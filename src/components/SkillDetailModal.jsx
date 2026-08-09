@@ -294,6 +294,20 @@ function ScheduleSection({ skill, onUpdated }) {
   const [error, setError] = useState(null)
   const [saved, setSaved] = useState(false)
 
+  // Re-sync local form state when the skill changes elsewhere (e.g. a new
+  // check-in auto-advances next_checkin_date) — useState's initial value is
+  // only read on mount, so without this the date field would go stale.
+  useEffect(() => {
+    setNextCheckinDate(skill.next_checkin_date ?? '')
+    setRecurring(Boolean(skill.checkin_frequency_unit))
+    setFrequencyValue(skill.checkin_frequency_value ?? 1)
+    setFrequencyUnit(skill.checkin_frequency_unit ?? 'months')
+  }, [
+    skill.next_checkin_date,
+    skill.checkin_frequency_value,
+    skill.checkin_frequency_unit,
+  ])
+
   async function handleSave(e) {
     e.preventDefault()
     setError(null)
