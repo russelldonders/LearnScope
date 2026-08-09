@@ -106,7 +106,13 @@ async function verifySupabaseUser(accessToken) {
 
 function extractPdfPhoto(pdfBytes) {
   try {
-    const pdfDoc = PDFDocument.load(pdfBytes, { ignoreEncryption: true, updateMetadata: false })
+    // Node Buffers can be views into a larger pooled ArrayBuffer — pdf-lib's
+    // low-level JPEG/stream handling assumes .buffer spans exactly the data,
+    // so make a tightly-sized copy before handing it off.
+    const pdfDoc = PDFDocument.load(new Uint8Array(pdfBytes), {
+      ignoreEncryption: true,
+      updateMetadata: false,
+    })
     return pdfDoc.then((doc) => {
       let best = null
       for (const [, obj] of doc.context.enumerateIndirectObjects()) {
