@@ -1,0 +1,195 @@
+import { useState } from 'react'
+
+export default function ExperienceModal({ item, onSave, onDelete, onClose }) {
+  const isEditing = Boolean(item?.id)
+  const [type, setType] = useState(item?.type ?? 'employment')
+  const [title, setTitle] = useState(item?.title ?? '')
+  const [organization, setOrganization] = useState(item?.organization ?? '')
+  const [startDate, setStartDate] = useState(item?.start_date ?? '')
+  const [endDate, setEndDate] = useState(item?.end_date ?? '')
+  const [current, setCurrent] = useState(Boolean(item?.id) && !item?.end_date)
+  const [description, setDescription] = useState(item?.description ?? '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!title.trim() || !organization.trim() || !startDate) {
+      setError('Title, organization, and start date are required.')
+      return
+    }
+    setError(null)
+    setSaving(true)
+    try {
+      await onSave({
+        id: item?.id,
+        type,
+        title: title.trim(),
+        organization: organization.trim(),
+        start_date: startDate,
+        end_date: current ? null : endDate || null,
+        description: description.trim() || null,
+      })
+    } catch (err) {
+      setError(err.message)
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm(`Delete "${item.title}"? This can't be undone.`)) return
+    setSaving(true)
+    try {
+      await onDelete(item.id)
+    } catch (err) {
+      setError(err.message)
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div
+        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="font-display text-2xl text-ink mb-4">
+          {isEditing ? 'Edit experience' : 'Add experience'}
+        </h2>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <span className="block text-sm text-secondary mb-2">Type</span>
+            <div className="flex gap-2">
+              {[
+                { value: 'employment', label: 'Employment' },
+                { value: 'education', label: 'Education' },
+              ].map((opt) => (
+                <button
+                  type="button"
+                  key={opt.value}
+                  onClick={() => setType(opt.value)}
+                  className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
+                    type === opt.value
+                      ? 'bg-moss text-paper border-moss'
+                      : 'border-hairline text-ink hover:bg-paper'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm text-secondary mb-1" htmlFor="title">
+              {type === 'education' ? 'Degree / course title' : 'Role title'}
+            </label>
+            <input
+              id="title"
+              required
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-secondary mb-1" htmlFor="organization">
+              {type === 'education' ? 'Institution' : 'Company'}
+            </label>
+            <input
+              id="organization"
+              required
+              value={organization}
+              onChange={(e) => setOrganization(e.target.value)}
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-secondary mb-1" htmlFor="startDate">
+                Start date
+              </label>
+              <input
+                id="startDate"
+                type="date"
+                required
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-secondary mb-1" htmlFor="endDate">
+                End date
+              </label>
+              <input
+                id="endDate"
+                type="date"
+                disabled={current}
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss disabled:opacity-50"
+              />
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-secondary">
+            <input
+              type="checkbox"
+              checked={current}
+              onChange={(e) => setCurrent(e.target.checked)}
+              className="rounded border-hairline"
+            />
+            This is ongoing / current
+          </label>
+
+          <div>
+            <label className="block text-sm text-secondary mb-1" htmlFor="description">
+              Description
+            </label>
+            <textarea
+              id="description"
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Responsibilities, achievements, focus areas…"
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+            />
+          </div>
+
+          {error && <p className="text-sm text-red-700">{error}</p>}
+
+          <div className="flex items-center gap-2 pt-2">
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper"
+            >
+              Cancel
+            </button>
+            {isEditing && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={saving}
+                className="rounded-md border border-hairline text-red-700 py-2 px-4 hover:bg-paper disabled:opacity-60"
+              >
+                Delete
+              </button>
+            )}
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
