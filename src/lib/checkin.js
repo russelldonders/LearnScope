@@ -1,4 +1,4 @@
-export function computeNextCheckinDate(fromDateStr, value, unit) {
+export function computeNextSelfAssessmentDate(fromDateStr, value, unit) {
   const from = fromDateStr ? new Date(`${fromDateStr}T00:00:00`) : new Date()
   const next = new Date(from)
   if (unit === 'weeks') next.setDate(next.getDate() + value * 7)
@@ -7,8 +7,8 @@ export function computeNextCheckinDate(fromDateStr, value, unit) {
   return next.toISOString().slice(0, 10)
 }
 
-export function isCheckinDue(nextCheckinDate) {
-  if (!nextCheckinDate) return false
+export function isSelfAssessmentDue(nextDate) {
+  if (!nextDate) return false
   const today = new Date().toISOString().slice(0, 10)
-  return nextCheckinDate <= today
+  return nextDate <= today
 }

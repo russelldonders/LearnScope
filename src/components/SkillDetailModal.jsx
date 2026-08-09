@@ -2,12 +2,19 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { uploadEvidence, getEvidenceSignedUrl } from '../lib/skillEvidence'
-import { computeNextCheckinDate } from '../lib/checkin'
+import { computeNextSelfAssessmentDate } from '../lib/checkin'
 import GrowthRing from './GrowthRing'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 
+const TABS = [
+  { id: 'details', label: 'Details' },
+  { id: 'assess', label: 'Self-assess' },
+  { id: 'history', label: 'History' },
+]
+
 export default function SkillDetailModal({ skill, categories, onClose, onUpdated, onDeleted }) {
   const { user } = useAuth()
+  const [tab, setTab] = useState('details')
   const [history, setHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(true)
 
@@ -38,46 +45,59 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
             <div>
               <h2 className="font-display text-2xl text-ink">{skill.name}</h2>
               <p className="text-sm text-secondary">
-                {skill.category} · {LEVEL_LABELS[skill.level]}
+                {skill.category} · {skill.level ? LEVEL_LABELS[skill.level] : 'Not yet self-assessed'}
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-secondary hover:text-ink text-sm"
-          >
+          <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
             Close
           </button>
         </div>
 
-        <NewCheckInSection
-          skill={skill}
-          user={user}
-          onCheckedIn={() => {
-            loadHistory()
-            onUpdated()
-          }}
-        />
+        <div className="flex items-center gap-1 border-b border-hairline mb-4">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
+                tab === t.id
+                  ? 'border-moss text-ink'
+                  : 'border-transparent text-secondary hover:text-ink'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
 
-        <HistorySection history={history} loading={loadingHistory} />
+        {tab === 'details' && (
+          <div className="space-y-6">
+            <DetailsSection skill={skill} categories={categories} onUpdated={onUpdated} onDeleted={onDeleted} />
+            <ScheduleSection skill={skill} onUpdated={onUpdated} />
+          </div>
+        )}
 
-        <ScheduleSection skill={skill} onUpdated={onUpdated} />
+        {tab === 'assess' && (
+          <SelfAssessSection
+            skill={skill}
+            user={user}
+            onAssessed={() => {
+              loadHistory()
+              onUpdated()
+              setTab('history')
+            }}
+          />
+        )}
 
-        <DetailsSection
-          skill={skill}
-          categories={categories}
-          onUpdated={onUpdated}
-          onDeleted={onDeleted}
-        />
+        {tab === 'history' && <HistorySection history={history} loading={loadingHistory} />}
       </div>
     </div>
   )
 }
 
-function NewCheckInSection({ skill, user, onCheckedIn }) {
-  const [open, setOpen] = useState(false)
-  const [level, setLevel] = useState(skill.level)
+function SelfAssessSection({ skill, user, onAssessed }) {
+  const [level, setLevel] = useState(skill.level ?? 1)
   const [comments, setComments] = useState('')
   const [evidenceUrl, setEvidenceUrl] = useState('')
   const [evidenceFile, setEvidenceFile] = useState(null)
@@ -113,7 +133,7 @@ function NewCheckInSection({ skill, user, onCheckedIn }) {
 
       const skillUpdate = { level }
       if (skill.checkin_frequency_value && skill.checkin_frequency_unit) {
-        skillUpdate.next_checkin_date = computeNextCheckinDate(
+        skillUpdate.next_checkin_date = computeNextSelfAssessmentDate(
           null,
           skill.checkin_frequency_value,
           skill.checkin_frequency_unit
@@ -125,11 +145,7 @@ function NewCheckInSection({ skill, user, onCheckedIn }) {
         .eq('id', skill.id)
       if (skillError) throw skillError
 
-      setOpen(false)
-      setComments('')
-      setEvidenceUrl('')
-      setEvidenceFile(null)
-      onCheckedIn()
+      onAssessed()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -137,20 +153,8 @@ function NewCheckInSection({ skill, user, onCheckedIn }) {
     }
   }
 
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 mb-6"
-      >
-        Log a new check-in
-      </button>
-    )
-  }
-
   return (
-    <form onSubmit={handleSubmit} className="border border-hairline rounded-lg p-4 mb-6 space-y-3">
+    <form onSubmit={handleSubmit} className="space-y-3">
       <div>
         <span className="block text-sm text-secondary mb-2">Level now</span>
         <div className="flex items-center justify-between">
@@ -194,33 +198,23 @@ function NewCheckInSection({ skill, user, onCheckedIn }) {
 
       {error && <p className="text-sm text-red-700">{error}</p>}
 
-      <div className="flex items-center gap-2">
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-        >
-          {saving ? 'Saving…' : 'Save check-in'}
-        </button>
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className="rounded-md border border-hairline text-ink py-2 px-4 text-sm hover:bg-paper"
-        >
-          Cancel
-        </button>
-      </div>
+      <button
+        type="submit"
+        disabled={saving}
+        className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+      >
+        {saving ? 'Saving…' : 'Save self-assessment'}
+      </button>
     </form>
   )
 }
 
 function HistorySection({ history, loading }) {
   return (
-    <div className="mb-6">
-      <h3 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">History</h3>
+    <div>
       {loading && <p className="text-sm text-secondary">Loading…</p>}
       {!loading && history.length === 0 && (
-        <p className="text-sm text-secondary">No check-ins yet.</p>
+        <p className="text-sm text-secondary">No self-assessments yet.</p>
       )}
       <div className="space-y-3">
         {history.map((entry) => (
@@ -295,18 +289,15 @@ function ScheduleSection({ skill, onUpdated }) {
   const [saved, setSaved] = useState(false)
 
   // Re-sync local form state when the skill changes elsewhere (e.g. a new
-  // check-in auto-advances next_checkin_date) — useState's initial value is
-  // only read on mount, so without this the date field would go stale.
+  // self-assessment auto-advances next_checkin_date) — useState's initial
+  // value is only read on mount, so without this the date field would go
+  // stale.
   useEffect(() => {
     setNextCheckinDate(skill.next_checkin_date ?? '')
     setRecurring(Boolean(skill.checkin_frequency_unit))
     setFrequencyValue(skill.checkin_frequency_value ?? 1)
     setFrequencyUnit(skill.checkin_frequency_unit ?? 'months')
-  }, [
-    skill.next_checkin_date,
-    skill.checkin_frequency_value,
-    skill.checkin_frequency_unit,
-  ])
+  }, [skill.next_checkin_date, skill.checkin_frequency_value, skill.checkin_frequency_unit])
 
   async function handleSave(e) {
     e.preventDefault()
@@ -333,17 +324,14 @@ function ScheduleSection({ skill, onUpdated }) {
   }
 
   return (
-    <form
-      onSubmit={handleSave}
-      className="mb-6 border-t border-hairline pt-4 space-y-3"
-    >
+    <form onSubmit={handleSave} className="border-t border-hairline pt-4 space-y-3">
       <h3 className="font-mono text-xs uppercase tracking-wide text-secondary">
-        Check-in schedule
+        Self-assessment schedule
       </h3>
 
       <div>
         <label className="block text-sm text-secondary mb-1" htmlFor="nextCheckinDate">
-          Next check-in date
+          Next self-assessment date
         </label>
         <input
           id="nextCheckinDate"
@@ -361,7 +349,7 @@ function ScheduleSection({ skill, onUpdated }) {
           onChange={(e) => setRecurring(e.target.checked)}
           className="rounded border-hairline"
         />
-        Set up a regular check-in
+        Set up regular self-assessments
       </label>
 
       {recurring && (
@@ -434,7 +422,7 @@ function DetailsSection({ skill, categories, onUpdated, onDeleted }) {
   }
 
   async function handleDelete() {
-    if (!confirm(`Delete "${skill.name}" and all of its check-in history? This can't be undone.`)) {
+    if (!confirm(`Delete "${skill.name}" and all of its self-assessment history? This can't be undone.`)) {
       return
     }
     setSaving(true)
@@ -449,9 +437,7 @@ function DetailsSection({ skill, categories, onUpdated, onDeleted }) {
   }
 
   return (
-    <form onSubmit={handleSave} className="border-t border-hairline pt-4 space-y-3">
-      <h3 className="font-mono text-xs uppercase tracking-wide text-secondary">Details</h3>
-
+    <form onSubmit={handleSave} className="space-y-3">
       <div>
         <label className="block text-sm text-secondary mb-1" htmlFor="detailName">
           Name

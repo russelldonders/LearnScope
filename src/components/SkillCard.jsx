@@ -1,8 +1,8 @@
 import GrowthRing from './GrowthRing'
-import { isCheckinDue } from '../lib/checkin'
+import { isSelfAssessmentDue } from '../lib/checkin'
 
 export default function SkillCard({ skill, onEdit }) {
-  const due = isCheckinDue(skill.next_checkin_date)
+  const due = isSelfAssessmentDue(skill.next_checkin_date)
 
   return (
     <button
@@ -13,9 +13,14 @@ export default function SkillCard({ skill, onEdit }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <h3 className="font-display text-lg text-ink truncate">{skill.name}</h3>
+          {!skill.level && (
+            <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5">
+              Not yet self-assessed
+            </span>
+          )}
           {due && (
             <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-gold border border-gold rounded-full px-2 py-0.5">
-              Check-in due
+              Self-assessment due
             </span>
           )}
         </div>

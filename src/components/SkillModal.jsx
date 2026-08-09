@@ -9,8 +9,9 @@ export default function SkillModal({ categories, onClose, onCreated }) {
   const { user } = useAuth()
   const [name, setName] = useState('')
   const [category, setCategory] = useState('')
-  const [level, setLevel] = useState(1)
   const [isCurrentRole, setIsCurrentRole] = useState(false)
+  const [assessNow, setAssessNow] = useState(true)
+  const [level, setLevel] = useState(1)
   const [comments, setComments] = useState('')
   const [evidenceUrl, setEvidenceUrl] = useState('')
   const [evidenceFile, setEvidenceFile] = useState(null)
@@ -31,7 +32,7 @@ export default function SkillModal({ categories, onClose, onCreated }) {
         .insert({
           name: name.trim(),
           category: category.trim(),
-          level,
+          level: assessNow ? level : null,
           is_current_role: isCurrentRole,
           user_id: user.id,
         })
@@ -39,26 +40,28 @@ export default function SkillModal({ categories, onClose, onCreated }) {
         .single()
       if (skillError) throw skillError
 
-      const { data: assessment, error: assessmentError } = await supabase
-        .from('skill_assessments')
-        .insert({
-          skill_id: skill.id,
-          user_id: user.id,
-          level,
-          comments: comments.trim() || null,
-          evidence_url: evidenceUrl.trim() || null,
-        })
-        .select()
-        .single()
-      if (assessmentError) throw assessmentError
-
-      if (evidenceFile) {
-        const path = await uploadEvidence(user.id, skill.id, assessment.id, evidenceFile)
-        const { error: updateError } = await supabase
+      if (assessNow) {
+        const { data: assessment, error: assessmentError } = await supabase
           .from('skill_assessments')
-          .update({ evidence_path: path })
-          .eq('id', assessment.id)
-        if (updateError) throw updateError
+          .insert({
+            skill_id: skill.id,
+            user_id: user.id,
+            level,
+            comments: comments.trim() || null,
+            evidence_url: evidenceUrl.trim() || null,
+          })
+          .select()
+          .single()
+        if (assessmentError) throw assessmentError
+
+        if (evidenceFile) {
+          const path = await uploadEvidence(user.id, skill.id, assessment.id, evidenceFile)
+          const { error: updateError } = await supabase
+            .from('skill_assessments')
+            .update({ evidence_path: path })
+            .eq('id', assessment.id)
+          if (updateError) throw updateError
+        }
       }
 
       onCreated()
@@ -119,67 +122,82 @@ export default function SkillModal({ categories, onClose, onCreated }) {
             Part of my current role
           </label>
 
-          <div>
-            <span className="block text-sm text-secondary mb-2">Level</span>
-            <div className="flex items-center justify-between">
-              {LEVELS.map((l) => (
-                <button
-                  type="button"
-                  key={l}
-                  onClick={() => setLevel(l)}
-                  className={`flex flex-col items-center gap-1 rounded-md px-1 py-1 ${
-                    level === l ? 'bg-moss/10' : ''
-                  }`}
-                >
-                  <GrowthRing level={l} size={40} />
-                  <span className="font-mono text-[10px] text-secondary">{LEVEL_LABELS[l]}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          <label className="flex items-center gap-2 text-sm text-secondary border-t border-hairline pt-4">
+            <input
+              type="checkbox"
+              checked={assessNow}
+              onChange={(e) => setAssessNow(e.target.checked)}
+              className="rounded border-hairline"
+            />
+            Self-assess this skill now
+          </label>
 
-          <div className="border-t border-hairline pt-4">
-            <p className="text-xs text-secondary mb-2">
-              This becomes your first check-in — you can log more over time.
+          {assessNow ? (
+            <>
+              <div>
+                <span className="block text-sm text-secondary mb-2">Level</span>
+                <div className="flex items-center justify-between">
+                  {LEVELS.map((l) => (
+                    <button
+                      type="button"
+                      key={l}
+                      onClick={() => setLevel(l)}
+                      className={`flex flex-col items-center gap-1 rounded-md px-1 py-1 ${
+                        level === l ? 'bg-moss/10' : ''
+                      }`}
+                    >
+                      <GrowthRing level={l} size={40} />
+                      <span className="font-mono text-[10px] text-secondary">{LEVEL_LABELS[l]}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-secondary mb-1" htmlFor="comments">
+                  Why this level? (optional)
+                </label>
+                <textarea
+                  id="comments"
+                  rows={3}
+                  value={comments}
+                  onChange={(e) => setComments(e.target.value)}
+                  placeholder="Context, examples, self-assessment notes…"
+                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-secondary mb-1" htmlFor="evidenceUrl">
+                  Evidence link (optional)
+                </label>
+                <input
+                  id="evidenceUrl"
+                  type="url"
+                  placeholder="https://…"
+                  value={evidenceUrl}
+                  onChange={(e) => setEvidenceUrl(e.target.value)}
+                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-secondary mb-1" htmlFor="evidenceFile">
+                  Or attach a file (optional)
+                </label>
+                <input
+                  id="evidenceFile"
+                  type="file"
+                  onChange={(e) => setEvidenceFile(e.target.files?.[0] ?? null)}
+                  className="w-full text-sm text-ink"
+                />
+              </div>
+            </>
+          ) : (
+            <p className="text-xs text-secondary">
+              You can self-assess this skill any time from its card.
             </p>
-            <label className="block text-sm text-secondary mb-1" htmlFor="comments">
-              Why this level? (optional)
-            </label>
-            <textarea
-              id="comments"
-              rows={3}
-              value={comments}
-              onChange={(e) => setComments(e.target.value)}
-              placeholder="Context, examples, self-assessment notes…"
-              className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm text-secondary mb-1" htmlFor="evidenceUrl">
-              Evidence link (optional)
-            </label>
-            <input
-              id="evidenceUrl"
-              type="url"
-              placeholder="https://…"
-              value={evidenceUrl}
-              onChange={(e) => setEvidenceUrl(e.target.value)}
-              className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm text-secondary mb-1" htmlFor="evidenceFile">
-              Or attach a file (optional)
-            </label>
-            <input
-              id="evidenceFile"
-              type="file"
-              onChange={(e) => setEvidenceFile(e.target.files?.[0] ?? null)}
-              className="w-full text-sm text-ink"
-            />
-          </div>
+          )}
 
           {error && <p className="text-sm text-red-700">{error}</p>}
 
