@@ -1,3 +1,6 @@
 {
+  "functions": {
+    "api/parse-cv.js": { "maxDuration": 60 }
+  },
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
