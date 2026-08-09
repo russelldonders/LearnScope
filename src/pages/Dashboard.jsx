@@ -89,7 +89,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-paper">
       <header className="border-b border-hairline bg-card">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="font-display text-2xl text-ink">Rootline</h1>
+          <h1 className="font-display text-2xl text-ink">LearnScope</h1>
           <div className="flex items-center gap-3">
             <span className="font-mono text-xs text-secondary hidden sm:inline">{user?.email}</span>
             <button

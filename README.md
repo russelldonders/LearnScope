@@ -1,4 +1,4 @@
-# Rootline
+# LearnScope
 
 A personal, lifelong skills and learning tracker. Log the skills you're building, how proficient you
 are, and the training or experience behind them — shown as growth rings, not progress bars.
