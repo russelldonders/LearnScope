@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { uploadAvatar } from '../lib/avatar'
+import { uploadAvatar, removeAvatar } from '../lib/avatar'
 
 const MAX_BYTES = 5 * 1024 * 1024
 
@@ -34,6 +34,20 @@ export default function ProfilePhoto({ avatarUrl, onUploaded }) {
     }
   }
 
+  async function handleRemove() {
+    if (!confirm('Remove your profile photo?')) return
+    setUploading(true)
+    setError(null)
+    try {
+      await removeAvatar(user.id)
+      onUploaded(null)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setUploading(false)
+    }
+  }
+
   return (
     <div className="flex items-center gap-4">
       <div className="w-20 h-20 rounded-full overflow-hidden border border-hairline bg-paper flex items-center justify-center shrink-0">
@@ -55,14 +69,26 @@ export default function ProfilePhoto({ avatarUrl, onUploaded }) {
         )}
       </div>
       <div>
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={uploading}
-          className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
-        >
-          {uploading ? 'Uploading…' : avatarUrl ? 'Change photo' : 'Upload photo'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={uploading}
+            className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
+          >
+            {uploading ? 'Uploading…' : avatarUrl ? 'Change photo' : 'Upload photo'}
+          </button>
+          {avatarUrl && (
+            <button
+              type="button"
+              onClick={handleRemove}
+              disabled={uploading}
+              className="text-sm text-secondary hover:text-red-700 disabled:opacity-60"
+            >
+              Remove
+            </button>
+          )}
+        </div>
         {error && <p className="text-xs text-red-700 mt-1">{error}</p>}
       </div>
       <input

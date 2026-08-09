@@ -21,6 +21,14 @@ export async function uploadAvatar(userId, fileOrBlob, extHint) {
   return url
 }
 
+export async function removeAvatar(userId) {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ avatar_url: null, updated_at: new Date().toISOString() })
+    .eq('id', userId)
+  if (error) throw error
+}
+
 export function base64ToBlob(base64, contentType) {
   const bin = atob(base64)
   const bytes = new Uint8Array(bin.length)
