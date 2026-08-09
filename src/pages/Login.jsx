@@ -26,7 +26,9 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-paper px-4">
       <div className="w-full max-w-sm bg-card border border-hairline rounded-lg p-8">
-        <h1 className="font-display text-3xl text-ink mb-1">LearnScope</h1>
+        <Link to="/" className="font-display text-3xl text-ink mb-1 block">
+          LearnScope
+        </Link>
         <p className="text-secondary text-sm mb-6">Log in to your growth log.</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -44,9 +46,14 @@ export default function Login() {
             />
           </div>
           <div>
-            <label className="block text-sm text-secondary mb-1" htmlFor="password">
-              Password
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm text-secondary" htmlFor="password">
+                Password
+              </label>
+              <Link to="/forgot-password" className="text-sm text-moss font-medium">
+                Forgot password?
+              </Link>
+            </div>
             <input
               id="password"
               type="password"

@@ -2,30 +2,26 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
-export default function Signup() {
-  const { signUp } = useAuth()
+export default function ResetPassword() {
+  const { user, loading, updatePassword } = useAuth()
   const navigate = useNavigate()
-  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
-  const [confirmationSent, setConfirmationSent] = useState(false)
+  const [done, setDone] = useState(false)
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError(null)
     setSubmitting(true)
-    const { data, error } = await signUp(email, password)
+    const { error } = await updatePassword(password)
     setSubmitting(false)
     if (error) {
       setError(error.message)
       return
     }
-    if (data.session) {
-      navigate('/dashboard')
-    } else {
-      setConfirmationSent(true)
-    }
+    setDone(true)
+    setTimeout(() => navigate('/dashboard'), 1500)
   }
 
   return (
@@ -34,30 +30,25 @@ export default function Signup() {
         <Link to="/" className="font-display text-3xl text-ink mb-1 block">
           LearnScope
         </Link>
-        <p className="text-secondary text-sm mb-6">Start tracking the skills you're growing.</p>
+        <p className="text-secondary text-sm mb-6">Choose a new password.</p>
 
-        {confirmationSent ? (
+        {loading ? (
+          <p className="text-sm text-secondary">Loading…</p>
+        ) : !user ? (
           <p className="text-sm text-ink">
-            Check your email to confirm your account, then log in.
+            This reset link is invalid or has expired.{' '}
+            <Link to="/forgot-password" className="text-moss font-medium">
+              Request a new one
+            </Link>
+            .
           </p>
+        ) : done ? (
+          <p className="text-sm text-ink">Password updated. Taking you to your dashboard…</p>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm text-secondary mb-1" htmlFor="email">
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-              />
-            </div>
-            <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="password">
-                Password
+                New password
               </label>
               <input
                 id="password"
@@ -77,17 +68,10 @@ export default function Signup() {
               disabled={submitting}
               className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
             >
-              {submitting ? 'Creating account…' : 'Sign up'}
+              {submitting ? 'Saving…' : 'Save new password'}
             </button>
           </form>
         )}
-
-        <p className="text-sm text-secondary mt-6 text-center">
-          Already have an account?{' '}
-          <Link to="/login" className="text-moss font-medium">
-            Log in
-          </Link>
-        </p>
       </div>
     </div>
   )

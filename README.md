@@ -44,6 +44,21 @@ are, and the training or experience behind them — shown as growth rings, not p
    confirmation before you can log in, so check your inbox (or disable confirmation in Authentication →
    Providers → Email while developing).
 
+6. **Configure auth redirect URLs**
+
+   The app sends users to `/welcome` after confirming their email, and to `/reset-password` after
+   requesting a password reset. Supabase only allows redirecting to URLs you've explicitly listed, so in
+   the Supabase dashboard go to **Authentication → URL Configuration → Redirect URLs** and add:
+
+   ```
+   http://localhost:5173/welcome
+   http://localhost:5173/reset-password
+   https://<your-vercel-domain>/welcome
+   https://<your-vercel-domain>/reset-password
+   ```
+
+   Without this, confirmation and reset links will fail to redirect back into the app.
+
 ## Deploying to Vercel
 
 1. Push this repo to GitHub.
@@ -52,8 +67,8 @@ are, and the training or experience behind them — shown as growth rings, not p
    under Project Settings → Environment Variables.
 4. Deploy. Build command `npm run build`, output directory `dist` (Vercel detects these automatically
    for Vite).
-5. In Supabase, add your Vercel deployment URL to Authentication → URL Configuration → Redirect URLs
-   so auth redirects work in production.
+5. Add the production `/welcome` and `/reset-password` URLs to Supabase's Redirect URLs allow list (see
+   step 6 above).
 
 ## Project structure
 
@@ -62,14 +77,13 @@ src/
   components/   GrowthRing, SkillCard, SkillModal, ProtectedRoute
   context/      AuthContext (Supabase session state)
   lib/          supabaseClient, level labels
-  pages/        Login, Signup, Dashboard
+  pages/        Landing, Login, Signup, ForgotPassword, ResetPassword, Welcome, Dashboard
 supabase/
   migrations/   SQL schema + RLS policy
 ```
 
 ## Stretch goals
 
-- Password reset / email verification flow
 - Public/shareable read-only profile view (opt-in)
 - Timeline view of skills logged over time
 - Export skills as PDF or CSV
