@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { useAuth } from '../context/AuthContext'
 import SkillCard from './SkillCard'
 import SkillModal from './SkillModal'
+import SkillDetailModal from './SkillDetailModal'
 
 function groupByCategory(skills) {
   const map = new Map()
@@ -14,12 +14,11 @@ function groupByCategory(skills) {
 }
 
 export default function SkillsSection() {
-  const { user } = useAuth()
   const [skills, setSkills] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [modalSkill, setModalSkill] = useState(null)
-  const [modalOpen, setModalOpen] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
+  const [detailSkill, setDetailSkill] = useState(null)
 
   useEffect(() => {
     loadSkills()
@@ -36,6 +35,7 @@ export default function SkillsSection() {
       setError(error.message)
     } else {
       setSkills(data)
+      setDetailSkill((prev) => (prev ? data.find((s) => s.id === prev.id) ?? prev : prev))
     }
     setLoading(false)
   }
@@ -48,57 +48,12 @@ export default function SkillsSection() {
 
   const categories = useMemo(() => [...new Set(skills.map((s) => s.category))], [skills])
 
-  function openAddModal() {
-    setModalSkill(null)
-    setModalOpen(true)
-  }
-
-  function openEditModal(skill) {
-    setModalSkill(skill)
-    setModalOpen(true)
-  }
-
-  async function handleSave(values) {
-    if (values.id) {
-      const { error } = await supabase
-        .from('skills')
-        .update({
-          name: values.name,
-          category: values.category,
-          level: values.level,
-          notes: values.notes,
-          is_current_role: values.is_current_role,
-        })
-        .eq('id', values.id)
-      if (error) throw error
-    } else {
-      const { error } = await supabase.from('skills').insert({
-        name: values.name,
-        category: values.category,
-        level: values.level,
-        notes: values.notes,
-        is_current_role: values.is_current_role,
-        user_id: user.id,
-      })
-      if (error) throw error
-    }
-    setModalOpen(false)
-    await loadSkills()
-  }
-
-  async function handleDelete(id) {
-    const { error } = await supabase.from('skills').delete().eq('id', id)
-    if (error) throw error
-    setModalOpen(false)
-    await loadSkills()
-  }
-
   return (
     <section>
       <div className="flex items-center justify-between mb-6">
         <h2 className="font-display text-xl text-ink">Your skills</h2>
         <button
-          onClick={openAddModal}
+          onClick={() => setAddOpen(true)}
           className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90"
         >
           + Add skill
@@ -117,24 +72,38 @@ export default function SkillsSection() {
       {hasSplit && (
         <div className="mb-10">
           <h3 className="font-display text-base text-ink mb-4">Current role</h3>
-          <SkillGroups grouped={currentRoleGrouped} onEdit={openEditModal} />
+          <SkillGroups grouped={currentRoleGrouped} onEdit={setDetailSkill} />
         </div>
       )}
 
       {otherSkills.length > 0 && (
         <div>
           {hasSplit && <h3 className="font-display text-base text-ink mb-4">Further skills</h3>}
-          <SkillGroups grouped={otherGrouped} onEdit={openEditModal} />
+          <SkillGroups grouped={otherGrouped} onEdit={setDetailSkill} />
         </div>
       )}
 
-      {modalOpen && (
+      {addOpen && (
         <SkillModal
-          skill={modalSkill}
           categories={categories}
-          onSave={handleSave}
-          onDelete={handleDelete}
-          onClose={() => setModalOpen(false)}
+          onClose={() => setAddOpen(false)}
+          onCreated={() => {
+            setAddOpen(false)
+            loadSkills()
+          }}
+        />
+      )}
+
+      {detailSkill && (
+        <SkillDetailModal
+          skill={detailSkill}
+          categories={categories}
+          onClose={() => setDetailSkill(null)}
+          onUpdated={loadSkills}
+          onDeleted={() => {
+            setDetailSkill(null)
+            loadSkills()
+          }}
         />
       )}
     </section>

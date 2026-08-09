@@ -86,8 +86,22 @@ export default function ResumeImportReviewModal({
 
     try {
       if (skillRows.length) {
-        const { error } = await supabase.from('skills').insert(skillRows)
+        const { data: insertedSkills, error } = await supabase
+          .from('skills')
+          .insert(skillRows)
+          .select()
         if (error) throw error
+
+        const genesisAssessments = insertedSkills.map((s) => ({
+          skill_id: s.id,
+          user_id: user.id,
+          level: s.level,
+          comments: s.notes,
+        }))
+        const { error: assessmentError } = await supabase
+          .from('skill_assessments')
+          .insert(genesisAssessments)
+        if (assessmentError) throw assessmentError
       }
       if (courseRows.length) {
         const { error } = await supabase.from('courses').insert(courseRows)

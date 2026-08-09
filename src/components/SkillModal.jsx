@@ -1,14 +1,19 @@
 import { useState } from 'react'
+import { supabase } from '../lib/supabaseClient'
+import { useAuth } from '../context/AuthContext'
+import { uploadEvidence } from '../lib/skillEvidence'
 import GrowthRing from './GrowthRing'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 
-export default function SkillModal({ skill, categories, onSave, onDelete, onClose }) {
-  const isEditing = Boolean(skill?.id)
-  const [name, setName] = useState(skill?.name ?? '')
-  const [category, setCategory] = useState(skill?.category ?? '')
-  const [level, setLevel] = useState(skill?.level ?? 1)
-  const [notes, setNotes] = useState(skill?.notes ?? '')
-  const [isCurrentRole, setIsCurrentRole] = useState(Boolean(skill?.is_current_role))
+export default function SkillModal({ categories, onClose, onCreated }) {
+  const { user } = useAuth()
+  const [name, setName] = useState('')
+  const [category, setCategory] = useState('')
+  const [level, setLevel] = useState(1)
+  const [isCurrentRole, setIsCurrentRole] = useState(false)
+  const [comments, setComments] = useState('')
+  const [evidenceUrl, setEvidenceUrl] = useState('')
+  const [evidenceFile, setEvidenceFile] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
@@ -21,25 +26,42 @@ export default function SkillModal({ skill, categories, onSave, onDelete, onClos
     setError(null)
     setSaving(true)
     try {
-      await onSave({
-        id: skill?.id,
-        name: name.trim(),
-        category: category.trim(),
-        level,
-        notes: notes.trim() || null,
-        is_current_role: isCurrentRole,
-      })
-    } catch (err) {
-      setError(err.message)
-      setSaving(false)
-    }
-  }
+      const { data: skill, error: skillError } = await supabase
+        .from('skills')
+        .insert({
+          name: name.trim(),
+          category: category.trim(),
+          level,
+          is_current_role: isCurrentRole,
+          user_id: user.id,
+        })
+        .select()
+        .single()
+      if (skillError) throw skillError
 
-  async function handleDelete() {
-    if (!confirm(`Delete "${skill.name}"? This can't be undone.`)) return
-    setSaving(true)
-    try {
-      await onDelete(skill.id)
+      const { data: assessment, error: assessmentError } = await supabase
+        .from('skill_assessments')
+        .insert({
+          skill_id: skill.id,
+          user_id: user.id,
+          level,
+          comments: comments.trim() || null,
+          evidence_url: evidenceUrl.trim() || null,
+        })
+        .select()
+        .single()
+      if (assessmentError) throw assessmentError
+
+      if (evidenceFile) {
+        const path = await uploadEvidence(user.id, skill.id, assessment.id, evidenceFile)
+        const { error: updateError } = await supabase
+          .from('skill_assessments')
+          .update({ evidence_path: path })
+          .eq('id', assessment.id)
+        if (updateError) throw updateError
+      }
+
+      onCreated()
     } catch (err) {
       setError(err.message)
       setSaving(false)
@@ -52,9 +74,7 @@ export default function SkillModal({ skill, categories, onSave, onDelete, onClos
         className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="font-display text-2xl text-ink mb-4">
-          {isEditing ? 'Edit skill' : 'Add a skill'}
-        </h2>
+        <h2 className="font-display text-2xl text-ink mb-4">Add a skill</h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -89,6 +109,16 @@ export default function SkillModal({ skill, categories, onSave, onDelete, onClos
             </datalist>
           </div>
 
+          <label className="flex items-center gap-2 text-sm text-secondary">
+            <input
+              type="checkbox"
+              checked={isCurrentRole}
+              onChange={(e) => setIsCurrentRole(e.target.checked)}
+              className="rounded border-hairline"
+            />
+            Part of my current role
+          </label>
+
           <div>
             <span className="block text-sm text-secondary mb-2">Level</span>
             <div className="flex items-center justify-between">
@@ -108,27 +138,46 @@ export default function SkillModal({ skill, categories, onSave, onDelete, onClos
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-secondary">
-            <input
-              type="checkbox"
-              checked={isCurrentRole}
-              onChange={(e) => setIsCurrentRole(e.target.checked)}
-              className="rounded border-hairline"
-            />
-            Part of my current role
-          </label>
-
-          <div>
-            <label className="block text-sm text-secondary mb-1" htmlFor="notes">
-              Notes
+          <div className="border-t border-hairline pt-4">
+            <p className="text-xs text-secondary mb-2">
+              This becomes your first check-in — you can log more over time.
+            </p>
+            <label className="block text-sm text-secondary mb-1" htmlFor="comments">
+              Why this level? (optional)
             </label>
             <textarea
-              id="notes"
+              id="comments"
               rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Courses, projects, evidence…"
+              value={comments}
+              onChange={(e) => setComments(e.target.value)}
+              placeholder="Context, examples, self-assessment notes…"
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-secondary mb-1" htmlFor="evidenceUrl">
+              Evidence link (optional)
+            </label>
+            <input
+              id="evidenceUrl"
+              type="url"
+              placeholder="https://…"
+              value={evidenceUrl}
+              onChange={(e) => setEvidenceUrl(e.target.value)}
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-secondary mb-1" htmlFor="evidenceFile">
+              Or attach a file (optional)
+            </label>
+            <input
+              id="evidenceFile"
+              type="file"
+              onChange={(e) => setEvidenceFile(e.target.files?.[0] ?? null)}
+              className="w-full text-sm text-ink"
             />
           </div>
 
@@ -149,16 +198,6 @@ export default function SkillModal({ skill, categories, onSave, onDelete, onClos
             >
               Cancel
             </button>
-            {isEditing && (
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={saving}
-                className="rounded-md border border-hairline text-red-700 py-2 px-4 hover:bg-paper disabled:opacity-60"
-              >
-                Delete
-              </button>
-            )}
           </div>
         </form>
       </div>
