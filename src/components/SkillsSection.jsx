@@ -4,6 +4,15 @@ import { useAuth } from '../context/AuthContext'
 import SkillCard from './SkillCard'
 import SkillModal from './SkillModal'
 
+function groupByCategory(skills) {
+  const map = new Map()
+  for (const skill of skills) {
+    if (!map.has(skill.category)) map.set(skill.category, [])
+    map.get(skill.category).push(skill)
+  }
+  return Array.from(map.entries())
+}
+
 export default function SkillsSection() {
   const { user } = useAuth()
   const [skills, setSkills] = useState([])
@@ -31,14 +40,11 @@ export default function SkillsSection() {
     setLoading(false)
   }
 
-  const grouped = useMemo(() => {
-    const map = new Map()
-    for (const skill of skills) {
-      if (!map.has(skill.category)) map.set(skill.category, [])
-      map.get(skill.category).push(skill)
-    }
-    return Array.from(map.entries())
-  }, [skills])
+  const currentRoleSkills = useMemo(() => skills.filter((s) => s.is_current_role), [skills])
+  const otherSkills = useMemo(() => skills.filter((s) => !s.is_current_role), [skills])
+  const currentRoleGrouped = useMemo(() => groupByCategory(currentRoleSkills), [currentRoleSkills])
+  const otherGrouped = useMemo(() => groupByCategory(otherSkills), [otherSkills])
+  const hasSplit = currentRoleSkills.length > 0
 
   const categories = useMemo(() => [...new Set(skills.map((s) => s.category))], [skills])
 
@@ -61,6 +67,7 @@ export default function SkillsSection() {
           category: values.category,
           level: values.level,
           notes: values.notes,
+          is_current_role: values.is_current_role,
         })
         .eq('id', values.id)
       if (error) throw error
@@ -70,6 +77,7 @@ export default function SkillsSection() {
         category: values.category,
         level: values.level,
         notes: values.notes,
+        is_current_role: values.is_current_role,
         user_id: user.id,
       })
       if (error) throw error
@@ -106,20 +114,19 @@ export default function SkillsSection() {
         </div>
       )}
 
-      <div className="space-y-8">
-        {grouped.map(([category, categorySkills]) => (
-          <div key={category}>
-            <h3 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">
-              {category}
-            </h3>
-            <div className="grid sm:grid-cols-2 gap-3">
-              {categorySkills.map((skill) => (
-                <SkillCard key={skill.id} skill={skill} onEdit={openEditModal} />
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+      {hasSplit && (
+        <div className="mb-10">
+          <h3 className="font-display text-base text-ink mb-4">Current role</h3>
+          <SkillGroups grouped={currentRoleGrouped} onEdit={openEditModal} />
+        </div>
+      )}
+
+      {otherSkills.length > 0 && (
+        <div>
+          {hasSplit && <h3 className="font-display text-base text-ink mb-4">Further skills</h3>}
+          <SkillGroups grouped={otherGrouped} onEdit={openEditModal} />
+        </div>
+      )}
 
       {modalOpen && (
         <SkillModal
@@ -131,5 +138,24 @@ export default function SkillsSection() {
         />
       )}
     </section>
+  )
+}
+
+function SkillGroups({ grouped, onEdit }) {
+  return (
+    <div className="space-y-8">
+      {grouped.map(([category, categorySkills]) => (
+        <div key={category}>
+          <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">
+            {category}
+          </h4>
+          <div className="grid sm:grid-cols-2 gap-3">
+            {categorySkills.map((skill) => (
+              <SkillCard key={skill.id} skill={skill} onEdit={onEdit} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
+import { uploadAvatar, base64ToBlob } from '../lib/avatar'
 import { formatMonthYear } from '../lib/dates'
 
 function useSelection(items) {
@@ -23,11 +24,26 @@ function useSelection(items) {
   return { selected, values, toggle, updateField }
 }
 
-export default function CvImportReviewModal({ extracted, onClose, onImported }) {
+export default function ResumeImportReviewModal({
+  extracted,
+  hasAvatar,
+  onAvatarSet,
+  onProfileFieldsFilled,
+  onClose,
+  onImported,
+}) {
   const { user } = useAuth()
   const skills = useSelection(extracted.skills ?? [])
   const courses = useSelection(extracted.courses ?? [])
   const experience = useSelection(extracted.experience ?? [])
+
+  const profileFields = extracted.profile ?? {}
+  const hasProfileFields = Object.values(profileFields).some(Boolean)
+  const [applyProfile, setApplyProfile] = useState(true)
+
+  const hasPhoto = Boolean(extracted.photoBase64) && !hasAvatar
+  const [applyPhoto, setApplyPhoto] = useState(true)
+
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState(null)
 
@@ -44,6 +60,7 @@ export default function CvImportReviewModal({ extracted, onClose, onImported }) 
         category: s.category,
         level: s.level,
         notes: s.notes,
+        is_current_role: Boolean(s.current_role),
         user_id: user.id,
       }))
     const courseRows = courses.values
@@ -80,6 +97,14 @@ export default function CvImportReviewModal({ extracted, onClose, onImported }) 
         const { error } = await supabase.from('experience').insert(experienceRows)
         if (error) throw error
       }
+      if (applyProfile && hasProfileFields) {
+        onProfileFieldsFilled?.(profileFields)
+      }
+      if (applyPhoto && hasPhoto) {
+        const blob = base64ToBlob(extracted.photoBase64, extracted.photoContentType || 'image/jpeg')
+        const url = await uploadAvatar(user.id, blob, extracted.photoContentType?.split('/')[1])
+        onAvatarSet?.(url)
+      }
       onImported()
     } catch (err) {
       setError(err.message)
@@ -98,27 +123,100 @@ export default function CvImportReviewModal({ extracted, onClose, onImported }) 
           Uncheck anything you don't want, tweak the name/title if needed, then import.
         </p>
 
-        <ReviewSection title="Skills" selection={skills} renderItem={(item, i, sel) => (
-          <SkillRow key={i} item={item} checked={sel.selected.has(i)} onToggle={() => sel.toggle(i)}
-            onChange={(v) => sel.updateField(i, 'name', v)} />
-        )} />
+        {(hasProfileFields || hasPhoto) && (
+          <div className="mb-6 space-y-3">
+            {hasPhoto && (
+              <label className="flex items-center gap-3 border border-hairline rounded-md p-3 bg-paper">
+                <input
+                  type="checkbox"
+                  checked={applyPhoto}
+                  onChange={(e) => setApplyPhoto(e.target.checked)}
+                  className="rounded border-hairline"
+                />
+                <img
+                  src={`data:${extracted.photoContentType || 'image/jpeg'};base64,${extracted.photoBase64}`}
+                  alt="Found in document"
+                  className="w-12 h-12 rounded-full object-cover border border-hairline"
+                />
+                <span className="text-sm text-ink">Set as your profile photo</span>
+              </label>
+            )}
+            {extracted.photoBase64 && hasAvatar && (
+              <p className="text-xs text-secondary">
+                Found a photo in this document, but you already have a profile photo — leaving it
+                as is.
+              </p>
+            )}
 
-        <ReviewSection title="Training & courses" selection={courses} renderItem={(item, i, sel) => (
-          <CourseRow key={i} item={item} checked={sel.selected.has(i)} onToggle={() => sel.toggle(i)}
-            onChange={(v) => sel.updateField(i, 'name', v)} />
-        )} />
+            {hasProfileFields && (
+              <label className="flex items-start gap-3 border border-hairline rounded-md p-3 bg-paper">
+                <input
+                  type="checkbox"
+                  checked={applyProfile}
+                  onChange={(e) => setApplyProfile(e.target.checked)}
+                  className="mt-0.5 rounded border-hairline"
+                />
+                <span className="text-sm text-ink">
+                  Fill in blank profile fields:{' '}
+                  <span className="text-secondary">
+                    {[profileFields.full_name, profileFields.country, profileFields.location, profileFields.language]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                </span>
+              </label>
+            )}
+          </div>
+        )}
 
-        <ReviewSection title="Experience" selection={experience} renderItem={(item, i, sel) => (
-          <ExperienceRow key={i} item={item} checked={sel.selected.has(i)} onToggle={() => sel.toggle(i)}
-            onChange={(v) => sel.updateField(i, 'title', v)} />
-        )} />
+        <ReviewSection
+          title="Skills"
+          selection={skills}
+          renderItem={(item, i, sel) => (
+            <SkillRow
+              key={i}
+              item={item}
+              checked={sel.selected.has(i)}
+              onToggle={() => sel.toggle(i)}
+              onChange={(v) => sel.updateField(i, 'name', v)}
+            />
+          )}
+        />
+
+        <ReviewSection
+          title="Training & courses"
+          selection={courses}
+          renderItem={(item, i, sel) => (
+            <CourseRow
+              key={i}
+              item={item}
+              checked={sel.selected.has(i)}
+              onToggle={() => sel.toggle(i)}
+              onChange={(v) => sel.updateField(i, 'name', v)}
+            />
+          )}
+        />
+
+        <ReviewSection
+          title="Experience"
+          selection={experience}
+          renderItem={(item, i, sel) => (
+            <ExperienceRow
+              key={i}
+              item={item}
+              checked={sel.selected.has(i)}
+              onToggle={() => sel.toggle(i)}
+              onChange={(v) => sel.updateField(i, 'title', v)}
+            />
+          )}
+        />
 
         {error && <p className="text-sm text-red-700 mt-2">{error}</p>}
 
         <div className="flex items-center gap-2 pt-4 mt-4 border-t border-hairline">
           <button
             onClick={handleImport}
-            disabled={importing || totalSelected === 0}
+            disabled={importing || (totalSelected === 0 && !(applyProfile && hasProfileFields) && !(applyPhoto && hasPhoto))}
             className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90 disabled:opacity-60"
           >
             {importing ? 'Importing…' : `Import ${totalSelected} item${totalSelected === 1 ? '' : 's'}`}
@@ -174,6 +272,7 @@ function SkillRow({ item, checked, onToggle, onChange }) {
       />
       <p className="text-xs text-secondary mt-0.5">
         {item.category} · Level {item.level}
+        {item.current_role ? ' · Current role' : ''}
       </p>
     </Row>
   )

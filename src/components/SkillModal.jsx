@@ -8,6 +8,7 @@ export default function SkillModal({ skill, categories, onSave, onDelete, onClos
   const [category, setCategory] = useState(skill?.category ?? '')
   const [level, setLevel] = useState(skill?.level ?? 1)
   const [notes, setNotes] = useState(skill?.notes ?? '')
+  const [isCurrentRole, setIsCurrentRole] = useState(Boolean(skill?.is_current_role))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
@@ -26,6 +27,7 @@ export default function SkillModal({ skill, categories, onSave, onDelete, onClos
         category: category.trim(),
         level,
         notes: notes.trim() || null,
+        is_current_role: isCurrentRole,
       })
     } catch (err) {
       setError(err.message)
@@ -105,6 +107,16 @@ export default function SkillModal({ skill, categories, onSave, onDelete, onClos
               ))}
             </div>
           </div>
+
+          <label className="flex items-center gap-2 text-sm text-secondary">
+            <input
+              type="checkbox"
+              checked={isCurrentRole}
+              onChange={(e) => setIsCurrentRole(e.target.checked)}
+              className="rounded border-hairline"
+            />
+            Part of my current role
+          </label>
 
           <div>
             <label className="block text-sm text-secondary mb-1" htmlFor="notes">

@@ -3,7 +3,6 @@ import { useAuth } from '../context/AuthContext'
 import SkillsSection from '../components/SkillsSection'
 import CoursesSection from '../components/CoursesSection'
 import ExperienceSection from '../components/ExperienceSection'
-import CvImportButton from '../components/CvImportButton'
 
 export default function Dashboard() {
   const { user, signOut } = useAuth()
@@ -37,7 +36,6 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-16">
-        <CvImportButton />
         <SkillsSection />
         <CoursesSection />
         <ExperienceSection />
