@@ -305,7 +305,11 @@ function TimelineEntry({ entry, isLast, isMostRecent, assessorName }) {
         )}
         {entry.comments && <p className="text-sm text-ink mt-1">{entry.comments}</p>}
         {(entry.evidence_url || paths.length > 0) && (
-          <div className="flex flex-wrap items-center gap-3 mt-1">
+          <div className="mt-2">
+            <h5 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1">
+              Evidence
+            </h5>
+            <div className="flex flex-wrap items-center gap-3">
             {entry.evidence_url && (
               <a
                 href={entry.evidence_url}
@@ -319,6 +323,7 @@ function TimelineEntry({ entry, isLast, isMostRecent, assessorName }) {
             {paths.map((path, i) => (
               <EvidenceAttachmentLink key={path} path={path} index={i} />
             ))}
+            </div>
           </div>
         )}
       </div>
