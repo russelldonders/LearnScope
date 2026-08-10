@@ -31,7 +31,7 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
     setLoadingHistory(true)
     const { data } = await supabase
       .from('skill_assessments')
-      .select('*')
+      .select('*, courses(name)')
       .eq('skill_id', skill.id)
       .order('assessed_at', { ascending: false })
     setHistory(data ?? [])
@@ -333,10 +333,16 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
         <p className="font-mono text-xs text-secondary mt-0.5">
           {new Date(entry.assessed_at).toLocaleDateString()}
         </p>
-        {assessorName && (
+        {entry.source === 'course' && entry.courses?.name ? (
           <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
-            Self-assessed by {assessorName}
+            Earned by completing {entry.courses.name}
           </p>
+        ) : (
+          assessorName && (
+            <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+              Self-assessed by {assessorName}
+            </p>
+          )
         )}
         {entry.comments && <p className="text-sm text-ink mt-1">{entry.comments}</p>}
         {(entry.evidence_url || paths.length > 0) && (

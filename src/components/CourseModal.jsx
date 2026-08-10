@@ -1,11 +1,15 @@
 import { useState } from 'react'
+import GrowthRing from './GrowthRing'
+import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 
-export default function CourseModal({ course, onSave, onDelete, onClose }) {
+export default function CourseModal({ course, skills, linkedAssessment, onSave, onDelete, onClose }) {
   const isEditing = Boolean(course?.id)
   const [name, setName] = useState(course?.name ?? '')
   const [provider, setProvider] = useState(course?.provider ?? '')
   const [completedDate, setCompletedDate] = useState(course?.completed_date ?? '')
   const [notes, setNotes] = useState(course?.notes ?? '')
+  const [skillId, setSkillId] = useState(linkedAssessment?.skill_id ?? '')
+  const [skillLevel, setSkillLevel] = useState(linkedAssessment?.level ?? 3)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
@@ -24,6 +28,10 @@ export default function CourseModal({ course, onSave, onDelete, onClose }) {
         provider: provider.trim() || null,
         completed_date: completedDate || null,
         notes: notes.trim() || null,
+        skillId: skillId || null,
+        level: skillId ? skillLevel : null,
+        linkedAssessmentId: linkedAssessment?.id ?? null,
+        previousSkillId: linkedAssessment?.skill_id ?? null,
       })
     } catch (err) {
       setError(err.message)
@@ -104,6 +112,53 @@ export default function CourseModal({ course, onSave, onDelete, onClose }) {
               placeholder="What it covered, certificate link…"
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
             />
+          </div>
+
+          <div className="border-t border-hairline pt-4 space-y-3">
+            <h4 className="font-mono text-xs uppercase tracking-wide text-secondary">
+              Skill earned (optional)
+            </h4>
+            {skills.length === 0 ? (
+              <p className="text-xs text-secondary">
+                You don't have any skills yet — add one first to link it here.
+              </p>
+            ) : (
+              <>
+                <select
+                  value={skillId}
+                  onChange={(e) => setSkillId(e.target.value)}
+                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+                >
+                  <option value="">— None —</option>
+                  {skills.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.category})
+                    </option>
+                  ))}
+                </select>
+
+                {skillId && (
+                  <div>
+                    <span className="block text-sm text-secondary mb-2">Level earned</span>
+                    <div className="flex items-center justify-between">
+                      {LEVELS.map((l) => (
+                        <button
+                          type="button"
+                          key={l}
+                          onClick={() => setSkillLevel(l)}
+                          className={`flex flex-col items-center gap-1 rounded-md px-1 py-1 ${
+                            skillLevel === l ? 'bg-moss/10' : ''
+                          }`}
+                        >
+                          <GrowthRing level={l} size={36} />
+                          <span className="font-mono text-[10px] text-secondary">{LEVEL_LABELS[l]}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {error && <p className="text-sm text-red-700">{error}</p>}
