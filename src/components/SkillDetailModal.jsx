@@ -258,6 +258,7 @@ function HistorySection({ skill, history, loading, assessorName }) {
             key={entry.id}
             entry={entry}
             isLast={i === history.length - 1}
+            isMostRecent={i === 0}
             assessorName={assessorName}
           />
         ))}
@@ -266,7 +267,7 @@ function HistorySection({ skill, history, loading, assessorName }) {
   )
 }
 
-function TimelineEntry({ entry, isLast, assessorName }) {
+function TimelineEntry({ entry, isLast, isMostRecent, assessorName }) {
   const paths = entry.evidence_paths?.length
     ? entry.evidence_paths
     : entry.evidence_path
@@ -276,12 +277,26 @@ function TimelineEntry({ entry, isLast, assessorName }) {
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center">
-        <GrowthRing level={entry.level} size={32} />
+        <GrowthRing level={entry.level} size={isMostRecent ? 48 : 32} />
         {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
       </div>
-      <div className="min-w-0 flex-1 pb-6">
-        <p className="font-mono text-xs text-secondary">
-          {new Date(entry.assessed_at).toLocaleDateString()} · {LEVEL_LABELS[entry.level]}
+      <div
+        className={`min-w-0 flex-1 pb-6 ${
+          isMostRecent ? 'rounded-md border border-moss/30 bg-moss/5 p-3' : ''
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          <p className={isMostRecent ? 'text-base font-semibold text-ink' : 'text-sm font-medium text-ink'}>
+            {LEVEL_LABELS[entry.level]}
+          </p>
+          {isMostRecent && (
+            <span className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5">
+              Current
+            </span>
+          )}
+        </div>
+        <p className="font-mono text-xs text-secondary mt-0.5">
+          {new Date(entry.assessed_at).toLocaleDateString()}
         </p>
         {assessorName && (
           <p className="font-mono text-[10px] text-secondary/80 mt-0.5">

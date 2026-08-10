@@ -22,6 +22,7 @@ export default function SkillsSection() {
   const [addOpen, setAddOpen] = useState(false)
   const [detailSkill, setDetailSkill] = useState(null)
   const [reasonFilter, setReasonFilter] = useState(null)
+  const [categoryFilter, setCategoryFilter] = useState(null)
 
   useEffect(() => {
     loadSkills()
@@ -44,8 +45,13 @@ export default function SkillsSection() {
   }
 
   const filteredSkills = useMemo(
-    () => (reasonFilter ? skills.filter((s) => s.tracking_reason === reasonFilter) : skills),
-    [skills, reasonFilter]
+    () =>
+      skills.filter(
+        (s) =>
+          (!reasonFilter || s.tracking_reason === reasonFilter) &&
+          (!categoryFilter || s.category === categoryFilter)
+      ),
+    [skills, reasonFilter, categoryFilter]
   )
   const currentRoleSkills = useMemo(
     () => filteredSkills.filter((s) => s.is_current_role),
@@ -86,34 +92,53 @@ export default function SkillsSection() {
         </div>
       )}
 
-      {!loading && skills.length > 0 && availableReasons.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 mb-6">
-          <button
-            type="button"
-            onClick={() => setReasonFilter(null)}
-            className={`font-mono text-xs uppercase tracking-wide rounded-full px-3 py-1 border transition-colors ${
-              reasonFilter === null
-                ? 'bg-moss text-paper border-moss'
-                : 'border-hairline text-secondary hover:text-ink'
-            }`}
-          >
-            All
-          </button>
-          {availableReasons.map((r) => (
-            <button
-              key={r.value}
-              type="button"
-              onClick={() => setReasonFilter(reasonFilter === r.value ? null : r.value)}
-              className={`flex items-center gap-1.5 font-mono text-xs uppercase tracking-wide rounded-full px-3 py-1 border transition-colors ${
-                reasonFilter === r.value
-                  ? 'bg-moss text-paper border-moss'
-                  : 'border-hairline text-secondary hover:text-ink'
-              }`}
+      {!loading && skills.length > 0 && (availableReasons.length > 0 || categories.length > 1) && (
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          {availableReasons.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setReasonFilter(null)}
+                className={`font-mono text-xs uppercase tracking-wide rounded-full px-3 py-1 border transition-colors ${
+                  reasonFilter === null
+                    ? 'bg-moss text-paper border-moss'
+                    : 'border-hairline text-secondary hover:text-ink'
+                }`}
+              >
+                All
+              </button>
+              {availableReasons.map((r) => (
+                <button
+                  key={r.value}
+                  type="button"
+                  onClick={() => setReasonFilter(reasonFilter === r.value ? null : r.value)}
+                  className={`flex items-center gap-1.5 font-mono text-xs uppercase tracking-wide rounded-full px-3 py-1 border transition-colors ${
+                    reasonFilter === r.value
+                      ? 'bg-moss text-paper border-moss'
+                      : 'border-hairline text-secondary hover:text-ink'
+                  }`}
+                >
+                  <TrackingReasonIcon reason={r.value} size={12} />
+                  {TRACKING_REASON_LABELS[r.value]}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {categories.length > 1 && (
+            <select
+              value={categoryFilter ?? ''}
+              onChange={(e) => setCategoryFilter(e.target.value || null)}
+              className="rounded-full border border-hairline bg-paper px-3 py-1 font-mono text-xs uppercase tracking-wide text-secondary focus:outline-none focus:ring-2 focus:ring-moss"
             >
-              <TrackingReasonIcon reason={r.value} size={12} />
-              {TRACKING_REASON_LABELS[r.value]}
-            </button>
-          ))}
+              <option value="">All categories</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
       )}
 
