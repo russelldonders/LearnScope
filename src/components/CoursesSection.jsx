@@ -57,10 +57,12 @@ export default function CoursesSection() {
     setModalCourse(null)
     setModalLinkedAssessment(null)
     setModalOpen(true)
+    loadSkills()
   }
 
   async function openEditModal(course) {
     setModalCourse(course)
+    loadSkills()
     const { data } = await supabase
       .from('skill_assessments')
       .select('id, skill_id, level')
