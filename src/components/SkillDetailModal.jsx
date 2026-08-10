@@ -2,26 +2,28 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { uploadEvidenceFiles, getEvidenceSignedUrl } from '../lib/skillEvidence'
-import { computeNextSelfAssessmentDate } from '../lib/checkin'
+import { computeNextSelfAssessmentDate, isSelfAssessmentDue } from '../lib/checkin'
 import GrowthRing from './GrowthRing'
 import EvidenceFields from './EvidenceFields'
 import TrackingReasonPicker from './TrackingReasonPicker'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 
 const TABS = [
+  { id: 'history', label: 'Overview' },
   { id: 'assess', label: 'Self-assess' },
   { id: 'details', label: 'Details' },
-  { id: 'history', label: 'History' },
 ]
 
 export default function SkillDetailModal({ skill, categories, onClose, onUpdated, onDeleted }) {
   const { user } = useAuth()
-  const [tab, setTab] = useState('assess')
+  const [tab, setTab] = useState('history')
   const [history, setHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(true)
+  const [assessorName, setAssessorName] = useState(null)
 
   useEffect(() => {
     loadHistory()
+    loadAssessorName()
   }, [])
 
   async function loadHistory() {
@@ -33,6 +35,15 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
       .order('assessed_at', { ascending: false })
     setHistory(data ?? [])
     setLoadingHistory(false)
+  }
+
+  async function loadAssessorName() {
+    const { data } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', user.id)
+      .single()
+    setAssessorName(data?.full_name || user.email)
   }
 
   return (
@@ -97,7 +108,14 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
           />
         )}
 
-        {tab === 'history' && <HistorySection history={history} loading={loadingHistory} />}
+        {tab === 'history' && (
+          <HistorySection
+            skill={skill}
+            history={history}
+            loading={loadingHistory}
+            assessorName={assessorName}
+          />
+        )}
       </div>
     </div>
   )
@@ -209,23 +227,46 @@ function SelfAssessSection({ skill, user, onAssessed }) {
   )
 }
 
-function HistorySection({ history, loading }) {
+function HistorySection({ skill, history, loading, assessorName }) {
+  const due = isSelfAssessmentDue(skill.next_checkin_date)
+
   return (
     <div>
+      {skill.next_checkin_date && (
+        <div
+          className={`flex items-center justify-between rounded-md border px-3 py-2 mb-6 ${
+            due ? 'border-gold bg-gold/10' : 'border-hairline bg-paper'
+          }`}
+        >
+          <span className="font-mono text-xs uppercase tracking-wide text-secondary">
+            Next planned self-assessment
+          </span>
+          <span className={`text-sm font-medium ${due ? 'text-gold' : 'text-ink'}`}>
+            {new Date(`${skill.next_checkin_date}T00:00:00`).toLocaleDateString()}
+            {due ? ' · Due' : ''}
+          </span>
+        </div>
+      )}
+
       {loading && <p className="text-sm text-secondary">Loading…</p>}
       {!loading && history.length === 0 && (
         <p className="text-sm text-secondary">No self-assessments yet.</p>
       )}
       <div>
         {history.map((entry, i) => (
-          <TimelineEntry key={entry.id} entry={entry} isLast={i === history.length - 1} />
+          <TimelineEntry
+            key={entry.id}
+            entry={entry}
+            isLast={i === history.length - 1}
+            assessorName={assessorName}
+          />
         ))}
       </div>
     </div>
   )
 }
 
-function TimelineEntry({ entry, isLast }) {
+function TimelineEntry({ entry, isLast, assessorName }) {
   const paths = entry.evidence_paths?.length
     ? entry.evidence_paths
     : entry.evidence_path
@@ -242,6 +283,11 @@ function TimelineEntry({ entry, isLast }) {
         <p className="font-mono text-xs text-secondary">
           {new Date(entry.assessed_at).toLocaleDateString()} · {LEVEL_LABELS[entry.level]}
         </p>
+        {assessorName && (
+          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+            Self-assessed by {assessorName}
+          </p>
+        )}
         {entry.comments && <p className="text-sm text-ink mt-1">{entry.comments}</p>}
         {(entry.evidence_url || paths.length > 0) && (
           <div className="flex flex-wrap items-center gap-3 mt-1">

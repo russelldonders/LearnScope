@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabaseClient'
 import SkillCard from './SkillCard'
 import SkillModal from './SkillModal'
 import SkillDetailModal from './SkillDetailModal'
+import TrackingReasonIcon from './TrackingReasonIcon'
+import { TRACKING_REASONS, TRACKING_REASON_LABELS } from '../lib/trackingReasons'
 
 function groupByCategory(skills) {
   const map = new Map()
@@ -19,6 +21,7 @@ export default function SkillsSection() {
   const [error, setError] = useState(null)
   const [addOpen, setAddOpen] = useState(false)
   const [detailSkill, setDetailSkill] = useState(null)
+  const [reasonFilter, setReasonFilter] = useState(null)
 
   useEffect(() => {
     loadSkills()
@@ -40,13 +43,27 @@ export default function SkillsSection() {
     setLoading(false)
   }
 
-  const currentRoleSkills = useMemo(() => skills.filter((s) => s.is_current_role), [skills])
-  const otherSkills = useMemo(() => skills.filter((s) => !s.is_current_role), [skills])
+  const filteredSkills = useMemo(
+    () => (reasonFilter ? skills.filter((s) => s.tracking_reason === reasonFilter) : skills),
+    [skills, reasonFilter]
+  )
+  const currentRoleSkills = useMemo(
+    () => filteredSkills.filter((s) => s.is_current_role),
+    [filteredSkills]
+  )
+  const otherSkills = useMemo(
+    () => filteredSkills.filter((s) => !s.is_current_role),
+    [filteredSkills]
+  )
   const currentRoleGrouped = useMemo(() => groupByCategory(currentRoleSkills), [currentRoleSkills])
   const otherGrouped = useMemo(() => groupByCategory(otherSkills), [otherSkills])
   const hasSplit = currentRoleSkills.length > 0
 
   const categories = useMemo(() => [...new Set(skills.map((s) => s.category))], [skills])
+  const availableReasons = useMemo(
+    () => TRACKING_REASONS.filter((r) => skills.some((s) => s.tracking_reason === r.value)),
+    [skills]
+  )
 
   return (
     <section>
@@ -66,6 +83,43 @@ export default function SkillsSection() {
       {!loading && skills.length === 0 && (
         <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
           <p className="text-secondary">No skills logged yet. Add your first one.</p>
+        </div>
+      )}
+
+      {!loading && skills.length > 0 && availableReasons.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-6">
+          <button
+            type="button"
+            onClick={() => setReasonFilter(null)}
+            className={`font-mono text-xs uppercase tracking-wide rounded-full px-3 py-1 border transition-colors ${
+              reasonFilter === null
+                ? 'bg-moss text-paper border-moss'
+                : 'border-hairline text-secondary hover:text-ink'
+            }`}
+          >
+            All
+          </button>
+          {availableReasons.map((r) => (
+            <button
+              key={r.value}
+              type="button"
+              onClick={() => setReasonFilter(reasonFilter === r.value ? null : r.value)}
+              className={`flex items-center gap-1.5 font-mono text-xs uppercase tracking-wide rounded-full px-3 py-1 border transition-colors ${
+                reasonFilter === r.value
+                  ? 'bg-moss text-paper border-moss'
+                  : 'border-hairline text-secondary hover:text-ink'
+              }`}
+            >
+              <TrackingReasonIcon reason={r.value} size={12} />
+              {TRACKING_REASON_LABELS[r.value]}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!loading && skills.length > 0 && filteredSkills.length === 0 && (
+        <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
+          <p className="text-secondary">No skills match this filter.</p>
         </div>
       )}
 

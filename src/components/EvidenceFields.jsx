@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 
 function UploadIcon() {
   return (
@@ -12,6 +12,8 @@ function UploadIcon() {
 
 export default function EvidenceFields({ evidenceUrl, onEvidenceUrlChange, files, onFilesChange }) {
   const inputRef = useRef(null)
+  const [dragging, setDragging] = useState(false)
+  const dragCounter = useRef(0)
 
   function handleFileChange(e) {
     const newFiles = Array.from(e.target.files ?? [])
@@ -21,6 +23,33 @@ export default function EvidenceFields({ evidenceUrl, onEvidenceUrlChange, files
 
   function removeFile(index) {
     onFilesChange(files.filter((_, i) => i !== index))
+  }
+
+  function handleDragEnter(e) {
+    e.preventDefault()
+    dragCounter.current += 1
+    setDragging(true)
+  }
+
+  function handleDragLeave(e) {
+    e.preventDefault()
+    dragCounter.current -= 1
+    if (dragCounter.current <= 0) {
+      dragCounter.current = 0
+      setDragging(false)
+    }
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault()
+  }
+
+  function handleDrop(e) {
+    e.preventDefault()
+    dragCounter.current = 0
+    setDragging(false)
+    const newFiles = Array.from(e.dataTransfer.files ?? [])
+    if (newFiles.length > 0) onFilesChange([...files, ...newFiles])
   }
 
   return (
@@ -43,16 +72,29 @@ export default function EvidenceFields({ evidenceUrl, onEvidenceUrlChange, files
 
       <div>
         <label className="block text-xs text-secondary mb-1">Files</label>
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="flex items-center gap-2 rounded-md border border-hairline text-ink py-2 px-3 text-sm font-medium hover:bg-paper"
+        <div
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          className={`flex flex-col items-center justify-center gap-1.5 rounded-md border-2 border-dashed px-3 py-4 text-center transition-colors ${
+            dragging ? 'border-moss bg-moss/10' : 'border-hairline'
+          }`}
         >
           <UploadIcon />
-          {files.length > 0
-            ? `Add more files (${files.length} attached)`
-            : 'Attach files'}
-        </button>
+          <p className="text-xs text-secondary">
+            Drag and drop files here, or
+          </p>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+          >
+            {files.length > 0
+              ? `Add more files (${files.length} attached)`
+              : 'Attach files'}
+          </button>
+        </div>
         <input
           ref={inputRef}
           type="file"
