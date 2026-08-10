@@ -61,6 +61,7 @@ export default function ResumeImportReviewModal({
         level: s.level,
         notes: s.notes,
         is_current_role: Boolean(s.current_role),
+        source: 'cv_import',
         user_id: user.id,
       }))
     const courseRows = courses.values

@@ -7,6 +7,7 @@ import GrowthRing from './GrowthRing'
 import EvidenceFields from './EvidenceFields'
 import TrackingReasonPicker from './TrackingReasonPicker'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
+import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
 
 const TABS = [
   { id: 'history', label: 'Overview' },
@@ -252,7 +253,7 @@ function HistorySection({ skill, history, loading, assessorName }) {
       {!loading && (() => {
         const events = [
           ...history.map((entry) => ({ type: 'assessment', date: entry.assessed_at, entry })),
-          { type: 'added', date: skill.date_added },
+          { type: 'added', date: skill.date_added, source: skill.source },
         ].sort((a, b) => new Date(b.date) - new Date(a.date))
         const mostRecentAssessmentIndex = events.findIndex((e) => e.type === 'assessment')
 
@@ -275,6 +276,10 @@ function HistorySection({ skill, history, loading, assessorName }) {
 }
 
 function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
+  const boxClass = isMostRecent
+    ? 'rounded-md border border-moss/40 bg-moss/5 p-3'
+    : 'rounded-md border border-hairline bg-paper p-3'
+
   if (event.type === 'added') {
     return (
       <div className="flex gap-3">
@@ -287,10 +292,14 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
           </div>
           {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
         </div>
-        <div className="min-w-0 flex-1 pb-6">
+        <div className={`min-w-0 flex-1 mb-6 ${boxClass}`}>
           <p className="text-sm font-medium text-ink">Skill added</p>
           <p className="font-mono text-xs text-secondary mt-0.5">
             {new Date(event.date).toLocaleDateString()}
+          </p>
+          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+            {assessorName ? `By ${assessorName}` : 'By you'}
+            {event.source ? ` · ${SKILL_SOURCE_LABELS[event.source] ?? event.source}` : ''}
           </p>
         </div>
       </div>
@@ -310,11 +319,7 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
         <GrowthRing level={entry.level} size={isMostRecent ? 48 : 32} />
         {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
       </div>
-      <div
-        className={`min-w-0 flex-1 pb-6 ${
-          isMostRecent ? 'rounded-md border border-moss/30 bg-moss/5 p-3' : ''
-        }`}
-      >
+      <div className={`min-w-0 flex-1 mb-6 ${boxClass}`}>
         <div className="flex items-center gap-2">
           <p className={isMostRecent ? 'text-base font-semibold text-ink' : 'text-sm font-medium text-ink'}>
             {LEVEL_LABELS[entry.level]}
