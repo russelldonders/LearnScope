@@ -1,20 +1,22 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { uploadEvidence, getEvidenceSignedUrl } from '../lib/skillEvidence'
+import { uploadEvidenceFiles, getEvidenceSignedUrl } from '../lib/skillEvidence'
 import { computeNextSelfAssessmentDate } from '../lib/checkin'
 import GrowthRing from './GrowthRing'
+import EvidenceFields from './EvidenceFields'
+import TrackingReasonPicker from './TrackingReasonPicker'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 
 const TABS = [
-  { id: 'details', label: 'Details' },
   { id: 'assess', label: 'Self-assess' },
+  { id: 'details', label: 'Details' },
   { id: 'history', label: 'History' },
 ]
 
 export default function SkillDetailModal({ skill, categories, onClose, onUpdated, onDeleted }) {
   const { user } = useAuth()
-  const [tab, setTab] = useState('details')
+  const [tab, setTab] = useState('assess')
   const [history, setHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(true)
 
@@ -71,22 +73,27 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
           ))}
         </div>
 
-        {tab === 'details' && (
+        {tab === 'assess' && (
           <div className="space-y-6">
-            <DetailsSection skill={skill} categories={categories} onUpdated={onUpdated} onDeleted={onDeleted} />
+            <SelfAssessSection
+              skill={skill}
+              user={user}
+              onAssessed={() => {
+                loadHistory()
+                onUpdated()
+                setTab('history')
+              }}
+            />
             <ScheduleSection skill={skill} onUpdated={onUpdated} />
           </div>
         )}
 
-        {tab === 'assess' && (
-          <SelfAssessSection
+        {tab === 'details' && (
+          <DetailsSection
             skill={skill}
-            user={user}
-            onAssessed={() => {
-              loadHistory()
-              onUpdated()
-              setTab('history')
-            }}
+            categories={categories}
+            onUpdated={onUpdated}
+            onDeleted={onDeleted}
           />
         )}
 
@@ -100,7 +107,7 @@ function SelfAssessSection({ skill, user, onAssessed }) {
   const [level, setLevel] = useState(skill.level ?? 1)
   const [comments, setComments] = useState('')
   const [evidenceUrl, setEvidenceUrl] = useState('')
-  const [evidenceFile, setEvidenceFile] = useState(null)
+  const [evidenceFiles, setEvidenceFiles] = useState([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
@@ -122,11 +129,11 @@ function SelfAssessSection({ skill, user, onAssessed }) {
         .single()
       if (assessmentError) throw assessmentError
 
-      if (evidenceFile) {
-        const path = await uploadEvidence(user.id, skill.id, assessment.id, evidenceFile)
+      if (evidenceFiles.length > 0) {
+        const paths = await uploadEvidenceFiles(user.id, skill.id, assessment.id, evidenceFiles)
         const { error: updateError } = await supabase
           .from('skill_assessments')
-          .update({ evidence_path: path })
+          .update({ evidence_paths: paths })
           .eq('id', assessment.id)
         if (updateError) throw updateError
       }
@@ -182,18 +189,11 @@ function SelfAssessSection({ skill, user, onAssessed }) {
         className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
       />
 
-      <input
-        type="url"
-        placeholder="Evidence link (optional)"
-        value={evidenceUrl}
-        onChange={(e) => setEvidenceUrl(e.target.value)}
-        className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-      />
-
-      <input
-        type="file"
-        onChange={(e) => setEvidenceFile(e.target.files?.[0] ?? null)}
-        className="w-full text-sm text-ink"
+      <EvidenceFields
+        evidenceUrl={evidenceUrl}
+        onEvidenceUrlChange={setEvidenceUrl}
+        files={evidenceFiles}
+        onFilesChange={setEvidenceFiles}
       />
 
       {error && <p className="text-sm text-red-700">{error}</p>}
@@ -216,16 +216,56 @@ function HistorySection({ history, loading }) {
       {!loading && history.length === 0 && (
         <p className="text-sm text-secondary">No self-assessments yet.</p>
       )}
-      <div className="space-y-3">
-        {history.map((entry) => (
-          <HistoryEntry key={entry.id} entry={entry} />
+      <div>
+        {history.map((entry, i) => (
+          <TimelineEntry key={entry.id} entry={entry} isLast={i === history.length - 1} />
         ))}
       </div>
     </div>
   )
 }
 
-function HistoryEntry({ entry }) {
+function TimelineEntry({ entry, isLast }) {
+  const paths = entry.evidence_paths?.length
+    ? entry.evidence_paths
+    : entry.evidence_path
+      ? [entry.evidence_path]
+      : []
+
+  return (
+    <div className="flex gap-3">
+      <div className="flex flex-col items-center">
+        <GrowthRing level={entry.level} size={32} />
+        {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
+      </div>
+      <div className="min-w-0 flex-1 pb-6">
+        <p className="font-mono text-xs text-secondary">
+          {new Date(entry.assessed_at).toLocaleDateString()} · {LEVEL_LABELS[entry.level]}
+        </p>
+        {entry.comments && <p className="text-sm text-ink mt-1">{entry.comments}</p>}
+        {(entry.evidence_url || paths.length > 0) && (
+          <div className="flex flex-wrap items-center gap-3 mt-1">
+            {entry.evidence_url && (
+              <a
+                href={entry.evidence_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-moss font-medium"
+              >
+                Evidence link
+              </a>
+            )}
+            {paths.map((path, i) => (
+              <EvidenceAttachmentLink key={path} path={path} index={i} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function EvidenceAttachmentLink({ path, index }) {
   const [signedUrl, setSignedUrl] = useState(null)
   const [loadingUrl, setLoadingUrl] = useState(false)
 
@@ -236,7 +276,7 @@ function HistoryEntry({ entry }) {
     }
     setLoadingUrl(true)
     try {
-      const url = await getEvidenceSignedUrl(entry.evidence_path)
+      const url = await getEvidenceSignedUrl(path)
       setSignedUrl(url)
       window.open(url, '_blank', 'noopener')
     } finally {
@@ -245,37 +285,14 @@ function HistoryEntry({ entry }) {
   }
 
   return (
-    <div className="flex gap-3 border border-hairline rounded-md p-3 bg-paper">
-      <GrowthRing level={entry.level} size={32} />
-      <div className="min-w-0 flex-1">
-        <p className="font-mono text-xs text-secondary">
-          {new Date(entry.assessed_at).toLocaleDateString()} · {LEVEL_LABELS[entry.level]}
-        </p>
-        {entry.comments && <p className="text-sm text-ink mt-1">{entry.comments}</p>}
-        <div className="flex items-center gap-3 mt-1">
-          {entry.evidence_url && (
-            <a
-              href={entry.evidence_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-moss font-medium"
-            >
-              Evidence link
-            </a>
-          )}
-          {entry.evidence_path && (
-            <button
-              type="button"
-              onClick={handleViewEvidence}
-              disabled={loadingUrl}
-              className="text-xs text-moss font-medium"
-            >
-              {loadingUrl ? 'Loading…' : 'View attachment'}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+    <button
+      type="button"
+      onClick={handleViewEvidence}
+      disabled={loadingUrl}
+      className="text-xs text-moss font-medium"
+    >
+      {loadingUrl ? 'Loading…' : `Attachment ${index + 1}`}
+    </button>
   )
 }
 
@@ -392,6 +409,7 @@ function DetailsSection({ skill, categories, onUpdated, onDeleted }) {
   const [name, setName] = useState(skill.name)
   const [category, setCategory] = useState(skill.category)
   const [isCurrentRole, setIsCurrentRole] = useState(skill.is_current_role)
+  const [trackingReason, setTrackingReason] = useState(skill.tracking_reason ?? null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
@@ -410,6 +428,7 @@ function DetailsSection({ skill, categories, onUpdated, onDeleted }) {
           name: name.trim(),
           category: category.trim(),
           is_current_role: isCurrentRole,
+          tracking_reason: trackingReason,
         })
         .eq('id', skill.id)
       if (error) throw error
@@ -477,6 +496,8 @@ function DetailsSection({ skill, categories, onUpdated, onDeleted }) {
         />
         Part of my current role
       </label>
+
+      <TrackingReasonPicker value={trackingReason} onChange={setTrackingReason} />
 
       {error && <p className="text-sm text-red-700">{error}</p>}
 

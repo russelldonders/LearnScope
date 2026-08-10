@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { uploadEvidence } from '../lib/skillEvidence'
+import { uploadEvidenceFiles } from '../lib/skillEvidence'
 import GrowthRing from './GrowthRing'
+import EvidenceFields from './EvidenceFields'
+import TrackingReasonPicker from './TrackingReasonPicker'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 
 export default function SkillModal({ categories, onClose, onCreated }) {
@@ -10,11 +12,12 @@ export default function SkillModal({ categories, onClose, onCreated }) {
   const [name, setName] = useState('')
   const [category, setCategory] = useState('')
   const [isCurrentRole, setIsCurrentRole] = useState(false)
+  const [trackingReason, setTrackingReason] = useState(null)
   const [assessNow, setAssessNow] = useState(true)
   const [level, setLevel] = useState(1)
   const [comments, setComments] = useState('')
   const [evidenceUrl, setEvidenceUrl] = useState('')
-  const [evidenceFile, setEvidenceFile] = useState(null)
+  const [evidenceFiles, setEvidenceFiles] = useState([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
@@ -34,6 +37,7 @@ export default function SkillModal({ categories, onClose, onCreated }) {
           category: category.trim(),
           level: assessNow ? level : null,
           is_current_role: isCurrentRole,
+          tracking_reason: trackingReason,
           user_id: user.id,
         })
         .select()
@@ -54,11 +58,11 @@ export default function SkillModal({ categories, onClose, onCreated }) {
           .single()
         if (assessmentError) throw assessmentError
 
-        if (evidenceFile) {
-          const path = await uploadEvidence(user.id, skill.id, assessment.id, evidenceFile)
+        if (evidenceFiles.length > 0) {
+          const paths = await uploadEvidenceFiles(user.id, skill.id, assessment.id, evidenceFiles)
           const { error: updateError } = await supabase
             .from('skill_assessments')
-            .update({ evidence_path: path })
+            .update({ evidence_paths: paths })
             .eq('id', assessment.id)
           if (updateError) throw updateError
         }
@@ -122,6 +126,8 @@ export default function SkillModal({ categories, onClose, onCreated }) {
             Part of my current role
           </label>
 
+          <TrackingReasonPicker value={trackingReason} onChange={setTrackingReason} />
+
           <label className="flex items-center gap-2 text-sm text-secondary border-t border-hairline pt-4">
             <input
               type="checkbox"
@@ -167,31 +173,12 @@ export default function SkillModal({ categories, onClose, onCreated }) {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm text-secondary mb-1" htmlFor="evidenceUrl">
-                  Evidence link (optional)
-                </label>
-                <input
-                  id="evidenceUrl"
-                  type="url"
-                  placeholder="https://…"
-                  value={evidenceUrl}
-                  onChange={(e) => setEvidenceUrl(e.target.value)}
-                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm text-secondary mb-1" htmlFor="evidenceFile">
-                  Or attach a file (optional)
-                </label>
-                <input
-                  id="evidenceFile"
-                  type="file"
-                  onChange={(e) => setEvidenceFile(e.target.files?.[0] ?? null)}
-                  className="w-full text-sm text-ink"
-                />
-              </div>
+              <EvidenceFields
+                evidenceUrl={evidenceUrl}
+                onEvidenceUrlChange={setEvidenceUrl}
+                files={evidenceFiles}
+                onFilesChange={setEvidenceFiles}
+              />
             </>
           ) : (
             <p className="text-xs text-secondary">

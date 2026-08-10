@@ -1,5 +1,7 @@
 import GrowthRing from './GrowthRing'
+import TrackingReasonIcon from './TrackingReasonIcon'
 import { isSelfAssessmentDue } from '../lib/checkin'
+import { TRACKING_REASON_LABELS } from '../lib/trackingReasons'
 
 export default function SkillCard({ skill, onEdit }) {
   const due = isSelfAssessmentDue(skill.next_checkin_date)
@@ -25,9 +27,20 @@ export default function SkillCard({ skill, onEdit }) {
           )}
         </div>
         {skill.notes && <p className="text-sm text-secondary line-clamp-2 mt-0.5">{skill.notes}</p>}
-        <p className="font-mono text-xs text-secondary mt-1">
-          {new Date(skill.date_added).toLocaleDateString()}
-        </p>
+        <div className="flex items-center gap-2 mt-1">
+          <p className="font-mono text-xs text-secondary">
+            {new Date(skill.date_added).toLocaleDateString()}
+          </p>
+          {skill.tracking_reason && (
+            <span
+              className="flex items-center gap-1 font-mono text-[10px] text-secondary"
+              title={TRACKING_REASON_LABELS[skill.tracking_reason]}
+            >
+              <TrackingReasonIcon reason={skill.tracking_reason} size={12} />
+              {TRACKING_REASON_LABELS[skill.tracking_reason]}
+            </span>
+          )}
+        </div>
       </div>
     </button>
   )
