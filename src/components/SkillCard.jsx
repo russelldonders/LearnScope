@@ -27,20 +27,15 @@ export default function SkillCard({ skill, onEdit }) {
           )}
         </div>
         {skill.notes && <p className="text-sm text-secondary line-clamp-2 mt-0.5">{skill.notes}</p>}
-        <div className="flex items-center gap-2 mt-1">
-          <p className="font-mono text-xs text-secondary">
-            {new Date(skill.date_added).toLocaleDateString()}
-          </p>
-          {skill.tracking_reason && (
-            <span
-              className="flex items-center gap-1 font-mono text-[10px] text-secondary"
-              title={TRACKING_REASON_LABELS[skill.tracking_reason]}
-            >
-              <TrackingReasonIcon reason={skill.tracking_reason} size={12} />
-              {TRACKING_REASON_LABELS[skill.tracking_reason]}
-            </span>
-          )}
-        </div>
+        {skill.tracking_reason && (
+          <span
+            className="flex items-center gap-1 font-mono text-[10px] text-secondary mt-1"
+            title={TRACKING_REASON_LABELS[skill.tracking_reason]}
+          >
+            <TrackingReasonIcon reason={skill.tracking_reason} size={12} />
+            {TRACKING_REASON_LABELS[skill.tracking_reason]}
+          </span>
+        )}
       </div>
     </button>
   )

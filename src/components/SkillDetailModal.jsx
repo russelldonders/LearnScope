@@ -249,25 +249,55 @@ function HistorySection({ skill, history, loading, assessorName }) {
       )}
 
       {loading && <p className="text-sm text-secondary">Loading…</p>}
-      {!loading && history.length === 0 && (
-        <p className="text-sm text-secondary">No self-assessments yet.</p>
-      )}
-      <div>
-        {history.map((entry, i) => (
-          <TimelineEntry
-            key={entry.id}
-            entry={entry}
-            isLast={i === history.length - 1}
-            isMostRecent={i === 0}
-            assessorName={assessorName}
-          />
-        ))}
-      </div>
+      {!loading && (() => {
+        const events = [
+          ...history.map((entry) => ({ type: 'assessment', date: entry.assessed_at, entry })),
+          { type: 'added', date: skill.date_added },
+        ].sort((a, b) => new Date(b.date) - new Date(a.date))
+        const mostRecentAssessmentIndex = events.findIndex((e) => e.type === 'assessment')
+
+        return (
+          <div>
+            {events.map((event, i) => (
+              <TimelineEntry
+                key={event.type === 'assessment' ? event.entry.id : 'added'}
+                event={event}
+                isLast={i === events.length - 1}
+                isMostRecent={i === mostRecentAssessmentIndex}
+                assessorName={assessorName}
+              />
+            ))}
+          </div>
+        )
+      })()}
     </div>
   )
 }
 
-function TimelineEntry({ entry, isLast, isMostRecent, assessorName }) {
+function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
+  if (event.type === 'added') {
+    return (
+      <div className="flex gap-3">
+        <div className="flex flex-col items-center">
+          <div className="flex items-center justify-center w-8 h-8 rounded-full border border-hairline bg-paper">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-secondary">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </div>
+          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
+        </div>
+        <div className="min-w-0 flex-1 pb-6">
+          <p className="text-sm font-medium text-ink">Skill added</p>
+          <p className="font-mono text-xs text-secondary mt-0.5">
+            {new Date(event.date).toLocaleDateString()}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  const entry = event.entry
   const paths = entry.evidence_paths?.length
     ? entry.evidence_paths
     : entry.evidence_path
