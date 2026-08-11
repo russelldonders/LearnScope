@@ -3,11 +3,13 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { uploadEvidenceFiles, getEvidenceSignedUrl } from '../lib/skillEvidence'
 import { computeNextSelfAssessmentDate, isSelfAssessmentDue } from '../lib/checkin'
+import { formatMonthYear } from '../lib/dates'
 import GrowthRing from './GrowthRing'
 import EvidenceFields from './EvidenceFields'
 import TrackingReasonPicker from './TrackingReasonPicker'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
+import { SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
 import InviteRaterModal from './InviteRaterModal'
 
 const TABS = [
@@ -21,6 +23,7 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
   const [tab, setTab] = useState('history')
   const [history, setHistory] = useState([])
   const [peerRatings, setPeerRatings] = useState([])
+  const [relationshipLinks, setRelationshipLinks] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [assessorName, setAssessorName] = useState(null)
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -32,10 +35,10 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
 
   async function loadHistory() {
     setLoadingHistory(true)
-    const [{ data: assessments }, { data: ratings }] = await Promise.all([
+    const [{ data: assessments }, { data: ratings }, { data: links }] = await Promise.all([
       supabase
         .from('skill_assessments')
-        .select('*, courses(name)')
+        .select('*, courses(name), experience(title, organization)')
         .eq('skill_id', skill.id)
         .order('assessed_at', { ascending: false }),
       supabase
@@ -43,9 +46,14 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
         .select('*')
         .eq('skill_id', skill.id)
         .order('rated_at', { ascending: false }),
+      supabase
+        .from('skill_experience_links')
+        .select('id, relationship, experience(id, title, organization, type, start_date, end_date)')
+        .eq('skill_id', skill.id),
     ])
     setHistory(assessments ?? [])
     setPeerRatings(ratings ?? [])
+    setRelationshipLinks(links ?? [])
     setLoadingHistory(false)
   }
 
@@ -135,6 +143,7 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
             skill={skill}
             history={history}
             peerRatings={peerRatings}
+            relationshipLinks={relationshipLinks}
             loading={loadingHistory}
             assessorName={assessorName}
           />
@@ -250,7 +259,7 @@ function SelfAssessSection({ skill, user, onAssessed }) {
   )
 }
 
-function HistorySection({ skill, history, peerRatings, loading, assessorName }) {
+function HistorySection({ skill, history, peerRatings, relationshipLinks, loading, assessorName }) {
   const due = isSelfAssessmentDue(skill.next_checkin_date)
 
   return (
@@ -276,6 +285,9 @@ function HistorySection({ skill, history, peerRatings, loading, assessorName }) 
         const events = [
           ...history.map((entry) => ({ type: 'assessment', date: entry.assessed_at, entry })),
           ...peerRatings.map((rating) => ({ type: 'peer', date: rating.rated_at, rating })),
+          ...relationshipLinks
+            .filter((link) => link.experience)
+            .map((link) => ({ type: 'relationship', date: link.experience.start_date, link })),
           { type: 'added', date: skill.date_added, source: skill.source },
         ].sort((a, b) => new Date(b.date) - new Date(a.date))
         const mostRecentRatingIndex = events.findIndex((e) => e.type === 'assessment' || e.type === 'peer')
@@ -284,7 +296,11 @@ function HistorySection({ skill, history, peerRatings, loading, assessorName }) 
           <div>
             {events.map((event, i) => (
               <TimelineEntry
-                key={event.type === 'added' ? 'added' : (event.entry ?? event.rating).id}
+                key={
+                  event.type === 'added'
+                    ? 'added'
+                    : (event.entry ?? event.rating ?? event.link).id
+                }
                 event={event}
                 isLast={i === events.length - 1}
                 isMostRecent={i === mostRecentRatingIndex}
@@ -360,6 +376,36 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
     )
   }
 
+  if (event.type === 'relationship') {
+    const { link } = event
+    const exp = link.experience
+    return (
+      <div className="flex gap-3">
+        <div className="flex flex-col items-center">
+          <div className="flex items-center justify-center w-8 h-8 rounded-full border border-hairline bg-paper">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-secondary">
+              <path d="M3 7l9-4 9 4-9 4-9-4z" />
+              <path d="M3 12l9 4 9-4" />
+              <path d="M3 17l9 4 9-4" />
+            </svg>
+          </div>
+          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
+        </div>
+        <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3">
+          <p className="text-sm font-medium text-ink">
+            {SKILL_RELATIONSHIP_LABELS[link.relationship] ?? link.relationship}
+          </p>
+          <p className="font-mono text-xs text-secondary mt-0.5">
+            {formatMonthYear(exp.start_date)} – {exp.end_date ? formatMonthYear(exp.end_date) : 'present'}
+          </p>
+          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+            {exp.type === 'education' ? 'During study' : 'During employment'}: {exp.title} · {exp.organization}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   const entry = event.entry
   const paths = entry.evidence_paths?.length
     ? entry.evidence_paths
@@ -397,6 +443,11 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
               Self-assessed by {assessorName}
             </p>
           )
+        )}
+        {entry.experience?.title && (
+          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+            During {entry.experience.title} · {entry.experience.organization}
+          </p>
         )}
         {entry.comments && <p className="text-sm text-ink mt-1">{entry.comments}</p>}
         {(entry.evidence_url || paths.length > 0) && (

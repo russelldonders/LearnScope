@@ -7,6 +7,8 @@ import ExperienceModal from './ExperienceModal'
 export default function ExperienceSection() {
   const { user } = useAuth()
   const [items, setItems] = useState([])
+  const [skills, setSkills] = useState([])
+  const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [modalItem, setModalItem] = useState(null)
@@ -30,6 +32,15 @@ export default function ExperienceSection() {
     setLoading(false)
   }
 
+  async function loadPickerData() {
+    const [{ data: skillsData }, { data: coursesData }] = await Promise.all([
+      supabase.from('skills').select('id, name, category').order('name'),
+      supabase.from('courses').select('id, name, provider, completed_date').order('name'),
+    ])
+    setSkills(skillsData ?? [])
+    setCourses(coursesData ?? [])
+  }
+
   function openAddModal() {
     setModalItem(null)
     setModalOpen(true)
@@ -37,6 +48,7 @@ export default function ExperienceSection() {
 
   function openEditModal(item) {
     setModalItem(item)
+    loadPickerData()
     setModalOpen(true)
   }
 
@@ -112,6 +124,9 @@ export default function ExperienceSection() {
       {modalOpen && (
         <ExperienceModal
           item={modalItem}
+          skills={skills}
+          courses={courses}
+          onRefreshPickerData={loadPickerData}
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setModalOpen(false)}
