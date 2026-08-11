@@ -1,8 +1,20 @@
-import { Link } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { getPendingInviteCode, clearPendingInviteCode } from '../lib/connections'
 
 export default function Welcome() {
   const { user, loading } = useAuth()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!user) return
+    const pendingCode = getPendingInviteCode()
+    if (pendingCode) {
+      clearPendingInviteCode()
+      navigate(`/rate/${pendingCode}`)
+    }
+  }, [user, navigate])
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-paper px-4">

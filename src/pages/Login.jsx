@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { getPendingInviteCode, clearPendingInviteCode } from '../lib/connections'
 
 export default function Login() {
   const { signIn } = useAuth()
@@ -20,7 +21,13 @@ export default function Login() {
       setError(error.message)
       return
     }
-    navigate('/dashboard')
+    const pendingCode = getPendingInviteCode()
+    if (pendingCode) {
+      clearPendingInviteCode()
+      navigate(`/rate/${pendingCode}`)
+    } else {
+      navigate('/dashboard')
+    }
   }
 
   return (

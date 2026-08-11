@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { getPendingInviteCode, clearPendingInviteCode } from '../lib/connections'
 
 export default function Signup() {
   const { signUp } = useAuth()
@@ -22,7 +23,13 @@ export default function Signup() {
       return
     }
     if (data.session) {
-      navigate('/dashboard')
+      const pendingCode = getPendingInviteCode()
+      if (pendingCode) {
+        clearPendingInviteCode()
+        navigate(`/rate/${pendingCode}`)
+      } else {
+        navigate('/dashboard')
+      }
     } else {
       setConfirmationSent(true)
     }

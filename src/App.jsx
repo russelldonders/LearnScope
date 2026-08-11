@@ -9,6 +9,8 @@ import ResetPassword from './pages/ResetPassword'
 import Welcome from './pages/Welcome'
 import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
+import Rate from './pages/Rate'
+import Connections from './pages/Connections'
 
 function App() {
   return (
@@ -21,6 +23,7 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/welcome" element={<Welcome />} />
+          <Route path="/rate/:code" element={<Rate />} />
           <Route
             path="/dashboard"
             element={
@@ -34,6 +37,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Profile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/connections"
+            element={
+              <ProtectedRoute>
+                <Connections />
               </ProtectedRoute>
             }
           />

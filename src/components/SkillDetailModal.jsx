@@ -8,6 +8,7 @@ import EvidenceFields from './EvidenceFields'
 import TrackingReasonPicker from './TrackingReasonPicker'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
+import InviteRaterModal from './InviteRaterModal'
 
 const TABS = [
   { id: 'history', label: 'Overview' },
@@ -19,8 +20,10 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
   const { user } = useAuth()
   const [tab, setTab] = useState('history')
   const [history, setHistory] = useState([])
+  const [peerRatings, setPeerRatings] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [assessorName, setAssessorName] = useState(null)
+  const [inviteOpen, setInviteOpen] = useState(false)
 
   useEffect(() => {
     loadHistory()
@@ -29,12 +32,20 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
 
   async function loadHistory() {
     setLoadingHistory(true)
-    const { data } = await supabase
-      .from('skill_assessments')
-      .select('*, courses(name)')
-      .eq('skill_id', skill.id)
-      .order('assessed_at', { ascending: false })
-    setHistory(data ?? [])
+    const [{ data: assessments }, { data: ratings }] = await Promise.all([
+      supabase
+        .from('skill_assessments')
+        .select('*, courses(name)')
+        .eq('skill_id', skill.id)
+        .order('assessed_at', { ascending: false }),
+      supabase
+        .from('skill_peer_ratings')
+        .select('*')
+        .eq('skill_id', skill.id)
+        .order('rated_at', { ascending: false }),
+    ])
+    setHistory(assessments ?? [])
+    setPeerRatings(ratings ?? [])
     setLoadingHistory(false)
   }
 
@@ -67,6 +78,16 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
             Close
           </button>
         </div>
+
+        <button
+          type="button"
+          onClick={() => setInviteOpen(true)}
+          className="text-xs text-moss font-medium mb-4 -mt-2"
+        >
+          + Invite someone to rate this
+        </button>
+
+        {inviteOpen && <InviteRaterModal skill={skill} onClose={() => setInviteOpen(false)} />}
 
         <div className="flex items-center gap-1 border-b border-hairline mb-4">
           {TABS.map((t) => (
@@ -113,6 +134,7 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
           <HistorySection
             skill={skill}
             history={history}
+            peerRatings={peerRatings}
             loading={loadingHistory}
             assessorName={assessorName}
           />
@@ -228,7 +250,7 @@ function SelfAssessSection({ skill, user, onAssessed }) {
   )
 }
 
-function HistorySection({ skill, history, loading, assessorName }) {
+function HistorySection({ skill, history, peerRatings, loading, assessorName }) {
   const due = isSelfAssessmentDue(skill.next_checkin_date)
 
   return (
@@ -253,18 +275,19 @@ function HistorySection({ skill, history, loading, assessorName }) {
       {!loading && (() => {
         const events = [
           ...history.map((entry) => ({ type: 'assessment', date: entry.assessed_at, entry })),
+          ...peerRatings.map((rating) => ({ type: 'peer', date: rating.rated_at, rating })),
           { type: 'added', date: skill.date_added, source: skill.source },
         ].sort((a, b) => new Date(b.date) - new Date(a.date))
-        const mostRecentAssessmentIndex = events.findIndex((e) => e.type === 'assessment')
+        const mostRecentRatingIndex = events.findIndex((e) => e.type === 'assessment' || e.type === 'peer')
 
         return (
           <div>
             {events.map((event, i) => (
               <TimelineEntry
-                key={event.type === 'assessment' ? event.entry.id : 'added'}
+                key={event.type === 'added' ? 'added' : (event.entry ?? event.rating).id}
                 event={event}
                 isLast={i === events.length - 1}
-                isMostRecent={i === mostRecentAssessmentIndex}
+                isMostRecent={i === mostRecentRatingIndex}
                 assessorName={assessorName}
               />
             ))}
@@ -301,6 +324,37 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
             {assessorName ? `By ${assessorName}` : 'By you'}
             {event.source ? ` · ${SKILL_SOURCE_LABELS[event.source] ?? event.source}` : ''}
           </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (event.type === 'peer') {
+    const rating = event.rating
+    return (
+      <div className="flex gap-3">
+        <div className="flex flex-col items-center">
+          <GrowthRing level={rating.level} size={isMostRecent ? 48 : 32} />
+          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
+        </div>
+        <div className={`min-w-0 flex-1 mb-6 ${boxClass}`}>
+          <div className="flex items-center gap-2">
+            <p className={isMostRecent ? 'text-base font-semibold text-ink' : 'text-sm font-medium text-ink'}>
+              {LEVEL_LABELS[rating.level]}
+            </p>
+            {isMostRecent && (
+              <span className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5">
+                Current
+              </span>
+            )}
+          </div>
+          <p className="font-mono text-xs text-secondary mt-0.5">
+            {new Date(rating.rated_at).toLocaleDateString()}
+          </p>
+          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+            Rated by {rating.rater_name || rating.rater_email || 'a connection'}
+          </p>
+          {rating.comments && <p className="text-sm text-ink mt-1">{rating.comments}</p>}
         </div>
       </div>
     )

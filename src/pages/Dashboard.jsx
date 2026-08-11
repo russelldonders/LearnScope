@@ -15,6 +15,12 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             <span className="font-mono text-xs text-secondary hidden sm:inline">{user?.email}</span>
             <Link
+              to="/connections"
+              className="text-sm text-secondary hover:text-ink border border-hairline rounded-md px-3 py-1.5"
+            >
+              Connections
+            </Link>
+            <Link
               to="/profile"
               aria-label="Your profile"
               title="Your profile"
