@@ -243,14 +243,16 @@ function LearningSection({ item, skills, courses, onRefreshPickerData }) {
   const [linkedCourses, setLinkedCourses] = useState([])
   const [skillLinks, setSkillLinks] = useState([])
   const [achievements, setAchievements] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [initialLoading, setInitialLoading] = useState(true)
 
   useEffect(() => {
     load()
   }, [])
 
+  // Deliberately doesn't toggle a loading flag on refresh (only on first
+  // mount) — subsections keep local state (e.g. the achievement level-sync
+  // prompt) across a reload, which unmounting the whole tree here would wipe.
   async function load() {
-    setLoading(true)
     const [{ data: cl }, { data: sl }, { data: ach }] = await Promise.all([
       supabase
         .from('course_experience_links')
@@ -270,10 +272,10 @@ function LearningSection({ item, skills, courses, onRefreshPickerData }) {
     setLinkedCourses(cl ?? [])
     setSkillLinks(sl ?? [])
     setAchievements(ach ?? [])
-    setLoading(false)
+    setInitialLoading(false)
   }
 
-  if (loading) return <p className="text-sm text-secondary">Loading…</p>
+  if (initialLoading) return <p className="text-sm text-secondary">Loading…</p>
 
   return (
     <div className="space-y-8">
