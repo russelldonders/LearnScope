@@ -10,10 +10,13 @@ import EvidenceFields from './EvidenceFields'
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
+  { id: 'courses', label: 'Courses' },
+  { id: 'skills', label: 'Skills' },
   { id: 'details', label: 'Details' },
 ]
 
 export default function ExperienceModal({ item, skills, courses, onRefreshPickerData, onSave, onDelete, onClose }) {
+  const { user } = useAuth()
   const isEditing = Boolean(item?.id)
   const [tab, setTab] = useState('overview')
   const [type, setType] = useState(item?.type ?? 'employment')
@@ -25,6 +28,39 @@ export default function ExperienceModal({ item, skills, courses, onRefreshPicker
   const [description, setDescription] = useState(item?.description ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+
+  const [linkedCourses, setLinkedCourses] = useState([])
+  const [skillLinks, setSkillLinks] = useState([])
+  const [achievements, setAchievements] = useState([])
+  const [learningLoaded, setLearningLoaded] = useState(false)
+
+  useEffect(() => {
+    if (!isEditing) return
+    loadLearning()
+  }, [])
+
+  async function loadLearning() {
+    const [{ data: cl }, { data: sl }, { data: ach }] = await Promise.all([
+      supabase
+        .from('course_experience_links')
+        .select('id, course_id, courses(id, name, provider, completed_date)')
+        .eq('experience_id', item.id),
+      supabase
+        .from('skill_experience_links')
+        .select('id, skill_id, relationship, skills(id, name, category)')
+        .eq('experience_id', item.id)
+        .order('created_at'),
+      supabase
+        .from('skill_assessments')
+        .select('*, skills(name, category), courses(name)')
+        .eq('experience_id', item.id)
+        .order('assessed_at', { ascending: false }),
+    ])
+    setLinkedCourses(cl ?? [])
+    setSkillLinks(sl ?? [])
+    setAchievements(ach ?? [])
+    setLearningLoaded(true)
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -226,27 +262,44 @@ export default function ExperienceModal({ item, skills, courses, onRefreshPicker
         )}
 
         {isEditing && tab === 'overview' && (
-          <div className="space-y-6">
-            <div>
-              <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
-                {item.type === 'education' ? 'Education' : 'Employment'}
-              </span>
-              <h3 className="font-display text-lg text-ink mt-0.5">{item.title}</h3>
-              <p className="text-sm text-secondary">{item.organization}</p>
-              <p className="font-mono text-xs text-secondary mt-1">
-                {formatMonthYear(item.start_date)} –{' '}
-                {item.end_date ? formatMonthYear(item.end_date) : 'Present'}
-              </p>
-              {item.description && (
-                <p className="text-sm text-ink mt-2 whitespace-pre-line">{item.description}</p>
-              )}
-            </div>
+          <OverviewTab
+            item={item}
+            linkedCourses={linkedCourses}
+            skillLinks={skillLinks}
+            achievements={achievements}
+            loaded={learningLoaded}
+          />
+        )}
 
-            <LearningSection
+        {isEditing && tab === 'courses' && (
+          <CoursesSubsection
+            item={item}
+            courses={courses}
+            linkedCourses={linkedCourses}
+            onChange={loadLearning}
+            user={user}
+          />
+        )}
+
+        {isEditing && tab === 'skills' && (
+          <div className="space-y-8">
+            <SkillsDevelopedSubsection
               item={item}
               skills={skills}
-              courses={courses}
+              skillLinks={skillLinks}
+              onChange={loadLearning}
               onRefreshPickerData={onRefreshPickerData}
+              user={user}
+            />
+
+            <AchievementsSubsection
+              item={item}
+              skills={skills}
+              linkedCourses={linkedCourses}
+              achievements={achievements}
+              onChange={loadLearning}
+              onRefreshPickerData={onRefreshPickerData}
+              user={user}
             />
           </div>
         )}
@@ -255,72 +308,95 @@ export default function ExperienceModal({ item, skills, courses, onRefreshPicker
   )
 }
 
-function LearningSection({ item, skills, courses, onRefreshPickerData }) {
-  const { user } = useAuth()
-  const [linkedCourses, setLinkedCourses] = useState([])
-  const [skillLinks, setSkillLinks] = useState([])
-  const [achievements, setAchievements] = useState([])
-  const [initialLoading, setInitialLoading] = useState(true)
+function OverviewTab({ item, linkedCourses, skillLinks, achievements, loaded }) {
+  if (!loaded) return <p className="text-sm text-secondary">Loading…</p>
 
-  useEffect(() => {
-    load()
-  }, [])
-
-  // Deliberately doesn't toggle a loading flag on refresh (only on first
-  // mount) — subsections keep local state (e.g. the achievement level-sync
-  // prompt) across a reload, which unmounting the whole tree here would wipe.
-  async function load() {
-    const [{ data: cl }, { data: sl }, { data: ach }] = await Promise.all([
-      supabase
-        .from('course_experience_links')
-        .select('id, course_id, courses(id, name, provider, completed_date)')
-        .eq('experience_id', item.id),
-      supabase
-        .from('skill_experience_links')
-        .select('id, skill_id, relationship, skills(id, name, category)')
-        .eq('experience_id', item.id)
-        .order('created_at'),
-      supabase
-        .from('skill_assessments')
-        .select('*, skills(name, category), courses(name)')
-        .eq('experience_id', item.id)
-        .order('assessed_at', { ascending: false }),
-    ])
-    setLinkedCourses(cl ?? [])
-    setSkillLinks(sl ?? [])
-    setAchievements(ach ?? [])
-    setInitialLoading(false)
+  const grouped = []
+  const bySkill = new Map()
+  for (const l of skillLinks) {
+    if (!bySkill.has(l.skill_id)) {
+      const entry = { skillId: l.skill_id, name: l.skills?.name, category: l.skills?.category, relationships: [] }
+      bySkill.set(l.skill_id, entry)
+      grouped.push(entry)
+    }
+    bySkill.get(l.skill_id).relationships.push(l.relationship)
   }
 
-  if (initialLoading) return <p className="text-sm text-secondary">Loading…</p>
-
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      <div>
+        <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
+          {item.type === 'education' ? 'Education' : 'Employment'}
+        </span>
+        <h3 className="font-display text-lg text-ink mt-0.5">{item.title}</h3>
+        <p className="text-sm text-secondary">{item.organization}</p>
+        <p className="font-mono text-xs text-secondary mt-1">
+          {formatMonthYear(item.start_date)} – {item.end_date ? formatMonthYear(item.end_date) : 'Present'}
+        </p>
+        {item.description && (
+          <p className="text-sm text-ink mt-2 whitespace-pre-line">{item.description}</p>
+        )}
+      </div>
+
       <p className="text-xs text-secondary">
         These are historical records from this {item.type === 'education' ? 'study period' : 'role'} —
         they don't change your current skill levels unless you choose to update them.
       </p>
 
-      <CoursesSubsection item={item} courses={courses} linkedCourses={linkedCourses} onChange={load} user={user} />
+      <div>
+        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">Courses</h4>
+        {linkedCourses.length === 0 ? (
+          <p className="text-sm text-secondary">No courses linked yet.</p>
+        ) : (
+          <ul className="space-y-1">
+            {linkedCourses.map((l) => (
+              <li key={l.id} className="text-sm text-ink">
+                {l.courses?.name}
+                {l.courses?.completed_date && (
+                  <span className="text-secondary"> · Completed {formatMonthYear(l.courses.completed_date)}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
-      <SkillsDevelopedSubsection
-        item={item}
-        skills={skills}
-        skillLinks={skillLinks}
-        onChange={load}
-        onRefreshPickerData={onRefreshPickerData}
-        user={user}
-      />
+      <div>
+        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">Skills developed</h4>
+        {grouped.length === 0 ? (
+          <p className="text-sm text-secondary">No skills linked yet.</p>
+        ) : (
+          <ul className="space-y-1">
+            {grouped.map((g) => (
+              <li key={g.skillId} className="text-sm text-ink">
+                {g.name} <span className="text-secondary">({g.category})</span> —{' '}
+                <span className="text-secondary">
+                  {g.relationships.map((r) => SKILL_RELATIONSHIP_LABELS[r]).join(', ')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
-      <AchievementsSubsection
-        item={item}
-        skills={skills}
-        linkedCourses={linkedCourses}
-        achievements={achievements}
-        onChange={load}
-        onRefreshPickerData={onRefreshPickerData}
-        user={user}
-      />
+      <div>
+        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">Skill achievements</h4>
+        {achievements.length === 0 ? (
+          <p className="text-sm text-secondary">No achievements recorded yet.</p>
+        ) : (
+          <ul className="space-y-2">
+            {achievements.map((a) => (
+              <li key={a.id} className="text-sm text-ink">
+                {a.skills?.name} <span className="text-secondary">· {LEVEL_LABELS[a.level]}</span>{' '}
+                <span className="font-mono text-xs text-secondary">
+                  ({new Date(a.assessed_at).toLocaleDateString()})
+                </span>
+                {a.comments && <p className="text-xs text-secondary mt-0.5">{a.comments}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   )
 }

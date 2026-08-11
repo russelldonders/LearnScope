@@ -1,6 +1,6 @@
 import { formatMonthYear } from '../lib/dates'
 
-export default function TimelineItem({ item, onEdit, isLast }) {
+export default function TimelineItem({ item, summary, onEdit, isLast }) {
   return (
     <div className="flex gap-4">
       <div className="flex flex-col items-center">
@@ -27,6 +27,22 @@ export default function TimelineItem({ item, onEdit, isLast }) {
         </p>
         {item.description && (
           <p className="text-sm text-ink mt-2 whitespace-pre-line">{item.description}</p>
+        )}
+        {summary && (summary.courseNames.length > 0 || summary.skillNames.length > 0) && (
+          <div className="mt-3 pt-3 border-t border-hairline space-y-1">
+            {summary.courseNames.length > 0 && (
+              <p className="text-xs text-secondary">
+                <span className="font-mono uppercase tracking-wide">Courses:</span>{' '}
+                {summary.courseNames.join(', ')}
+              </p>
+            )}
+            {summary.skillNames.length > 0 && (
+              <p className="text-xs text-secondary">
+                <span className="font-mono uppercase tracking-wide">Skills:</span>{' '}
+                {summary.skillNames.join(', ')}
+              </p>
+            )}
+          </div>
         )}
       </button>
     </div>

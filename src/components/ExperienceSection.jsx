@@ -7,6 +7,7 @@ import ExperienceModal from './ExperienceModal'
 export default function ExperienceSection() {
   const { user } = useAuth()
   const [items, setItems] = useState([])
+  const [learningSummaries, setLearningSummaries] = useState({})
   const [skills, setSkills] = useState([])
   const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
@@ -28,8 +29,38 @@ export default function ExperienceSection() {
       setError(error.message)
     } else {
       setItems(data)
+      loadLearningSummaries(data)
     }
     setLoading(false)
+  }
+
+  // Compact "courses completed / skills touched" summary per experience,
+  // shown directly on each timeline card so the learning history is visible
+  // without opening the modal.
+  async function loadLearningSummaries(experienceItems) {
+    const ids = experienceItems.map((i) => i.id)
+    if (ids.length === 0) {
+      setLearningSummaries({})
+      return
+    }
+    const [{ data: cl }, { data: sl }, { data: ach }] = await Promise.all([
+      supabase.from('course_experience_links').select('experience_id, courses(name)').in('experience_id', ids),
+      supabase.from('skill_experience_links').select('experience_id, skills(name)').in('experience_id', ids),
+      supabase.from('skill_assessments').select('experience_id, skills(name)').in('experience_id', ids),
+    ])
+    const map = {}
+    for (const id of ids) map[id] = { courseNames: new Set(), skillNames: new Set() }
+    for (const row of cl ?? []) map[row.experience_id]?.courseNames.add(row.courses?.name)
+    for (const row of sl ?? []) map[row.experience_id]?.skillNames.add(row.skills?.name)
+    for (const row of ach ?? []) map[row.experience_id]?.skillNames.add(row.skills?.name)
+    const result = {}
+    for (const id of ids) {
+      result[id] = {
+        courseNames: [...map[id].courseNames].filter(Boolean),
+        skillNames: [...map[id].skillNames].filter(Boolean),
+      }
+    }
+    setLearningSummaries(result)
   }
 
   async function loadPickerData() {
@@ -115,6 +146,7 @@ export default function ExperienceSection() {
           <TimelineItem
             key={item.id}
             item={item}
+            summary={learningSummaries[item.id]}
             onEdit={openEditModal}
             isLast={i === items.length - 1}
           />
@@ -129,7 +161,10 @@ export default function ExperienceSection() {
           onRefreshPickerData={loadPickerData}
           onSave={handleSave}
           onDelete={handleDelete}
-          onClose={() => setModalOpen(false)}
+          onClose={() => {
+            setModalOpen(false)
+            loadExperience()
+          }}
         />
       )}
     </section>
