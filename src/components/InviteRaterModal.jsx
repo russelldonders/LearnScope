@@ -28,7 +28,7 @@ export default function InviteRaterModal({ skill, onClose }) {
     setError(null)
     setSending(true)
     try {
-      const invite = await createInvite(skill.id, email.trim())
+      const invite = await createInvite(skill.id, email.trim(), user.id)
       const {
         data: { session },
       } = await supabase.auth.getSession()
@@ -61,7 +61,7 @@ export default function InviteRaterModal({ skill, onClose }) {
     setError(null)
     setGenerating(true)
     try {
-      const invite = await createInvite(skill.id, email.trim() || null)
+      const invite = await createInvite(skill.id, email.trim() || null, user.id)
       setResult(invite)
     } catch (err) {
       setError(err.message)

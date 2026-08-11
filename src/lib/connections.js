@@ -14,10 +14,10 @@ export function clearPendingInviteCode() {
   sessionStorage.removeItem(PENDING_INVITE_KEY)
 }
 
-export async function createInvite(skillId, email) {
+export async function createInvite(skillId, email, inviterId) {
   const { data, error } = await supabase
     .from('connection_invites')
-    .insert({ skill_id: skillId, invitee_email: email || null })
+    .insert({ skill_id: skillId, invitee_email: email || null, inviter_id: inviterId })
     .select('id, share_code')
     .single()
   if (error) throw error
