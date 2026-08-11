@@ -1,9 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabaseClient'
+import { formatMonthYear } from '../lib/dates'
 import GrowthRing from './GrowthRing'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 
+const TABS = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'details', label: 'Details' },
+]
+
 export default function CourseModal({ course, skills, linkedAssessment, onSave, onDelete, onClose }) {
   const isEditing = Boolean(course?.id)
+  const [tab, setTab] = useState('overview')
+  const [linkedExperiences, setLinkedExperiences] = useState([])
   const [name, setName] = useState(course?.name ?? '')
   const [provider, setProvider] = useState(course?.provider ?? '')
   const [completedDate, setCompletedDate] = useState(course?.completed_date ?? '')
@@ -12,6 +21,15 @@ export default function CourseModal({ course, skills, linkedAssessment, onSave, 
   const [skillLevel, setSkillLevel] = useState(linkedAssessment?.level ?? 3)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+
+  useEffect(() => {
+    if (!isEditing) return
+    supabase
+      .from('course_experience_links')
+      .select('id, experience(id, title, organization, type)')
+      .eq('course_id', course.id)
+      .then(({ data }) => setLinkedExperiences(data ?? []))
+  }, [])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -57,10 +75,78 @@ export default function CourseModal({ course, skills, linkedAssessment, onSave, 
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="font-display text-2xl text-ink mb-4">
-          {isEditing ? 'Edit course' : 'Add a course'}
+          {isEditing ? course.name : 'Add a course'}
         </h2>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {isEditing && (
+          <div className="flex items-center gap-1 border-b border-hairline mb-4">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTab(t.id)}
+                className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
+                  tab === t.id
+                    ? 'border-moss text-ink'
+                    : 'border-transparent text-secondary hover:text-ink'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {isEditing && tab === 'overview' && (
+          <div className="space-y-6">
+            <div>
+              {course.provider && <p className="text-sm text-secondary">{course.provider}</p>}
+              {course.completed_date && (
+                <p className="font-mono text-xs text-secondary mt-1">
+                  Completed {formatMonthYear(course.completed_date)}
+                </p>
+              )}
+              {course.notes && (
+                <p className="text-sm text-ink mt-2 whitespace-pre-line">{course.notes}</p>
+              )}
+            </div>
+
+            {linkedAssessment && (
+              <div>
+                <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">
+                  Skill earned
+                </h4>
+                <div className="flex items-center gap-3">
+                  <GrowthRing level={linkedAssessment.level} size={36} />
+                  <p className="text-sm text-ink">
+                    {linkedAssessment.skills?.name}
+                    {linkedAssessment.skills?.category ? ` (${linkedAssessment.skills.category})` : ''} ·{' '}
+                    {LEVEL_LABELS[linkedAssessment.level]}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {linkedExperiences.length > 0 && (
+              <div>
+                <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">
+                  Part of
+                </h4>
+                <ul className="space-y-1">
+                  {linkedExperiences.map((l) => (
+                    <li key={l.id} className="text-sm text-ink">
+                      {l.experience?.title}{' '}
+                      <span className="text-secondary">· {l.experience?.organization}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        {(!isEditing || tab === 'details') && (
+          <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm text-secondary mb-1" htmlFor="courseName">
               Name
@@ -189,7 +275,8 @@ export default function CourseModal({ course, skills, linkedAssessment, onSave, 
               </button>
             )}
           </div>
-        </form>
+          </form>
+        )}
       </div>
     </div>
   )

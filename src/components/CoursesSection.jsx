@@ -65,7 +65,7 @@ export default function CoursesSection() {
     loadSkills()
     const { data } = await supabase
       .from('skill_assessments')
-      .select('id, skill_id, level')
+      .select('id, skill_id, level, skills(name, category)')
       .eq('course_id', course.id)
       .order('assessed_at', { ascending: false })
       .limit(1)

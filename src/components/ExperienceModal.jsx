@@ -9,13 +9,13 @@ import GrowthRing from './GrowthRing'
 import EvidenceFields from './EvidenceFields'
 
 const TABS = [
+  { id: 'overview', label: 'Overview' },
   { id: 'details', label: 'Details' },
-  { id: 'learning', label: 'Learning & skills' },
 ]
 
 export default function ExperienceModal({ item, skills, courses, onRefreshPickerData, onSave, onDelete, onClose }) {
   const isEditing = Boolean(item?.id)
-  const [tab, setTab] = useState('details')
+  const [tab, setTab] = useState('overview')
   const [type, setType] = useState(item?.type ?? 'employment')
   const [title, setTitle] = useState(item?.title ?? '')
   const [organization, setOrganization] = useState(item?.organization ?? '')
@@ -225,13 +225,30 @@ export default function ExperienceModal({ item, skills, courses, onRefreshPicker
           </form>
         )}
 
-        {isEditing && tab === 'learning' && (
-          <LearningSection
-            item={item}
-            skills={skills}
-            courses={courses}
-            onRefreshPickerData={onRefreshPickerData}
-          />
+        {isEditing && tab === 'overview' && (
+          <div className="space-y-6">
+            <div>
+              <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
+                {item.type === 'education' ? 'Education' : 'Employment'}
+              </span>
+              <h3 className="font-display text-lg text-ink mt-0.5">{item.title}</h3>
+              <p className="text-sm text-secondary">{item.organization}</p>
+              <p className="font-mono text-xs text-secondary mt-1">
+                {formatMonthYear(item.start_date)} –{' '}
+                {item.end_date ? formatMonthYear(item.end_date) : 'Present'}
+              </p>
+              {item.description && (
+                <p className="text-sm text-ink mt-2 whitespace-pre-line">{item.description}</p>
+              )}
+            </div>
+
+            <LearningSection
+              item={item}
+              skills={skills}
+              courses={courses}
+              onRefreshPickerData={onRefreshPickerData}
+            />
+          </div>
         )}
       </div>
     </div>
