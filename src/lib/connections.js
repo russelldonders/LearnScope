@@ -62,7 +62,7 @@ export async function listMyPeerRatings() {
   const { data, error } = await supabase
     .from('skill_peer_ratings')
     .select(
-      'id, skill_id, skill_name, skill_category, skill_owner_id, rater_id, rater_name, rater_email, level, comments, rated_at'
+      'id, skill_id, skill_name, skill_category, skill_owner_id, skill_owner_email, rater_id, rater_name, rater_email, level, comments, rated_at'
     )
     .order('rated_at', { ascending: false })
   if (error) throw error
@@ -75,4 +75,28 @@ export async function getProfileNames(userIds) {
   const { data, error } = await supabase.from('profiles').select('id, full_name').in('id', ids)
   if (error) throw error
   return Object.fromEntries((data ?? []).map((p) => [p.id, p.full_name]))
+}
+
+// Distinct people the user has a rating history with, one row each (most
+// recent interaction wins since listMyPeerRatings is already sorted desc),
+// with an email resolved for either direction — needed so the invite flow
+// can offer "pick an existing connection" instead of retyping an address.
+export async function listConnections(currentUserId) {
+  const ratings = await listMyPeerRatings()
+  const map = new Map()
+  for (const r of ratings) {
+    const gaveRating = r.rater_id === currentUserId
+    const otherId = gaveRating ? r.skill_owner_id : r.rater_id
+    if (map.has(otherId)) continue
+    map.set(otherId, {
+      email: gaveRating ? r.skill_owner_email : r.rater_email,
+      fallbackName: gaveRating ? null : r.rater_name,
+    })
+  }
+  const names = await getProfileNames([...map.keys()])
+  return [...map.entries()].map(([id, v]) => ({
+    id,
+    email: v.email || null,
+    name: names[id] || v.fallbackName || v.email || 'Someone',
+  }))
 }

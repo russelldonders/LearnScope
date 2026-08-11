@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
-import { createInvite } from '../lib/connections'
+import { createInvite, listConnections } from '../lib/connections'
 
 export default function InviteRaterModal({ skill, onClose }) {
   const { user } = useAuth()
   const [email, setEmail] = useState('')
   const [inviterName, setInviterName] = useState(null)
+  const [connections, setConnections] = useState([])
+  const [selectedConnectionId, setSelectedConnectionId] = useState(null)
   const [sending, setSending] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState(null)
@@ -20,7 +22,23 @@ export default function InviteRaterModal({ skill, onClose }) {
       .eq('id', user.id)
       .single()
       .then(({ data }) => setInviterName(data?.full_name || user.email))
+    listConnections(user.id).then((list) => setConnections(list.filter((c) => c.email)))
   }, [user])
+
+  function handleSelectConnection(connection) {
+    if (selectedConnectionId === connection.id) {
+      setSelectedConnectionId(null)
+      setEmail('')
+    } else {
+      setSelectedConnectionId(connection.id)
+      setEmail(connection.email)
+    }
+  }
+
+  function handleEmailChange(value) {
+    setEmail(value)
+    setSelectedConnectionId(null)
+  }
 
   async function handleSendEmail(e) {
     e.preventDefault()
@@ -119,16 +137,40 @@ export default function InviteRaterModal({ skill, onClose }) {
           </div>
         ) : (
           <form onSubmit={handleSendEmail} className="space-y-4">
+            {connections.length > 0 && (
+              <div>
+                <span className="block text-sm text-secondary mb-1">
+                  Choose an existing connection
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {connections.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => handleSelectConnection(c)}
+                      className={`font-mono text-xs rounded-full px-3 py-1 border transition-colors ${
+                        selectedConnectionId === c.id
+                          ? 'bg-moss text-paper border-moss'
+                          : 'border-hairline text-secondary hover:text-ink'
+                      }`}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="inviteEmail">
-                Email (optional)
+                {connections.length > 0 ? 'Or enter an email (optional)' : 'Email (optional)'}
               </label>
               <input
                 id="inviteEmail"
                 type="email"
                 placeholder="someone@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => handleEmailChange(e.target.value)}
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
               />
             </div>
