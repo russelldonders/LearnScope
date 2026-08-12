@@ -3,18 +3,22 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { uploadEvidenceFiles } from '../lib/skillEvidence'
 import { listLibrarySkills, findOrCreateLibrarySkill } from '../lib/skillLibrary'
+import { listTags, addTagToSkill } from '../lib/skillTags'
+import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import GrowthRing from './GrowthRing'
 import EvidenceFields from './EvidenceFields'
 import TrackingReasonPicker from './TrackingReasonPicker'
+import TagsField from './TagsField'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { SKILL_LIFECYCLE_STAGES } from '../lib/skillLifecycle'
 import { syncCurrentRoleLinks } from '../lib/currentRole'
 
-export default function SkillModal({ categories, onClose, onCreated }) {
+export default function SkillModal({ onClose, onCreated }) {
   const { user } = useAuth()
   const [name, setName] = useState('')
-  const [category, setCategory] = useState('')
   const [librarySkills, setLibrarySkills] = useState([])
+  const [allTags, setAllTags] = useState([])
+  const [pendingTags, setPendingTags] = useState([])
   const [isCurrentRole, setIsCurrentRole] = useState(false)
   const [trackingReason, setTrackingReason] = useState(null)
   const [lifecycleStage, setLifecycleStage] = useState('identified')
@@ -28,31 +32,31 @@ export default function SkillModal({ categories, onClose, onCreated }) {
 
   useEffect(() => {
     listLibrarySkills().then(setLibrarySkills)
+    listTags().then(setAllTags)
   }, [])
 
-  function handleNameChange(value) {
-    setName(value)
-    if (!category.trim()) {
-      const match = librarySkills.find((s) => s.name.toLowerCase() === value.trim().toLowerCase())
-      if (match?.category) setCategory(match.category)
-    }
+  async function handleAddTag(tagName) {
+    setPendingTags((prev) => [...prev, { id: null, name: tagName }])
+  }
+
+  function handleRemoveTag(index) {
+    setPendingTags((prev) => prev.filter((_, i) => i !== index))
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!name.trim() || !category.trim()) {
-      setError('Name and category are required.')
+    if (!name.trim()) {
+      setError('Name is required.')
       return
     }
     setError(null)
     setSaving(true)
     try {
-      const libraryId = await findOrCreateLibrarySkill(name, category, user.id)
+      const libraryId = await findOrCreateLibrarySkill(name, null, user.id)
       const { data: skill, error: skillError } = await supabase
         .from('skills')
         .insert({
           name: name.trim(),
-          category: category.trim(),
           level: assessNow ? level : null,
           is_current_role: isCurrentRole,
           tracking_reason: trackingReason,
@@ -62,7 +66,14 @@ export default function SkillModal({ categories, onClose, onCreated }) {
         })
         .select()
         .single()
-      if (skillError) throw skillError
+      if (skillError) {
+        if (isDuplicateSkillNameError(skillError)) throw new Error(duplicateSkillMessage(name))
+        throw skillError
+      }
+
+      for (const tag of pendingTags) {
+        await addTagToSkill(user.id, skill.id, tag.name)
+      }
 
       await syncCurrentRoleLinks(user.id, skill.id, isCurrentRole)
 
@@ -116,7 +127,7 @@ export default function SkillModal({ categories, onClose, onCreated }) {
               list="skill-library-options"
               placeholder="Search the skill library or type a new one…"
               value={name}
-              onChange={(e) => handleNameChange(e.target.value)}
+              onChange={(e) => setName(e.target.value)}
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
             />
             <datalist id="skill-library-options">
@@ -126,24 +137,14 @@ export default function SkillModal({ categories, onClose, onCreated }) {
             </datalist>
           </div>
 
-          <div>
-            <label className="block text-sm text-secondary mb-1" htmlFor="category">
-              Category
-            </label>
-            <input
-              id="category"
-              required
-              list="category-options"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-            />
-            <datalist id="category-options">
-              {categories.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
-          </div>
+          <TagsField
+            tags={pendingTags}
+            onAddTag={handleAddTag}
+            onRemoveTag={handleRemoveTag}
+            skillName={name}
+            allTags={allTags}
+            datalistId="tags-options-add"
+          />
 
           <div>
             <label className="block text-sm text-secondary mb-1" htmlFor="lifecycleStage">

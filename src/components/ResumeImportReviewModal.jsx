@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { uploadAvatar, base64ToBlob } from '../lib/avatar'
 import { findOrCreateLibrarySkill } from '../lib/skillLibrary'
+import { addTagToSkill } from '../lib/skillTags'
 import { formatMonthYear } from '../lib/dates'
 
 function useSelection(items) {
@@ -37,6 +38,26 @@ export default function ResumeImportReviewModal({
   const skills = useSelection(extracted.skills ?? [])
   const courses = useSelection(extracted.courses ?? [])
   const experience = useSelection(extracted.experience ?? [])
+  const [existingSkillNames, setExistingSkillNames] = useState(null)
+
+  // Skills already in the profile can't be imported again (name must be
+  // unique per learner) -- fetch them once so duplicate rows can be shown
+  // as such and excluded, rather than failing the whole import.
+  useEffect(() => {
+    supabase
+      .from('skills')
+      .select('name')
+      .eq('user_id', user.id)
+      .then(({ data }) => {
+        const names = new Set((data ?? []).map((s) => s.name.toLowerCase().trim()))
+        setExistingSkillNames(names)
+        skills.values.forEach((s, i) => {
+          if (names.has(s.name.toLowerCase().trim()) && skills.selected.has(i)) {
+            skills.toggle(i)
+          }
+        })
+      })
+  }, [])
 
   const profileFields = extracted.profile ?? {}
   const hasProfileFields = Object.values(profileFields).some(Boolean)
@@ -54,7 +75,9 @@ export default function ResumeImportReviewModal({
     setError(null)
     setImporting(true)
 
-    const selectedSkills = skills.values.filter((_, i) => skills.selected.has(i))
+    const selectedSkills = skills.values.filter(
+      (s, i) => skills.selected.has(i) && !existingSkillNames?.has(s.name.toLowerCase().trim())
+    )
     const courseRows = courses.values
       .filter((_, i) => courses.selected.has(i))
       .map((c) => ({
@@ -79,11 +102,10 @@ export default function ResumeImportReviewModal({
     try {
       if (selectedSkills.length) {
         const libraryIds = await Promise.all(
-          selectedSkills.map((s) => findOrCreateLibrarySkill(s.name, s.category, user.id))
+          selectedSkills.map((s) => findOrCreateLibrarySkill(s.name, null, user.id))
         )
         const skillRows = selectedSkills.map((s, i) => ({
           name: s.name,
-          category: s.category,
           level: s.level,
           notes: s.notes,
           is_current_role: Boolean(s.current_role),
@@ -107,6 +129,12 @@ export default function ResumeImportReviewModal({
           .from('skill_assessments')
           .insert(genesisAssessments)
         if (assessmentError) throw assessmentError
+
+        for (let i = 0; i < insertedSkills.length; i++) {
+          for (const tagName of selectedSkills[i].tags ?? []) {
+            if (tagName?.trim()) await addTagToSkill(user.id, insertedSkills[i].id, tagName)
+          }
+        }
       }
       if (courseRows.length) {
         const { error } = await supabase.from('courses').insert(courseRows)
@@ -196,6 +224,7 @@ export default function ResumeImportReviewModal({
               key={i}
               item={item}
               checked={sel.selected.has(i)}
+              alreadyExists={Boolean(existingSkillNames?.has(item.name.toLowerCase().trim()))}
               onToggle={() => sel.toggle(i)}
               onChange={(v) => sel.updateField(i, 'name', v)}
             />
@@ -267,13 +296,14 @@ function ReviewSection({ title, selection, renderItem }) {
   )
 }
 
-function Row({ checked, onToggle, children }) {
+function Row({ checked, onToggle, disabled, children }) {
   return (
-    <label className="flex items-start gap-3 border border-hairline rounded-md p-2 bg-paper">
+    <label className={`flex items-start gap-3 border border-hairline rounded-md p-2 bg-paper ${disabled ? 'opacity-60' : ''}`}>
       <input
         type="checkbox"
         checked={checked}
         onChange={onToggle}
+        disabled={disabled}
         className="mt-2 rounded border-hairline"
       />
       <div className="flex-1 min-w-0">{children}</div>
@@ -281,17 +311,19 @@ function Row({ checked, onToggle, children }) {
   )
 }
 
-function SkillRow({ item, checked, onToggle, onChange }) {
+function SkillRow({ item, checked, alreadyExists, onToggle, onChange }) {
   return (
-    <Row checked={checked} onToggle={onToggle}>
+    <Row checked={checked && !alreadyExists} onToggle={onToggle} disabled={alreadyExists}>
       <input
         value={item.name}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full bg-transparent font-display text-ink border-b border-transparent focus:border-hairline focus:outline-none"
+        disabled={alreadyExists}
+        className="w-full bg-transparent font-display text-ink border-b border-transparent focus:border-hairline focus:outline-none disabled:opacity-60"
       />
       <p className="text-xs text-secondary mt-0.5">
-        {item.category} · Level {item.level}
+        {item.tags?.length > 0 && item.tags.join(', ')} · Level {item.level}
         {item.current_role ? ' · Current role' : ''}
+        {alreadyExists ? ' · Already in your profile' : ''}
       </p>
     </Row>
   )

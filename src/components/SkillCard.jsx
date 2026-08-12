@@ -3,7 +3,7 @@ import TrackingReasonIcon from './TrackingReasonIcon'
 import { isSelfAssessmentDue } from '../lib/checkin'
 import { TRACKING_REASON_LABELS } from '../lib/trackingReasons'
 
-export default function SkillCard({ skill, onEdit }) {
+export default function SkillCard({ skill, tags, onEdit }) {
   const due = isSelfAssessmentDue(skill.next_checkin_date)
 
   return (
@@ -26,6 +26,18 @@ export default function SkillCard({ skill, onEdit }) {
             </span>
           )}
         </div>
+        {tags?.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {tags.map((t) => (
+              <span
+                key={t}
+                className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
         {skill.notes && <p className="text-sm text-secondary line-clamp-2 mt-0.5">{skill.notes}</p>}
         {skill.tracking_reason && (
           <span

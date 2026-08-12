@@ -3,20 +3,12 @@ import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import GrowthRing from '../components/GrowthRing'
 
-function groupByCategory(skills) {
-  const map = new Map()
-  for (const skill of skills) {
-    if (!map.has(skill.category)) map.set(skill.category, [])
-    map.get(skill.category).push(skill)
-  }
-  return Array.from(map.entries())
-}
-
 export default function SkillsProfile() {
   const { userId } = useParams()
   const [name, setName] = useState('')
   const [visible, setVisible] = useState(false)
   const [skills, setSkills] = useState([])
+  const [tagsBySkill, setTagsBySkill] = useState(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -41,19 +33,29 @@ export default function SkillsProfile() {
     setVisible(Boolean(profile.skills_profile_visible))
 
     if (profile.skills_profile_visible) {
-      const { data, error: skillsError } = await supabase
-        .from('skills')
-        .select('id, name, category, level')
-        .eq('user_id', userId)
-        .order('category', { ascending: true })
-        .order('name', { ascending: true })
-      if (skillsError) setError(skillsError.message)
-      else setSkills(data ?? [])
+      const [{ data, error: skillsError }, { data: tagLinks }] = await Promise.all([
+        supabase
+          .from('skills')
+          .select('id, name, level')
+          .eq('user_id', userId)
+          .order('name', { ascending: true }),
+        supabase.from('skill_tags').select('skill_id, tags(name)').eq('user_id', userId),
+      ])
+      if (skillsError) {
+        setError(skillsError.message)
+      } else {
+        setSkills(data ?? [])
+        const map = new Map()
+        for (const link of tagLinks ?? []) {
+          if (!link.tags?.name) continue
+          if (!map.has(link.skill_id)) map.set(link.skill_id, [])
+          map.get(link.skill_id).push(link.tags.name)
+        }
+        setTagsBySkill(map)
+      }
     }
     setLoading(false)
   }
-
-  const grouped = groupByCategory(skills)
 
   return (
     <div className="min-h-screen bg-paper">
@@ -89,22 +91,27 @@ export default function SkillsProfile() {
                 <p className="text-secondary">No skills tracked yet.</p>
               </div>
             ) : (
-              <div className="space-y-8">
-                {grouped.map(([category, categorySkills]) => (
-                  <div key={category}>
-                    <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">
-                      {category}
-                    </h4>
-                    <div className="grid sm:grid-cols-2 gap-3">
-                      {categorySkills.map((skill) => (
-                        <div
-                          key={skill.id}
-                          className="bg-card border border-hairline rounded-lg p-4 flex gap-4 items-center"
-                        >
-                          <GrowthRing level={skill.level} size={48} />
-                          <h3 className="font-display text-lg text-ink truncate">{skill.name}</h3>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {skills.map((skill) => (
+                  <div
+                    key={skill.id}
+                    className="bg-card border border-hairline rounded-lg p-4 flex gap-4 items-center"
+                  >
+                    <GrowthRing level={skill.level} size={48} />
+                    <div className="min-w-0">
+                      <h3 className="font-display text-lg text-ink truncate">{skill.name}</h3>
+                      {tagsBySkill.get(skill.id)?.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {tagsBySkill.get(skill.id).map((t) => (
+                            <span
+                              key={t}
+                              className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
+                            >
+                              {t}
+                            </span>
+                          ))}
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
                 ))}

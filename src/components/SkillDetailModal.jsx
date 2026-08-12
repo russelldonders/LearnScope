@@ -12,8 +12,11 @@ import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
 import { SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
 import { activityName, verbLabel } from '../lib/xapiStatement'
 import { syncCurrentRoleLinks } from '../lib/currentRole'
+import { listTags, listSkillTags, addTagToSkill, removeSkillTagLink } from '../lib/skillTags'
+import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import InviteRaterModal from './InviteRaterModal'
 import RecordExperienceModal from './RecordExperienceModal'
+import TagsField from './TagsField'
 
 const TABS = [
   { id: 'history', label: 'Overview' },
@@ -24,13 +27,15 @@ const TABS = [
   { id: 'settings', label: 'Settings' },
 ]
 
-export default function SkillDetailModal({ skill, categories, onClose, onUpdated, onDeleted }) {
+export default function SkillDetailModal({ skill, onClose, onUpdated, onDeleted }) {
   const { user } = useAuth()
   const [tab, setTab] = useState('history')
   const [history, setHistory] = useState([])
   const [peerRatings, setPeerRatings] = useState([])
   const [relationshipLinks, setRelationshipLinks] = useState([])
   const [statements, setStatements] = useState([])
+  const [skillTags, setSkillTags] = useState([])
+  const [allTags, setAllTags] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [assessorName, setAssessorName] = useState(null)
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -38,11 +43,12 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
   useEffect(() => {
     loadHistory()
     loadAssessorName()
+    listTags().then(setAllTags)
   }, [])
 
   async function loadHistory() {
     setLoadingHistory(true)
-    const [{ data: assessments }, { data: ratings }, { data: links }, { data: st }] = await Promise.all([
+    const [{ data: assessments }, { data: ratings }, { data: links }, { data: st }, tags] = await Promise.all([
       supabase
         .from('skill_assessments')
         .select('*, courses(name), experience(title, organization)')
@@ -63,12 +69,24 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
         .eq('skill_id', skill.id)
         .eq('user_id', user.id)
         .order('recorded_at', { ascending: false }),
+      listSkillTags(skill.id),
     ])
     setHistory(assessments ?? [])
     setPeerRatings(ratings ?? [])
     setRelationshipLinks(links ?? [])
     setStatements(st ?? [])
+    setSkillTags(tags ?? [])
     setLoadingHistory(false)
+  }
+
+  async function handleAddTag(tagName) {
+    await addTagToSkill(user.id, skill.id, tagName)
+    await loadHistory()
+  }
+
+  async function handleRemoveTag(skillTagLinkId) {
+    await removeSkillTagLink(skillTagLinkId)
+    await loadHistory()
   }
 
   async function loadAssessorName() {
@@ -92,8 +110,20 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
             <div>
               <h2 className="font-display text-2xl text-ink">{skill.name}</h2>
               <p className="text-sm text-secondary">
-                {skill.category} · {skill.level ? LEVEL_LABELS[skill.level] : 'Not yet self-assessed'}
+                {skill.level ? LEVEL_LABELS[skill.level] : 'Not yet self-assessed'}
               </p>
+              {skillTags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {skillTags.map((t) => (
+                    <span
+                      key={t.id}
+                      className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
+                    >
+                      {t.tags?.name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
@@ -146,7 +176,10 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
         {tab === 'details' && (
           <DetailsSection
             skill={skill}
-            categories={categories}
+            skillTags={skillTags}
+            allTags={allTags}
+            onAddTag={handleAddTag}
+            onRemoveTag={handleRemoveTag}
             user={user}
             onUpdated={onUpdated}
             onDeleted={onDeleted}
@@ -646,9 +679,8 @@ function ScheduleSection({ skill, onUpdated }) {
   )
 }
 
-function DetailsSection({ skill, categories, user, onUpdated, onDeleted }) {
+function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user, onUpdated, onDeleted }) {
   const [name, setName] = useState(skill.name)
-  const [category, setCategory] = useState(skill.category)
   const [isCurrentRole, setIsCurrentRole] = useState(skill.is_current_role)
   const [trackingReason, setTrackingReason] = useState(skill.tracking_reason ?? null)
   const [saving, setSaving] = useState(false)
@@ -656,8 +688,8 @@ function DetailsSection({ skill, categories, user, onUpdated, onDeleted }) {
 
   async function handleSave(e) {
     e.preventDefault()
-    if (!name.trim() || !category.trim()) {
-      setError('Name and category are required.')
+    if (!name.trim()) {
+      setError('Name is required.')
       return
     }
     setError(null)
@@ -667,12 +699,14 @@ function DetailsSection({ skill, categories, user, onUpdated, onDeleted }) {
         .from('skills')
         .update({
           name: name.trim(),
-          category: category.trim(),
           is_current_role: isCurrentRole,
           tracking_reason: trackingReason,
         })
         .eq('id', skill.id)
-      if (error) throw error
+      if (error) {
+        if (isDuplicateSkillNameError(error)) throw new Error(duplicateSkillMessage(name))
+        throw error
+      }
       await syncCurrentRoleLinks(user.id, skill.id, isCurrentRole)
       onUpdated()
     } catch (err) {
@@ -711,23 +745,14 @@ function DetailsSection({ skill, categories, user, onUpdated, onDeleted }) {
         />
       </div>
 
-      <div>
-        <label className="block text-sm text-secondary mb-1" htmlFor="detailCategory">
-          Category
-        </label>
-        <input
-          id="detailCategory"
-          list="detail-category-options"
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-        />
-        <datalist id="detail-category-options">
-          {categories.map((c) => (
-            <option key={c} value={c} />
-          ))}
-        </datalist>
-      </div>
+      <TagsField
+        tags={skillTags.map((t) => ({ id: t.id, name: t.tags?.name }))}
+        onAddTag={onAddTag}
+        onRemoveTag={onRemoveTag}
+        skillName={name}
+        allTags={allTags}
+        datalistId="tags-options-detail"
+      />
 
       <label className="flex items-start gap-2 text-sm text-secondary">
         <input

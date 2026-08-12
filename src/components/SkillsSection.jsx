@@ -7,24 +7,16 @@ import SkillDetailModal from './SkillDetailModal'
 import TrackingReasonIcon from './TrackingReasonIcon'
 import { TRACKING_REASONS, TRACKING_REASON_LABELS } from '../lib/trackingReasons'
 
-function groupByCategory(skills) {
-  const map = new Map()
-  for (const skill of skills) {
-    if (!map.has(skill.category)) map.set(skill.category, [])
-    map.get(skill.category).push(skill)
-  }
-  return Array.from(map.entries())
-}
-
 export default function SkillsSection() {
   const { user } = useAuth()
   const [skills, setSkills] = useState([])
+  const [tagsBySkill, setTagsBySkill] = useState(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [addOpen, setAddOpen] = useState(false)
   const [detailSkill, setDetailSkill] = useState(null)
   const [reasonFilter, setReasonFilter] = useState(null)
-  const [categoryFilter, setCategoryFilter] = useState(null)
+  const [tagFilter, setTagFilter] = useState(null)
 
   useEffect(() => {
     loadSkills()
@@ -32,17 +24,26 @@ export default function SkillsSection() {
 
   async function loadSkills() {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('skills')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('category', { ascending: true })
-      .order('date_added', { ascending: false })
+    const [{ data, error }, { data: tagLinks }] = await Promise.all([
+      supabase
+        .from('skills')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('date_added', { ascending: false }),
+      supabase.from('skill_tags').select('skill_id, tags(name)').eq('user_id', user.id),
+    ])
     if (error) {
       setError(error.message)
     } else {
       setSkills(data)
       setDetailSkill((prev) => (prev ? data.find((s) => s.id === prev.id) ?? prev : prev))
+      const map = new Map()
+      for (const link of tagLinks ?? []) {
+        if (!link.tags?.name) continue
+        if (!map.has(link.skill_id)) map.set(link.skill_id, [])
+        map.get(link.skill_id).push(link.tags.name)
+      }
+      setTagsBySkill(map)
     }
     setLoading(false)
   }
@@ -52,9 +53,9 @@ export default function SkillsSection() {
       skills.filter(
         (s) =>
           (!reasonFilter || s.tracking_reason === reasonFilter) &&
-          (!categoryFilter || s.category === categoryFilter)
+          (!tagFilter || (tagsBySkill.get(s.id) ?? []).includes(tagFilter))
       ),
-    [skills, reasonFilter, categoryFilter]
+    [skills, reasonFilter, tagFilter, tagsBySkill]
   )
   const currentRoleSkills = useMemo(
     () => filteredSkills.filter((s) => s.is_current_role),
@@ -64,11 +65,12 @@ export default function SkillsSection() {
     () => filteredSkills.filter((s) => !s.is_current_role),
     [filteredSkills]
   )
-  const currentRoleGrouped = useMemo(() => groupByCategory(currentRoleSkills), [currentRoleSkills])
-  const otherGrouped = useMemo(() => groupByCategory(otherSkills), [otherSkills])
   const hasSplit = currentRoleSkills.length > 0
 
-  const categories = useMemo(() => [...new Set(skills.map((s) => s.category))], [skills])
+  const availableTags = useMemo(
+    () => [...new Set([...tagsBySkill.values()].flat())].sort(),
+    [tagsBySkill]
+  )
   const availableReasons = useMemo(
     () => TRACKING_REASONS.filter((r) => skills.some((s) => s.tracking_reason === r.value)),
     [skills]
@@ -95,7 +97,7 @@ export default function SkillsSection() {
         </div>
       )}
 
-      {!loading && skills.length > 0 && (availableReasons.length > 0 || categories.length > 1) && (
+      {!loading && skills.length > 0 && (availableReasons.length > 0 || availableTags.length > 0) && (
         <div className="flex flex-wrap items-center gap-3 mb-6">
           {availableReasons.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
@@ -128,19 +130,23 @@ export default function SkillsSection() {
             </div>
           )}
 
-          {categories.length > 1 && (
-            <select
-              value={categoryFilter ?? ''}
-              onChange={(e) => setCategoryFilter(e.target.value || null)}
-              className="rounded-full border border-hairline bg-paper px-3 py-1 font-mono text-xs uppercase tracking-wide text-secondary focus:outline-none focus:ring-2 focus:ring-moss"
-            >
-              <option value="">All categories</option>
-              {categories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
+          {availableTags.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              {availableTags.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTagFilter(tagFilter === t ? null : t)}
+                  className={`font-mono text-xs uppercase tracking-wide rounded-full px-3 py-1 border transition-colors ${
+                    tagFilter === t
+                      ? 'bg-moss text-paper border-moss'
+                      : 'border-hairline text-secondary hover:text-ink'
+                  }`}
+                >
+                  {t}
+                </button>
               ))}
-            </select>
+            </div>
           )}
         </div>
       )}
@@ -154,20 +160,19 @@ export default function SkillsSection() {
       {hasSplit && (
         <div className="mb-10">
           <h3 className="font-display text-base text-ink mb-4">Current role</h3>
-          <SkillGroups grouped={currentRoleGrouped} onEdit={setDetailSkill} />
+          <SkillGrid skills={currentRoleSkills} tagsBySkill={tagsBySkill} onEdit={setDetailSkill} />
         </div>
       )}
 
       {otherSkills.length > 0 && (
         <div>
           {hasSplit && <h3 className="font-display text-base text-ink mb-4">Further skills</h3>}
-          <SkillGroups grouped={otherGrouped} onEdit={setDetailSkill} />
+          <SkillGrid skills={otherSkills} tagsBySkill={tagsBySkill} onEdit={setDetailSkill} />
         </div>
       )}
 
       {addOpen && (
         <SkillModal
-          categories={categories}
           onClose={() => setAddOpen(false)}
           onCreated={() => {
             setAddOpen(false)
@@ -179,7 +184,6 @@ export default function SkillsSection() {
       {detailSkill && (
         <SkillDetailModal
           skill={detailSkill}
-          categories={categories}
           onClose={() => setDetailSkill(null)}
           onUpdated={loadSkills}
           onDeleted={() => {
@@ -192,20 +196,11 @@ export default function SkillsSection() {
   )
 }
 
-function SkillGroups({ grouped, onEdit }) {
+function SkillGrid({ skills, tagsBySkill, onEdit }) {
   return (
-    <div className="space-y-8">
-      {grouped.map(([category, categorySkills]) => (
-        <div key={category}>
-          <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">
-            {category}
-          </h4>
-          <div className="grid sm:grid-cols-2 gap-3">
-            {categorySkills.map((skill) => (
-              <SkillCard key={skill.id} skill={skill} onEdit={onEdit} />
-            ))}
-          </div>
-        </div>
+    <div className="grid sm:grid-cols-2 gap-3">
+      {skills.map((skill) => (
+        <SkillCard key={skill.id} skill={skill} tags={tagsBySkill.get(skill.id)} onEdit={onEdit} />
       ))}
     </div>
   )

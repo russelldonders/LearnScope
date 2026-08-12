@@ -8,6 +8,7 @@ import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { SKILL_RELATIONSHIPS, SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
 import { COURSE_TYPES } from '../lib/courseTypes'
 import { activityName, verbLabel, relatedSkillFromStatement } from '../lib/xapiStatement'
+import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import GrowthRing from './GrowthRing'
 import EvidenceFields from './EvidenceFields'
 import RecordExperienceModal from './RecordExperienceModal'
@@ -51,12 +52,12 @@ export default function CourseModal({ course, skills, librarySkills, onRefreshPi
         .eq('course_id', course.id),
       supabase
         .from('skill_course_links')
-        .select('id, skill_id, relationship, skills(id, name, category)')
+        .select('id, skill_id, relationship, skills(id, name)')
         .eq('course_id', course.id)
         .order('created_at'),
       supabase
         .from('skill_assessments')
-        .select('*, skills(name, category)')
+        .select('*, skills(name)')
         .eq('course_id', course.id)
         .order('assessed_at', { ascending: false }),
       supabase
@@ -312,7 +313,7 @@ function OverviewTab({ course, linkedExperiences, skillLinks, achievements, stat
   const bySkill = new Map()
   for (const l of skillLinks) {
     if (!bySkill.has(l.skill_id)) {
-      const entry = { skillId: l.skill_id, name: l.skills?.name, category: l.skills?.category, relationships: [] }
+      const entry = { skillId: l.skill_id, name: l.skills?.name, relationships: [] }
       bySkill.set(l.skill_id, entry)
       grouped.push(entry)
     }
@@ -356,7 +357,7 @@ function OverviewTab({ course, linkedExperiences, skillLinks, achievements, stat
           <ul className="space-y-1">
             {grouped.map((g) => (
               <li key={g.skillId} className="text-sm text-ink">
-                {g.name} <span className="text-secondary">({g.category})</span> —{' '}
+                {g.name} —{' '}
                 <span className="text-secondary">
                   {g.relationships.map((r) => SKILL_RELATIONSHIP_LABELS[r]).join(', ')}
                 </span>
@@ -413,24 +414,15 @@ function SkillsDevelopedSubsection({ course, skills, skillLinks, librarySkills, 
   const [skillId, setSkillId] = useState('')
   const [creatingNew, setCreatingNew] = useState(false)
   const [newSkillName, setNewSkillName] = useState('')
-  const [newSkillCategory, setNewSkillCategory] = useState('')
   const [relationship, setRelationship] = useState('developed')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
-
-  function handleNewSkillNameChange(value) {
-    setNewSkillName(value)
-    if (!newSkillCategory.trim()) {
-      const match = librarySkills.find((s) => s.name.toLowerCase() === value.trim().toLowerCase())
-      if (match?.category) setNewSkillCategory(match.category)
-    }
-  }
 
   const grouped = []
   const bySkill = new Map()
   for (const l of skillLinks) {
     if (!bySkill.has(l.skill_id)) {
-      const entry = { skillId: l.skill_id, name: l.skills?.name, category: l.skills?.category, links: [] }
+      const entry = { skillId: l.skill_id, name: l.skills?.name, links: [] }
       bySkill.set(l.skill_id, entry)
       grouped.push(entry)
     }
@@ -444,21 +436,23 @@ function SkillsDevelopedSubsection({ course, skills, skillLinks, librarySkills, 
     try {
       let targetSkillId = skillId
       if (creatingNew) {
-        if (!newSkillName.trim() || !newSkillCategory.trim()) {
-          throw new Error('Name and category are required for a new skill.')
+        if (!newSkillName.trim()) {
+          throw new Error('A name is required for a new skill.')
         }
-        const libraryId = await findOrCreateLibrarySkill(newSkillName, newSkillCategory, user.id)
+        const libraryId = await findOrCreateLibrarySkill(newSkillName, null, user.id)
         const { data, error } = await supabase
           .from('skills')
           .insert({
             name: newSkillName.trim(),
-            category: newSkillCategory.trim(),
             library_skill_id: libraryId,
             user_id: user.id,
           })
           .select()
           .single()
-        if (error) throw error
+        if (error) {
+          if (isDuplicateSkillNameError(error)) throw new Error(duplicateSkillMessage(newSkillName))
+          throw error
+        }
         targetSkillId = data.id
         await onRefreshPickerData()
       }
@@ -477,7 +471,6 @@ function SkillsDevelopedSubsection({ course, skills, skillLinks, librarySkills, 
       setSkillId('')
       setCreatingNew(false)
       setNewSkillName('')
-      setNewSkillCategory('')
       await onChange()
     } catch (err) {
       setError(err.message)
@@ -503,9 +496,7 @@ function SkillsDevelopedSubsection({ course, skills, skillLinks, librarySkills, 
         <ul className="space-y-2 mb-3">
           {grouped.map((g) => (
             <li key={g.skillId} className="bg-paper border border-hairline rounded-md px-3 py-2">
-              <p className="text-sm text-ink">
-                {g.name} <span className="text-secondary">({g.category})</span>
-              </p>
+              <p className="text-sm text-ink">{g.name}</p>
               <div className="flex flex-wrap gap-1.5 mt-1">
                 {g.links.map((l) => (
                   <span
@@ -530,7 +521,7 @@ function SkillsDevelopedSubsection({ course, skills, skillLinks, librarySkills, 
             <input
               list="skill-library-options-course-developed"
               value={newSkillName}
-              onChange={(e) => handleNewSkillNameChange(e.target.value)}
+              onChange={(e) => setNewSkillName(e.target.value)}
               placeholder="Search the skill library or type a new one…"
               className="flex-1 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
             />
@@ -539,12 +530,6 @@ function SkillsDevelopedSubsection({ course, skills, skillLinks, librarySkills, 
                 <option key={s.id} value={s.name} />
               ))}
             </datalist>
-            <input
-              value={newSkillCategory}
-              onChange={(e) => setNewSkillCategory(e.target.value)}
-              placeholder="Category"
-              className="flex-1 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-            />
             <button
               type="button"
               onClick={() => setCreatingNew(false)}
@@ -563,7 +548,7 @@ function SkillsDevelopedSubsection({ course, skills, skillLinks, librarySkills, 
               <option value="">Choose a skill…</option>
               {skills.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name} ({s.category})
+                  {s.name}
                 </option>
               ))}
             </select>
@@ -610,7 +595,6 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
   const [skillId, setSkillId] = useState('')
   const [creatingNew, setCreatingNew] = useState(false)
   const [newSkillName, setNewSkillName] = useState('')
-  const [newSkillCategory, setNewSkillCategory] = useState('')
   const [level, setLevel] = useState(3)
   const [achievedDate, setAchievedDate] = useState(course.completed_date || new Date().toISOString().slice(0, 10))
   const [comments, setComments] = useState('')
@@ -619,14 +603,6 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [levelSyncPrompt, setLevelSyncPrompt] = useState(null)
-
-  function handleNewSkillNameChange(value) {
-    setNewSkillName(value)
-    if (!newSkillCategory.trim()) {
-      const match = librarySkills.find((s) => s.name.toLowerCase() === value.trim().toLowerCase())
-      if (match?.category) setNewSkillCategory(match.category)
-    }
-  }
 
   async function handleAdd(e) {
     e.preventDefault()
@@ -640,21 +616,23 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
       let targetSkillId = skillId
       let targetSkillName = skills.find((s) => s.id === skillId)?.name
       if (creatingNew) {
-        if (!newSkillName.trim() || !newSkillCategory.trim()) {
-          throw new Error('Name and category are required for a new skill.')
+        if (!newSkillName.trim()) {
+          throw new Error('A name is required for a new skill.')
         }
-        const libraryId = await findOrCreateLibrarySkill(newSkillName, newSkillCategory, user.id)
+        const libraryId = await findOrCreateLibrarySkill(newSkillName, null, user.id)
         const { data, error } = await supabase
           .from('skills')
           .insert({
             name: newSkillName.trim(),
-            category: newSkillCategory.trim(),
             library_skill_id: libraryId,
             user_id: user.id,
           })
           .select()
           .single()
-        if (error) throw error
+        if (error) {
+          if (isDuplicateSkillNameError(error)) throw new Error(duplicateSkillMessage(newSkillName))
+          throw error
+        }
         targetSkillId = data.id
         targetSkillName = data.name
         await onRefreshPickerData()
@@ -711,7 +689,6 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
       setSkillId('')
       setCreatingNew(false)
       setNewSkillName('')
-      setNewSkillCategory('')
       setComments('')
       setEvidenceUrl('')
       setEvidenceFiles([])
@@ -796,7 +773,7 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
             <input
               list="skill-library-options-course-achievement"
               value={newSkillName}
-              onChange={(e) => handleNewSkillNameChange(e.target.value)}
+              onChange={(e) => setNewSkillName(e.target.value)}
               placeholder="Search the skill library or type a new one…"
               className="flex-1 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
             />
@@ -805,12 +782,6 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
                 <option key={s.id} value={s.name} />
               ))}
             </datalist>
-            <input
-              value={newSkillCategory}
-              onChange={(e) => setNewSkillCategory(e.target.value)}
-              placeholder="Category"
-              className="flex-1 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-            />
             <button
               type="button"
               onClick={() => setCreatingNew(false)}
@@ -829,7 +800,7 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
               <option value="">Choose a skill…</option>
               {skills.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name} ({s.category})
+                  {s.name}
                 </option>
               ))}
             </select>

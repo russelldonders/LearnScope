@@ -35,7 +35,7 @@ export default function CoursesSection() {
 
   async function loadPickerData() {
     const [{ data: skillsData }, libraryData] = await Promise.all([
-      supabase.from('skills').select('id, name, category').eq('user_id', user.id).order('name'),
+      supabase.from('skills').select('id, name').eq('user_id', user.id).order('name'),
       listLibrarySkills(),
     ])
     setSkills(skillsData ?? [])

@@ -32,7 +32,11 @@ const EXTRACTION_SCHEMA = {
         type: 'object',
         properties: {
           name: { type: 'string' },
-          category: { type: 'string' },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '2-4 short, general tags for this skill (e.g. "Technical", "Communication", "Leadership").',
+          },
           level: { type: 'integer', enum: [1, 2, 3, 4, 5] },
           notes: NULLABLE_STRING,
           current_role: {
@@ -40,7 +44,7 @@ const EXTRACTION_SCHEMA = {
             description: 'True if this skill is used in the person\'s current/most recent role.',
           },
         },
-        required: ['name', 'category', 'level', 'notes', 'current_role'],
+        required: ['name', 'tags', 'level', 'notes', 'current_role'],
         additionalProperties: false,
       },
     },
@@ -83,7 +87,7 @@ const EXTRACTION_PROMPT = `Extract profile details, skills, courses/training, an
 
 For profile: pull full name, country, current city/region (location), and primary language if stated or clearly inferable. Leave a field null if not present.
 
-For skills: infer a reasonable proficiency level 1-5 (1 = beginner, 5 = expert) from years of experience, seniority language, or context; if genuinely unclear, use 3. Group similar skills under a sensible free-form category (e.g. "Technical", "Communication", "Leadership"). Mark current_role true only for skills clearly used in the most recent / current role (usually the first-listed or undated-end job); mark the rest false.
+For skills: infer a reasonable proficiency level 1-5 (1 = beginner, 5 = expert) from years of experience, seniority language, or context; if genuinely unclear, use 3. Suggest 2-4 short, general tags per skill (e.g. "Technical", "Communication", "Leadership") rather than one rigid category. Mark current_role true only for skills clearly used in the most recent / current role (usually the first-listed or undated-end job); mark the rest false.
 
 For courses/training: include certifications, completed courses, and formal training programs. Leave completed_date null if no date is given.
 

@@ -67,7 +67,7 @@ export default function ExperienceSection() {
 
   async function loadPickerData() {
     const [{ data: skillsData }, { data: coursesData }, libraryData] = await Promise.all([
-      supabase.from('skills').select('id, name, category').eq('user_id', user.id).order('name'),
+      supabase.from('skills').select('id, name').eq('user_id', user.id).order('name'),
       supabase.from('courses').select('id, name, provider, completed_date').order('name'),
       listLibrarySkills(),
     ])
