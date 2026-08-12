@@ -129,28 +129,34 @@ export default function ExperienceModal({ item, skills, courses, librarySkills, 
 
         {(!isEditing || tab === 'details') && (
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <span className="block text-sm text-secondary mb-2">Type</span>
-              <div className="flex gap-2">
-                {[
-                  { value: 'employment', label: 'Employment' },
-                  { value: 'education', label: 'Education' },
-                ].map((opt) => (
-                  <button
-                    type="button"
-                    key={opt.value}
-                    onClick={() => setType(opt.value)}
-                    className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
-                      type === opt.value
-                        ? 'bg-moss text-paper border-moss'
-                        : 'border-hairline text-ink hover:bg-paper'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+            {item?.type === 'education' && (
+              <div>
+                <span className="block text-sm text-secondary mb-2">Type</span>
+                <div className="flex gap-2">
+                  {[
+                    { value: 'employment', label: 'Employment' },
+                    { value: 'education', label: 'Education' },
+                  ].map((opt) => (
+                    <button
+                      type="button"
+                      key={opt.value}
+                      onClick={() => setType(opt.value)}
+                      className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
+                        type === opt.value
+                          ? 'bg-moss text-paper border-moss'
+                          : 'border-hairline text-ink hover:bg-paper'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-secondary mt-1">
+                  Education entries are now recorded under Courses — this one is kept as-is since it
+                  already exists.
+                </p>
               </div>
-            </div>
+            )}
 
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="title">

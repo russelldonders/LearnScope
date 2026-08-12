@@ -6,7 +6,7 @@ function todayDate() {
   return new Date().toISOString().slice(0, 10)
 }
 
-export default function RecordExperienceModal({ actor, skills, onSave, onClose }) {
+export default function RecordExperienceModal({ actor, skills, relatedCourse, onSave, onClose }) {
   const [rawMode, setRawMode] = useState(false)
   const [verbValue, setVerbValue] = useState('experienced')
   const [activityTitle, setActivityTitle] = useState('')
@@ -30,6 +30,7 @@ export default function RecordExperienceModal({ actor, skills, onSave, onClose }
           description: description.trim() || null,
           timestamp: date,
           relatedSkill,
+          relatedCourse,
         })
         setRawJson(JSON.stringify(statement, null, 2))
       } catch {
@@ -67,6 +68,7 @@ export default function RecordExperienceModal({ actor, skills, onSave, onClose }
           description: description.trim() || null,
           timestamp: date,
           relatedSkill,
+          relatedCourse,
         })
       }
     } catch (err) {
@@ -91,7 +93,9 @@ export default function RecordExperienceModal({ actor, skills, onSave, onClose }
       >
         <h2 className="font-display text-2xl text-ink mb-1">Record an experience</h2>
         <p className="text-sm text-secondary mb-4">
-          A quick log of something you did — separate from your work &amp; education timeline.
+          {relatedCourse
+            ? `A quick log of something you did as part of "${relatedCourse.name}".`
+            : "A quick log of something you did — separate from your work & education timeline."}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">

@@ -1,11 +1,20 @@
 import { XAPI_VERBS } from './xapiVerbs'
 
 export const SKILL_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/skill'
+export const COURSE_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/course'
 
 // Builds a spec-shaped xAPI statement from the guided-form fields.
 // actor: { name, email }. verbValue: one of XAPI_VERBS[].value.
-// relatedSkill: optional { id, name } to record as a context extension.
-export function buildStatement({ actor, verbValue, activityName, description, timestamp, relatedSkill }) {
+// relatedSkill/relatedCourse: optional { id, name } recorded as context extensions.
+export function buildStatement({
+  actor,
+  verbValue,
+  activityName,
+  description,
+  timestamp,
+  relatedSkill,
+  relatedCourse,
+}) {
   const verb = XAPI_VERBS.find((v) => v.value === verbValue)
   if (!verb) throw new Error('Choose a valid verb.')
 
@@ -31,12 +40,11 @@ export function buildStatement({ actor, verbValue, activityName, description, ti
     timestamp: new Date(timestamp).toISOString(),
   }
 
-  if (relatedSkill) {
-    statement.context = {
-      extensions: {
-        [SKILL_EXTENSION_IRI]: { id: relatedSkill.id, name: relatedSkill.name },
-      },
-    }
+  if (relatedSkill || relatedCourse) {
+    const extensions = {}
+    if (relatedSkill) extensions[SKILL_EXTENSION_IRI] = { id: relatedSkill.id, name: relatedSkill.name }
+    if (relatedCourse) extensions[COURSE_EXTENSION_IRI] = { id: relatedCourse.id, name: relatedCourse.name }
+    statement.context = { extensions }
   }
 
   return statement
@@ -67,4 +75,8 @@ export function verbLabel(statement) {
 
 export function relatedSkillFromStatement(statement) {
   return statement.context?.extensions?.[SKILL_EXTENSION_IRI] ?? null
+}
+
+export function relatedCourseFromStatement(statement) {
+  return statement.context?.extensions?.[COURSE_EXTENSION_IRI] ?? null
 }

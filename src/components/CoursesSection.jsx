@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
+import { listLibrarySkills } from '../lib/skillLibrary'
 import CourseCard from './CourseCard'
 import CourseModal from './CourseModal'
 
@@ -8,15 +9,14 @@ export default function CoursesSection() {
   const { user } = useAuth()
   const [courses, setCourses] = useState([])
   const [skills, setSkills] = useState([])
+  const [librarySkills, setLibrarySkills] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [modalCourse, setModalCourse] = useState(null)
-  const [modalLinkedAssessment, setModalLinkedAssessment] = useState(null)
   const [modalOpen, setModalOpen] = useState(false)
 
   useEffect(() => {
     loadCourses()
-    loadSkills()
   }, [])
 
   async function loadCourses() {
@@ -33,125 +33,52 @@ export default function CoursesSection() {
     setLoading(false)
   }
 
-  async function loadSkills() {
-    const { data } = await supabase
-      .from('skills')
-      .select('id, name, category')
-      .eq('user_id', user.id)
-      .order('name')
-    setSkills(data ?? [])
-  }
-
-  async function refreshSkillLevel(skillId) {
-    if (!skillId) return
-    const { data } = await supabase
-      .from('skill_assessments')
-      .select('level')
-      .eq('skill_id', skillId)
-      .order('assessed_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    await supabase
-      .from('skills')
-      .update({ level: data?.level ?? null })
-      .eq('id', skillId)
+  async function loadPickerData() {
+    const [{ data: skillsData }, libraryData] = await Promise.all([
+      supabase.from('skills').select('id, name, category').eq('user_id', user.id).order('name'),
+      listLibrarySkills(),
+    ])
+    setSkills(skillsData ?? [])
+    setLibrarySkills(libraryData)
   }
 
   function openAddModal() {
     setModalCourse(null)
-    setModalLinkedAssessment(null)
     setModalOpen(true)
-    loadSkills()
   }
 
-  async function openEditModal(course) {
+  function openEditModal(course) {
     setModalCourse(course)
-    loadSkills()
-    const { data } = await supabase
-      .from('skill_assessments')
-      .select('id, skill_id, level, skills(name, category)')
-      .eq('course_id', course.id)
-      .order('assessed_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    setModalLinkedAssessment(data ?? null)
+    loadPickerData()
     setModalOpen(true)
   }
 
   async function handleSave(values) {
-    const { skillId, level, linkedAssessmentId, previousSkillId, ...courseValues } = values
-    let courseId = values.id
-
     if (values.id) {
       const { error } = await supabase
         .from('courses')
         .update({
-          name: courseValues.name,
-          provider: courseValues.provider,
-          completed_date: courseValues.completed_date,
-          notes: courseValues.notes,
+          name: values.name,
+          provider: values.provider,
+          completed_date: values.completed_date,
+          duration: values.duration,
+          course_type: values.course_type,
+          notes: values.notes,
         })
         .eq('id', values.id)
       if (error) throw error
     } else {
-      const { data, error } = await supabase
-        .from('courses')
-        .insert({
-          name: courseValues.name,
-          provider: courseValues.provider,
-          completed_date: courseValues.completed_date,
-          notes: courseValues.notes,
-          user_id: user.id,
-        })
-        .select()
-        .single()
-      if (error) throw error
-      courseId = data.id
-    }
-
-    if (linkedAssessmentId) {
-      if (!skillId || !level) {
-        const { error } = await supabase.from('skill_assessments').delete().eq('id', linkedAssessmentId)
-        if (error) throw error
-        await refreshSkillLevel(previousSkillId)
-      } else if (skillId === previousSkillId) {
-        const { error } = await supabase
-          .from('skill_assessments')
-          .update({ level, assessed_at: courseValues.completed_date || undefined })
-          .eq('id', linkedAssessmentId)
-        if (error) throw error
-        await refreshSkillLevel(skillId)
-      } else {
-        const { error: deleteError } = await supabase
-          .from('skill_assessments')
-          .delete()
-          .eq('id', linkedAssessmentId)
-        if (deleteError) throw deleteError
-        await refreshSkillLevel(previousSkillId)
-        const { error: insertError } = await supabase.from('skill_assessments').insert({
-          skill_id: skillId,
-          user_id: user.id,
-          level,
-          source: 'course',
-          course_id: courseId,
-          assessed_at: courseValues.completed_date || new Date().toISOString(),
-        })
-        if (insertError) throw insertError
-        await refreshSkillLevel(skillId)
-      }
-    } else if (skillId && level) {
-      const { error } = await supabase.from('skill_assessments').insert({
-        skill_id: skillId,
+      const { error } = await supabase.from('courses').insert({
+        name: values.name,
+        provider: values.provider,
+        completed_date: values.completed_date,
+        duration: values.duration,
+        course_type: values.course_type,
+        notes: values.notes,
         user_id: user.id,
-        level,
-        source: 'course',
-        course_id: courseId,
-        assessed_at: courseValues.completed_date || new Date().toISOString(),
       })
       if (error) throw error
-      await refreshSkillLevel(skillId)
     }
-
     setModalOpen(false)
     await loadCourses()
   }
@@ -194,7 +121,8 @@ export default function CoursesSection() {
         <CourseModal
           course={modalCourse}
           skills={skills}
-          linkedAssessment={modalLinkedAssessment}
+          librarySkills={librarySkills}
+          onRefreshPickerData={loadPickerData}
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setModalOpen(false)}
