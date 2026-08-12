@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { useAuth } from '../context/AuthContext'
 import SkillCard from './SkillCard'
 import SkillModal from './SkillModal'
 import SkillDetailModal from './SkillDetailModal'
@@ -16,6 +17,7 @@ function groupByCategory(skills) {
 }
 
 export default function SkillsSection() {
+  const { user } = useAuth()
   const [skills, setSkills] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -33,6 +35,7 @@ export default function SkillsSection() {
     const { data, error } = await supabase
       .from('skills')
       .select('*')
+      .eq('user_id', user.id)
       .order('category', { ascending: true })
       .order('date_added', { ascending: false })
     if (error) {

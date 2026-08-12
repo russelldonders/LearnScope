@@ -31,7 +31,11 @@ export default function RecordExperienceSection() {
   }
 
   async function loadSkills() {
-    const { data } = await supabase.from('skills').select('id, name, category').order('name')
+    const { data } = await supabase
+      .from('skills')
+      .select('id, name, category')
+      .eq('user_id', user.id)
+      .order('name')
     setSkills(data ?? [])
   }
 
