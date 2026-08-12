@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
+import AppHeader from '../components/AppHeader'
 import ProfilePhoto from '../components/ProfilePhoto'
 import ResumeImportButton from '../components/ResumeImportButton'
 
@@ -101,19 +101,7 @@ export default function Profile() {
 
   return (
     <div className="min-h-screen bg-paper">
-      <header className="border-b border-hairline bg-card">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to="/dashboard" className="font-display text-2xl text-ink">
-            LearnScope
-          </Link>
-          <Link
-            to="/dashboard"
-            className="text-sm text-secondary hover:text-ink border border-hairline rounded-md px-3 py-1.5"
-          >
-            Back to dashboard
-          </Link>
-        </div>
-      </header>
+      <AppHeader />
 
       <main className="max-w-2xl mx-auto px-4 py-8">
         <h2 className="font-display text-xl text-ink mb-6">Your profile</h2>

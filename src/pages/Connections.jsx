@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import { LEVEL_LABELS } from '../lib/levels'
 import { listMyPeerRatings, listSentInvites, getProfileNames } from '../lib/connections'
@@ -71,19 +72,7 @@ export default function Connections() {
 
   return (
     <div className="min-h-screen bg-paper">
-      <header className="border-b border-hairline bg-card">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to="/dashboard" className="font-display text-2xl text-ink">
-            LearnScope
-          </Link>
-          <Link
-            to="/dashboard"
-            className="text-sm text-secondary hover:text-ink border border-hairline rounded-md px-3 py-1.5"
-          >
-            Back to dashboard
-          </Link>
-        </div>
-      </header>
+      <AppHeader />
 
       <main className="max-w-2xl mx-auto px-4 py-8 space-y-10">
         <div>

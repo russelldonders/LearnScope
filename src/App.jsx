@@ -8,6 +8,8 @@ import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import Welcome from './pages/Welcome'
 import Dashboard from './pages/Dashboard'
+import Skills from './pages/Skills'
+import Experience from './pages/Experience'
 import Profile from './pages/Profile'
 import Rate from './pages/Rate'
 import Connections from './pages/Connections'
@@ -30,6 +32,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/skills"
+            element={
+              <ProtectedRoute>
+                <Skills />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/experience"
+            element={
+              <ProtectedRoute>
+                <Experience />
               </ProtectedRoute>
             }
           />

@@ -1,53 +1,90 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import SkillsSection from '../components/SkillsSection'
-import CoursesSection from '../components/CoursesSection'
-import ExperienceSection from '../components/ExperienceSection'
+import { supabase } from '../lib/supabaseClient'
+import { listConnections } from '../lib/connections'
+import AppHeader from '../components/AppHeader'
 import RecordExperienceSection from '../components/RecordExperienceSection'
 
+async function countRows(table, userId) {
+  const { count } = await supabase
+    .from(table)
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+  return count ?? 0
+}
+
 export default function Dashboard() {
-  const { user, signOut } = useAuth()
+  const { user } = useAuth()
+  const [counts, setCounts] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadSummary()
+  }, [])
+
+  async function loadSummary() {
+    setLoading(true)
+    const [skills, courses, experience, connections] = await Promise.all([
+      countRows('skills', user.id),
+      countRows('courses', user.id),
+      countRows('experience', user.id),
+      listConnections(user.id).then((c) => c.length),
+    ])
+    setCounts({ skills, courses, experience, connections })
+    setLoading(false)
+  }
 
   return (
     <div className="min-h-screen bg-paper">
-      <header className="border-b border-hairline bg-card">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="font-display text-2xl text-ink">LearnScope</h1>
-          <div className="flex items-center gap-3">
-            <span className="font-mono text-xs text-secondary hidden sm:inline">{user?.email}</span>
-            <Link
-              to="/connections"
-              className="text-sm text-secondary hover:text-ink border border-hairline rounded-md px-3 py-1.5"
-            >
-              Connections
-            </Link>
-            <Link
-              to="/profile"
-              aria-label="Your profile"
-              title="Your profile"
-              className="flex items-center justify-center w-9 h-9 rounded-full border border-hairline text-ink hover:bg-paper"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="8" r="4" />
-                <path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8" />
-              </svg>
-            </Link>
-            <button
-              onClick={signOut}
-              className="text-sm text-secondary hover:text-ink border border-hairline rounded-md px-3 py-1.5"
-            >
-              Log out
-            </button>
-          </div>
-        </div>
-      </header>
+      <AppHeader />
 
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-16">
-        <SkillsSection />
-        <CoursesSection />
-        <ExperienceSection />
+        <div>
+          <h2 className="font-display text-xl text-ink mb-6">Your overview</h2>
+
+          {loading ? (
+            <p className="text-secondary">Loading…</p>
+          ) : (
+            <div className="grid sm:grid-cols-3 gap-4">
+              <SummaryCard
+                to="/skills"
+                title="Skills"
+                value={counts.skills}
+                unit={counts.skills === 1 ? 'skill tracked' : 'skills tracked'}
+              />
+              <SummaryCard
+                to="/experience"
+                title="Experience"
+                value={counts.experience + counts.courses}
+                unit={`${counts.experience} role${counts.experience === 1 ? '' : 's'}/study period${counts.experience === 1 ? '' : 's'} · ${counts.courses} course${counts.courses === 1 ? '' : 's'}`}
+              />
+              <SummaryCard
+                to="/connections"
+                title="Connections"
+                value={counts.connections}
+                unit={counts.connections === 1 ? 'connection' : 'connections'}
+              />
+            </div>
+          )}
+        </div>
+
         <RecordExperienceSection />
       </main>
     </div>
+  )
+}
+
+function SummaryCard({ to, title, value, unit }) {
+  return (
+    <Link
+      to={to}
+      className="bg-card border border-hairline rounded-lg p-5 hover:border-moss transition-colors block"
+    >
+      <h3 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">{title}</h3>
+      <p className="font-display text-3xl text-ink">{value}</p>
+      <p className="text-xs text-secondary mt-1">{unit}</p>
+      <p className="text-xs text-moss font-medium mt-3">View {title.toLowerCase()} →</p>
+    </Link>
   )
 }

@@ -1,0 +1,63 @@
+import { Link, useLocation } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+
+const NAV_LINKS = [
+  { to: '/skills', label: 'Skills' },
+  { to: '/experience', label: 'Experience' },
+  { to: '/connections', label: 'Connections' },
+]
+
+export default function AppHeader() {
+  const { signOut } = useAuth()
+  const location = useLocation()
+
+  return (
+    <header className="border-b border-hairline bg-card">
+      <div className="max-w-4xl mx-auto px-4 py-3">
+        <div className="flex items-center justify-between gap-4">
+          <Link to="/dashboard" className="font-display text-2xl text-ink shrink-0">
+            LearnScope
+          </Link>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              to="/profile"
+              aria-label="Your profile"
+              title="Your profile"
+              className={`flex items-center justify-center w-9 h-9 rounded-full border shrink-0 ${
+                location.pathname === '/profile'
+                  ? 'border-moss text-ink'
+                  : 'border-hairline text-ink hover:bg-paper'
+              }`}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8" />
+              </svg>
+            </Link>
+            <button
+              onClick={signOut}
+              className="shrink-0 text-sm text-secondary hover:text-ink border border-hairline rounded-md px-3 py-1.5"
+            >
+              Log out
+            </button>
+          </div>
+        </div>
+        <nav className="flex items-center flex-wrap gap-1 sm:gap-3 mt-3">
+          {NAV_LINKS.map((link) => (
+            <Link
+              key={link.to}
+              to={link.to}
+              className={`text-sm rounded-md px-2.5 py-1.5 whitespace-nowrap ${
+                location.pathname === link.to
+                  ? 'text-ink font-medium bg-paper'
+                  : 'text-secondary hover:text-ink'
+              }`}
+            >
+              {link.label}
+            </Link>
+          ))}
+        </nav>
+      </div>
+    </header>
+  )
+}
