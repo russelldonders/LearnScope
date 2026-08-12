@@ -67,7 +67,6 @@ Only invent a new tag when none of the existing ones fit. Use Title Case, 1-3 wo
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 512,
       output_config: {
-        effort: 'low',
         format: { type: 'json_schema', schema: SUGGESTION_SCHEMA },
       },
       messages: [{ role: 'user', content: prompt }],
