@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { uploadEvidenceFiles } from '../lib/skillEvidence'
+import { listLibrarySkills, findOrCreateLibrarySkill } from '../lib/skillLibrary'
 import GrowthRing from './GrowthRing'
 import EvidenceFields from './EvidenceFields'
 import TrackingReasonPicker from './TrackingReasonPicker'
@@ -11,6 +12,7 @@ export default function SkillModal({ categories, onClose, onCreated }) {
   const { user } = useAuth()
   const [name, setName] = useState('')
   const [category, setCategory] = useState('')
+  const [librarySkills, setLibrarySkills] = useState([])
   const [isCurrentRole, setIsCurrentRole] = useState(false)
   const [trackingReason, setTrackingReason] = useState(null)
   const [assessNow, setAssessNow] = useState(true)
@@ -21,6 +23,18 @@ export default function SkillModal({ categories, onClose, onCreated }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
+  useEffect(() => {
+    listLibrarySkills().then(setLibrarySkills)
+  }, [])
+
+  function handleNameChange(value) {
+    setName(value)
+    if (!category.trim()) {
+      const match = librarySkills.find((s) => s.name.toLowerCase() === value.trim().toLowerCase())
+      if (match?.category) setCategory(match.category)
+    }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     if (!name.trim() || !category.trim()) {
@@ -30,6 +44,7 @@ export default function SkillModal({ categories, onClose, onCreated }) {
     setError(null)
     setSaving(true)
     try {
+      const libraryId = await findOrCreateLibrarySkill(name, category, user.id)
       const { data: skill, error: skillError } = await supabase
         .from('skills')
         .insert({
@@ -38,6 +53,7 @@ export default function SkillModal({ categories, onClose, onCreated }) {
           level: assessNow ? level : null,
           is_current_role: isCurrentRole,
           tracking_reason: trackingReason,
+          library_skill_id: libraryId,
           user_id: user.id,
         })
         .select()
@@ -91,10 +107,17 @@ export default function SkillModal({ categories, onClose, onCreated }) {
             <input
               id="name"
               required
+              list="skill-library-options"
+              placeholder="Search the skill library or type a new one…"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => handleNameChange(e.target.value)}
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
             />
+            <datalist id="skill-library-options">
+              {librarySkills.map((s) => (
+                <option key={s.id} value={s.name} />
+              ))}
+            </datalist>
           </div>
 
           <div>

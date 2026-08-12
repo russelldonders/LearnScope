@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
+import { listLibrarySkills } from '../lib/skillLibrary'
 import TimelineItem from './TimelineItem'
 import ExperienceModal from './ExperienceModal'
 
@@ -10,6 +11,7 @@ export default function ExperienceSection() {
   const [learningSummaries, setLearningSummaries] = useState({})
   const [skills, setSkills] = useState([])
   const [courses, setCourses] = useState([])
+  const [librarySkills, setLibrarySkills] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [modalItem, setModalItem] = useState(null)
@@ -64,12 +66,14 @@ export default function ExperienceSection() {
   }
 
   async function loadPickerData() {
-    const [{ data: skillsData }, { data: coursesData }] = await Promise.all([
+    const [{ data: skillsData }, { data: coursesData }, libraryData] = await Promise.all([
       supabase.from('skills').select('id, name, category').order('name'),
       supabase.from('courses').select('id, name, provider, completed_date').order('name'),
+      listLibrarySkills(),
     ])
     setSkills(skillsData ?? [])
     setCourses(coursesData ?? [])
+    setLibrarySkills(libraryData)
   }
 
   function openAddModal() {
@@ -158,6 +162,7 @@ export default function ExperienceSection() {
           item={modalItem}
           skills={skills}
           courses={courses}
+          librarySkills={librarySkills}
           onRefreshPickerData={loadPickerData}
           onSave={handleSave}
           onDelete={handleDelete}

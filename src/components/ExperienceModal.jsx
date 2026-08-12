@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { uploadEvidenceFiles } from '../lib/skillEvidence'
+import { findOrCreateLibrarySkill } from '../lib/skillLibrary'
 import { formatMonthYear } from '../lib/dates'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { SKILL_RELATIONSHIPS, SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
@@ -15,7 +16,7 @@ const TABS = [
   { id: 'details', label: 'Details' },
 ]
 
-export default function ExperienceModal({ item, skills, courses, onRefreshPickerData, onSave, onDelete, onClose }) {
+export default function ExperienceModal({ item, skills, courses, librarySkills, onRefreshPickerData, onSave, onDelete, onClose }) {
   const { user } = useAuth()
   const isEditing = Boolean(item?.id)
   const [tab, setTab] = useState('overview')
@@ -287,6 +288,7 @@ export default function ExperienceModal({ item, skills, courses, onRefreshPicker
               item={item}
               skills={skills}
               skillLinks={skillLinks}
+              librarySkills={librarySkills}
               onChange={loadLearning}
               onRefreshPickerData={onRefreshPickerData}
               user={user}
@@ -297,6 +299,7 @@ export default function ExperienceModal({ item, skills, courses, onRefreshPicker
               skills={skills}
               linkedCourses={linkedCourses}
               achievements={achievements}
+              librarySkills={librarySkills}
               onChange={loadLearning}
               onRefreshPickerData={onRefreshPickerData}
               user={user}
@@ -526,7 +529,7 @@ function CoursesSubsection({ item, courses, linkedCourses, onChange, user }) {
   )
 }
 
-function SkillsDevelopedSubsection({ item, skills, skillLinks, onChange, onRefreshPickerData, user }) {
+function SkillsDevelopedSubsection({ item, skills, skillLinks, librarySkills, onChange, onRefreshPickerData, user }) {
   const [skillId, setSkillId] = useState('')
   const [creatingNew, setCreatingNew] = useState(false)
   const [newSkillName, setNewSkillName] = useState('')
@@ -534,6 +537,14 @@ function SkillsDevelopedSubsection({ item, skills, skillLinks, onChange, onRefre
   const [relationship, setRelationship] = useState('developed')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+
+  function handleNewSkillNameChange(value) {
+    setNewSkillName(value)
+    if (!newSkillCategory.trim()) {
+      const match = librarySkills.find((s) => s.name.toLowerCase() === value.trim().toLowerCase())
+      if (match?.category) setNewSkillCategory(match.category)
+    }
+  }
 
   const grouped = []
   const bySkill = new Map()
@@ -556,9 +567,15 @@ function SkillsDevelopedSubsection({ item, skills, skillLinks, onChange, onRefre
         if (!newSkillName.trim() || !newSkillCategory.trim()) {
           throw new Error('Name and category are required for a new skill.')
         }
+        const libraryId = await findOrCreateLibrarySkill(newSkillName, newSkillCategory, user.id)
         const { data, error } = await supabase
           .from('skills')
-          .insert({ name: newSkillName.trim(), category: newSkillCategory.trim(), user_id: user.id })
+          .insert({
+            name: newSkillName.trim(),
+            category: newSkillCategory.trim(),
+            library_skill_id: libraryId,
+            user_id: user.id,
+          })
           .select()
           .single()
         if (error) throw error
@@ -631,11 +648,17 @@ function SkillsDevelopedSubsection({ item, skills, skillLinks, onChange, onRefre
         {creatingNew ? (
           <div className="flex items-center gap-2">
             <input
+              list="skill-library-options-developed"
               value={newSkillName}
-              onChange={(e) => setNewSkillName(e.target.value)}
-              placeholder="New skill name"
+              onChange={(e) => handleNewSkillNameChange(e.target.value)}
+              placeholder="Search the skill library or type a new one…"
               className="flex-1 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
             />
+            <datalist id="skill-library-options-developed">
+              {librarySkills.map((s) => (
+                <option key={s.id} value={s.name} />
+              ))}
+            </datalist>
             <input
               value={newSkillCategory}
               onChange={(e) => setNewSkillCategory(e.target.value)}
@@ -703,7 +726,7 @@ function SkillsDevelopedSubsection({ item, skills, skillLinks, onChange, onRefre
   )
 }
 
-function AchievementsSubsection({ item, skills, linkedCourses, achievements, onChange, onRefreshPickerData, user }) {
+function AchievementsSubsection({ item, skills, linkedCourses, achievements, librarySkills, onChange, onRefreshPickerData, user }) {
   const [skillId, setSkillId] = useState('')
   const [creatingNew, setCreatingNew] = useState(false)
   const [newSkillName, setNewSkillName] = useState('')
@@ -721,6 +744,14 @@ function AchievementsSubsection({ item, skills, linkedCourses, achievements, onC
   const endBound = item.end_date || new Date().toISOString().slice(0, 10)
   const dateOutOfRange = achievedDate && (achievedDate < item.start_date || achievedDate > endBound)
 
+  function handleNewSkillNameChange(value) {
+    setNewSkillName(value)
+    if (!newSkillCategory.trim()) {
+      const match = librarySkills.find((s) => s.name.toLowerCase() === value.trim().toLowerCase())
+      if (match?.category) setNewSkillCategory(match.category)
+    }
+  }
+
   async function handleAdd(e) {
     e.preventDefault()
     setError(null)
@@ -736,9 +767,15 @@ function AchievementsSubsection({ item, skills, linkedCourses, achievements, onC
         if (!newSkillName.trim() || !newSkillCategory.trim()) {
           throw new Error('Name and category are required for a new skill.')
         }
+        const libraryId = await findOrCreateLibrarySkill(newSkillName, newSkillCategory, user.id)
         const { data, error } = await supabase
           .from('skills')
-          .insert({ name: newSkillName.trim(), category: newSkillCategory.trim(), user_id: user.id })
+          .insert({
+            name: newSkillName.trim(),
+            category: newSkillCategory.trim(),
+            library_skill_id: libraryId,
+            user_id: user.id,
+          })
           .select()
           .single()
         if (error) throw error
@@ -883,11 +920,17 @@ function AchievementsSubsection({ item, skills, linkedCourses, achievements, onC
         {creatingNew ? (
           <div className="flex items-center gap-2">
             <input
+              list="skill-library-options-achievement"
               value={newSkillName}
-              onChange={(e) => setNewSkillName(e.target.value)}
-              placeholder="New skill name"
+              onChange={(e) => handleNewSkillNameChange(e.target.value)}
+              placeholder="Search the skill library or type a new one…"
               className="flex-1 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
             />
+            <datalist id="skill-library-options-achievement">
+              {librarySkills.map((s) => (
+                <option key={s.id} value={s.name} />
+              ))}
+            </datalist>
             <input
               value={newSkillCategory}
               onChange={(e) => setNewSkillCategory(e.target.value)}

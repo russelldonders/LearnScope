@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { uploadAvatar, base64ToBlob } from '../lib/avatar'
+import { findOrCreateLibrarySkill } from '../lib/skillLibrary'
 import { formatMonthYear } from '../lib/dates'
 
 function useSelection(items) {
@@ -53,17 +54,7 @@ export default function ResumeImportReviewModal({
     setError(null)
     setImporting(true)
 
-    const skillRows = skills.values
-      .filter((_, i) => skills.selected.has(i))
-      .map((s) => ({
-        name: s.name,
-        category: s.category,
-        level: s.level,
-        notes: s.notes,
-        is_current_role: Boolean(s.current_role),
-        source: 'cv_import',
-        user_id: user.id,
-      }))
+    const selectedSkills = skills.values.filter((_, i) => skills.selected.has(i))
     const courseRows = courses.values
       .filter((_, i) => courses.selected.has(i))
       .map((c) => ({
@@ -86,7 +77,20 @@ export default function ResumeImportReviewModal({
       }))
 
     try {
-      if (skillRows.length) {
+      if (selectedSkills.length) {
+        const libraryIds = await Promise.all(
+          selectedSkills.map((s) => findOrCreateLibrarySkill(s.name, s.category, user.id))
+        )
+        const skillRows = selectedSkills.map((s, i) => ({
+          name: s.name,
+          category: s.category,
+          level: s.level,
+          notes: s.notes,
+          is_current_role: Boolean(s.current_role),
+          source: 'cv_import',
+          library_skill_id: libraryIds[i],
+          user_id: user.id,
+        }))
         const { data: insertedSkills, error } = await supabase
           .from('skills')
           .insert(skillRows)
