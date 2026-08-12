@@ -14,6 +14,14 @@ export function clearPendingInviteCode() {
   sessionStorage.removeItem(PENDING_INVITE_KEY)
 }
 
+export function isDuplicatePendingInviteError(error) {
+  return error?.code === '23505' && error?.message?.includes('connection_invites_unique_pending_idx')
+}
+
+export function duplicatePendingInviteMessage(email) {
+  return `You already have a pending invite out to ${email} for this skill.`
+}
+
 export async function createInvite(skillId, email, inviterId) {
   const { data, error } = await supabase
     .from('connection_invites')
@@ -22,6 +30,26 @@ export async function createInvite(skillId, email, inviterId) {
     .single()
   if (error) throw error
   return { ...data, url: `${window.location.origin}/rate/${data.share_code}` }
+}
+
+// Shared by the first-send flow (InviteRaterModal) and the resend action on
+// the Connections page so both go through the same Resend-backed endpoint.
+export async function sendInviteEmail({ toEmail, inviterName, skillName, shareUrl }) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  const res = await fetch('/api/send-invite', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ toEmail, inviterName, skillName, shareUrl }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error || 'Failed to send invite email.')
+  }
 }
 
 export async function getInvitePreview(code) {
@@ -75,6 +103,16 @@ export async function getProfileNames(userIds) {
   const { data, error } = await supabase.from('profiles').select('id, full_name').in('id', ids)
   if (error) throw error
   return Object.fromEntries((data ?? []).map((p) => [p.id, p.full_name]))
+}
+
+// Like getProfileNames but also carries the avatar, for surfaces that show a
+// person's photo next to their name (e.g. the connections list).
+export async function getProfiles(userIds) {
+  const ids = [...new Set(userIds)].filter(Boolean)
+  if (ids.length === 0) return {}
+  const { data, error } = await supabase.from('profiles').select('id, full_name, avatar_url').in('id', ids)
+  if (error) throw error
+  return Object.fromEntries((data ?? []).map((p) => [p.id, { name: p.full_name, avatarUrl: p.avatar_url }]))
 }
 
 // Distinct people the user has a rating history with, one row each (most

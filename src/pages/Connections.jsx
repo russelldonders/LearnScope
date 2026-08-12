@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import { LEVEL_LABELS } from '../lib/levels'
-import { listMyPeerRatings, listSentInvites, getProfileNames } from '../lib/connections'
+import { listMyPeerRatings, listSentInvites, getProfiles, sendInviteEmail } from '../lib/connections'
 
 export default function Connections() {
   const { user } = useAuth()
@@ -12,8 +12,11 @@ export default function Connections() {
   const [error, setError] = useState(null)
   const [ratings, setRatings] = useState([])
   const [invites, setInvites] = useState([])
-  const [names, setNames] = useState({})
+  const [profiles, setProfiles] = useState({})
   const [copiedId, setCopiedId] = useState(null)
+  const [resendingId, setResendingId] = useState(null)
+  const [resentId, setResentId] = useState(null)
+  const [resendError, setResendError] = useState(null)
 
   useEffect(() => {
     load()
@@ -26,10 +29,8 @@ export default function Connections() {
       const [ratingsData, invitesData] = await Promise.all([listMyPeerRatings(), listSentInvites()])
       setRatings(ratingsData)
       setInvites(invitesData)
-      const ownerIds = ratingsData
-        .filter((r) => r.rater_id === user.id)
-        .map((r) => r.skill_owner_id)
-      setNames(await getProfileNames(ownerIds))
+      const otherIds = ratingsData.map((r) => (r.rater_id === user.id ? r.skill_owner_id : r.rater_id))
+      setProfiles(await getProfiles([...otherIds, user.id]))
     } catch (err) {
       setError(err.message)
     } finally {
@@ -43,9 +44,13 @@ export default function Connections() {
     for (const r of ratings) {
       const gaveRating = r.rater_id === user.id
       const otherId = gaveRating ? r.skill_owner_id : r.rater_id
-      const otherName = gaveRating ? names[otherId] || 'Someone' : r.rater_name || r.rater_email || 'Someone'
+      const otherName = gaveRating
+        ? profiles[otherId]?.name || 'Someone'
+        : r.rater_name || r.rater_email || 'Someone'
 
-      if (!map.has(otherId)) map.set(otherId, { id: otherId, name: otherName, events: [] })
+      if (!map.has(otherId)) {
+        map.set(otherId, { id: otherId, name: otherName, avatarUrl: profiles[otherId]?.avatarUrl || null, events: [] })
+      }
       map.get(otherId).events.push({
         direction: gaveRating ? 'given' : 'received',
         skillName: r.skill_name,
@@ -60,7 +65,7 @@ export default function Connections() {
     for (const c of list) c.events.sort((a, b) => new Date(b.date) - new Date(a.date))
     list.sort((a, b) => new Date(b.events[0].date) - new Date(a.events[0].date))
     return list
-  }, [ratings, names, user.id])
+  }, [ratings, profiles, user.id])
 
   const pendingInvites = useMemo(() => invites.filter((i) => i.status === 'pending'), [invites])
 
@@ -68,6 +73,25 @@ export default function Connections() {
     navigator.clipboard.writeText(invite.url)
     setCopiedId(invite.id)
     setTimeout(() => setCopiedId(null), 2000)
+  }
+
+  async function handleResend(invite) {
+    setResendError(null)
+    setResendingId(invite.id)
+    try {
+      await sendInviteEmail({
+        toEmail: invite.invitee_email,
+        inviterName: profiles[user.id]?.name || user.email,
+        skillName: invite.skills?.name,
+        shareUrl: invite.url,
+      })
+      setResentId(invite.id)
+      setTimeout(() => setResentId(null), 2000)
+    } catch (err) {
+      setResendError({ id: invite.id, message: err.message })
+    } finally {
+      setResendingId(null)
+    }
   }
 
   return (
@@ -94,9 +118,12 @@ export default function Connections() {
               <div key={c.id} className="bg-card border border-hairline rounded-lg p-4">
                 <Link
                   to={`/skills-profile/${c.id}`}
-                  className="font-display text-lg text-ink mb-3 inline-block hover:text-moss hover:underline"
+                  className="flex items-center gap-2 mb-3 group w-fit"
                 >
-                  {c.name}
+                  <ConnectionAvatar name={c.name} avatarUrl={c.avatarUrl} />
+                  <span className="font-display text-lg text-ink group-hover:text-moss group-hover:underline">
+                    {c.name}
+                  </span>
                 </Link>
                 <div className="space-y-3">
                   {c.events.map((e, i) => (
@@ -145,14 +172,33 @@ export default function Connections() {
                     <p className="font-mono text-xs text-secondary">
                       {new Date(invite.created_at).toLocaleDateString()}
                     </p>
+                    {resendError?.id === invite.id && (
+                      <p className="text-xs text-red-700 mt-1">{resendError.message}</p>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleCopy(invite)}
-                    className="shrink-0 rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
-                  >
-                    {copiedId === invite.id ? 'Copied!' : 'Copy link'}
-                  </button>
+                  <div className="shrink-0 flex items-center gap-2">
+                    {invite.invitee_email && (
+                      <button
+                        type="button"
+                        onClick={() => handleResend(invite)}
+                        disabled={resendingId === invite.id}
+                        className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+                      >
+                        {resendingId === invite.id
+                          ? 'Sending…'
+                          : resentId === invite.id
+                            ? 'Sent!'
+                            : 'Resend email'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(invite)}
+                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+                    >
+                      {copiedId === invite.id ? 'Copied!' : 'Copy link'}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -160,5 +206,22 @@ export default function Connections() {
         )}
       </main>
     </div>
+  )
+}
+
+function ConnectionAvatar({ name, avatarUrl }) {
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt=""
+        className="w-8 h-8 rounded-full object-cover border border-hairline shrink-0"
+      />
+    )
+  }
+  return (
+    <span className="w-8 h-8 rounded-full border border-hairline bg-paper text-secondary font-mono text-xs flex items-center justify-center shrink-0 uppercase">
+      {name?.[0] || '?'}
+    </span>
   )
 }

@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
-import { createInvite, listConnections } from '../lib/connections'
+import {
+  createInvite,
+  listConnections,
+  sendInviteEmail,
+  isDuplicatePendingInviteError,
+  duplicatePendingInviteMessage,
+} from '../lib/connections'
 
 export default function InviteRaterModal({ skill, onClose }) {
   const { user } = useAuth()
@@ -47,29 +53,15 @@ export default function InviteRaterModal({ skill, onClose }) {
     setSending(true)
     try {
       const invite = await createInvite(skill.id, email.trim(), user.id)
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      const res = await fetch('/api/send-invite', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          toEmail: email.trim(),
-          inviterName,
-          skillName: skill.name,
-          shareUrl: invite.url,
-        }),
+      await sendInviteEmail({
+        toEmail: email.trim(),
+        inviterName,
+        skillName: skill.name,
+        shareUrl: invite.url,
       })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body.error || 'Failed to send invite email.')
-      }
       setResult({ ...invite, sentTo: email.trim() })
     } catch (err) {
-      setError(err.message)
+      setError(isDuplicatePendingInviteError(err) ? duplicatePendingInviteMessage(email.trim()) : err.message)
     } finally {
       setSending(false)
     }
@@ -82,7 +74,7 @@ export default function InviteRaterModal({ skill, onClose }) {
       const invite = await createInvite(skill.id, email.trim() || null, user.id)
       setResult(invite)
     } catch (err) {
-      setError(err.message)
+      setError(isDuplicatePendingInviteError(err) ? duplicatePendingInviteMessage(email.trim()) : err.message)
     } finally {
       setGenerating(false)
     }
