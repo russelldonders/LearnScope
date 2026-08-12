@@ -8,8 +8,6 @@ const SUGGESTION_SCHEMA = {
     tags: {
       type: 'array',
       items: { type: 'string' },
-      minItems: 1,
-      maxItems: 6,
     },
   },
   required: ['tags'],
