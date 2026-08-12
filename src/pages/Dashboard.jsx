@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import SkillsSection from '../components/SkillsSection'
 import CoursesSection from '../components/CoursesSection'
 import ExperienceSection from '../components/ExperienceSection'
+import RecordExperienceSection from '../components/RecordExperienceSection'
 
 export default function Dashboard() {
   const { user, signOut } = useAuth()
@@ -45,6 +46,7 @@ export default function Dashboard() {
         <SkillsSection />
         <CoursesSection />
         <ExperienceSection />
+        <RecordExperienceSection />
       </main>
     </div>
   )
