@@ -10,12 +10,17 @@ import TrackingReasonPicker from './TrackingReasonPicker'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
 import { SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
+import { activityName, verbLabel } from '../lib/xapiStatement'
 import InviteRaterModal from './InviteRaterModal'
+import RecordExperienceModal from './RecordExperienceModal'
 
 const TABS = [
   { id: 'history', label: 'Overview' },
+  { id: 'ratings', label: 'Ratings' },
+  { id: 'experiences', label: 'Experiences' },
   { id: 'assess', label: 'Self-assess' },
   { id: 'details', label: 'Details' },
+  { id: 'settings', label: 'Settings' },
 ]
 
 export default function SkillDetailModal({ skill, categories, onClose, onUpdated, onDeleted }) {
@@ -24,6 +29,7 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
   const [history, setHistory] = useState([])
   const [peerRatings, setPeerRatings] = useState([])
   const [relationshipLinks, setRelationshipLinks] = useState([])
+  const [statements, setStatements] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [assessorName, setAssessorName] = useState(null)
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -35,7 +41,7 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
 
   async function loadHistory() {
     setLoadingHistory(true)
-    const [{ data: assessments }, { data: ratings }, { data: links }] = await Promise.all([
+    const [{ data: assessments }, { data: ratings }, { data: links }, { data: st }] = await Promise.all([
       supabase
         .from('skill_assessments')
         .select('*, courses(name), experience(title, organization)')
@@ -50,10 +56,17 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
         .from('skill_experience_links')
         .select('id, relationship, experience(id, title, organization, type, start_date, end_date)')
         .eq('skill_id', skill.id),
+      supabase
+        .from('xapi_statements')
+        .select('*')
+        .eq('skill_id', skill.id)
+        .eq('user_id', user.id)
+        .order('recorded_at', { ascending: false }),
     ])
     setHistory(assessments ?? [])
     setPeerRatings(ratings ?? [])
     setRelationshipLinks(links ?? [])
+    setStatements(st ?? [])
     setLoadingHistory(false)
   }
 
@@ -148,6 +161,20 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
             assessorName={assessorName}
           />
         )}
+
+        {tab === 'ratings' && <RatingsSection peerRatings={peerRatings} loading={loadingHistory} />}
+
+        {tab === 'experiences' && (
+          <ExperiencesSection
+            skill={skill}
+            statements={statements}
+            loading={loadingHistory}
+            onChange={loadHistory}
+            user={user}
+          />
+        )}
+
+        {tab === 'settings' && <SettingsSection skill={skill} onUpdated={onUpdated} />}
       </div>
     </div>
   )
@@ -731,5 +758,172 @@ function DetailsSection({ skill, categories, onUpdated, onDeleted }) {
         </button>
       </div>
     </form>
+  )
+}
+
+function RatingsSection({ peerRatings, loading }) {
+  if (loading) return <p className="text-sm text-secondary">Loading…</p>
+  if (peerRatings.length === 0) {
+    return (
+      <p className="text-sm text-secondary">
+        No ratings from others yet. Invite someone to rate this skill.
+      </p>
+    )
+  }
+  return (
+    <ul className="space-y-3">
+      {peerRatings.map((rating) => (
+        <li key={rating.id} className="flex items-start gap-3 bg-paper border border-hairline rounded-md p-3">
+          <GrowthRing level={rating.level} size={40} />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-ink">{LEVEL_LABELS[rating.level]}</p>
+            <p className="font-mono text-xs text-secondary mt-0.5">
+              {new Date(rating.rated_at).toLocaleDateString()} · Rated by{' '}
+              {rating.rater_name || rating.rater_email || 'a connection'}
+            </p>
+            {rating.comments && <p className="text-sm text-ink mt-1">{rating.comments}</p>}
+          </div>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function ExperiencesSection({ skill, statements, loading, onChange, user }) {
+  const [actorName, setActorName] = useState('')
+  const [modalOpen, setModalOpen] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => setActorName(data?.full_name ?? ''))
+  }, [])
+
+  async function handleSave(statement) {
+    const { error } = await supabase.from('xapi_statements').insert({
+      user_id: user.id,
+      statement,
+      recorded_at: statement.timestamp,
+      skill_id: skill.id,
+    })
+    if (error) throw error
+    setModalOpen(false)
+    await onChange()
+  }
+
+  async function handleDelete(id) {
+    if (!confirm("Delete this recorded experience? This can't be undone.")) return
+    const { error } = await supabase.from('xapi_statements').delete().eq('id', id)
+    if (error) setError(error.message)
+    else await onChange()
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary">Experiences</h4>
+        <button type="button" onClick={() => setModalOpen(true)} className="text-xs text-moss font-medium">
+          + Record experience
+        </button>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-secondary">Loading…</p>
+      ) : statements.length === 0 ? (
+        <p className="text-sm text-secondary">Nothing recorded yet for this skill.</p>
+      ) : (
+        <ul className="space-y-2">
+          {statements.map((s) => (
+            <li key={s.id} className="bg-paper border border-hairline rounded-md px-3 py-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm text-ink">
+                    <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
+                      {verbLabel(s.statement)}
+                    </span>{' '}
+                    {activityName(s.statement)}
+                  </p>
+                  <p className="font-mono text-xs text-secondary mt-0.5">
+                    {new Date(s.recorded_at).toLocaleDateString()}
+                  </p>
+                  {s.statement.object?.definition?.description?.['en-US'] && (
+                    <p className="text-sm text-ink mt-1">
+                      {s.statement.object.definition.description['en-US']}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(s.id)}
+                  className="shrink-0 text-xs text-red-700 font-medium"
+                >
+                  Remove
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {error && <p className="text-sm text-red-700 mt-2">{error}</p>}
+
+      {modalOpen && (
+        <RecordExperienceModal
+          actor={{ name: actorName, email: user.email }}
+          skills={[]}
+          relatedSkill={{ id: skill.id, name: skill.name }}
+          onSave={handleSave}
+          onClose={() => setModalOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+function SettingsSection({ skill, onUpdated }) {
+  const [visible, setVisible] = useState(skill.visible_on_profile ?? false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  async function handleToggle(checked) {
+    setError(null)
+    setSaving(true)
+    const { error } = await supabase
+      .from('skills')
+      .update({ visible_on_profile: checked })
+      .eq('id', skill.id)
+    if (error) {
+      setError(error.message)
+    } else {
+      setVisible(checked)
+      onUpdated()
+    }
+    setSaving(false)
+  }
+
+  return (
+    <div>
+      <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Profile visibility</h4>
+      <label className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          checked={visible}
+          disabled={saving}
+          onChange={(e) => handleToggle(e.target.checked)}
+          className="mt-0.5 rounded border-hairline"
+        />
+        <span className="text-sm text-ink">
+          Show this skill on your skills profile
+          <span className="block text-xs text-secondary mt-0.5">
+            Only skills marked visible here can appear to your connections — and only if you've also
+            turned on "Let connections view your skills profile" in your Profile's Privacy settings.
+          </span>
+        </span>
+      </label>
+      {error && <p className="text-sm text-red-700 mt-2">{error}</p>}
+    </div>
   )
 }

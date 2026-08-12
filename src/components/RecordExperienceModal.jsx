@@ -6,7 +6,7 @@ function todayDate() {
   return new Date().toISOString().slice(0, 10)
 }
 
-export default function RecordExperienceModal({ actor, skills, relatedCourse, onSave, onClose }) {
+export default function RecordExperienceModal({ actor, skills, relatedCourse, relatedSkill: fixedSkill, onSave, onClose }) {
   const [rawMode, setRawMode] = useState(false)
   const [verbValue, setVerbValue] = useState('experienced')
   const [activityTitle, setActivityTitle] = useState('')
@@ -20,9 +20,8 @@ export default function RecordExperienceModal({ actor, skills, relatedCourse, on
   function switchToRaw() {
     if (!rawJson) {
       try {
-        const relatedSkill = relatedSkillId
-          ? { id: relatedSkillId, name: skills.find((s) => s.id === relatedSkillId)?.name }
-          : null
+        const relatedSkill =
+          fixedSkill ?? (relatedSkillId ? { id: relatedSkillId, name: skills.find((s) => s.id === relatedSkillId)?.name } : null)
         const statement = buildStatement({
           actor,
           verbValue,
@@ -58,9 +57,8 @@ export default function RecordExperienceModal({ actor, skills, relatedCourse, on
       } else {
         if (!activityTitle.trim()) throw new Error('An activity name is required.')
         if (!date) throw new Error('A date is required.')
-        const relatedSkill = relatedSkillId
-          ? { id: relatedSkillId, name: skills.find((s) => s.id === relatedSkillId)?.name }
-          : null
+        const relatedSkill =
+          fixedSkill ?? (relatedSkillId ? { id: relatedSkillId, name: skills.find((s) => s.id === relatedSkillId)?.name } : null)
         statement = buildStatement({
           actor,
           verbValue,
@@ -95,7 +93,9 @@ export default function RecordExperienceModal({ actor, skills, relatedCourse, on
         <p className="text-sm text-secondary mb-4">
           {relatedCourse
             ? `A quick log of something you did as part of "${relatedCourse.name}".`
-            : "A quick log of something you did — separate from your work & education timeline."}
+            : fixedSkill
+              ? `A quick log of something you did related to "${fixedSkill.name}".`
+              : "A quick log of something you did — separate from your work & education timeline."}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -147,7 +147,7 @@ export default function RecordExperienceModal({ actor, skills, relatedCourse, on
                 />
               </div>
 
-              {skills.length > 0 && (
+              {!fixedSkill && skills.length > 0 && (
                 <div>
                   <label className="block text-sm text-secondary mb-1" htmlFor="relatedSkill">
                     Related skill (optional)
