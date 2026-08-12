@@ -103,7 +103,12 @@ export default function Connections() {
           <div className="space-y-4">
             {connections.map((c) => (
               <div key={c.id} className="bg-card border border-hairline rounded-lg p-4">
-                <h3 className="font-display text-lg text-ink mb-3">{c.name}</h3>
+                <Link
+                  to={`/skills-profile/${c.id}`}
+                  className="font-display text-lg text-ink mb-3 inline-block hover:text-moss hover:underline"
+                >
+                  {c.name}
+                </Link>
                 <div className="space-y-3">
                   {c.events.map((e, i) => (
                     <div key={i} className="flex items-center gap-3">

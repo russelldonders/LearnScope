@@ -11,6 +11,7 @@ import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import Rate from './pages/Rate'
 import Connections from './pages/Connections'
+import SkillsProfile from './pages/SkillsProfile'
 
 function App() {
   return (
@@ -45,6 +46,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Connections />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/skills-profile/:userId"
+            element={
+              <ProtectedRoute>
+                <SkillsProfile />
               </ProtectedRoute>
             }
           />
