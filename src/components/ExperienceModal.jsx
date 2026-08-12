@@ -6,6 +6,7 @@ import { findOrCreateLibrarySkill } from '../lib/skillLibrary'
 import { formatMonthYear } from '../lib/dates'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { SKILL_RELATIONSHIPS, SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
+import { isCurrentEmployment, syncSkillIsCurrentRole } from '../lib/currentRole'
 import GrowthRing from './GrowthRing'
 import EvidenceFields from './EvidenceFields'
 
@@ -600,6 +601,9 @@ function SkillsDevelopedSubsection({ item, skills, skillLinks, librarySkills, on
         if (error.code === '23505') throw new Error('That relationship is already recorded for this skill.')
         throw error
       }
+      if (isCurrentEmployment(item)) {
+        await syncSkillIsCurrentRole(user.id, targetSkillId)
+      }
       setSkillId('')
       setCreatingNew(false)
       setNewSkillName('')
@@ -614,14 +618,28 @@ function SkillsDevelopedSubsection({ item, skills, skillLinks, librarySkills, on
 
   async function removeLink(linkId) {
     setError(null)
+    const linkedSkillId = skillLinks.find((l) => l.id === linkId)?.skill_id
     const { error } = await supabase.from('skill_experience_links').delete().eq('id', linkId)
-    if (error) setError(error.message)
-    else await onChange()
+    if (error) {
+      setError(error.message)
+      return
+    }
+    if (isCurrentEmployment(item) && linkedSkillId) {
+      await syncSkillIsCurrentRole(user.id, linkedSkillId)
+    }
+    await onChange()
   }
 
   return (
     <div>
       <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Skills developed</h4>
+
+      {isCurrentEmployment(item) && (
+        <p className="text-xs text-secondary mb-3">
+          Since this role is ongoing, skills linked here will also show as "Current role" on your
+          Skills page.
+        </p>
+      )}
 
       {grouped.length === 0 ? (
         <p className="text-sm text-secondary mb-3">No skills linked yet.</p>

@@ -8,6 +8,7 @@ import EvidenceFields from './EvidenceFields'
 import TrackingReasonPicker from './TrackingReasonPicker'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { SKILL_LIFECYCLE_STAGES } from '../lib/skillLifecycle'
+import { syncCurrentRoleLinks } from '../lib/currentRole'
 
 export default function SkillModal({ categories, onClose, onCreated }) {
   const { user } = useAuth()
@@ -62,6 +63,8 @@ export default function SkillModal({ categories, onClose, onCreated }) {
         .select()
         .single()
       if (skillError) throw skillError
+
+      await syncCurrentRoleLinks(user.id, skill.id, isCurrentRole)
 
       if (assessNow) {
         const { data: assessment, error: assessmentError } = await supabase
@@ -160,14 +163,19 @@ export default function SkillModal({ categories, onClose, onCreated }) {
             </select>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-secondary">
+          <label className="flex items-start gap-2 text-sm text-secondary">
             <input
               type="checkbox"
               checked={isCurrentRole}
               onChange={(e) => setIsCurrentRole(e.target.checked)}
-              className="rounded border-hairline"
+              className="mt-0.5 rounded border-hairline"
             />
-            Part of my current role
+            <span>
+              Part of my current role
+              <span className="block text-xs text-secondary/80 mt-0.5">
+                Also links this skill to any ongoing employment entries on your Experience timeline.
+              </span>
+            </span>
           </label>
 
           <TrackingReasonPicker value={trackingReason} onChange={setTrackingReason} />

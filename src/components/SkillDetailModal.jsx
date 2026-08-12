@@ -11,6 +11,7 @@ import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
 import { SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
 import { activityName, verbLabel } from '../lib/xapiStatement'
+import { syncCurrentRoleLinks } from '../lib/currentRole'
 import InviteRaterModal from './InviteRaterModal'
 import RecordExperienceModal from './RecordExperienceModal'
 
@@ -146,6 +147,7 @@ export default function SkillDetailModal({ skill, categories, onClose, onUpdated
           <DetailsSection
             skill={skill}
             categories={categories}
+            user={user}
             onUpdated={onUpdated}
             onDeleted={onDeleted}
           />
@@ -644,7 +646,7 @@ function ScheduleSection({ skill, onUpdated }) {
   )
 }
 
-function DetailsSection({ skill, categories, onUpdated, onDeleted }) {
+function DetailsSection({ skill, categories, user, onUpdated, onDeleted }) {
   const [name, setName] = useState(skill.name)
   const [category, setCategory] = useState(skill.category)
   const [isCurrentRole, setIsCurrentRole] = useState(skill.is_current_role)
@@ -671,6 +673,7 @@ function DetailsSection({ skill, categories, onUpdated, onDeleted }) {
         })
         .eq('id', skill.id)
       if (error) throw error
+      await syncCurrentRoleLinks(user.id, skill.id, isCurrentRole)
       onUpdated()
     } catch (err) {
       setError(err.message)
@@ -726,14 +729,19 @@ function DetailsSection({ skill, categories, onUpdated, onDeleted }) {
         </datalist>
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-secondary">
+      <label className="flex items-start gap-2 text-sm text-secondary">
         <input
           type="checkbox"
           checked={isCurrentRole}
           onChange={(e) => setIsCurrentRole(e.target.checked)}
-          className="rounded border-hairline"
+          className="mt-0.5 rounded border-hairline"
         />
-        Part of my current role
+        <span>
+          Part of my current role
+          <span className="block text-xs text-secondary/80 mt-0.5">
+            Also links this skill to any ongoing employment entries on your Experience timeline.
+          </span>
+        </span>
       </label>
 
       <TrackingReasonPicker value={trackingReason} onChange={setTrackingReason} />
