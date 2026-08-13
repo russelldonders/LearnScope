@@ -217,6 +217,20 @@ export default function SkillDetail() {
                   )}
                 </div>
               </div>
+
+              {targets.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setTargetOpen(true)}
+                  className="shrink-0 text-right rounded-md border border-hairline bg-paper px-3 py-2 hover:border-moss transition-colors"
+                >
+                  <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Next Target</p>
+                  <p className="text-sm font-medium text-ink">{LEVEL_LABELS[targets[0].target_level]}</p>
+                  <p className="font-mono text-xs text-secondary">
+                    by {new Date(`${targets[0].target_date}T00:00:00`).toLocaleDateString()}
+                  </p>
+                </button>
+              )}
             </div>
 
             {skill.lifecycle_stage && <LifecycleProgress stage={skill.lifecycle_stage} />}
@@ -314,6 +328,7 @@ export default function SkillDetail() {
               <SetTargetModal
                 skill={skill}
                 user={user}
+                targets={targets}
                 onClose={() => setTargetOpen(false)}
                 onSet={() => {
                   loadHistory()
@@ -653,6 +668,7 @@ function HistorySection({ skill, history, peerRatings, relationshipLinks, loadin
           { type: 'added', date: skill.date_added, source: skill.source },
         ].sort((a, b) => new Date(b.date) - new Date(a.date))
         const mostRecentRatingIndex = events.findIndex((e) => e.type === 'assessment' || e.type === 'peer')
+        const currentLabel = skill.lifecycle_stage && skill.lifecycle_stage !== 'identified' ? 'Baseline' : 'Current'
 
         return (
           <div>
@@ -667,6 +683,7 @@ function HistorySection({ skill, history, peerRatings, relationshipLinks, loadin
                 isLast={i === events.length - 1}
                 isMostRecent={i === mostRecentRatingIndex}
                 assessorName={assessorName}
+                currentLabel={currentLabel}
               />
             ))}
           </div>
@@ -676,7 +693,7 @@ function HistorySection({ skill, history, peerRatings, relationshipLinks, loadin
   )
 }
 
-function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
+function TimelineEntry({ event, isLast, isMostRecent, assessorName, currentLabel }) {
   const boxClass = isMostRecent
     ? 'rounded-md border border-moss/40 bg-moss/5 p-3'
     : 'rounded-md border border-hairline bg-paper p-3'
@@ -722,7 +739,7 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
             </p>
             {isMostRecent && (
               <span className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5">
-                Current
+                {currentLabel}
               </span>
             )}
           </div>
@@ -786,7 +803,7 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
           </p>
           {isMostRecent && (
             <span className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5">
-              Current
+              {currentLabel}
             </span>
           )}
         </div>

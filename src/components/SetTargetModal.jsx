@@ -3,10 +3,14 @@ import { supabase } from '../lib/supabaseClient'
 import GrowthRing from './GrowthRing'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 
-export default function SetTargetModal({ skill, user, onClose, onSet }) {
-  const [targetLevel, setTargetLevel] = useState(skill.level ? Math.min(skill.level + 1, 5) : 3)
-  const [targetDate, setTargetDate] = useState('')
-  const [comments, setComments] = useState('')
+export default function SetTargetModal({ skill, user, targets = [], onClose, onSet }) {
+  const current = targets[0] ?? null
+  const isEdit = Boolean(current)
+  const [targetLevel, setTargetLevel] = useState(
+    current?.target_level ?? (skill.level ? Math.min(skill.level + 1, 5) : 3)
+  )
+  const [targetDate, setTargetDate] = useState(current?.target_date ?? '')
+  const [comments, setComments] = useState(current?.comments ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
@@ -28,11 +32,13 @@ export default function SetTargetModal({ skill, user, onClose, onSet }) {
       })
       if (insertError) throw insertError
 
-      const { error: skillError } = await supabase
-        .from('skills')
-        .update({ lifecycle_stage: 'target_set' })
-        .eq('id', skill.id)
-      if (skillError) throw skillError
+      if (skill.lifecycle_stage === 'baseline_assessed') {
+        const { error: skillError } = await supabase
+          .from('skills')
+          .update({ lifecycle_stage: 'target_set' })
+          .eq('id', skill.id)
+        if (skillError) throw skillError
+      }
 
       onSet()
     } catch (err) {
@@ -47,7 +53,7 @@ export default function SetTargetModal({ skill, user, onClose, onSet }) {
         className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="font-display text-2xl text-ink mb-1">Set a target</h2>
+        <h2 className="font-display text-2xl text-ink mb-1">{isEdit ? 'Edit target' : 'Set a target'}</h2>
         <p className="text-sm text-secondary mb-4">{skill.name}</p>
 
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -99,7 +105,7 @@ export default function SetTargetModal({ skill, user, onClose, onSet }) {
               disabled={saving}
               className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
             >
-              {saving ? 'Saving…' : 'Set target'}
+              {saving ? 'Saving…' : isEdit ? 'Save new target' : 'Set target'}
             </button>
             <button
               type="button"
@@ -110,6 +116,29 @@ export default function SetTargetModal({ skill, user, onClose, onSet }) {
             </button>
           </div>
         </form>
+
+        {targets.length > 0 && (
+          <div className="mt-6 pt-4 border-t border-hairline opacity-50">
+            <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">
+              Target history
+            </h3>
+            <ul className="space-y-2">
+              {targets.map((t) => (
+                <li key={t.id} className="flex items-start gap-2 text-sm">
+                  <GrowthRing level={t.target_level} size={28} />
+                  <div className="min-w-0">
+                    <p className="text-ink">{LEVEL_LABELS[t.target_level]}</p>
+                    <p className="font-mono text-xs text-secondary">
+                      By {new Date(`${t.target_date}T00:00:00`).toLocaleDateString()} · set{' '}
+                      {new Date(t.created_at).toLocaleDateString()}
+                    </p>
+                    {t.comments && <p className="text-xs text-secondary mt-0.5">{t.comments}</p>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   )

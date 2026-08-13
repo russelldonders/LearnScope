@@ -13,15 +13,19 @@ export default function AppHeader() {
   const { signOut, user } = useAuth()
   const location = useLocation()
   const [avatarUrl, setAvatarUrl] = useState(null)
+  const [fullName, setFullName] = useState(null)
 
   useEffect(() => {
     if (!user) return
     supabase
       .from('profiles')
-      .select('avatar_url')
+      .select('avatar_url, full_name')
       .eq('id', user.id)
       .single()
-      .then(({ data }) => setAvatarUrl(data?.avatar_url ?? null))
+      .then(({ data }) => {
+        setAvatarUrl(data?.avatar_url ?? null)
+        setFullName(data?.full_name ?? null)
+      })
   }, [user])
 
   return (
@@ -32,6 +36,9 @@ export default function AppHeader() {
             LearnScope
           </Link>
           <div className="flex items-center gap-2 shrink-0">
+            {fullName && (
+              <span className="text-sm text-ink hidden sm:inline">{fullName}</span>
+            )}
             <Link
               to="/profile"
               aria-label="Your profile"
