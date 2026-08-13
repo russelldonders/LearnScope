@@ -12,7 +12,7 @@ import TagsField from './TagsField'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { syncCurrentRoleLinks } from '../lib/currentRole'
 
-export default function SkillModal({ onClose, onCreated }) {
+export default function SkillModal({ onClose, onCreated, experienceId }) {
   const { user } = useAuth()
   const [name, setName] = useState('')
   const [librarySkills, setLibrarySkills] = useState([])
@@ -74,6 +74,16 @@ export default function SkillModal({ onClose, onCreated }) {
       }
 
       await syncCurrentRoleLinks(user.id, skill.id, isCurrentRole)
+
+      if (experienceId) {
+        const { error: linkError } = await supabase.from('skill_experience_links').insert({
+          user_id: user.id,
+          skill_id: skill.id,
+          experience_id: experienceId,
+          relationship: 'developed',
+        })
+        if (linkError) throw linkError
+      }
 
       if (assessNow) {
         const { data: assessment, error: assessmentError } = await supabase
