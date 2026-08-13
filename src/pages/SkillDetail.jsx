@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { uploadEvidenceFiles, getEvidenceSignedUrl } from '../lib/skillEvidence'
@@ -32,7 +32,10 @@ const TABS = [
 export default function SkillDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { user } = useAuth()
+  const backTo = location.state?.from ?? '/skills'
+  const backLabel = location.state?.from ? '← Back to experience' : '← Back to skills'
   const [skill, setSkill] = useState(null)
   const [loadingSkill, setLoadingSkill] = useState(true)
   const [notFound, setNotFound] = useState(false)
@@ -130,8 +133,8 @@ export default function SkillDetail() {
     <div className="min-h-screen bg-paper">
       <AppHeader />
       <main className="max-w-4xl mx-auto px-4 py-8">
-        <Link to="/skills" className="text-sm text-secondary hover:text-ink mb-6 inline-block">
-          ← Back to skills
+        <Link to={backTo} className="text-sm text-secondary hover:text-ink mb-6 inline-block">
+          {backLabel}
         </Link>
 
         {loadingSkill && <p className="text-secondary">Loading…</p>}
@@ -214,7 +217,7 @@ export default function SkillDetail() {
                 onRemoveTag={handleRemoveTag}
                 user={user}
                 onUpdated={loadSkill}
-                onDeleted={() => navigate('/skills')}
+                onDeleted={() => navigate(backTo)}
               />
             )}
 

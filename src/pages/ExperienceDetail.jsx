@@ -601,7 +601,11 @@ function SkillsSubsection({ item, skillLinks, onChange, user }) {
     <div>
       <div className="flex items-center justify-between mb-3">
         <h4 className="font-mono text-xs uppercase tracking-wide text-secondary">Skills</h4>
-        <button type="button" onClick={() => setAddOpen(true)} className="text-xs text-moss font-medium">
+        <button
+          type="button"
+          onClick={() => setAddOpen(true)}
+          className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90"
+        >
           + Add skill
         </button>
       </div>
@@ -617,7 +621,11 @@ function SkillsSubsection({ item, skillLinks, onChange, user }) {
               key={skill.id}
               skill={skill}
               tags={tagsBySkill.get(skill.id)}
-              onEdit={(s) => navigate(`/skills/${s.id}`)}
+              onEdit={(s) =>
+                navigate(`/skills/${s.id}`, {
+                  state: { from: `/experience/${item.id}`, fromLabel: item.title },
+                })
+              }
             />
           ))}
         </div>

@@ -53,14 +53,12 @@ export default async function handler(req, res) {
 
   const existingList = Array.isArray(existingTags) ? existingTags.filter((t) => typeof t === 'string') : []
 
-  const prompt = `Suggest 3-6 short tags for the skill "${skillName.trim()}".
+  const prompt = `Suggest up to 4 short tags for the skill "${skillName.trim()}" -- broad, reusable categories (e.g. "Technical", "Leadership", "Languages", "Cooking"), not overly specific restatements of the skill name itself.
 
-Tags should be broad, reusable categories (e.g. "Technical", "Leadership", "Languages", "Cooking"), not overly specific restatements of the skill name itself.
-
-Reuse one of these existing tags whenever it genuinely fits, rather than inventing a near-duplicate:
+Reuse one of these existing tags when it is a genuinely strong fit -- do not stretch a loose or tenuous match just to reuse one:
 ${existingList.length > 0 ? existingList.join(', ') : '(none yet)'}
 
-Only invent a new tag when none of the existing ones fit. Use Title Case, 1-3 words per tag.`
+Only invent a new tag when none of the existing ones are a strong fit. It's fine to suggest just one or two tags if that's all that genuinely applies. Use Title Case, 1-3 words per tag.`
 
   try {
     const response = await anthropic.messages.create({

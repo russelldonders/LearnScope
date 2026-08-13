@@ -3,12 +3,11 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { uploadEvidenceFiles } from '../lib/skillEvidence'
 import { listLibrarySkills, findOrCreateLibrarySkill } from '../lib/skillLibrary'
-import { listTags, addTagToSkill } from '../lib/skillTags'
+import { listTags, addTagToSkill, suggestTags } from '../lib/skillTags'
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import GrowthRing from './GrowthRing'
 import EvidenceFields from './EvidenceFields'
 import TrackingReasonPicker from './TrackingReasonPicker'
-import TagsField from './TagsField'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { syncCurrentRoleLinks } from '../lib/currentRole'
 
@@ -17,7 +16,6 @@ export default function SkillModal({ onClose, onCreated, experienceId }) {
   const [name, setName] = useState('')
   const [librarySkills, setLibrarySkills] = useState([])
   const [allTags, setAllTags] = useState([])
-  const [pendingTags, setPendingTags] = useState([])
   const [isCurrentRole, setIsCurrentRole] = useState(false)
   const [trackingReason, setTrackingReason] = useState(null)
   const [assessNow, setAssessNow] = useState(false)
@@ -32,14 +30,6 @@ export default function SkillModal({ onClose, onCreated, experienceId }) {
     listLibrarySkills().then(setLibrarySkills)
     listTags().then(setAllTags)
   }, [])
-
-  async function handleAddTag(tagName) {
-    setPendingTags((prev) => [...prev, { id: null, name: tagName }])
-  }
-
-  function handleRemoveTag(index) {
-    setPendingTags((prev) => prev.filter((_, i) => i !== index))
-  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -69,8 +59,13 @@ export default function SkillModal({ onClose, onCreated, experienceId }) {
         throw skillError
       }
 
-      for (const tag of pendingTags) {
-        await addTagToSkill(user.id, skill.id, tag.name)
+      try {
+        const suggested = await suggestTags(name, allTags.map((t) => t.name))
+        for (const tagName of suggested) {
+          await addTagToSkill(user.id, skill.id, tagName)
+        }
+      } catch (tagErr) {
+        console.error('Auto-tag suggestion failed:', tagErr)
       }
 
       await syncCurrentRoleLinks(user.id, skill.id, isCurrentRole)
@@ -145,29 +140,22 @@ export default function SkillModal({ onClose, onCreated, experienceId }) {
             </datalist>
           </div>
 
-          <TagsField
-            tags={pendingTags}
-            onAddTag={handleAddTag}
-            onRemoveTag={handleRemoveTag}
-            skillName={name}
-            allTags={allTags}
-            datalistId="tags-options-add"
-          />
-
-          <label className="flex items-start gap-2 text-sm text-secondary">
-            <input
-              type="checkbox"
-              checked={isCurrentRole}
-              onChange={(e) => setIsCurrentRole(e.target.checked)}
-              className="mt-0.5 rounded border-hairline"
-            />
-            <span>
-              Part of my current role
-              <span className="block text-xs text-secondary/80 mt-0.5">
-                Also links this skill to any ongoing employment entries on your Experience timeline.
+          {!experienceId && (
+            <label className="flex items-start gap-2 text-sm text-secondary">
+              <input
+                type="checkbox"
+                checked={isCurrentRole}
+                onChange={(e) => setIsCurrentRole(e.target.checked)}
+                className="mt-0.5 rounded border-hairline"
+              />
+              <span>
+                Part of my current role
+                <span className="block text-xs text-secondary/80 mt-0.5">
+                  Also links this skill to any ongoing employment entries on your Experience timeline.
+                </span>
               </span>
-            </span>
-          </label>
+            </label>
+          )}
 
           <TrackingReasonPicker value={trackingReason} onChange={setTrackingReason} />
 
