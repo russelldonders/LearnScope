@@ -24,14 +24,15 @@ import InviteRaterModal from '../components/InviteRaterModal'
 import RecordExperienceModal from '../components/RecordExperienceModal'
 import BaselineQuizModal from '../components/BaselineQuizModal'
 import AssessBaselineModal from '../components/AssessBaselineModal'
+import SetTargetModal from '../components/SetTargetModal'
 import TagsField from '../components/TagsField'
 
 const TABS = [
   { id: 'history', label: 'Overview' },
   { id: 'ratings', label: 'Ratings' },
   { id: 'experiences', label: 'Experiences' },
+  { id: 'targets', label: 'Targets' },
   { id: 'details', label: 'Details' },
-  { id: 'settings', label: 'Settings' },
 ]
 
 export default function SkillDetail() {
@@ -52,6 +53,7 @@ export default function SkillDetail() {
   const [skillTags, setSkillTags] = useState([])
   const [allTags, setAllTags] = useState([])
   const [quizResults, setQuizResults] = useState([])
+  const [targets, setTargets] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [assessorName, setAssessorName] = useState(null)
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -59,6 +61,7 @@ export default function SkillDetail() {
   const [recordExperienceOpen, setRecordExperienceOpen] = useState(false)
   const [quizOpen, setQuizOpen] = useState(false)
   const [assessBaselineOpen, setAssessBaselineOpen] = useState(false)
+  const [targetOpen, setTargetOpen] = useState(false)
 
   useEffect(() => {
     loadSkill()
@@ -89,8 +92,15 @@ export default function SkillDetail() {
 
   async function loadHistory() {
     setLoadingHistory(true)
-    const [{ data: assessments }, { data: ratings }, { data: links }, { data: st }, tags, { data: quizzes }] =
-      await Promise.all([
+    const [
+      { data: assessments },
+      { data: ratings },
+      { data: links },
+      { data: st },
+      tags,
+      { data: quizzes },
+      { data: skillTargets },
+    ] = await Promise.all([
         supabase
           .from('skill_assessments')
           .select('*, courses(name), experience(title, organization)')
@@ -116,11 +126,17 @@ export default function SkillDetail() {
           .from('skill_baseline_quizzes')
           .select('id, score, total, created_at')
           .eq('skill_id', skill.id),
+        supabase
+          .from('skill_targets')
+          .select('*')
+          .eq('skill_id', skill.id)
+          .order('created_at', { ascending: false }),
       ])
     setHistory(assessments ?? [])
     setPeerRatings(ratings ?? [])
     setRelationshipLinks(links ?? [])
     setStatements(st ?? [])
+    setTargets(skillTargets ?? [])
     setSkillTags(tags ?? [])
     setQuizResults(quizzes ?? [])
     setLoadingHistory(false)
@@ -233,6 +249,16 @@ export default function SkillDetail() {
               </>
             )}
 
+            {skill.lifecycle_stage === 'baseline_assessed' && (
+              <button
+                type="button"
+                onClick={() => setTargetOpen(true)}
+                className="w-full mb-6 rounded-md bg-moss text-paper py-2.5 font-medium hover:opacity-90"
+              >
+                Set a target
+              </button>
+            )}
+
             {inviteOpen && <InviteRaterModal skill={skill} onClose={() => setInviteOpen(false)} />}
 
             {selfAssessOpen && (
@@ -284,8 +310,21 @@ export default function SkillDetail() {
               />
             )}
 
+            {targetOpen && (
+              <SetTargetModal
+                skill={skill}
+                user={user}
+                onClose={() => setTargetOpen(false)}
+                onSet={() => {
+                  loadHistory()
+                  loadSkill()
+                  setTargetOpen(false)
+                }}
+              />
+            )}
+
             <div className="flex items-center gap-1 border-b border-hairline mb-4 overflow-x-auto">
-              {TABS.map((t) => (
+              {TABS.filter((t) => t.id !== 'targets' || targets.length > 0).map((t) => (
                 <button
                   key={t.id}
                   type="button"
@@ -302,16 +341,20 @@ export default function SkillDetail() {
             </div>
 
             {tab === 'details' && (
-              <DetailsSection
-                skill={skill}
-                skillTags={skillTags}
-                allTags={allTags}
-                onAddTag={handleAddTag}
-                onRemoveTag={handleRemoveTag}
-                user={user}
-                onUpdated={loadSkill}
-                onDeleted={() => navigate(backTo, { state: { tab: 'skills' } })}
-              />
+              <div className="space-y-6">
+                <DetailsSection
+                  skill={skill}
+                  skillTags={skillTags}
+                  allTags={allTags}
+                  onAddTag={handleAddTag}
+                  onRemoveTag={handleRemoveTag}
+                  user={user}
+                  onUpdated={loadSkill}
+                  onDeleted={() => navigate(backTo, { state: { tab: 'skills' } })}
+                />
+                <SettingsSection skill={skill} onUpdated={loadSkill} />
+                <ScheduleSection skill={skill} onUpdated={loadSkill} />
+              </div>
             )}
 
             {tab === 'history' && (
@@ -331,12 +374,7 @@ export default function SkillDetail() {
               <ExperiencesSection statements={statements} loading={loadingHistory} />
             )}
 
-            {tab === 'settings' && (
-              <div className="space-y-6">
-                <SettingsSection skill={skill} onUpdated={loadSkill} />
-                <ScheduleSection skill={skill} onUpdated={loadSkill} />
-              </div>
-            )}
+            {tab === 'targets' && <TargetsSection targets={targets} loading={loadingHistory} />}
           </div>
         )}
       </main>
@@ -1079,6 +1117,39 @@ function RatingsSection({ peerRatings, loading }) {
               {rating.rater_name || rating.rater_email || 'a connection'}
             </p>
             {rating.comments && <p className="text-sm text-ink mt-1">{rating.comments}</p>}
+          </div>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function TargetsSection({ targets, loading }) {
+  if (loading) return <p className="text-sm text-secondary">Loading…</p>
+  if (targets.length === 0) {
+    return <p className="text-sm text-secondary">No target set yet.</p>
+  }
+  return (
+    <ul className="space-y-3">
+      {targets.map((t, i) => (
+        <li key={t.id} className="flex items-start gap-3 bg-paper border border-hairline rounded-md p-3">
+          <GrowthRing level={t.target_level} size={40} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-ink">{LEVEL_LABELS[t.target_level]}</p>
+              {i === 0 && (
+                <span className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5">
+                  Current
+                </span>
+              )}
+            </div>
+            <p className="font-mono text-xs text-secondary mt-0.5">
+              Target date: {new Date(`${t.target_date}T00:00:00`).toLocaleDateString()}
+            </p>
+            <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+              Set {new Date(t.created_at).toLocaleDateString()}
+            </p>
+            {t.comments && <p className="text-sm text-ink mt-1">{t.comments}</p>}
           </div>
         </li>
       ))}
