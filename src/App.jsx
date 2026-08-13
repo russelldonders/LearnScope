@@ -9,6 +9,7 @@ import ResetPassword from './pages/ResetPassword'
 import Welcome from './pages/Welcome'
 import Dashboard from './pages/Dashboard'
 import Skills from './pages/Skills'
+import SkillDetail from './pages/SkillDetail'
 import Experience from './pages/Experience'
 import Profile from './pages/Profile'
 import Rate from './pages/Rate'
@@ -40,6 +41,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Skills />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/skills/:id"
+            element={
+              <ProtectedRoute>
+                <SkillDetail />
               </ProtectedRoute>
             }
           />

@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { uploadEvidenceFiles, getEvidenceSignedUrl } from '../lib/skillEvidence'
 import { computeNextSelfAssessmentDate, isSelfAssessmentDue } from '../lib/checkin'
 import { formatMonthYear } from '../lib/dates'
-import GrowthRing from './GrowthRing'
-import EvidenceFields from './EvidenceFields'
-import TrackingReasonPicker from './TrackingReasonPicker'
+import AppHeader from '../components/AppHeader'
+import GrowthRing from '../components/GrowthRing'
+import EvidenceFields from '../components/EvidenceFields'
+import TrackingReasonPicker from '../components/TrackingReasonPicker'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
 import { SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
@@ -14,9 +16,9 @@ import { activityName, verbLabel } from '../lib/xapiStatement'
 import { syncCurrentRoleLinks } from '../lib/currentRole'
 import { listTags, listSkillTags, addTagToSkill, removeSkillTagLink } from '../lib/skillTags'
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
-import InviteRaterModal from './InviteRaterModal'
-import RecordExperienceModal from './RecordExperienceModal'
-import TagsField from './TagsField'
+import InviteRaterModal from '../components/InviteRaterModal'
+import RecordExperienceModal from '../components/RecordExperienceModal'
+import TagsField from '../components/TagsField'
 
 const TABS = [
   { id: 'history', label: 'Overview' },
@@ -27,8 +29,13 @@ const TABS = [
   { id: 'settings', label: 'Settings' },
 ]
 
-export default function SkillDetailModal({ skill, onClose, onUpdated, onDeleted }) {
+export default function SkillDetail() {
+  const { id } = useParams()
+  const navigate = useNavigate()
   const { user } = useAuth()
+  const [skill, setSkill] = useState(null)
+  const [loadingSkill, setLoadingSkill] = useState(true)
+  const [notFound, setNotFound] = useState(false)
   const [tab, setTab] = useState('history')
   const [history, setHistory] = useState([])
   const [peerRatings, setPeerRatings] = useState([])
@@ -41,10 +48,31 @@ export default function SkillDetailModal({ skill, onClose, onUpdated, onDeleted 
   const [inviteOpen, setInviteOpen] = useState(false)
 
   useEffect(() => {
-    loadHistory()
+    loadSkill()
     loadAssessorName()
     listTags().then(setAllTags)
-  }, [])
+  }, [id])
+
+  useEffect(() => {
+    if (skill) loadHistory()
+  }, [skill?.id])
+
+  async function loadSkill() {
+    setLoadingSkill(true)
+    setNotFound(false)
+    const { data, error } = await supabase
+      .from('skills')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (error || !data) {
+      setNotFound(true)
+    } else {
+      setSkill(data)
+    }
+    setLoadingSkill(false)
+  }
 
   async function loadHistory() {
     setLoadingHistory(true)
@@ -99,118 +127,124 @@ export default function SkillDetailModal({ skill, onClose, onUpdated, onDeleted 
   }
 
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-4">
-            <GrowthRing level={skill.level} size={56} />
-            <div>
-              <h2 className="font-display text-2xl text-ink">{skill.name}</h2>
-              <p className="text-sm text-secondary">
-                {skill.level ? LEVEL_LABELS[skill.level] : 'Not yet self-assessed'}
-              </p>
-              {skillTags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {skillTags.map((t) => (
-                    <span
-                      key={t.id}
-                      className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
-                    >
-                      {t.tags?.name}
-                    </span>
-                  ))}
+    <div className="min-h-screen bg-paper">
+      <AppHeader />
+      <main className="max-w-4xl mx-auto px-4 py-8">
+        <Link to="/skills" className="text-sm text-secondary hover:text-ink mb-6 inline-block">
+          ← Back to skills
+        </Link>
+
+        {loadingSkill && <p className="text-secondary">Loading…</p>}
+        {notFound && <p className="text-secondary">Skill not found.</p>}
+
+        {skill && (
+          <div className="bg-card border border-hairline rounded-lg p-6">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-4">
+                <GrowthRing level={skill.level} size={56} />
+                <div>
+                  <h2 className="font-display text-2xl text-ink">{skill.name}</h2>
+                  <p className="text-sm text-secondary">
+                    {skill.level ? LEVEL_LABELS[skill.level] : 'Not yet self-assessed'}
+                  </p>
+                  {skillTags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {skillTags.map((t) => (
+                        <span
+                          key={t.id}
+                          className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
+                        >
+                          {t.tags?.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
-          </div>
-          <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
-            Close
-          </button>
-        </div>
 
-        <button
-          type="button"
-          onClick={() => setInviteOpen(true)}
-          className="text-xs text-moss font-medium mb-4 -mt-2"
-        >
-          + Invite someone to rate this
-        </button>
-
-        {inviteOpen && <InviteRaterModal skill={skill} onClose={() => setInviteOpen(false)} />}
-
-        <div className="flex items-center gap-1 border-b border-hairline mb-4">
-          {TABS.map((t) => (
             <button
-              key={t.id}
               type="button"
-              onClick={() => setTab(t.id)}
-              className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
-                tab === t.id
-                  ? 'border-moss text-ink'
-                  : 'border-transparent text-secondary hover:text-ink'
-              }`}
+              onClick={() => setInviteOpen(true)}
+              className="text-xs text-moss font-medium mb-4 -mt-2"
             >
-              {t.label}
+              + Invite someone to rate this
             </button>
-          ))}
-        </div>
 
-        {tab === 'assess' && (
-          <div className="space-y-6">
-            <SelfAssessSection
-              skill={skill}
-              user={user}
-              onAssessed={() => {
-                loadHistory()
-                onUpdated()
-                setTab('history')
-              }}
-            />
-            <ScheduleSection skill={skill} onUpdated={onUpdated} />
+            {inviteOpen && <InviteRaterModal skill={skill} onClose={() => setInviteOpen(false)} />}
+
+            <div className="flex items-center gap-1 border-b border-hairline mb-4 overflow-x-auto">
+              {TABS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTab(t.id)}
+                  className={`shrink-0 px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
+                    tab === t.id
+                      ? 'border-moss text-ink'
+                      : 'border-transparent text-secondary hover:text-ink'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {tab === 'assess' && (
+              <div className="space-y-6">
+                <SelfAssessSection
+                  skill={skill}
+                  user={user}
+                  onAssessed={() => {
+                    loadHistory()
+                    loadSkill()
+                    setTab('history')
+                  }}
+                />
+                <ScheduleSection skill={skill} onUpdated={loadSkill} />
+              </div>
+            )}
+
+            {tab === 'details' && (
+              <DetailsSection
+                skill={skill}
+                skillTags={skillTags}
+                allTags={allTags}
+                onAddTag={handleAddTag}
+                onRemoveTag={handleRemoveTag}
+                user={user}
+                onUpdated={loadSkill}
+                onDeleted={() => navigate('/skills')}
+              />
+            )}
+
+            {tab === 'history' && (
+              <HistorySection
+                skill={skill}
+                history={history}
+                peerRatings={peerRatings}
+                relationshipLinks={relationshipLinks}
+                loading={loadingHistory}
+                assessorName={assessorName}
+              />
+            )}
+
+            {tab === 'ratings' && <RatingsSection peerRatings={peerRatings} loading={loadingHistory} />}
+
+            {tab === 'experiences' && (
+              <ExperiencesSection
+                skill={skill}
+                statements={statements}
+                loading={loadingHistory}
+                onChange={loadHistory}
+                user={user}
+              />
+            )}
+
+            {tab === 'settings' && <SettingsSection skill={skill} onUpdated={loadSkill} />}
           </div>
         )}
-
-        {tab === 'details' && (
-          <DetailsSection
-            skill={skill}
-            skillTags={skillTags}
-            allTags={allTags}
-            onAddTag={handleAddTag}
-            onRemoveTag={handleRemoveTag}
-            user={user}
-            onUpdated={onUpdated}
-            onDeleted={onDeleted}
-          />
-        )}
-
-        {tab === 'history' && (
-          <HistorySection
-            skill={skill}
-            history={history}
-            peerRatings={peerRatings}
-            relationshipLinks={relationshipLinks}
-            loading={loadingHistory}
-            assessorName={assessorName}
-          />
-        )}
-
-        {tab === 'ratings' && <RatingsSection peerRatings={peerRatings} loading={loadingHistory} />}
-
-        {tab === 'experiences' && (
-          <ExperiencesSection
-            skill={skill}
-            statements={statements}
-            loading={loadingHistory}
-            onChange={loadHistory}
-            user={user}
-          />
-        )}
-
-        {tab === 'settings' && <SettingsSection skill={skill} onUpdated={onUpdated} />}
-      </div>
+      </main>
     </div>
   )
 }

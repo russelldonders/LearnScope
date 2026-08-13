@@ -1,20 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import SkillCard from './SkillCard'
 import SkillModal from './SkillModal'
-import SkillDetailModal from './SkillDetailModal'
 import TrackingReasonIcon from './TrackingReasonIcon'
 import { TRACKING_REASONS, TRACKING_REASON_LABELS } from '../lib/trackingReasons'
 
 export default function SkillsSection() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [skills, setSkills] = useState([])
   const [tagsBySkill, setTagsBySkill] = useState(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [addOpen, setAddOpen] = useState(false)
-  const [detailSkill, setDetailSkill] = useState(null)
   const [reasonFilter, setReasonFilter] = useState(null)
   const [tagFilter, setTagFilter] = useState(null)
 
@@ -36,7 +36,6 @@ export default function SkillsSection() {
       setError(error.message)
     } else {
       setSkills(data)
-      setDetailSkill((prev) => (prev ? data.find((s) => s.id === prev.id) ?? prev : prev))
       const map = new Map()
       for (const link of tagLinks ?? []) {
         if (!link.tags?.name) continue
@@ -160,14 +159,22 @@ export default function SkillsSection() {
       {hasSplit && (
         <div className="mb-10">
           <h3 className="font-display text-base text-ink mb-4">Current role</h3>
-          <SkillGrid skills={currentRoleSkills} tagsBySkill={tagsBySkill} onEdit={setDetailSkill} />
+          <SkillGrid
+            skills={currentRoleSkills}
+            tagsBySkill={tagsBySkill}
+            onEdit={(skill) => navigate(`/skills/${skill.id}`)}
+          />
         </div>
       )}
 
       {otherSkills.length > 0 && (
         <div>
           {hasSplit && <h3 className="font-display text-base text-ink mb-4">Further skills</h3>}
-          <SkillGrid skills={otherSkills} tagsBySkill={tagsBySkill} onEdit={setDetailSkill} />
+          <SkillGrid
+            skills={otherSkills}
+            tagsBySkill={tagsBySkill}
+            onEdit={(skill) => navigate(`/skills/${skill.id}`)}
+          />
         </div>
       )}
 
@@ -176,18 +183,6 @@ export default function SkillsSection() {
           onClose={() => setAddOpen(false)}
           onCreated={() => {
             setAddOpen(false)
-            loadSkills()
-          }}
-        />
-      )}
-
-      {detailSkill && (
-        <SkillDetailModal
-          skill={detailSkill}
-          onClose={() => setDetailSkill(null)}
-          onUpdated={loadSkills}
-          onDeleted={() => {
-            setDetailSkill(null)
             loadSkills()
           }}
         />
