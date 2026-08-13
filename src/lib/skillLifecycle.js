@@ -1,5 +1,5 @@
 export const SKILL_LIFECYCLE_STAGES = [
-  { value: 'identified', label: 'Identified' },
+  { value: 'identified', label: 'Baseline to be set' },
   { value: 'baseline_assessed', label: 'Baseline assessed' },
   { value: 'target_set', label: 'Target set' },
   { value: 'developing', label: 'Developing' },

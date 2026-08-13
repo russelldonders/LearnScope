@@ -10,7 +10,6 @@ import EvidenceFields from './EvidenceFields'
 import TrackingReasonPicker from './TrackingReasonPicker'
 import TagsField from './TagsField'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
-import { SKILL_LIFECYCLE_STAGES } from '../lib/skillLifecycle'
 import { syncCurrentRoleLinks } from '../lib/currentRole'
 
 export default function SkillModal({ onClose, onCreated }) {
@@ -21,7 +20,6 @@ export default function SkillModal({ onClose, onCreated }) {
   const [pendingTags, setPendingTags] = useState([])
   const [isCurrentRole, setIsCurrentRole] = useState(false)
   const [trackingReason, setTrackingReason] = useState(null)
-  const [lifecycleStage, setLifecycleStage] = useState('identified')
   const [assessNow, setAssessNow] = useState(false)
   const [level, setLevel] = useState(1)
   const [comments, setComments] = useState('')
@@ -60,7 +58,7 @@ export default function SkillModal({ onClose, onCreated }) {
           level: assessNow ? level : null,
           is_current_role: isCurrentRole,
           tracking_reason: trackingReason,
-          lifecycle_stage: lifecycleStage,
+          lifecycle_stage: 'identified',
           library_skill_id: libraryId,
           user_id: user.id,
         })
@@ -145,24 +143,6 @@ export default function SkillModal({ onClose, onCreated }) {
             allTags={allTags}
             datalistId="tags-options-add"
           />
-
-          <div>
-            <label className="block text-sm text-secondary mb-1" htmlFor="lifecycleStage">
-              Lifecycle stage
-            </label>
-            <select
-              id="lifecycleStage"
-              value={lifecycleStage}
-              onChange={(e) => setLifecycleStage(e.target.value)}
-              className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-            >
-              {SKILL_LIFECYCLE_STAGES.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </div>
 
           <label className="flex items-start gap-2 text-sm text-secondary">
             <input
