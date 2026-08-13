@@ -2,6 +2,7 @@ import GrowthRing from './GrowthRing'
 import TrackingReasonIcon from './TrackingReasonIcon'
 import { isSelfAssessmentDue } from '../lib/checkin'
 import { TRACKING_REASON_LABELS } from '../lib/trackingReasons'
+import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
 
 export default function SkillCard({ skill, tags, onEdit }) {
   const due = isSelfAssessmentDue(skill.next_checkin_date)
@@ -15,17 +16,17 @@ export default function SkillCard({ skill, tags, onEdit }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <h3 className="font-display text-lg text-ink truncate">{skill.name}</h3>
-          {!skill.level && (
-            <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5">
-              Not yet self-assessed
-            </span>
-          )}
           {due && (
             <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-gold border border-gold rounded-full px-2 py-0.5">
               Self-assessment due
             </span>
           )}
         </div>
+        {skill.lifecycle_stage && SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage] && (
+          <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mt-0.5">
+            {SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]}
+          </p>
+        )}
         {tags?.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1">
             {tags.map((t) => (
