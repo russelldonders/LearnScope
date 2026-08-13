@@ -18,13 +18,13 @@ import { listTags, listSkillTags, addTagToSkill, removeSkillTagLink } from '../l
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import InviteRaterModal from '../components/InviteRaterModal'
 import RecordExperienceModal from '../components/RecordExperienceModal'
+import BaselineQuizModal from '../components/BaselineQuizModal'
 import TagsField from '../components/TagsField'
 
 const TABS = [
   { id: 'history', label: 'Overview' },
   { id: 'ratings', label: 'Ratings' },
   { id: 'experiences', label: 'Experiences' },
-  { id: 'assess', label: 'Self-assess' },
   { id: 'details', label: 'Details' },
   { id: 'settings', label: 'Settings' },
 ]
@@ -46,9 +46,13 @@ export default function SkillDetail() {
   const [statements, setStatements] = useState([])
   const [skillTags, setSkillTags] = useState([])
   const [allTags, setAllTags] = useState([])
+  const [quizResults, setQuizResults] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [assessorName, setAssessorName] = useState(null)
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [selfAssessOpen, setSelfAssessOpen] = useState(false)
+  const [recordExperienceOpen, setRecordExperienceOpen] = useState(false)
+  const [quizOpen, setQuizOpen] = useState(false)
 
   useEffect(() => {
     loadSkill()
@@ -79,34 +83,37 @@ export default function SkillDetail() {
 
   async function loadHistory() {
     setLoadingHistory(true)
-    const [{ data: assessments }, { data: ratings }, { data: links }, { data: st }, tags] = await Promise.all([
-      supabase
-        .from('skill_assessments')
-        .select('*, courses(name), experience(title, organization)')
-        .eq('skill_id', skill.id)
-        .order('assessed_at', { ascending: false }),
-      supabase
-        .from('skill_peer_ratings')
-        .select('*')
-        .eq('skill_id', skill.id)
-        .order('rated_at', { ascending: false }),
-      supabase
-        .from('skill_experience_links')
-        .select('id, experience(id, title, organization, type, start_date, end_date)')
-        .eq('skill_id', skill.id),
-      supabase
-        .from('xapi_statements')
-        .select('*')
-        .eq('skill_id', skill.id)
-        .eq('user_id', user.id)
-        .order('recorded_at', { ascending: false }),
-      listSkillTags(skill.id),
-    ])
+    const [{ data: assessments }, { data: ratings }, { data: links }, { data: st }, tags, { data: quizzes }] =
+      await Promise.all([
+        supabase
+          .from('skill_assessments')
+          .select('*, courses(name), experience(title, organization)')
+          .eq('skill_id', skill.id)
+          .order('assessed_at', { ascending: false }),
+        supabase
+          .from('skill_peer_ratings')
+          .select('*')
+          .eq('skill_id', skill.id)
+          .order('rated_at', { ascending: false }),
+        supabase
+          .from('skill_experience_links')
+          .select('id, experience(id, title, organization, type, start_date, end_date)')
+          .eq('skill_id', skill.id),
+        supabase
+          .from('xapi_statements')
+          .select('*')
+          .eq('skill_id', skill.id)
+          .eq('user_id', user.id)
+          .order('recorded_at', { ascending: false }),
+        listSkillTags(skill.id),
+        supabase.from('skill_baseline_quizzes').select('id').eq('skill_id', skill.id),
+      ])
     setHistory(assessments ?? [])
     setPeerRatings(ratings ?? [])
     setRelationshipLinks(links ?? [])
     setStatements(st ?? [])
     setSkillTags(tags ?? [])
+    setQuizResults(quizzes ?? [])
     setLoadingHistory(false)
   }
 
@@ -127,6 +134,18 @@ export default function SkillDetail() {
       .eq('id', user.id)
       .single()
     setAssessorName(data?.full_name || user.email)
+  }
+
+  async function handleRecordExperience(statement) {
+    const { error } = await supabase.from('xapi_statements').insert({
+      user_id: user.id,
+      statement,
+      recorded_at: statement.timestamp,
+      skill_id: skill.id,
+    })
+    if (error) throw error
+    setRecordExperienceOpen(false)
+    await loadHistory()
   }
 
   return (
@@ -176,15 +195,52 @@ export default function SkillDetail() {
 
             {skill.lifecycle_stage && <LifecycleProgress stage={skill.lifecycle_stage} />}
 
-            <button
-              type="button"
-              onClick={() => setInviteOpen(true)}
-              className="text-xs text-moss font-medium mb-4 -mt-2"
-            >
-              + Invite someone to rate this
-            </button>
+            {skill.lifecycle_stage === 'identified' && (
+              <BaselineChecklist
+                skill={skill}
+                peerRatingsCount={peerRatings.length}
+                statementsCount={statements.length}
+                quizCount={quizResults.length}
+                onSelfAssess={() => setSelfAssessOpen(true)}
+                onInvite={() => setInviteOpen(true)}
+                onRecordExperience={() => setRecordExperienceOpen(true)}
+                onQuiz={() => setQuizOpen(true)}
+              />
+            )}
 
             {inviteOpen && <InviteRaterModal skill={skill} onClose={() => setInviteOpen(false)} />}
+
+            {selfAssessOpen && (
+              <SelfAssessModal
+                skill={skill}
+                user={user}
+                onClose={() => setSelfAssessOpen(false)}
+                onAssessed={() => {
+                  loadHistory()
+                  loadSkill()
+                  setSelfAssessOpen(false)
+                }}
+              />
+            )}
+
+            {recordExperienceOpen && (
+              <RecordExperienceModal
+                actor={{ name: assessorName, email: user.email }}
+                skills={[]}
+                relatedSkill={{ id: skill.id, name: skill.name }}
+                onSave={handleRecordExperience}
+                onClose={() => setRecordExperienceOpen(false)}
+              />
+            )}
+
+            {quizOpen && (
+              <BaselineQuizModal
+                skill={skill}
+                user={user}
+                onClose={() => setQuizOpen(false)}
+                onCompleted={loadHistory}
+              />
+            )}
 
             <div className="flex items-center gap-1 border-b border-hairline mb-4 overflow-x-auto">
               {TABS.map((t) => (
@@ -202,21 +258,6 @@ export default function SkillDetail() {
                 </button>
               ))}
             </div>
-
-            {tab === 'assess' && (
-              <div className="space-y-6">
-                <SelfAssessSection
-                  skill={skill}
-                  user={user}
-                  onAssessed={() => {
-                    loadHistory()
-                    loadSkill()
-                    setTab('history')
-                  }}
-                />
-                <ScheduleSection skill={skill} onUpdated={loadSkill} />
-              </div>
-            )}
 
             {tab === 'details' && (
               <DetailsSection
@@ -245,16 +286,15 @@ export default function SkillDetail() {
             {tab === 'ratings' && <RatingsSection peerRatings={peerRatings} loading={loadingHistory} />}
 
             {tab === 'experiences' && (
-              <ExperiencesSection
-                skill={skill}
-                statements={statements}
-                loading={loadingHistory}
-                onChange={loadHistory}
-                user={user}
-              />
+              <ExperiencesSection statements={statements} loading={loadingHistory} />
             )}
 
-            {tab === 'settings' && <SettingsSection skill={skill} onUpdated={loadSkill} />}
+            {tab === 'settings' && (
+              <div className="space-y-6">
+                <SettingsSection skill={skill} onUpdated={loadSkill} />
+                <ScheduleSection skill={skill} onUpdated={loadSkill} />
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -297,6 +337,100 @@ function LifecycleProgress({ stage }) {
           {SKILL_LIFECYCLE_LABELS[stage]}
         </span>
       )}
+    </div>
+  )
+}
+
+function BaselineChecklist({
+  skill,
+  peerRatingsCount,
+  statementsCount,
+  quizCount,
+  onSelfAssess,
+  onInvite,
+  onRecordExperience,
+  onQuiz,
+}) {
+  const items = [
+    {
+      key: 'self-assess',
+      label: 'Self-assess your own level',
+      description: 'Rate where you think you are right now.',
+      done: Boolean(skill.level),
+      onClick: onSelfAssess,
+    },
+    {
+      key: 'invite',
+      label: 'Invite others to assess your skill',
+      description: 'Get an outside perspective on your level.',
+      done: peerRatingsCount > 0,
+      onClick: onInvite,
+    },
+    {
+      key: 'experience',
+      label: 'Add experience activity',
+      description: 'Log something you did that shows this skill in action.',
+      done: statementsCount > 0,
+      onClick: onRecordExperience,
+    },
+    {
+      key: 'quiz',
+      label: 'Ask me questions to assess me',
+      description: 'Answer a short AI-generated quiz on your baseline knowledge.',
+      done: quizCount > 0,
+      onClick: onQuiz,
+    },
+  ]
+
+  return (
+    <div className="mb-6 rounded-md border border-hairline bg-paper p-4">
+      <h3 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">
+        Baseline checklist
+      </h3>
+      <div className="space-y-2">
+        {items.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={item.onClick}
+            className="w-full flex items-center justify-between gap-3 rounded-md border border-hairline bg-card px-3 py-2.5 text-left hover:border-moss transition-colors"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <span
+                className={`shrink-0 flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold ${
+                  item.done ? 'bg-moss border-moss text-paper' : 'border-hairline text-secondary'
+                }`}
+              >
+                {item.done ? '✓' : ''}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm text-ink">{item.label}</span>
+                <span className="block text-xs text-secondary truncate">{item.description}</span>
+              </span>
+            </div>
+            <span className="shrink-0 text-xs text-moss font-medium">{item.done ? 'Redo' : 'Start'}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SelfAssessModal({ skill, user, onClose, onAssessed }) {
+  return (
+    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div
+        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-display text-2xl text-ink">Self-assess</h2>
+          <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
+            Close
+          </button>
+        </div>
+        <SelfAssessSection skill={skill} user={user} onAssessed={onAssessed} />
+      </div>
     </div>
   )
 }
@@ -906,47 +1040,10 @@ function RatingsSection({ peerRatings, loading }) {
   )
 }
 
-function ExperiencesSection({ skill, statements, loading, onChange, user }) {
-  const [actorName, setActorName] = useState('')
-  const [modalOpen, setModalOpen] = useState(false)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    supabase
-      .from('profiles')
-      .select('full_name')
-      .eq('id', user.id)
-      .single()
-      .then(({ data }) => setActorName(data?.full_name ?? ''))
-  }, [])
-
-  async function handleSave(statement) {
-    const { error } = await supabase.from('xapi_statements').insert({
-      user_id: user.id,
-      statement,
-      recorded_at: statement.timestamp,
-      skill_id: skill.id,
-    })
-    if (error) throw error
-    setModalOpen(false)
-    await onChange()
-  }
-
-  async function handleDelete(id) {
-    if (!confirm("Delete this recorded experience? This can't be undone.")) return
-    const { error } = await supabase.from('xapi_statements').delete().eq('id', id)
-    if (error) setError(error.message)
-    else await onChange()
-  }
-
+function ExperiencesSection({ statements, loading }) {
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary">Experiences</h4>
-        <button type="button" onClick={() => setModalOpen(true)} className="text-xs text-moss font-medium">
-          + Record experience
-        </button>
-      </div>
+      <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Experiences</h4>
 
       {loading ? (
         <p className="text-sm text-secondary">Loading…</p>
@@ -956,45 +1053,23 @@ function ExperiencesSection({ skill, statements, loading, onChange, user }) {
         <ul className="space-y-2">
           {statements.map((s) => (
             <li key={s.id} className="bg-paper border border-hairline rounded-md px-3 py-2">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm text-ink">
-                    <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
-                      {verbLabel(s.statement)}
-                    </span>{' '}
-                    {activityName(s.statement)}
-                  </p>
-                  <p className="font-mono text-xs text-secondary mt-0.5">
-                    {new Date(s.recorded_at).toLocaleDateString()}
-                  </p>
-                  {s.statement.object?.definition?.description?.['en-US'] && (
-                    <p className="text-sm text-ink mt-1">
-                      {s.statement.object.definition.description['en-US']}
-                    </p>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(s.id)}
-                  className="shrink-0 text-xs text-red-700 font-medium"
-                >
-                  Remove
-                </button>
-              </div>
+              <p className="text-sm text-ink">
+                <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
+                  {verbLabel(s.statement)}
+                </span>{' '}
+                {activityName(s.statement)}
+              </p>
+              <p className="font-mono text-xs text-secondary mt-0.5">
+                {new Date(s.recorded_at).toLocaleDateString()}
+              </p>
+              {s.statement.object?.definition?.description?.['en-US'] && (
+                <p className="text-sm text-ink mt-1">
+                  {s.statement.object.definition.description['en-US']}
+                </p>
+              )}
             </li>
           ))}
         </ul>
-      )}
-      {error && <p className="text-sm text-red-700 mt-2">{error}</p>}
-
-      {modalOpen && (
-        <RecordExperienceModal
-          actor={{ name: actorName, email: user.email }}
-          skills={[]}
-          relatedSkill={{ id: skill.id, name: skill.name }}
-          onSave={handleSave}
-          onClose={() => setModalOpen(false)}
-        />
       )}
     </div>
   )
