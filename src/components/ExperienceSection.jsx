@@ -1,20 +1,17 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { listLibrarySkills } from '../lib/skillLibrary'
 import TimelineItem from './TimelineItem'
 import ExperienceModal from './ExperienceModal'
 
 export default function ExperienceSection() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [items, setItems] = useState([])
   const [learningSummaries, setLearningSummaries] = useState({})
-  const [skills, setSkills] = useState([])
-  const [courses, setCourses] = useState([])
-  const [librarySkills, setLibrarySkills] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [modalItem, setModalItem] = useState(null)
   const [modalOpen, setModalOpen] = useState(false)
 
   useEffect(() => {
@@ -36,9 +33,6 @@ export default function ExperienceSection() {
     setLoading(false)
   }
 
-  // Compact "courses completed / skills touched" summary per experience,
-  // shown directly on each timeline card so the learning history is visible
-  // without opening the modal.
   async function loadLearningSummaries(experienceItems) {
     const ids = experienceItems.map((i) => i.id)
     if (ids.length === 0) {
@@ -65,60 +59,16 @@ export default function ExperienceSection() {
     setLearningSummaries(result)
   }
 
-  async function loadPickerData() {
-    const [{ data: skillsData }, { data: coursesData }, libraryData] = await Promise.all([
-      supabase.from('skills').select('id, name').eq('user_id', user.id).order('name'),
-      supabase.from('courses').select('id, name, provider, completed_date').order('name'),
-      listLibrarySkills(),
-    ])
-    setSkills(skillsData ?? [])
-    setCourses(coursesData ?? [])
-    setLibrarySkills(libraryData)
-  }
-
-  function openAddModal() {
-    setModalItem(null)
-    setModalOpen(true)
-  }
-
-  function openEditModal(item) {
-    setModalItem(item)
-    loadPickerData()
-    setModalOpen(true)
-  }
-
   async function handleSave(values) {
-    if (values.id) {
-      const { error } = await supabase
-        .from('experience')
-        .update({
-          type: values.type,
-          title: values.title,
-          organization: values.organization,
-          start_date: values.start_date,
-          end_date: values.end_date,
-          description: values.description,
-        })
-        .eq('id', values.id)
-      if (error) throw error
-    } else {
-      const { error } = await supabase.from('experience').insert({
-        type: values.type,
-        title: values.title,
-        organization: values.organization,
-        start_date: values.start_date,
-        end_date: values.end_date,
-        description: values.description,
-        user_id: user.id,
-      })
-      if (error) throw error
-    }
-    setModalOpen(false)
-    await loadExperience()
-  }
-
-  async function handleDelete(id) {
-    const { error } = await supabase.from('experience').delete().eq('id', id)
+    const { error } = await supabase.from('experience').insert({
+      type: values.type,
+      title: values.title,
+      organization: values.organization,
+      start_date: values.start_date,
+      end_date: values.end_date,
+      description: values.description,
+      user_id: user.id,
+    })
     if (error) throw error
     setModalOpen(false)
     await loadExperience()
@@ -129,7 +79,7 @@ export default function ExperienceSection() {
       <div className="flex items-center justify-between mb-6">
         <h2 className="font-display text-xl text-ink">Experience timeline</h2>
         <button
-          onClick={openAddModal}
+          onClick={() => setModalOpen(true)}
           className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90"
         >
           + Add experience
@@ -151,27 +101,13 @@ export default function ExperienceSection() {
             key={item.id}
             item={item}
             summary={learningSummaries[item.id]}
-            onEdit={openEditModal}
+            onEdit={(item) => navigate(`/experience/${item.id}`)}
             isLast={i === items.length - 1}
           />
         ))}
       </div>
 
-      {modalOpen && (
-        <ExperienceModal
-          item={modalItem}
-          skills={skills}
-          courses={courses}
-          librarySkills={librarySkills}
-          onRefreshPickerData={loadPickerData}
-          onSave={handleSave}
-          onDelete={handleDelete}
-          onClose={() => {
-            setModalOpen(false)
-            loadExperience()
-          }}
-        />
-      )}
+      {modalOpen && <ExperienceModal onSave={handleSave} onClose={() => setModalOpen(false)} />}
     </section>
   )
 }

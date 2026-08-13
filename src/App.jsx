@@ -11,6 +11,7 @@ import Dashboard from './pages/Dashboard'
 import Skills from './pages/Skills'
 import SkillDetail from './pages/SkillDetail'
 import Experience from './pages/Experience'
+import ExperienceDetail from './pages/ExperienceDetail'
 import Profile from './pages/Profile'
 import Rate from './pages/Rate'
 import Connections from './pages/Connections'
@@ -57,6 +58,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Experience />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/experience/:id"
+            element={
+              <ProtectedRoute>
+                <ExperienceDetail />
               </ProtectedRoute>
             }
           />
