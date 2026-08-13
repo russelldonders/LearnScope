@@ -33,3 +33,17 @@ export const SKILL_LIFECYCLE_ACTIVITY_LABELS = {
 export const SKILL_LIFECYCLE_FLOW_STAGES = SKILL_LIFECYCLE_STAGES.filter(
   (s) => s.value !== 'at_risk' && s.value !== 'archived'
 )
+
+const VALIDATED_INDEX = SKILL_LIFECYCLE_FLOW_STAGES.findIndex((s) => s.value === 'validated')
+
+// How much extra credibility a peer rater's opinion should carry when they
+// also track the same skill themselves, based on how far along their own
+// copy is. Scales linearly from 1x (identified, i.e. no further along than
+// a beginner) up to 3x once they've reached validated; maintained counts
+// the same as validated since it's the sustained state after validation.
+export function lifecycleWeight(stage) {
+  const idx = SKILL_LIFECYCLE_FLOW_STAGES.findIndex((s) => s.value === stage)
+  if (idx < 0) return 1
+  const capped = Math.min(idx, VALIDATED_INDEX)
+  return 1 + (capped / VALIDATED_INDEX) * 2
+}

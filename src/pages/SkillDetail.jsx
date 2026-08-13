@@ -23,6 +23,7 @@ import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDu
 import InviteRaterModal from '../components/InviteRaterModal'
 import RecordExperienceModal from '../components/RecordExperienceModal'
 import BaselineQuizModal from '../components/BaselineQuizModal'
+import AssessBaselineModal from '../components/AssessBaselineModal'
 import TagsField from '../components/TagsField'
 
 const TABS = [
@@ -57,6 +58,7 @@ export default function SkillDetail() {
   const [selfAssessOpen, setSelfAssessOpen] = useState(false)
   const [recordExperienceOpen, setRecordExperienceOpen] = useState(false)
   const [quizOpen, setQuizOpen] = useState(false)
+  const [assessBaselineOpen, setAssessBaselineOpen] = useState(false)
 
   useEffect(() => {
     loadSkill()
@@ -110,7 +112,10 @@ export default function SkillDetail() {
           .eq('user_id', user.id)
           .order('recorded_at', { ascending: false }),
         listSkillTags(skill.id),
-        supabase.from('skill_baseline_quizzes').select('id').eq('skill_id', skill.id),
+        supabase
+          .from('skill_baseline_quizzes')
+          .select('id, score, total, created_at')
+          .eq('skill_id', skill.id),
       ])
     setHistory(assessments ?? [])
     setPeerRatings(ratings ?? [])
@@ -201,16 +206,31 @@ export default function SkillDetail() {
             {skill.lifecycle_stage && <LifecycleProgress stage={skill.lifecycle_stage} />}
 
             {skill.lifecycle_stage === 'identified' && (
-              <BaselineChecklist
-                skill={skill}
-                peerRatingsCount={peerRatings.length}
-                statementsCount={statements.length}
-                quizCount={quizResults.length}
-                onSelfAssess={() => setSelfAssessOpen(true)}
-                onInvite={() => setInviteOpen(true)}
-                onRecordExperience={() => setRecordExperienceOpen(true)}
-                onQuiz={() => setQuizOpen(true)}
-              />
+              <>
+                <BaselineChecklist
+                  skill={skill}
+                  peerRatingsCount={peerRatings.length}
+                  statementsCount={statements.length}
+                  quizCount={quizResults.length}
+                  onSelfAssess={() => setSelfAssessOpen(true)}
+                  onInvite={() => setInviteOpen(true)}
+                  onRecordExperience={() => setRecordExperienceOpen(true)}
+                  onQuiz={() => setQuizOpen(true)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setAssessBaselineOpen(true)}
+                  disabled={!skill.level && peerRatings.length === 0 && statements.length === 0 && quizResults.length === 0}
+                  title={
+                    !skill.level && peerRatings.length === 0 && statements.length === 0 && quizResults.length === 0
+                      ? 'Complete at least one checklist item first'
+                      : undefined
+                  }
+                  className="w-full mb-6 rounded-md bg-moss text-paper py-2.5 font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Assess baseline with AI
+                </button>
+              </>
             )}
 
             {inviteOpen && <InviteRaterModal skill={skill} onClose={() => setInviteOpen(false)} />}
@@ -244,6 +264,23 @@ export default function SkillDetail() {
                 user={user}
                 onClose={() => setQuizOpen(false)}
                 onCompleted={loadHistory}
+              />
+            )}
+
+            {assessBaselineOpen && (
+              <AssessBaselineModal
+                skill={skill}
+                user={user}
+                assessments={history}
+                peerRatings={peerRatings}
+                statements={statements}
+                quizzes={quizResults}
+                onClose={() => setAssessBaselineOpen(false)}
+                onAssessed={() => {
+                  loadHistory()
+                  loadSkill()
+                  setAssessBaselineOpen(false)
+                }}
               />
             )}
 
