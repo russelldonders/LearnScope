@@ -10,7 +10,11 @@ import GrowthRing from '../components/GrowthRing'
 import EvidenceFields from '../components/EvidenceFields'
 import TrackingReasonPicker from '../components/TrackingReasonPicker'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
-import { SKILL_LIFECYCLE_LABELS, SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
+import {
+  SKILL_LIFECYCLE_LABELS,
+  SKILL_LIFECYCLE_FLOW_STAGES,
+  SKILL_LIFECYCLE_ACTIVITY_LABELS,
+} from '../lib/skillLifecycle'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
 import { activityName, verbLabel } from '../lib/xapiStatement'
 import { syncCurrentRoleLinks } from '../lib/currentRole'
@@ -174,7 +178,8 @@ export default function SkillDetail() {
                     {skill.level
                       ? LEVEL_LABELS[skill.level]
                       : skill.lifecycle_stage
-                        ? SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]
+                        ? (SKILL_LIFECYCLE_ACTIVITY_LABELS[skill.lifecycle_stage] ??
+                          SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage])
                         : 'Not yet self-assessed'}
                   </p>
                   {skillTags.length > 0 && (
