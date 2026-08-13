@@ -1,11 +1,16 @@
+// Labels name what's actually happening at each stage, not just the state's
+// name -- validated and maintained intentionally share a label since both
+// are "the skill is being kept current" from the learner's point of view,
+// and the lifecycle stepper never shows both at once (see
+// SKILL_LIFECYCLE_FLOW_STAGES / the "hide completed stages" behavior).
 export const SKILL_LIFECYCLE_STAGES = [
-  { value: 'identified', label: 'Identified' },
-  { value: 'baseline_assessed', label: 'Baseline assessed' },
-  { value: 'target_set', label: 'Target set' },
-  { value: 'developing', label: 'Developing' },
-  { value: 'demonstrated', label: 'Demonstrated' },
-  { value: 'validated', label: 'Validated' },
-  { value: 'maintained', label: 'Maintained' },
+  { value: 'identified', label: 'Establishing Baseline' },
+  { value: 'baseline_assessed', label: 'Target Setting' },
+  { value: 'target_set', label: 'Developing' },
+  { value: 'developing', label: 'Demonstrating' },
+  { value: 'demonstrated', label: 'Validating' },
+  { value: 'validated', label: 'Maintaining' },
+  { value: 'maintained', label: 'Maintaining' },
   { value: 'at_risk', label: 'At risk / Expired' },
   { value: 'archived', label: 'Archived' },
 ]
@@ -13,19 +18,6 @@ export const SKILL_LIFECYCLE_STAGES = [
 export const SKILL_LIFECYCLE_LABELS = Object.fromEntries(
   SKILL_LIFECYCLE_STAGES.map((s) => [s.value, s.label])
 )
-
-// What's currently underway while a skill sits in a given stage, framed as
-// progress toward the next stage in the flow (rather than the stage's own
-// name). Shown as the skill page subtitle instead of the static stage label.
-export const SKILL_LIFECYCLE_ACTIVITY_LABELS = {
-  identified: 'Assessing skill baseline',
-  baseline_assessed: 'Setting skill targets',
-  target_set: 'Developing skill',
-  developing: 'Demonstrating skill',
-  demonstrated: 'Validating skill',
-  validated: 'Maintaining skill',
-  maintained: 'Maintaining skill',
-}
 
 // The forward-moving progression shown as a stepper on a skill's page.
 // at_risk/archived are exception/terminal states outside the normal flow,

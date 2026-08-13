@@ -10,11 +10,7 @@ import GrowthRing from '../components/GrowthRing'
 import EvidenceFields from '../components/EvidenceFields'
 import TrackingReasonPicker from '../components/TrackingReasonPicker'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
-import {
-  SKILL_LIFECYCLE_LABELS,
-  SKILL_LIFECYCLE_FLOW_STAGES,
-  SKILL_LIFECYCLE_ACTIVITY_LABELS,
-} from '../lib/skillLifecycle'
+import { SKILL_LIFECYCLE_LABELS, SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
 import { activityName, verbLabel } from '../lib/xapiStatement'
 import { syncCurrentRoleLinks } from '../lib/currentRole'
@@ -31,7 +27,6 @@ const TABS = [
   { id: 'history', label: 'Overview' },
   { id: 'ratings', label: 'Ratings' },
   { id: 'experiences', label: 'Experiences' },
-  { id: 'targets', label: 'Targets' },
   { id: 'details', label: 'Details' },
 ]
 
@@ -60,7 +55,7 @@ export default function SkillDetail() {
   const [selfAssessOpen, setSelfAssessOpen] = useState(false)
   const [recordExperienceOpen, setRecordExperienceOpen] = useState(false)
   const [quizOpen, setQuizOpen] = useState(false)
-  const [assessBaselineOpen, setAssessBaselineOpen] = useState(false)
+  const [assessMode, setAssessMode] = useState(null)
   const [targetOpen, setTargetOpen] = useState(false)
 
   useEffect(() => {
@@ -173,6 +168,10 @@ export default function SkillDetail() {
     await loadHistory()
   }
 
+  const selfAssessedCount = history.filter((a) => a.source === 'self' || !a.source).length
+  const hasAnyEvaluationInput =
+    selfAssessedCount > 0 || peerRatings.length > 0 || statements.length > 0 || quizResults.length > 0
+
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
@@ -199,8 +198,7 @@ export default function SkillDetail() {
                     {skill.level
                       ? LEVEL_LABELS[skill.level]
                       : skill.lifecycle_stage
-                        ? (SKILL_LIFECYCLE_ACTIVITY_LABELS[skill.lifecycle_stage] ??
-                          SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage])
+                        ? SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]
                         : 'Not yet self-assessed'}
                   </p>
                   {skillTags.length > 0 && (
@@ -235,10 +233,20 @@ export default function SkillDetail() {
 
             {skill.lifecycle_stage && <LifecycleProgress stage={skill.lifecycle_stage} />}
 
+            <button
+              type="button"
+              onClick={() => setAssessMode('evaluate')}
+              disabled={!hasAnyEvaluationInput}
+              title={!hasAnyEvaluationInput ? 'Self-assess, invite a rating, record activity, or take the quiz first' : undefined}
+              className="w-full mb-6 rounded-md border border-moss text-moss py-2.5 font-medium hover:bg-moss/5 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Evaluate Skill
+            </button>
+
             {skill.lifecycle_stage === 'identified' && (
               <>
                 <BaselineChecklist
-                  skill={skill}
+                  selfAssessedCount={selfAssessedCount}
                   peerRatingsCount={peerRatings.length}
                   statementsCount={statements.length}
                   quizCount={quizResults.length}
@@ -249,13 +257,9 @@ export default function SkillDetail() {
                 />
                 <button
                   type="button"
-                  onClick={() => setAssessBaselineOpen(true)}
-                  disabled={!skill.level && peerRatings.length === 0 && statements.length === 0 && quizResults.length === 0}
-                  title={
-                    !skill.level && peerRatings.length === 0 && statements.length === 0 && quizResults.length === 0
-                      ? 'Complete at least one checklist item first'
-                      : undefined
-                  }
+                  onClick={() => setAssessMode('baseline')}
+                  disabled={!hasAnyEvaluationInput}
+                  title={!hasAnyEvaluationInput ? 'Complete at least one checklist item first' : undefined}
                   className="w-full mb-6 rounded-md bg-moss text-paper py-2.5 font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Assess baseline with AI
@@ -307,7 +311,7 @@ export default function SkillDetail() {
               />
             )}
 
-            {assessBaselineOpen && (
+            {assessMode && (
               <AssessBaselineModal
                 skill={skill}
                 user={user}
@@ -315,11 +319,12 @@ export default function SkillDetail() {
                 peerRatings={peerRatings}
                 statements={statements}
                 quizzes={quizResults}
-                onClose={() => setAssessBaselineOpen(false)}
+                mode={assessMode}
+                onClose={() => setAssessMode(null)}
                 onAssessed={() => {
                   loadHistory()
                   loadSkill()
-                  setAssessBaselineOpen(false)
+                  setAssessMode(null)
                 }}
               />
             )}
@@ -339,7 +344,7 @@ export default function SkillDetail() {
             )}
 
             <div className="flex items-center gap-1 border-b border-hairline mb-4 overflow-x-auto">
-              {TABS.filter((t) => t.id !== 'targets' || targets.length > 0).map((t) => (
+              {TABS.map((t) => (
                 <button
                   key={t.id}
                   type="button"
@@ -378,18 +383,28 @@ export default function SkillDetail() {
                 history={history}
                 peerRatings={peerRatings}
                 relationshipLinks={relationshipLinks}
+                targets={targets}
                 loading={loadingHistory}
                 assessorName={assessorName}
               />
             )}
 
-            {tab === 'ratings' && <RatingsSection peerRatings={peerRatings} loading={loadingHistory} />}
-
-            {tab === 'experiences' && (
-              <ExperiencesSection statements={statements} loading={loadingHistory} />
+            {tab === 'ratings' && (
+              <RatingsSection
+                peerRatings={peerRatings}
+                loading={loadingHistory}
+                onSelfAssess={() => setSelfAssessOpen(true)}
+                onInvite={() => setInviteOpen(true)}
+              />
             )}
 
-            {tab === 'targets' && <TargetsSection targets={targets} loading={loadingHistory} />}
+            {tab === 'experiences' && (
+              <ExperiencesSection
+                statements={statements}
+                loading={loadingHistory}
+                onRecordExperience={() => setRecordExperienceOpen(true)}
+              />
+            )}
           </div>
         )}
       </main>
@@ -400,29 +415,27 @@ export default function SkillDetail() {
 function LifecycleProgress({ stage }) {
   const currentIndex = SKILL_LIFECYCLE_FLOW_STAGES.findIndex((s) => s.value === stage)
   const isException = stage === 'at_risk' || stage === 'archived'
+  // Stages the learner has already moved past are dropped from view rather
+  // than just dimmed -- the diagram only shows where things stand from here.
+  const visibleStages = currentIndex >= 0 ? SKILL_LIFECYCLE_FLOW_STAGES.slice(currentIndex) : SKILL_LIFECYCLE_FLOW_STAGES
 
   return (
     <div className="mb-6">
       <div className="flex items-center overflow-x-auto pb-1">
-        {SKILL_LIFECYCLE_FLOW_STAGES.map((s, i) => {
-          const isCurrent = !isException && i === currentIndex
-          const isPast = !isException && currentIndex >= 0 && i < currentIndex
+        {visibleStages.map((s, i) => {
+          const isCurrent = !isException && i === 0
           return (
             <div key={s.value} className="flex items-center shrink-0">
               <span
                 className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2.5 py-1 border whitespace-nowrap ${
                   isCurrent
                     ? 'bg-moss text-paper border-moss'
-                    : isPast
-                      ? 'border-moss text-moss'
-                      : 'border-hairline text-secondary'
+                    : 'border-hairline text-secondary'
                 }`}
               >
                 {s.label}
               </span>
-              {i < SKILL_LIFECYCLE_FLOW_STAGES.length - 1 && (
-                <span className={`w-4 h-px mx-1 shrink-0 ${isPast ? 'bg-moss' : 'bg-hairline'}`} />
-              )}
+              {i < visibleStages.length - 1 && <span className="w-4 h-px mx-1 shrink-0 bg-hairline" />}
             </div>
           )
         })}
@@ -437,7 +450,7 @@ function LifecycleProgress({ stage }) {
 }
 
 function BaselineChecklist({
-  skill,
+  selfAssessedCount,
   peerRatingsCount,
   statementsCount,
   quizCount,
@@ -451,7 +464,7 @@ function BaselineChecklist({
       key: 'self-assess',
       label: 'Self-assess your own level',
       description: 'Rate where you think you are right now.',
-      done: Boolean(skill.level),
+      done: selfAssessedCount > 0,
       onClick: onSelfAssess,
     },
     {
@@ -565,19 +578,22 @@ function SelfAssessSection({ skill, user, onAssessed }) {
         if (updateError) throw updateError
       }
 
-      const skillUpdate = { level }
+      // A self-assessment is recorded as history but doesn't move the
+      // skill's official current level -- only an explicit "Assess
+      // baseline" / "Evaluate Skill" action does that.
       if (skill.checkin_frequency_value && skill.checkin_frequency_unit) {
-        skillUpdate.next_checkin_date = computeNextSelfAssessmentDate(
-          null,
-          skill.checkin_frequency_value,
-          skill.checkin_frequency_unit
-        )
+        const { error: skillError } = await supabase
+          .from('skills')
+          .update({
+            next_checkin_date: computeNextSelfAssessmentDate(
+              null,
+              skill.checkin_frequency_value,
+              skill.checkin_frequency_unit
+            ),
+          })
+          .eq('id', skill.id)
+        if (skillError) throw skillError
       }
-      const { error: skillError } = await supabase
-        .from('skills')
-        .update(skillUpdate)
-        .eq('id', skill.id)
-      if (skillError) throw skillError
 
       onAssessed()
     } catch (err) {
@@ -636,8 +652,9 @@ function SelfAssessSection({ skill, user, onAssessed }) {
   )
 }
 
-function HistorySection({ skill, history, peerRatings, relationshipLinks, loading, assessorName }) {
+function HistorySection({ skill, history, peerRatings, relationshipLinks, targets, loading, assessorName }) {
   const due = isSelfAssessmentDue(skill.next_checkin_date)
+  const currentTarget = targets[0]
 
   return (
     <div>
@@ -668,10 +685,10 @@ function HistorySection({ skill, history, peerRatings, relationshipLinks, loadin
           { type: 'added', date: skill.date_added, source: skill.source },
         ].sort((a, b) => new Date(b.date) - new Date(a.date))
         const mostRecentRatingIndex = events.findIndex((e) => e.type === 'assessment' || e.type === 'peer')
-        const currentLabel = skill.lifecycle_stage && skill.lifecycle_stage !== 'identified' ? 'Baseline' : 'Current'
 
         return (
           <div>
+            {currentTarget && <TargetTimelineEntry target={currentTarget} hasMore={events.length > 0} />}
             {events.map((event, i) => (
               <TimelineEntry
                 key={
@@ -683,7 +700,6 @@ function HistorySection({ skill, history, peerRatings, relationshipLinks, loadin
                 isLast={i === events.length - 1}
                 isMostRecent={i === mostRecentRatingIndex}
                 assessorName={assessorName}
-                currentLabel={currentLabel}
               />
             ))}
           </div>
@@ -693,7 +709,32 @@ function HistorySection({ skill, history, peerRatings, relationshipLinks, loadin
   )
 }
 
-function TimelineEntry({ event, isLast, isMostRecent, assessorName, currentLabel }) {
+function TargetTimelineEntry({ target, hasMore }) {
+  return (
+    <div className="flex gap-3">
+      <div className="flex flex-col items-center">
+        <div className="rounded-full border-2 border-dashed border-moss/50 p-0.5">
+          <GrowthRing level={target.target_level} size={40} />
+        </div>
+        {hasMore && <span className="w-0 flex-1 border-l-2 border-dashed border-hairline mt-1" />}
+      </div>
+      <div className="min-w-0 flex-1 mb-6 rounded-md border-2 border-dashed border-moss/40 bg-moss/5 p-3">
+        <div className="flex items-center gap-2">
+          <p className="text-base font-semibold text-ink">{LEVEL_LABELS[target.target_level]}</p>
+          <span className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5">
+            Target
+          </span>
+        </div>
+        <p className="font-mono text-xs text-secondary mt-0.5">
+          By {new Date(`${target.target_date}T00:00:00`).toLocaleDateString()}
+        </p>
+        {target.comments && <p className="text-sm text-ink mt-1">{target.comments}</p>}
+      </div>
+    </div>
+  )
+}
+
+function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
   const boxClass = isMostRecent
     ? 'rounded-md border border-moss/40 bg-moss/5 p-3'
     : 'rounded-md border border-hairline bg-paper p-3'
@@ -739,7 +780,7 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName, currentLabel
             </p>
             {isMostRecent && (
               <span className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5">
-                {currentLabel}
+                Most Recent Evaluation
               </span>
             )}
           </div>
@@ -803,7 +844,7 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName, currentLabel
           </p>
           {isMostRecent && (
             <span className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5">
-              {currentLabel}
+              Most Recent Evaluation
             </span>
           )}
         </div>
@@ -817,6 +858,10 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName, currentLabel
         ) : entry.source === 'ai_baseline' ? (
           <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
             AI-assessed baseline, from self-assessment, peer ratings, activity and quiz inputs
+          </p>
+        ) : entry.source === 'ai_evaluation' ? (
+          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+            AI skill evaluation, from self-assessment, peer ratings, activity and quiz inputs
           </p>
         ) : (
           assessorName && (
@@ -1113,71 +1158,64 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
   )
 }
 
-function RatingsSection({ peerRatings, loading }) {
-  if (loading) return <p className="text-sm text-secondary">Loading…</p>
-  if (peerRatings.length === 0) {
-    return (
-      <p className="text-sm text-secondary">
-        No ratings from others yet. Invite someone to rate this skill.
-      </p>
-    )
-  }
-  return (
-    <ul className="space-y-3">
-      {peerRatings.map((rating) => (
-        <li key={rating.id} className="flex items-start gap-3 bg-paper border border-hairline rounded-md p-3">
-          <GrowthRing level={rating.level} size={40} />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-ink">{LEVEL_LABELS[rating.level]}</p>
-            <p className="font-mono text-xs text-secondary mt-0.5">
-              {new Date(rating.rated_at).toLocaleDateString()} · Rated by{' '}
-              {rating.rater_name || rating.rater_email || 'a connection'}
-            </p>
-            {rating.comments && <p className="text-sm text-ink mt-1">{rating.comments}</p>}
-          </div>
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-function TargetsSection({ targets, loading }) {
-  if (loading) return <p className="text-sm text-secondary">Loading…</p>
-  if (targets.length === 0) {
-    return <p className="text-sm text-secondary">No target set yet.</p>
-  }
-  return (
-    <ul className="space-y-3">
-      {targets.map((t, i) => (
-        <li key={t.id} className="flex items-start gap-3 bg-paper border border-hairline rounded-md p-3">
-          <GrowthRing level={t.target_level} size={40} />
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-medium text-ink">{LEVEL_LABELS[t.target_level]}</p>
-              {i === 0 && (
-                <span className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5">
-                  Current
-                </span>
-              )}
-            </div>
-            <p className="font-mono text-xs text-secondary mt-0.5">
-              Target date: {new Date(`${t.target_date}T00:00:00`).toLocaleDateString()}
-            </p>
-            <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
-              Set {new Date(t.created_at).toLocaleDateString()}
-            </p>
-            {t.comments && <p className="text-sm text-ink mt-1">{t.comments}</p>}
-          </div>
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-function ExperiencesSection({ statements, loading }) {
+function RatingsSection({ peerRatings, loading, onSelfAssess, onInvite }) {
   return (
     <div>
-      <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Experiences</h4>
+      <div className="flex items-center gap-2 mb-4">
+        <button
+          type="button"
+          onClick={onSelfAssess}
+          className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+        >
+          Self-assess
+        </button>
+        <button
+          type="button"
+          onClick={onInvite}
+          className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+        >
+          Invite someone to rate this
+        </button>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-secondary">Loading…</p>
+      ) : peerRatings.length === 0 ? (
+        <p className="text-sm text-secondary">No ratings from others yet.</p>
+      ) : (
+        <ul className="space-y-3">
+          {peerRatings.map((rating) => (
+            <li key={rating.id} className="flex items-start gap-3 bg-paper border border-hairline rounded-md p-3">
+              <GrowthRing level={rating.level} size={40} />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-ink">{LEVEL_LABELS[rating.level]}</p>
+                <p className="font-mono text-xs text-secondary mt-0.5">
+                  {new Date(rating.rated_at).toLocaleDateString()} · Rated by{' '}
+                  {rating.rater_name || rating.rater_email || 'a connection'}
+                </p>
+                {rating.comments && <p className="text-sm text-ink mt-1">{rating.comments}</p>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function ExperiencesSection({ statements, loading, onRecordExperience }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary">Experiences</h4>
+        <button
+          type="button"
+          onClick={onRecordExperience}
+          className="text-xs text-moss font-medium"
+        >
+          + Record experience
+        </button>
+      </div>
 
       {loading ? (
         <p className="text-sm text-secondary">Loading…</p>

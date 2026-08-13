@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react'
 import GrowthRing from './GrowthRing'
 import { LEVEL_LABELS } from '../lib/levels'
+import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
 import { activityName, verbLabel } from '../lib/xapiStatement'
 import {
   fetchPeerRaterProgress,
   buildWeightedPeerRatings,
   assessBaseline,
-  saveBaselineAssessment,
+  saveAssessmentResult,
 } from '../lib/baselineAssessment'
 
+// mode: 'baseline' (identified -> baseline_assessed, one-time) or
+// 'evaluate' (always-available re-assessment). Same synthesis either way --
+// only the heading, saved source, and whether the stage advances differ.
 export default function AssessBaselineModal({
   skill,
   user,
@@ -16,6 +20,7 @@ export default function AssessBaselineModal({
   peerRatings,
   statements,
   quizzes,
+  mode = 'baseline',
   onClose,
   onAssessed,
 }) {
@@ -49,7 +54,7 @@ export default function AssessBaselineModal({
 
         const res = await assessBaseline({
           skill,
-          selfLevel: skill.level,
+          selfLevel: latestSelf?.level ?? null,
           selfComments: latestSelf?.comments,
           experiences,
           quizzes: quizPayload,
@@ -68,7 +73,7 @@ export default function AssessBaselineModal({
   async function handleConfirm() {
     setSaving(true)
     try {
-      await saveBaselineAssessment(user, skill, result.level, result.reasoning)
+      await saveAssessmentResult(user, skill, result.level, result.reasoning, mode)
       onAssessed()
     } catch (err) {
       setError(err.message)
@@ -76,13 +81,21 @@ export default function AssessBaselineModal({
     }
   }
 
+  const heading = mode === 'baseline' ? 'Assess baseline' : 'Evaluate skill'
+  const proposedLabel = mode === 'baseline' ? 'Proposed baseline' : 'Proposed level'
+  const confirmLabel = mode === 'baseline' ? 'Confirm baseline' : 'Confirm evaluation'
+  const confirmNote =
+    mode === 'baseline'
+      ? `Confirming will set this as the skill's current level, save it to the timeline, and move the skill to the "${SKILL_LIFECYCLE_LABELS.baseline_assessed}" stage.`
+      : "Confirming will update the skill's current level if it changed, and save this evaluation to the timeline."
+
   return (
     <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
       <div
         className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="font-display text-2xl text-ink mb-1">Assess baseline</h2>
+        <h2 className="font-display text-2xl text-ink mb-1">{heading}</h2>
         <p className="text-sm text-secondary mb-4">{skill.name}</p>
 
         {loading && (
@@ -98,16 +111,13 @@ export default function AssessBaselineModal({
               <GrowthRing level={result.level} size={48} />
               <div>
                 <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">
-                  Proposed baseline
+                  {proposedLabel}
                 </p>
                 <p className="text-ink font-medium">{LEVEL_LABELS[result.level]}</p>
               </div>
             </div>
             <p className="text-sm text-ink mb-4">{result.reasoning}</p>
-            <p className="text-xs text-secondary mb-4">
-              Confirming will set this as the skill's current level, save it to the history, and move
-              the skill to the "Baseline assessed" stage.
-            </p>
+            <p className="text-xs text-secondary mb-4">{confirmNote}</p>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -115,7 +125,7 @@ export default function AssessBaselineModal({
                 disabled={saving}
                 className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
               >
-                {saving ? 'Saving…' : 'Confirm baseline'}
+                {saving ? 'Saving…' : confirmLabel}
               </button>
               <button
                 type="button"

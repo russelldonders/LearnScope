@@ -2,7 +2,7 @@ import GrowthRing from './GrowthRing'
 import TrackingReasonIcon from './TrackingReasonIcon'
 import { isSelfAssessmentDue } from '../lib/checkin'
 import { TRACKING_REASON_LABELS } from '../lib/trackingReasons'
-import { SKILL_LIFECYCLE_LABELS, SKILL_LIFECYCLE_ACTIVITY_LABELS } from '../lib/skillLifecycle'
+import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
 
 export default function SkillCard({ skill, tags, onEdit }) {
   const due = isSelfAssessmentDue(skill.next_checkin_date)
@@ -24,7 +24,7 @@ export default function SkillCard({ skill, tags, onEdit }) {
         </div>
         {skill.lifecycle_stage && SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage] && (
           <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mt-0.5">
-            {SKILL_LIFECYCLE_ACTIVITY_LABELS[skill.lifecycle_stage] ?? SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]}
+            {SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]}
           </p>
         )}
         {tags?.length > 0 && (

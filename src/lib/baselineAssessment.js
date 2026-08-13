@@ -49,17 +49,21 @@ export async function assessBaseline({ skill, selfLevel, selfComments, experienc
   return res.json()
 }
 
-export async function saveBaselineAssessment(user, skill, level, reasoning) {
+// mode: 'baseline' (the one-time identified -> baseline_assessed action) or
+// 'evaluate' (the always-available re-assessment) -- same synthesis, only
+// the recorded source and whether the lifecycle stage advances differ.
+export async function saveAssessmentResult(user, skill, level, reasoning, mode) {
   const { error: assessError } = await supabase.from('skill_assessments').insert({
     skill_id: skill.id,
     user_id: user.id,
     level,
     comments: reasoning,
-    source: 'ai_baseline',
+    source: mode === 'baseline' ? 'ai_baseline' : 'ai_evaluation',
   })
   if (assessError) throw assessError
 
-  const skillUpdate = { level, lifecycle_stage: 'baseline_assessed' }
+  const skillUpdate = { level }
+  if (mode === 'baseline') skillUpdate.lifecycle_stage = 'baseline_assessed'
   if (skill.checkin_frequency_value && skill.checkin_frequency_unit) {
     skillUpdate.next_checkin_date = computeNextSelfAssessmentDate(
       null,
