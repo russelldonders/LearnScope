@@ -759,6 +759,10 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
           <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
             Earned by completing {entry.courses.name}
           </p>
+        ) : entry.source === 'ai_baseline' ? (
+          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+            AI-assessed baseline, from self-assessment, peer ratings, activity and quiz inputs
+          </p>
         ) : (
           assessorName && (
             <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
