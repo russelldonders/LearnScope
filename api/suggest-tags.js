@@ -53,12 +53,12 @@ export default async function handler(req, res) {
 
   const existingList = Array.isArray(existingTags) ? existingTags.filter((t) => typeof t === 'string') : []
 
-  const prompt = `Suggest up to 4 short tags for the skill "${skillName.trim()}" -- broad, reusable categories (e.g. "Technical", "Leadership", "Languages", "Cooking"), not overly specific restatements of the skill name itself.
+  const prompt = `Suggest up to 3 short tags that best categorize the skill "${skillName.trim()}" -- broad, reusable categories (e.g. "Technical", "Leadership", "Languages", "Cooking"), not overly specific restatements of the skill name itself.
 
-Reuse one of these existing tags when it is a genuinely strong fit -- do not stretch a loose or tenuous match just to reuse one:
+Pick whichever tags are the best fit, freely inventing new ones as needed -- do not force a fit to an existing tag just to reuse it. For reference, these tags already exist and can be reused if one is a genuinely strong fit:
 ${existingList.length > 0 ? existingList.join(', ') : '(none yet)'}
 
-Only invent a new tag when none of the existing ones are a strong fit. It's fine to suggest just one or two tags if that's all that genuinely applies. Use Title Case, 1-3 words per tag.`
+It's fine to suggest just one or two tags if that's all that genuinely applies. Use Title Case, 1-3 words per tag.`
 
   try {
     const response = await anthropic.messages.create({
@@ -77,7 +77,7 @@ Only invent a new tag when none of the existing ones are a strong fit. It's fine
 
     const textBlock = response.content.find((b) => b.type === 'text')
     const data = JSON.parse(textBlock.text)
-    res.status(200).json(data)
+    res.status(200).json({ tags: (data.tags ?? []).slice(0, 3) })
   } catch (err) {
     console.error('suggest-tags error:', err)
     res.status(500).json({ error: 'Failed to suggest tags.' })

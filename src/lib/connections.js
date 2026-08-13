@@ -82,6 +82,14 @@ export async function listSentInvites() {
   }))
 }
 
+export async function revokeInvite(inviteId) {
+  const { error } = await supabase
+    .from('connection_invites')
+    .update({ status: 'revoked' })
+    .eq('id', inviteId)
+  if (error) throw error
+}
+
 // RLS on skill_peer_ratings returns rows where the current user is either
 // the rater or the owner of the rated skill — everything needed to render
 // both sides is already snapshotted on the row, so this one fetch covers

@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import { LEVEL_LABELS } from '../lib/levels'
-import { listMyPeerRatings, listSentInvites, getProfiles, sendInviteEmail } from '../lib/connections'
+import { listMyPeerRatings, listSentInvites, getProfiles, sendInviteEmail, revokeInvite } from '../lib/connections'
 
 export default function Connections() {
   const { user } = useAuth()
@@ -17,6 +17,8 @@ export default function Connections() {
   const [resendingId, setResendingId] = useState(null)
   const [resentId, setResentId] = useState(null)
   const [resendError, setResendError] = useState(null)
+  const [revokingId, setRevokingId] = useState(null)
+  const [revokeError, setRevokeError] = useState(null)
 
   useEffect(() => {
     load()
@@ -67,7 +69,10 @@ export default function Connections() {
     return list
   }, [ratings, profiles, user.id])
 
-  const pendingInvites = useMemo(() => invites.filter((i) => i.status === 'pending'), [invites])
+  const pendingInvites = useMemo(
+    () => invites.filter((i) => i.status === 'pending' && i.invitee_email),
+    [invites]
+  )
 
   function handleCopy(invite) {
     navigator.clipboard.writeText(invite.url)
@@ -91,6 +96,22 @@ export default function Connections() {
       setResendError({ id: invite.id, message: err.message })
     } finally {
       setResendingId(null)
+    }
+  }
+
+  async function handleRevoke(invite) {
+    if (!confirm(`Revoke the invite to ${invite.invitee_email}? They'll no longer be able to use this link.`)) {
+      return
+    }
+    setRevokeError(null)
+    setRevokingId(invite.id)
+    try {
+      await revokeInvite(invite.id)
+      setInvites((prev) => prev.filter((i) => i.id !== invite.id))
+    } catch (err) {
+      setRevokeError({ id: invite.id, message: err.message })
+    } finally {
+      setRevokingId(null)
     }
   }
 
@@ -166,8 +187,7 @@ export default function Connections() {
                 >
                   <div className="min-w-0">
                     <p className="text-sm text-ink">
-                      <strong>{invite.skills?.name}</strong>
-                      {invite.invitee_email ? ` — sent to ${invite.invitee_email}` : ' — share link'}
+                      <strong>{invite.skills?.name}</strong> — sent to {invite.invitee_email}
                     </p>
                     <p className="font-mono text-xs text-secondary">
                       {new Date(invite.created_at).toLocaleDateString()}
@@ -175,28 +195,37 @@ export default function Connections() {
                     {resendError?.id === invite.id && (
                       <p className="text-xs text-red-700 mt-1">{resendError.message}</p>
                     )}
+                    {revokeError?.id === invite.id && (
+                      <p className="text-xs text-red-700 mt-1">{revokeError.message}</p>
+                    )}
                   </div>
                   <div className="shrink-0 flex items-center gap-2">
-                    {invite.invitee_email && (
-                      <button
-                        type="button"
-                        onClick={() => handleResend(invite)}
-                        disabled={resendingId === invite.id}
-                        className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-                      >
-                        {resendingId === invite.id
-                          ? 'Sending…'
-                          : resentId === invite.id
-                            ? 'Sent!'
-                            : 'Resend email'}
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleResend(invite)}
+                      disabled={resendingId === invite.id}
+                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+                    >
+                      {resendingId === invite.id
+                        ? 'Sending…'
+                        : resentId === invite.id
+                          ? 'Sent!'
+                          : 'Resend email'}
+                    </button>
                     <button
                       type="button"
                       onClick={() => handleCopy(invite)}
                       className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
                     >
                       {copiedId === invite.id ? 'Copied!' : 'Copy link'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRevoke(invite)}
+                      disabled={revokingId === invite.id}
+                      className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+                    >
+                      {revokingId === invite.id ? 'Revoking…' : 'Revoke'}
                     </button>
                   </div>
                 </div>
