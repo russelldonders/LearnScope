@@ -238,7 +238,7 @@ export default function SkillDetail() {
               onClick={() => setAssessMode('evaluate')}
               disabled={!hasAnyEvaluationInput}
               title={!hasAnyEvaluationInput ? 'Self-assess, invite a rating, record activity, or take the quiz first' : undefined}
-              className="w-full mb-6 rounded-md border border-moss text-moss py-2.5 font-medium hover:bg-moss/5 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full mb-6 rounded-md bg-moss text-paper py-2.5 px-4 font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Evaluate Skill
             </button>
@@ -260,7 +260,7 @@ export default function SkillDetail() {
                   onClick={() => setAssessMode('baseline')}
                   disabled={!hasAnyEvaluationInput}
                   title={!hasAnyEvaluationInput ? 'Complete at least one checklist item first' : undefined}
-                  className="w-full mb-6 rounded-md bg-moss text-paper py-2.5 font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="w-full mb-6 rounded-md bg-moss text-paper py-2.5 px-4 font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Assess baseline with AI
                 </button>
@@ -271,7 +271,7 @@ export default function SkillDetail() {
               <button
                 type="button"
                 onClick={() => setTargetOpen(true)}
-                className="w-full mb-6 rounded-md bg-moss text-paper py-2.5 font-medium hover:opacity-90"
+                className="w-full mb-6 rounded-md bg-moss text-paper py-2.5 px-4 font-medium hover:opacity-90"
               >
                 Set a target
               </button>
@@ -343,13 +343,13 @@ export default function SkillDetail() {
               />
             )}
 
-            <div className="flex items-center gap-1 border-b border-hairline mb-4 overflow-x-auto">
+            <div className="flex items-center flex-wrap gap-1 border-b border-hairline mb-4">
               {TABS.map((t) => (
                 <button
                   key={t.id}
                   type="button"
                   onClick={() => setTab(t.id)}
-                  className={`shrink-0 px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
+                  className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
                     tab === t.id
                       ? 'border-moss text-ink'
                       : 'border-transparent text-secondary hover:text-ink'
@@ -417,15 +417,18 @@ function LifecycleProgress({ stage }) {
   const isException = stage === 'at_risk' || stage === 'archived'
   // Stages the learner has already moved past are dropped from view rather
   // than just dimmed -- the diagram only shows where things stand from here.
-  const visibleStages = currentIndex >= 0 ? SKILL_LIFECYCLE_FLOW_STAGES.slice(currentIndex) : SKILL_LIFECYCLE_FLOW_STAGES
+  const slicedStages = currentIndex >= 0 ? SKILL_LIFECYCLE_FLOW_STAGES.slice(currentIndex) : SKILL_LIFECYCLE_FLOW_STAGES
+  // validated/maintained intentionally share a label (see skillLifecycle.js)
+  // -- collapse consecutive duplicates so the diagram never repeats a chip.
+  const visibleStages = slicedStages.filter((s, i) => i === 0 || s.label !== slicedStages[i - 1].label)
 
   return (
     <div className="mb-6">
-      <div className="flex items-center overflow-x-auto pb-1">
+      <div className="flex items-center flex-wrap gap-y-1">
         {visibleStages.map((s, i) => {
           const isCurrent = !isException && i === 0
           return (
-            <div key={s.value} className="flex items-center shrink-0">
+            <div key={s.value} className="flex items-center">
               <span
                 className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2.5 py-1 border whitespace-nowrap ${
                   isCurrent
@@ -712,7 +715,7 @@ function HistorySection({ skill, history, peerRatings, relationshipLinks, target
 function TargetTimelineEntry({ target, hasMore }) {
   return (
     <div className="flex gap-3">
-      <div className="flex flex-col items-center">
+      <div className="flex flex-col items-center w-12 shrink-0">
         <div className="rounded-full border-2 border-dashed border-moss/50 p-0.5">
           <GrowthRing level={target.target_level} size={40} />
         </div>
@@ -742,7 +745,7 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
   if (event.type === 'added') {
     return (
       <div className="flex gap-3">
-        <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center w-12 shrink-0">
           <div className="flex items-center justify-center w-8 h-8 rounded-full border border-hairline bg-paper">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-secondary">
               <line x1="12" y1="5" x2="12" y2="19" />
@@ -769,7 +772,7 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
     const rating = event.rating
     return (
       <div className="flex gap-3">
-        <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center w-12 shrink-0">
           <GrowthRing level={rating.level} size={isMostRecent ? 48 : 32} />
           {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
         </div>
@@ -801,7 +804,7 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
     const exp = link.experience
     return (
       <div className="flex gap-3">
-        <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center w-12 shrink-0">
           <div className="flex items-center justify-center w-8 h-8 rounded-full border border-hairline bg-paper">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-secondary">
               <path d="M3 7l9-4 9 4-9 4-9-4z" />
@@ -833,7 +836,7 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
 
   return (
     <div className="flex gap-3">
-      <div className="flex flex-col items-center">
+      <div className="flex flex-col items-center w-12 shrink-0">
         <GrowthRing level={entry.level} size={isMostRecent ? 48 : 32} />
         {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
       </div>
@@ -1149,7 +1152,7 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
           type="button"
           onClick={handleDelete}
           disabled={saving}
-          className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm hover:bg-paper disabled:opacity-60"
+          className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
         >
           Delete skill
         </button>
