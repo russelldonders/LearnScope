@@ -3,11 +3,29 @@ import { supabase } from './supabaseClient'
 export async function listLibrarySkills() {
   const { data, error } = await supabase
     .from('skill_library')
-    .select('id, name, category, description')
+    .select('id, name, category, description, is_private')
     .order('name')
     .limit(500)
   if (error) throw error
   return data ?? []
+}
+
+// skill_library(lower(name)) is only unique among public entries (0028);
+// private entries are unique per creator instead, since a private entry
+// invisible to everyone else can't be allowed to block a public name.
+export function isDuplicateLibrarySkillError(error) {
+  return (
+    error?.code === '23505' &&
+    (error?.message?.includes('skill_library_public_name_lower_idx') ||
+      error?.message?.includes('skill_library_private_name_lower_idx'))
+  )
+}
+
+export function duplicateLibrarySkillMessage(error, name) {
+  if (error?.message?.includes('skill_library_private_name_lower_idx')) {
+    return `You already have a private skill named "${name.trim()}".`
+  }
+  return `A skill named "${name.trim()}" already exists in the library — use the search above to find and add it instead.`
 }
 
 // Case-insensitive exact-name match: reuse the existing library entry if

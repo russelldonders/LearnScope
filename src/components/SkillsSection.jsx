@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import SkillCard from './SkillCard'
-import SkillModal from './SkillModal'
+import FindSkillModal from './FindSkillModal'
 import TrackingReasonIcon from './TrackingReasonIcon'
 import { TRACKING_REASONS, TRACKING_REASON_LABELS } from '../lib/trackingReasons'
 
@@ -83,7 +83,7 @@ export default function SkillsSection() {
           onClick={() => setAddOpen(true)}
           className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90"
         >
-          + Add skill
+          + Find skill
         </button>
       </div>
 
@@ -179,7 +179,7 @@ export default function SkillsSection() {
       )}
 
       {addOpen && (
-        <SkillModal
+        <FindSkillModal
           onClose={() => setAddOpen(false)}
           onCreated={() => {
             setAddOpen(false)

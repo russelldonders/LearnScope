@@ -6,7 +6,7 @@ import { formatMonthYear } from '../lib/dates'
 import { LEVEL_LABELS } from '../lib/levels'
 import AppHeader from '../components/AppHeader'
 import SkillCard from '../components/SkillCard'
-import SkillModal from '../components/SkillModal'
+import FindSkillModal from '../components/FindSkillModal'
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -592,7 +592,7 @@ function SkillsSubsection({ item, skillLinks, onChange, user }) {
           onClick={() => setAddOpen(true)}
           className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90"
         >
-          + Add skill
+          + Find skill
         </button>
       </div>
 
@@ -618,7 +618,7 @@ function SkillsSubsection({ item, skillLinks, onChange, user }) {
       )}
 
       {addOpen && (
-        <SkillModal
+        <FindSkillModal
           experienceId={item.id}
           onClose={() => setAddOpen(false)}
           onCreated={() => {
