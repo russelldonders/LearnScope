@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { formatMonthYear } from '../lib/dates'
 import { LEVEL_LABELS } from '../lib/levels'
-import { SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
 import AppHeader from '../components/AppHeader'
 import SkillCard from '../components/SkillCard'
 import SkillModal from '../components/SkillModal'
@@ -19,11 +18,12 @@ const TABS = [
 export default function ExperienceDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { user } = useAuth()
   const [item, setItem] = useState(null)
   const [loadingItem, setLoadingItem] = useState(true)
   const [notFound, setNotFound] = useState(false)
-  const [tab, setTab] = useState('overview')
+  const [tab, setTab] = useState(location.state?.tab ?? 'overview')
   const [courses, setCourses] = useState([])
   const [linkedCourses, setLinkedCourses] = useState([])
   const [skillLinks, setSkillLinks] = useState([])
@@ -72,7 +72,7 @@ export default function ExperienceDetail() {
         .eq('experience_id', item.id),
       supabase
         .from('skill_experience_links')
-        .select('id, skill_id, relationship, skills(id, name)')
+        .select('id, skill_id, skills(id, name)')
         .eq('experience_id', item.id)
         .order('created_at'),
       supabase
@@ -351,17 +351,6 @@ function DetailsTab({ item, onSave, onDelete }) {
 function OverviewTab({ item, linkedCourses, skillLinks, achievements, loaded }) {
   if (!loaded) return <p className="text-sm text-secondary">Loading…</p>
 
-  const grouped = []
-  const bySkill = new Map()
-  for (const l of skillLinks) {
-    if (!bySkill.has(l.skill_id)) {
-      const entry = { skillId: l.skill_id, name: l.skills?.name, relationships: [] }
-      bySkill.set(l.skill_id, entry)
-      grouped.push(entry)
-    }
-    bySkill.get(l.skill_id).relationships.push(l.relationship)
-  }
-
   return (
     <div className="space-y-6">
       <div>
@@ -398,16 +387,13 @@ function OverviewTab({ item, linkedCourses, skillLinks, achievements, loaded }) 
 
       <div>
         <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">Skills developed</h4>
-        {grouped.length === 0 ? (
+        {skillLinks.length === 0 ? (
           <p className="text-sm text-secondary">No skills linked yet.</p>
         ) : (
           <ul className="space-y-1">
-            {grouped.map((g) => (
-              <li key={g.skillId} className="text-sm text-ink">
-                {g.name} —{' '}
-                <span className="text-secondary">
-                  {g.relationships.map((r) => SKILL_RELATIONSHIP_LABELS[r]).join(', ')}
-                </span>
+            {skillLinks.map((l) => (
+              <li key={l.skill_id} className="text-sm text-ink">
+                {l.skills?.name}
               </li>
             ))}
           </ul>

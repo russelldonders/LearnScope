@@ -11,7 +11,6 @@ import EvidenceFields from '../components/EvidenceFields'
 import TrackingReasonPicker from '../components/TrackingReasonPicker'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
-import { SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
 import { activityName, verbLabel } from '../lib/xapiStatement'
 import { syncCurrentRoleLinks } from '../lib/currentRole'
 import { listTags, listSkillTags, addTagToSkill, removeSkillTagLink } from '../lib/skillTags'
@@ -92,7 +91,7 @@ export default function SkillDetail() {
         .order('rated_at', { ascending: false }),
       supabase
         .from('skill_experience_links')
-        .select('id, relationship, experience(id, title, organization, type, start_date, end_date)')
+        .select('id, experience(id, title, organization, type, start_date, end_date)')
         .eq('skill_id', skill.id),
       supabase
         .from('xapi_statements')
@@ -133,7 +132,11 @@ export default function SkillDetail() {
     <div className="min-h-screen bg-paper">
       <AppHeader />
       <main className="max-w-4xl mx-auto px-4 py-8">
-        <Link to={backTo} className="text-sm text-secondary hover:text-ink mb-6 inline-block">
+        <Link
+          to={backTo}
+          state={{ tab: 'skills' }}
+          className="text-sm text-secondary hover:text-ink mb-6 inline-block"
+        >
           {backLabel}
         </Link>
 
@@ -217,7 +220,7 @@ export default function SkillDetail() {
                 onRemoveTag={handleRemoveTag}
                 user={user}
                 onUpdated={loadSkill}
-                onDeleted={() => navigate(backTo)}
+                onDeleted={() => navigate(backTo, { state: { tab: 'skills' } })}
               />
             )}
 
@@ -491,14 +494,12 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
           {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
         </div>
         <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3">
-          <p className="text-sm font-medium text-ink">
-            {SKILL_RELATIONSHIP_LABELS[link.relationship] ?? link.relationship}
-          </p>
+          <p className="text-sm font-medium text-ink">{exp.title}</p>
           <p className="font-mono text-xs text-secondary mt-0.5">
             {formatMonthYear(exp.start_date)} – {exp.end_date ? formatMonthYear(exp.end_date) : 'present'}
           </p>
           <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
-            {exp.type === 'education' ? 'During study' : 'During employment'}: {exp.title} · {exp.organization}
+            {exp.type === 'education' ? 'Used during study' : 'Used during employment'} · {exp.organization}
           </p>
         </div>
       </div>

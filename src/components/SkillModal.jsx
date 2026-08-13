@@ -75,7 +75,6 @@ export default function SkillModal({ onClose, onCreated, experienceId }) {
           user_id: user.id,
           skill_id: skill.id,
           experience_id: experienceId,
-          relationship: 'developed',
         })
         if (linkError) throw linkError
       }

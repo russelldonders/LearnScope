@@ -36,7 +36,6 @@ export async function syncCurrentRoleLinks(userId, skillId, isCurrentRole) {
           user_id: userId,
           skill_id: skillId,
           experience_id,
-          relationship: 'applied',
         }))
       )
     }
