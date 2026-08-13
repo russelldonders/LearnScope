@@ -10,6 +10,7 @@ import GrowthRing from '../components/GrowthRing'
 import EvidenceFields from '../components/EvidenceFields'
 import TrackingReasonPicker from '../components/TrackingReasonPicker'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
+import { SKILL_LIFECYCLE_LABELS, SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
 import { activityName, verbLabel } from '../lib/xapiStatement'
 import { syncCurrentRoleLinks } from '../lib/currentRole'
@@ -151,7 +152,11 @@ export default function SkillDetail() {
                 <div>
                   <h2 className="font-display text-2xl text-ink">{skill.name}</h2>
                   <p className="text-sm text-secondary">
-                    {skill.level ? LEVEL_LABELS[skill.level] : 'Not yet self-assessed'}
+                    {skill.level
+                      ? LEVEL_LABELS[skill.level]
+                      : skill.lifecycle_stage
+                        ? SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]
+                        : 'Not yet self-assessed'}
                   </p>
                   {skillTags.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">
@@ -168,6 +173,8 @@ export default function SkillDetail() {
                 </div>
               </div>
             </div>
+
+            {skill.lifecycle_stage && <LifecycleProgress stage={skill.lifecycle_stage} />}
 
             <button
               type="button"
@@ -251,6 +258,45 @@ export default function SkillDetail() {
           </div>
         )}
       </main>
+    </div>
+  )
+}
+
+function LifecycleProgress({ stage }) {
+  const currentIndex = SKILL_LIFECYCLE_FLOW_STAGES.findIndex((s) => s.value === stage)
+  const isException = stage === 'at_risk' || stage === 'archived'
+
+  return (
+    <div className="mb-6">
+      <div className="flex items-center overflow-x-auto pb-1">
+        {SKILL_LIFECYCLE_FLOW_STAGES.map((s, i) => {
+          const isCurrent = !isException && i === currentIndex
+          const isPast = !isException && currentIndex >= 0 && i < currentIndex
+          return (
+            <div key={s.value} className="flex items-center shrink-0">
+              <span
+                className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2.5 py-1 border whitespace-nowrap ${
+                  isCurrent
+                    ? 'bg-moss text-paper border-moss'
+                    : isPast
+                      ? 'border-moss text-moss'
+                      : 'border-hairline text-secondary'
+                }`}
+              >
+                {s.label}
+              </span>
+              {i < SKILL_LIFECYCLE_FLOW_STAGES.length - 1 && (
+                <span className={`w-4 h-px mx-1 shrink-0 ${isPast ? 'bg-moss' : 'bg-hairline'}`} />
+              )}
+            </div>
+          )
+        })}
+      </div>
+      {isException && (
+        <span className="inline-block font-mono text-[10px] uppercase tracking-wide text-gold border border-gold rounded-full px-2.5 py-1 mt-2">
+          {SKILL_LIFECYCLE_LABELS[stage]}
+        </span>
+      )}
     </div>
   )
 }

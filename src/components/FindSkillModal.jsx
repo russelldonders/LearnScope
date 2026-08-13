@@ -17,6 +17,7 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
   const [query, setQuery] = useState('')
   const [libraryResults, setLibraryResults] = useState([])
   const [loadingLibrary, setLoadingLibrary] = useState(true)
+  const [ownedNames, setOwnedNames] = useState(new Set())
   const [allTags, setAllTags] = useState([])
 
   const [selected, setSelected] = useState(null)
@@ -36,13 +37,23 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
       .then(setLibraryResults)
       .finally(() => setLoadingLibrary(false))
     listTags().then(setAllTags)
+    supabase
+      .from('skills')
+      .select('name')
+      .eq('user_id', user.id)
+      .then(({ data }) => setOwnedNames(new Set((data ?? []).map((s) => s.name.toLowerCase()))))
   }, [])
+
+  const availableLibrary = useMemo(
+    () => libraryResults.filter((s) => !ownedNames.has(s.name.toLowerCase())),
+    [libraryResults, ownedNames]
+  )
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return libraryResults
-    return libraryResults.filter((s) => s.name.toLowerCase().includes(q))
-  }, [libraryResults, query])
+    if (!q) return availableLibrary
+    return availableLibrary.filter((s) => s.name.toLowerCase().includes(q))
+  }, [availableLibrary, query])
 
   function selectExisting(libSkill) {
     setSelected({ id: libSkill.id, name: libSkill.name, isNew: false })

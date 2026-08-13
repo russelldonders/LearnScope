@@ -13,3 +13,10 @@ export const SKILL_LIFECYCLE_STAGES = [
 export const SKILL_LIFECYCLE_LABELS = Object.fromEntries(
   SKILL_LIFECYCLE_STAGES.map((s) => [s.value, s.label])
 )
+
+// The forward-moving progression shown as a stepper on a skill's page.
+// at_risk/archived are exception/terminal states outside the normal flow,
+// so they're excluded here and surfaced separately instead.
+export const SKILL_LIFECYCLE_FLOW_STAGES = SKILL_LIFECYCLE_STAGES.filter(
+  (s) => s.value !== 'at_risk' && s.value !== 'archived'
+)
