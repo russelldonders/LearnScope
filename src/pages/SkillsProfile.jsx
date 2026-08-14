@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 
 export default function SkillsProfile() {
@@ -59,21 +60,13 @@ export default function SkillsProfile() {
 
   return (
     <div className="min-h-screen bg-paper">
-      <header className="border-b border-hairline bg-card">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to="/dashboard" className="font-display text-2xl text-ink">
-            LearnScope
-          </Link>
-          <Link
-            to="/connections"
-            className="text-sm text-secondary hover:text-ink border border-hairline rounded-md px-3 py-1.5"
-          >
-            Back to connections
-          </Link>
-        </div>
-      </header>
+      <AppHeader />
 
-      <main className="max-w-2xl mx-auto px-4 py-8">
+      <main className="max-w-4xl mx-auto px-4 py-8">
+        <Link to="/connections" className="text-sm text-secondary hover:text-ink mb-6 inline-block">
+          ← Back to connections
+        </Link>
+
         {loading ? (
           <p className="text-secondary">Loading…</p>
         ) : error ? (

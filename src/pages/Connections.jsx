@@ -119,7 +119,7 @@ export default function Connections() {
     <div className="min-h-screen bg-paper">
       <AppHeader />
 
-      <main className="max-w-2xl mx-auto px-4 py-8 space-y-10">
+      <main className="max-w-4xl mx-auto px-4 py-8 space-y-10">
         <div>
           <h2 className="font-display text-xl text-ink mb-6">Your connections</h2>
 

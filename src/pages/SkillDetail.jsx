@@ -21,6 +21,7 @@ import RecordExperienceModal from '../components/RecordExperienceModal'
 import BaselineQuizModal from '../components/BaselineQuizModal'
 import AssessBaselineModal from '../components/AssessBaselineModal'
 import SetTargetModal from '../components/SetTargetModal'
+import LifecycleStageIcon from '../components/LifecycleStageIcon'
 import TagsField from '../components/TagsField'
 
 const TABS = [
@@ -194,7 +195,10 @@ export default function SkillDetail() {
                 <GrowthRing level={skill.level} size={56} />
                 <div>
                   <h2 className="font-display text-2xl text-ink">{skill.name}</h2>
-                  <p className="text-sm text-secondary">
+                  <p className="text-sm text-secondary flex items-center gap-1.5">
+                    {!skill.level && skill.lifecycle_stage && (
+                      <LifecycleStageIcon stage={skill.lifecycle_stage} />
+                    )}
                     {skill.level
                       ? LEVEL_LABELS[skill.level]
                       : skill.lifecycle_stage
@@ -232,16 +236,6 @@ export default function SkillDetail() {
             </div>
 
             {skill.lifecycle_stage && <LifecycleProgress stage={skill.lifecycle_stage} />}
-
-            <button
-              type="button"
-              onClick={() => setAssessMode('evaluate')}
-              disabled={!hasAnyEvaluationInput}
-              title={!hasAnyEvaluationInput ? 'Self-assess, invite a rating, record activity, or take the quiz first' : undefined}
-              className="w-full mb-6 rounded-md bg-moss text-paper py-2.5 px-4 font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Evaluate Skill
-            </button>
 
             {skill.lifecycle_stage === 'identified' && (
               <>
@@ -372,6 +366,24 @@ export default function SkillDetail() {
                   onUpdated={loadSkill}
                   onDeleted={() => navigate(backTo, { state: { tab: 'skills' } })}
                 />
+                <div className="border-t border-hairline pt-4">
+                  <h3 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">
+                    Skill evaluation
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setAssessMode('evaluate')}
+                    disabled={!hasAnyEvaluationInput}
+                    title={
+                      !hasAnyEvaluationInput
+                        ? 'Self-assess, invite a rating, record activity, or take the quiz first'
+                        : undefined
+                    }
+                    className="w-full rounded-md bg-moss text-paper py-2.5 px-4 font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Evaluate Skill
+                  </button>
+                </div>
                 <SettingsSection skill={skill} onUpdated={loadSkill} />
                 <ScheduleSection skill={skill} onUpdated={loadSkill} />
               </div>
@@ -430,12 +442,13 @@ function LifecycleProgress({ stage }) {
           return (
             <div key={s.value} className="flex items-center">
               <span
-                className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2.5 py-1 border whitespace-nowrap ${
+                className={`flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide rounded-full px-2.5 py-1 border whitespace-nowrap ${
                   isCurrent
                     ? 'bg-moss text-paper border-moss'
                     : 'border-hairline text-secondary'
                 }`}
               >
+                <LifecycleStageIcon stage={s.value} />
                 {s.label}
               </span>
               {i < visibleStages.length - 1 && <span className="w-4 h-px mx-1 shrink-0 bg-hairline" />}
@@ -444,7 +457,8 @@ function LifecycleProgress({ stage }) {
         })}
       </div>
       {isException && (
-        <span className="inline-block font-mono text-[10px] uppercase tracking-wide text-gold border border-gold rounded-full px-2.5 py-1 mt-2">
+        <span className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide text-gold border border-gold rounded-full px-2.5 py-1 mt-2">
+          <LifecycleStageIcon stage={stage} />
           {SKILL_LIFECYCLE_LABELS[stage]}
         </span>
       )}
@@ -686,6 +700,7 @@ function HistorySection({ skill, history, peerRatings, relationshipLinks, target
             .filter((link) => link.experience)
             .map((link) => ({ type: 'relationship', date: link.experience.start_date, link })),
           { type: 'added', date: skill.date_added, source: skill.source },
+          { type: 'today', date: new Date().toISOString() },
         ].sort((a, b) => new Date(b.date) - new Date(a.date))
         const mostRecentRatingIndex = events.findIndex((e) => e.type === 'assessment' || e.type === 'peer')
 
@@ -695,8 +710,8 @@ function HistorySection({ skill, history, peerRatings, relationshipLinks, target
             {events.map((event, i) => (
               <TimelineEntry
                 key={
-                  event.type === 'added'
-                    ? 'added'
+                  event.type === 'added' || event.type === 'today'
+                    ? event.type
                     : (event.entry ?? event.rating ?? event.link).id
                 }
                 event={event}
@@ -741,6 +756,23 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
   const boxClass = isMostRecent
     ? 'rounded-md border border-moss/40 bg-moss/5 p-3'
     : 'rounded-md border border-hairline bg-paper p-3'
+
+  if (event.type === 'today') {
+    return (
+      <div className="flex gap-3">
+        <div className="flex flex-col items-center w-12 shrink-0">
+          <span className="w-2.5 h-2.5 rounded-full bg-ink shrink-0" />
+          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
+        </div>
+        <div className="min-w-0 flex-1 mb-6 flex items-center gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-wide text-ink font-semibold">
+            Today
+          </span>
+          <span className="flex-1 h-px bg-hairline" />
+        </div>
+      </div>
+    )
+  }
 
   if (event.type === 'added') {
     return (
@@ -1209,12 +1241,11 @@ function RatingsSection({ peerRatings, loading, onSelfAssess, onInvite }) {
 function ExperiencesSection({ statements, loading, onRecordExperience }) {
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary">Experiences</h4>
+      <div className="flex items-center gap-2 mb-4">
         <button
           type="button"
           onClick={onRecordExperience}
-          className="text-xs text-moss font-medium"
+          className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
         >
           + Record experience
         </button>
