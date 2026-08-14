@@ -50,15 +50,17 @@ export async function assessBaseline({ skill, selfLevel, selfComments, experienc
 }
 
 // mode: 'baseline' (the one-time identified -> baseline_assessed action) or
-// 'evaluate' (the always-available re-assessment) -- same synthesis, only
-// the recorded source and whether the lifecycle stage advances differ.
+// 'evaluate' (the always-available baseline re-assessment). Both save the
+// same 'ai_baseline' source -- re-evaluating updates the skill's current
+// baseline while preserving the earlier one as history -- only whether the
+// lifecycle stage advances differs between the two.
 export async function saveAssessmentResult(user, skill, level, reasoning, mode) {
   const { error: assessError } = await supabase.from('skill_assessments').insert({
     skill_id: skill.id,
     user_id: user.id,
     level,
     comments: reasoning,
-    source: mode === 'baseline' ? 'ai_baseline' : 'ai_evaluation',
+    source: 'ai_baseline',
   })
   if (assessError) throw assessError
 

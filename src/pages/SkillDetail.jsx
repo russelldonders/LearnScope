@@ -205,18 +205,6 @@ export default function SkillDetail() {
                         ? SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]
                         : 'Not yet self-assessed'}
                   </p>
-                  {skillTags.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {skillTags.map((t) => (
-                        <span
-                          key={t.id}
-                          className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
-                        >
-                          {t.tags?.name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -368,7 +356,7 @@ export default function SkillDetail() {
                 />
                 <div className="border-t border-hairline pt-4">
                   <h3 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">
-                    Skill evaluation
+                    Baseline
                   </h3>
                   <button
                     type="button"
@@ -381,7 +369,7 @@ export default function SkillDetail() {
                     }
                     className="w-full rounded-md bg-moss text-paper py-2.5 px-4 font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    Evaluate Skill
+                    Evaluate Baseline
                   </button>
                 </div>
                 <SettingsSection skill={skill} onUpdated={loadSkill} />
@@ -597,7 +585,7 @@ function SelfAssessSection({ skill, user, onAssessed }) {
 
       // A self-assessment is recorded as history but doesn't move the
       // skill's official current level -- only an explicit "Assess
-      // baseline" / "Evaluate Skill" action does that.
+      // baseline" / "Evaluate Baseline" action does that.
       if (skill.checkin_frequency_value && skill.checkin_frequency_unit) {
         const { error: skillError } = await supabase
           .from('skills')
@@ -703,6 +691,12 @@ function HistorySection({ skill, history, peerRatings, relationshipLinks, target
           { type: 'today', date: new Date().toISOString() },
         ].sort((a, b) => new Date(b.date) - new Date(a.date))
         const mostRecentRatingIndex = events.findIndex((e) => e.type === 'assessment' || e.type === 'peer')
+        // The "Baseline" badge marks the most recent AI-assessed baseline
+        // specifically -- self-assessments and peer ratings are additional
+        // input toward an evaluation, not a baseline in their own right.
+        const mostRecentBaselineIndex = events.findIndex(
+          (e) => e.type === 'assessment' && e.entry.source === 'ai_baseline'
+        )
 
         return (
           <div>
@@ -717,6 +711,7 @@ function HistorySection({ skill, history, peerRatings, relationshipLinks, target
                 event={event}
                 isLast={i === events.length - 1}
                 isMostRecent={i === mostRecentRatingIndex}
+                isBaseline={i === mostRecentBaselineIndex}
                 assessorName={assessorName}
               />
             ))}
@@ -731,28 +726,22 @@ function TargetTimelineEntry({ target, hasMore }) {
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center w-12 shrink-0">
-        <div className="rounded-full border-2 border-dashed border-moss/50 p-0.5">
-          <GrowthRing level={target.target_level} size={40} />
+        <div className="rounded-full border-2 border-dashed border-hairline p-0.5">
+          <GrowthRing level={target.target_level} size={32} />
         </div>
         {hasMore && <span className="w-0 flex-1 border-l-2 border-dashed border-hairline mt-1" />}
       </div>
-      <div className="min-w-0 flex-1 mb-6 rounded-md border-2 border-dashed border-moss/40 bg-moss/5 p-3">
-        <div className="flex items-center gap-2">
-          <p className="text-base font-semibold text-ink">{LEVEL_LABELS[target.target_level]}</p>
-          <span className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5">
-            Target
-          </span>
-        </div>
-        <p className="font-mono text-xs text-secondary mt-0.5">
-          By {new Date(`${target.target_date}T00:00:00`).toLocaleDateString()}
+      <div className="min-w-0 flex-1 mb-6 flex items-center">
+        <p className="font-mono text-xs text-secondary/70 italic">
+          Target {LEVEL_LABELS[target.target_level]} aimed to be achieved by{' '}
+          {new Date(`${target.target_date}T00:00:00`).toLocaleDateString()}
         </p>
-        {target.comments && <p className="text-sm text-ink mt-1">{target.comments}</p>}
       </div>
     </div>
   )
 }
 
-function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
+function TimelineEntry({ event, isLast, isMostRecent, isBaseline, assessorName }) {
   const boxClass = isMostRecent
     ? 'rounded-md border border-moss/40 bg-moss/5 p-3'
     : 'rounded-md border border-hairline bg-paper p-3'
@@ -766,7 +755,7 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
         </div>
         <div className="min-w-0 flex-1 mb-6 flex items-center gap-2">
           <span className="font-mono text-[10px] uppercase tracking-wide text-ink font-semibold">
-            Today
+            Today · {new Date(event.date).toLocaleDateString()}
           </span>
           <span className="flex-1 h-px bg-hairline" />
         </div>
@@ -809,16 +798,9 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
           {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
         </div>
         <div className={`min-w-0 flex-1 mb-6 ${boxClass}`}>
-          <div className="flex items-center gap-2">
-            <p className={isMostRecent ? 'text-base font-semibold text-ink' : 'text-sm font-medium text-ink'}>
-              {LEVEL_LABELS[rating.level]}
-            </p>
-            {isMostRecent && (
-              <span className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5">
-                Most Recent Evaluation
-              </span>
-            )}
-          </div>
+          <p className={isMostRecent ? 'text-base font-semibold text-ink' : 'text-sm font-medium text-ink'}>
+            {LEVEL_LABELS[rating.level]}
+          </p>
           <p className="font-mono text-xs text-secondary mt-0.5">
             {new Date(rating.rated_at).toLocaleDateString()}
           </p>
@@ -877,9 +859,9 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
           <p className={isMostRecent ? 'text-base font-semibold text-ink' : 'text-sm font-medium text-ink'}>
             {LEVEL_LABELS[entry.level]}
           </p>
-          {isMostRecent && (
+          {isBaseline && (
             <span className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5">
-              Most Recent Evaluation
+              Baseline
             </span>
           )}
         </div>
@@ -893,10 +875,6 @@ function TimelineEntry({ event, isLast, isMostRecent, assessorName }) {
         ) : entry.source === 'ai_baseline' ? (
           <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
             AI-assessed baseline, from self-assessment, peer ratings, activity and quiz inputs
-          </p>
-        ) : entry.source === 'ai_evaluation' ? (
-          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
-            AI skill evaluation, from self-assessment, peer ratings, activity and quiz inputs
           </p>
         ) : (
           assessorName && (
