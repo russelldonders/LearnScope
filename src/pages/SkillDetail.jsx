@@ -15,6 +15,7 @@ import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
 import { activityName, verbLabel } from '../lib/xapiStatement'
 import { syncCurrentRoleLinks } from '../lib/currentRole'
 import { listTags, listSkillTags, addTagToSkill, removeSkillTagLink } from '../lib/skillTags'
+import { SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import InviteRaterModal from '../components/InviteRaterModal'
 import RecordExperienceModal from '../components/RecordExperienceModal'
@@ -28,6 +29,7 @@ const TABS = [
   { id: 'history', label: 'Overview' },
   { id: 'ratings', label: 'Ratings' },
   { id: 'experiences', label: 'Experiences' },
+  { id: 'training', label: 'Training' },
   { id: 'details', label: 'Details' },
 ]
 
@@ -44,12 +46,14 @@ export default function SkillDetail() {
   const [tab, setTab] = useState('history')
   const [history, setHistory] = useState([])
   const [peerRatings, setPeerRatings] = useState([])
+  const [raterAvatars, setRaterAvatars] = useState({})
   const [relationshipLinks, setRelationshipLinks] = useState([])
   const [statements, setStatements] = useState([])
   const [skillTags, setSkillTags] = useState([])
   const [allTags, setAllTags] = useState([])
   const [quizResults, setQuizResults] = useState([])
   const [targets, setTargets] = useState([])
+  const [courseLinks, setCourseLinks] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [assessorName, setAssessorName] = useState(null)
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -96,6 +100,7 @@ export default function SkillDetail() {
       tags,
       { data: quizzes },
       { data: skillTargets },
+      { data: courses },
     ] = await Promise.all([
         supabase
           .from('skill_assessments')
@@ -127,6 +132,10 @@ export default function SkillDetail() {
           .select('*')
           .eq('skill_id', skill.id)
           .order('created_at', { ascending: false }),
+        supabase
+          .from('skill_course_links')
+          .select('id, relationship, courses(id, name, provider, course_type, duration, completed_date)')
+          .eq('skill_id', skill.id),
       ])
     setHistory(assessments ?? [])
     setPeerRatings(ratings ?? [])
@@ -135,7 +144,19 @@ export default function SkillDetail() {
     setTargets(skillTargets ?? [])
     setSkillTags(tags ?? [])
     setQuizResults(quizzes ?? [])
+    setCourseLinks(courses ?? [])
     setLoadingHistory(false)
+
+    const raterIds = [...new Set((ratings ?? []).map((r) => r.rater_id).filter(Boolean))]
+    if (raterIds.length > 0) {
+      const { data: raterProfiles } = await supabase
+        .from('profiles')
+        .select('id, avatar_url')
+        .in('id', raterIds)
+      setRaterAvatars(Object.fromEntries((raterProfiles ?? []).map((p) => [p.id, p.avatar_url])))
+    } else {
+      setRaterAvatars({})
+    }
   }
 
   async function handleAddTag(tagName) {
@@ -386,6 +407,7 @@ export default function SkillDetail() {
                 targets={targets}
                 loading={loadingHistory}
                 assessorName={assessorName}
+                raterAvatars={raterAvatars}
               />
             )}
 
@@ -395,6 +417,7 @@ export default function SkillDetail() {
                 loading={loadingHistory}
                 onSelfAssess={() => setSelfAssessOpen(true)}
                 onInvite={() => setInviteOpen(true)}
+                raterAvatars={raterAvatars}
               />
             )}
 
@@ -404,6 +427,10 @@ export default function SkillDetail() {
                 loading={loadingHistory}
                 onRecordExperience={() => setRecordExperienceOpen(true)}
               />
+            )}
+
+            {tab === 'training' && (
+              <TrainingSection courseLinks={courseLinks} loading={loadingHistory} />
             )}
           </div>
         )}
@@ -657,7 +684,16 @@ function SelfAssessSection({ skill, user, onAssessed }) {
   )
 }
 
-function HistorySection({ skill, history, peerRatings, relationshipLinks, targets, loading, assessorName }) {
+function HistorySection({
+  skill,
+  history,
+  peerRatings,
+  relationshipLinks,
+  targets,
+  loading,
+  assessorName,
+  raterAvatars,
+}) {
   const due = isSelfAssessmentDue(skill.next_checkin_date)
   const currentTarget = targets[0]
 
@@ -713,6 +749,7 @@ function HistorySection({ skill, history, peerRatings, relationshipLinks, target
                 isMostRecent={i === mostRecentRatingIndex}
                 isBaseline={i === mostRecentBaselineIndex}
                 assessorName={assessorName}
+                raterAvatars={raterAvatars}
               />
             ))}
           </div>
@@ -729,10 +766,10 @@ function TargetTimelineEntry({ target, hasMore }) {
         <div className="rounded-full border-2 border-dashed border-hairline p-0.5">
           <GrowthRing level={target.target_level} size={32} />
         </div>
-        {hasMore && <span className="w-0 flex-1 border-l-2 border-dashed border-hairline mt-1" />}
+        {hasMore && <span className="w-px flex-1 bg-hairline mt-1" />}
       </div>
-      <div className="min-w-0 flex-1 mb-6 flex items-center">
-        <p className="font-mono text-xs text-secondary/70 italic">
+      <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper/60 p-3">
+        <p className="text-sm text-secondary">
           Target {LEVEL_LABELS[target.target_level]} aimed to be achieved by{' '}
           {new Date(`${target.target_date}T00:00:00`).toLocaleDateString()}
         </p>
@@ -741,7 +778,7 @@ function TargetTimelineEntry({ target, hasMore }) {
   )
 }
 
-function TimelineEntry({ event, isLast, isMostRecent, isBaseline, assessorName }) {
+function TimelineEntry({ event, isLast, isMostRecent, isBaseline, assessorName, raterAvatars }) {
   const boxClass = isMostRecent
     ? 'rounded-md border border-moss/40 bg-moss/5 p-3'
     : 'rounded-md border border-hairline bg-paper p-3'
@@ -804,7 +841,8 @@ function TimelineEntry({ event, isLast, isMostRecent, isBaseline, assessorName }
           <p className="font-mono text-xs text-secondary mt-0.5">
             {new Date(rating.rated_at).toLocaleDateString()}
           </p>
-          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+          <p className="font-mono text-[10px] text-secondary/80 mt-0.5 flex items-center gap-1.5">
+            <RaterAvatar url={raterAvatars?.[rating.rater_id]} />
             Rated by {rating.rater_name || rating.rater_email || 'a connection'}
           </p>
           {rating.comments && <p className="text-sm text-ink mt-1">{rating.comments}</p>}
@@ -913,6 +951,32 @@ function TimelineEntry({ event, isLast, isMostRecent, isBaseline, assessorName }
         )}
       </div>
     </div>
+  )
+}
+
+function RaterAvatar({ url, size = 16 }) {
+  return (
+    <span
+      className="inline-flex items-center justify-center rounded-full border border-hairline bg-paper overflow-hidden shrink-0"
+      style={{ width: size, height: size }}
+    >
+      {url ? (
+        <img src={url} alt="" className="w-full h-full object-cover" />
+      ) : (
+        <svg
+          width={size * 0.6}
+          height={size * 0.6}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          className="text-secondary"
+        >
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8" />
+        </svg>
+      )}
+    </span>
   )
 }
 
@@ -1171,7 +1235,7 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
   )
 }
 
-function RatingsSection({ peerRatings, loading, onSelfAssess, onInvite }) {
+function RatingsSection({ peerRatings, loading, onSelfAssess, onInvite, raterAvatars }) {
   return (
     <div>
       <div className="flex items-center gap-2 mb-4">
@@ -1202,9 +1266,10 @@ function RatingsSection({ peerRatings, loading, onSelfAssess, onInvite }) {
               <GrowthRing level={rating.level} size={40} />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-ink">{LEVEL_LABELS[rating.level]}</p>
-                <p className="font-mono text-xs text-secondary mt-0.5">
-                  {new Date(rating.rated_at).toLocaleDateString()} · Rated by{' '}
-                  {rating.rater_name || rating.rater_email || 'a connection'}
+                <p className="font-mono text-xs text-secondary mt-0.5 flex items-center gap-1.5">
+                  {new Date(rating.rated_at).toLocaleDateString()} ·
+                  <RaterAvatar url={raterAvatars?.[rating.rater_id]} />
+                  Rated by {rating.rater_name || rating.rater_email || 'a connection'}
                 </p>
                 {rating.comments && <p className="text-sm text-ink mt-1">{rating.comments}</p>}
               </div>
@@ -1253,6 +1318,42 @@ function ExperiencesSection({ statements, loading, onRecordExperience }) {
               )}
             </li>
           ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function TrainingSection({ courseLinks, loading }) {
+  return (
+    <div>
+      {loading ? (
+        <p className="text-sm text-secondary">Loading…</p>
+      ) : courseLinks.length === 0 ? (
+        <p className="text-sm text-secondary">No courses linked to this skill yet.</p>
+      ) : (
+        <ul className="space-y-2">
+          {courseLinks
+            .filter((link) => link.courses)
+            .map((link) => (
+              <li key={link.id} className="bg-paper border border-hairline rounded-md px-3 py-2">
+                <p className="text-sm font-medium text-ink">{link.courses.name}</p>
+                <p className="font-mono text-xs text-secondary mt-0.5">
+                  {[
+                    link.courses.provider,
+                    link.courses.course_type,
+                    link.courses.duration,
+                    link.courses.completed_date &&
+                      `Completed ${new Date(link.courses.completed_date).toLocaleDateString()}`,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+                <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/80 mt-0.5">
+                  {SKILL_RELATIONSHIP_LABELS[link.relationship] ?? link.relationship}
+                </p>
+              </li>
+            ))}
         </ul>
       )}
     </div>

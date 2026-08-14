@@ -161,7 +161,6 @@ export default function SkillsSection() {
           <h3 className="font-display text-base text-ink mb-4">Current role</h3>
           <SkillGrid
             skills={currentRoleSkills}
-            tagsBySkill={tagsBySkill}
             onEdit={(skill) => navigate(`/skills/${skill.id}`)}
           />
         </div>
@@ -172,7 +171,6 @@ export default function SkillsSection() {
           {hasSplit && <h3 className="font-display text-base text-ink mb-4">Further skills</h3>}
           <SkillGrid
             skills={otherSkills}
-            tagsBySkill={tagsBySkill}
             onEdit={(skill) => navigate(`/skills/${skill.id}`)}
           />
         </div>
@@ -191,11 +189,11 @@ export default function SkillsSection() {
   )
 }
 
-function SkillGrid({ skills, tagsBySkill, onEdit }) {
+function SkillGrid({ skills, onEdit }) {
   return (
     <div className="grid sm:grid-cols-2 gap-3">
       {skills.map((skill) => (
-        <SkillCard key={skill.id} skill={skill} tags={tagsBySkill.get(skill.id)} onEdit={onEdit} />
+        <SkillCard key={skill.id} skill={skill} onEdit={onEdit} />
       ))}
     </div>
   )

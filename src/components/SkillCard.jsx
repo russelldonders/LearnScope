@@ -5,7 +5,7 @@ import { TRACKING_REASON_LABELS } from '../lib/trackingReasons'
 import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
 import LifecycleStageIcon from './LifecycleStageIcon'
 
-export default function SkillCard({ skill, tags, onEdit }) {
+export default function SkillCard({ skill, onEdit }) {
   const due = isSelfAssessmentDue(skill.next_checkin_date)
 
   return (
@@ -28,18 +28,6 @@ export default function SkillCard({ skill, tags, onEdit }) {
             <LifecycleStageIcon stage={skill.lifecycle_stage} />
             {SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]}
           </p>
-        )}
-        {tags?.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-1">
-            {tags.map((t) => (
-              <span
-                key={t}
-                className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
-              >
-                {t}
-              </span>
-            ))}
-          </div>
         )}
         {skill.notes && <p className="text-sm text-secondary line-clamp-2 mt-0.5">{skill.notes}</p>}
         {skill.tracking_reason && (
