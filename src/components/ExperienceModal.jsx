@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { EXPERIENCE_TYPE_CONFIG } from '../lib/experienceTypes'
 
-export default function ExperienceModal({ onSave, onClose }) {
-  const type = 'employment'
+export default function ExperienceModal({ type = 'employment', onSave, onClose }) {
+  const config = EXPERIENCE_TYPE_CONFIG[type]
   const [title, setTitle] = useState('')
   const [organization, setOrganization] = useState('')
+  const [organizationUrl, setOrganizationUrl] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [current, setCurrent] = useState(false)
@@ -13,8 +15,8 @@ export default function ExperienceModal({ onSave, onClose }) {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!title.trim() || !organization.trim() || !startDate) {
-      setError('Title, organization, and start date are required.')
+    if (!title.trim() || (config.orgRequired && !organization.trim()) || !startDate) {
+      setError(`Title${config.orgRequired ? ', organization,' : ''} and start date are required.`)
       return
     }
     setError(null)
@@ -23,7 +25,8 @@ export default function ExperienceModal({ onSave, onClose }) {
       await onSave({
         type,
         title: title.trim(),
-        organization: organization.trim(),
+        organization: organization.trim() || null,
+        organization_url: organizationUrl.trim() || null,
         start_date: startDate,
         end_date: current ? null : endDate || null,
         description: description.trim() || null,
@@ -40,12 +43,12 @@ export default function ExperienceModal({ onSave, onClose }) {
         className="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="font-display text-2xl text-ink mb-4">Add experience</h2>
+        <h2 className="font-display text-2xl text-ink mb-4">{config.modalTitle}</h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm text-secondary mb-1" htmlFor="title">
-              Role title
+              {config.titleLabel}
             </label>
             <input
               id="title"
@@ -58,15 +61,30 @@ export default function ExperienceModal({ onSave, onClose }) {
 
           <div>
             <label className="block text-sm text-secondary mb-1" htmlFor="organization">
-              Company
+              {config.orgLabel}
             </label>
             <input
               id="organization"
-              required
+              required={config.orgRequired}
               value={organization}
               onChange={(e) => setOrganization(e.target.value)}
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm text-secondary mb-1" htmlFor="organizationUrl">
+              Organization website (optional)
+            </label>
+            <input
+              id="organizationUrl"
+              type="url"
+              placeholder="https://…"
+              value={organizationUrl}
+              onChange={(e) => setOrganizationUrl(e.target.value)}
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+            />
+            <p className="text-xs text-secondary/80 mt-1">Used to show the organization's logo.</p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

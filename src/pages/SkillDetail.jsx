@@ -16,6 +16,7 @@ import { activityName, verbLabel } from '../lib/xapiStatement'
 import { syncCurrentRoleLinks } from '../lib/currentRole'
 import { listTags, listSkillTags, addTagToSkill, removeSkillTagLink } from '../lib/skillTags'
 import { SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
+import { getCatalogueCourse } from '../lib/courseCatalogue'
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import InviteRaterModal from '../components/InviteRaterModal'
 import RecordExperienceModal from '../components/RecordExperienceModal'
@@ -134,7 +135,9 @@ export default function SkillDetail() {
           .order('created_at', { ascending: false }),
         supabase
           .from('skill_course_links')
-          .select('id, relationship, created_at, courses(id, name, provider, course_type, duration, completed_date)')
+          .select(
+            'id, relationship, created_at, courses(id, name, provider, course_type, duration, completed_date, catalogue_course_id)'
+          )
           .eq('skill_id', skill.id),
       ])
     setHistory(assessments ?? [])
@@ -1617,6 +1620,8 @@ function ExperiencesSection({ statements, loading, onRecordExperience }) {
 }
 
 function TrainingSection({ courseLinks, loading, trainingScopeState }) {
+  const [selectedLink, setSelectedLink] = useState(null)
+
   return (
     <div>
       <div className="flex items-center gap-2 mb-4">
@@ -1638,7 +1643,19 @@ function TrainingSection({ courseLinks, loading, trainingScopeState }) {
           {courseLinks
             .filter((link) => link.courses)
             .map((link) => (
-              <li key={link.id} className="bg-paper border border-hairline rounded-md px-3 py-2">
+              <li
+                key={link.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelectedLink(link)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    setSelectedLink(link)
+                  }
+                }}
+                className="bg-paper border border-hairline rounded-md px-3 py-2 cursor-pointer hover:border-moss transition-colors"
+              >
                 <p className="text-sm font-medium text-ink">{link.courses.name}</p>
                 <p className="font-mono text-xs text-secondary mt-0.5">
                   {[
@@ -1658,6 +1675,71 @@ function TrainingSection({ courseLinks, loading, trainingScopeState }) {
             ))}
         </ul>
       )}
+
+      {selectedLink && <TrainingDetailModal link={selectedLink} onClose={() => setSelectedLink(null)} />}
+    </div>
+  )
+}
+
+function TrainingDetailModal({ link, onClose }) {
+  const course = link.courses
+  const [catalogueCourse, setCatalogueCourse] = useState(null)
+  const [loadingCatalogue, setLoadingCatalogue] = useState(false)
+
+  useEffect(() => {
+    if (!course.catalogue_course_id) return
+    setLoadingCatalogue(true)
+    getCatalogueCourse(course.catalogue_course_id)
+      .then(setCatalogueCourse)
+      .finally(() => setLoadingCatalogue(false))
+  }, [course.catalogue_course_id])
+
+  return (
+    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div
+        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-2 gap-4">
+          <h2 className="font-display text-xl text-ink">{course.name}</h2>
+          <button type="button" onClick={onClose} className="shrink-0 text-secondary hover:text-ink text-sm">
+            Close
+          </button>
+        </div>
+        <p className="font-mono text-xs text-secondary mb-2">
+          {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ')}
+        </p>
+        {course.completed_date && (
+          <p className="font-mono text-xs text-secondary mb-2">
+            Completed {new Date(course.completed_date).toLocaleDateString()}
+          </p>
+        )}
+        <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/80 mb-3">
+          {SKILL_RELATIONSHIP_LABELS[link.relationship] ?? link.relationship}
+        </p>
+        {loadingCatalogue && <p className="text-sm text-secondary">Loading more details…</p>}
+        {catalogueCourse?.synopsis && <p className="text-sm text-ink mb-3">{catalogueCourse.synopsis}</p>}
+        {catalogueCourse && (catalogueCourse.skillEntries.length > 0 || catalogueCourse.tags.length > 0) && (
+          <div className="flex flex-wrap gap-1">
+            {catalogueCourse.skillEntries.map((e) => (
+              <span
+                key={e.skillId}
+                className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5"
+              >
+                {e.skillName} · {LEVEL_LABELS[e.level]}
+              </span>
+            ))}
+            {catalogueCourse.tags.map((t) => (
+              <span
+                key={t.id}
+                className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
+              >
+                {t.name}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

@@ -27,6 +27,10 @@ export default function CourseCatalogue() {
   const [minLevel, setMinLevel] = useState(
     scope?.librarySkillId ? (scope.skillLevel ?? 0) + 1 : null
   )
+  // Filters start collapsed unless we arrived already scoped to a skill, in
+  // which case showing them lets the learner see (and adjust) what's applied.
+  const [showFilters, setShowFilters] = useState(Boolean(scope?.librarySkillId))
+  const [selectedCourse, setSelectedCourse] = useState(null)
 
   useEffect(() => {
     load()
@@ -90,6 +94,8 @@ export default function CourseCatalogue() {
     return [...map.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
   }, [catalogue])
 
+  const activeFilterCount = [tagId, skillId, level].filter((v) => v !== null).length
+
   const q = query.trim().toLowerCase()
   const filtered = catalogue.filter((course) => {
     if (q && ![course.name, course.provider, course.synopsis].filter(Boolean).some((v) => v.toLowerCase().includes(q))) {
@@ -142,34 +148,44 @@ export default function CourseCatalogue() {
           className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-ink text-sm mb-6 focus:outline-none focus:ring-2 focus:ring-moss"
         />
 
-        <div className="space-y-3 mb-6">
-          <FilterRow
-            label="Category tag"
-            value={tagId}
-            onChange={setTagId}
-            options={availableTags.map((t) => ({ value: t.id, label: t.name }))}
-          />
-          <FilterRow
-            label="Skill"
-            value={skillId}
-            onChange={handleSelectSkill}
-            options={availableSkills.map((s) => ({ value: s.id, label: s.name }))}
-          />
-          {mySkills.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowFilters((v) => !v)}
+          className="text-sm text-moss font-medium mb-4"
+        >
+          {showFilters ? 'Hide filters' : `Show filters${activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}`}
+        </button>
+
+        {showFilters && (
+          <div className="space-y-3 mb-6">
             <FilterRow
-              label="My skill entry"
-              value={mySkills.some((s) => s.library_skill_id === skillId) ? skillId : null}
-              onChange={handleSelectSkill}
-              options={mySkills.map((s) => ({ value: s.library_skill_id, label: s.name }))}
+              label="Category tag"
+              value={tagId}
+              onChange={setTagId}
+              options={availableTags.map((t) => ({ value: t.id, label: t.name }))}
             />
-          )}
-          <FilterRow
-            label="Target level"
-            value={level}
-            onChange={setLevel}
-            options={Object.entries(LEVEL_LABELS).map(([value, label]) => ({ value: Number(value), label }))}
-          />
-        </div>
+            <FilterRow
+              label="Skill"
+              value={skillId}
+              onChange={handleSelectSkill}
+              options={availableSkills.map((s) => ({ value: s.id, label: s.name }))}
+            />
+            {mySkills.length > 0 && (
+              <FilterRow
+                label="My skill entry"
+                value={mySkills.some((s) => s.library_skill_id === skillId) ? skillId : null}
+                onChange={handleSelectSkill}
+                options={mySkills.map((s) => ({ value: s.library_skill_id, label: s.name }))}
+              />
+            )}
+            <FilterRow
+              label="Target level"
+              value={level}
+              onChange={setLevel}
+              options={Object.entries(LEVEL_LABELS).map(([value, label]) => ({ value: Number(value), label }))}
+            />
+          </div>
+        )}
 
         {error && <p className="text-sm text-red-700 mb-4">{error}</p>}
         {loading && <p className="text-secondary">Loading…</p>}
@@ -184,7 +200,19 @@ export default function CourseCatalogue() {
           {filtered.map((course) => {
             const enrolled = enrolledIds.has(course.id)
             return (
-              <div key={course.id} className="bg-card border border-hairline rounded-lg p-4 flex flex-col">
+              <div
+                key={course.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelectedCourse(course)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    setSelectedCourse(course)
+                  }
+                }}
+                className="bg-card border border-hairline rounded-lg p-4 flex flex-col cursor-pointer hover:border-moss transition-colors"
+              >
                 <h3 className="font-display text-lg text-ink">{course.name}</h3>
                 <p className="font-mono text-xs text-secondary mt-0.5">
                   {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ')}
@@ -212,7 +240,10 @@ export default function CourseCatalogue() {
                 )}
                 <button
                   type="button"
-                  onClick={() => handleEnrol(course)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleEnrol(course)
+                  }}
                   disabled={enrolled || enrollingId === course.id}
                   className="mt-3 self-start rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -223,6 +254,66 @@ export default function CourseCatalogue() {
           })}
         </div>
       </main>
+
+      {selectedCourse && (
+        <CourseDetailModal
+          course={selectedCourse}
+          enrolled={enrolledIds.has(selectedCourse.id)}
+          enrolling={enrollingId === selectedCourse.id}
+          onEnrol={() => handleEnrol(selectedCourse)}
+          onClose={() => setSelectedCourse(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function CourseDetailModal({ course, enrolled, enrolling, onEnrol, onClose }) {
+  return (
+    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div
+        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-2 gap-4">
+          <h2 className="font-display text-xl text-ink">{course.name}</h2>
+          <button type="button" onClick={onClose} className="shrink-0 text-secondary hover:text-ink text-sm">
+            Close
+          </button>
+        </div>
+        <p className="font-mono text-xs text-secondary mb-3">
+          {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ')}
+        </p>
+        {course.synopsis && <p className="text-sm text-ink mb-4">{course.synopsis}</p>}
+        {(course.skillEntries.length > 0 || course.tags.length > 0) && (
+          <div className="flex flex-wrap gap-1 mb-4">
+            {course.skillEntries.map((e) => (
+              <span
+                key={e.skillId}
+                className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5"
+              >
+                {e.skillName} · {LEVEL_LABELS[e.level]}
+              </span>
+            ))}
+            {course.tags.map((t) => (
+              <span
+                key={t.id}
+                className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
+              >
+                {t.name}
+              </span>
+            ))}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={onEnrol}
+          disabled={enrolled || enrolling}
+          className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {enrolled ? 'Enrolled ✓' : enrolling ? 'Enrolling…' : 'Enrol'}
+        </button>
+      </div>
     </div>
   )
 }

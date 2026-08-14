@@ -1,16 +1,11 @@
 import { supabase } from './supabaseClient'
 
-export async function listCatalogueCourses() {
-  const { data, error } = await supabase
-    .from('course_catalogue')
-    .select(
-      `*,
-      course_catalogue_skills(id, level, skill_library(id, name)),
-      course_catalogue_tags(id, tags(id, name))`
-    )
-    .order('name')
-  if (error) throw error
-  return (data ?? []).map((course) => ({
+const CATALOGUE_SELECT = `*,
+  course_catalogue_skills(id, level, skill_library(id, name)),
+  course_catalogue_tags(id, tags(id, name))`
+
+function mapCatalogueCourse(course) {
+  return {
     ...course,
     skillEntries: (course.course_catalogue_skills ?? [])
       .filter((e) => e.skill_library)
@@ -18,7 +13,23 @@ export async function listCatalogueCourses() {
     tags: (course.course_catalogue_tags ?? [])
       .filter((t) => t.tags)
       .map((t) => ({ id: t.tags.id, name: t.tags.name })),
-  }))
+  }
+}
+
+export async function listCatalogueCourses() {
+  const { data, error } = await supabase.from('course_catalogue').select(CATALOGUE_SELECT).order('name')
+  if (error) throw error
+  return (data ?? []).map(mapCatalogueCourse)
+}
+
+export async function getCatalogueCourse(id) {
+  const { data, error } = await supabase
+    .from('course_catalogue')
+    .select(CATALOGUE_SELECT)
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw error
+  return data ? mapCatalogueCourse(data) : null
 }
 
 export async function listEnrolledCatalogueIds(userId) {

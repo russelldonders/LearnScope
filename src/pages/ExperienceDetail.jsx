@@ -4,9 +4,11 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { formatMonthYear } from '../lib/dates'
 import { LEVEL_LABELS } from '../lib/levels'
+import { EXPERIENCE_TYPE_LABELS, EXPERIENCE_TYPE_CONFIG } from '../lib/experienceTypes'
 import AppHeader from '../components/AppHeader'
 import SkillCard from '../components/SkillCard'
 import FindSkillModal from '../components/FindSkillModal'
+import OrganizationLogo from '../components/OrganizationLogo'
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -113,10 +115,15 @@ export default function ExperienceDetail() {
         {item && (
           <div className="bg-card border border-hairline rounded-lg p-6">
             <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
-              {item.type === 'education' ? 'Education' : 'Employment'}
+              {EXPERIENCE_TYPE_LABELS[item.type] ?? item.type}
             </span>
             <h2 className="font-display text-2xl text-ink mt-0.5">{item.title}</h2>
-            <p className="text-sm text-secondary">{item.organization}</p>
+            {item.organization && (
+              <div className="flex items-center gap-2 mt-0.5">
+                {item.organization_url && <OrganizationLogo organizationUrl={item.organization_url} size={24} />}
+                <p className="text-sm text-secondary">{item.organization}</p>
+              </div>
+            )}
 
             <div className="flex items-center gap-1 border-b border-hairline mt-4 mb-4 overflow-x-auto">
               {TABS.map((t) => (
@@ -172,7 +179,8 @@ export default function ExperienceDetail() {
 function DetailsTab({ item, onSave, onDelete }) {
   const [type, setType] = useState(item.type)
   const [title, setTitle] = useState(item.title)
-  const [organization, setOrganization] = useState(item.organization)
+  const [organization, setOrganization] = useState(item.organization ?? '')
+  const [organizationUrl, setOrganizationUrl] = useState(item.organization_url ?? '')
   const [startDate, setStartDate] = useState(item.start_date ?? '')
   const [endDate, setEndDate] = useState(item.end_date ?? '')
   const [current, setCurrent] = useState(!item.end_date)
@@ -180,10 +188,12 @@ function DetailsTab({ item, onSave, onDelete }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
+  const config = EXPERIENCE_TYPE_CONFIG[type] ?? EXPERIENCE_TYPE_CONFIG.employment
+
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!title.trim() || !organization.trim() || !startDate) {
-      setError('Title, organization, and start date are required.')
+    if (!title.trim() || (config.orgRequired && !organization.trim()) || !startDate) {
+      setError(`Title${config.orgRequired ? ', organization,' : ''} and start date are required.`)
       return
     }
     setError(null)
@@ -192,7 +202,8 @@ function DetailsTab({ item, onSave, onDelete }) {
       await onSave({
         type,
         title: title.trim(),
-        organization: organization.trim(),
+        organization: organization.trim() || null,
+        organization_url: organizationUrl.trim() || null,
         start_date: startDate,
         end_date: current ? null : endDate || null,
         description: description.trim() || null,
@@ -248,7 +259,7 @@ function DetailsTab({ item, onSave, onDelete }) {
 
       <div>
         <label className="block text-sm text-secondary mb-1" htmlFor="title">
-          {type === 'education' ? 'Degree / course title' : 'Role title'}
+          {config.titleLabel}
         </label>
         <input
           id="title"
@@ -261,15 +272,30 @@ function DetailsTab({ item, onSave, onDelete }) {
 
       <div>
         <label className="block text-sm text-secondary mb-1" htmlFor="organization">
-          {type === 'education' ? 'Institution' : 'Company'}
+          {config.orgLabel}
         </label>
         <input
           id="organization"
-          required
+          required={config.orgRequired}
           value={organization}
           onChange={(e) => setOrganization(e.target.value)}
           className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
         />
+      </div>
+
+      <div>
+        <label className="block text-sm text-secondary mb-1" htmlFor="organizationUrl">
+          Organization website (optional)
+        </label>
+        <input
+          id="organizationUrl"
+          type="url"
+          placeholder="https://…"
+          value={organizationUrl}
+          onChange={(e) => setOrganizationUrl(e.target.value)}
+          className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+        />
+        <p className="text-xs text-secondary/80 mt-1">Used to show the organization's logo.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -363,7 +389,7 @@ function OverviewTab({ item, linkedCourses, skillLinks, achievements, loaded }) 
       </div>
 
       <p className="text-xs text-secondary">
-        These are historical records from this {item.type === 'education' ? 'study period' : 'role'} —
+        These are historical records from this {EXPERIENCE_TYPE_CONFIG[item.type]?.periodNoun ?? 'experience'} —
         they don't change your current skill levels unless you choose to update them.
       </p>
 

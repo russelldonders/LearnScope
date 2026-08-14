@@ -12,7 +12,7 @@ export default function ExperienceSection() {
   const [learningSummaries, setLearningSummaries] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [modalOpen, setModalOpen] = useState(false)
+  const [modalType, setModalType] = useState(null)
 
   useEffect(() => {
     loadExperience()
@@ -64,26 +64,47 @@ export default function ExperienceSection() {
       type: values.type,
       title: values.title,
       organization: values.organization,
+      organization_url: values.organization_url,
       start_date: values.start_date,
       end_date: values.end_date,
       description: values.description,
       user_id: user.id,
     })
     if (error) throw error
-    setModalOpen(false)
+    setModalType(null)
     await loadExperience()
   }
 
   return (
     <section>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="font-display text-xl text-ink">Experience timeline</h2>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90"
-        >
-          + Add experience
-        </button>
+      <div className="mb-6">
+        <h2 className="font-display text-xl text-ink mb-3">Experience timeline</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setModalType('employment')}
+            className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90"
+          >
+            + Add Job
+          </button>
+          <button
+            onClick={() => setModalType('project')}
+            className="rounded-md border border-hairline text-ink py-2 px-4 font-medium hover:bg-paper"
+          >
+            + Add Project
+          </button>
+          <button
+            onClick={() => setModalType('volunteer')}
+            className="rounded-md border border-hairline text-ink py-2 px-4 font-medium hover:bg-paper"
+          >
+            + Add Volunteer Position
+          </button>
+          <button
+            onClick={() => setModalType('other')}
+            className="rounded-md border border-hairline text-ink py-2 px-4 font-medium hover:bg-paper"
+          >
+            + Add Other Experience
+          </button>
+        </div>
       </div>
 
       {loading && <p className="text-secondary">Loading…</p>}
@@ -107,7 +128,9 @@ export default function ExperienceSection() {
         ))}
       </div>
 
-      {modalOpen && <ExperienceModal onSave={handleSave} onClose={() => setModalOpen(false)} />}
+      {modalType && (
+        <ExperienceModal type={modalType} onSave={handleSave} onClose={() => setModalType(null)} />
+      )}
     </section>
   )
 }
