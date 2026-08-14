@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabaseClient'
 const NAV_LINKS = [
   { to: '/skills', label: 'Skills' },
   { to: '/experience', label: 'Experience' },
+  { to: '/training', label: 'Training' },
   { to: '/connections', label: 'Connections' },
 ]
 

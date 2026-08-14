@@ -246,16 +246,6 @@ export default function SkillDetail() {
 
             {skill.lifecycle_stage && <LifecycleProgress stage={skill.lifecycle_stage} />}
 
-            {skill.lifecycle_stage === 'baseline_assessed' && (
-              <button
-                type="button"
-                onClick={() => setTargetOpen(true)}
-                className="w-full mb-6 rounded-md bg-moss text-paper py-2.5 px-4 font-medium hover:opacity-90"
-              >
-                Set a target
-              </button>
-            )}
-
             {inviteOpen && <InviteRaterModal skill={skill} onClose={() => setInviteOpen(false)} />}
 
             {selfAssessOpen && (
@@ -393,6 +383,7 @@ export default function SkillDetail() {
                 onRecordExperience={() => setRecordExperienceOpen(true)}
                 onQuiz={() => setQuizOpen(true)}
                 onAssessBaseline={() => setAssessMode('baseline')}
+                onSetTarget={() => setTargetOpen(true)}
               />
             )}
 
@@ -466,7 +457,11 @@ function LifecycleProgress({ stage }) {
   )
 }
 
-function BaselineChecklist({
+// The recommended next actions for a skill, keyed by lifecycle stage.
+// Only stages with a defined next step render this section at all --
+// later stages (target_set onward) have no single recommended action yet.
+function UpNextSection({
+  stage,
   selfAssessedCount,
   peerRatingsCount,
   statementsCount,
@@ -475,43 +470,57 @@ function BaselineChecklist({
   onInvite,
   onRecordExperience,
   onQuiz,
+  onSetTarget,
 }) {
-  const items = [
-    {
-      key: 'self-assess',
-      label: 'Self-assess your own level',
-      description: 'Rate where you think you are right now.',
-      done: selfAssessedCount > 0,
-      onClick: onSelfAssess,
-    },
-    {
-      key: 'invite',
-      label: 'Invite others to assess your skill',
-      description: 'Get an outside perspective on your level.',
-      done: peerRatingsCount > 0,
-      onClick: onInvite,
-    },
-    {
-      key: 'experience',
-      label: 'Add experience activity',
-      description: 'Log something you did that shows this skill in action.',
-      done: statementsCount > 0,
-      onClick: onRecordExperience,
-    },
-    {
-      key: 'quiz',
-      label: 'Ask me questions to assess me',
-      description: 'Answer a short AI-generated quiz on your baseline knowledge.',
-      done: quizCount > 0,
-      onClick: onQuiz,
-    },
-  ]
+  let items = []
+  if (stage === 'identified') {
+    items = [
+      {
+        key: 'self-assess',
+        label: 'Self-assess your own level',
+        description: 'Rate where you think you are right now.',
+        done: selfAssessedCount > 0,
+        onClick: onSelfAssess,
+      },
+      {
+        key: 'invite',
+        label: 'Invite others to assess your skill',
+        description: 'Get an outside perspective on your level.',
+        done: peerRatingsCount > 0,
+        onClick: onInvite,
+      },
+      {
+        key: 'experience',
+        label: 'Add experience activity',
+        description: 'Log something you did that shows this skill in action.',
+        done: statementsCount > 0,
+        onClick: onRecordExperience,
+      },
+      {
+        key: 'quiz',
+        label: 'Ask me questions to assess me',
+        description: 'Answer a short AI-generated quiz on your baseline knowledge.',
+        done: quizCount > 0,
+        onClick: onQuiz,
+      },
+    ]
+  } else if (stage === 'baseline_assessed') {
+    items = [
+      {
+        key: 'target',
+        label: 'Set a target',
+        description: 'Choose a level and date you are aiming to reach next.',
+        done: false,
+        onClick: onSetTarget,
+      },
+    ]
+  }
+
+  if (items.length === 0) return null
 
   return (
     <div className="mb-6 rounded-md border border-hairline bg-paper p-4">
-      <h3 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">
-        Baseline checklist
-      </h3>
+      <h3 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Up Next</h3>
       <div className="space-y-2">
         {items.map((item) => (
           <button
@@ -689,6 +698,7 @@ function HistorySection({
   onRecordExperience,
   onQuiz,
   onAssessBaseline,
+  onSetTarget,
 }) {
   const due = isSelfAssessmentDue(skill.next_checkin_date)
   const currentTarget = targets[0]
@@ -740,18 +750,18 @@ function HistorySection({
         return (
           <div>
             {currentTarget && <TargetTimelineEntry target={currentTarget} hasMore={events.length > 0} />}
-            {showBaselineFlow && (
-              <BaselineChecklist
-                selfAssessedCount={selfAssessedCount}
-                peerRatingsCount={peerRatings.length}
-                statementsCount={statements.length}
-                quizCount={quizResults.length}
-                onSelfAssess={onSelfAssess}
-                onInvite={onInvite}
-                onRecordExperience={onRecordExperience}
-                onQuiz={onQuiz}
-              />
-            )}
+            <UpNextSection
+              stage={skill.lifecycle_stage}
+              selfAssessedCount={selfAssessedCount}
+              peerRatingsCount={peerRatings.length}
+              statementsCount={statements.length}
+              quizCount={quizResults.length}
+              onSelfAssess={onSelfAssess}
+              onInvite={onInvite}
+              onRecordExperience={onRecordExperience}
+              onQuiz={onQuiz}
+              onSetTarget={onSetTarget}
+            />
             {events.map((event, i) => (
               <TimelineEntry
                 key={event.entry?.id ?? event.rating?.id ?? event.link?.id ?? event.statement?.id ?? event.type}
@@ -1579,6 +1589,15 @@ function ExperiencesSection({ statements, loading, onRecordExperience }) {
 function TrainingSection({ courseLinks, loading }) {
   return (
     <div>
+      <div className="flex items-center gap-2 mb-4">
+        <Link
+          to="/training"
+          className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+        >
+          Find training
+        </Link>
+      </div>
+
       {loading ? (
         <p className="text-sm text-secondary">Loading…</p>
       ) : courseLinks.length === 0 ? (

@@ -41,7 +41,15 @@ export default function Dashboard() {
 
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-16">
         <div>
-          <h2 className="font-display text-xl text-ink mb-6">Your overview</h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="font-display text-xl text-ink">Your overview</h2>
+            <Link
+              to="/training"
+              className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
+            >
+              Find training
+            </Link>
+          </div>
 
           {loading ? (
             <p className="text-secondary">Loading…</p>

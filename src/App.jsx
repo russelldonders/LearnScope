@@ -16,6 +16,7 @@ import Profile from './pages/Profile'
 import Rate from './pages/Rate'
 import Connections from './pages/Connections'
 import SkillsProfile from './pages/SkillsProfile'
+import CourseCatalogue from './pages/CourseCatalogue'
 
 function App() {
   return (
@@ -82,6 +83,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Connections />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/training"
+            element={
+              <ProtectedRoute>
+                <CourseCatalogue />
               </ProtectedRoute>
             }
           />
