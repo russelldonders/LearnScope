@@ -193,6 +193,15 @@ export default function SkillDetail() {
   const selfAssessedCount = history.filter((a) => a.source === 'self' || !a.source).length
   const hasAnyEvaluationInput =
     selfAssessedCount > 0 || peerRatings.length > 0 || statements.length > 0 || quizResults.length > 0
+  const trainingScopeState = skill
+    ? {
+        skillId: skill.id,
+        skillName: skill.name,
+        librarySkillId: skill.library_skill_id,
+        skillLevel: skill.level,
+        backTo: `/skills/${skill.id}`,
+      }
+    : null
 
   return (
     <div className="min-h-screen bg-paper">
@@ -384,6 +393,7 @@ export default function SkillDetail() {
                 onQuiz={() => setQuizOpen(true)}
                 onAssessBaseline={() => setAssessMode('baseline')}
                 onSetTarget={() => setTargetOpen(true)}
+                onFindCourse={() => navigate('/training', { state: trainingScopeState })}
               />
             )}
 
@@ -406,7 +416,11 @@ export default function SkillDetail() {
             )}
 
             {tab === 'training' && (
-              <TrainingSection courseLinks={courseLinks} loading={loadingHistory} />
+              <TrainingSection
+                courseLinks={courseLinks}
+                loading={loadingHistory}
+                trainingScopeState={trainingScopeState}
+              />
             )}
           </div>
         )}
@@ -471,6 +485,8 @@ function UpNextSection({
   onRecordExperience,
   onQuiz,
   onSetTarget,
+  hasActiveCourseEnrollment,
+  onFindCourse,
 }) {
   let items = []
   if (stage === 'identified') {
@@ -512,6 +528,16 @@ function UpNextSection({
         description: 'Choose a level and date you are aiming to reach next.',
         done: false,
         onClick: onSetTarget,
+      },
+    ]
+  } else if (stage === 'developing' && !hasActiveCourseEnrollment) {
+    items = [
+      {
+        key: 'find-course',
+        label: 'Find a course',
+        description: 'Browse the training catalogue for something that fits your target.',
+        done: false,
+        onClick: onFindCourse,
       },
     ]
   }
@@ -699,11 +725,13 @@ function HistorySection({
   onQuiz,
   onAssessBaseline,
   onSetTarget,
+  onFindCourse,
 }) {
   const due = isSelfAssessmentDue(skill.next_checkin_date)
   const currentTarget = targets[0]
   const showBaselineFlow = skill.lifecycle_stage === 'identified'
   const selfAssessedCount = history.filter((a) => a.source === 'self' || !a.source).length
+  const hasActiveCourseEnrollment = courseLinks.some((link) => link.courses && !link.courses.completed_date)
   const [selectedEvent, setSelectedEvent] = useState(null)
 
   return (
@@ -761,6 +789,8 @@ function HistorySection({
               onRecordExperience={onRecordExperience}
               onQuiz={onQuiz}
               onSetTarget={onSetTarget}
+              hasActiveCourseEnrollment={hasActiveCourseEnrollment}
+              onFindCourse={onFindCourse}
             />
             {events.map((event, i) => (
               <TimelineEntry
@@ -1586,12 +1616,13 @@ function ExperiencesSection({ statements, loading, onRecordExperience }) {
   )
 }
 
-function TrainingSection({ courseLinks, loading }) {
+function TrainingSection({ courseLinks, loading, trainingScopeState }) {
   return (
     <div>
       <div className="flex items-center gap-2 mb-4">
         <Link
           to="/training"
+          state={trainingScopeState}
           className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
         >
           Find training
