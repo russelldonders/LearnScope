@@ -134,7 +134,7 @@ export default function SkillDetail() {
           .order('created_at', { ascending: false }),
         supabase
           .from('skill_course_links')
-          .select('id, relationship, courses(id, name, provider, course_type, duration, completed_date)')
+          .select('id, relationship, created_at, courses(id, name, provider, course_type, duration, completed_date)')
           .eq('skill_id', skill.id),
       ])
     setHistory(assessments ?? [])
@@ -245,30 +245,6 @@ export default function SkillDetail() {
             </div>
 
             {skill.lifecycle_stage && <LifecycleProgress stage={skill.lifecycle_stage} />}
-
-            {skill.lifecycle_stage === 'identified' && (
-              <>
-                <BaselineChecklist
-                  selfAssessedCount={selfAssessedCount}
-                  peerRatingsCount={peerRatings.length}
-                  statementsCount={statements.length}
-                  quizCount={quizResults.length}
-                  onSelfAssess={() => setSelfAssessOpen(true)}
-                  onInvite={() => setInviteOpen(true)}
-                  onRecordExperience={() => setRecordExperienceOpen(true)}
-                  onQuiz={() => setQuizOpen(true)}
-                />
-                <button
-                  type="button"
-                  onClick={() => setAssessMode('baseline')}
-                  disabled={!hasAnyEvaluationInput}
-                  title={!hasAnyEvaluationInput ? 'Complete at least one checklist item first' : undefined}
-                  className="w-full mb-6 rounded-md bg-moss text-paper py-2.5 px-4 font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Assess baseline with AI
-                </button>
-              </>
-            )}
 
             {skill.lifecycle_stage === 'baseline_assessed' && (
               <button
@@ -404,10 +380,19 @@ export default function SkillDetail() {
                 history={history}
                 peerRatings={peerRatings}
                 relationshipLinks={relationshipLinks}
+                statements={statements}
+                courseLinks={courseLinks}
+                quizResults={quizResults}
                 targets={targets}
                 loading={loadingHistory}
                 assessorName={assessorName}
                 raterAvatars={raterAvatars}
+                hasAnyEvaluationInput={hasAnyEvaluationInput}
+                onSelfAssess={() => setSelfAssessOpen(true)}
+                onInvite={() => setInviteOpen(true)}
+                onRecordExperience={() => setRecordExperienceOpen(true)}
+                onQuiz={() => setQuizOpen(true)}
+                onAssessBaseline={() => setAssessMode('baseline')}
               />
             )}
 
@@ -684,18 +669,32 @@ function SelfAssessSection({ skill, user, onAssessed }) {
   )
 }
 
+const TIMELINE_DETAIL_TYPES = new Set(['assessment', 'peer', 'relationship', 'activity', 'training'])
+
 function HistorySection({
   skill,
   history,
   peerRatings,
   relationshipLinks,
+  statements,
+  courseLinks,
+  quizResults,
   targets,
   loading,
   assessorName,
   raterAvatars,
+  hasAnyEvaluationInput,
+  onSelfAssess,
+  onInvite,
+  onRecordExperience,
+  onQuiz,
+  onAssessBaseline,
 }) {
   const due = isSelfAssessmentDue(skill.next_checkin_date)
   const currentTarget = targets[0]
+  const showBaselineFlow = skill.lifecycle_stage === 'identified'
+  const selfAssessedCount = history.filter((a) => a.source === 'self' || !a.source).length
+  const [selectedEvent, setSelectedEvent] = useState(null)
 
   return (
     <div>
@@ -723,6 +722,10 @@ function HistorySection({
           ...relationshipLinks
             .filter((link) => link.experience)
             .map((link) => ({ type: 'relationship', date: link.experience.start_date, link })),
+          ...statements.map((s) => ({ type: 'activity', date: s.recorded_at, statement: s })),
+          ...courseLinks
+            .filter((link) => link.courses)
+            .map((link) => ({ type: 'training', date: link.courses.completed_date || link.created_at, link })),
           { type: 'added', date: skill.date_added, source: skill.source },
           { type: 'today', date: new Date().toISOString() },
         ].sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -737,24 +740,45 @@ function HistorySection({
         return (
           <div>
             {currentTarget && <TargetTimelineEntry target={currentTarget} hasMore={events.length > 0} />}
+            {showBaselineFlow && (
+              <BaselineChecklist
+                selfAssessedCount={selfAssessedCount}
+                peerRatingsCount={peerRatings.length}
+                statementsCount={statements.length}
+                quizCount={quizResults.length}
+                onSelfAssess={onSelfAssess}
+                onInvite={onInvite}
+                onRecordExperience={onRecordExperience}
+                onQuiz={onQuiz}
+              />
+            )}
             {events.map((event, i) => (
               <TimelineEntry
-                key={
-                  event.type === 'added' || event.type === 'today'
-                    ? event.type
-                    : (event.entry ?? event.rating ?? event.link).id
-                }
+                key={event.entry?.id ?? event.rating?.id ?? event.link?.id ?? event.statement?.id ?? event.type}
                 event={event}
                 isLast={i === events.length - 1}
                 isMostRecent={i === mostRecentRatingIndex}
                 isBaseline={i === mostRecentBaselineIndex}
                 assessorName={assessorName}
                 raterAvatars={raterAvatars}
+                showAssessBaseline={showBaselineFlow && event.type === 'today'}
+                onAssessBaseline={onAssessBaseline}
+                assessBaselineDisabled={!hasAnyEvaluationInput}
+                onSelect={TIMELINE_DETAIL_TYPES.has(event.type) ? () => setSelectedEvent(event) : undefined}
               />
             ))}
           </div>
         )
       })()}
+
+      {selectedEvent && (
+        <TimelineDetailModal
+          event={selectedEvent}
+          assessorName={assessorName}
+          raterAvatars={raterAvatars}
+          onClose={() => setSelectedEvent(null)}
+        />
+      )}
     </div>
   )
 }
@@ -778,10 +802,34 @@ function TargetTimelineEntry({ target, hasMore }) {
   )
 }
 
-function TimelineEntry({ event, isLast, isMostRecent, isBaseline, assessorName, raterAvatars }) {
+function TimelineEntry({
+  event,
+  isLast,
+  isMostRecent,
+  isBaseline,
+  assessorName,
+  raterAvatars,
+  showAssessBaseline,
+  onAssessBaseline,
+  assessBaselineDisabled,
+  onSelect,
+}) {
   const boxClass = isMostRecent
     ? 'rounded-md border border-moss/40 bg-moss/5 p-3'
     : 'rounded-md border border-hairline bg-paper p-3'
+  const clickableProps = onSelect
+    ? {
+        role: 'button',
+        tabIndex: 0,
+        onClick: onSelect,
+        onKeyDown: (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onSelect()
+          }
+        },
+      }
+    : {}
 
   if (event.type === 'today') {
     return (
@@ -795,6 +843,61 @@ function TimelineEntry({ event, isLast, isMostRecent, isBaseline, assessorName, 
             Today · {new Date(event.date).toLocaleDateString()}
           </span>
           <span className="flex-1 h-px bg-hairline" />
+          {showAssessBaseline && (
+            <button
+              type="button"
+              onClick={onAssessBaseline}
+              disabled={assessBaselineDisabled}
+              title={assessBaselineDisabled ? 'Complete at least one checklist item first' : undefined}
+              className="shrink-0 rounded-md bg-moss text-paper text-xs font-medium py-1 px-2.5 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Assess baseline
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  if (event.type === 'activity') {
+    const s = event.statement
+    return (
+      <div className="flex gap-3">
+        <div className="flex flex-col items-center w-12 shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-secondary/40 shrink-0 mt-1.5" />
+          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
+        </div>
+        <div
+          className="min-w-0 flex-1 mb-3 flex items-center gap-2 text-xs text-secondary cursor-pointer hover:text-ink transition-colors"
+          {...clickableProps}
+        >
+          <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">{verbLabel(s.statement)}</span>
+          <span className="truncate">{activityName(s.statement)}</span>
+          <span className="font-mono text-[10px] text-secondary/70 shrink-0">
+            {new Date(s.recorded_at).toLocaleDateString()}
+          </span>
+        </div>
+      </div>
+    )
+  }
+
+  if (event.type === 'training') {
+    const course = event.link.courses
+    return (
+      <div className="flex gap-3">
+        <div className="flex flex-col items-center w-12 shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-secondary/40 shrink-0 mt-1.5" />
+          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
+        </div>
+        <div
+          className="min-w-0 flex-1 mb-3 flex items-center gap-2 text-xs text-secondary cursor-pointer hover:text-ink transition-colors"
+          {...clickableProps}
+        >
+          <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">Training</span>
+          <span className="truncate">{course.name}</span>
+          <span className="font-mono text-[10px] text-secondary/70 shrink-0">
+            {new Date(course.completed_date || event.link.created_at).toLocaleDateString()}
+          </span>
         </div>
       </div>
     )
@@ -834,7 +937,10 @@ function TimelineEntry({ event, isLast, isMostRecent, isBaseline, assessorName, 
           <GrowthRing level={rating.level} size={isMostRecent ? 48 : 32} />
           {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
         </div>
-        <div className={`min-w-0 flex-1 mb-6 ${boxClass}`}>
+        <div
+          className={`min-w-0 flex-1 mb-6 ${boxClass} ${onSelect ? 'cursor-pointer hover:border-moss/60 transition-colors' : ''}`}
+          {...clickableProps}
+        >
           <p className={isMostRecent ? 'text-base font-semibold text-ink' : 'text-sm font-medium text-ink'}>
             {LEVEL_LABELS[rating.level]}
           </p>
@@ -866,7 +972,10 @@ function TimelineEntry({ event, isLast, isMostRecent, isBaseline, assessorName, 
           </div>
           {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
         </div>
-        <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3">
+        <div
+          className={`min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3 ${onSelect ? 'cursor-pointer hover:border-moss/60 transition-colors' : ''}`}
+          {...clickableProps}
+        >
           <p className="text-sm font-medium text-ink">{exp.title}</p>
           <p className="font-mono text-xs text-secondary mt-0.5">
             {formatMonthYear(exp.start_date)} – {exp.end_date ? formatMonthYear(exp.end_date) : 'present'}
@@ -892,7 +1001,10 @@ function TimelineEntry({ event, isLast, isMostRecent, isBaseline, assessorName, 
         <GrowthRing level={entry.level} size={isMostRecent ? 48 : 32} />
         {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
       </div>
-      <div className={`min-w-0 flex-1 mb-6 ${boxClass}`}>
+      <div
+        className={`min-w-0 flex-1 mb-6 ${boxClass} ${onSelect ? 'cursor-pointer hover:border-moss/60 transition-colors' : ''}`}
+        {...clickableProps}
+      >
         <div className="flex items-center gap-2">
           <p className={isMostRecent ? 'text-base font-semibold text-ink' : 'text-sm font-medium text-ink'}>
             {LEVEL_LABELS[entry.level]}
@@ -932,7 +1044,7 @@ function TimelineEntry({ event, isLast, isMostRecent, isBaseline, assessorName, 
             <h5 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1">
               Evidence
             </h5>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3" onClick={(e) => e.stopPropagation()}>
             {entry.evidence_url && (
               <a
                 href={entry.evidence_url}
@@ -949,6 +1061,146 @@ function TimelineEntry({ event, isLast, isMostRecent, isBaseline, assessorName, 
             </div>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+function TimelineDetailModal({ event, assessorName, raterAvatars, onClose }) {
+  let title = 'Details'
+  let body = null
+
+  if (event.type === 'assessment') {
+    const entry = event.entry
+    const paths = entry.evidence_paths?.length
+      ? entry.evidence_paths
+      : entry.evidence_path
+        ? [entry.evidence_path]
+        : []
+    title = LEVEL_LABELS[entry.level]
+    body = (
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <GrowthRing level={entry.level} size={48} />
+          <p className="font-mono text-xs text-secondary">
+            {new Date(entry.assessed_at).toLocaleDateString()}
+          </p>
+        </div>
+        {entry.source === 'course' && entry.courses?.name ? (
+          <p className="text-sm text-secondary">Earned by completing {entry.courses.name}</p>
+        ) : entry.source === 'ai_baseline' ? (
+          <p className="text-sm text-secondary">
+            AI-assessed baseline, from self-assessment, peer ratings, activity and quiz inputs
+          </p>
+        ) : (
+          assessorName && <p className="text-sm text-secondary">Self-assessed by {assessorName}</p>
+        )}
+        {entry.experience?.title && (
+          <p className="text-sm text-secondary">
+            During {entry.experience.title} · {entry.experience.organization}
+          </p>
+        )}
+        {entry.comments && <p className="text-sm text-ink">{entry.comments}</p>}
+        {(entry.evidence_url || paths.length > 0) && (
+          <div>
+            <h5 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1">Evidence</h5>
+            <div className="flex flex-wrap items-center gap-3">
+              {entry.evidence_url && (
+                <a
+                  href={entry.evidence_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-moss font-medium"
+                >
+                  Evidence link
+                </a>
+              )}
+              {paths.map((path, i) => (
+                <EvidenceAttachmentLink key={path} path={path} index={i} />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  } else if (event.type === 'peer') {
+    const rating = event.rating
+    title = LEVEL_LABELS[rating.level]
+    body = (
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <GrowthRing level={rating.level} size={48} />
+          <p className="font-mono text-xs text-secondary">
+            {new Date(rating.rated_at).toLocaleDateString()}
+          </p>
+        </div>
+        <p className="text-sm text-secondary flex items-center gap-1.5">
+          <RaterAvatar url={raterAvatars?.[rating.rater_id]} size={20} />
+          Rated by {rating.rater_name || rating.rater_email || 'a connection'}
+        </p>
+        {rating.comments && <p className="text-sm text-ink">{rating.comments}</p>}
+      </div>
+    )
+  } else if (event.type === 'relationship') {
+    const exp = event.link.experience
+    title = exp.title
+    body = (
+      <div className="space-y-2">
+        <p className="font-mono text-xs text-secondary">
+          {formatMonthYear(exp.start_date)} – {exp.end_date ? formatMonthYear(exp.end_date) : 'present'}
+        </p>
+        <p className="text-sm text-secondary">
+          {exp.type === 'education' ? 'Used during study' : 'Used during employment'} · {exp.organization}
+        </p>
+      </div>
+    )
+  } else if (event.type === 'activity') {
+    const s = event.statement
+    title = activityName(s.statement)
+    body = (
+      <div className="space-y-2">
+        <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">{verbLabel(s.statement)}</p>
+        <p className="font-mono text-xs text-secondary">
+          {new Date(s.recorded_at).toLocaleDateString()}
+        </p>
+        {s.statement.object?.definition?.description?.['en-US'] && (
+          <p className="text-sm text-ink">{s.statement.object.definition.description['en-US']}</p>
+        )}
+      </div>
+    )
+  } else if (event.type === 'training') {
+    const course = event.link.courses
+    title = course.name
+    body = (
+      <div className="space-y-2">
+        <p className="font-mono text-xs text-secondary">
+          {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ')}
+        </p>
+        {course.completed_date && (
+          <p className="font-mono text-xs text-secondary">
+            Completed {new Date(course.completed_date).toLocaleDateString()}
+          </p>
+        )}
+        <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/80">
+          {SKILL_RELATIONSHIP_LABELS[event.link.relationship] ?? event.link.relationship}
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div
+        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4 gap-4">
+          <h2 className="font-display text-xl text-ink">{title}</h2>
+          <button type="button" onClick={onClose} className="shrink-0 text-secondary hover:text-ink text-sm">
+            Close
+          </button>
+        </div>
+        {body}
       </div>
     </div>
   )
