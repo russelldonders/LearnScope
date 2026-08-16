@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { EXPERIENCE_TYPE_CONFIG } from '../lib/experienceTypes'
+import OrganizationUrlField from './OrganizationUrlField'
 
 export default function ExperienceModal({ type = 'employment', onSave, onClose }) {
   const config = EXPERIENCE_TYPE_CONFIG[type]
@@ -72,20 +73,7 @@ export default function ExperienceModal({ type = 'employment', onSave, onClose }
             />
           </div>
 
-          <div>
-            <label className="block text-sm text-secondary mb-1" htmlFor="organizationUrl">
-              Organization website (optional)
-            </label>
-            <input
-              id="organizationUrl"
-              type="url"
-              placeholder="https://…"
-              value={organizationUrl}
-              onChange={(e) => setOrganizationUrl(e.target.value)}
-              className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-            />
-            <p className="text-xs text-secondary/80 mt-1">Used to show the organization's logo.</p>
-          </div>
+          <OrganizationUrlField value={organizationUrl} onChange={setOrganizationUrl} />
 
           <div className="grid grid-cols-2 gap-4">
             <div>

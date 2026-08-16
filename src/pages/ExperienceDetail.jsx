@@ -9,6 +9,7 @@ import AppHeader from '../components/AppHeader'
 import SkillCard from '../components/SkillCard'
 import FindSkillModal from '../components/FindSkillModal'
 import OrganizationLogo from '../components/OrganizationLogo'
+import OrganizationUrlField from '../components/OrganizationUrlField'
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -283,20 +284,7 @@ function DetailsTab({ item, onSave, onDelete }) {
         />
       </div>
 
-      <div>
-        <label className="block text-sm text-secondary mb-1" htmlFor="organizationUrl">
-          Organization website (optional)
-        </label>
-        <input
-          id="organizationUrl"
-          type="url"
-          placeholder="https://…"
-          value={organizationUrl}
-          onChange={(e) => setOrganizationUrl(e.target.value)}
-          className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-        />
-        <p className="text-xs text-secondary/80 mt-1">Used to show the organization's logo.</p>
-      </div>
+      <OrganizationUrlField value={organizationUrl} onChange={setOrganizationUrl} />
 
       <div className="grid grid-cols-2 gap-4">
         <div>

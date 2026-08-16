@@ -3,6 +3,7 @@ export const EXPERIENCE_TYPES = [
   { value: 'project', label: 'Project' },
   { value: 'volunteer', label: 'Volunteer Position' },
   { value: 'other', label: 'Other Experience' },
+  { value: 'course', label: 'Course / Training' },
   { value: 'education', label: 'Education' },
 ]
 
@@ -39,6 +40,13 @@ export const EXPERIENCE_TYPE_CONFIG = {
     orgLabel: 'Organization (optional)',
     orgRequired: false,
     periodNoun: 'experience',
+  },
+  course: {
+    modalTitle: 'Add course / training',
+    titleLabel: 'Course / training title',
+    orgLabel: 'Provider (optional)',
+    orgRequired: false,
+    periodNoun: 'course',
   },
   education: {
     modalTitle: 'Add education',

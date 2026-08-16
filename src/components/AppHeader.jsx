@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
 
 const NAV_LINKS = [
+  { to: '/dashboard', label: 'Home' },
   { to: '/skills', label: 'Skills' },
   { to: '/experience', label: 'Experience' },
   { to: '/training', label: 'Training' },
