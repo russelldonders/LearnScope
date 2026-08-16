@@ -773,6 +773,11 @@ function HistorySection({
 
       {loading && <p className="text-sm text-secondary">Loading…</p>}
       {!loading && (() => {
+        // Enrolled-but-not-completed courses have no real date yet -- they
+        // haven't happened. Rather than fake a date (which risked sorting
+        // them below "today", as if already done), they render as pending
+        // items above "today", the same way an unmet target does.
+        const pendingCourseLinks = courseLinks.filter((link) => link.courses && !link.courses.completed_date)
         const events = [
           ...history.map((entry) => ({ type: 'assessment', date: entry.assessed_at, entry })),
           ...peerRatings.map((rating) => ({ type: 'peer', date: rating.rated_at, rating })),
@@ -781,8 +786,8 @@ function HistorySection({
             .map((link) => ({ type: 'relationship', date: link.experience.start_date, link })),
           ...statements.map((s) => ({ type: 'activity', date: s.recorded_at, statement: s })),
           ...courseLinks
-            .filter((link) => link.courses)
-            .map((link) => ({ type: 'training', date: link.courses.completed_date || link.created_at, link })),
+            .filter((link) => link.courses?.completed_date)
+            .map((link) => ({ type: 'training', date: link.courses.completed_date, link })),
           { type: 'added', date: skill.date_added, source: skill.source },
           { type: 'today', date: new Date().toISOString() },
         ].sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -796,7 +801,19 @@ function HistorySection({
 
         return (
           <div>
-            {currentTarget && <TargetTimelineEntry target={currentTarget} hasMore={events.length > 0} />}
+            {currentTarget && (
+              <TargetTimelineEntry
+                target={currentTarget}
+                hasMore={pendingCourseLinks.length > 0 || events.length > 0}
+              />
+            )}
+            {pendingCourseLinks.map((link, i) => (
+              <PendingTrainingEntry
+                key={link.id}
+                link={link}
+                hasMore={i < pendingCourseLinks.length - 1 || events.length > 0}
+              />
+            ))}
             <UpNextSection
               stage={skill.lifecycle_stage}
               selfAssessedCount={selfAssessedCount}
@@ -855,6 +872,24 @@ function TargetTimelineEntry({ target, hasMore }) {
         <p className="text-sm text-secondary">
           Target {LEVEL_LABELS[target.target_level]} aimed to be achieved by{' '}
           {new Date(`${target.target_date}T00:00:00`).toLocaleDateString()}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function PendingTrainingEntry({ link, hasMore }) {
+  return (
+    <div className="flex gap-3">
+      <div className="flex flex-col items-center w-12 shrink-0">
+        <div className="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-hairline">
+          <span className="w-1.5 h-1.5 rounded-full bg-secondary/40" />
+        </div>
+        {hasMore && <span className="w-px flex-1 bg-hairline mt-1" />}
+      </div>
+      <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper/60 p-3">
+        <p className="text-sm text-secondary">
+          Enrolled in <span className="text-ink font-medium">{link.courses.name}</span> — in progress
         </p>
       </div>
     </div>
@@ -955,7 +990,7 @@ function TimelineEntry({
           <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">Training</span>
           <span className="truncate">{course.name}</span>
           <span className="font-mono text-[10px] text-secondary/70 shrink-0">
-            {new Date(course.completed_date || event.link.created_at).toLocaleDateString()}
+            {new Date(course.completed_date).toLocaleDateString()}
           </span>
         </div>
       </div>

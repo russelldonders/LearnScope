@@ -42,14 +42,34 @@ export async function listEnrolledCatalogueIds(userId) {
   return new Set((data ?? []).map((c) => c.catalogue_course_id))
 }
 
-export async function enrolInCatalogueCourse(userId, course) {
-  const { error } = await supabase.from('courses').insert({
-    user_id: userId,
-    name: course.name,
-    provider: course.provider,
-    course_type: course.course_type,
-    duration: course.duration,
-    catalogue_course_id: course.id,
-  })
+// skillId (optional) links the new course straight to the skill the learner
+// enrolled from, via skill_course_links -- without this, enrolling scoped to
+// a skill would insert a personal course record but never surface it back
+// on that skill's page.
+export async function enrolInCatalogueCourse(userId, course, skillId = null) {
+  const { data, error } = await supabase
+    .from('courses')
+    .insert({
+      user_id: userId,
+      name: course.name,
+      provider: course.provider,
+      course_type: course.course_type,
+      duration: course.duration,
+      catalogue_course_id: course.id,
+    })
+    .select()
+    .single()
   if (error) throw error
+
+  if (skillId) {
+    const { error: linkError } = await supabase.from('skill_course_links').insert({
+      user_id: userId,
+      skill_id: skillId,
+      course_id: data.id,
+      relationship: 'developed',
+    })
+    if (linkError) throw linkError
+  }
+
+  return data
 }

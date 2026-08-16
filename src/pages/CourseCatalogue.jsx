@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
 import { listCatalogueCourses, listEnrolledCatalogueIds, enrolInCatalogueCourse } from '../lib/courseCatalogue'
@@ -10,6 +10,7 @@ import FilterRow from '../components/FilterRow'
 export default function CourseCatalogue() {
   const { user } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
   const scope = location.state ?? null
 
   const [catalogue, setCatalogue] = useState([])
@@ -23,14 +24,16 @@ export default function CourseCatalogue() {
   const [tagId, setTagId] = useState(null)
   const [skillId, setSkillId] = useState(scope?.librarySkillId ?? null)
   const [level, setLevel] = useState(null)
+  const [myLevel, setMyLevel] = useState(null)
   // Only set when arriving scoped to a skill (via the skill-not-yet-achieved
   // deep link) -- cleared as soon as the user browses away from that skill.
   const [minLevel, setMinLevel] = useState(
     scope?.librarySkillId ? (scope.skillLevel ?? 0) + 1 : null
   )
-  // Filters start collapsed unless we arrived already scoped to a skill, in
-  // which case showing them lets the learner see (and adjust) what's applied.
-  const [showFilters, setShowFilters] = useState(Boolean(scope?.librarySkillId))
+  // Filters start collapsed even when arriving scoped to a skill -- the
+  // scoping still applies (see minLevel/skillId above), it's just not shown
+  // expanded by default.
+  const [showFilters, setShowFilters] = useState(false)
   const [selectedCourse, setSelectedCourse] = useState(null)
 
   useEffect(() => {
@@ -64,8 +67,12 @@ export default function CourseCatalogue() {
     setError(null)
     setEnrollingId(course.id)
     try {
-      await enrolInCatalogueCourse(user.id, course)
+      await enrolInCatalogueCourse(user.id, course, scope?.skillId ?? null)
       setEnrolledIds((prev) => new Set(prev).add(course.id))
+      if (scope?.skillId && scope?.backTo) {
+        navigate(scope.backTo)
+        return
+      }
     } catch (err) {
       setError(err.message)
     } finally {
@@ -95,7 +102,9 @@ export default function CourseCatalogue() {
     return [...map.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
   }, [catalogue])
 
-  const activeFilterCount = [tagId, skillId, level].filter((v) => v !== null).length
+  const myLibrarySkillIds = useMemo(() => new Set(mySkills.map((s) => s.library_skill_id)), [mySkills])
+
+  const activeFilterCount = [tagId, skillId, level, myLevel].filter((v) => v !== null).length
 
   const q = query.trim().toLowerCase()
   const filtered = catalogue.filter((course) => {
@@ -109,6 +118,9 @@ export default function CourseCatalogue() {
       if (level && !entries.some((e) => e.level === level)) return false
       if (minLevel && !entries.some((e) => e.level >= minLevel)) return false
     } else if (level && !course.skillEntries.some((e) => e.level === level)) {
+      return false
+    }
+    if (myLevel && !course.skillEntries.some((e) => myLibrarySkillIds.has(e.skillId) && e.level === myLevel)) {
       return false
     }
     return true
@@ -174,9 +186,9 @@ export default function CourseCatalogue() {
             {mySkills.length > 0 && (
               <FilterRow
                 label="My skill entry"
-                value={mySkills.some((s) => s.library_skill_id === skillId) ? skillId : null}
-                onChange={handleSelectSkill}
-                options={mySkills.map((s) => ({ value: s.library_skill_id, label: s.name }))}
+                value={myLevel}
+                onChange={setMyLevel}
+                options={Object.entries(LEVEL_LABELS).map(([value, label]) => ({ value: Number(value), label }))}
               />
             )}
             <FilterRow
