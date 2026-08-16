@@ -32,14 +32,16 @@ export async function getCatalogueCourse(id) {
   return data ? mapCatalogueCourse(data) : null
 }
 
+// Maps catalogue_course_id -> the learner's own courses.id, so an already
+// -enrolled catalogue card can link straight to that personal record.
 export async function listEnrolledCatalogueIds(userId) {
   const { data, error } = await supabase
     .from('courses')
-    .select('catalogue_course_id')
+    .select('id, catalogue_course_id')
     .eq('user_id', userId)
     .not('catalogue_course_id', 'is', null)
   if (error) throw error
-  return new Set((data ?? []).map((c) => c.catalogue_course_id))
+  return new Map((data ?? []).map((c) => [c.catalogue_course_id, c.id]))
 }
 
 // skillId (optional) links the new course straight to the skill the learner

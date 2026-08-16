@@ -16,7 +16,6 @@ import { activityName, verbLabel } from '../lib/xapiStatement'
 import { syncCurrentRoleLinks } from '../lib/currentRole'
 import { listTags, listSkillTags, addTagToSkill, removeSkillTagLink } from '../lib/skillTags'
 import { SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
-import { getCatalogueCourse } from '../lib/courseCatalogue'
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import InviteRaterModal from '../components/InviteRaterModal'
 import RecordExperienceModal from '../components/RecordExperienceModal'
@@ -223,37 +222,21 @@ export default function SkillDetail() {
 
         {skill && (
           <div className="bg-card border border-hairline rounded-lg p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-4">
-                <GrowthRing level={skill.level} size={56} />
-                <div>
-                  <h2 className="font-display text-2xl text-ink">{skill.name}</h2>
-                  <p className="text-sm text-secondary flex items-center gap-1.5">
-                    {!skill.level && skill.lifecycle_stage && (
-                      <LifecycleStageIcon stage={skill.lifecycle_stage} />
-                    )}
-                    {skill.level
-                      ? LEVEL_LABELS[skill.level]
-                      : skill.lifecycle_stage
-                        ? SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]
-                        : 'Not yet self-assessed'}
-                  </p>
-                </div>
+            <div className="flex items-center gap-4 mb-4">
+              <GrowthRing level={skill.level} size={56} />
+              <div>
+                <h2 className="font-display text-2xl text-ink">{skill.name}</h2>
+                <p className="text-sm text-secondary flex items-center gap-1.5">
+                  {!skill.level && skill.lifecycle_stage && (
+                    <LifecycleStageIcon stage={skill.lifecycle_stage} />
+                  )}
+                  {skill.level
+                    ? LEVEL_LABELS[skill.level]
+                    : skill.lifecycle_stage
+                      ? SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]
+                      : 'Not yet self-assessed'}
+                </p>
               </div>
-
-              {targets.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setTargetOpen(true)}
-                  className="shrink-0 text-right rounded-md border border-hairline bg-paper px-3 py-2 hover:border-moss transition-colors"
-                >
-                  <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Next Target</p>
-                  <p className="text-sm font-medium text-ink">{LEVEL_LABELS[targets[0].target_level]}</p>
-                  <p className="font-mono text-xs text-secondary">
-                    by {new Date(`${targets[0].target_date}T00:00:00`).toLocaleDateString()}
-                  </p>
-                </button>
-              )}
             </div>
 
             {skill.lifecycle_stage && <LifecycleProgress stage={skill.lifecycle_stage} />}
@@ -491,6 +474,24 @@ function UpNextSection({
   courseLinks,
   onFindCourse,
 }) {
+  // Once a course is already linked, the once-off "find a course" checklist
+  // item has served its purpose -- the course itself now shows on the
+  // timeline and in the Training tab, so Up Next collapses to a single
+  // action for finding something further, rather than repeating the list.
+  if (stage === 'target_set' && courseLinks.some((link) => link.courses)) {
+    return (
+      <div className="mb-6">
+        <button
+          type="button"
+          onClick={onFindCourse}
+          className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+        >
+          Find more training
+        </button>
+      </div>
+    )
+  }
+
   let items = []
   if (stage === 'identified') {
     items = [
@@ -542,16 +543,6 @@ function UpNextSection({
         done: false,
         onClick: onFindCourse,
       },
-      ...courseLinks
-        .filter((link) => link.courses)
-        .map((link) => ({
-          key: `course-${link.id}`,
-          label: link.courses.name,
-          description: link.courses.completed_date
-            ? `Completed ${formatMonthYear(link.courses.completed_date)}`
-            : 'Assigned — in progress',
-          done: !!link.courses.completed_date,
-        })),
     ]
   }
 
@@ -561,36 +552,29 @@ function UpNextSection({
     <div className="mb-6 rounded-md border border-hairline bg-paper p-4">
       <h3 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Up Next</h3>
       <div className="space-y-2">
-        {items.map((item) => {
-          const Tag = item.onClick ? 'button' : 'div'
-          return (
-            <Tag
-              key={item.key}
-              type={item.onClick ? 'button' : undefined}
-              onClick={item.onClick}
-              className={`w-full flex items-center justify-between gap-3 rounded-md border border-hairline bg-card px-3 py-2.5 text-left transition-colors ${
-                item.onClick ? 'hover:border-moss' : ''
-              }`}
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <span
-                  className={`shrink-0 flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold ${
-                    item.done ? 'bg-moss border-moss text-paper' : 'border-hairline text-secondary'
-                  }`}
-                >
-                  {item.done ? '✓' : ''}
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-sm text-ink">{item.label}</span>
-                  <span className="block text-xs text-secondary truncate">{item.description}</span>
-                </span>
-              </div>
-              {item.onClick && (
-                <span className="shrink-0 text-xs text-moss font-medium">{item.done ? 'Redo' : 'Start'}</span>
-              )}
-            </Tag>
-          )
-        })}
+        {items.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={item.onClick}
+            className="w-full flex items-center justify-between gap-3 rounded-md border border-hairline bg-card px-3 py-2.5 text-left hover:border-moss transition-colors"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <span
+                className={`shrink-0 flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold ${
+                  item.done ? 'bg-moss border-moss text-paper' : 'border-hairline text-secondary'
+                }`}
+              >
+                {item.done ? '✓' : ''}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm text-ink">{item.label}</span>
+                <span className="block text-xs text-secondary truncate">{item.description}</span>
+              </span>
+            </div>
+            <span className="shrink-0 text-xs text-moss font-medium">{item.done ? 'Redo' : 'Start'}</span>
+          </button>
+        ))}
       </div>
     </div>
   )
@@ -747,11 +731,16 @@ function HistorySection({
   onSetTarget,
   onFindCourse,
 }) {
+  const navigate = useNavigate()
   const due = isSelfAssessmentDue(skill.next_checkin_date)
   const currentTarget = targets[0]
   const showBaselineFlow = skill.lifecycle_stage === 'identified'
   const selfAssessedCount = history.filter((a) => a.source === 'self' || !a.source).length
   const [selectedEvent, setSelectedEvent] = useState(null)
+
+  function goToCourse(courseId) {
+    navigate(`/courses/${courseId}`, { state: { backTo: `/skills/${skill.id}`, backLabel: skill.name } })
+  }
 
   return (
     <div>
@@ -805,6 +794,7 @@ function HistorySection({
               <TargetTimelineEntry
                 target={currentTarget}
                 hasMore={pendingCourseLinks.length > 0 || events.length > 0}
+                onClick={onSetTarget}
               />
             )}
             {pendingCourseLinks.map((link, i) => (
@@ -812,6 +802,7 @@ function HistorySection({
                 key={link.id}
                 link={link}
                 hasMore={i < pendingCourseLinks.length - 1 || events.length > 0}
+                onClick={() => goToCourse(link.courses.id)}
               />
             ))}
             <UpNextSection
@@ -840,7 +831,13 @@ function HistorySection({
                 showAssessBaseline={showBaselineFlow && event.type === 'today'}
                 onAssessBaseline={onAssessBaseline}
                 assessBaselineDisabled={!hasAnyEvaluationInput}
-                onSelect={TIMELINE_DETAIL_TYPES.has(event.type) ? () => setSelectedEvent(event) : undefined}
+                onSelect={
+                  event.type === 'training'
+                    ? () => goToCourse(event.link.courses.id)
+                    : TIMELINE_DETAIL_TYPES.has(event.type)
+                      ? () => setSelectedEvent(event)
+                      : undefined
+                }
               />
             ))}
           </div>
@@ -859,7 +856,7 @@ function HistorySection({
   )
 }
 
-function TargetTimelineEntry({ target, hasMore }) {
+function TargetTimelineEntry({ target, hasMore, onClick }) {
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center w-12 shrink-0">
@@ -868,7 +865,18 @@ function TargetTimelineEntry({ target, hasMore }) {
         </div>
         {hasMore && <span className="w-px flex-1 bg-hairline mt-1" />}
       </div>
-      <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper/60 p-3">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onClick()
+          }
+        }}
+        className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper/60 p-3 cursor-pointer hover:border-moss/60 transition-colors"
+      >
         <p className="text-sm text-secondary">
           Target {LEVEL_LABELS[target.target_level]} aimed to be achieved by{' '}
           {new Date(`${target.target_date}T00:00:00`).toLocaleDateString()}
@@ -878,7 +886,7 @@ function TargetTimelineEntry({ target, hasMore }) {
   )
 }
 
-function PendingTrainingEntry({ link, hasMore }) {
+function PendingTrainingEntry({ link, hasMore, onClick }) {
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center w-12 shrink-0">
@@ -887,7 +895,18 @@ function PendingTrainingEntry({ link, hasMore }) {
         </div>
         {hasMore && <span className="w-px flex-1 bg-hairline mt-1" />}
       </div>
-      <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper/60 p-3">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onClick()
+          }
+        }}
+        className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper/60 p-3 cursor-pointer hover:border-moss/60 transition-colors"
+      >
         <p className="text-sm text-secondary">
           Enrolled in <span className="text-ink font-medium">{link.courses.name}</span> — in progress
         </p>
@@ -1260,24 +1279,6 @@ function TimelineDetailModal({ event, assessorName, raterAvatars, onClose }) {
         {s.statement.object?.definition?.description?.['en-US'] && (
           <p className="text-sm text-ink">{s.statement.object.definition.description['en-US']}</p>
         )}
-      </div>
-    )
-  } else if (event.type === 'training') {
-    const course = event.link.courses
-    title = course.name
-    body = (
-      <div className="space-y-2">
-        <p className="font-mono text-xs text-secondary">
-          {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ')}
-        </p>
-        {course.completed_date && (
-          <p className="font-mono text-xs text-secondary">
-            Completed {new Date(course.completed_date).toLocaleDateString()}
-          </p>
-        )}
-        <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/80">
-          {SKILL_RELATIONSHIP_LABELS[event.link.relationship] ?? event.link.relationship}
-        </p>
       </div>
     )
   }
@@ -1671,7 +1672,7 @@ function ExperiencesSection({ statements, loading, onRecordExperience }) {
 }
 
 function TrainingSection({ courseLinks, loading, trainingScopeState }) {
-  const [selectedLink, setSelectedLink] = useState(null)
+  const navigate = useNavigate()
 
   return (
     <div>
@@ -1698,11 +1699,17 @@ function TrainingSection({ courseLinks, loading, trainingScopeState }) {
                 key={link.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => setSelectedLink(link)}
+                onClick={() =>
+                  navigate(`/courses/${link.courses.id}`, {
+                    state: { backTo: trainingScopeState?.backTo, backLabel: trainingScopeState?.skillName },
+                  })
+                }
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
-                    setSelectedLink(link)
+                    navigate(`/courses/${link.courses.id}`, {
+                      state: { backTo: trainingScopeState?.backTo, backLabel: trainingScopeState?.skillName },
+                    })
                   }
                 }}
                 className="bg-paper border border-hairline rounded-md px-3 py-2 cursor-pointer hover:border-moss transition-colors"
@@ -1726,71 +1733,6 @@ function TrainingSection({ courseLinks, loading, trainingScopeState }) {
             ))}
         </ul>
       )}
-
-      {selectedLink && <TrainingDetailModal link={selectedLink} onClose={() => setSelectedLink(null)} />}
-    </div>
-  )
-}
-
-function TrainingDetailModal({ link, onClose }) {
-  const course = link.courses
-  const [catalogueCourse, setCatalogueCourse] = useState(null)
-  const [loadingCatalogue, setLoadingCatalogue] = useState(false)
-
-  useEffect(() => {
-    if (!course.catalogue_course_id) return
-    setLoadingCatalogue(true)
-    getCatalogueCourse(course.catalogue_course_id)
-      .then(setCatalogueCourse)
-      .finally(() => setLoadingCatalogue(false))
-  }, [course.catalogue_course_id])
-
-  return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-2 gap-4">
-          <h2 className="font-display text-xl text-ink">{course.name}</h2>
-          <button type="button" onClick={onClose} className="shrink-0 text-secondary hover:text-ink text-sm">
-            Close
-          </button>
-        </div>
-        <p className="font-mono text-xs text-secondary mb-2">
-          {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ')}
-        </p>
-        {course.completed_date && (
-          <p className="font-mono text-xs text-secondary mb-2">
-            Completed {new Date(course.completed_date).toLocaleDateString()}
-          </p>
-        )}
-        <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/80 mb-3">
-          {SKILL_RELATIONSHIP_LABELS[link.relationship] ?? link.relationship}
-        </p>
-        {loadingCatalogue && <p className="text-sm text-secondary">Loading more details…</p>}
-        {catalogueCourse?.synopsis && <p className="text-sm text-ink mb-3">{catalogueCourse.synopsis}</p>}
-        {catalogueCourse && (catalogueCourse.skillEntries.length > 0 || catalogueCourse.tags.length > 0) && (
-          <div className="flex flex-wrap gap-1">
-            {catalogueCourse.skillEntries.map((e) => (
-              <span
-                key={e.skillId}
-                className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5"
-              >
-                {e.skillName} · {LEVEL_LABELS[e.level]}
-              </span>
-            ))}
-            {catalogueCourse.tags.map((t) => (
-              <span
-                key={t.id}
-                className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
-              >
-                {t.name}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   )
 }

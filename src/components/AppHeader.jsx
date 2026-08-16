@@ -8,6 +8,7 @@ const NAV_LINKS = [
   { to: '/skills', label: 'Skills' },
   { to: '/experience', label: 'Experience' },
   { to: '/training', label: 'Find Training' },
+  { to: '/learning', label: 'Learning' },
   { to: '/connections', label: 'Connections' },
 ]
 

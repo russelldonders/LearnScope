@@ -14,7 +14,7 @@ export default function CourseCatalogue() {
   const scope = location.state ?? null
 
   const [catalogue, setCatalogue] = useState([])
-  const [enrolledIds, setEnrolledIds] = useState(new Set())
+  const [enrolledIds, setEnrolledIds] = useState(new Map())
   const [mySkills, setMySkills] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -67,9 +67,16 @@ export default function CourseCatalogue() {
     setError(null)
     setEnrollingId(course.id)
     try {
-      await enrolInCatalogueCourse(user.id, course, scope?.skillId ?? null)
-      setEnrolledIds((prev) => new Set(prev).add(course.id))
-      if (scope?.skillId && scope?.backTo) {
+      // Only link the enrolment to the skill it was found from if the
+      // course actually covers that skill -- otherwise a course reached via
+      // "Browse all courses" from a skill's page could get silently
+      // attached to a skill it has nothing to do with.
+      const matchesScopedSkill =
+        scope?.librarySkillId && course.skillEntries.some((e) => e.skillId === scope.librarySkillId)
+      const linkSkillId = matchesScopedSkill ? scope.skillId : null
+      const enrolled = await enrolInCatalogueCourse(user.id, course, linkSkillId)
+      setEnrolledIds((prev) => new Map(prev).set(course.id, enrolled.id))
+      if (linkSkillId && scope?.backTo) {
         navigate(scope.backTo)
         return
       }
@@ -78,6 +85,15 @@ export default function CourseCatalogue() {
     } finally {
       setEnrollingId(null)
     }
+  }
+
+  function handleCardClick(course) {
+    const enrolledCourseId = enrolledIds.get(course.id)
+    if (enrolledCourseId) {
+      navigate(`/courses/${enrolledCourseId}`)
+      return
+    }
+    setSelectedCourse(course)
   }
 
   function handleSelectSkill(id) {
@@ -217,11 +233,11 @@ export default function CourseCatalogue() {
                 key={course.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => setSelectedCourse(course)}
+                onClick={() => handleCardClick(course)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
-                    setSelectedCourse(course)
+                    handleCardClick(course)
                   }
                 }}
                 className="bg-card border border-hairline rounded-lg p-4 flex flex-col cursor-pointer hover:border-moss transition-colors"

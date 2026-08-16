@@ -238,7 +238,7 @@ export default function ExperienceDetail() {
             )}
 
             {tab === 'courses' && (
-              <CoursesSubsection linkedCourses={linkedCourses} onChange={loadLearning} />
+              <CoursesSubsection item={item} linkedCourses={linkedCourses} onChange={loadLearning} />
             )}
 
             {tab === 'skills' && (
@@ -513,14 +513,22 @@ function OverviewTab({ item, linkedCourses, skillLinks, achievements, childExper
           <p className="text-sm text-secondary">No courses linked yet.</p>
         ) : (
           <ul className="space-y-1">
-            {linkedCourses.map((l) => (
-              <li key={l.id} className="text-sm text-ink">
-                {l.courses?.name}
-                {l.courses?.completed_date && (
-                  <span className="text-secondary"> · Completed {formatMonthYear(l.courses.completed_date)}</span>
-                )}
-              </li>
-            ))}
+            {linkedCourses
+              .filter((l) => l.courses)
+              .map((l) => (
+                <li key={l.id} className="text-sm">
+                  <Link
+                    to={`/courses/${l.courses.id}`}
+                    state={{ backTo: `/experience/${item.id}`, backLabel: item.title }}
+                    className="text-moss hover:underline"
+                  >
+                    {l.courses.name}
+                  </Link>
+                  {l.courses.completed_date && (
+                    <span className="text-secondary"> · Completed {formatMonthYear(l.courses.completed_date)}</span>
+                  )}
+                </li>
+              ))}
           </ul>
         )}
       </div>
@@ -562,7 +570,7 @@ function OverviewTab({ item, linkedCourses, skillLinks, achievements, childExper
   )
 }
 
-function CoursesSubsection({ linkedCourses, onChange }) {
+function CoursesSubsection({ item, linkedCourses, onChange }) {
   const [error, setError] = useState(null)
 
   async function unlinkCourse(linkId) {
@@ -580,28 +588,34 @@ function CoursesSubsection({ linkedCourses, onChange }) {
         <p className="text-sm text-secondary mb-3">No courses linked yet.</p>
       ) : (
         <ul className="space-y-2 mb-3">
-          {linkedCourses.map((l) => (
-            <li
-              key={l.id}
-              className="flex items-center justify-between gap-2 bg-paper border border-hairline rounded-md px-3 py-2"
-            >
-              <div className="min-w-0">
-                <p className="text-sm text-ink truncate">{l.courses?.name}</p>
-                {l.courses?.completed_date && (
-                  <p className="font-mono text-xs text-secondary">
-                    Completed {formatMonthYear(l.courses.completed_date)}
-                  </p>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => unlinkCourse(l.id)}
-                className="shrink-0 text-xs text-red-700 font-medium"
+          {linkedCourses
+            .filter((l) => l.courses)
+            .map((l) => (
+              <li
+                key={l.id}
+                className="flex items-center justify-between gap-2 bg-paper border border-hairline rounded-md px-3 py-2"
               >
-                Unlink
-              </button>
-            </li>
-          ))}
+                <Link
+                  to={`/courses/${l.courses.id}`}
+                  state={{ backTo: `/experience/${item.id}`, backLabel: item.title }}
+                  className="min-w-0"
+                >
+                  <p className="text-sm text-ink truncate hover:underline">{l.courses.name}</p>
+                  {l.courses.completed_date && (
+                    <p className="font-mono text-xs text-secondary">
+                      Completed {formatMonthYear(l.courses.completed_date)}
+                    </p>
+                  )}
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => unlinkCourse(l.id)}
+                  className="shrink-0 text-xs text-red-700 font-medium"
+                >
+                  Unlink
+                </button>
+              </li>
+            ))}
         </ul>
       )}
 
