@@ -20,10 +20,12 @@ export default function TrackingReasonIcon({ reason, size = 18, className }) {
         </svg>
       )
     case 'career_development':
+      // Ascending steps -- distinct from the lifecycle "Developing" stage's
+      // trend-line icon, which this used to share a shape with.
       return (
         <svg {...props}>
-          <polyline points="3 17 9 11 13 15 21 7" />
-          <polyline points="14 7 21 7 21 14" />
+          <path d="M3 21h4v-4h4v-4h4v-4h4V5" />
+          <circle cx="19" cy="5" r="1.5" fill="currentColor" stroke="none" />
         </svg>
       )
     case 'lifestyle':

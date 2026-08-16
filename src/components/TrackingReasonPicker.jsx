@@ -1,10 +1,12 @@
 import TrackingReasonIcon from './TrackingReasonIcon'
 import { TRACKING_REASONS } from '../lib/trackingReasons'
 
-export default function TrackingReasonPicker({ value, onChange }) {
+export default function TrackingReasonPicker({ value, onChange, required = false }) {
   return (
     <div>
-      <span className="block text-sm text-secondary mb-2">Why are you tracking this? (optional)</span>
+      <span className="block text-sm text-secondary mb-2">
+        Why are you tracking this?{!required && ' (optional)'}
+      </span>
       <div className="grid grid-cols-2 gap-2">
         {TRACKING_REASONS.map((r) => (
           <button

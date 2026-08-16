@@ -6,12 +6,14 @@ import SkillCard from './SkillCard'
 import FindSkillModal from './FindSkillModal'
 import FilterRow from './FilterRow'
 import TrackingReasonIcon from './TrackingReasonIcon'
+import OrganizationLogo from './OrganizationLogo'
 import { TRACKING_REASONS } from '../lib/trackingReasons'
 
 export default function SkillsSection() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [skills, setSkills] = useState([])
+  const [currentRoles, setCurrentRoles] = useState([])
   const [tagsBySkill, setTagsBySkill] = useState(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -22,7 +24,19 @@ export default function SkillsSection() {
 
   useEffect(() => {
     loadSkills()
+    loadCurrentRoles()
   }, [])
+
+  async function loadCurrentRoles() {
+    const { data } = await supabase
+      .from('experience')
+      .select('id, title, organization, organization_url')
+      .eq('user_id', user.id)
+      .eq('type', 'employment')
+      .is('end_date', null)
+      .order('start_date', { ascending: false })
+    setCurrentRoles(data ?? [])
+  }
 
   async function loadSkills() {
     setLoading(true)
@@ -161,7 +175,18 @@ export default function SkillsSection() {
 
       {hasSplit && (
         <div className="mb-10">
-          <h3 className="font-display text-base text-ink mb-4">Current role</h3>
+          <div className="mb-4">
+            <h3 className="font-display text-base text-ink">Current role</h3>
+            {currentRoles.map((role) => (
+              <p key={role.id} className="flex items-center gap-1.5 text-sm text-secondary mt-1">
+                {role.organization_url && <OrganizationLogo organizationUrl={role.organization_url} size={18} />}
+                <span>
+                  {role.title}
+                  {role.organization ? ` · ${role.organization}` : ''}
+                </span>
+              </p>
+            ))}
+          </div>
           <SkillGrid
             skills={currentRoleSkills}
             onEdit={(skill) => navigate(`/skills/${skill.id}`)}

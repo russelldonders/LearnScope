@@ -74,6 +74,10 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
       setError('Name is required.')
       return
     }
+    if (!trackingReason) {
+      setError('Please choose why you are tracking this skill.')
+      return
+    }
     setError(null)
     setSaving(true)
     try {
@@ -292,7 +296,7 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
                 </label>
               )}
 
-              <TrackingReasonPicker value={trackingReason} onChange={setTrackingReason} />
+              <TrackingReasonPicker value={trackingReason} onChange={setTrackingReason} required />
 
               <label className="flex items-center gap-2 text-sm text-secondary border-t border-hairline pt-4">
                 <input
