@@ -22,6 +22,7 @@ import RecordExperienceModal from '../components/RecordExperienceModal'
 import BaselineQuizModal from '../components/BaselineQuizModal'
 import AssessBaselineModal from '../components/AssessBaselineModal'
 import SetTargetModal from '../components/SetTargetModal'
+import ValidateSkillModal from '../components/ValidateSkillModal'
 import LifecycleStageIcon from '../components/LifecycleStageIcon'
 import TagsField from '../components/TagsField'
 
@@ -62,6 +63,7 @@ export default function SkillDetail() {
   const [quizOpen, setQuizOpen] = useState(false)
   const [assessMode, setAssessMode] = useState(null)
   const [targetOpen, setTargetOpen] = useState(false)
+  const [validateOpen, setValidateOpen] = useState(false)
 
   useEffect(() => {
     loadSkill()
@@ -173,6 +175,11 @@ export default function SkillDetail() {
 
   async function handleDemonstrateSkill() {
     const { error } = await supabase.from('skills').update({ lifecycle_stage: 'developing' }).eq('id', skill.id)
+    if (!error) await loadSkill()
+  }
+
+  async function handleValidateSkillStage() {
+    const { error } = await supabase.from('skills').update({ lifecycle_stage: 'demonstrated' }).eq('id', skill.id)
     if (!error) await loadSkill()
   }
 
@@ -312,6 +319,25 @@ export default function SkillDetail() {
               />
             )}
 
+            {validateOpen && targets[0] && (
+              <ValidateSkillModal
+                skill={skill}
+                user={user}
+                target={targets[0]}
+                assessments={history}
+                peerRatings={peerRatings}
+                statements={statements}
+                quizzes={quizResults}
+                courseLinks={courseLinks}
+                onClose={() => setValidateOpen(false)}
+                onValidated={() => {
+                  loadHistory()
+                  loadSkill()
+                  setValidateOpen(false)
+                }}
+              />
+            )}
+
             <div className="flex items-center flex-wrap gap-1 border-b border-hairline mb-4">
               {TABS.map((t) => (
                 <button
@@ -386,6 +412,8 @@ export default function SkillDetail() {
                 onSetTarget={() => setTargetOpen(true)}
                 onFindCourse={() => navigate('/training', { state: trainingScopeState })}
                 onDemonstrateSkill={handleDemonstrateSkill}
+                onValidateSkillStage={handleValidateSkillStage}
+                onRequestValidation={() => setValidateOpen(true)}
               />
             )}
 
@@ -456,7 +484,16 @@ function LifecycleProgress({ stage }) {
 // establishing a baseline, so these live outside the stage-specific Up Next
 // checklist below. Find a course/Demonstrate Skill join the row only while
 // actively working toward a target.
-function QuickActionsRow({ stage, hasAnyCourse, onSelfAssess, onInvite, onRecordExperience, onFindCourse, onDemonstrateSkill }) {
+function QuickActionsRow({
+  stage,
+  hasAnyCourse,
+  onSelfAssess,
+  onInvite,
+  onRecordExperience,
+  onFindCourse,
+  onDemonstrateSkill,
+  onValidateSkillStage,
+}) {
   const buttonClass = 'rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper'
   return (
     <div className="flex flex-wrap items-center gap-2 mb-6">
@@ -477,6 +514,11 @@ function QuickActionsRow({ stage, hasAnyCourse, onSelfAssess, onInvite, onRecord
       {stage === 'target_set' && (
         <button type="button" onClick={onDemonstrateSkill} className={buttonClass}>
           Demonstrate Skill
+        </button>
+      )}
+      {stage === 'developing' && (
+        <button type="button" onClick={onValidateSkillStage} className={buttonClass}>
+          Validate Skill
         </button>
       )}
     </div>
@@ -500,6 +542,9 @@ function UpNextSection({
   onDemonstrateSkill,
   onFindCourse,
   courseLinks,
+  onValidateSkillStage,
+  onRequestValidation,
+  hasTarget,
 }) {
   let items = []
   if (stage === 'identified') {
@@ -592,7 +637,33 @@ function UpNextSection({
         done: peerRatingsCount > 0,
         onClick: onInvite,
       },
+      {
+        key: 'validate',
+        label: 'Validate Skill',
+        description: 'Move on to validating this skill against your target once you feel ready.',
+        done: false,
+        onClick: onValidateSkillStage,
+      },
     ]
+  } else if (stage === 'demonstrated') {
+    items = [
+      {
+        key: 'invite-validating',
+        label: 'Invite others to assess your skill',
+        description: 'Get an outside perspective on your level.',
+        done: peerRatingsCount > 0,
+        onClick: onInvite,
+      },
+    ]
+    if (hasTarget) {
+      items.push({
+        key: 'ai-assessment',
+        label: 'Request AI Assessment',
+        description: 'Weigh all your evidence against your target level and get feedback.',
+        done: false,
+        onClick: onRequestValidation,
+      })
+    }
   }
 
   if (items.length === 0) return null
@@ -780,6 +851,8 @@ function HistorySection({
   onSetTarget,
   onFindCourse,
   onDemonstrateSkill,
+  onValidateSkillStage,
+  onRequestValidation,
 }) {
   const navigate = useNavigate()
   const due = isSelfAssessmentDue(skill.next_checkin_date)
@@ -890,6 +963,9 @@ function HistorySection({
               onDemonstrateSkill={onDemonstrateSkill}
               onFindCourse={onFindCourse}
               courseLinks={courseLinks}
+              onValidateSkillStage={onValidateSkillStage}
+              onRequestValidation={onRequestValidation}
+              hasTarget={targets.length > 0}
             />
             <QuickActionsRow
               stage={skill.lifecycle_stage}
@@ -899,6 +975,7 @@ function HistorySection({
               onRecordExperience={onRecordExperience}
               onFindCourse={onFindCourse}
               onDemonstrateSkill={onDemonstrateSkill}
+              onValidateSkillStage={onValidateSkillStage}
             />
             {events.map((event, i) => (
               <TimelineEntry
