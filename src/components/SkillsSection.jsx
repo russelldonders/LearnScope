@@ -4,9 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import SkillCard from './SkillCard'
 import FindSkillModal from './FindSkillModal'
-import TrackingReasonIcon from './TrackingReasonIcon'
 import FilterRow from './FilterRow'
-import { TRACKING_REASONS, TRACKING_REASON_LABELS } from '../lib/trackingReasons'
 
 export default function SkillsSection() {
   const { user } = useAuth()
@@ -16,7 +14,6 @@ export default function SkillsSection() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [addOpen, setAddOpen] = useState(false)
-  const [reasonFilter, setReasonFilter] = useState(null)
   const [tagFilter, setTagFilter] = useState(null)
   const [showFilters, setShowFilters] = useState(false)
 
@@ -50,13 +47,8 @@ export default function SkillsSection() {
   }
 
   const filteredSkills = useMemo(
-    () =>
-      skills.filter(
-        (s) =>
-          (!reasonFilter || s.tracking_reason === reasonFilter) &&
-          (!tagFilter || (tagsBySkill.get(s.id) ?? []).includes(tagFilter))
-      ),
-    [skills, reasonFilter, tagFilter, tagsBySkill]
+    () => skills.filter((s) => !tagFilter || (tagsBySkill.get(s.id) ?? []).includes(tagFilter)),
+    [skills, tagFilter, tagsBySkill]
   )
   const currentRoleSkills = useMemo(
     () => filteredSkills.filter((s) => s.is_current_role),
@@ -72,10 +64,6 @@ export default function SkillsSection() {
     () => [...new Set([...tagsBySkill.values()].flat())].sort(),
     [tagsBySkill]
   )
-  const availableReasons = useMemo(
-    () => TRACKING_REASONS.filter((r) => skills.some((s) => s.tracking_reason === r.value)),
-    [skills]
-  )
   const activeFilterCount = [tagFilter].filter((v) => v !== null).length
 
   return (
@@ -86,7 +74,7 @@ export default function SkillsSection() {
           onClick={() => setAddOpen(true)}
           className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90"
         >
-          + Find skill
+          Find a skill to add to your profile
         </button>
       </div>
 
@@ -99,42 +87,6 @@ export default function SkillsSection() {
         </div>
       )}
 
-      {!loading && skills.length > 0 && availableReasons.length > 0 && (
-        <div className="mb-4">
-          <span className="block font-mono text-xs uppercase tracking-wide text-secondary mb-2">
-            Why you're tracking these
-          </span>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setReasonFilter(null)}
-              className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                reasonFilter === null
-                  ? 'border-moss bg-moss/10 text-ink'
-                  : 'border-hairline text-secondary hover:text-ink'
-              }`}
-            >
-              All
-            </button>
-            {availableReasons.map((r) => (
-              <button
-                key={r.value}
-                type="button"
-                onClick={() => setReasonFilter(reasonFilter === r.value ? null : r.value)}
-                className={`flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                  reasonFilter === r.value
-                    ? 'border-moss bg-moss/10 text-ink'
-                    : 'border-hairline text-secondary hover:text-ink'
-                }`}
-              >
-                <TrackingReasonIcon reason={r.value} size={14} />
-                {TRACKING_REASON_LABELS[r.value]}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {!loading && skills.length > 0 && availableTags.length > 0 && (
         <>
           <button
@@ -142,7 +94,9 @@ export default function SkillsSection() {
             onClick={() => setShowFilters((v) => !v)}
             className="text-sm text-moss font-medium mb-4"
           >
-            {showFilters ? 'Hide filters' : `Show filters${activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}`}
+            {showFilters
+              ? 'Hide More Filters'
+              : `Show More Filters${activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}`}
           </button>
 
           {showFilters && (

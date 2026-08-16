@@ -175,7 +175,7 @@ export default function ExperienceDetail() {
                 <AddExperienceButton
                   types={NESTED_EXPERIENCE_TYPES}
                   onSelect={setChildModalType}
-                  label="+ Add Project or Course"
+                  label="+ Add Experience"
                 />
               </div>
             )}
@@ -444,19 +444,38 @@ function OverviewTab({ item, linkedCourses, skillLinks, achievements, childExper
         they don't change your current skill levels unless you choose to update them.
       </p>
 
-      {childExperiences?.length > 0 && (
+      {childExperiences?.filter((c) => c.type === 'project').length > 0 && (
+        <div>
+          <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">Projects</h4>
+          <ul className="space-y-1">
+            {childExperiences
+              .filter((c) => c.type === 'project')
+              .map((c) => (
+                <li key={c.id} className="text-sm">
+                  <Link to={`/experience/${c.id}`} className="text-moss hover:underline">
+                    {c.title}
+                  </Link>
+                </li>
+              ))}
+          </ul>
+        </div>
+      )}
+
+      {childExperiences?.filter((c) => c.type === 'course').length > 0 && (
         <div>
           <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">
-            Related projects & courses
+            Course / Training Record
           </h4>
           <ul className="space-y-1">
-            {childExperiences.map((c) => (
-              <li key={c.id} className="text-sm">
-                <Link to={`/experience/${c.id}`} className="text-moss hover:underline">
-                  {EXPERIENCE_TYPE_LABELS[c.type] ?? c.type}: {c.title}
-                </Link>
-              </li>
-            ))}
+            {childExperiences
+              .filter((c) => c.type === 'course')
+              .map((c) => (
+                <li key={c.id} className="text-sm">
+                  <Link to={`/experience/${c.id}`} className="text-moss hover:underline">
+                    {c.title}
+                  </Link>
+                </li>
+              ))}
           </ul>
         </div>
       )}

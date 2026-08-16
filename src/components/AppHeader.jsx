@@ -7,7 +7,7 @@ const NAV_LINKS = [
   { to: '/dashboard', label: 'Home' },
   { to: '/skills', label: 'Skills' },
   { to: '/experience', label: 'Experience' },
-  { to: '/training', label: 'Training' },
+  { to: '/training', label: 'Find Training' },
   { to: '/connections', label: 'Connections' },
 ]
 
