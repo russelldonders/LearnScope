@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext'
 import RecordExperienceModal from './RecordExperienceModal'
 import { activityName, verbLabel, relatedSkillFromStatement } from '../lib/xapiStatement'
 
+const RECENT_LIMIT = 6
+
 export default function RecordExperienceSection() {
   const { user } = useAuth()
   const [statements, setStatements] = useState([])
@@ -24,6 +26,7 @@ export default function RecordExperienceSection() {
     const { data, error } = await supabase
       .from('xapi_statements')
       .select('*')
+      .eq('user_id', user.id)
       .order('recorded_at', { ascending: false })
     if (error) setError(error.message)
     else setStatements(data)
@@ -88,7 +91,7 @@ export default function RecordExperienceSection() {
       )}
 
       <div className="space-y-2">
-        {statements.map((row) => {
+        {statements.slice(0, RECENT_LIMIT).map((row) => {
           const relatedSkill = relatedSkillFromStatement(row.statement)
           return (
             <div
@@ -123,6 +126,12 @@ export default function RecordExperienceSection() {
           )
         })}
       </div>
+
+      {statements.length > RECENT_LIMIT && (
+        <p className="text-xs text-secondary mt-2">
+          Showing your {RECENT_LIMIT} most recent of {statements.length}.
+        </p>
+      )}
 
       {modalOpen && (
         <RecordExperienceModal

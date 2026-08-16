@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient'
 import { listConnections } from '../lib/connections'
 import AppHeader from '../components/AppHeader'
 import RecordExperienceSection from '../components/RecordExperienceSection'
+import { LEVEL_LABELS } from '../lib/levels'
 
 async function countRows(table, userId) {
   const { count } = await supabase
@@ -14,9 +15,21 @@ async function countRows(table, userId) {
   return count ?? 0
 }
 
+async function loadRecentGrowth(userId) {
+  const { data, error } = await supabase
+    .from('skill_assessments')
+    .select('id, skill_id, level, assessed_at, skills(name)')
+    .eq('user_id', userId)
+    .order('assessed_at', { ascending: false })
+    .limit(3)
+  if (error) return []
+  return data ?? []
+}
+
 export default function Dashboard() {
   const { user } = useAuth()
   const [counts, setCounts] = useState(null)
+  const [recentGrowth, setRecentGrowth] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -25,13 +38,15 @@ export default function Dashboard() {
 
   async function loadSummary() {
     setLoading(true)
-    const [skills, courses, experience, connections] = await Promise.all([
+    const [skills, courses, experience, connections, growth] = await Promise.all([
       countRows('skills', user.id),
       countRows('courses', user.id),
       countRows('experience', user.id),
       listConnections(user.id).then((c) => c.length),
+      loadRecentGrowth(user.id),
     ])
     setCounts({ skills, courses, experience, connections })
+    setRecentGrowth(growth)
     setLoading(false)
   }
 
@@ -53,8 +68,20 @@ export default function Dashboard() {
 
           {loading ? (
             <p className="text-secondary">Loading…</p>
+          ) : counts.skills + counts.experience + counts.courses + counts.connections === 0 ? (
+            <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
+              <p className="text-secondary mb-4">
+                Your profile is empty. Start by adding a skill you already have.
+              </p>
+              <Link
+                to="/skills"
+                className="inline-block rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
+              >
+                Add your first skill
+              </Link>
+            </div>
           ) : (
-            <div className="grid sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <SummaryCard
                 to="/skills"
                 title="Skills"
@@ -64,8 +91,14 @@ export default function Dashboard() {
               <SummaryCard
                 to="/experience"
                 title="Experience"
-                value={counts.experience + counts.courses}
-                unit={`${counts.experience} role${counts.experience === 1 ? '' : 's'}/study period${counts.experience === 1 ? '' : 's'} · ${counts.courses} course${counts.courses === 1 ? '' : 's'}`}
+                value={counts.experience}
+                unit={counts.experience === 1 ? 'role/study period' : 'roles/study periods'}
+              />
+              <SummaryCard
+                to="/experience"
+                title="Courses"
+                value={counts.courses}
+                unit={counts.courses === 1 ? 'course completed' : 'courses completed'}
               />
               <SummaryCard
                 to="/connections"
@@ -76,6 +109,29 @@ export default function Dashboard() {
             </div>
           )}
         </div>
+
+        {!loading && recentGrowth.length > 0 && (
+          <div>
+            <h2 className="font-display text-xl text-ink mb-6">Recent growth</h2>
+            <div className="space-y-2">
+              {recentGrowth.map((row) => (
+                <Link
+                  key={row.id}
+                  to={`/skills/${row.skill_id}`}
+                  className="flex items-center justify-between gap-2 bg-card border border-hairline rounded-lg px-4 py-3 hover:border-moss transition-colors"
+                >
+                  <p className="text-sm text-ink">
+                    {row.skills?.name ?? 'Skill'}{' '}
+                    <span className="text-secondary">→ {LEVEL_LABELS[row.level]}</span>
+                  </p>
+                  <p className="font-mono text-xs text-secondary shrink-0">
+                    {new Date(row.assessed_at).toLocaleDateString()}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         <RecordExperienceSection />
       </main>
