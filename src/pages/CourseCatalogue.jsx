@@ -75,7 +75,7 @@ export default function CourseCatalogue() {
         scope?.librarySkillId && course.skillEntries.some((e) => e.skillId === scope.librarySkillId)
       const linkSkillId = matchesScopedSkill ? scope.skillId : null
       const enrolled = await enrolInCatalogueCourse(user.id, course, linkSkillId)
-      setEnrolledIds((prev) => new Map(prev).set(course.id, enrolled.id))
+      setEnrolledIds((prev) => new Map(prev).set(course.id, { id: enrolled.id, completedDate: enrolled.completed_date }))
       if (linkSkillId && scope?.backTo) {
         navigate(scope.backTo)
         return
@@ -88,9 +88,9 @@ export default function CourseCatalogue() {
   }
 
   function handleCardClick(course) {
-    const enrolledCourseId = enrolledIds.get(course.id)
-    if (enrolledCourseId) {
-      navigate(`/courses/${enrolledCourseId}`)
+    const enrollment = enrolledIds.get(course.id)
+    if (enrollment) {
+      navigate(`/courses/${enrollment.id}`)
       return
     }
     setSelectedCourse(course)
@@ -227,7 +227,9 @@ export default function CourseCatalogue() {
 
         <div className="grid sm:grid-cols-2 gap-3">
           {filtered.map((course) => {
-            const enrolled = enrolledIds.has(course.id)
+            const enrollment = enrolledIds.get(course.id)
+            const enrolled = Boolean(enrollment)
+            const completed = Boolean(enrollment?.completedDate)
             return (
               <div
                 key={course.id}
@@ -276,7 +278,13 @@ export default function CourseCatalogue() {
                   disabled={enrolled || enrollingId === course.id}
                   className="mt-3 self-start rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {enrolled ? 'Enrolled ✓' : enrollingId === course.id ? 'Enrolling…' : 'Enrol'}
+                  {completed
+                    ? 'Completed ✓'
+                    : enrolled
+                      ? 'Enrolled ✓'
+                      : enrollingId === course.id
+                        ? 'Enrolling…'
+                        : 'Enrol'}
                 </button>
               </div>
             )
@@ -288,6 +296,7 @@ export default function CourseCatalogue() {
         <CourseDetailModal
           course={selectedCourse}
           enrolled={enrolledIds.has(selectedCourse.id)}
+          completed={Boolean(enrolledIds.get(selectedCourse.id)?.completedDate)}
           enrolling={enrollingId === selectedCourse.id}
           onEnrol={() => handleEnrol(selectedCourse)}
           onClose={() => setSelectedCourse(null)}
@@ -297,7 +306,7 @@ export default function CourseCatalogue() {
   )
 }
 
-function CourseDetailModal({ course, enrolled, enrolling, onEnrol, onClose }) {
+function CourseDetailModal({ course, enrolled, completed, enrolling, onEnrol, onClose }) {
   return (
     <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
       <div
@@ -340,7 +349,7 @@ function CourseDetailModal({ course, enrolled, enrolling, onEnrol, onClose }) {
           disabled={enrolled || enrolling}
           className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {enrolled ? 'Enrolled ✓' : enrolling ? 'Enrolling…' : 'Enrol'}
+          {completed ? 'Completed ✓' : enrolled ? 'Enrolled ✓' : enrolling ? 'Enrolling…' : 'Enrol'}
         </button>
       </div>
     </div>

@@ -412,16 +412,9 @@ export default function SkillDetail() {
 function LifecycleProgress({ stage }) {
   const currentIndex = SKILL_LIFECYCLE_FLOW_STAGES.findIndex((s) => s.value === stage)
   const isException = stage === 'at_risk' || stage === 'archived'
-  // Show a window around where things stand -- one stage back for context,
-  // the current stage, and two stages ahead -- rather than the full flow,
-  // which got long once later stages had real content of their own.
-  const windowStart = currentIndex >= 0 ? Math.max(0, currentIndex - 1) : 0
-  const windowEnd =
-    currentIndex >= 0 ? Math.min(SKILL_LIFECYCLE_FLOW_STAGES.length - 1, currentIndex + 2) : SKILL_LIFECYCLE_FLOW_STAGES.length - 1
-  const slicedStages =
-    currentIndex >= 0 ? SKILL_LIFECYCLE_FLOW_STAGES.slice(windowStart, windowEnd + 1) : SKILL_LIFECYCLE_FLOW_STAGES
-  const hasMoreBefore = currentIndex >= 0 && windowStart > 0
-  const hasMoreAfter = currentIndex >= 0 && windowEnd < SKILL_LIFECYCLE_FLOW_STAGES.length - 1
+  // Stages the learner has already moved past are dropped from view rather
+  // than just dimmed -- the diagram only shows where things stand from here.
+  const slicedStages = currentIndex >= 0 ? SKILL_LIFECYCLE_FLOW_STAGES.slice(currentIndex) : SKILL_LIFECYCLE_FLOW_STAGES
   // validated/maintained intentionally share a label (see skillLifecycle.js)
   // -- collapse consecutive duplicates so the diagram never repeats a chip.
   const visibleStages = slicedStages.filter((s, i) => i === 0 || s.label !== slicedStages[i - 1].label)
@@ -429,19 +422,8 @@ function LifecycleProgress({ stage }) {
   return (
     <div className="mb-6">
       <div className="flex items-center flex-wrap gap-y-1">
-        {hasMoreBefore && (
-          <div className="flex items-center">
-            <span
-              className="font-mono text-xs text-secondary/60 px-0.5"
-              title="Earlier stages not shown"
-            >
-              …
-            </span>
-            <span className="w-4 h-px mx-1 shrink-0 bg-hairline" />
-          </div>
-        )}
         {visibleStages.map((s, i) => {
-          const isCurrent = !isException && s.value === stage
+          const isCurrent = !isException && i === 0
           return (
             <div key={s.value} className="flex items-center">
               <span
@@ -454,17 +436,10 @@ function LifecycleProgress({ stage }) {
                 <LifecycleStageIcon stage={s.value} />
                 {s.label}
               </span>
-              {(i < visibleStages.length - 1 || hasMoreAfter) && (
-                <span className="w-4 h-px mx-1 shrink-0 bg-hairline" />
-              )}
+              {i < visibleStages.length - 1 && <span className="w-4 h-px mx-1 shrink-0 bg-hairline" />}
             </div>
           )
         })}
-        {hasMoreAfter && (
-          <span className="font-mono text-xs text-secondary/60 px-0.5" title="Later stages not shown">
-            …
-          </span>
-        )}
       </div>
       {isException && (
         <span className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide text-gold border border-gold rounded-full px-2.5 py-1 mt-2">
@@ -523,6 +498,8 @@ function UpNextSection({
   onQuiz,
   onSetTarget,
   onDemonstrateSkill,
+  onFindCourse,
+  courseLinks,
 }) {
   let items = []
   if (stage === 'identified') {
@@ -567,15 +544,31 @@ function UpNextSection({
       },
     ]
   } else if (stage === 'target_set') {
-    items = [
-      {
+    // "Find a course" leads while nothing is currently in progress; once at
+    // least one course has ever been completed for this skill, moving on to
+    // demonstrating it becomes an option too (in addition to, not instead
+    // of, finding further training).
+    const hasPendingCourse = courseLinks.some((link) => link.courses && !link.courses.completed_date)
+    const hasCompletedCourse = courseLinks.some((link) => link.courses?.completed_date)
+    items = []
+    if (!hasPendingCourse) {
+      items.push({
+        key: 'find-course',
+        label: 'Find a course',
+        description: 'Browse the training catalogue for something that fits your target.',
+        done: false,
+        onClick: onFindCourse,
+      })
+    }
+    if (hasCompletedCourse) {
+      items.push({
         key: 'demonstrate',
         label: 'Demonstrate Skill',
         description: 'Move on to actively demonstrating this skill once you feel ready.',
         done: false,
         onClick: onDemonstrateSkill,
-      },
-    ]
+      })
+    }
   } else if (stage === 'developing') {
     items = [
       {
@@ -861,6 +854,8 @@ function HistorySection({
               onQuiz={onQuiz}
               onSetTarget={onSetTarget}
               onDemonstrateSkill={onDemonstrateSkill}
+              onFindCourse={onFindCourse}
+              courseLinks={courseLinks}
             />
             <QuickActionsRow
               stage={skill.lifecycle_stage}
