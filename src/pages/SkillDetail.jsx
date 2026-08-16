@@ -171,6 +171,11 @@ export default function SkillDetail() {
     await loadHistory()
   }
 
+  async function handleDemonstrateSkill() {
+    const { error } = await supabase.from('skills').update({ lifecycle_stage: 'developing' }).eq('id', skill.id)
+    if (!error) await loadSkill()
+  }
+
   async function loadAssessorName() {
     const { data } = await supabase
       .from('profiles')
@@ -380,26 +385,15 @@ export default function SkillDetail() {
                 onAssessBaseline={() => setAssessMode('baseline')}
                 onSetTarget={() => setTargetOpen(true)}
                 onFindCourse={() => navigate('/training', { state: trainingScopeState })}
+                onDemonstrateSkill={handleDemonstrateSkill}
               />
             )}
 
             {tab === 'ratings' && (
-              <RatingsSection
-                peerRatings={peerRatings}
-                loading={loadingHistory}
-                onSelfAssess={() => setSelfAssessOpen(true)}
-                onInvite={() => setInviteOpen(true)}
-                raterAvatars={raterAvatars}
-              />
+              <RatingsSection peerRatings={peerRatings} loading={loadingHistory} raterAvatars={raterAvatars} />
             )}
 
-            {tab === 'experiences' && (
-              <ExperiencesSection
-                statements={statements}
-                loading={loadingHistory}
-                onRecordExperience={() => setRecordExperienceOpen(true)}
-              />
-            )}
+            {tab === 'experiences' && <ExperiencesSection statements={statements} loading={loadingHistory} />}
 
             {tab === 'training' && (
               <TrainingSection
@@ -457,9 +451,41 @@ function LifecycleProgress({ stage }) {
   )
 }
 
+// A persistent row of common actions -- self-assessing, inviting a rater and
+// recording experience are useful at every stage, not just while
+// establishing a baseline, so these live outside the stage-specific Up Next
+// checklist below. Find a course/Demonstrate Skill join the row only while
+// actively working toward a target.
+function QuickActionsRow({ stage, hasAnyCourse, onSelfAssess, onInvite, onRecordExperience, onFindCourse, onDemonstrateSkill }) {
+  const buttonClass = 'rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper'
+  return (
+    <div className="flex flex-wrap items-center gap-2 mb-6">
+      <button type="button" onClick={onSelfAssess} className={buttonClass}>
+        Self-assess
+      </button>
+      <button type="button" onClick={onInvite} className={buttonClass}>
+        Invite someone to rate
+      </button>
+      <button type="button" onClick={onRecordExperience} className={buttonClass}>
+        Record Experience
+      </button>
+      {stage === 'target_set' && (
+        <button type="button" onClick={onFindCourse} className={buttonClass}>
+          {hasAnyCourse ? 'Find more training' : 'Find a course'}
+        </button>
+      )}
+      {stage === 'target_set' && (
+        <button type="button" onClick={onDemonstrateSkill} className={buttonClass}>
+          Demonstrate Skill
+        </button>
+      )}
+    </div>
+  )
+}
+
 // The recommended next actions for a skill, keyed by lifecycle stage.
 // Only stages with a defined next step render this section at all --
-// later stages (developing onward) have no single recommended action yet.
+// later stages (demonstrated onward) have no single recommended action yet.
 function UpNextSection({
   stage,
   selfAssessedCount,
@@ -471,27 +497,7 @@ function UpNextSection({
   onRecordExperience,
   onQuiz,
   onSetTarget,
-  courseLinks,
-  onFindCourse,
 }) {
-  // Once a course is already linked, the once-off "find a course" checklist
-  // item has served its purpose -- the course itself now shows on the
-  // timeline and in the Training tab, so Up Next collapses to a single
-  // action for finding something further, rather than repeating the list.
-  if (stage === 'target_set' && courseLinks.some((link) => link.courses)) {
-    return (
-      <div className="mb-6">
-        <button
-          type="button"
-          onClick={onFindCourse}
-          className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
-        >
-          Find more training
-        </button>
-      </div>
-    )
-  }
-
   let items = []
   if (stage === 'identified') {
     items = [
@@ -534,14 +540,14 @@ function UpNextSection({
         onClick: onSetTarget,
       },
     ]
-  } else if (stage === 'target_set') {
+  } else if (stage === 'developing') {
     items = [
       {
-        key: 'find-course',
-        label: 'Find a course',
-        description: 'Browse the training catalogue for something that fits your target.',
+        key: 'record-activity',
+        label: 'Record activity',
+        description: 'Log something that shows you demonstrating this skill.',
         done: false,
-        onClick: onFindCourse,
+        onClick: onRecordExperience,
       },
     ]
   }
@@ -730,12 +736,14 @@ function HistorySection({
   onAssessBaseline,
   onSetTarget,
   onFindCourse,
+  onDemonstrateSkill,
 }) {
   const navigate = useNavigate()
   const due = isSelfAssessmentDue(skill.next_checkin_date)
   const currentTarget = targets[0]
   const showBaselineFlow = skill.lifecycle_stage === 'identified'
   const selfAssessedCount = history.filter((a) => a.source === 'self' || !a.source).length
+  const hasAnyCourse = courseLinks.some((link) => link.courses)
   const [selectedEvent, setSelectedEvent] = useState(null)
 
   function goToCourse(courseId) {
@@ -759,6 +767,16 @@ function HistorySection({
           </span>
         </div>
       )}
+
+      <QuickActionsRow
+        stage={skill.lifecycle_stage}
+        hasAnyCourse={hasAnyCourse}
+        onSelfAssess={onSelfAssess}
+        onInvite={onInvite}
+        onRecordExperience={onRecordExperience}
+        onFindCourse={onFindCourse}
+        onDemonstrateSkill={onDemonstrateSkill}
+      />
 
       {loading && <p className="text-sm text-secondary">Loading…</p>}
       {!loading && (() => {
@@ -816,8 +834,6 @@ function HistorySection({
               onRecordExperience={onRecordExperience}
               onQuiz={onQuiz}
               onSetTarget={onSetTarget}
-              courseLinks={courseLinks}
-              onFindCourse={onFindCourse}
             />
             {events.map((event, i) => (
               <TimelineEntry
@@ -1582,26 +1598,9 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
   )
 }
 
-function RatingsSection({ peerRatings, loading, onSelfAssess, onInvite, raterAvatars }) {
+function RatingsSection({ peerRatings, loading, raterAvatars }) {
   return (
     <div>
-      <div className="flex items-center gap-2 mb-4">
-        <button
-          type="button"
-          onClick={onSelfAssess}
-          className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
-        >
-          Self-assess
-        </button>
-        <button
-          type="button"
-          onClick={onInvite}
-          className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
-        >
-          Invite someone to rate this
-        </button>
-      </div>
-
       {loading ? (
         <p className="text-sm text-secondary">Loading…</p>
       ) : peerRatings.length === 0 ? (
@@ -1628,19 +1627,9 @@ function RatingsSection({ peerRatings, loading, onSelfAssess, onInvite, raterAva
   )
 }
 
-function ExperiencesSection({ statements, loading, onRecordExperience }) {
+function ExperiencesSection({ statements, loading }) {
   return (
     <div>
-      <div className="flex items-center gap-2 mb-4">
-        <button
-          type="button"
-          onClick={onRecordExperience}
-          className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
-        >
-          + Record experience
-        </button>
-      </div>
-
       {loading ? (
         <p className="text-sm text-secondary">Loading…</p>
       ) : statements.length === 0 ? (
