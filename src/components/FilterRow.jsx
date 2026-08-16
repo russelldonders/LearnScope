@@ -2,9 +2,11 @@ export default function FilterRow({ label, value, onChange, options }) {
   if (options.length === 0) return null
   return (
     <div className="flex items-start gap-2">
-      <span className="font-mono text-[10px] uppercase tracking-wide text-secondary w-28 shrink-0 pt-1.5">
-        {label}
-      </span>
+      {label && (
+        <span className="font-mono text-[10px] uppercase tracking-wide text-secondary w-28 shrink-0 pt-1.5">
+          {label}
+        </span>
+      )}
       <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
         <button
           type="button"

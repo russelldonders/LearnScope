@@ -15,6 +15,25 @@ import AddExperienceButton from '../components/AddExperienceButton'
 
 const NESTABLE_PARENT_TYPES = ['employment', 'volunteer']
 
+// Keeps a nested project/course/other experience's dates from silently
+// drifting outside the parent role's dates -- an open-ended parent
+// (end_date null) places no upper bound on its children.
+function validateWithinParent(values, parent) {
+  if (!parent) return null
+  if (values.start_date < parent.start_date) {
+    return `Start date can't be before ${formatMonthYear(parent.start_date)}, when "${parent.title}" started.`
+  }
+  if (parent.end_date) {
+    if (values.start_date > parent.end_date) {
+      return `Start date can't be after ${formatMonthYear(parent.end_date)}, when "${parent.title}" ended.`
+    }
+    if (!values.end_date || values.end_date > parent.end_date) {
+      return `End date can't be after ${formatMonthYear(parent.end_date)}, when "${parent.title}" ended.`
+    }
+  }
+  return null
+}
+
 const TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'courses', label: 'Courses' },
@@ -98,7 +117,11 @@ export default function ExperienceDetail() {
         .eq('parent_experience_id', item.id)
         .order('start_date', { ascending: false }),
       item.parent_experience_id
-        ? supabase.from('experience').select('id, title').eq('id', item.parent_experience_id).maybeSingle()
+        ? supabase
+            .from('experience')
+            .select('id, title, start_date, end_date')
+            .eq('id', item.parent_experience_id)
+            .maybeSingle()
         : Promise.resolve({ data: null }),
     ])
     setChildExperiences(children ?? [])
@@ -106,6 +129,8 @@ export default function ExperienceDetail() {
   }
 
   async function handleAddChildExperience(values) {
+    const validationError = validateWithinParent(values, item)
+    if (validationError) throw new Error(validationError)
     const { error } = await supabase.from('experience').insert({
       ...values,
       user_id: user.id,
@@ -117,6 +142,10 @@ export default function ExperienceDetail() {
   }
 
   async function handleSaveDetails(values) {
+    if (item.parent_experience_id && parentExperience) {
+      const validationError = validateWithinParent(values, parentExperience)
+      if (validationError) throw new Error(validationError)
+    }
     const { error } = await supabase.from('experience').update(values).eq('id', item.id)
     if (error) throw error
     await loadItem()
@@ -173,6 +202,8 @@ export default function ExperienceDetail() {
             {childModalType && (
               <ExperienceModal
                 type={childModalType}
+                initialOrganization={item.organization ?? ''}
+                initialOrganizationUrl={item.organization_url ?? ''}
                 onSave={handleAddChildExperience}
                 onClose={() => setChildModalType(null)}
               />
@@ -448,6 +479,23 @@ function OverviewTab({ item, linkedCourses, skillLinks, achievements, childExper
           <ul className="space-y-1">
             {childExperiences
               .filter((c) => c.type === 'course')
+              .map((c) => (
+                <li key={c.id} className="text-sm">
+                  <Link to={`/experience/${c.id}`} className="text-moss hover:underline">
+                    {c.title}
+                  </Link>
+                </li>
+              ))}
+          </ul>
+        </div>
+      )}
+
+      {childExperiences?.filter((c) => c.type === 'other').length > 0 && (
+        <div>
+          <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">Other Experience</h4>
+          <ul className="space-y-1">
+            {childExperiences
+              .filter((c) => c.type === 'other')
               .map((c) => (
                 <li key={c.id} className="text-sm">
                   <Link to={`/experience/${c.id}`} className="text-moss hover:underline">

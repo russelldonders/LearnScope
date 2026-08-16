@@ -2,11 +2,17 @@ import { useState } from 'react'
 import { EXPERIENCE_TYPE_CONFIG } from '../lib/experienceTypes'
 import OrganizationUrlField from './OrganizationUrlField'
 
-export default function ExperienceModal({ type = 'employment', onSave, onClose }) {
+export default function ExperienceModal({
+  type = 'employment',
+  initialOrganization = '',
+  initialOrganizationUrl = '',
+  onSave,
+  onClose,
+}) {
   const config = EXPERIENCE_TYPE_CONFIG[type]
   const [title, setTitle] = useState('')
-  const [organization, setOrganization] = useState('')
-  const [organizationUrl, setOrganizationUrl] = useState('')
+  const [organization, setOrganization] = useState(initialOrganization)
+  const [organizationUrl, setOrganizationUrl] = useState(initialOrganizationUrl)
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [current, setCurrent] = useState(false)

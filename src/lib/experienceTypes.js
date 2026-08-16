@@ -12,7 +12,7 @@ export const EXPERIENCE_TYPE_LABELS = Object.fromEntries(EXPERIENCE_TYPES.map((t
 // The types that can be added as a "sub-experience" nested under a Job or
 // Volunteer Position -- e.g. a project or course record completed as part
 // of that role. Automatically linked to the parent via parent_experience_id.
-export const NESTED_EXPERIENCE_TYPES = ['project', 'course']
+export const NESTED_EXPERIENCE_TYPES = ['project', 'course', 'other']
 
 // Field copy and requiredness vary slightly per type -- a project or other
 // personal pursuit doesn't always have an organization behind it, while a

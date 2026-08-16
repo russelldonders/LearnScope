@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext'
 import SkillCard from './SkillCard'
 import FindSkillModal from './FindSkillModal'
 import FilterRow from './FilterRow'
+import TrackingReasonIcon from './TrackingReasonIcon'
+import { TRACKING_REASONS } from '../lib/trackingReasons'
 
 export default function SkillsSection() {
   const { user } = useAuth()
@@ -15,6 +17,7 @@ export default function SkillsSection() {
   const [error, setError] = useState(null)
   const [addOpen, setAddOpen] = useState(false)
   const [tagFilter, setTagFilter] = useState(null)
+  const [trackingReasonFilter, setTrackingReasonFilter] = useState(null)
   const [showFilters, setShowFilters] = useState(false)
 
   useEffect(() => {
@@ -47,8 +50,13 @@ export default function SkillsSection() {
   }
 
   const filteredSkills = useMemo(
-    () => skills.filter((s) => !tagFilter || (tagsBySkill.get(s.id) ?? []).includes(tagFilter)),
-    [skills, tagFilter, tagsBySkill]
+    () =>
+      skills.filter(
+        (s) =>
+          (!tagFilter || (tagsBySkill.get(s.id) ?? []).includes(tagFilter)) &&
+          (!trackingReasonFilter || s.tracking_reason === trackingReasonFilter)
+      ),
+    [skills, tagFilter, tagsBySkill, trackingReasonFilter]
   )
   const currentRoleSkills = useMemo(
     () => filteredSkills.filter((s) => s.is_current_role),
@@ -64,7 +72,7 @@ export default function SkillsSection() {
     () => [...new Set([...tagsBySkill.values()].flat())].sort(),
     [tagsBySkill]
   )
-  const activeFilterCount = [tagFilter].filter((v) => v !== null).length
+  const activeMoreFilterCount = [tagFilter].filter((v) => v !== null).length
 
   return (
     <section>
@@ -87,27 +95,60 @@ export default function SkillsSection() {
         </div>
       )}
 
-      {!loading && skills.length > 0 && availableTags.length > 0 && (
+      {!loading && skills.length > 0 && (
         <>
-          <button
-            type="button"
-            onClick={() => setShowFilters((v) => !v)}
-            className="text-sm text-moss font-medium mb-4"
-          >
-            {showFilters
-              ? 'Hide More Filters'
-              : `Show More Filters${activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}`}
-          </button>
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <button
+              type="button"
+              onClick={() => setTrackingReasonFilter(null)}
+              className={`font-mono text-xs uppercase tracking-wide rounded-full px-3 py-1 border transition-colors ${
+                trackingReasonFilter === null
+                  ? 'bg-moss text-paper border-moss'
+                  : 'border-hairline text-secondary hover:text-ink'
+              }`}
+            >
+              Any
+            </button>
+            {TRACKING_REASONS.map((r) => (
+              <button
+                key={r.value}
+                type="button"
+                onClick={() => setTrackingReasonFilter(trackingReasonFilter === r.value ? null : r.value)}
+                className={`flex items-center gap-1.5 font-mono text-xs uppercase tracking-wide rounded-full px-3 py-1 border transition-colors ${
+                  trackingReasonFilter === r.value
+                    ? 'bg-moss text-paper border-moss'
+                    : 'border-hairline text-secondary hover:text-ink'
+                }`}
+              >
+                <TrackingReasonIcon reason={r.value} size={14} />
+                {r.label}
+              </button>
+            ))}
+          </div>
 
-          {showFilters && (
-            <div className="space-y-3 mb-6 bg-card border border-hairline rounded-lg p-4">
-              <FilterRow
-                label="Tag"
-                value={tagFilter}
-                onChange={setTagFilter}
-                options={availableTags.map((t) => ({ value: t, label: t }))}
-              />
-            </div>
+          {availableTags.length > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowFilters((v) => !v)}
+                className="text-sm text-moss font-medium mb-4"
+              >
+                {showFilters
+                  ? 'Hide More Filters'
+                  : `Show More Filters${activeMoreFilterCount > 0 ? ` (${activeMoreFilterCount})` : ''}`}
+              </button>
+
+              {showFilters && (
+                <div className="space-y-3 mb-6 bg-card border border-hairline rounded-lg p-4">
+                  <FilterRow
+                    label="Tag"
+                    value={tagFilter}
+                    onChange={setTagFilter}
+                    options={availableTags.map((t) => ({ value: t, label: t }))}
+                  />
+                </div>
+              )}
+            </>
           )}
         </>
       )}

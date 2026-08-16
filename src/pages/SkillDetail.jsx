@@ -476,7 +476,7 @@ function LifecycleProgress({ stage }) {
 
 // The recommended next actions for a skill, keyed by lifecycle stage.
 // Only stages with a defined next step render this section at all --
-// later stages (target_set onward) have no single recommended action yet.
+// later stages (developing onward) have no single recommended action yet.
 function UpNextSection({
   stage,
   selfAssessedCount,
@@ -533,7 +533,7 @@ function UpNextSection({
         onClick: onSetTarget,
       },
     ]
-  } else if (stage === 'developing') {
+  } else if (stage === 'target_set') {
     items = [
       {
         key: 'find-course',
