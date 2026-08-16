@@ -488,7 +488,7 @@ function UpNextSection({
   onRecordExperience,
   onQuiz,
   onSetTarget,
-  hasActiveCourseEnrollment,
+  courseLinks,
   onFindCourse,
 }) {
   let items = []
@@ -533,7 +533,7 @@ function UpNextSection({
         onClick: onSetTarget,
       },
     ]
-  } else if (stage === 'developing' && !hasActiveCourseEnrollment) {
+  } else if (stage === 'developing') {
     items = [
       {
         key: 'find-course',
@@ -542,6 +542,16 @@ function UpNextSection({
         done: false,
         onClick: onFindCourse,
       },
+      ...courseLinks
+        .filter((link) => link.courses)
+        .map((link) => ({
+          key: `course-${link.id}`,
+          label: link.courses.name,
+          description: link.courses.completed_date
+            ? `Completed ${formatMonthYear(link.courses.completed_date)}`
+            : 'Assigned — in progress',
+          done: !!link.courses.completed_date,
+        })),
     ]
   }
 
@@ -551,29 +561,36 @@ function UpNextSection({
     <div className="mb-6 rounded-md border border-hairline bg-paper p-4">
       <h3 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Up Next</h3>
       <div className="space-y-2">
-        {items.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            onClick={item.onClick}
-            className="w-full flex items-center justify-between gap-3 rounded-md border border-hairline bg-card px-3 py-2.5 text-left hover:border-moss transition-colors"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <span
-                className={`shrink-0 flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold ${
-                  item.done ? 'bg-moss border-moss text-paper' : 'border-hairline text-secondary'
-                }`}
-              >
-                {item.done ? '✓' : ''}
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm text-ink">{item.label}</span>
-                <span className="block text-xs text-secondary truncate">{item.description}</span>
-              </span>
-            </div>
-            <span className="shrink-0 text-xs text-moss font-medium">{item.done ? 'Redo' : 'Start'}</span>
-          </button>
-        ))}
+        {items.map((item) => {
+          const Tag = item.onClick ? 'button' : 'div'
+          return (
+            <Tag
+              key={item.key}
+              type={item.onClick ? 'button' : undefined}
+              onClick={item.onClick}
+              className={`w-full flex items-center justify-between gap-3 rounded-md border border-hairline bg-card px-3 py-2.5 text-left transition-colors ${
+                item.onClick ? 'hover:border-moss' : ''
+              }`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <span
+                  className={`shrink-0 flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold ${
+                    item.done ? 'bg-moss border-moss text-paper' : 'border-hairline text-secondary'
+                  }`}
+                >
+                  {item.done ? '✓' : ''}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm text-ink">{item.label}</span>
+                  <span className="block text-xs text-secondary truncate">{item.description}</span>
+                </span>
+              </div>
+              {item.onClick && (
+                <span className="shrink-0 text-xs text-moss font-medium">{item.done ? 'Redo' : 'Start'}</span>
+              )}
+            </Tag>
+          )
+        })}
       </div>
     </div>
   )
@@ -734,7 +751,6 @@ function HistorySection({
   const currentTarget = targets[0]
   const showBaselineFlow = skill.lifecycle_stage === 'identified'
   const selfAssessedCount = history.filter((a) => a.source === 'self' || !a.source).length
-  const hasActiveCourseEnrollment = courseLinks.some((link) => link.courses && !link.courses.completed_date)
   const [selectedEvent, setSelectedEvent] = useState(null)
 
   return (
@@ -792,7 +808,7 @@ function HistorySection({
               onRecordExperience={onRecordExperience}
               onQuiz={onQuiz}
               onSetTarget={onSetTarget}
-              hasActiveCourseEnrollment={hasActiveCourseEnrollment}
+              courseLinks={courseLinks}
               onFindCourse={onFindCourse}
             />
             {events.map((event, i) => (

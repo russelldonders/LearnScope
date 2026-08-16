@@ -85,7 +85,11 @@ export default function ExperienceModal({ type = 'employment', onSave, onClose }
                 type="date"
                 required
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value
+                  setStartDate(value)
+                  if (!endDate) setEndDate(value)
+                }}
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
               />
             </div>

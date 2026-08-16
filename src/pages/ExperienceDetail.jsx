@@ -31,7 +31,6 @@ export default function ExperienceDetail() {
   const [loadingItem, setLoadingItem] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [tab, setTab] = useState(location.state?.tab ?? 'overview')
-  const [courses, setCourses] = useState([])
   const [linkedCourses, setLinkedCourses] = useState([])
   const [skillLinks, setSkillLinks] = useState([])
   const [achievements, setAchievements] = useState([])
@@ -42,7 +41,6 @@ export default function ExperienceDetail() {
 
   useEffect(() => {
     loadItem()
-    loadPickerData()
   }, [id])
 
   useEffect(() => {
@@ -67,14 +65,6 @@ export default function ExperienceDetail() {
       setItem(data)
     }
     setLoadingItem(false)
-  }
-
-  async function loadPickerData() {
-    const { data: coursesData } = await supabase
-      .from('courses')
-      .select('id, name, provider, completed_date')
-      .order('name')
-    setCourses(coursesData ?? [])
   }
 
   async function loadLearning() {
@@ -217,13 +207,7 @@ export default function ExperienceDetail() {
             )}
 
             {tab === 'courses' && (
-              <CoursesSubsection
-                item={item}
-                courses={courses}
-                linkedCourses={linkedCourses}
-                onChange={loadLearning}
-                user={user}
-              />
+              <CoursesSubsection linkedCourses={linkedCourses} onChange={loadLearning} />
             )}
 
             {tab === 'skills' && (
@@ -439,11 +423,6 @@ function OverviewTab({ item, linkedCourses, skillLinks, achievements, childExper
         )}
       </div>
 
-      <p className="text-xs text-secondary">
-        These are historical records from this {EXPERIENCE_TYPE_CONFIG[item.type]?.periodNoun ?? 'experience'} —
-        they don't change your current skill levels unless you choose to update them.
-      </p>
-
       {childExperiences?.filter((c) => c.type === 'project').length > 0 && (
         <div>
           <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">Projects</h4>
@@ -535,38 +514,8 @@ function OverviewTab({ item, linkedCourses, skillLinks, achievements, childExper
   )
 }
 
-function CoursesSubsection({ item, courses, linkedCourses, onChange, user }) {
-  const [selectedCourseId, setSelectedCourseId] = useState('')
-  const [linking, setLinking] = useState(false)
+function CoursesSubsection({ linkedCourses, onChange }) {
   const [error, setError] = useState(null)
-
-  const linkedIds = new Set(linkedCourses.map((l) => l.course_id))
-  const unlinked = courses.filter((c) => !linkedIds.has(c.id))
-  const endBound = item.end_date || new Date().toISOString().slice(0, 10)
-  const suggested = unlinked.filter(
-    (c) => c.completed_date && c.completed_date >= item.start_date && c.completed_date <= endBound
-  )
-  const otherOptions = unlinked.filter((c) => !suggested.includes(c))
-
-  async function linkCourse(courseId) {
-    if (!courseId) return
-    setError(null)
-    setLinking(true)
-    try {
-      const { error } = await supabase.from('course_experience_links').insert({
-        user_id: user.id,
-        course_id: courseId,
-        experience_id: item.id,
-      })
-      if (error) throw error
-      setSelectedCourseId('')
-      await onChange()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLinking(false)
-    }
-  }
 
   async function unlinkCourse(linkId) {
     setError(null)
@@ -608,53 +557,6 @@ function CoursesSubsection({ item, courses, linkedCourses, onChange, user }) {
         </ul>
       )}
 
-      {suggested.length > 0 && (
-        <div className="mb-3">
-          <p className="text-xs text-secondary mb-1">Suggested (completed during this period):</p>
-          <div className="flex flex-wrap gap-2">
-            {suggested.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                disabled={linking}
-                onClick={() => linkCourse(c.id)}
-                className="font-mono text-xs rounded-full px-3 py-1 border border-moss text-moss hover:bg-moss/10 disabled:opacity-60"
-              >
-                + {c.name}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {otherOptions.length > 0 && (
-        <div className="flex items-center gap-2">
-          <select
-            value={selectedCourseId}
-            onChange={(e) => setSelectedCourseId(e.target.value)}
-            className="flex-1 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-          >
-            <option value="">Link another course…</option>
-            {otherOptions.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            disabled={!selectedCourseId || linking}
-            onClick={() => linkCourse(selectedCourseId)}
-            className="shrink-0 rounded-md border border-hairline text-ink py-2 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-          >
-            Link
-          </button>
-        </div>
-      )}
-
-      {courses.length === 0 && (
-        <p className="text-xs text-secondary">You don't have any courses logged yet.</p>
-      )}
       {error && <p className="text-sm text-red-700 mt-2">{error}</p>}
     </div>
   )
