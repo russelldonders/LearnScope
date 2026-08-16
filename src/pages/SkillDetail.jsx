@@ -114,7 +114,7 @@ export default function SkillDetail() {
           .order('rated_at', { ascending: false }),
         supabase
           .from('skill_experience_links')
-          .select('id, experience(id, title, organization, type, start_date, end_date)')
+          .select('id, created_at, experience(id, title, organization, type, start_date, end_date)')
           .eq('skill_id', skill.id),
         supabase
           .from('xapi_statements')
@@ -578,6 +578,20 @@ function UpNextSection({
         done: false,
         onClick: onRecordExperience,
       },
+      {
+        key: 'self-assess-demonstrating',
+        label: 'Self-assess your own level',
+        description: 'Rate where you think you are now.',
+        done: selfAssessedCount > 0,
+        onClick: onSelfAssess,
+      },
+      {
+        key: 'invite-demonstrating',
+        label: 'Invite others to assess your skill',
+        description: 'Get an outside perspective on your level.',
+        done: peerRatingsCount > 0,
+        onClick: onInvite,
+      },
     ]
   }
 
@@ -805,18 +819,38 @@ function HistorySection({
         // items above "today", the same way an unmet target does.
         const pendingCourseLinks = courseLinks.filter((link) => link.courses && !link.courses.completed_date)
         const events = [
-          ...history.map((entry) => ({ type: 'assessment', date: entry.assessed_at, entry })),
-          ...peerRatings.map((rating) => ({ type: 'peer', date: rating.rated_at, rating })),
+          ...history.map((entry) => ({ type: 'assessment', date: entry.assessed_at, createdAt: entry.created_at, entry })),
+          ...peerRatings.map((rating) => ({ type: 'peer', date: rating.rated_at, createdAt: rating.rated_at, rating })),
           ...relationshipLinks
             .filter((link) => link.experience)
-            .map((link) => ({ type: 'relationship', date: link.experience.start_date, link })),
-          ...statements.map((s) => ({ type: 'activity', date: s.recorded_at, statement: s })),
+            .map((link) => ({
+              type: 'relationship',
+              date: link.experience.start_date,
+              createdAt: link.created_at,
+              link,
+            })),
+          ...statements.map((s) => ({ type: 'activity', date: s.recorded_at, createdAt: s.created_at, statement: s })),
           ...courseLinks
             .filter((link) => link.courses?.completed_date)
-            .map((link) => ({ type: 'training', date: link.courses.completed_date, link })),
-          { type: 'added', date: skill.date_added, source: skill.source },
-          { type: 'today', date: new Date().toISOString() },
-        ].sort((a, b) => new Date(b.date) - new Date(a.date))
+            .map((link) => ({
+              type: 'training',
+              date: link.courses.completed_date,
+              createdAt: link.created_at,
+              link,
+            })),
+          { type: 'added', date: skill.date_added, createdAt: skill.date_added, source: skill.source },
+          { type: 'today', date: new Date().toISOString(), createdAt: new Date().toISOString() },
+          // Same-day events sort by day first, then by when the record was
+          // actually created/assigned -- e.g. a course completed today
+          // should rank above a skill added earlier today, even though both
+          // show "today" as their display date.
+        ].sort((a, b) => {
+          const dayDiff = new Date(b.date).toISOString().slice(0, 10).localeCompare(
+            new Date(a.date).toISOString().slice(0, 10)
+          )
+          if (dayDiff !== 0) return dayDiff
+          return new Date(b.createdAt ?? b.date) - new Date(a.createdAt ?? a.date)
+        })
         const mostRecentRatingIndex = events.findIndex((e) => e.type === 'assessment' || e.type === 'peer')
         // The "Baseline" badge marks the most recent AI-assessed baseline
         // specifically -- self-assessments and peer ratings are additional
