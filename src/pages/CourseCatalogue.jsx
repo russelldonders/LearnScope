@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient'
 import { listCatalogueCourses, listEnrolledCatalogueIds, enrolInCatalogueCourse } from '../lib/courseCatalogue'
 import { LEVEL_LABELS } from '../lib/levels'
 import AppHeader from '../components/AppHeader'
+import FilterRow from '../components/FilterRow'
 
 export default function CourseCatalogue() {
   const { user } = useAuth()
@@ -157,7 +158,7 @@ export default function CourseCatalogue() {
         </button>
 
         {showFilters && (
-          <div className="space-y-3 mb-6">
+          <div className="space-y-3 mb-6 bg-card border border-hairline rounded-lg p-4">
             <FilterRow
               label="Category tag"
               value={tagId}
@@ -314,36 +315,6 @@ function CourseDetailModal({ course, enrolled, enrolling, onEnrol, onClose }) {
           {enrolled ? 'Enrolled ✓' : enrolling ? 'Enrolling…' : 'Enrol'}
         </button>
       </div>
-    </div>
-  )
-}
-
-function FilterRow({ label, value, onChange, options }) {
-  if (options.length === 0) return null
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="font-mono text-[10px] uppercase tracking-wide text-secondary w-28 shrink-0">{label}</span>
-      <button
-        type="button"
-        onClick={() => onChange(null)}
-        className={`font-mono text-xs uppercase tracking-wide rounded-full px-3 py-1 border transition-colors ${
-          value === null ? 'bg-moss text-paper border-moss' : 'border-hairline text-secondary hover:text-ink'
-        }`}
-      >
-        Any
-      </button>
-      {options.map((o) => (
-        <button
-          key={o.value}
-          type="button"
-          onClick={() => onChange(value === o.value ? null : o.value)}
-          className={`font-mono text-xs uppercase tracking-wide rounded-full px-3 py-1 border transition-colors ${
-            value === o.value ? 'bg-moss text-paper border-moss' : 'border-hairline text-secondary hover:text-ink'
-          }`}
-        >
-          {o.label}
-        </button>
-      ))}
     </div>
   )
 }

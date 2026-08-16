@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import SkillCard from './SkillCard'
 import FindSkillModal from './FindSkillModal'
 import TrackingReasonIcon from './TrackingReasonIcon'
+import FilterRow from './FilterRow'
 import { TRACKING_REASONS, TRACKING_REASON_LABELS } from '../lib/trackingReasons'
 
 export default function SkillsSection() {
@@ -17,6 +18,7 @@ export default function SkillsSection() {
   const [addOpen, setAddOpen] = useState(false)
   const [reasonFilter, setReasonFilter] = useState(null)
   const [tagFilter, setTagFilter] = useState(null)
+  const [showFilters, setShowFilters] = useState(false)
 
   useEffect(() => {
     loadSkills()
@@ -74,6 +76,7 @@ export default function SkillsSection() {
     () => TRACKING_REASONS.filter((r) => skills.some((s) => s.tracking_reason === r.value)),
     [skills]
   )
+  const activeFilterCount = [reasonFilter, tagFilter].filter((v) => v !== null).length
 
   return (
     <section>
@@ -97,57 +100,40 @@ export default function SkillsSection() {
       )}
 
       {!loading && skills.length > 0 && (availableReasons.length > 0 || availableTags.length > 0) && (
-        <div className="flex flex-wrap items-center gap-3 mb-6">
-          {availableReasons.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setReasonFilter(null)}
-                className={`font-mono text-xs uppercase tracking-wide rounded-full px-3 py-1 border transition-colors ${
-                  reasonFilter === null
-                    ? 'bg-moss text-paper border-moss'
-                    : 'border-hairline text-secondary hover:text-ink'
-                }`}
-              >
-                All
-              </button>
-              {availableReasons.map((r) => (
-                <button
-                  key={r.value}
-                  type="button"
-                  onClick={() => setReasonFilter(reasonFilter === r.value ? null : r.value)}
-                  className={`flex items-center gap-1.5 font-mono text-xs uppercase tracking-wide rounded-full px-3 py-1 border transition-colors ${
-                    reasonFilter === r.value
-                      ? 'bg-moss text-paper border-moss'
-                      : 'border-hairline text-secondary hover:text-ink'
-                  }`}
-                >
-                  <TrackingReasonIcon reason={r.value} size={12} />
-                  {TRACKING_REASON_LABELS[r.value]}
-                </button>
-              ))}
-            </div>
-          )}
+        <>
+          <button
+            type="button"
+            onClick={() => setShowFilters((v) => !v)}
+            className="text-sm text-moss font-medium mb-4"
+          >
+            {showFilters ? 'Hide filters' : `Show filters${activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}`}
+          </button>
 
-          {availableTags.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              {availableTags.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setTagFilter(tagFilter === t ? null : t)}
-                  className={`font-mono text-xs uppercase tracking-wide rounded-full px-3 py-1 border transition-colors ${
-                    tagFilter === t
-                      ? 'bg-moss text-paper border-moss'
-                      : 'border-hairline text-secondary hover:text-ink'
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
+          {showFilters && (
+            <div className="space-y-3 mb-6 bg-card border border-hairline rounded-lg p-4">
+              {availableReasons.length > 0 && (
+                <FilterRow
+                  label="Tracking reason"
+                  value={reasonFilter}
+                  onChange={setReasonFilter}
+                  options={availableReasons.map((r) => ({
+                    value: r.value,
+                    label: TRACKING_REASON_LABELS[r.value],
+                    icon: <TrackingReasonIcon reason={r.value} size={12} />,
+                  }))}
+                />
+              )}
+              {availableTags.length > 0 && (
+                <FilterRow
+                  label="Tag"
+                  value={tagFilter}
+                  onChange={setTagFilter}
+                  options={availableTags.map((t) => ({ value: t, label: t }))}
+                />
+              )}
             </div>
           )}
-        </div>
+        </>
       )}
 
       {!loading && skills.length > 0 && filteredSkills.length === 0 && (
