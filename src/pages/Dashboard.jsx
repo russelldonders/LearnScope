@@ -95,7 +95,7 @@ export default function Dashboard() {
                 unit={counts.experience === 1 ? 'role/study period' : 'roles/study periods'}
               />
               <SummaryCard
-                to="/experience"
+                to="/learning"
                 title="Courses"
                 value={counts.courses}
                 unit={counts.courses === 1 ? 'course completed' : 'courses completed'}
