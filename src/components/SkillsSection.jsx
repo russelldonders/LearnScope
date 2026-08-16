@@ -76,7 +76,7 @@ export default function SkillsSection() {
     () => TRACKING_REASONS.filter((r) => skills.some((s) => s.tracking_reason === r.value)),
     [skills]
   )
-  const activeFilterCount = [reasonFilter, tagFilter].filter((v) => v !== null).length
+  const activeFilterCount = [tagFilter].filter((v) => v !== null).length
 
   return (
     <section>
@@ -99,7 +99,43 @@ export default function SkillsSection() {
         </div>
       )}
 
-      {!loading && skills.length > 0 && (availableReasons.length > 0 || availableTags.length > 0) && (
+      {!loading && skills.length > 0 && availableReasons.length > 0 && (
+        <div className="mb-4">
+          <span className="block font-mono text-xs uppercase tracking-wide text-secondary mb-2">
+            Why you're tracking these
+          </span>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setReasonFilter(null)}
+              className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                reasonFilter === null
+                  ? 'border-moss bg-moss/10 text-ink'
+                  : 'border-hairline text-secondary hover:text-ink'
+              }`}
+            >
+              All
+            </button>
+            {availableReasons.map((r) => (
+              <button
+                key={r.value}
+                type="button"
+                onClick={() => setReasonFilter(reasonFilter === r.value ? null : r.value)}
+                className={`flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                  reasonFilter === r.value
+                    ? 'border-moss bg-moss/10 text-ink'
+                    : 'border-hairline text-secondary hover:text-ink'
+                }`}
+              >
+                <TrackingReasonIcon reason={r.value} size={14} />
+                {TRACKING_REASON_LABELS[r.value]}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!loading && skills.length > 0 && availableTags.length > 0 && (
         <>
           <button
             type="button"
@@ -111,26 +147,12 @@ export default function SkillsSection() {
 
           {showFilters && (
             <div className="space-y-3 mb-6 bg-card border border-hairline rounded-lg p-4">
-              {availableReasons.length > 0 && (
-                <FilterRow
-                  label="Tracking reason"
-                  value={reasonFilter}
-                  onChange={setReasonFilter}
-                  options={availableReasons.map((r) => ({
-                    value: r.value,
-                    label: TRACKING_REASON_LABELS[r.value],
-                    icon: <TrackingReasonIcon reason={r.value} size={12} />,
-                  }))}
-                />
-              )}
-              {availableTags.length > 0 && (
-                <FilterRow
-                  label="Tag"
-                  value={tagFilter}
-                  onChange={setTagFilter}
-                  options={availableTags.map((t) => ({ value: t, label: t }))}
-                />
-              )}
+              <FilterRow
+                label="Tag"
+                value={tagFilter}
+                onChange={setTagFilter}
+                options={availableTags.map((t) => ({ value: t, label: t }))}
+              />
             </div>
           )}
         </>
