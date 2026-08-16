@@ -4,12 +4,16 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { formatMonthYear } from '../lib/dates'
 import { LEVEL_LABELS } from '../lib/levels'
-import { EXPERIENCE_TYPE_LABELS, EXPERIENCE_TYPE_CONFIG } from '../lib/experienceTypes'
+import { EXPERIENCE_TYPE_LABELS, EXPERIENCE_TYPE_CONFIG, NESTED_EXPERIENCE_TYPES } from '../lib/experienceTypes'
 import AppHeader from '../components/AppHeader'
 import SkillCard from '../components/SkillCard'
 import FindSkillModal from '../components/FindSkillModal'
 import OrganizationLogo from '../components/OrganizationLogo'
 import OrganizationUrlField from '../components/OrganizationUrlField'
+import ExperienceModal from '../components/ExperienceModal'
+import AddExperienceButton from '../components/AddExperienceButton'
+
+const NESTABLE_PARENT_TYPES = ['employment', 'volunteer']
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -32,6 +36,9 @@ export default function ExperienceDetail() {
   const [skillLinks, setSkillLinks] = useState([])
   const [achievements, setAchievements] = useState([])
   const [learningLoaded, setLearningLoaded] = useState(false)
+  const [childExperiences, setChildExperiences] = useState([])
+  const [parentExperience, setParentExperience] = useState(null)
+  const [childModalType, setChildModalType] = useState(null)
 
   useEffect(() => {
     loadItem()
@@ -39,7 +46,10 @@ export default function ExperienceDetail() {
   }, [id])
 
   useEffect(() => {
-    if (item) loadLearning()
+    if (item) {
+      loadLearning()
+      loadRelated()
+    }
   }, [item?.id])
 
   async function loadItem() {
@@ -90,6 +100,32 @@ export default function ExperienceDetail() {
     setLearningLoaded(true)
   }
 
+  async function loadRelated() {
+    const [{ data: children }, parentResult] = await Promise.all([
+      supabase
+        .from('experience')
+        .select('id, type, title, start_date, end_date')
+        .eq('parent_experience_id', item.id)
+        .order('start_date', { ascending: false }),
+      item.parent_experience_id
+        ? supabase.from('experience').select('id, title').eq('id', item.parent_experience_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ])
+    setChildExperiences(children ?? [])
+    setParentExperience(parentResult.data ?? null)
+  }
+
+  async function handleAddChildExperience(values) {
+    const { error } = await supabase.from('experience').insert({
+      ...values,
+      user_id: user.id,
+      parent_experience_id: item.id,
+    })
+    if (error) throw error
+    setChildModalType(null)
+    await loadRelated()
+  }
+
   async function handleSaveDetails(values) {
     const { error } = await supabase.from('experience').update(values).eq('id', item.id)
     if (error) throw error
@@ -125,6 +161,32 @@ export default function ExperienceDetail() {
                 <p className="text-sm text-secondary">{item.organization}</p>
               </div>
             )}
+            {parentExperience && (
+              <p className="text-xs text-secondary mt-1">
+                Part of{' '}
+                <Link to={`/experience/${parentExperience.id}`} className="text-moss hover:underline">
+                  {parentExperience.title}
+                </Link>
+              </p>
+            )}
+
+            {NESTABLE_PARENT_TYPES.includes(item.type) && (
+              <div className="mt-4">
+                <AddExperienceButton
+                  types={NESTED_EXPERIENCE_TYPES}
+                  onSelect={setChildModalType}
+                  label="+ Add Project or Course"
+                />
+              </div>
+            )}
+
+            {childModalType && (
+              <ExperienceModal
+                type={childModalType}
+                onSave={handleAddChildExperience}
+                onClose={() => setChildModalType(null)}
+              />
+            )}
 
             <div className="flex items-center gap-1 border-b border-hairline mt-4 mb-4 overflow-x-auto">
               {TABS.map((t) => (
@@ -149,6 +211,7 @@ export default function ExperienceDetail() {
                 linkedCourses={linkedCourses}
                 skillLinks={skillLinks}
                 achievements={achievements}
+                childExperiences={childExperiences}
                 loaded={learningLoaded}
               />
             )}
@@ -362,7 +425,7 @@ function DetailsTab({ item, onSave, onDelete }) {
   )
 }
 
-function OverviewTab({ item, linkedCourses, skillLinks, achievements, loaded }) {
+function OverviewTab({ item, linkedCourses, skillLinks, achievements, childExperiences, loaded }) {
   if (!loaded) return <p className="text-sm text-secondary">Loading…</p>
 
   return (
@@ -380,6 +443,23 @@ function OverviewTab({ item, linkedCourses, skillLinks, achievements, loaded }) 
         These are historical records from this {EXPERIENCE_TYPE_CONFIG[item.type]?.periodNoun ?? 'experience'} —
         they don't change your current skill levels unless you choose to update them.
       </p>
+
+      {childExperiences?.length > 0 && (
+        <div>
+          <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">
+            Related projects & courses
+          </h4>
+          <ul className="space-y-1">
+            {childExperiences.map((c) => (
+              <li key={c.id} className="text-sm">
+                <Link to={`/experience/${c.id}`} className="text-moss hover:underline">
+                  {EXPERIENCE_TYPE_LABELS[c.type] ?? c.type}: {c.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div>
         <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">Courses</h4>

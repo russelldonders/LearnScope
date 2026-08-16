@@ -1,13 +1,18 @@
 export const EXPERIENCE_TYPES = [
   { value: 'employment', label: 'Job' },
   { value: 'project', label: 'Project' },
+  { value: 'course', label: 'Course / Training Record' },
   { value: 'volunteer', label: 'Volunteer Position' },
   { value: 'other', label: 'Other Experience' },
-  { value: 'course', label: 'Course / Training' },
   { value: 'education', label: 'Education' },
 ]
 
 export const EXPERIENCE_TYPE_LABELS = Object.fromEntries(EXPERIENCE_TYPES.map((t) => [t.value, t.label]))
+
+// The types that can be added as a "sub-experience" nested under a Job or
+// Volunteer Position -- e.g. a project or course record completed as part
+// of that role. Automatically linked to the parent via parent_experience_id.
+export const NESTED_EXPERIENCE_TYPES = ['project', 'course']
 
 // Field copy and requiredness vary slightly per type -- a project or other
 // personal pursuit doesn't always have an organization behind it, while a
@@ -42,7 +47,7 @@ export const EXPERIENCE_TYPE_CONFIG = {
     periodNoun: 'experience',
   },
   course: {
-    modalTitle: 'Add course / training',
+    modalTitle: 'Add course / training record',
     titleLabel: 'Course / training title',
     orgLabel: 'Provider (optional)',
     orgRequired: false,

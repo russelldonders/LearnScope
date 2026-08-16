@@ -5,8 +5,9 @@ import { useAuth } from '../context/AuthContext'
 import { EXPERIENCE_TYPES } from '../lib/experienceTypes'
 import TimelineItem from './TimelineItem'
 import ExperienceModal from './ExperienceModal'
+import AddExperienceButton from './AddExperienceButton'
 
-const ADD_EXPERIENCE_TYPES = EXPERIENCE_TYPES.filter((t) => t.value !== 'education')
+const ADD_EXPERIENCE_TYPES = EXPERIENCE_TYPES.filter((t) => t.value !== 'education').map((t) => t.value)
 
 export default function ExperienceSection() {
   const { user } = useAuth()
@@ -16,7 +17,6 @@ export default function ExperienceSection() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [modalType, setModalType] = useState(null)
-  const [pickerOpen, setPickerOpen] = useState(false)
 
   useEffect(() => {
     loadExperience()
@@ -83,35 +83,7 @@ export default function ExperienceSection() {
     <section>
       <div className="mb-6">
         <h2 className="font-display text-xl text-ink mb-3">Experience timeline</h2>
-        <div className="relative inline-block">
-          <button
-            type="button"
-            onClick={() => setPickerOpen((v) => !v)}
-            className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90"
-          >
-            + Add Experience
-          </button>
-          {pickerOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setPickerOpen(false)} />
-              <div className="absolute left-0 top-full mt-1 w-56 bg-card border border-hairline rounded-md shadow-lg z-50 overflow-hidden">
-                {ADD_EXPERIENCE_TYPES.map((t) => (
-                  <button
-                    key={t.value}
-                    type="button"
-                    onClick={() => {
-                      setModalType(t.value)
-                      setPickerOpen(false)
-                    }}
-                    className="w-full text-left px-4 py-2.5 text-sm text-ink hover:bg-paper transition-colors"
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+        <AddExperienceButton types={ADD_EXPERIENCE_TYPES} onSelect={setModalType} />
       </div>
 
       {loading && <p className="text-secondary">Loading…</p>}
