@@ -6,6 +6,7 @@ import { formatMonthYear } from '../lib/dates'
 import { LEVEL_LABELS } from '../lib/levels'
 import { EXPERIENCE_TYPE_LABELS, EXPERIENCE_TYPE_CONFIG, NESTED_EXPERIENCE_TYPES } from '../lib/experienceTypes'
 import AppHeader from '../components/AppHeader'
+import GrowthRing from '../components/GrowthRing'
 import SkillCard from '../components/SkillCard'
 import FindSkillModal from '../components/FindSkillModal'
 import OrganizationLogo from '../components/OrganizationLogo'
@@ -441,96 +442,50 @@ function DetailsTab({ item, onSave, onDelete }) {
 }
 
 function OverviewTab({ item, linkedCourses, skillLinks, achievements, childExperiences, loaded }) {
+  const navigate = useNavigate()
   if (!loaded) return <p className="text-sm text-secondary">Loading…</p>
+
+  function goToCourse(courseId) {
+    navigate(`/courses/${courseId}`, { state: { backTo: `/experience/${item.id}`, backLabel: item.title } })
+  }
+
+  const pendingCourseLinks = linkedCourses.filter((l) => l.courses && !l.courses.completed_date)
+  const events = [
+    { type: 'start', date: item.start_date },
+    item.end_date ? { type: 'end', date: item.end_date } : { type: 'today', date: new Date().toISOString() },
+    ...(childExperiences ?? []).map((c) => ({ type: 'child', date: c.start_date, child: c })),
+    ...linkedCourses
+      .filter((l) => l.courses?.completed_date)
+      .map((l) => ({ type: 'course', date: l.courses.completed_date, link: l })),
+    ...achievements.map((a) => ({ type: 'achievement', date: a.assessed_at, entry: a })),
+  ].sort((a, b) =>
+    new Date(b.date).toISOString().slice(0, 10).localeCompare(new Date(a.date).toISOString().slice(0, 10))
+  )
+  const total = pendingCourseLinks.length + events.length
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="font-mono text-xs text-secondary">
-          {formatMonthYear(item.start_date)} – {item.end_date ? formatMonthYear(item.end_date) : 'Present'}
-        </p>
-        {item.description && (
-          <p className="text-sm text-ink mt-2 whitespace-pre-line">{item.description}</p>
-        )}
-      </div>
-
-      {childExperiences?.filter((c) => c.type === 'project').length > 0 && (
-        <div>
-          <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">Projects</h4>
-          <ul className="space-y-1">
-            {childExperiences
-              .filter((c) => c.type === 'project')
-              .map((c) => (
-                <li key={c.id} className="text-sm">
-                  <Link to={`/experience/${c.id}`} className="text-moss hover:underline">
-                    {c.title}
-                  </Link>
-                </li>
-              ))}
-          </ul>
-        </div>
-      )}
-
-      {childExperiences?.filter((c) => c.type === 'course').length > 0 && (
-        <div>
-          <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">
-            Course / Training Record
-          </h4>
-          <ul className="space-y-1">
-            {childExperiences
-              .filter((c) => c.type === 'course')
-              .map((c) => (
-                <li key={c.id} className="text-sm">
-                  <Link to={`/experience/${c.id}`} className="text-moss hover:underline">
-                    {c.title}
-                  </Link>
-                </li>
-              ))}
-          </ul>
-        </div>
-      )}
-
-      {childExperiences?.filter((c) => c.type === 'other').length > 0 && (
-        <div>
-          <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">Other Experience</h4>
-          <ul className="space-y-1">
-            {childExperiences
-              .filter((c) => c.type === 'other')
-              .map((c) => (
-                <li key={c.id} className="text-sm">
-                  <Link to={`/experience/${c.id}`} className="text-moss hover:underline">
-                    {c.title}
-                  </Link>
-                </li>
-              ))}
-          </ul>
-        </div>
-      )}
+      {item.description && <p className="text-sm text-ink whitespace-pre-line">{item.description}</p>}
 
       <div>
-        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">Courses</h4>
-        {linkedCourses.length === 0 ? (
-          <p className="text-sm text-secondary">No courses linked yet.</p>
-        ) : (
-          <ul className="space-y-1">
-            {linkedCourses
-              .filter((l) => l.courses)
-              .map((l) => (
-                <li key={l.id} className="text-sm">
-                  <Link
-                    to={`/courses/${l.courses.id}`}
-                    state={{ backTo: `/experience/${item.id}`, backLabel: item.title }}
-                    className="text-moss hover:underline"
-                  >
-                    {l.courses.name}
-                  </Link>
-                  {l.courses.completed_date && (
-                    <span className="text-secondary"> · Completed {formatMonthYear(l.courses.completed_date)}</span>
-                  )}
-                </li>
-              ))}
-          </ul>
-        )}
+        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Timeline</h4>
+        {pendingCourseLinks.map((link, i) => (
+          <PendingCourseEntry
+            key={link.id}
+            link={link}
+            hasMore={i < total - 1}
+            onClick={() => goToCourse(link.courses.id)}
+          />
+        ))}
+        {events.map((event, i) => (
+          <ExperienceTimelineEntry
+            key={event.child?.id ?? event.link?.id ?? event.entry?.id ?? event.type}
+            item={item}
+            event={event}
+            isLast={pendingCourseLinks.length + i === total - 1}
+            onSelectCourse={goToCourse}
+          />
+        ))}
       </div>
 
       <div>
@@ -547,24 +502,154 @@ function OverviewTab({ item, linkedCourses, skillLinks, achievements, childExper
           </ul>
         )}
       </div>
+    </div>
+  )
+}
 
-      <div>
-        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">Skill achievements</h4>
-        {achievements.length === 0 ? (
-          <p className="text-sm text-secondary">No achievements recorded yet.</p>
-        ) : (
-          <ul className="space-y-2">
-            {achievements.map((a) => (
-              <li key={a.id} className="text-sm text-ink">
-                {a.skills?.name} <span className="text-secondary">· {LEVEL_LABELS[a.level]}</span>{' '}
-                <span className="font-mono text-xs text-secondary">
-                  ({new Date(a.assessed_at).toLocaleDateString()})
-                </span>
-                {a.comments && <p className="text-xs text-secondary mt-0.5">{a.comments}</p>}
-              </li>
-            ))}
-          </ul>
-        )}
+function PendingCourseEntry({ link, hasMore, onClick }) {
+  return (
+    <div className="flex gap-3">
+      <div className="flex flex-col items-center w-12 shrink-0">
+        <div className="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-hairline">
+          <span className="w-1.5 h-1.5 rounded-full bg-secondary/40" />
+        </div>
+        {hasMore && <span className="w-px flex-1 bg-hairline mt-1" />}
+      </div>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onClick()
+          }
+        }}
+        className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper/60 p-3 cursor-pointer hover:border-moss/60 transition-colors"
+      >
+        <p className="text-sm text-secondary">
+          Enrolled in <span className="text-ink font-medium">{link.courses.name}</span> — in progress
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function FlagIcon({ className }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M5 3v18" />
+      <path d="M5 4h13l-2.5 4.5L18 13H5" />
+    </svg>
+  )
+}
+
+function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse }) {
+  if (event.type === 'start' || event.type === 'end') {
+    const config = EXPERIENCE_TYPE_CONFIG[item.type] ?? EXPERIENCE_TYPE_CONFIG.employment
+    return (
+      <div className="flex gap-3">
+        <div className="flex flex-col items-center w-12 shrink-0">
+          <div className="flex items-center justify-center w-8 h-8 rounded-full border border-hairline bg-paper">
+            <FlagIcon className="text-secondary" />
+          </div>
+          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
+        </div>
+        <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3">
+          <p className="text-sm font-medium text-ink capitalize">
+            {event.type === 'start' ? `${config.periodNoun} started` : `${config.periodNoun} ended`}
+          </p>
+          <p className="font-mono text-xs text-secondary mt-0.5">{formatMonthYear(event.date)}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (event.type === 'today') {
+    return (
+      <div className="flex gap-3">
+        <div className="flex flex-col items-center w-12 shrink-0">
+          <span className="w-2.5 h-2.5 rounded-full bg-ink shrink-0" />
+          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
+        </div>
+        <div className="min-w-0 flex-1 mb-6 flex items-center gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-wide text-ink font-semibold">
+            Today · {new Date(event.date).toLocaleDateString()}
+          </span>
+          <span className="flex-1 h-px bg-hairline" />
+        </div>
+      </div>
+    )
+  }
+
+  if (event.type === 'child') {
+    const { child } = event
+    return (
+      <div className="flex gap-3">
+        <div className="flex flex-col items-center w-12 shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-secondary/40 shrink-0 mt-1.5" />
+          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
+        </div>
+        <Link
+          to={`/experience/${child.id}`}
+          className="min-w-0 flex-1 mb-3 flex items-center gap-2 text-xs text-secondary hover:text-ink transition-colors"
+        >
+          <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">
+            {EXPERIENCE_TYPE_LABELS[child.type] ?? child.type}
+          </span>
+          <span className="truncate text-ink">{child.title}</span>
+          <span className="font-mono text-[10px] text-secondary/70 shrink-0">
+            {formatMonthYear(child.start_date)}
+            {child.end_date ? ` – ${formatMonthYear(child.end_date)}` : ''}
+          </span>
+        </Link>
+      </div>
+    )
+  }
+
+  if (event.type === 'course') {
+    const course = event.link.courses
+    return (
+      <div className="flex gap-3">
+        <div className="flex flex-col items-center w-12 shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-secondary/40 shrink-0 mt-1.5" />
+          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
+        </div>
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => onSelectCourse(course.id)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              onSelectCourse(course.id)
+            }
+          }}
+          className="min-w-0 flex-1 mb-3 flex items-center gap-2 text-xs text-secondary cursor-pointer hover:text-ink transition-colors"
+        >
+          <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">Training</span>
+          <span className="truncate">{course.name}</span>
+          <span className="font-mono text-[10px] text-secondary/70 shrink-0">
+            {new Date(course.completed_date).toLocaleDateString()}
+          </span>
+        </div>
+      </div>
+    )
+  }
+
+  const entry = event.entry
+  return (
+    <div className="flex gap-3">
+      <div className="flex flex-col items-center w-12 shrink-0">
+        <GrowthRing level={entry.level} size={32} />
+        {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
+      </div>
+      <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3">
+        <p className="text-sm font-medium text-ink">
+          {entry.skills?.name} <span className="text-secondary font-normal">· {LEVEL_LABELS[entry.level]}</span>
+        </p>
+        <p className="font-mono text-xs text-secondary mt-0.5">{new Date(entry.assessed_at).toLocaleDateString()}</p>
+        {entry.comments && <p className="text-sm text-ink mt-1">{entry.comments}</p>}
       </div>
     </div>
   )
