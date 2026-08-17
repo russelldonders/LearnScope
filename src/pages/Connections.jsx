@@ -5,6 +5,7 @@ import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import { LEVEL_LABELS } from '../lib/levels'
 import { listMyPeerRatings, listSentInvites, getProfiles, sendInviteEmail, revokeInvite } from '../lib/connections'
+import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
 
 export default function Connections() {
   const { user } = useAuth()
@@ -12,6 +13,7 @@ export default function Connections() {
   const [error, setError] = useState(null)
   const [ratings, setRatings] = useState([])
   const [invites, setInvites] = useState([])
+  const [validationRequests, setValidationRequests] = useState([])
   const [profiles, setProfiles] = useState({})
   const [copiedId, setCopiedId] = useState(null)
   const [resendingId, setResendingId] = useState(null)
@@ -28,11 +30,17 @@ export default function Connections() {
     setLoading(true)
     setError(null)
     try {
-      const [ratingsData, invitesData] = await Promise.all([listMyPeerRatings(), listSentInvites()])
+      const [ratingsData, invitesData, validationRequestsData] = await Promise.all([
+        listMyPeerRatings(),
+        listSentInvites(),
+        listIncomingPendingValidationRequests(),
+      ])
       setRatings(ratingsData)
       setInvites(invitesData)
+      setValidationRequests(validationRequestsData)
       const otherIds = ratingsData.map((r) => (r.rater_id === user.id ? r.skill_owner_id : r.rater_id))
-      setProfiles(await getProfiles([...otherIds, user.id]))
+      const requesterIds = validationRequestsData.map((r) => r.requester_id)
+      setProfiles(await getProfiles([...otherIds, ...requesterIds, user.id]))
     } catch (err) {
       setError(err.message)
     } finally {
@@ -175,6 +183,30 @@ export default function Connections() {
             ))}
           </div>
         </div>
+
+        {validationRequests.length > 0 && (
+          <div>
+            <h2 className="font-display text-xl text-ink mb-6">Requests to validate</h2>
+            <div className="space-y-3">
+              {validationRequests.map((request) => (
+                <Link
+                  key={request.id}
+                  to={`/validate-request/${request.id}`}
+                  className="block bg-card border border-hairline rounded-lg p-4 hover:border-moss/60 transition-colors"
+                >
+                  <p className="text-sm text-ink">
+                    <strong>{profiles[request.requester_id]?.name || 'Someone'}</strong> asked you to confirm{' '}
+                    they've reached <strong>{LEVEL_LABELS[request.target_level]}</strong> on{' '}
+                    <strong>{request.skills?.name}</strong>
+                  </p>
+                  <p className="font-mono text-xs text-secondary mt-0.5">
+                    {new Date(request.created_at).toLocaleDateString()}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         {pendingInvites.length > 0 && (
           <div>

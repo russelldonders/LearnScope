@@ -19,6 +19,7 @@ import SkillsProfile from './pages/SkillsProfile'
 import CourseCatalogue from './pages/CourseCatalogue'
 import CourseDetail from './pages/CourseDetail'
 import Learning from './pages/Learning'
+import ValidateRequest from './pages/ValidateRequest'
 
 function App() {
   return (
@@ -117,6 +118,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <SkillsProfile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/validate-request/:requestId"
+            element={
+              <ProtectedRoute>
+                <ValidateRequest />
               </ProtectedRoute>
             }
           />

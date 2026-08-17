@@ -23,8 +23,10 @@ import BaselineQuizModal from '../components/BaselineQuizModal'
 import AssessBaselineModal from '../components/AssessBaselineModal'
 import SetTargetModal from '../components/SetTargetModal'
 import ValidateSkillModal from '../components/ValidateSkillModal'
+import RequestValidationModal from '../components/RequestValidationModal'
 import LifecycleStageIcon from '../components/LifecycleStageIcon'
 import TagsField from '../components/TagsField'
+import { listOutgoingValidationRequests } from '../lib/skillValidationRequests'
 
 const TABS = [
   { id: 'history', label: 'Overview' },
@@ -64,6 +66,9 @@ export default function SkillDetail() {
   const [assessMode, setAssessMode] = useState(null)
   const [targetOpen, setTargetOpen] = useState(false)
   const [validateOpen, setValidateOpen] = useState(false)
+  const [expertValidationOpen, setExpertValidationOpen] = useState(false)
+  const [validationRequests, setValidationRequests] = useState([])
+  const [validatorNames, setValidatorNames] = useState({})
 
   useEffect(() => {
     loadSkill()
@@ -103,6 +108,7 @@ export default function SkillDetail() {
       { data: quizzes },
       { data: skillTargets },
       { data: courses },
+      requests,
     ] = await Promise.all([
         supabase
           .from('skill_assessments')
@@ -140,6 +146,7 @@ export default function SkillDetail() {
             'id, relationship, created_at, courses(id, name, provider, course_type, duration, completed_date, catalogue_course_id)'
           )
           .eq('skill_id', skill.id),
+        listOutgoingValidationRequests(skill.id),
       ])
     setHistory(assessments ?? [])
     setPeerRatings(ratings ?? [])
@@ -149,7 +156,19 @@ export default function SkillDetail() {
     setSkillTags(tags ?? [])
     setQuizResults(quizzes ?? [])
     setCourseLinks(courses ?? [])
+    setValidationRequests(requests ?? [])
     setLoadingHistory(false)
+
+    const validatorIds = [...new Set((requests ?? []).map((r) => r.validator_id).filter(Boolean))]
+    if (validatorIds.length > 0) {
+      const { data: validatorProfiles } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', validatorIds)
+      setValidatorNames(Object.fromEntries((validatorProfiles ?? []).map((p) => [p.id, p.full_name])))
+    } else {
+      setValidatorNames({})
+    }
 
     const raterIds = [...new Set((ratings ?? []).map((r) => r.rater_id).filter(Boolean))]
     if (raterIds.length > 0) {
@@ -338,6 +357,19 @@ export default function SkillDetail() {
               />
             )}
 
+            {expertValidationOpen && targets[0] && (
+              <RequestValidationModal
+                skill={skill}
+                user={user}
+                targetLevel={targets[0].target_level}
+                onClose={() => setExpertValidationOpen(false)}
+                onRequested={() => {
+                  loadHistory()
+                  setExpertValidationOpen(false)
+                }}
+              />
+            )}
+
             <div className="flex items-center flex-wrap gap-1 border-b border-hairline mb-4">
               {TABS.map((t) => (
                 <button
@@ -400,6 +432,8 @@ export default function SkillDetail() {
                 courseLinks={courseLinks}
                 quizResults={quizResults}
                 targets={targets}
+                validationRequests={validationRequests}
+                validatorNames={validatorNames}
                 loading={loadingHistory}
                 assessorName={assessorName}
                 raterAvatars={raterAvatars}
@@ -414,6 +448,7 @@ export default function SkillDetail() {
                 onDemonstrateSkill={handleDemonstrateSkill}
                 onValidateSkillStage={handleValidateSkillStage}
                 onRequestValidation={() => setValidateOpen(true)}
+                onRequestExpertValidation={() => setExpertValidationOpen(true)}
               />
             )}
 
@@ -544,6 +579,8 @@ function UpNextSection({
   courseLinks,
   onValidateSkillStage,
   onRequestValidation,
+  onRequestExpertValidation,
+  hasPendingExpertValidation,
   hasTarget,
 }) {
   let items = []
@@ -656,6 +693,13 @@ function UpNextSection({
       },
     ]
     if (hasTarget) {
+      items.push({
+        key: 'request-validation',
+        label: 'Request Validation',
+        description: 'Ask someone who has already reached this level to review your evidence.',
+        done: hasPendingExpertValidation,
+        onClick: onRequestExpertValidation,
+      })
       items.push({
         key: 'ai-assessment',
         label: 'Request AI Assessment',
@@ -839,6 +883,8 @@ function HistorySection({
   courseLinks,
   quizResults,
   targets,
+  validationRequests,
+  validatorNames,
   loading,
   assessorName,
   raterAvatars,
@@ -853,6 +899,7 @@ function HistorySection({
   onDemonstrateSkill,
   onValidateSkillStage,
   onRequestValidation,
+  onRequestExpertValidation,
 }) {
   const navigate = useNavigate()
   const due = isSelfAssessmentDue(skill.next_checkin_date)
@@ -860,6 +907,8 @@ function HistorySection({
   const showBaselineFlow = skill.lifecycle_stage === 'identified'
   const selfAssessedCount = history.filter((a) => a.source === 'self' || !a.source).length
   const hasAnyCourse = courseLinks.some((link) => link.courses)
+  const pendingValidationRequests = validationRequests.filter((r) => r.status === 'pending')
+  const decidedValidationRequests = validationRequests.filter((r) => r.status !== 'pending')
   const [selectedEvent, setSelectedEvent] = useState(null)
 
   function goToCourse(courseId) {
@@ -911,6 +960,12 @@ function HistorySection({
               createdAt: link.created_at,
               link,
             })),
+          ...decidedValidationRequests.map((request) => ({
+            type: 'validation',
+            date: request.decided_at,
+            createdAt: request.decided_at,
+            request,
+          })),
           { type: 'added', date: skill.date_added, createdAt: skill.date_added, source: skill.source },
           { type: 'today', date: new Date().toISOString(), createdAt: new Date().toISOString() },
           // Same-day events sort by day first, then by when the record was
@@ -937,7 +992,7 @@ function HistorySection({
             {currentTarget && (
               <TargetTimelineEntry
                 target={currentTarget}
-                hasMore={pendingCourseLinks.length > 0 || events.length > 0}
+                hasMore={pendingCourseLinks.length > 0 || pendingValidationRequests.length > 0 || events.length > 0}
                 onClick={onSetTarget}
               />
             )}
@@ -945,8 +1000,16 @@ function HistorySection({
               <PendingTrainingEntry
                 key={link.id}
                 link={link}
-                hasMore={i < pendingCourseLinks.length - 1 || events.length > 0}
+                hasMore={i < pendingCourseLinks.length - 1 || pendingValidationRequests.length > 0 || events.length > 0}
                 onClick={() => goToCourse(link.courses.id)}
+              />
+            ))}
+            {pendingValidationRequests.map((request, i) => (
+              <PendingValidationEntry
+                key={request.id}
+                request={request}
+                validatorName={validatorNames[request.validator_id]}
+                hasMore={i < pendingValidationRequests.length - 1 || events.length > 0}
               />
             ))}
             <UpNextSection
@@ -965,6 +1028,8 @@ function HistorySection({
               courseLinks={courseLinks}
               onValidateSkillStage={onValidateSkillStage}
               onRequestValidation={onRequestValidation}
+              onRequestExpertValidation={onRequestExpertValidation}
+              hasPendingExpertValidation={pendingValidationRequests.length > 0}
               hasTarget={targets.length > 0}
             />
             <QuickActionsRow
@@ -979,7 +1044,10 @@ function HistorySection({
             />
             {events.map((event, i) => (
               <TimelineEntry
-                key={event.entry?.id ?? event.rating?.id ?? event.link?.id ?? event.statement?.id ?? event.type}
+                key={
+                  event.entry?.id ?? event.rating?.id ?? event.link?.id ?? event.statement?.id ??
+                  event.request?.id ?? event.type
+                }
                 event={event}
                 isLast={i === events.length - 1}
                 isMostRecent={i === mostRecentRatingIndex}
@@ -1067,6 +1135,25 @@ function PendingTrainingEntry({ link, hasMore, onClick }) {
       >
         <p className="text-sm text-secondary">
           Enrolled in <span className="text-ink font-medium">{link.courses.name}</span> — in progress
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function PendingValidationEntry({ request, validatorName, hasMore }) {
+  return (
+    <div className="flex gap-3">
+      <div className="flex flex-col items-center w-12 shrink-0">
+        <div className="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-hairline">
+          <span className="w-1.5 h-1.5 rounded-full bg-secondary/40" />
+        </div>
+        {hasMore && <span className="w-px flex-1 bg-hairline mt-1" />}
+      </div>
+      <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper/60 p-3">
+        <p className="text-sm text-secondary">
+          Waiting on <span className="text-ink font-medium">{validatorName || 'a validator'}</span> to confirm{' '}
+          {LEVEL_LABELS[request.target_level]}
         </p>
       </div>
     </div>
@@ -1254,6 +1341,36 @@ function TimelineEntry({
           <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
             {exp.type === 'education' ? 'Used during study' : 'Used during employment'} · {exp.organization}
           </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (event.type === 'validation') {
+    const { request } = event
+    const confirmed = request.status === 'confirmed'
+    return (
+      <div className="flex gap-3">
+        <div className="flex flex-col items-center w-12 shrink-0">
+          <div
+            className={`flex items-center justify-center w-8 h-8 rounded-full border ${
+              confirmed ? 'border-moss bg-moss/10' : 'border-hairline bg-paper'
+            }`}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={confirmed ? 'text-moss' : 'text-secondary'}>
+              {confirmed ? <path d="M20 6L9 17l-5-5" /> : <path d="M18 6L6 18M6 6l12 12" />}
+            </svg>
+          </div>
+          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
+        </div>
+        <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3">
+          <p className="text-sm font-medium text-ink">
+            {confirmed ? `Validated at ${LEVEL_LABELS[request.target_level]}` : 'Validation declined'}
+          </p>
+          <p className="font-mono text-xs text-secondary mt-0.5">
+            {new Date(request.decided_at).toLocaleDateString()}
+          </p>
+          {request.decision_comments && <p className="text-sm text-ink mt-1">"{request.decision_comments}"</p>}
         </div>
       </div>
     )
@@ -1870,8 +1987,11 @@ function TrainingSection({ courseLinks, loading, trainingScopeState }) {
 
 function SettingsSection({ skill, onUpdated }) {
   const [visible, setVisible] = useState(skill.visible_on_profile ?? false)
+  const [validateConnections, setValidateConnections] = useState(skill.offer_validate_connections ?? false)
+  const [validateOthers, setValidateOthers] = useState(skill.offer_validate_others ?? false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const canOfferValidation = skill.lifecycle_stage === 'validated' || skill.lifecycle_stage === 'maintained'
 
   async function handleToggle(checked) {
     setError(null)
@@ -1889,25 +2009,81 @@ function SettingsSection({ skill, onUpdated }) {
     setSaving(false)
   }
 
+  async function handleValidationToggle(field, checked, setLocal) {
+    setError(null)
+    setSaving(true)
+    const { error } = await supabase
+      .from('skills')
+      .update({ [field]: checked })
+      .eq('id', skill.id)
+    if (error) {
+      setError(error.message)
+    } else {
+      setLocal(checked)
+      onUpdated()
+    }
+    setSaving(false)
+  }
+
   return (
-    <div>
-      <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Profile visibility</h4>
-      <label className="flex items-start gap-3">
-        <input
-          type="checkbox"
-          checked={visible}
-          disabled={saving}
-          onChange={(e) => handleToggle(e.target.checked)}
-          className="mt-0.5 rounded border-hairline"
-        />
-        <span className="text-sm text-ink">
-          Show this skill on your skills profile
-          <span className="block text-xs text-secondary mt-0.5">
-            Only skills marked visible here can appear to your connections — and only if you've also
-            turned on "Let connections view your skills profile" in your Profile's Privacy settings.
+    <div className="space-y-6">
+      <div>
+        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Profile visibility</h4>
+        <label className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            checked={visible}
+            disabled={saving}
+            onChange={(e) => handleToggle(e.target.checked)}
+            className="mt-0.5 rounded border-hairline"
+          />
+          <span className="text-sm text-ink">
+            Show this skill on your skills profile
+            <span className="block text-xs text-secondary mt-0.5">
+              Only skills marked visible here can appear to your connections — and only if you've also
+              turned on "Let connections view your skills profile" in your Profile's Privacy settings.
+            </span>
           </span>
-        </span>
-      </label>
+        </label>
+      </div>
+
+      {canOfferValidation && (
+        <div>
+          <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Validating others</h4>
+          <p className="text-xs text-secondary mb-3">
+            Since you've reached this level yourself, other people working toward it can ask you to review
+            their evidence and confirm they've got there too. If you accept a request, you get read-only
+            access to that one skill's record for as long as the request exists.
+          </p>
+          <div className="space-y-3">
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={validateConnections}
+                disabled={saving}
+                onChange={(e) =>
+                  handleValidationToggle('offer_validate_connections', e.target.checked, setValidateConnections)
+                }
+                className="mt-0.5 rounded border-hairline"
+              />
+              <span className="text-sm text-ink">Let your connections ask you to validate this skill</span>
+            </label>
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={validateOthers}
+                disabled={saving}
+                onChange={(e) =>
+                  handleValidationToggle('offer_validate_others', e.target.checked, setValidateOthers)
+                }
+                className="mt-0.5 rounded border-hairline"
+              />
+              <span className="text-sm text-ink">Let anyone on LearnScope ask you to validate this skill</span>
+            </label>
+          </div>
+        </div>
+      )}
+
       {error && <p className="text-sm text-red-700 mt-2">{error}</p>}
     </div>
   )
