@@ -1230,7 +1230,7 @@ function TimelineEntry({
           {...clickableProps}
         >
           <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">{verbLabel(s.statement)}</span>
-          <span className="truncate">{activityName(s.statement)}</span>
+          <span className="truncate min-w-0">{activityName(s.statement)}</span>
           <span className="font-mono text-[10px] text-secondary/70 shrink-0">
             {new Date(s.recorded_at).toLocaleDateString()}
           </span>
@@ -1252,7 +1252,7 @@ function TimelineEntry({
           {...clickableProps}
         >
           <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">Training</span>
-          <span className="truncate">{course.name}</span>
+          <span className="truncate min-w-0">{course.name}</span>
           <span className="font-mono text-[10px] text-secondary/70 shrink-0">
             {new Date(course.completed_date).toLocaleDateString()}
           </span>

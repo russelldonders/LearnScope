@@ -24,7 +24,7 @@ export default function ChildExperienceEntry({ child, isLast, onNavigate }) {
         <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">
           {EXPERIENCE_TYPE_LABELS[child.type] ?? child.type}
         </span>
-        <span className="truncate text-ink">{child.title}</span>
+        <span className="truncate text-ink min-w-0">{child.title}</span>
         <span className="font-mono text-[10px] text-secondary/70 shrink-0">
           {formatMonthYear(child.start_date)}
           {child.end_date ? ` – ${formatMonthYear(child.end_date)}` : ''}

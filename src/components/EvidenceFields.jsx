@@ -110,7 +110,7 @@ export default function EvidenceFields({ evidenceUrl, onEvidenceUrlChange, files
                 key={`${file.name}-${i}`}
                 className="flex items-center justify-between gap-2 text-xs text-secondary bg-paper border border-hairline rounded px-2 py-1"
               >
-                <span className="truncate">{file.name}</span>
+                <span className="truncate min-w-0">{file.name}</span>
                 <button
                   type="button"
                   onClick={() => removeFile(i)}

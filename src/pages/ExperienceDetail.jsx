@@ -608,7 +608,7 @@ function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse }) {
           className="min-w-0 flex-1 mb-3 flex items-center gap-2 text-xs text-secondary cursor-pointer hover:text-ink transition-colors"
         >
           <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">Training</span>
-          <span className="truncate">{course.name}</span>
+          <span className="truncate min-w-0">{course.name}</span>
           <span className="font-mono text-[10px] text-secondary/70 shrink-0">
             {new Date(course.completed_date).toLocaleDateString()}
           </span>

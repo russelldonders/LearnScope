@@ -194,7 +194,7 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
               )}
               {filtered.map((s) => (
                 <div key={s.id} className="flex items-center justify-between gap-2 py-2">
-                  <span className="text-sm text-ink truncate">
+                  <span className="text-sm text-ink truncate min-w-0">
                     {s.name}
                     {s.is_private && (
                       <span className="ml-1.5 font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-1.5 py-0.5">
