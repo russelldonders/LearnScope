@@ -24,6 +24,29 @@ function buildActivityId(activityName, relatedSkill, relatedCourse) {
   return `https://learnscope.app/activities/${scope}/${activitySlug(activityName)}`
 }
 
+// xAPI represents how long an activity took as result.duration, an ISO 8601
+// duration string (e.g. "PT1H30M") rather than a plain number -- this stays
+// in that format rather than inventing a separate minutes/hours field.
+export function buildDuration(hours, minutes) {
+  const h = Math.max(0, Math.floor(Number(hours) || 0))
+  const m = Math.max(0, Math.floor(Number(minutes) || 0))
+  if (h === 0 && m === 0) return null
+  return `PT${h > 0 ? `${h}H` : ''}${m > 0 ? `${m}M` : ''}`
+}
+
+const DURATION_PATTERN = /^PT(?:(\d+)H)?(?:(\d+)M)?$/
+
+export function formatDuration(statement) {
+  const iso = statement.result?.duration
+  if (!iso) return null
+  const match = DURATION_PATTERN.exec(iso)
+  if (!match) return null
+  const hours = Number(match[1] || 0)
+  const minutes = Number(match[2] || 0)
+  if (hours === 0 && minutes === 0) return null
+  return [hours > 0 ? `${hours}h` : null, minutes > 0 ? `${minutes}m` : null].filter(Boolean).join(' ')
+}
+
 // Builds a spec-shaped xAPI statement from the guided-form fields.
 // actor: { name, email }. verbValue: one of XAPI_VERBS[].value.
 // relatedSkill/relatedCourse: optional { id, name } recorded as context extensions.
@@ -35,6 +58,8 @@ export function buildStatement({
   timestamp,
   relatedSkill,
   relatedCourse,
+  durationHours,
+  durationMinutes,
 }) {
   const verb = XAPI_VERBS.find((v) => v.value === verbValue)
   if (!verb) throw new Error('Choose a valid verb.')
@@ -60,6 +85,9 @@ export function buildStatement({
     },
     timestamp: new Date(timestamp).toISOString(),
   }
+
+  const duration = buildDuration(durationHours, durationMinutes)
+  if (duration) statement.result = { duration }
 
   if (relatedSkill || relatedCourse) {
     const extensions = {}

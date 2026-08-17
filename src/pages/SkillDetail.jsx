@@ -12,7 +12,7 @@ import TrackingReasonPicker from '../components/TrackingReasonPicker'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { SKILL_LIFECYCLE_LABELS, SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
-import { activityName, verbLabel } from '../lib/xapiStatement'
+import { activityName, verbLabel, formatDuration } from '../lib/xapiStatement'
 import { syncCurrentRoleLinks } from '../lib/currentRole'
 import { listTags, listSkillTags, addTagToSkill, removeSkillTagLink } from '../lib/skillTags'
 import { SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
@@ -1233,6 +1233,7 @@ function TimelineEntry({
           <span className="truncate min-w-0">{activityName(s.statement)}</span>
           <span className="font-mono text-[10px] text-secondary/70 shrink-0">
             {new Date(s.recorded_at).toLocaleDateString()}
+            {formatDuration(s.statement) ? ` · ${formatDuration(s.statement)}` : ''}
           </span>
         </div>
       </div>
@@ -1550,6 +1551,7 @@ function TimelineDetailModal({ event, assessorName, raterAvatars, onClose }) {
         <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">{verbLabel(s.statement)}</p>
         <p className="font-mono text-xs text-secondary">
           {new Date(s.recorded_at).toLocaleDateString()}
+          {formatDuration(s.statement) ? ` · ${formatDuration(s.statement)}` : ''}
         </p>
         {s.statement.object?.definition?.description?.['en-US'] && (
           <p className="text-sm text-ink">{s.statement.object.definition.description['en-US']}</p>
@@ -1905,6 +1907,7 @@ function ActivitiesSection({ statements, loading }) {
               </p>
               <p className="font-mono text-xs text-secondary mt-0.5">
                 {new Date(s.recorded_at).toLocaleDateString()}
+                {formatDuration(s.statement) ? ` · ${formatDuration(s.statement)}` : ''}
               </p>
               {s.statement.object?.definition?.description?.['en-US'] && (
                 <p className="text-sm text-ink mt-1">

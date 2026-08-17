@@ -12,6 +12,8 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
   const [activityTitle, setActivityTitle] = useState('')
   const [description, setDescription] = useState('')
   const [date, setDate] = useState(todayDate())
+  const [durationHours, setDurationHours] = useState('')
+  const [durationMinutes, setDurationMinutes] = useState('')
   const [relatedSkillId, setRelatedSkillId] = useState('')
   const [rawJson, setRawJson] = useState('')
   const [saving, setSaving] = useState(false)
@@ -30,6 +32,8 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
           timestamp: date,
           relatedSkill,
           relatedCourse,
+          durationHours,
+          durationMinutes,
         })
         setRawJson(JSON.stringify(statement, null, 2))
       } catch {
@@ -67,6 +71,8 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
           timestamp: date,
           relatedSkill,
           relatedCourse,
+          durationHours,
+          durationMinutes,
         })
       }
     } catch (err) {
@@ -145,6 +151,35 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
                   onChange={(e) => setDate(e.target.value)}
                   className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
                 />
+              </div>
+
+              <div>
+                <span className="block text-sm text-secondary mb-1">Duration (optional)</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    inputMode="numeric"
+                    value={durationHours}
+                    onChange={(e) => setDurationHours(e.target.value)}
+                    placeholder="0"
+                    aria-label="Hours"
+                    className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                  />
+                  <span className="text-sm text-secondary shrink-0">h</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    inputMode="numeric"
+                    value={durationMinutes}
+                    onChange={(e) => setDurationMinutes(e.target.value)}
+                    placeholder="0"
+                    aria-label="Minutes"
+                    className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                  />
+                  <span className="text-sm text-secondary shrink-0">m</span>
+                </div>
               </div>
 
               {!fixedSkill && skills.length > 0 && (

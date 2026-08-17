@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import RecordActivityModal from './RecordActivityModal'
-import { activityName, verbLabel, relatedSkillFromStatement } from '../lib/xapiStatement'
+import { activityName, verbLabel, relatedSkillFromStatement, formatDuration } from '../lib/xapiStatement'
 
 const RECENT_LIMIT = 6
 
@@ -93,6 +93,7 @@ export default function RecordActivitySection() {
       <div className="space-y-2">
         {statements.slice(0, RECENT_LIMIT).map((row) => {
           const relatedSkill = relatedSkillFromStatement(row.statement)
+          const duration = formatDuration(row.statement)
           return (
             <div
               key={row.id}
@@ -107,6 +108,7 @@ export default function RecordActivitySection() {
                 </p>
                 <p className="font-mono text-xs text-secondary mt-0.5">
                   {new Date(row.recorded_at).toLocaleDateString()}
+                  {duration ? ` · ${duration}` : ''}
                   {relatedSkill ? ` · ${relatedSkill.name}` : ''}
                 </p>
                 {row.statement.object?.definition?.description?.['en-US'] && (

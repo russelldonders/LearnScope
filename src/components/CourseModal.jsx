@@ -7,7 +7,7 @@ import { formatMonthYear } from '../lib/dates'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { SKILL_RELATIONSHIPS, SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
 import { COURSE_TYPES } from '../lib/courseTypes'
-import { activityName, verbLabel, relatedSkillFromStatement } from '../lib/xapiStatement'
+import { activityName, verbLabel, relatedSkillFromStatement, formatDuration } from '../lib/xapiStatement'
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import GrowthRing from './GrowthRing'
 import EvidenceFields from './EvidenceFields'
@@ -399,7 +399,8 @@ function OverviewTab({ course, linkedExperiences, skillLinks, achievements, stat
                 </span>{' '}
                 {activityName(s.statement)}{' '}
                 <span className="font-mono text-xs text-secondary">
-                  ({new Date(s.recorded_at).toLocaleDateString()})
+                  ({new Date(s.recorded_at).toLocaleDateString()}
+                  {formatDuration(s.statement) ? ` · ${formatDuration(s.statement)}` : ''})
                 </span>
               </li>
             ))}
@@ -969,6 +970,7 @@ function ActivitiesSubsection({ course, skills, statements, onChange, user }) {
                     </p>
                     <p className="font-mono text-xs text-secondary mt-0.5">
                       {new Date(s.recorded_at).toLocaleDateString()}
+                      {formatDuration(s.statement) ? ` · ${formatDuration(s.statement)}` : ''}
                       {relatedSkill ? ` · ${relatedSkill.name}` : ''}
                     </p>
                     {s.statement.object?.definition?.description?.['en-US'] && (
