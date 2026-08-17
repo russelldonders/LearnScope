@@ -27,6 +27,7 @@ import RequestValidationModal from '../components/RequestValidationModal'
 import LifecycleStageIcon from '../components/LifecycleStageIcon'
 import TagsField from '../components/TagsField'
 import { listOutgoingValidationRequests } from '../lib/skillValidationRequests'
+import { computeUpNextItems } from '../lib/skillNextAction'
 
 const TABS = [
   { id: 'history', label: 'Overview' },
@@ -583,132 +584,32 @@ function UpNextSection({
   hasPendingExpertValidation,
   hasTarget,
 }) {
-  let items = []
-  if (stage === 'identified') {
-    items = [
-      {
-        key: 'self-assess',
-        label: 'Self-assess your own level',
-        description: 'Rate where you think you are right now.',
-        done: selfAssessedCount > 0,
-        onClick: onSelfAssess,
-      },
-      {
-        key: 'invite',
-        label: 'Invite others to assess your skill',
-        description: 'Get an outside perspective on your level.',
-        done: peerRatingsCount > 0,
-        onClick: onInvite,
-      },
-      {
-        key: 'activity',
-        label: 'Record an activity',
-        description: 'Log something you did that shows this skill in action.',
-        done: statementsCount > 0,
-        onClick: onRecordActivity,
-      },
-      {
-        key: 'quiz',
-        label: 'Ask me questions to assess me',
-        description: 'Answer a short AI-generated quiz on your baseline knowledge.',
-        done: quizCount > 0,
-        onClick: onQuiz,
-      },
-    ]
-  } else if (stage === 'baseline_assessed') {
-    items = [
-      {
-        key: 'target',
-        label: 'Set a target',
-        description: 'Choose a level and date you are aiming to reach next.',
-        done: false,
-        onClick: onSetTarget,
-      },
-    ]
-  } else if (stage === 'target_set') {
-    // "Find a course" leads while nothing is currently in progress; once at
-    // least one course has ever been completed for this skill, moving on to
-    // demonstrating it becomes an option too (in addition to, not instead
-    // of, finding further training).
-    const hasPendingCourse = courseLinks.some((link) => link.courses && !link.courses.completed_date)
-    const hasCompletedCourse = courseLinks.some((link) => link.courses?.completed_date)
-    items = []
-    if (!hasPendingCourse) {
-      items.push({
-        key: 'find-course',
-        label: 'Find a course',
-        description: 'Browse the training catalogue for something that fits your target.',
-        done: false,
-        onClick: onFindCourse,
-      })
-    }
-    if (hasCompletedCourse) {
-      items.push({
-        key: 'demonstrate',
-        label: 'Demonstrate Skill',
-        description: 'Move on to actively demonstrating this skill once you feel ready.',
-        done: false,
-        onClick: onDemonstrateSkill,
-      })
-    }
-  } else if (stage === 'developing') {
-    items = [
-      {
-        key: 'record-activity',
-        label: 'Record activity',
-        description: 'Log something that shows you demonstrating this skill.',
-        done: false,
-        onClick: onRecordActivity,
-      },
-      {
-        key: 'self-assess-demonstrating',
-        label: 'Self-assess your own level',
-        description: 'Rate where you think you are now.',
-        done: selfAssessedCount > 0,
-        onClick: onSelfAssess,
-      },
-      {
-        key: 'invite-demonstrating',
-        label: 'Invite others to assess your skill',
-        description: 'Get an outside perspective on your level.',
-        done: peerRatingsCount > 0,
-        onClick: onInvite,
-      },
-      {
-        key: 'validate',
-        label: 'Validate Skill',
-        description: 'Move on to validating this skill against your target once you feel ready.',
-        done: false,
-        onClick: onValidateSkillStage,
-      },
-    ]
-  } else if (stage === 'demonstrated') {
-    items = [
-      {
-        key: 'invite-validating',
-        label: 'Invite others to assess your skill',
-        description: 'Get an outside perspective on your level.',
-        done: peerRatingsCount > 0,
-        onClick: onInvite,
-      },
-    ]
-    if (hasTarget) {
-      items.push({
-        key: 'request-validation',
-        label: 'Request Validation',
-        description: 'Ask someone who has already reached this level to review your evidence.',
-        done: hasPendingExpertValidation,
-        onClick: onRequestExpertValidation,
-      })
-      items.push({
-        key: 'ai-assessment',
-        label: 'Request AI Assessment',
-        description: 'Weigh all your evidence against your target level and get feedback.',
-        done: false,
-        onClick: onRequestValidation,
-      })
-    }
+  const handlers = {
+    'self-assess': onSelfAssess,
+    invite: onInvite,
+    activity: onRecordActivity,
+    quiz: onQuiz,
+    target: onSetTarget,
+    'find-course': onFindCourse,
+    demonstrate: onDemonstrateSkill,
+    'record-activity': onRecordActivity,
+    'self-assess-demonstrating': onSelfAssess,
+    'invite-demonstrating': onInvite,
+    validate: onValidateSkillStage,
+    'invite-validating': onInvite,
+    'request-validation': onRequestExpertValidation,
+    'ai-assessment': onRequestValidation,
   }
+  const items = computeUpNextItems({
+    stage,
+    selfAssessedCount,
+    peerRatingsCount,
+    statementsCount,
+    quizCount,
+    courseLinks,
+    hasTarget,
+    hasPendingExpertValidation,
+  }).map((item) => ({ ...item, onClick: handlers[item.key] }))
 
   if (items.length === 0) return null
 
