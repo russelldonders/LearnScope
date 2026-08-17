@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { formatMonthYear } from '../lib/dates'
+import { formatMonthYear, formatFullDate } from '../lib/dates'
 import { LEVEL_LABELS } from '../lib/levels'
 import { EXPERIENCE_TYPE_LABELS, EXPERIENCE_TYPE_CONFIG, NESTED_EXPERIENCE_TYPES } from '../lib/experienceTypes'
 import AppHeader from '../components/AppHeader'
@@ -212,7 +212,7 @@ export default function ExperienceDetail() {
             )}
 
             <div className="flex items-center gap-1 border-b border-hairline mt-4 mb-4 overflow-x-auto">
-              {TABS.map((t) => (
+              {TABS.filter((t) => t.id !== 'courses' || !item.parent_experience_id).map((t) => (
                 <button
                   key={t.id}
                   type="button"
@@ -548,6 +548,7 @@ function FlagIcon({ className }) {
 function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse }) {
   if (event.type === 'start' || event.type === 'end') {
     const config = EXPERIENCE_TYPE_CONFIG[item.type] ?? EXPERIENCE_TYPE_CONFIG.employment
+    const isSubExperience = Boolean(item.parent_experience_id)
     return (
       <div className="flex gap-3">
         <div className="flex flex-col items-center w-12 shrink-0">
@@ -560,7 +561,9 @@ function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse }) {
           <p className="text-sm font-medium text-ink capitalize">
             {event.type === 'start' ? `${config.periodNoun} started` : `${config.periodNoun} ended`}
           </p>
-          <p className="font-mono text-xs text-secondary mt-0.5">{formatMonthYear(event.date)}</p>
+          <p className="font-mono text-xs text-secondary mt-0.5">
+            {isSubExperience ? formatFullDate(event.date) : formatMonthYear(event.date)}
+          </p>
         </div>
       </div>
     )

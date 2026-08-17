@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { formatMonthYear } from '../lib/dates'
+import { formatDateRange } from '../lib/dates'
 import { EXPERIENCE_TYPE_LABELS } from '../lib/experienceTypes'
 
 // A single sub-experience (project/course/other nested under a job or
@@ -19,16 +19,15 @@ export default function ChildExperienceEntry({ child, isLast, onNavigate }) {
           e.stopPropagation()
           onNavigate?.()
         }}
-        className="min-w-0 flex-1 mb-3 flex items-center gap-2 text-xs text-secondary hover:text-ink transition-colors"
+        className="min-w-0 flex-1 mb-3 block hover:text-ink transition-colors"
       >
-        <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">
-          {EXPERIENCE_TYPE_LABELS[child.type] ?? child.type}
-        </span>
-        <span className="truncate text-ink min-w-0">{child.title}</span>
-        <span className="font-mono text-[10px] text-secondary/70 shrink-0">
-          {formatMonthYear(child.start_date)}
-          {child.end_date ? ` – ${formatMonthYear(child.end_date)}` : ''}
-        </span>
+        <p className="text-sm text-ink break-words">{child.title}</p>
+        <p className="flex items-center gap-2 font-mono text-[10px] text-secondary/80 mt-0.5">
+          <span className="uppercase tracking-wide shrink-0">
+            {EXPERIENCE_TYPE_LABELS[child.type] ?? child.type}
+          </span>
+          <span className="shrink-0">{formatDateRange(child.start_date, child.end_date)}</span>
+        </p>
       </Link>
     </div>
   )
