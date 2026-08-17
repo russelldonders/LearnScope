@@ -3,6 +3,27 @@ import { XAPI_VERBS } from './xapiVerbs'
 export const SKILL_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/skill'
 export const COURSE_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/course'
 
+// Statements about the same real-world activity (same name, same related
+// skill/course) should share one Activity id so anything consuming the
+// statements later -- an LRS, an export, a reporting query -- can recognise
+// and aggregate them by inspecting the JSON alone, per xAPI's Activity
+// concept. Deriving it from the name + context keeps it deterministic
+// without needing a lookup table of previously-used ids.
+function activitySlug(name) {
+  return (
+    name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'activity'
+  )
+}
+
+function buildActivityId(activityName, relatedSkill, relatedCourse) {
+  const scope = relatedSkill ? `skill-${relatedSkill.id}` : relatedCourse ? `course-${relatedCourse.id}` : 'general'
+  return `https://learnscope.app/activities/${scope}/${activitySlug(activityName)}`
+}
+
 // Builds a spec-shaped xAPI statement from the guided-form fields.
 // actor: { name, email }. verbValue: one of XAPI_VERBS[].value.
 // relatedSkill/relatedCourse: optional { id, name } recorded as context extensions.
@@ -30,7 +51,7 @@ export function buildStatement({
       display: { 'en-US': verb.label },
     },
     object: {
-      id: `https://learnscope.app/activities/${crypto.randomUUID()}`,
+      id: buildActivityId(activityName, relatedSkill, relatedCourse),
       objectType: 'Activity',
       definition: {
         name: { 'en-US': activityName },
