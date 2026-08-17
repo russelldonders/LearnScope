@@ -1,10 +1,14 @@
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import GrowthRing from '../components/GrowthRing'
 import { LEVELS } from '../lib/levels'
 
 export default function Landing() {
   const { user, loading } = useAuth()
+
+  if (user) {
+    return <Navigate to="/dashboard" replace />
+  }
 
   return (
     <div className="min-h-screen bg-paper">
