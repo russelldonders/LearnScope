@@ -708,9 +708,36 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
 
   async function removeAchievement(id) {
     setError(null)
+    const target = achievements.find((a) => a.id === id)
     const { error } = await supabase.from('skill_assessments').delete().eq('id', id)
-    if (error) setError(error.message)
-    else await onChange()
+    if (error) {
+      setError(error.message)
+      return
+    }
+    if (target) {
+      const { data: currentSkill } = await supabase
+        .from('skills')
+        .select('level')
+        .eq('id', target.skill_id)
+        .single()
+      if (currentSkill?.level === target.level) {
+        const { data: remaining } = await supabase
+          .from('skill_assessments')
+          .select('level, assessed_at')
+          .eq('skill_id', target.skill_id)
+          .order('assessed_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (remaining && remaining.level !== currentSkill.level) {
+          setLevelSyncPrompt({
+            skillId: target.skill_id,
+            skillName: target.skills?.name,
+            newLevel: remaining.level,
+          })
+        }
+      }
+    }
+    await onChange()
   }
 
   return (

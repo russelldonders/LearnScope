@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { verifySupabaseUser } from './_lib/auth.js'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -12,19 +13,6 @@ const SUGGESTION_SCHEMA = {
   },
   required: ['tags'],
   additionalProperties: false,
-}
-
-async function verifySupabaseUser(accessToken) {
-  const supabaseUrl = process.env.VITE_SUPABASE_URL
-  const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY
-  const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    headers: {
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${accessToken}`,
-    },
-  })
-  if (!res.ok) return null
-  return res.json()
 }
 
 export default async function handler(req, res) {

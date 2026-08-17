@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import mammoth from 'mammoth'
 import { PDFDocument, PDFName, PDFRawStream } from 'pdf-lib'
+import { verifySupabaseUser } from './_lib/auth.js'
 
 export const config = {
   api: {
@@ -94,19 +95,6 @@ For courses/training: include certifications, completed courses, and formal trai
 For experience: include every job and every degree/education entry as a separate item, type "employment" or "education". Use ISO date format YYYY-MM-DD for start_date and end_date; if only a month/year or year is given, use the 1st of that month (or January 1st). Leave end_date null if the role or program is current/ongoing.
 
 Only include information actually present in the document. Do not invent details.`
-
-async function verifySupabaseUser(accessToken) {
-  const supabaseUrl = process.env.VITE_SUPABASE_URL
-  const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY
-  const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    headers: {
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${accessToken}`,
-    },
-  })
-  if (!res.ok) return null
-  return res.json()
-}
 
 function extractPdfPhoto(pdfBytes) {
   try {
