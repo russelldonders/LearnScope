@@ -6,7 +6,7 @@ function todayDate() {
   return new Date().toISOString().slice(0, 10)
 }
 
-export default function RecordExperienceModal({ actor, skills, relatedCourse, relatedSkill: fixedSkill, onSave, onClose }) {
+export default function RecordActivityModal({ actor, skills, relatedCourse, relatedSkill: fixedSkill, onSave, onClose }) {
   const [rawMode, setRawMode] = useState(false)
   const [verbValue, setVerbValue] = useState('experienced')
   const [activityTitle, setActivityTitle] = useState('')
@@ -89,7 +89,7 @@ export default function RecordExperienceModal({ actor, skills, relatedCourse, re
         className="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="font-display text-2xl text-ink mb-1">Record an experience</h2>
+        <h2 className="font-display text-2xl text-ink mb-1">Record an activity</h2>
         <p className="text-sm text-secondary mb-4">
           {relatedCourse
             ? `A quick log of something you did as part of "${relatedCourse.name}".`

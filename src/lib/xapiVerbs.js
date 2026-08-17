@@ -1,4 +1,4 @@
-// Curated subset of xAPI verbs for logging day-to-day experiences.
+// Curated subset of xAPI verbs for logging day-to-day activities.
 // Verbs from the official ADL registry keep that IRI; a few concepts the
 // ADL registry doesn't cover use a LearnScope-namespaced IRI instead of
 // guessing at a third-party registry's URI.

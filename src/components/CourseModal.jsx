@@ -11,12 +11,12 @@ import { activityName, verbLabel, relatedSkillFromStatement } from '../lib/xapiS
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import GrowthRing from './GrowthRing'
 import EvidenceFields from './EvidenceFields'
-import RecordExperienceModal from './RecordExperienceModal'
+import RecordActivityModal from './RecordActivityModal'
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'skills', label: 'Skills' },
-  { id: 'experiences', label: 'Experiences' },
+  { id: 'activities', label: 'Activities' },
   { id: 'details', label: 'Details' },
 ]
 
@@ -292,8 +292,8 @@ export default function CourseModal({ course, skills, librarySkills, onRefreshPi
           </div>
         )}
 
-        {isEditing && tab === 'experiences' && (
-          <ExperiencesSubsection
+        {isEditing && tab === 'activities' && (
+          <ActivitiesSubsection
             course={course}
             skills={skills}
             statements={statements}
@@ -387,7 +387,7 @@ function OverviewTab({ course, linkedExperiences, skillLinks, achievements, stat
       </div>
 
       <div>
-        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">Experiences</h4>
+        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">Activities</h4>
         {statements.length === 0 ? (
           <p className="text-sm text-secondary">Nothing recorded yet.</p>
         ) : (
@@ -905,7 +905,7 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
   )
 }
 
-function ExperiencesSubsection({ course, skills, statements, onChange, user }) {
+function ActivitiesSubsection({ course, skills, statements, onChange, user }) {
   const [actorName, setActorName] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [error, setError] = useState(null)
@@ -932,7 +932,7 @@ function ExperiencesSubsection({ course, skills, statements, onChange, user }) {
   }
 
   async function handleDelete(id) {
-    if (!confirm("Delete this recorded experience? This can't be undone.")) return
+    if (!confirm("Delete this recorded activity? This can't be undone.")) return
     const { error } = await supabase.from('xapi_statements').delete().eq('id', id)
     if (error) setError(error.message)
     else await onChange()
@@ -941,13 +941,13 @@ function ExperiencesSubsection({ course, skills, statements, onChange, user }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary">Experiences</h4>
+        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary">Activities</h4>
         <button
           type="button"
           onClick={() => setModalOpen(true)}
           className="text-xs text-moss font-medium"
         >
-          + Record experience
+          + Record activity
         </button>
       </div>
 
@@ -993,7 +993,7 @@ function ExperiencesSubsection({ course, skills, statements, onChange, user }) {
       {error && <p className="text-sm text-red-700 mt-2">{error}</p>}
 
       {modalOpen && (
-        <RecordExperienceModal
+        <RecordActivityModal
           actor={{ name: actorName, email: user.email }}
           skills={skills}
           relatedCourse={{ id: course.id, name: course.name }}

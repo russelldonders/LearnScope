@@ -13,7 +13,7 @@ const ASSESSMENT_SCHEMA = {
   additionalProperties: false,
 }
 
-function buildPrompt({ skillName, selfLevel, selfComments, experiences, quizzes, peerRatings }) {
+function buildPrompt({ skillName, selfLevel, selfComments, activities, quizzes, peerRatings }) {
   const lines = []
   lines.push(`Skill: "${skillName.trim()}"`)
   lines.push('')
@@ -25,13 +25,13 @@ function buildPrompt({ skillName, selfLevel, selfComments, experiences, quizzes,
       : 'Self-assessment: none given yet.'
   )
   lines.push('')
-  if (Array.isArray(experiences) && experiences.length > 0) {
-    lines.push(`Recorded experience activities (${experiences.length}):`)
-    experiences
+  if (Array.isArray(activities) && activities.length > 0) {
+    lines.push(`Recorded activities (${activities.length}):`)
+    activities
       .slice(0, 10)
       .forEach((e) => lines.push(`- ${e.verb} "${e.activity}"${e.description ? `: ${e.description}` : ''} (${e.date})`))
   } else {
-    lines.push('Recorded experience activities: none.')
+    lines.push('Recorded activities: none.')
   }
   lines.push('')
   if (Array.isArray(quizzes) && quizzes.length > 0) {
@@ -59,7 +59,7 @@ function buildPrompt({ skillName, selfLevel, selfComments, experiences, quizzes,
 
 ${lines.join('\n')}
 
-Weigh all the available evidence -- self-assessment, recorded experience activity, quiz performance, and peer ratings (using the given weights) -- to propose a single overall level from this scale: 1=Seedling, 2=Sprout, 3=Growing, 4=Rooted, 5=Flourishing. If little or no evidence is available, default toward a conservative (lower) estimate rather than guessing high. Return the level as an integer 1-5, and a short 2-4 sentence explanation of how you weighed the inputs.`
+Weigh all the available evidence -- self-assessment, recorded activity, quiz performance, and peer ratings (using the given weights) -- to propose a single overall level from this scale: 1=Seedling, 2=Sprout, 3=Growing, 4=Rooted, 5=Flourishing. If little or no evidence is available, default toward a conservative (lower) estimate rather than guessing high. Return the level as an integer 1-5, and a short 2-4 sentence explanation of how you weighed the inputs.`
 }
 
 export default async function handler(req, res) {
@@ -80,13 +80,13 @@ export default async function handler(req, res) {
     return
   }
 
-  const { skillName, selfLevel, selfComments, experiences, quizzes, peerRatings } = req.body ?? {}
+  const { skillName, selfLevel, selfComments, activities, quizzes, peerRatings } = req.body ?? {}
   if (!skillName || typeof skillName !== 'string') {
     res.status(400).json({ error: 'Missing skillName' })
     return
   }
 
-  const prompt = buildPrompt({ skillName, selfLevel, selfComments, experiences, quizzes, peerRatings })
+  const prompt = buildPrompt({ skillName, selfLevel, selfComments, activities, quizzes, peerRatings })
 
   try {
     const response = await anthropic.messages.create({

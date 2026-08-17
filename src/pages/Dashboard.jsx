@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
 import { listConnections } from '../lib/connections'
 import AppHeader from '../components/AppHeader'
-import RecordExperienceSection from '../components/RecordExperienceSection'
+import RecordActivitySection from '../components/RecordActivitySection'
 import { LEVEL_LABELS } from '../lib/levels'
 
 async function countRows(table, userId) {
@@ -133,7 +133,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        <RecordExperienceSection />
+        <RecordActivitySection />
       </main>
     </div>
   )

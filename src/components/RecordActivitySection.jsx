@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import RecordExperienceModal from './RecordExperienceModal'
+import RecordActivityModal from './RecordActivityModal'
 import { activityName, verbLabel, relatedSkillFromStatement } from '../lib/xapiStatement'
 
 const RECENT_LIMIT = 6
 
-export default function RecordExperienceSection() {
+export default function RecordActivitySection() {
   const { user } = useAuth()
   const [statements, setStatements] = useState([])
   const [skills, setSkills] = useState([])
@@ -59,7 +59,7 @@ export default function RecordExperienceSection() {
   }
 
   async function handleDelete(id) {
-    if (!confirm("Delete this recorded experience? This can't be undone.")) return
+    if (!confirm("Delete this recorded activity? This can't be undone.")) return
     const { error } = await supabase.from('xapi_statements').delete().eq('id', id)
     if (error) setError(error.message)
     else await loadStatements()
@@ -68,12 +68,12 @@ export default function RecordExperienceSection() {
   return (
     <section>
       <div className="flex items-center justify-between mb-1">
-        <h2 className="font-display text-xl text-ink">Record experience</h2>
+        <h2 className="font-display text-xl text-ink">Record activity</h2>
         <button
           onClick={() => setModalOpen(true)}
           className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90"
         >
-          + Record experience
+          + Record activity
         </button>
       </div>
       <p className="text-sm text-secondary mb-6">
@@ -86,7 +86,7 @@ export default function RecordExperienceSection() {
 
       {!loading && statements.length === 0 && (
         <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
-          <p className="text-secondary">Nothing recorded yet. Log your first experience.</p>
+          <p className="text-secondary">Nothing recorded yet. Log your first activity.</p>
         </div>
       )}
 
@@ -134,7 +134,7 @@ export default function RecordExperienceSection() {
       )}
 
       {modalOpen && (
-        <RecordExperienceModal
+        <RecordActivityModal
           actor={{ name: actorName, email: user.email }}
           skills={skills}
           onSave={handleSave}

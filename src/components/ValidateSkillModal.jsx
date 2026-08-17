@@ -32,7 +32,7 @@ export default function ValidateSkillModal({
         const raterProgress = peerRatings.length > 0 ? await fetchPeerRaterProgress(skill.id) : []
         const weightedPeerRatings = buildWeightedPeerRatings(peerRatings, raterProgress)
 
-        const experiences = statements.map((s) => ({
+        const activities = statements.map((s) => ({
           verb: verbLabel(s.statement),
           activity: activityName(s.statement),
           description: s.statement.object?.definition?.description?.['en-US'] ?? null,
@@ -54,7 +54,7 @@ export default function ValidateSkillModal({
           targetLevel: target.target_level,
           selfLevel: latestSelf?.level ?? null,
           selfComments: latestSelf?.comments,
-          experiences,
+          activities,
           quizzes: quizPayload,
           peerRatings: weightedPeerRatings,
           courses,

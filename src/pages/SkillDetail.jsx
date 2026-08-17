@@ -18,7 +18,7 @@ import { listTags, listSkillTags, addTagToSkill, removeSkillTagLink } from '../l
 import { SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import InviteRaterModal from '../components/InviteRaterModal'
-import RecordExperienceModal from '../components/RecordExperienceModal'
+import RecordActivityModal from '../components/RecordActivityModal'
 import BaselineQuizModal from '../components/BaselineQuizModal'
 import AssessBaselineModal from '../components/AssessBaselineModal'
 import SetTargetModal from '../components/SetTargetModal'
@@ -31,7 +31,7 @@ import { listOutgoingValidationRequests } from '../lib/skillValidationRequests'
 const TABS = [
   { id: 'history', label: 'Overview' },
   { id: 'ratings', label: 'Ratings' },
-  { id: 'experiences', label: 'Experiences' },
+  { id: 'activities', label: 'Activities' },
   { id: 'training', label: 'Training' },
   { id: 'details', label: 'Details' },
 ]
@@ -61,7 +61,7 @@ export default function SkillDetail() {
   const [assessorName, setAssessorName] = useState(null)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [selfAssessOpen, setSelfAssessOpen] = useState(false)
-  const [recordExperienceOpen, setRecordExperienceOpen] = useState(false)
+  const [recordActivityOpen, setRecordActivityOpen] = useState(false)
   const [quizOpen, setQuizOpen] = useState(false)
   const [assessMode, setAssessMode] = useState(null)
   const [targetOpen, setTargetOpen] = useState(false)
@@ -211,7 +211,7 @@ export default function SkillDetail() {
     setAssessorName(data?.full_name || user.email)
   }
 
-  async function handleRecordExperience(statement) {
+  async function handleRecordActivity(statement) {
     const { error } = await supabase.from('xapi_statements').insert({
       user_id: user.id,
       statement,
@@ -219,7 +219,7 @@ export default function SkillDetail() {
       skill_id: skill.id,
     })
     if (error) throw error
-    setRecordExperienceOpen(false)
+    setRecordActivityOpen(false)
     await loadHistory()
   }
 
@@ -287,13 +287,13 @@ export default function SkillDetail() {
               />
             )}
 
-            {recordExperienceOpen && (
-              <RecordExperienceModal
+            {recordActivityOpen && (
+              <RecordActivityModal
                 actor={{ name: assessorName, email: user.email }}
                 skills={[]}
                 relatedSkill={{ id: skill.id, name: skill.name }}
-                onSave={handleRecordExperience}
-                onClose={() => setRecordExperienceOpen(false)}
+                onSave={handleRecordActivity}
+                onClose={() => setRecordActivityOpen(false)}
               />
             )}
 
@@ -440,7 +440,7 @@ export default function SkillDetail() {
                 hasAnyEvaluationInput={hasAnyEvaluationInput}
                 onSelfAssess={() => setSelfAssessOpen(true)}
                 onInvite={() => setInviteOpen(true)}
-                onRecordExperience={() => setRecordExperienceOpen(true)}
+                onRecordActivity={() => setRecordActivityOpen(true)}
                 onQuiz={() => setQuizOpen(true)}
                 onAssessBaseline={() => setAssessMode('baseline')}
                 onSetTarget={() => setTargetOpen(true)}
@@ -456,7 +456,7 @@ export default function SkillDetail() {
               <RatingsSection peerRatings={peerRatings} loading={loadingHistory} raterAvatars={raterAvatars} />
             )}
 
-            {tab === 'experiences' && <ExperiencesSection statements={statements} loading={loadingHistory} />}
+            {tab === 'activities' && <ActivitiesSection statements={statements} loading={loadingHistory} />}
 
             {tab === 'training' && (
               <TrainingSection
@@ -524,7 +524,7 @@ function QuickActionsRow({
   hasAnyCourse,
   onSelfAssess,
   onInvite,
-  onRecordExperience,
+  onRecordActivity,
   onFindCourse,
   onDemonstrateSkill,
   onValidateSkillStage,
@@ -538,8 +538,8 @@ function QuickActionsRow({
       <button type="button" onClick={onInvite} className={buttonClass}>
         Invite someone to rate
       </button>
-      <button type="button" onClick={onRecordExperience} className={buttonClass}>
-        Record Experience
+      <button type="button" onClick={onRecordActivity} className={buttonClass}>
+        Record Activity
       </button>
       {stage === 'target_set' && (
         <button type="button" onClick={onFindCourse} className={buttonClass}>
@@ -571,7 +571,7 @@ function UpNextSection({
   quizCount,
   onSelfAssess,
   onInvite,
-  onRecordExperience,
+  onRecordActivity,
   onQuiz,
   onSetTarget,
   onDemonstrateSkill,
@@ -601,11 +601,11 @@ function UpNextSection({
         onClick: onInvite,
       },
       {
-        key: 'experience',
-        label: 'Add experience activity',
+        key: 'activity',
+        label: 'Record an activity',
         description: 'Log something you did that shows this skill in action.',
         done: statementsCount > 0,
-        onClick: onRecordExperience,
+        onClick: onRecordActivity,
       },
       {
         key: 'quiz',
@@ -658,7 +658,7 @@ function UpNextSection({
         label: 'Record activity',
         description: 'Log something that shows you demonstrating this skill.',
         done: false,
-        onClick: onRecordExperience,
+        onClick: onRecordActivity,
       },
       {
         key: 'self-assess-demonstrating',
@@ -891,7 +891,7 @@ function HistorySection({
   hasAnyEvaluationInput,
   onSelfAssess,
   onInvite,
-  onRecordExperience,
+  onRecordActivity,
   onQuiz,
   onAssessBaseline,
   onSetTarget,
@@ -1020,7 +1020,7 @@ function HistorySection({
               quizCount={quizResults.length}
               onSelfAssess={onSelfAssess}
               onInvite={onInvite}
-              onRecordExperience={onRecordExperience}
+              onRecordActivity={onRecordActivity}
               onQuiz={onQuiz}
               onSetTarget={onSetTarget}
               onDemonstrateSkill={onDemonstrateSkill}
@@ -1037,7 +1037,7 @@ function HistorySection({
               hasAnyCourse={hasAnyCourse}
               onSelfAssess={onSelfAssess}
               onInvite={onInvite}
-              onRecordExperience={onRecordExperience}
+              onRecordActivity={onRecordActivity}
               onFindCourse={onFindCourse}
               onDemonstrateSkill={onDemonstrateSkill}
               onValidateSkillStage={onValidateSkillStage}
@@ -1886,7 +1886,7 @@ function RatingsSection({ peerRatings, loading, raterAvatars }) {
   )
 }
 
-function ExperiencesSection({ statements, loading }) {
+function ActivitiesSection({ statements, loading }) {
   return (
     <div>
       {loading ? (

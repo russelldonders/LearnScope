@@ -14,7 +14,7 @@ const VALIDATION_SCHEMA = {
   additionalProperties: false,
 }
 
-function buildPrompt({ skillName, targetLevel, selfLevel, selfComments, experiences, quizzes, peerRatings, courses }) {
+function buildPrompt({ skillName, targetLevel, selfLevel, selfComments, activities, quizzes, peerRatings, courses }) {
   const lines = []
   lines.push(`Skill: "${skillName.trim()}"`)
   lines.push(`Target level the learner is trying to reach: "${targetLevel}".`)
@@ -34,13 +34,13 @@ function buildPrompt({ skillName, targetLevel, selfLevel, selfComments, experien
     lines.push('Completed training: none.')
   }
   lines.push('')
-  if (Array.isArray(experiences) && experiences.length > 0) {
-    lines.push(`Recorded experience activities (${experiences.length}):`)
-    experiences
+  if (Array.isArray(activities) && activities.length > 0) {
+    lines.push(`Recorded activities (${activities.length}):`)
+    activities
       .slice(0, 10)
       .forEach((e) => lines.push(`- ${e.verb} "${e.activity}"${e.description ? `: ${e.description}` : ''} (${e.date})`))
   } else {
-    lines.push('Recorded experience activities: none.')
+    lines.push('Recorded activities: none.')
   }
   lines.push('')
   if (Array.isArray(quizzes) && quizzes.length > 0) {
@@ -68,7 +68,7 @@ function buildPrompt({ skillName, targetLevel, selfLevel, selfComments, experien
 
 ${lines.join('\n')}
 
-Weigh all the available evidence -- completed training, self-assessment, recorded experience activity, quiz performance, and peer ratings (using the given weights) -- to propose a single overall current level from this scale: 1=Seedling, 2=Sprout, 3=Growing, 4=Rooted, 5=Flourishing. If little or no evidence is available, default toward a conservative (lower) estimate rather than guessing high.
+Weigh all the available evidence -- completed training, self-assessment, recorded activity, quiz performance, and peer ratings (using the given weights) -- to propose a single overall current level from this scale: 1=Seedling, 2=Sprout, 3=Growing, 4=Rooted, 5=Flourishing. If little or no evidence is available, default toward a conservative (lower) estimate rather than guessing high.
 
 Decide "passed" as true only if the evidence clearly supports the learner having reached the target level ("${targetLevel}") or higher; otherwise false.
 
@@ -93,7 +93,7 @@ export default async function handler(req, res) {
     return
   }
 
-  const { skillName, targetLevel, selfLevel, selfComments, experiences, quizzes, peerRatings, courses } = req.body ?? {}
+  const { skillName, targetLevel, selfLevel, selfComments, activities, quizzes, peerRatings, courses } = req.body ?? {}
   if (!skillName || typeof skillName !== 'string') {
     res.status(400).json({ error: 'Missing skillName' })
     return
@@ -103,7 +103,7 @@ export default async function handler(req, res) {
     return
   }
 
-  const prompt = buildPrompt({ skillName, targetLevel, selfLevel, selfComments, experiences, quizzes, peerRatings, courses })
+  const prompt = buildPrompt({ skillName, targetLevel, selfLevel, selfComments, activities, quizzes, peerRatings, courses })
 
   try {
     const response = await anthropic.messages.create({
