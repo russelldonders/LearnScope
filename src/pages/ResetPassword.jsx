@@ -27,7 +27,8 @@ export default function ResetPassword() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-paper px-4">
       <div className="w-full max-w-sm bg-card border border-hairline rounded-lg p-8">
-        <Link to="/" className="font-display text-3xl text-ink mb-1 block">
+        <Link to="/" className="flex items-center gap-2 font-display text-3xl text-ink mb-1">
+          <img src="/favicon.svg" alt="" className="w-8 h-8" />
           LearnScope
         </Link>
         <p className="text-secondary text-sm mb-6">Choose a new password.</p>

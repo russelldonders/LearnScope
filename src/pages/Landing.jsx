@@ -9,7 +9,10 @@ export default function Landing() {
   return (
     <div className="min-h-screen bg-paper">
       <header className="max-w-4xl mx-auto px-4 py-6 flex items-center justify-between">
-        <span className="font-display text-2xl text-ink">LearnScope</span>
+        <span className="flex items-center gap-2 font-display text-2xl text-ink">
+          <img src="/favicon.svg" alt="" className="w-7 h-7" />
+          LearnScope
+        </span>
         {!loading && (
           <nav className="flex items-center gap-3">
             {user ? (

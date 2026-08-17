@@ -1,15 +1,27 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getPendingInviteCode, clearPendingInviteCode } from '../lib/connections'
 
 export default function Login() {
-  const { signIn } = useAuth()
+  const { signIn, user, loading } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-paper text-secondary">
+        Loading…
+      </div>
+    )
+  }
+
+  if (user) {
+    return <Navigate to="/dashboard" replace />
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -33,7 +45,8 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-paper px-4">
       <div className="w-full max-w-sm bg-card border border-hairline rounded-lg p-8">
-        <Link to="/" className="font-display text-3xl text-ink mb-1 block">
+        <Link to="/" className="flex items-center gap-2 font-display text-3xl text-ink mb-1">
+          <img src="/favicon.svg" alt="" className="w-8 h-8" />
           LearnScope
         </Link>
         <p className="text-secondary text-sm mb-6">Log in to your growth log.</p>
