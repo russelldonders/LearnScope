@@ -203,6 +203,11 @@ export default function SkillDetail() {
     if (!error) await loadSkill()
   }
 
+  async function handleRevertStage(stageValue) {
+    const { error } = await supabase.from('skills').update({ lifecycle_stage: stageValue }).eq('id', skill.id)
+    if (!error) await loadSkill()
+  }
+
   async function loadAssessorName() {
     const { data } = await supabase
       .from('profiles')
@@ -271,7 +276,9 @@ export default function SkillDetail() {
               </div>
             </div>
 
-            {skill.lifecycle_stage && <LifecycleProgress stage={skill.lifecycle_stage} />}
+            {skill.lifecycle_stage && (
+              <LifecycleProgress stage={skill.lifecycle_stage} onRevert={handleRevertStage} />
+            )}
 
             {inviteOpen && <InviteRaterModal skill={skill} onClose={() => setInviteOpen(false)} />}
 
@@ -473,12 +480,18 @@ export default function SkillDetail() {
   )
 }
 
-function LifecycleProgress({ stage }) {
+function LifecycleProgress({ stage, onRevert }) {
   const currentIndex = SKILL_LIFECYCLE_FLOW_STAGES.findIndex((s) => s.value === stage)
   const isException = stage === 'at_risk' || stage === 'archived'
-  // Stages the learner has already moved past are dropped from view rather
-  // than just dimmed -- the diagram only shows where things stand from here.
-  const slicedStages = currentIndex >= 0 ? SKILL_LIFECYCLE_FLOW_STAGES.slice(currentIndex) : SKILL_LIFECYCLE_FLOW_STAGES
+  const nextStageValue = currentIndex >= 0 ? SKILL_LIFECYCLE_FLOW_STAGES[currentIndex + 1]?.value : undefined
+  // Shows the whole journey so far, plus a preview of just the one stage
+  // coming up next -- not the entire remaining future. Past stages can be
+  // clicked to move the skill back to them (e.g. to undo an accidental
+  // advance); the upcoming stage is shown for context but isn't clickable,
+  // since skipping ahead should go through its actual action, not the
+  // stepper.
+  const slicedStages =
+    currentIndex >= 0 ? SKILL_LIFECYCLE_FLOW_STAGES.slice(0, currentIndex + 2) : SKILL_LIFECYCLE_FLOW_STAGES
   // validated/maintained intentionally share a label (see skillLifecycle.js)
   // -- collapse consecutive duplicates so the diagram never repeats a chip.
   const visibleStages = slicedStages.filter((s, i) => i === 0 || s.label !== slicedStages[i - 1].label)
@@ -487,19 +500,37 @@ function LifecycleProgress({ stage }) {
     <div className="mb-6">
       <div className="flex items-center flex-wrap gap-y-1">
         {visibleStages.map((s, i) => {
-          const isCurrent = !isException && i === 0
+          const isCurrent = !isException && s.value === stage
+          const isNext = !isException && s.value === nextStageValue
+          const isPast = !isException && !isCurrent && !isNext
+          const chip = (
+            <span
+              className={`flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide rounded-full px-2.5 py-1 border whitespace-nowrap ${
+                isCurrent
+                  ? 'bg-moss text-paper border-moss'
+                  : isNext
+                    ? 'border-dashed border-hairline text-secondary/50'
+                    : 'border-hairline text-secondary'
+              }`}
+            >
+              <LifecycleStageIcon stage={s.value} />
+              {s.label}
+            </span>
+          )
           return (
             <div key={s.value} className="flex items-center">
-              <span
-                className={`flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide rounded-full px-2.5 py-1 border whitespace-nowrap ${
-                  isCurrent
-                    ? 'bg-moss text-paper border-moss'
-                    : 'border-hairline text-secondary'
-                }`}
-              >
-                <LifecycleStageIcon stage={s.value} />
-                {s.label}
-              </span>
+              {isPast ? (
+                <button
+                  type="button"
+                  onClick={() => onRevert(s.value)}
+                  title={`Move back to ${s.label}`}
+                  className="hover:opacity-70 transition-opacity"
+                >
+                  {chip}
+                </button>
+              ) : (
+                chip
+              )}
               {i < visibleStages.length - 1 && <span className="w-4 h-px mx-1 shrink-0 bg-hairline" />}
             </div>
           )
