@@ -7,6 +7,7 @@ import { LEVEL_LABELS } from '../lib/levels'
 import { EXPERIENCE_TYPE_LABELS, EXPERIENCE_TYPE_CONFIG, NESTED_EXPERIENCE_TYPES } from '../lib/experienceTypes'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
+import ChildExperienceEntry from '../components/ChildExperienceEntry'
 import SkillCard from '../components/SkillCard'
 import FindSkillModal from '../components/FindSkillModal'
 import OrganizationLogo from '../components/OrganizationLogo'
@@ -583,28 +584,7 @@ function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse }) {
   }
 
   if (event.type === 'child') {
-    const { child } = event
-    return (
-      <div className="flex gap-3">
-        <div className="flex flex-col items-center w-12 shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-secondary/40 shrink-0 mt-1.5" />
-          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
-        </div>
-        <Link
-          to={`/experience/${child.id}`}
-          className="min-w-0 flex-1 mb-3 flex items-center gap-2 text-xs text-secondary hover:text-ink transition-colors"
-        >
-          <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">
-            {EXPERIENCE_TYPE_LABELS[child.type] ?? child.type}
-          </span>
-          <span className="truncate text-ink">{child.title}</span>
-          <span className="font-mono text-[10px] text-secondary/70 shrink-0">
-            {formatMonthYear(child.start_date)}
-            {child.end_date ? ` – ${formatMonthYear(child.end_date)}` : ''}
-          </span>
-        </Link>
-      </div>
-    )
+    return <ChildExperienceEntry child={event.child} isLast={isLast} />
   }
 
   if (event.type === 'course') {

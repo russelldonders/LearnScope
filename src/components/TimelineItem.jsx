@@ -1,8 +1,9 @@
 import { formatMonthYear } from '../lib/dates'
 import { EXPERIENCE_TYPE_LABELS } from '../lib/experienceTypes'
 import OrganizationLogo from './OrganizationLogo'
+import ChildExperienceEntry from './ChildExperienceEntry'
 
-export default function TimelineItem({ item, summary, onEdit, isLast }) {
+export default function TimelineItem({ item, summary, childExperiences, onEdit, isLast }) {
   return (
     <div className="flex gap-4">
       <div className="flex flex-col items-center">
@@ -13,9 +14,17 @@ export default function TimelineItem({ item, summary, onEdit, isLast }) {
         />
         {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
       </div>
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => onEdit(item)}
-        className="text-left bg-card border border-hairline rounded-lg p-4 mb-6 hover:border-moss transition-colors w-full"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onEdit(item)
+          }
+        }}
+        className="text-left bg-card border border-hairline rounded-lg p-4 mb-6 hover:border-moss transition-colors w-full cursor-pointer"
       >
         <div className="flex items-center gap-2 mb-1">
           <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
@@ -35,6 +44,13 @@ export default function TimelineItem({ item, summary, onEdit, isLast }) {
         {item.description && (
           <p className="text-sm text-ink mt-2 whitespace-pre-line">{item.description}</p>
         )}
+        {childExperiences?.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-hairline">
+            {childExperiences.map((c, i) => (
+              <ChildExperienceEntry key={c.id} child={c} isLast={i === childExperiences.length - 1} />
+            ))}
+          </div>
+        )}
         {summary && (summary.courseNames.length > 0 || summary.skillNames.length > 0) && (
           <div className="mt-3 pt-3 border-t border-hairline space-y-1">
             {summary.courseNames.length > 0 && (
@@ -51,7 +67,7 @@ export default function TimelineItem({ item, summary, onEdit, isLast }) {
             )}
           </div>
         )}
-      </button>
+      </div>
     </div>
   )
 }

@@ -107,6 +107,18 @@ export default function ExperienceSection() {
     setExistingCurrentJob(null)
   }
 
+  // Sub-experiences (projects/courses/other nested under a job or volunteer
+  // role) render inside their parent's card rather than as their own entry
+  // on the main timeline -- items is already ordered by start_date, so each
+  // parent's children stay in that same order.
+  const rootItems = items.filter((i) => !i.parent_experience_id)
+  const childrenByParent = {}
+  for (const i of items) {
+    if (!i.parent_experience_id) continue
+    if (!childrenByParent[i.parent_experience_id]) childrenByParent[i.parent_experience_id] = []
+    childrenByParent[i.parent_experience_id].push(i)
+  }
+
   return (
     <section>
       <div className="mb-6">
@@ -117,20 +129,21 @@ export default function ExperienceSection() {
       {loading && <p className="text-secondary">Loading…</p>}
       {error && <p className="text-red-700 text-sm">{error}</p>}
 
-      {!loading && items.length === 0 && (
+      {!loading && rootItems.length === 0 && (
         <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
           <p className="text-secondary">No education or employment history yet. Add your first one.</p>
         </div>
       )}
 
       <div>
-        {items.map((item, i) => (
+        {rootItems.map((item, i) => (
           <TimelineItem
             key={item.id}
             item={item}
             summary={learningSummaries[item.id]}
+            childExperiences={childrenByParent[item.id]}
             onEdit={(item) => navigate(`/experience/${item.id}`)}
-            isLast={i === items.length - 1}
+            isLast={i === rootItems.length - 1}
           />
         ))}
       </div>
