@@ -277,7 +277,11 @@ export default function SkillDetail() {
             </div>
 
             {skill.lifecycle_stage && (
-              <LifecycleProgress stage={skill.lifecycle_stage} onRevert={handleRevertStage} />
+              <LifecycleProgress
+                stage={skill.lifecycle_stage}
+                highestStage={skill.highest_lifecycle_stage}
+                onRevert={handleRevertStage}
+              />
             )}
 
             {inviteOpen && <InviteRaterModal skill={skill} onClose={() => setInviteOpen(false)} />}
@@ -480,18 +484,22 @@ export default function SkillDetail() {
   )
 }
 
-function LifecycleProgress({ stage, onRevert }) {
+function LifecycleProgress({ stage, highestStage, onRevert }) {
   const currentIndex = SKILL_LIFECYCLE_FLOW_STAGES.findIndex((s) => s.value === stage)
   const isException = stage === 'at_risk' || stage === 'archived'
-  const nextStageValue = currentIndex >= 0 ? SKILL_LIFECYCLE_FLOW_STAGES[currentIndex + 1]?.value : undefined
-  // Shows the whole journey so far, plus a preview of just the one stage
-  // coming up next -- not the entire remaining future. Past stages can be
-  // clicked to move the skill back to them (e.g. to undo an accidental
-  // advance); the upcoming stage is shown for context but isn't clickable,
-  // since skipping ahead should go through its actual action, not the
-  // stepper.
+  // highest_lifecycle_stage never falls below the current stage (a
+  // database trigger keeps it that way) -- falling back to currentIndex
+  // just covers skills from before that column existed.
+  const highestIndexRaw = SKILL_LIFECYCLE_FLOW_STAGES.findIndex((s) => s.value === highestStage)
+  const highestIndex = highestIndexRaw >= 0 ? Math.max(highestIndexRaw, currentIndex) : currentIndex
+  const nextStageValue = highestIndex >= 0 ? SKILL_LIFECYCLE_FLOW_STAGES[highestIndex + 1]?.value : undefined
+  // Every stage the skill has ever unlocked stays clickable, plus a preview
+  // of just the one stage still to unlock -- clicking an earlier stage
+  // moves the skill back to it without losing how far it's actually gotten
+  // (highestStage keeps that marked), so this is a way to navigate through
+  // everything already reached, not a one-way "undo".
   const slicedStages =
-    currentIndex >= 0 ? SKILL_LIFECYCLE_FLOW_STAGES.slice(0, currentIndex + 2) : SKILL_LIFECYCLE_FLOW_STAGES
+    highestIndex >= 0 ? SKILL_LIFECYCLE_FLOW_STAGES.slice(0, highestIndex + 2) : SKILL_LIFECYCLE_FLOW_STAGES
   // validated/maintained intentionally share a label (see skillLifecycle.js)
   // -- collapse consecutive duplicates so the diagram never repeats a chip.
   const visibleStages = slicedStages.filter((s, i) => i === 0 || s.label !== slicedStages[i - 1].label)
@@ -501,16 +509,19 @@ function LifecycleProgress({ stage, onRevert }) {
       <div className="flex items-center flex-wrap gap-y-1">
         {visibleStages.map((s, i) => {
           const isCurrent = !isException && s.value === stage
+          const isHighest = !isException && !isCurrent && s.value === highestStage
           const isNext = !isException && s.value === nextStageValue
-          const isPast = !isException && !isCurrent && !isNext
+          const isUnlocked = !isException && !isCurrent && !isNext
           const chip = (
             <span
               className={`flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide rounded-full px-2.5 py-1 border whitespace-nowrap ${
                 isCurrent
                   ? 'bg-moss text-paper border-moss'
-                  : isNext
-                    ? 'border-dashed border-hairline text-secondary/50'
-                    : 'border-hairline text-secondary'
+                  : isHighest
+                    ? 'border-moss text-moss'
+                    : isNext
+                      ? 'border-dashed border-hairline text-secondary/50'
+                      : 'border-hairline text-secondary'
               }`}
             >
               <LifecycleStageIcon stage={s.value} />
@@ -519,11 +530,11 @@ function LifecycleProgress({ stage, onRevert }) {
           )
           return (
             <div key={s.value} className="flex items-center">
-              {isPast ? (
+              {isUnlocked ? (
                 <button
                   type="button"
                   onClick={() => onRevert(s.value)}
-                  title={`Move back to ${s.label}`}
+                  title={`Move to ${s.label}`}
                   className="hover:opacity-70 transition-opacity"
                 >
                   {chip}
