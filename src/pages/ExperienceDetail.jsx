@@ -743,7 +743,7 @@ function SkillsSubsection({ item, skillLinks, onChange, user }) {
       ) : skills.length === 0 ? (
         <p className="text-sm text-secondary">No skills linked yet.</p>
       ) : (
-        <div className="grid sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {skills.map((skill) => (
             <SkillCard
               key={skill.id}

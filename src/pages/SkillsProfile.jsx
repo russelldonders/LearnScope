@@ -84,7 +84,7 @@ export default function SkillsProfile() {
                 <p className="text-secondary">No skills tracked yet.</p>
               </div>
             ) : (
-              <div className="grid sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {skills.map((skill) => (
                   <div
                     key={skill.id}

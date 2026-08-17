@@ -94,7 +94,7 @@ export default function Learning() {
 
 function CourseGrid({ courses, skillsByCourse }) {
   return (
-    <div className="grid sm:grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       {courses.map((course) => {
         const skills = skillsByCourse.get(course.id) ?? []
         return (
