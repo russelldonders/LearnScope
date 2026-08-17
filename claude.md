@@ -471,3 +471,17 @@ A task is complete only when:
 * unverified behaviour is reported honestly
 
 A feature appearing to work in the UI is not by itself sufficient evidence that the feature is complete.
+
+## Subagent usage
+
+Use the custom agents in `.claude/agents/` when their specialism matches the task.
+
+For substantial feature work:
+
+1. Delegate codebase investigation where useful.
+2. Use the test agent to assess test coverage and regression risk.
+3. Use the security agent for authentication, permissions, personal data, database policies, APIs, dependencies, and deployment changes.
+4. Integrate all findings in the main session.
+5. Run the required verification before declaring the task complete.
+
+Do not spawn subagents for trivial changes where delegation adds no value.
