@@ -9,6 +9,7 @@
 export function computeUpNextItems({
   stage,
   selfAssessedCount,
+  knowledgeSelfAssessedCount,
   peerRatingsCount,
   statementsCount,
   quizCount,
@@ -25,8 +26,14 @@ export function computeUpNextItems({
       {
         key: 'self-assess',
         label: 'Self-assess your own level',
-        description: 'Rate where you think you are right now.',
+        description: 'Rate where you think you are right now, practically.',
         done: hasSelfAssessed,
+      },
+      {
+        key: 'self-assess-knowledge',
+        label: 'Self-assess your knowledge',
+        description: 'Rate what you already know, in theory.',
+        done: (knowledgeSelfAssessedCount ?? 0) > 0,
       },
       {
         key: 'invite',

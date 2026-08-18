@@ -19,10 +19,13 @@ async function countRows(table, userId) {
 }
 
 async function loadRecentGrowth(userId) {
+  // Practical only -- the knowledge axis uses a different label scale, and
+  // this widget only knows LEVEL_LABELS.
   const { data, error } = await supabase
     .from('skill_assessments')
     .select('id, skill_id, level, assessed_at, skills(name)')
     .eq('user_id', userId)
+    .eq('axis', 'practical')
     .order('assessed_at', { ascending: false })
     .limit(3)
   if (error) return []
@@ -54,7 +57,7 @@ async function loadUpNextRecommendations(userId) {
     { data: targets },
     { data: validationRequests },
   ] = await Promise.all([
-    supabase.from('skill_assessments').select('skill_id, source').in('skill_id', ids),
+    supabase.from('skill_assessments').select('skill_id, source, axis').in('skill_id', ids),
     supabase.from('skill_peer_ratings').select('skill_id').in('skill_id', ids),
     supabase.from('xapi_statements').select('skill_id').eq('user_id', userId).in('skill_id', ids),
     supabase.from('skill_baseline_quizzes').select('skill_id').in('skill_id', ids),
@@ -69,8 +72,14 @@ async function loadUpNextRecommendations(userId) {
     return map
   }
   const selfAssessedCounts = {}
+  const knowledgeSelfAssessedCounts = {}
   for (const a of assessments ?? []) {
-    if (a.source === 'self' || !a.source) selfAssessedCounts[a.skill_id] = (selfAssessedCounts[a.skill_id] ?? 0) + 1
+    if (a.source !== 'self' && a.source) continue
+    if (a.axis === 'knowledge') {
+      knowledgeSelfAssessedCounts[a.skill_id] = (knowledgeSelfAssessedCounts[a.skill_id] ?? 0) + 1
+    } else {
+      selfAssessedCounts[a.skill_id] = (selfAssessedCounts[a.skill_id] ?? 0) + 1
+    }
   }
   const peerCounts = countBy(peerRatings)
   const statementCounts = countBy(statements)
@@ -90,6 +99,7 @@ async function loadUpNextRecommendations(userId) {
       const items = computeUpNextItems({
         stage: skill.lifecycle_stage,
         selfAssessedCount: selfAssessedCounts[skill.id] ?? 0,
+        knowledgeSelfAssessedCount: knowledgeSelfAssessedCounts[skill.id] ?? 0,
         peerRatingsCount: peerCounts[skill.id] ?? 0,
         statementsCount: statementCounts[skill.id] ?? 0,
         quizCount: quizCounts[skill.id] ?? 0,

@@ -2,9 +2,9 @@ import { LEVEL_LABELS } from '../lib/levels'
 
 const RADII = [8, 15, 22, 29, 36]
 
-export default function GrowthRing({ level, size = 64, showLabel = false }) {
+export default function GrowthRing({ level, size = 64, showLabel = false, labels = LEVEL_LABELS }) {
   const clampedLevel = Math.min(5, Math.max(0, level ?? 0))
-  const label = level ? LEVEL_LABELS[level] : 'Not yet self-assessed'
+  const label = level ? labels[level] : 'Not yet self-assessed'
 
   return (
     <div className="flex flex-col items-center gap-1">

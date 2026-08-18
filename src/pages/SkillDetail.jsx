@@ -9,7 +9,7 @@ import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import EvidenceFields from '../components/EvidenceFields'
 import TrackingReasonPicker from '../components/TrackingReasonPicker'
-import { LEVELS, LEVEL_LABELS } from '../lib/levels'
+import { LEVELS, LEVEL_LABELS, KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
 import { SKILL_LIFECYCLE_LABELS, SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
 import { activityName, verbLabel, formatDuration } from '../lib/xapiStatement'
@@ -60,6 +60,8 @@ export default function SkillDetail() {
   const [assessorName, setAssessorName] = useState(null)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [selfAssessOpen, setSelfAssessOpen] = useState(false)
+  const [selfAssessKnowledgeOpen, setSelfAssessKnowledgeOpen] = useState(false)
+  const [confirmKnowledgeOpen, setConfirmKnowledgeOpen] = useState(false)
   const [recordActivityOpen, setRecordActivityOpen] = useState(false)
   const [quizOpen, setQuizOpen] = useState(false)
   const [assessMode, setAssessMode] = useState(null)
@@ -223,9 +225,14 @@ export default function SkillDetail() {
     await loadHistory()
   }
 
-  const selfAssessedCount = history.filter((a) => a.source === 'self' || !a.source).length
+  const selfAssessedCount = history.filter((a) => (a.source === 'self' || !a.source) && a.axis === 'practical').length
+  const knowledgeSelfAssessedCount = history.filter(
+    (a) => (a.source === 'self' || !a.source) && a.axis === 'knowledge'
+  ).length
   const hasAnyEvaluationInput =
     selfAssessedCount > 0 || peerRatings.length > 0 || statements.length > 0 || quizResults.length > 0
+  const hasAnyKnowledgeEvaluationInput = knowledgeSelfAssessedCount > 0
+  const latestKnowledgeAssessment = history.find((a) => a.axis === 'knowledge') ?? null
   const trainingScopeState = skill
     ? {
         skillId: skill.id,
@@ -253,21 +260,37 @@ export default function SkillDetail() {
 
         {skill && (
           <div className="bg-card border border-hairline rounded-lg p-6">
-            <div className="flex items-center gap-4 mb-4">
-              <GrowthRing level={skill.level} size={56} />
-              <div>
-                <h2 className="font-display text-2xl text-ink">{skill.name}</h2>
-                <p className="text-sm text-secondary flex items-center gap-1.5">
-                  {!skill.level && skill.lifecycle_stage && (
-                    <LifecycleStageIcon stage={skill.lifecycle_stage} />
-                  )}
-                  {skill.level
-                    ? LEVEL_LABELS[skill.level]
-                    : skill.lifecycle_stage
-                      ? SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]
-                      : 'Not yet self-assessed'}
-                </p>
+            <div className="flex items-start flex-wrap gap-x-6 gap-y-3 mb-4">
+              <div className="flex items-center gap-4">
+                <GrowthRing level={skill.level} size={56} />
+                <div>
+                  <h2 className="font-display text-2xl text-ink">{skill.name}</h2>
+                  <p className="text-sm text-secondary flex items-center gap-1.5">
+                    {!skill.level && skill.lifecycle_stage && (
+                      <LifecycleStageIcon stage={skill.lifecycle_stage} />
+                    )}
+                    {skill.level
+                      ? LEVEL_LABELS[skill.level]
+                      : skill.lifecycle_stage
+                        ? SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]
+                        : 'Not yet self-assessed'}
+                  </p>
+                  <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
+                    Practical
+                  </p>
+                </div>
               </div>
+              {skill.knowledge_level && (
+                <div className="flex items-center gap-3">
+                  <GrowthRing level={skill.knowledge_level} size={44} labels={KNOWLEDGE_LEVEL_LABELS} />
+                  <div>
+                    <p className="text-sm text-secondary">{KNOWLEDGE_LEVEL_LABELS[skill.knowledge_level]}</p>
+                    <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
+                      Knowledge
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {lifecycleMapOpen && skill.lifecycle_stage && (
@@ -289,6 +312,32 @@ export default function SkillDetail() {
                   loadHistory()
                   loadSkill()
                   setSelfAssessOpen(false)
+                }}
+              />
+            )}
+
+            {selfAssessKnowledgeOpen && (
+              <SelfAssessModal
+                skill={skill}
+                user={user}
+                axis="knowledge"
+                onClose={() => setSelfAssessKnowledgeOpen(false)}
+                onAssessed={() => {
+                  loadHistory()
+                  loadSkill()
+                  setSelfAssessKnowledgeOpen(false)
+                }}
+              />
+            )}
+
+            {confirmKnowledgeOpen && (
+              <ConfirmKnowledgeLevelModal
+                skill={skill}
+                latestAssessment={latestKnowledgeAssessment}
+                onClose={() => setConfirmKnowledgeOpen(false)}
+                onConfirmed={() => {
+                  loadSkill()
+                  setConfirmKnowledgeOpen(false)
                 }}
               />
             )}
@@ -423,6 +472,20 @@ export default function SkillDetail() {
                     Evaluate Baseline
                   </button>
                 </div>
+                <div className="border-t border-hairline pt-4">
+                  <h3 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">
+                    Knowledge
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmKnowledgeOpen(true)}
+                    disabled={!hasAnyKnowledgeEvaluationInput}
+                    title={!hasAnyKnowledgeEvaluationInput ? 'Self-assess your knowledge first' : undefined}
+                    className="w-full rounded-md bg-moss text-paper py-2.5 px-4 font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Confirm knowledge level
+                  </button>
+                </div>
                 <SettingsSection skill={skill} onUpdated={loadSkill} />
                 <ScheduleSection skill={skill} onUpdated={loadSkill} />
               </div>
@@ -445,6 +508,7 @@ export default function SkillDetail() {
                 raterAvatars={raterAvatars}
                 hasAnyEvaluationInput={hasAnyEvaluationInput}
                 onSelfAssess={() => setSelfAssessOpen(true)}
+                onSelfAssessKnowledge={() => setSelfAssessKnowledgeOpen(true)}
                 onInvite={() => setInviteOpen(true)}
                 onRecordActivity={() => setRecordActivityOpen(true)}
                 onQuiz={() => setQuizOpen(true)}
@@ -555,10 +619,12 @@ function LifecycleMap({ stage, highestStage }) {
 function UpNextSection({
   stage,
   selfAssessedCount,
+  knowledgeSelfAssessedCount,
   peerRatingsCount,
   statementsCount,
   quizCount,
   onSelfAssess,
+  onSelfAssessKnowledge,
   onInvite,
   onRecordActivity,
   onQuiz,
@@ -575,6 +641,7 @@ function UpNextSection({
 }) {
   const handlers = {
     'self-assess': onSelfAssess,
+    'self-assess-knowledge': onSelfAssessKnowledge,
     invite: onInvite,
     activity: onRecordActivity,
     quiz: onQuiz,
@@ -592,6 +659,7 @@ function UpNextSection({
   const items = computeUpNextItems({
     stage,
     selfAssessedCount,
+    knowledgeSelfAssessedCount,
     peerRatingsCount,
     statementsCount,
     quizCount,
@@ -657,7 +725,7 @@ function UpNextSection({
   )
 }
 
-function SelfAssessModal({ skill, user, onClose, onAssessed }) {
+function SelfAssessModal({ skill, user, axis = 'practical', onClose, onAssessed }) {
   return (
     <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
       <div
@@ -665,19 +733,23 @@ function SelfAssessModal({ skill, user, onClose, onAssessed }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-2xl text-ink">Self-assess</h2>
+          <h2 className="font-display text-2xl text-ink">
+            {axis === 'knowledge' ? 'Self-assess your knowledge' : 'Self-assess'}
+          </h2>
           <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
             Close
           </button>
         </div>
-        <SelfAssessSection skill={skill} user={user} onAssessed={onAssessed} />
+        <SelfAssessSection skill={skill} user={user} axis={axis} onAssessed={onAssessed} />
       </div>
     </div>
   )
 }
 
-function SelfAssessSection({ skill, user, onAssessed }) {
-  const [level, setLevel] = useState(skill.level ?? 1)
+function SelfAssessSection({ skill, user, axis = 'practical', onAssessed }) {
+  const isKnowledge = axis === 'knowledge'
+  const labels = isKnowledge ? KNOWLEDGE_LEVEL_LABELS : LEVEL_LABELS
+  const [level, setLevel] = useState((isKnowledge ? skill.knowledge_level : skill.level) ?? 1)
   const [comments, setComments] = useState('')
   const [evidenceUrl, setEvidenceUrl] = useState('')
   const [evidenceFiles, setEvidenceFiles] = useState([])
@@ -695,6 +767,7 @@ function SelfAssessSection({ skill, user, onAssessed }) {
           skill_id: skill.id,
           user_id: user.id,
           level,
+          axis,
           comments: comments.trim() || null,
           evidence_url: evidenceUrl.trim() || null,
         })
@@ -713,8 +786,11 @@ function SelfAssessSection({ skill, user, onAssessed }) {
 
       // A self-assessment is recorded as history but doesn't move the
       // skill's official current level -- only an explicit "Assess
-      // baseline" / "Evaluate Baseline" action does that.
-      if (skill.checkin_frequency_value && skill.checkin_frequency_unit) {
+      // baseline" / "Evaluate Baseline" (practical) or "Confirm knowledge
+      // level" (knowledge) action does that. The check-in cadence is a
+      // practical-review schedule, so only a practical self-assessment
+      // reschedules it.
+      if (!isKnowledge && skill.checkin_frequency_value && skill.checkin_frequency_unit) {
         const { error: skillError } = await supabase
           .from('skills')
           .update({
@@ -739,7 +815,9 @@ function SelfAssessSection({ skill, user, onAssessed }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div>
-        <span className="block text-sm text-secondary mb-2">Level now</span>
+        <span className="block text-sm text-secondary mb-2">
+          {isKnowledge ? 'What you already know' : 'Level now'}
+        </span>
         <div className="flex items-center justify-between">
           {LEVELS.map((l) => (
             <button
@@ -750,8 +828,8 @@ function SelfAssessSection({ skill, user, onAssessed }) {
                 level === l ? 'bg-moss/10' : ''
               }`}
             >
-              <GrowthRing level={l} size={36} />
-              <span className="font-mono text-[10px] text-secondary">{LEVEL_LABELS[l]}</span>
+              <GrowthRing level={l} size={36} labels={labels} />
+              <span className="font-mono text-[10px] text-secondary">{labels[l]}</span>
             </button>
           ))}
         </div>
@@ -761,7 +839,11 @@ function SelfAssessSection({ skill, user, onAssessed }) {
         rows={3}
         value={comments}
         onChange={(e) => setComments(e.target.value)}
-        placeholder="Why this level? What changed since last time…"
+        placeholder={
+          isKnowledge
+            ? 'What do you already know? Where did that understanding come from?'
+            : 'Why this level? What changed since last time…'
+        }
         className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
       />
 
@@ -785,6 +867,87 @@ function SelfAssessSection({ skill, user, onAssessed }) {
   )
 }
 
+// Unlike the practical axis, there's no multi-source AI synthesis feeding
+// knowledge_level -- the learner's own self-assessment is the only signal.
+// This still keeps it an explicit, separate confirmation step (rather than
+// self-assessing silently moving the official value) so it stays under the
+// learner's control, same as "Evaluate Baseline" is for the practical axis.
+function ConfirmKnowledgeLevelModal({ skill, latestAssessment, onClose, onConfirmed }) {
+  const [level, setLevel] = useState(latestAssessment?.level ?? skill.knowledge_level ?? 1)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  async function handleConfirm() {
+    setError(null)
+    setSaving(true)
+    try {
+      const { error: updateError } = await supabase
+        .from('skills')
+        .update({ knowledge_level: level })
+        .eq('id', skill.id)
+      if (updateError) throw updateError
+      onConfirmed()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div
+        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-display text-2xl text-ink">Confirm knowledge level</h2>
+          <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
+            Close
+          </button>
+        </div>
+
+        {latestAssessment && (
+          <p className="text-sm text-secondary mb-3">
+            Your latest self-assessment{' '}
+            {latestAssessment.comments ? <>said: "{latestAssessment.comments}"</> : 'is set below.'} Adjust if
+            needed, then confirm it as your current knowledge level.
+          </p>
+        )}
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            {LEVELS.map((l) => (
+              <button
+                type="button"
+                key={l}
+                onClick={() => setLevel(l)}
+                className={`flex flex-col items-center gap-1 rounded-md px-1 py-1 ${
+                  level === l ? 'bg-moss/10' : ''
+                }`}
+              >
+                <GrowthRing level={l} size={36} labels={KNOWLEDGE_LEVEL_LABELS} />
+                <span className="font-mono text-[10px] text-secondary">{KNOWLEDGE_LEVEL_LABELS[l]}</span>
+              </button>
+            ))}
+          </div>
+
+          {error && <p className="text-sm text-red-700">{error}</p>}
+
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={saving}
+            className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+          >
+            {saving ? 'Saving…' : 'Confirm knowledge level'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const TIMELINE_DETAIL_TYPES = new Set(['assessment', 'peer', 'relationship', 'activity', 'training'])
 
 function HistorySection({
@@ -803,6 +966,7 @@ function HistorySection({
   raterAvatars,
   hasAnyEvaluationInput,
   onSelfAssess,
+  onSelfAssessKnowledge,
   onInvite,
   onRecordActivity,
   onQuiz,
@@ -819,7 +983,10 @@ function HistorySection({
   const due = isSelfAssessmentDue(skill.next_checkin_date)
   const currentTarget = targets[0]
   const showBaselineFlow = skill.lifecycle_stage === 'identified'
-  const selfAssessedCount = history.filter((a) => a.source === 'self' || !a.source).length
+  const selfAssessedCount = history.filter((a) => (a.source === 'self' || !a.source) && a.axis === 'practical').length
+  const knowledgeSelfAssessedCount = history.filter(
+    (a) => (a.source === 'self' || !a.source) && a.axis === 'knowledge'
+  ).length
   const pendingValidationRequests = validationRequests.filter((r) => r.status === 'pending')
   const decidedValidationRequests = validationRequests.filter((r) => r.status !== 'pending')
   const [selectedEvent, setSelectedEvent] = useState(null)
@@ -892,7 +1059,12 @@ function HistorySection({
           if (dayDiff !== 0) return dayDiff
           return new Date(b.createdAt ?? b.date) - new Date(a.createdAt ?? a.date)
         })
-        const mostRecentRatingIndex = events.findIndex((e) => e.type === 'assessment' || e.type === 'peer')
+        // "Most recent" and "Baseline" badges track the practical axis --
+        // the axis GrowthRing in the header and skills.level are shown --
+        // so a knowledge self-assessment shouldn't claim either badge.
+        const mostRecentRatingIndex = events.findIndex(
+          (e) => (e.type === 'assessment' && e.entry.axis === 'practical') || e.type === 'peer'
+        )
         // The "Baseline" badge marks the most recent AI-assessed baseline
         // specifically -- self-assessments and peer ratings are additional
         // input toward an evaluation, not a baseline in their own right.
@@ -928,10 +1100,12 @@ function HistorySection({
             <UpNextSection
               stage={skill.lifecycle_stage}
               selfAssessedCount={selfAssessedCount}
+              knowledgeSelfAssessedCount={knowledgeSelfAssessedCount}
               peerRatingsCount={peerRatings.length}
               statementsCount={statements.length}
               quizCount={quizResults.length}
               onSelfAssess={onSelfAssess}
+              onSelfAssessKnowledge={onSelfAssessKnowledge}
               onInvite={onInvite}
               onRecordActivity={onRecordActivity}
               onQuiz={onQuiz}
@@ -1282,6 +1456,7 @@ function TimelineEntry({
   }
 
   const entry = event.entry
+  const entryLabels = entry.axis === 'knowledge' ? KNOWLEDGE_LEVEL_LABELS : LEVEL_LABELS
   const paths = entry.evidence_paths?.length
     ? entry.evidence_paths
     : entry.evidence_path
@@ -1291,7 +1466,7 @@ function TimelineEntry({
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center w-12 shrink-0">
-        <GrowthRing level={entry.level} size={isMostRecent ? 48 : 32} />
+        <GrowthRing level={entry.level} size={isMostRecent ? 48 : 32} labels={entryLabels} />
         {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
       </div>
       <div
@@ -1300,8 +1475,13 @@ function TimelineEntry({
       >
         <div className="flex items-center gap-2">
           <p className={isMostRecent ? 'text-base font-semibold text-ink' : 'text-sm font-medium text-ink'}>
-            {LEVEL_LABELS[entry.level]}
+            {entryLabels[entry.level]}
           </p>
+          {entry.axis === 'knowledge' && (
+            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5">
+              Knowledge
+            </span>
+          )}
           {isBaseline && (
             <span className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5">
               Baseline
@@ -1365,19 +1545,25 @@ function TimelineDetailModal({ event, assessorName, raterAvatars, onClose }) {
 
   if (event.type === 'assessment') {
     const entry = event.entry
+    const entryLabels = entry.axis === 'knowledge' ? KNOWLEDGE_LEVEL_LABELS : LEVEL_LABELS
     const paths = entry.evidence_paths?.length
       ? entry.evidence_paths
       : entry.evidence_path
         ? [entry.evidence_path]
         : []
-    title = LEVEL_LABELS[entry.level]
+    title = entryLabels[entry.level]
     body = (
       <div className="space-y-3">
         <div className="flex items-center gap-3">
-          <GrowthRing level={entry.level} size={48} />
+          <GrowthRing level={entry.level} size={48} labels={entryLabels} />
           <p className="font-mono text-xs text-secondary">
             {new Date(entry.assessed_at).toLocaleDateString()}
           </p>
+          {entry.axis === 'knowledge' && (
+            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5">
+              Knowledge
+            </span>
+          )}
         </div>
         {entry.source === 'course' && entry.courses?.name ? (
           <p className="text-sm text-secondary">Earned by completing {entry.courses.name}</p>
