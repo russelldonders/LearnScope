@@ -66,6 +66,7 @@ export default function SkillDetail() {
   const [targetOpen, setTargetOpen] = useState(false)
   const [validateOpen, setValidateOpen] = useState(false)
   const [expertValidationOpen, setExpertValidationOpen] = useState(false)
+  const [lifecycleMapOpen, setLifecycleMapOpen] = useState(false)
   const [validationRequests, setValidationRequests] = useState([])
   const [validatorNames, setValidatorNames] = useState({})
 
@@ -201,11 +202,6 @@ export default function SkillDetail() {
     if (!error) await loadSkill()
   }
 
-  async function handleRevertStage(stageValue) {
-    const { error } = await supabase.from('skills').update({ lifecycle_stage: stageValue }).eq('id', skill.id)
-    if (!error) await loadSkill()
-  }
-
   async function loadAssessorName() {
     const { data } = await supabase
       .from('profiles')
@@ -274,11 +270,11 @@ export default function SkillDetail() {
               </div>
             </div>
 
-            {skill.lifecycle_stage && (
-              <LifecycleProgress
+            {lifecycleMapOpen && skill.lifecycle_stage && (
+              <LifecycleMapModal
                 stage={skill.lifecycle_stage}
                 highestStage={skill.highest_lifecycle_stage}
-                onRevert={handleRevertStage}
+                onClose={() => setLifecycleMapOpen(false)}
               />
             )}
 
@@ -459,6 +455,7 @@ export default function SkillDetail() {
                 onValidateSkillStage={handleValidateSkillStage}
                 onRequestValidation={() => setValidateOpen(true)}
                 onRequestExpertValidation={() => setExpertValidationOpen(true)}
+                onOpenLifecycleMap={() => setLifecycleMapOpen(true)}
               />
             )}
 
@@ -476,7 +473,30 @@ export default function SkillDetail() {
   )
 }
 
-function LifecycleProgress({ stage, highestStage, onRevert }) {
+function LifecycleMapModal({ stage, highestStage, onClose }) {
+  return (
+    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div
+        className="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-display text-2xl text-ink">Your journey</h2>
+          <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
+            Close
+          </button>
+        </div>
+        <LifecycleMap stage={stage} highestStage={highestStage} />
+      </div>
+    </div>
+  )
+}
+
+// Read-only view of every lifecycle stage this skill has ever reached, plus a
+// preview of the next one to unlock. Opened from the current-stage badge on
+// the Up Next box so the full journey stays a click away without cluttering
+// the page by default.
+function LifecycleMap({ stage, highestStage }) {
   const currentIndex = SKILL_LIFECYCLE_FLOW_STAGES.findIndex((s) => s.value === stage)
   const isException = stage === 'at_risk' || stage === 'archived'
   // highest_lifecycle_stage never falls below the current stage (a
@@ -485,11 +505,6 @@ function LifecycleProgress({ stage, highestStage, onRevert }) {
   const highestIndexRaw = SKILL_LIFECYCLE_FLOW_STAGES.findIndex((s) => s.value === highestStage)
   const highestIndex = highestIndexRaw >= 0 ? Math.max(highestIndexRaw, currentIndex) : currentIndex
   const nextStageValue = highestIndex >= 0 ? SKILL_LIFECYCLE_FLOW_STAGES[highestIndex + 1]?.value : undefined
-  // Every stage the skill has ever unlocked stays clickable, plus a preview
-  // of just the one stage still to unlock -- clicking an earlier stage
-  // moves the skill back to it without losing how far it's actually gotten
-  // (highestStage keeps that marked), so this is a way to navigate through
-  // everything already reached, not a one-way "undo".
   const slicedStages =
     highestIndex >= 0 ? SKILL_LIFECYCLE_FLOW_STAGES.slice(0, highestIndex + 2) : SKILL_LIFECYCLE_FLOW_STAGES
   // validated/maintained intentionally share a label (see skillLifecycle.js)
@@ -497,43 +512,28 @@ function LifecycleProgress({ stage, highestStage, onRevert }) {
   const visibleStages = slicedStages.filter((s, i) => i === 0 || s.label !== slicedStages[i - 1].label)
 
   return (
-    <div className="mb-6">
+    <div>
       <div className="flex items-center flex-wrap gap-y-1">
         {visibleStages.map((s, i) => {
           const isCurrent = !isException && s.value === stage
           const isHighest = !isException && !isCurrent && s.value === highestStage
           const isNext = !isException && s.value === nextStageValue
-          const isUnlocked = !isException && !isCurrent && !isNext
-          const chip = (
-            <span
-              className={`flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide rounded-full px-2.5 py-1 border whitespace-nowrap ${
-                isCurrent
-                  ? 'bg-moss text-paper border-moss'
-                  : isHighest
-                    ? 'border-moss text-moss'
-                    : isNext
-                      ? 'border-dashed border-hairline text-secondary/50'
-                      : 'border-hairline text-secondary'
-              }`}
-            >
-              <LifecycleStageIcon stage={s.value} />
-              {s.label}
-            </span>
-          )
           return (
             <div key={s.value} className="flex items-center">
-              {isUnlocked ? (
-                <button
-                  type="button"
-                  onClick={() => onRevert(s.value)}
-                  title={`Move to ${s.label}`}
-                  className="hover:opacity-70 transition-opacity"
-                >
-                  {chip}
-                </button>
-              ) : (
-                chip
-              )}
+              <span
+                className={`flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide rounded-full px-2.5 py-1 border whitespace-nowrap ${
+                  isCurrent
+                    ? 'bg-moss text-paper border-moss'
+                    : isHighest
+                      ? 'border-moss text-moss'
+                      : isNext
+                        ? 'border-dashed border-hairline text-secondary/50'
+                        : 'border-hairline text-secondary'
+                }`}
+              >
+                <LifecycleStageIcon stage={s.value} />
+                {s.label}
+              </span>
               {i < visibleStages.length - 1 && <span className="w-4 h-px mx-1 shrink-0 bg-hairline" />}
             </div>
           )
@@ -544,52 +544,6 @@ function LifecycleProgress({ stage, highestStage, onRevert }) {
           <LifecycleStageIcon stage={stage} />
           {SKILL_LIFECYCLE_LABELS[stage]}
         </span>
-      )}
-    </div>
-  )
-}
-
-// A persistent row of common actions -- self-assessing, inviting a rater and
-// recording experience are useful at every stage, not just while
-// establishing a baseline, so these live outside the stage-specific Up Next
-// checklist below. Find a course/Demonstrate Skill join the row only while
-// actively working toward a target.
-function QuickActionsRow({
-  stage,
-  hasAnyCourse,
-  onSelfAssess,
-  onInvite,
-  onRecordActivity,
-  onFindCourse,
-  onDemonstrateSkill,
-  onValidateSkillStage,
-}) {
-  const buttonClass = 'rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper'
-  return (
-    <div className="flex flex-wrap items-center gap-2 mb-6">
-      <button type="button" onClick={onSelfAssess} className={buttonClass}>
-        Self-assess
-      </button>
-      <button type="button" onClick={onInvite} className={buttonClass}>
-        Invite someone to rate
-      </button>
-      <button type="button" onClick={onRecordActivity} className={buttonClass}>
-        Record Activity
-      </button>
-      {stage === 'target_set' && (
-        <button type="button" onClick={onFindCourse} className={buttonClass}>
-          {hasAnyCourse ? 'Find more training' : 'Find a course'}
-        </button>
-      )}
-      {stage === 'target_set' && (
-        <button type="button" onClick={onDemonstrateSkill} className={buttonClass}>
-          Demonstrate Skill
-        </button>
-      )}
-      {stage === 'developing' && (
-        <button type="button" onClick={onValidateSkillStage} className={buttonClass}>
-          Validate Skill
-        </button>
       )}
     </div>
   )
@@ -617,6 +571,7 @@ function UpNextSection({
   onRequestExpertValidation,
   hasPendingExpertValidation,
   hasTarget,
+  onOpenLifecycleMap,
 }) {
   const handlers = {
     'self-assess': onSelfAssess,
@@ -645,44 +600,59 @@ function UpNextSection({
     hasPendingExpertValidation,
   }).map((item) => ({ ...item, onClick: handlers[item.key] }))
 
-  if (items.length === 0) return null
+  if (!stage) return null
 
   return (
     <div className="mb-6 rounded-md border border-hairline bg-paper p-4">
-      <h3 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Up Next</h3>
-      <div className="space-y-2">
-        {items.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            onClick={item.locked ? undefined : item.onClick}
-            disabled={item.locked}
-            title={item.locked ? item.lockedReason : undefined}
-            className={`w-full flex items-center justify-between gap-3 rounded-md border border-hairline bg-card px-3 py-2.5 text-left transition-colors ${
-              item.locked ? 'opacity-50 cursor-not-allowed' : 'hover:border-moss'
-            }`}
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <span
-                className={`shrink-0 flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold ${
-                  item.done ? 'bg-moss border-moss text-paper' : 'border-hairline text-secondary'
-                }`}
-              >
-                {item.done ? '✓' : ''}
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm text-ink">{item.label}</span>
-                <span className="block text-xs text-secondary truncate">
-                  {item.locked ? item.lockedReason : item.description}
-                </span>
-              </span>
-            </div>
-            <span className={`shrink-0 text-xs font-medium ${item.locked ? 'text-secondary' : 'text-moss'}`}>
-              {item.locked ? 'Locked' : item.done ? 'Redo' : 'Start'}
-            </span>
-          </button>
-        ))}
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h3 className="font-mono text-xs uppercase tracking-wide text-secondary">Up Next</h3>
+        <button
+          type="button"
+          onClick={onOpenLifecycleMap}
+          title="See your lifecycle journey"
+          className="shrink-0 flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide rounded-full px-2.5 py-1 border border-moss bg-moss text-paper whitespace-nowrap hover:opacity-90 transition-opacity"
+        >
+          <LifecycleStageIcon stage={stage} />
+          {SKILL_LIFECYCLE_LABELS[stage]}
+        </button>
       </div>
+      {items.length === 0 ? (
+        <p className="text-sm text-secondary">Nothing outstanding right now.</p>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={item.locked ? undefined : item.onClick}
+              disabled={item.locked}
+              title={item.locked ? item.lockedReason : undefined}
+              className={`w-full flex items-center justify-between gap-3 rounded-md border border-hairline bg-card px-3 py-2.5 text-left transition-colors ${
+                item.locked ? 'opacity-50 cursor-not-allowed' : 'hover:border-moss'
+              }`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <span
+                  className={`shrink-0 flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold ${
+                    item.done ? 'bg-moss border-moss text-paper' : 'border-hairline text-secondary'
+                  }`}
+                >
+                  {item.done ? '✓' : ''}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm text-ink">{item.label}</span>
+                  <span className="block text-xs text-secondary truncate">
+                    {item.locked ? item.lockedReason : item.description}
+                  </span>
+                </span>
+              </div>
+              <span className={`shrink-0 text-xs font-medium ${item.locked ? 'text-secondary' : 'text-moss'}`}>
+                {item.locked ? 'Locked' : item.done ? 'Redo' : 'Start'}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -843,13 +813,13 @@ function HistorySection({
   onValidateSkillStage,
   onRequestValidation,
   onRequestExpertValidation,
+  onOpenLifecycleMap,
 }) {
   const navigate = useNavigate()
   const due = isSelfAssessmentDue(skill.next_checkin_date)
   const currentTarget = targets[0]
   const showBaselineFlow = skill.lifecycle_stage === 'identified'
   const selfAssessedCount = history.filter((a) => a.source === 'self' || !a.source).length
-  const hasAnyCourse = courseLinks.some((link) => link.courses)
   const pendingValidationRequests = validationRequests.filter((r) => r.status === 'pending')
   const decidedValidationRequests = validationRequests.filter((r) => r.status !== 'pending')
   const [selectedEvent, setSelectedEvent] = useState(null)
@@ -974,16 +944,7 @@ function HistorySection({
               onRequestExpertValidation={onRequestExpertValidation}
               hasPendingExpertValidation={pendingValidationRequests.length > 0}
               hasTarget={targets.length > 0}
-            />
-            <QuickActionsRow
-              stage={skill.lifecycle_stage}
-              hasAnyCourse={hasAnyCourse}
-              onSelfAssess={onSelfAssess}
-              onInvite={onInvite}
-              onRecordActivity={onRecordActivity}
-              onFindCourse={onFindCourse}
-              onDemonstrateSkill={onDemonstrateSkill}
-              onValidateSkillStage={onValidateSkillStage}
+              onOpenLifecycleMap={onOpenLifecycleMap}
             />
             {events.map((event, i) => (
               <TimelineEntry
