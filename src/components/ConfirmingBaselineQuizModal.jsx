@@ -1,17 +1,23 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import GrowthRing from './GrowthRing'
-import { LEVELS, KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
+import { KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
 import { fetchOrGenerateDiagnosticQuiz, saveDiagnosticAttempt } from '../lib/skillDiagnostics'
+
+// A learner is judged to genuinely be at the level they self-assessed if
+// they get at least 70% of the calibrated questions right; below that, the
+// confirmed level steps down one, rather than leaving them at a level the
+// quiz itself just showed they don't yet support.
+const PASS_THRESHOLD = 0.7
 
 // The Confirming Baseline stage's one action: a knowledge-check quiz pitched
 // at the level the learner already self-assessed (skill.knowledge_level,
 // falling back to their latest knowledge self-assessment), cached and reused
 // across learners rather than regenerated per attempt (see
-// api/generate-diagnostic-quiz.js). Finishing embeds an explicit
-// level-confirm step -- same "learner stays in control" pattern as
-// ConfirmKnowledgeLevelModal -- and that one confirm action both records the
-// attempt and advances the skill out of this stage.
+// api/generate-diagnostic-quiz.js). The score directly determines the
+// outcome -- no separate manual re-pick -- and one "Continue" action both
+// records the attempt and the confirmed level, and sends the skill back to
+// Establishing Baseline to pick up the practical axis next.
 export default function ConfirmingBaselineQuizModal({
   skill,
   user,
@@ -30,7 +36,6 @@ export default function ConfirmingBaselineQuizModal({
   const [selected, setSelected] = useState(null)
   const [answers, setAnswers] = useState([])
   const [finished, setFinished] = useState(false)
-  const [confirmLevel, setConfirmLevel] = useState(calibratedLevel)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -61,6 +66,9 @@ export default function ConfirmingBaselineQuizModal({
         0
       )
     : 0
+  const total = content?.questions.length ?? 0
+  const metExpectations = total > 0 && score / total >= PASS_THRESHOLD
+  const confirmedLevel = metExpectations ? calibratedLevel : Math.max(1, calibratedLevel - 1)
 
   async function handleConfirm() {
     setError(null)
@@ -74,22 +82,24 @@ export default function ConfirmingBaselineQuizModal({
         content,
         answers,
         calibratedLevel,
-        confirmedLevel: confirmLevel,
+        confirmedLevel,
       })
 
       const { error: assessError } = await supabase.from('skill_assessments').insert({
         skill_id: skill.id,
         user_id: user.id,
-        level: confirmLevel,
+        level: confirmedLevel,
         axis: 'knowledge',
         source: 'diagnostic_confirmed',
-        comments: `Confirmed via ${score}/${content.questions.length} knowledge check`,
+        comments: metExpectations
+          ? `Confirmed via knowledge check: scored ${score}/${total} at ${KNOWLEDGE_LEVEL_LABELS[calibratedLevel]}, meeting expectations for that level.`
+          : `Confirmed via knowledge check: scored ${score}/${total} at ${KNOWLEDGE_LEVEL_LABELS[calibratedLevel]}, below expectations for that level -- adjusted to ${KNOWLEDGE_LEVEL_LABELS[confirmedLevel]}.`,
       })
       if (assessError) throw assessError
 
       const { error: skillError } = await supabase
         .from('skills')
-        .update({ knowledge_level: confirmLevel, lifecycle_stage: 'baseline_assessed' })
+        .update({ knowledge_level: confirmedLevel, lifecycle_stage: 'identified' })
         .eq('id', skill.id)
       if (skillError) throw skillError
 
@@ -158,28 +168,21 @@ export default function ConfirmingBaselineQuizModal({
 
         {finished && content && (
           <div>
-            <p className="text-sm text-ink mb-4">
-              You scored <strong>{score} / {content.questions.length}</strong> at the {KNOWLEDGE_LEVEL_LABELS[calibratedLevel]} level.
-            </p>
-
-            <div className="mb-4">
-              <span className="block text-sm text-secondary mb-2">Confirm your knowledge level</span>
-              <div className="flex items-center justify-between">
-                {LEVELS.map((l) => (
-                  <button
-                    type="button"
-                    key={l}
-                    onClick={() => setConfirmLevel(l)}
-                    className={`flex flex-col items-center gap-1 rounded-md px-1 py-1 ${
-                      confirmLevel === l ? 'bg-slate/10' : ''
-                    }`}
-                  >
-                    <GrowthRing level={l} size={32} labels={KNOWLEDGE_LEVEL_LABELS} color="var(--color-slate)" />
-                    <span className="font-mono text-[10px] text-secondary">{KNOWLEDGE_LEVEL_LABELS[l]}</span>
-                  </button>
-                ))}
+            <div className="flex items-center gap-3 mb-3">
+              <GrowthRing level={confirmedLevel} size={48} labels={KNOWLEDGE_LEVEL_LABELS} color="var(--color-slate)" />
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">
+                  Confirmed knowledge level
+                </p>
+                <p className="text-ink font-medium">{KNOWLEDGE_LEVEL_LABELS[confirmedLevel]}</p>
               </div>
             </div>
+            <p className="text-sm text-ink mb-4">
+              You scored <strong>{score} / {total}</strong> at the {KNOWLEDGE_LEVEL_LABELS[calibratedLevel]} level
+              {metExpectations
+                ? ' -- that meets expectations, so this is now your confirmed knowledge level.'
+                : ` -- that's below what's expected at that level, so your confirmed level has been adjusted to ${KNOWLEDGE_LEVEL_LABELS[confirmedLevel]}.`}
+            </p>
 
             {error && <p className="text-sm text-red-700 mb-2">{error}</p>}
 
@@ -189,7 +192,7 @@ export default function ConfirmingBaselineQuizModal({
               disabled={saving}
               className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
             >
-              {saving ? 'Saving…' : 'Confirm and continue'}
+              {saving ? 'Saving…' : 'Continue'}
             </button>
           </div>
         )}

@@ -10,6 +10,7 @@ export function computeUpNextItems({
   stage,
   selfAssessedCount,
   knowledgeSelfAssessedCount,
+  hasKnowledgeLevel,
   peerRatingsCount,
   statementsCount,
   quizCount,
@@ -18,42 +19,48 @@ export function computeUpNextItems({
   hasPendingExpertValidation,
 }) {
   if (stage === 'identified') {
-    // Knowledge self-assessment is the one step available first -- everything
-    // else that reacts to "where the learner thinks they are" (practical
-    // self-assessment, peer ratings, the AI quiz) stays locked until it's
-    // done, so establishing a baseline always starts with their own
-    // understanding.
-    const hasKnowledgeAssessed = (knowledgeSelfAssessedCount ?? 0) > 0
+    // The knowledge axis is established and confirmed first, as its own
+    // self-contained round trip through Confirming Baseline -- submitting
+    // the knowledge self-assessment immediately leaves this stage, so
+    // nothing else here is reachable until that trip is done and the skill
+    // is back with a confirmed knowledge_level. Only then does the
+    // practical-axis checklist (self-assess, invite, quiz, activity, and
+    // eventually the AI "Assess Baseline" synthesis) become relevant --
+    // none of it touches the knowledge axis.
+    if (!hasKnowledgeLevel) {
+      return [
+        {
+          key: 'self-assess-knowledge',
+          label: 'Self-assess your knowledge',
+          description: "Rate what you already know, in theory -- you'll confirm it with a quiz next.",
+          done: (knowledgeSelfAssessedCount ?? 0) > 0,
+        },
+      ]
+    }
+
+    const hasSelfAssessed = selfAssessedCount > 0
     return [
-      {
-        key: 'self-assess-knowledge',
-        label: 'Self-assess your knowledge',
-        description: 'Rate what you already know, in theory.',
-        done: hasKnowledgeAssessed,
-      },
       {
         key: 'self-assess',
         label: 'Self-assess your own level',
         description: 'Rate where you think you are right now, practically.',
-        done: selfAssessedCount > 0,
-        locked: !hasKnowledgeAssessed,
-        lockedReason: 'Self-assess your knowledge first.',
+        done: hasSelfAssessed,
       },
       {
         key: 'invite',
         label: 'Invite others to assess your skill',
         description: 'Get an outside perspective on your level.',
         done: peerRatingsCount > 0,
-        locked: !hasKnowledgeAssessed,
-        lockedReason: 'Self-assess your knowledge first.',
+        locked: !hasSelfAssessed,
+        lockedReason: 'Self-assess your own level first.',
       },
       {
         key: 'quiz',
         label: 'Take a general knowledge quiz',
         description: 'Answer a short AI-generated quiz to help inform your AI-assessed baseline.',
         done: quizCount > 0,
-        locked: !hasKnowledgeAssessed,
-        lockedReason: 'Self-assess your knowledge first.',
+        locked: !hasSelfAssessed,
+        lockedReason: 'Self-assess your own level first.',
       },
       {
         key: 'activity',

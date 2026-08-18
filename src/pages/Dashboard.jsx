@@ -42,7 +42,7 @@ const STAGE_ORDER = Object.fromEntries(SKILL_LIFECYCLE_FLOW_STAGES.map((s, i) =>
 async function loadUpNextRecommendations(userId) {
   const { data: skills } = await supabase
     .from('skills')
-    .select('id, name, level, lifecycle_stage')
+    .select('id, name, level, lifecycle_stage, knowledge_level')
     .eq('user_id', userId)
     .not('lifecycle_stage', 'is', null)
   if (!skills || skills.length === 0) return []
@@ -100,6 +100,7 @@ async function loadUpNextRecommendations(userId) {
         stage: skill.lifecycle_stage,
         selfAssessedCount: selfAssessedCounts[skill.id] ?? 0,
         knowledgeSelfAssessedCount: knowledgeSelfAssessedCounts[skill.id] ?? 0,
+        hasKnowledgeLevel: Boolean(skill.knowledge_level),
         peerRatingsCount: peerCounts[skill.id] ?? 0,
         statementsCount: statementCounts[skill.id] ?? 0,
         quizCount: quizCounts[skill.id] ?? 0,

@@ -647,6 +647,7 @@ function UpNextSection({
   stage,
   selfAssessedCount,
   knowledgeSelfAssessedCount,
+  hasKnowledgeLevel,
   peerRatingsCount,
   statementsCount,
   quizCount,
@@ -689,6 +690,7 @@ function UpNextSection({
     stage,
     selfAssessedCount,
     knowledgeSelfAssessedCount,
+    hasKnowledgeLevel,
     peerRatingsCount,
     statementsCount,
     quizCount,
@@ -847,10 +849,10 @@ function SelfAssessSection({ skill, user, axis = 'practical', onAssessed, onGuid
 
       // A self-assessment is recorded as history but doesn't move the
       // skill's official current level -- only an explicit "Assess
-      // baseline" / "Evaluate Baseline" (practical) or "Confirm knowledge
-      // level" (knowledge) action does that. The check-in cadence is a
-      // practical-review schedule, so only a practical self-assessment
-      // reschedules it.
+      // baseline" / "Evaluate Baseline" (practical) or the Confirming
+      // Baseline quiz / "Confirm knowledge level" (knowledge) action does
+      // that. The check-in cadence is a practical-review schedule, so only
+      // a practical self-assessment reschedules it.
       if (!isKnowledge && skill.checkin_frequency_value && skill.checkin_frequency_unit) {
         const { error: skillError } = await supabase
           .from('skills')
@@ -863,6 +865,18 @@ function SelfAssessSection({ skill, user, axis = 'practical', onAssessed, onGuid
           })
           .eq('id', skill.id)
         if (skillError) throw skillError
+      }
+
+      // Establishing a baseline's knowledge axis is a self-contained round
+      // trip: self-assessing it immediately sends the skill to Confirming
+      // Baseline to check it against a calibrated quiz, entirely separate
+      // from the practical axis and its own AI-synthesis flow.
+      if (isKnowledge && skill.lifecycle_stage === 'identified') {
+        const { error: stageError } = await supabase
+          .from('skills')
+          .update({ lifecycle_stage: 'confirming_baseline' })
+          .eq('id', skill.id)
+        if (stageError) throw stageError
       }
 
       onAssessed()
@@ -1089,6 +1103,7 @@ function HistorySection({
   const knowledgeSelfAssessedCount = history.filter(
     (a) => (a.source === 'self' || !a.source) && a.axis === 'knowledge'
   ).length
+  const hasKnowledgeLevel = Boolean(skill.knowledge_level)
   const pendingValidationRequests = validationRequests.filter((r) => r.status === 'pending')
   const decidedValidationRequests = validationRequests.filter((r) => r.status !== 'pending')
   const [selectedEvent, setSelectedEvent] = useState(null)
@@ -1203,6 +1218,7 @@ function HistorySection({
               stage={skill.lifecycle_stage}
               selfAssessedCount={selfAssessedCount}
               knowledgeSelfAssessedCount={knowledgeSelfAssessedCount}
+              hasKnowledgeLevel={hasKnowledgeLevel}
               peerRatingsCount={peerRatings.length}
               statementsCount={statements.length}
               quizCount={quizResults.length}
