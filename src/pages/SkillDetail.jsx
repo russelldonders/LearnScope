@@ -31,8 +31,6 @@ import { computeUpNextItems } from '../lib/skillNextAction'
 
 const TABS = [
   { id: 'history', label: 'Overview' },
-  { id: 'ratings', label: 'Ratings' },
-  { id: 'activities', label: 'Activities' },
   { id: 'training', label: 'Training' },
   { id: 'details', label: 'Details' },
 ]
@@ -464,12 +462,6 @@ export default function SkillDetail() {
               />
             )}
 
-            {tab === 'ratings' && (
-              <RatingsSection peerRatings={peerRatings} loading={loadingHistory} raterAvatars={raterAvatars} />
-            )}
-
-            {tab === 'activities' && <ActivitiesSection statements={statements} loading={loadingHistory} />}
-
             {tab === 'training' && (
               <TrainingSection
                 courseLinks={courseLinks}
@@ -663,8 +655,12 @@ function UpNextSection({
           <button
             key={item.key}
             type="button"
-            onClick={item.onClick}
-            className="w-full flex items-center justify-between gap-3 rounded-md border border-hairline bg-card px-3 py-2.5 text-left hover:border-moss transition-colors"
+            onClick={item.locked ? undefined : item.onClick}
+            disabled={item.locked}
+            title={item.locked ? item.lockedReason : undefined}
+            className={`w-full flex items-center justify-between gap-3 rounded-md border border-hairline bg-card px-3 py-2.5 text-left transition-colors ${
+              item.locked ? 'opacity-50 cursor-not-allowed' : 'hover:border-moss'
+            }`}
           >
             <div className="flex items-center gap-3 min-w-0">
               <span
@@ -676,10 +672,14 @@ function UpNextSection({
               </span>
               <span className="min-w-0">
                 <span className="block text-sm text-ink">{item.label}</span>
-                <span className="block text-xs text-secondary truncate">{item.description}</span>
+                <span className="block text-xs text-secondary truncate">
+                  {item.locked ? item.lockedReason : item.description}
+                </span>
               </span>
             </div>
-            <span className="shrink-0 text-xs text-moss font-medium">{item.done ? 'Redo' : 'Start'}</span>
+            <span className={`shrink-0 text-xs font-medium ${item.locked ? 'text-secondary' : 'text-moss'}`}>
+              {item.locked ? 'Locked' : item.done ? 'Redo' : 'Start'}
+            </span>
           </button>
         ))}
       </div>
@@ -1799,69 +1799,6 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
         </button>
       </div>
     </form>
-  )
-}
-
-function RatingsSection({ peerRatings, loading, raterAvatars }) {
-  return (
-    <div>
-      {loading ? (
-        <p className="text-sm text-secondary">Loading…</p>
-      ) : peerRatings.length === 0 ? (
-        <p className="text-sm text-secondary">No ratings from others yet.</p>
-      ) : (
-        <ul className="space-y-3">
-          {peerRatings.map((rating) => (
-            <li key={rating.id} className="flex items-start gap-3 bg-paper border border-hairline rounded-md p-3">
-              <GrowthRing level={rating.level} size={40} />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-ink">{LEVEL_LABELS[rating.level]}</p>
-                <p className="font-mono text-xs text-secondary mt-0.5 flex items-center gap-1.5">
-                  {new Date(rating.rated_at).toLocaleDateString()} ·
-                  <RaterAvatar url={raterAvatars?.[rating.rater_id]} />
-                  Rated by {rating.rater_name || rating.rater_email || 'a connection'}
-                </p>
-                {rating.comments && <p className="text-sm text-ink mt-1">{rating.comments}</p>}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
-}
-
-function ActivitiesSection({ statements, loading }) {
-  return (
-    <div>
-      {loading ? (
-        <p className="text-sm text-secondary">Loading…</p>
-      ) : statements.length === 0 ? (
-        <p className="text-sm text-secondary">Nothing recorded yet for this skill.</p>
-      ) : (
-        <ul className="space-y-2">
-          {statements.map((s) => (
-            <li key={s.id} className="bg-paper border border-hairline rounded-md px-3 py-2">
-              <p className="text-sm text-ink">
-                <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
-                  {verbLabel(s.statement)}
-                </span>{' '}
-                {activityName(s.statement)}
-              </p>
-              <p className="font-mono text-xs text-secondary mt-0.5">
-                {new Date(s.recorded_at).toLocaleDateString()}
-                {formatDuration(s.statement) ? ` · ${formatDuration(s.statement)}` : ''}
-              </p>
-              {s.statement.object?.definition?.description?.['en-US'] && (
-                <p className="text-sm text-ink mt-1">
-                  {s.statement.object.definition.description['en-US']}
-                </p>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
   )
 }
 

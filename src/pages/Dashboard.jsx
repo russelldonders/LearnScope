@@ -97,7 +97,7 @@ async function loadUpNextRecommendations(userId) {
         hasTarget: targetSkillIds.has(skill.id),
         hasPendingExpertValidation: pendingValidationSkillIds.has(skill.id),
       })
-      const next = items.find((item) => !item.done)
+      const next = items.find((item) => !item.done && !item.locked)
       return next ? { skill, item: next } : null
     })
     .filter(Boolean)

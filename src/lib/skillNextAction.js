@@ -17,30 +17,38 @@ export function computeUpNextItems({
   hasPendingExpertValidation,
 }) {
   if (stage === 'identified') {
+    // Self-assessing first gives every other diagnostic something to react
+    // to, so the other-perspective steps (peer ratings, the AI quiz, and
+    // any future diagnostic added here) stay locked until it's done.
+    const hasSelfAssessed = selfAssessedCount > 0
     return [
       {
         key: 'self-assess',
         label: 'Self-assess your own level',
         description: 'Rate where you think you are right now.',
-        done: selfAssessedCount > 0,
+        done: hasSelfAssessed,
       },
       {
         key: 'invite',
         label: 'Invite others to assess your skill',
         description: 'Get an outside perspective on your level.',
         done: peerRatingsCount > 0,
-      },
-      {
-        key: 'activity',
-        label: 'Record an activity',
-        description: 'Log something you did that shows this skill in action.',
-        done: statementsCount > 0,
+        locked: !hasSelfAssessed,
+        lockedReason: 'Self-assess your own level first.',
       },
       {
         key: 'quiz',
         label: 'Ask me questions to assess me',
         description: 'Answer a short AI-generated quiz on your baseline knowledge.',
         done: quizCount > 0,
+        locked: !hasSelfAssessed,
+        lockedReason: 'Self-assess your own level first.',
+      },
+      {
+        key: 'activity',
+        label: 'Record an activity',
+        description: 'Log something you did that shows this skill in action.',
+        done: statementsCount > 0,
       },
     ]
   }
