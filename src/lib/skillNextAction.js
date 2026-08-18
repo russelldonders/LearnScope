@@ -49,8 +49,8 @@ export function computeUpNextItems({
       },
       {
         key: 'quiz',
-        label: 'Ask me questions to assess me',
-        description: 'Answer a short AI-generated quiz on your baseline knowledge.',
+        label: 'Take a general knowledge quiz',
+        description: 'Answer a short AI-generated quiz to help inform your AI-assessed baseline.',
         done: quizCount > 0,
         locked: !hasKnowledgeAssessed,
         lockedReason: 'Self-assess your knowledge first.',
@@ -60,6 +60,20 @@ export function computeUpNextItems({
         label: 'Record an activity',
         description: 'Log something you did that shows this skill in action.',
         done: statementsCount > 0,
+      },
+    ]
+  }
+
+  if (stage === 'confirming_baseline') {
+    // A single action that both records the attempt and advances the skill
+    // past this stage -- "still in this stage" already implies "not done
+    // yet", same as the baseline_assessed stage's `target` item below.
+    return [
+      {
+        key: 'confirm-baseline-quiz',
+        label: 'Confirm your knowledge with a quiz',
+        description: 'Answer questions pitched at your self-assessed knowledge level to confirm it.',
+        done: false,
       },
     ]
   }

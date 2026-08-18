@@ -24,6 +24,7 @@ import AssessBaselineModal from '../components/AssessBaselineModal'
 import SetTargetModal from '../components/SetTargetModal'
 import ValidateSkillModal from '../components/ValidateSkillModal'
 import RequestValidationModal from '../components/RequestValidationModal'
+import ConfirmingBaselineQuizModal from '../components/ConfirmingBaselineQuizModal'
 import LifecycleStageIcon from '../components/LifecycleStageIcon'
 import TagsField from '../components/TagsField'
 import { listOutgoingValidationRequests } from '../lib/skillValidationRequests'
@@ -63,6 +64,7 @@ export default function SkillDetail() {
   const [selfAssessOpen, setSelfAssessOpen] = useState(false)
   const [selfAssessKnowledgeOpen, setSelfAssessKnowledgeOpen] = useState(false)
   const [confirmKnowledgeOpen, setConfirmKnowledgeOpen] = useState(false)
+  const [confirmingBaselineOpen, setConfirmingBaselineOpen] = useState(false)
   const [recordActivityOpen, setRecordActivityOpen] = useState(false)
   const [quizOpen, setQuizOpen] = useState(false)
   const [assessMode, setAssessMode] = useState(null)
@@ -351,6 +353,21 @@ export default function SkillDetail() {
               />
             )}
 
+            {confirmingBaselineOpen && (
+              <ConfirmingBaselineQuizModal
+                skill={skill}
+                user={user}
+                actor={{ name: assessorName, email: user.email }}
+                latestKnowledgeAssessment={latestKnowledgeAssessment}
+                onClose={() => setConfirmingBaselineOpen(false)}
+                onConfirmed={() => {
+                  loadHistory()
+                  loadSkill()
+                  setConfirmingBaselineOpen(false)
+                }}
+              />
+            )}
+
             {recordActivityOpen && (
               <RecordActivityModal
                 actor={{ name: assessorName, email: user.email }}
@@ -529,6 +546,7 @@ export default function SkillDetail() {
                 onRequestValidation={() => setValidateOpen(true)}
                 onRequestExpertValidation={() => setExpertValidationOpen(true)}
                 onOpenLifecycleMap={() => setLifecycleMapOpen(true)}
+                onConfirmBaselineQuiz={() => setConfirmingBaselineOpen(true)}
               />
             )}
 
@@ -647,10 +665,12 @@ function UpNextSection({
   hasPendingExpertValidation,
   hasTarget,
   onOpenLifecycleMap,
+  onConfirmBaselineQuiz,
 }) {
   const handlers = {
     'self-assess': onSelfAssess,
     'self-assess-knowledge': onSelfAssessKnowledge,
+    'confirm-baseline-quiz': onConfirmBaselineQuiz,
     invite: onInvite,
     activity: onRecordActivity,
     quiz: onQuiz,
@@ -1059,6 +1079,7 @@ function HistorySection({
   onRequestValidation,
   onRequestExpertValidation,
   onOpenLifecycleMap,
+  onConfirmBaselineQuiz,
 }) {
   const navigate = useNavigate()
   const due = isSelfAssessmentDue(skill.next_checkin_date)
@@ -1200,6 +1221,7 @@ function HistorySection({
               hasPendingExpertValidation={pendingValidationRequests.length > 0}
               hasTarget={targets.length > 0}
               onOpenLifecycleMap={onOpenLifecycleMap}
+              onConfirmBaselineQuiz={onConfirmBaselineQuiz}
             />
             {events.map((event, i) => (
               <TimelineEntry

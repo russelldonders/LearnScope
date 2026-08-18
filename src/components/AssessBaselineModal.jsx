@@ -86,7 +86,7 @@ export default function AssessBaselineModal({
   const confirmLabel = mode === 'baseline' ? 'Confirm baseline' : 'Update baseline'
   const confirmNote =
     mode === 'baseline'
-      ? `Confirming will set this as the skill's current level, save it to the timeline, and move the skill to the "${SKILL_LIFECYCLE_LABELS.baseline_assessed}" stage.`
+      ? `Confirming will set this as the skill's current level, save it to the timeline, and move the skill to the "${SKILL_LIFECYCLE_LABELS.confirming_baseline}" stage.`
       : "Confirming will update the skill's current baseline level and add this as a new baseline entry on the timeline -- the previous baseline stays in the history."
 
   return (

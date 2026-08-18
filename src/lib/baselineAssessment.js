@@ -49,7 +49,7 @@ export async function assessBaseline({ skill, selfLevel, selfComments, activitie
   return res.json()
 }
 
-// mode: 'baseline' (the one-time identified -> baseline_assessed action) or
+// mode: 'baseline' (the one-time identified -> confirming_baseline action) or
 // 'evaluate' (the always-available baseline re-assessment). Both save the
 // same 'ai_baseline' source -- re-evaluating updates the skill's current
 // baseline while preserving the earlier one as history -- only whether the
@@ -65,7 +65,7 @@ export async function saveAssessmentResult(user, skill, level, reasoning, mode) 
   if (assessError) throw assessError
 
   const skillUpdate = { level }
-  if (mode === 'baseline') skillUpdate.lifecycle_stage = 'baseline_assessed'
+  if (mode === 'baseline') skillUpdate.lifecycle_stage = 'confirming_baseline'
   if (skill.checkin_frequency_value && skill.checkin_frequency_unit) {
     skillUpdate.next_checkin_date = computeNextSelfAssessmentDate(
       null,

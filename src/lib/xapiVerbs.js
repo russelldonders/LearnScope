@@ -12,6 +12,7 @@ export const XAPI_VERBS = [
   { value: 'passed', label: 'Passed', iri: 'http://adlnet.gov/expapi/verbs/passed' },
   { value: 'failed', label: 'Failed', iri: 'http://adlnet.gov/expapi/verbs/failed' },
   { value: 'shared', label: 'Shared', iri: 'http://adlnet.gov/expapi/verbs/shared' },
+  { value: 'assessed', label: 'Assessed', iri: 'https://learnscope.app/xapi/verbs/assessed' },
 ]
 
 export const XAPI_VERB_LABELS = Object.fromEntries(XAPI_VERBS.map((v) => [v.value, v.label]))

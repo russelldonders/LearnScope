@@ -8,6 +8,14 @@ const PATHS = {
       <path d="M5 4h13l-2.5 4L18 12H5" />
     </>
   ),
+  confirming_baseline: (
+    // Question mark in a circle: checking what's actually known
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.5 9a2.5 2.5 0 0 1 4.9.8c0 1.7-2.4 2-2.4 3.7" />
+      <circle cx="12" cy="16.5" r="0.5" fill="currentColor" />
+    </>
+  ),
   baseline_assessed: (
     // Target: setting a goal to aim for
     <>
