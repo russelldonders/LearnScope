@@ -28,6 +28,7 @@ import LifecycleStageIcon from '../components/LifecycleStageIcon'
 import TagsField from '../components/TagsField'
 import { listOutgoingValidationRequests } from '../lib/skillValidationRequests'
 import { computeUpNextItems } from '../lib/skillNextAction'
+import { generateKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
 
 const TABS = [
   { id: 'history', label: 'Overview' },
@@ -755,6 +756,29 @@ function SelfAssessSection({ skill, user, axis = 'practical', onAssessed }) {
   const [evidenceFiles, setEvidenceFiles] = useState([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [guideStatements, setGuideStatements] = useState([])
+  const [guideLoading, setGuideLoading] = useState(isKnowledge)
+
+  useEffect(() => {
+    if (!isKnowledge) return
+    let cancelled = false
+    setGuideLoading(true)
+    generateKnowledgeLevelGuide(skill.name)
+      .then((statements) => {
+        if (!cancelled) setGuideStatements(statements)
+      })
+      .catch(() => {
+        // Guidance is a nice-to-have, not required to self-assess -- fail
+        // quietly and just fall back to the plain level picker.
+        if (!cancelled) setGuideStatements([])
+      })
+      .finally(() => {
+        if (!cancelled) setGuideLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isKnowledge, skill.name])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -814,6 +838,24 @@ function SelfAssessSection({ skill, user, axis = 'practical', onAssessed }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
+      {isKnowledge && (
+        <div>
+          <span className="block text-sm text-secondary mb-2">What each level looks like for {skill.name}</span>
+          {guideLoading ? (
+            <p className="text-xs text-secondary">Loading guidance…</p>
+          ) : guideStatements.length === 5 ? (
+            <ul className="space-y-1.5 rounded-md border border-hairline bg-paper p-3">
+              {LEVELS.map((l) => (
+                <li key={l} className="text-xs text-secondary">
+                  <span className="font-mono uppercase tracking-wide text-ink">{labels[l]}:</span>{' '}
+                  {guideStatements[l - 1]}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      )}
+
       <div>
         <span className="block text-sm text-secondary mb-2">
           {isKnowledge ? 'What you already know' : 'Level now'}
