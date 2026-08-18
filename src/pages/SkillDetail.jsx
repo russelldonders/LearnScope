@@ -854,29 +854,54 @@ function SelfAssessSection({ skill, user, axis = 'practical', onAssessed, onGuid
         <span className="block text-sm text-secondary mb-2">
           {isKnowledge ? 'What you already know' : 'Level now'}
         </span>
-        <div className="flex items-center justify-between">
-          {LEVELS.map((l) => (
-            <button
-              type="button"
-              key={l}
-              onClick={() => setLevel(l)}
-              className={`flex flex-col items-center gap-1 rounded-md px-1 py-1 ${
-                level === l ? 'bg-moss/10' : ''
-              }`}
-            >
-              <GrowthRing level={l} size={36} labels={labels} />
-              <span className="font-mono text-[10px] text-secondary">{labels[l]}</span>
-            </button>
-          ))}
-        </div>
-        {isKnowledge &&
-          (guideLoading ? (
-            <p className="mt-2 text-xs text-secondary">Loading guidance…</p>
-          ) : guideStatements[level - 1] ? (
-            <p className="mt-2 text-xs text-secondary bg-paper border border-hairline rounded-md p-2">
-              {guideStatements[level - 1]}
-            </p>
-          ) : null)}
+        {isKnowledge ? (
+          <div className="space-y-2">
+            {LEVELS.map((l) => (
+              <div
+                key={l}
+                className={`rounded-md border overflow-hidden ${
+                  level === l ? 'border-moss' : 'border-hairline'
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setLevel(l)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${
+                    level === l ? 'bg-moss/10' : 'hover:bg-paper'
+                  }`}
+                >
+                  <GrowthRing level={l} size={28} labels={labels} />
+                  <span className="text-sm text-ink font-medium">{labels[l]}</span>
+                </button>
+                {level === l && (
+                  <div className="px-3 pb-3">
+                    {guideLoading ? (
+                      <p className="text-xs text-secondary">Loading guidance…</p>
+                    ) : guideStatements[l - 1] ? (
+                      <p className="text-xs text-secondary">{guideStatements[l - 1]}</p>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex items-center justify-between">
+            {LEVELS.map((l) => (
+              <button
+                type="button"
+                key={l}
+                onClick={() => setLevel(l)}
+                className={`flex flex-col items-center gap-1 rounded-md px-1 py-1 ${
+                  level === l ? 'bg-moss/10' : ''
+                }`}
+              >
+                <GrowthRing level={l} size={36} labels={labels} />
+                <span className="font-mono text-[10px] text-secondary">{labels[l]}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <textarea
