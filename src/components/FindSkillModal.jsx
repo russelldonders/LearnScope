@@ -10,6 +10,7 @@ import EvidenceFields from './EvidenceFields'
 import TrackingReasonPicker from './TrackingReasonPicker'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { syncCurrentRoleLinks } from '../lib/currentRole'
+import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
 
 export default function FindSkillModal({ onClose, onCreated, experienceId }) {
   const { user } = useAuth()
@@ -123,6 +124,13 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
       } catch (tagErr) {
         console.error('Auto-tag suggestion failed:', tagErr)
       }
+
+      // Best-effort and not awaited -- precomputes the knowledge-level
+      // guidance now so it's already cached by the time the learner opens
+      // the knowledge self-assessment, without delaying skill creation.
+      ensureKnowledgeLevelGuide(skill).catch((guideErr) =>
+        console.error('Knowledge level guide generation failed:', guideErr)
+      )
 
       await syncCurrentRoleLinks(user.id, skill.id, isCurrentRole)
 

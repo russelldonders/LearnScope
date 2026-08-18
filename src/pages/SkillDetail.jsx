@@ -28,7 +28,7 @@ import LifecycleStageIcon from '../components/LifecycleStageIcon'
 import TagsField from '../components/TagsField'
 import { listOutgoingValidationRequests } from '../lib/skillValidationRequests'
 import { computeUpNextItems } from '../lib/skillNextAction'
-import { generateKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
+import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
 
 const TABS = [
   { id: 'history', label: 'Overview' },
@@ -328,6 +328,9 @@ export default function SkillDetail() {
                   loadSkill()
                   setSelfAssessKnowledgeOpen(false)
                 }}
+                onGuideGenerated={(statements) =>
+                  setSkill((s) => (s ? { ...s, knowledge_level_guide: statements } : s))
+                }
               />
             )}
 
@@ -726,7 +729,7 @@ function UpNextSection({
   )
 }
 
-function SelfAssessModal({ skill, user, axis = 'practical', onClose, onAssessed }) {
+function SelfAssessModal({ skill, user, axis = 'practical', onClose, onAssessed, onGuideGenerated }) {
   return (
     <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
       <div
@@ -741,13 +744,19 @@ function SelfAssessModal({ skill, user, axis = 'practical', onClose, onAssessed 
             Close
           </button>
         </div>
-        <SelfAssessSection skill={skill} user={user} axis={axis} onAssessed={onAssessed} />
+        <SelfAssessSection
+          skill={skill}
+          user={user}
+          axis={axis}
+          onAssessed={onAssessed}
+          onGuideGenerated={onGuideGenerated}
+        />
       </div>
     </div>
   )
 }
 
-function SelfAssessSection({ skill, user, axis = 'practical', onAssessed }) {
+function SelfAssessSection({ skill, user, axis = 'practical', onAssessed, onGuideGenerated }) {
   const isKnowledge = axis === 'knowledge'
   const labels = isKnowledge ? KNOWLEDGE_LEVEL_LABELS : LEVEL_LABELS
   const [level, setLevel] = useState((isKnowledge ? skill.knowledge_level : skill.level) ?? 1)
@@ -763,9 +772,12 @@ function SelfAssessSection({ skill, user, axis = 'practical', onAssessed }) {
     if (!isKnowledge) return
     let cancelled = false
     setGuideLoading(true)
-    generateKnowledgeLevelGuide(skill.name)
+    ensureKnowledgeLevelGuide(skill)
       .then((statements) => {
         if (!cancelled) setGuideStatements(statements)
+        // Cache the result on the in-memory skill too, so reopening this
+        // modal in the same session doesn't hit the DB/AI call again.
+        if (statements.length === 5) onGuideGenerated?.(statements)
       })
       .catch(() => {
         // Guidance is a nice-to-have, not required to self-assess -- fail
@@ -778,7 +790,7 @@ function SelfAssessSection({ skill, user, axis = 'practical', onAssessed }) {
     return () => {
       cancelled = true
     }
-  }, [isKnowledge, skill.name])
+  }, [isKnowledge, skill.id])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -838,24 +850,6 @@ function SelfAssessSection({ skill, user, axis = 'practical', onAssessed }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      {isKnowledge && (
-        <div>
-          <span className="block text-sm text-secondary mb-2">What each level looks like for {skill.name}</span>
-          {guideLoading ? (
-            <p className="text-xs text-secondary">Loading guidance…</p>
-          ) : guideStatements.length === 5 ? (
-            <ul className="space-y-1.5 rounded-md border border-hairline bg-paper p-3">
-              {LEVELS.map((l) => (
-                <li key={l} className="text-xs text-secondary">
-                  <span className="font-mono uppercase tracking-wide text-ink">{labels[l]}:</span>{' '}
-                  {guideStatements[l - 1]}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      )}
-
       <div>
         <span className="block text-sm text-secondary mb-2">
           {isKnowledge ? 'What you already know' : 'Level now'}
@@ -875,6 +869,14 @@ function SelfAssessSection({ skill, user, axis = 'practical', onAssessed }) {
             </button>
           ))}
         </div>
+        {isKnowledge &&
+          (guideLoading ? (
+            <p className="mt-2 text-xs text-secondary">Loading guidance…</p>
+          ) : guideStatements[level - 1] ? (
+            <p className="mt-2 text-xs text-secondary bg-paper border border-hairline rounded-md p-2">
+              {guideStatements[level - 1]}
+            </p>
+          ) : null)}
       </div>
 
       <textarea
