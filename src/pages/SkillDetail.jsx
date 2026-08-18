@@ -283,7 +283,12 @@ export default function SkillDetail() {
               </div>
               {skill.knowledge_level && (
                 <div className="flex items-center gap-3">
-                  <GrowthRing level={skill.knowledge_level} size={44} labels={KNOWLEDGE_LEVEL_LABELS} />
+                  <GrowthRing
+                    level={skill.knowledge_level}
+                    size={44}
+                    labels={KNOWLEDGE_LEVEL_LABELS}
+                    color="var(--color-slate)"
+                  />
                   <div>
                     <p className="text-sm text-secondary">{KNOWLEDGE_LEVEL_LABELS[skill.knowledge_level]}</p>
                     <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
@@ -870,7 +875,7 @@ function SelfAssessSection({ skill, user, axis = 'practical', onAssessed, onGuid
                     level === l ? 'bg-moss/10' : 'hover:bg-paper'
                   }`}
                 >
-                  <GrowthRing level={l} size={28} labels={labels} />
+                  <GrowthRing level={l} size={28} labels={labels} color="var(--color-slate)" />
                   <span className="text-sm text-ink font-medium">{labels[l]}</span>
                 </button>
                 {level === l && (
@@ -904,24 +909,31 @@ function SelfAssessSection({ skill, user, axis = 'practical', onAssessed, onGuid
         )}
       </div>
 
-      <textarea
-        rows={3}
-        value={comments}
-        onChange={(e) => setComments(e.target.value)}
-        placeholder={
-          isKnowledge
-            ? 'What do you already know? Where did that understanding come from?'
-            : 'Why this level? What changed since last time…'
-        }
-        className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-      />
+      <div>
+        {isKnowledge && (
+          <span className="block text-sm text-secondary mb-2">What's shaped this understanding?</span>
+        )}
+        <textarea
+          rows={3}
+          value={comments}
+          onChange={(e) => setComments(e.target.value)}
+          placeholder={
+            isKnowledge
+              ? 'e.g. courses, reading, work you’ve done…'
+              : 'Why this level? What changed since last time…'
+          }
+          className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+        />
+      </div>
 
-      <EvidenceFields
-        evidenceUrl={evidenceUrl}
-        onEvidenceUrlChange={setEvidenceUrl}
-        files={evidenceFiles}
-        onFilesChange={setEvidenceFiles}
-      />
+      {!isKnowledge && (
+        <EvidenceFields
+          evidenceUrl={evidenceUrl}
+          onEvidenceUrlChange={setEvidenceUrl}
+          files={evidenceFiles}
+          onFilesChange={setEvidenceFiles}
+        />
+      )}
 
       {error && <p className="text-sm text-red-700">{error}</p>}
 
@@ -995,7 +1007,7 @@ function ConfirmKnowledgeLevelModal({ skill, latestAssessment, onClose, onConfir
                   level === l ? 'bg-moss/10' : ''
                 }`}
               >
-                <GrowthRing level={l} size={36} labels={KNOWLEDGE_LEVEL_LABELS} />
+                <GrowthRing level={l} size={36} labels={KNOWLEDGE_LEVEL_LABELS} color="var(--color-slate)" />
                 <span className="font-mono text-[10px] text-secondary">{KNOWLEDGE_LEVEL_LABELS[l]}</span>
               </button>
             ))}
@@ -1535,7 +1547,12 @@ function TimelineEntry({
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center w-12 shrink-0">
-        <GrowthRing level={entry.level} size={isMostRecent ? 48 : 32} labels={entryLabels} />
+        <GrowthRing
+          level={entry.level}
+          size={isMostRecent ? 48 : 32}
+          labels={entryLabels}
+          color={entry.axis === 'knowledge' ? 'var(--color-slate)' : undefined}
+        />
         {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
       </div>
       <div
@@ -1624,7 +1641,12 @@ function TimelineDetailModal({ event, assessorName, raterAvatars, onClose }) {
     body = (
       <div className="space-y-3">
         <div className="flex items-center gap-3">
-          <GrowthRing level={entry.level} size={48} labels={entryLabels} />
+          <GrowthRing
+            level={entry.level}
+            size={48}
+            labels={entryLabels}
+            color={entry.axis === 'knowledge' ? 'var(--color-slate)' : undefined}
+          />
           <p className="font-mono text-xs text-secondary">
             {new Date(entry.assessed_at).toLocaleDateString()}
           </p>

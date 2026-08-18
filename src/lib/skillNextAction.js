@@ -18,38 +18,42 @@ export function computeUpNextItems({
   hasPendingExpertValidation,
 }) {
   if (stage === 'identified') {
-    // Self-assessing first gives every other diagnostic something to react
-    // to, so the other-perspective steps (peer ratings, the AI quiz, and
-    // any future diagnostic added here) stay locked until it's done.
-    const hasSelfAssessed = selfAssessedCount > 0
+    // Knowledge self-assessment is the one step available first -- everything
+    // else that reacts to "where the learner thinks they are" (practical
+    // self-assessment, peer ratings, the AI quiz) stays locked until it's
+    // done, so establishing a baseline always starts with their own
+    // understanding.
+    const hasKnowledgeAssessed = (knowledgeSelfAssessedCount ?? 0) > 0
     return [
-      {
-        key: 'self-assess',
-        label: 'Self-assess your own level',
-        description: 'Rate where you think you are right now, practically.',
-        done: hasSelfAssessed,
-      },
       {
         key: 'self-assess-knowledge',
         label: 'Self-assess your knowledge',
         description: 'Rate what you already know, in theory.',
-        done: (knowledgeSelfAssessedCount ?? 0) > 0,
+        done: hasKnowledgeAssessed,
+      },
+      {
+        key: 'self-assess',
+        label: 'Self-assess your own level',
+        description: 'Rate where you think you are right now, practically.',
+        done: selfAssessedCount > 0,
+        locked: !hasKnowledgeAssessed,
+        lockedReason: 'Self-assess your knowledge first.',
       },
       {
         key: 'invite',
         label: 'Invite others to assess your skill',
         description: 'Get an outside perspective on your level.',
         done: peerRatingsCount > 0,
-        locked: !hasSelfAssessed,
-        lockedReason: 'Self-assess your own level first.',
+        locked: !hasKnowledgeAssessed,
+        lockedReason: 'Self-assess your knowledge first.',
       },
       {
         key: 'quiz',
         label: 'Ask me questions to assess me',
         description: 'Answer a short AI-generated quiz on your baseline knowledge.',
         done: quizCount > 0,
-        locked: !hasSelfAssessed,
-        lockedReason: 'Self-assess your own level first.',
+        locked: !hasKnowledgeAssessed,
+        lockedReason: 'Self-assess your knowledge first.',
       },
       {
         key: 'activity',
