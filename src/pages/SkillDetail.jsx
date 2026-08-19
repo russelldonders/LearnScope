@@ -389,6 +389,26 @@ export default function SkillDetail() {
               </div>
             </div>
 
+            <div className="mt-3">
+              <ActionGroup
+                title="Practical Application"
+                accent="moss"
+                actions={[
+                  { label: 'Self-assess your current level', onClick: () => setSelfAssessOpen(true) },
+                  { label: 'Invite connection to rate', onClick: () => setInviteOpen(true) },
+                  {
+                    label: 'Assess my current level',
+                    onClick: () => setAssessMode('evaluate'),
+                    disabled: !hasAnyEvaluationInput,
+                    title: !hasAnyEvaluationInput
+                      ? 'Self-assess, invite a rating, or record activity first'
+                      : undefined,
+                  },
+                  { label: 'Set target', onClick: () => setTargetOpen(true) },
+                ]}
+              />
+            </div>
+
             {practicalVerification && (
               <div className="flex flex-wrap items-start gap-x-6 gap-y-2 mt-3">
                 <VerificationBadge
@@ -416,7 +436,7 @@ export default function SkillDetail() {
               </div>
             )}
 
-            <div className="grid sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-hairline">
+            <div className="mt-4 pt-4 border-t border-hairline">
               <ActionGroup
                 title="Knowledge"
                 accent="slate"
@@ -439,23 +459,6 @@ export default function SkillDetail() {
                   { label: 'Rate your current level', onClick: () => setSelfAssessKnowledgeOpen(true) },
                   { label: 'Assess me', onClick: () => setConfirmingBaselineOpen(true) },
                   { label: 'Interview me', disabled: true, title: 'Coming soon' },
-                ]}
-              />
-              <ActionGroup
-                title="Practical Application"
-                accent="moss"
-                actions={[
-                  { label: 'Self-assess your current level', onClick: () => setSelfAssessOpen(true) },
-                  { label: 'Invite connection to rate', onClick: () => setInviteOpen(true) },
-                  {
-                    label: 'Assess my current level',
-                    onClick: () => setAssessMode('evaluate'),
-                    disabled: !hasAnyEvaluationInput,
-                    title: !hasAnyEvaluationInput
-                      ? 'Self-assess, invite a rating, or record activity first'
-                      : undefined,
-                  },
-                  { label: 'Set target', onClick: () => setTargetOpen(true) },
                 ]}
               />
             </div>
