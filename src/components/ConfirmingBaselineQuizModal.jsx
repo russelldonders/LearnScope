@@ -97,10 +97,14 @@ export default function ConfirmingBaselineQuizModal({
       })
       if (assessError) throw assessError
 
-      const { error: skillError } = await supabase
-        .from('skills')
-        .update({ knowledge_level: confirmedLevel, lifecycle_stage: 'identified' })
-        .eq('id', skill.id)
+      // Only resolve the confirming_baseline sub-stage back to identified when
+      // that's genuinely where the skill still is -- this quiz is now reachable
+      // at any point in a skill's life (not just fresh off self-assessing
+      // knowledge), and forcing the stage backwards for a skill that has since
+      // moved on (e.g. validated) would regress its displayed progress.
+      const skillUpdate = { knowledge_level: confirmedLevel }
+      if (skill.lifecycle_stage === 'confirming_baseline') skillUpdate.lifecycle_stage = 'identified'
+      const { error: skillError } = await supabase.from('skills').update(skillUpdate).eq('id', skill.id)
       if (skillError) throw skillError
 
       onConfirmed()

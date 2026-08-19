@@ -380,6 +380,35 @@ export default function SkillDetail() {
                 <p className="text-xs text-secondary mt-0.5">{nextMilestone.description}</p>
               </div>
             )}
+
+            <div className="grid sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-hairline">
+              <ActionGroup
+                title="Knowledge"
+                accent="slate"
+                actions={[
+                  { label: 'Rate your current level', onClick: () => setSelfAssessKnowledgeOpen(true) },
+                  { label: 'Assess me', onClick: () => setConfirmingBaselineOpen(true) },
+                  { label: 'Interview me', disabled: true, title: 'Coming soon' },
+                ]}
+              />
+              <ActionGroup
+                title="Practical Application"
+                accent="moss"
+                actions={[
+                  { label: 'Self-assess your current level', onClick: () => setSelfAssessOpen(true) },
+                  { label: 'Invite connection to rate', onClick: () => setInviteOpen(true) },
+                  {
+                    label: 'Assess my current level',
+                    onClick: () => setAssessMode('evaluate'),
+                    disabled: !hasAnyEvaluationInput,
+                    title: !hasAnyEvaluationInput
+                      ? 'Self-assess, invite a rating, or record activity first'
+                      : undefined,
+                  },
+                  { label: 'Set target', onClick: () => setTargetOpen(true) },
+                ]}
+              />
+            </div>
             </div>
 
             {inviteOpen && <InviteRaterModal skill={skill} onClose={() => setInviteOpen(false)} />}
@@ -543,24 +572,6 @@ export default function SkillDetail() {
                 />
                 <div className="border-t border-hairline pt-4">
                   <h3 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">
-                    Baseline
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => setAssessMode('evaluate')}
-                    disabled={!hasAnyEvaluationInput}
-                    title={
-                      !hasAnyEvaluationInput
-                        ? 'Self-assess, invite a rating, or record activity first'
-                        : undefined
-                    }
-                    className="w-full rounded-md bg-moss text-paper py-2.5 px-4 font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Evaluate Baseline
-                  </button>
-                </div>
-                <div className="border-t border-hairline pt-4">
-                  <h3 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">
                     Knowledge
                   </h3>
                   <button
@@ -647,6 +658,35 @@ function VerificationBadge({ axis, status, detail }) {
         {isKnowledge ? 'Knowledge' : 'Practical'} verification · {status}
       </span>
       {detail && <span className="text-xs text-secondary">{detail}</span>}
+    </div>
+  )
+}
+
+// Always-available actions for a skill, grouped by axis -- unlike Up Next
+// (which recommends the single next step for the skill's current lifecycle
+// stage), every action here is reachable regardless of stage, so a learner
+// isn't limited to following the guided checklist in order.
+function ActionGroup({ title, accent, actions }) {
+  const accentClass = accent === 'slate' ? 'hover:border-slate hover:text-slate' : 'hover:border-moss hover:text-moss'
+  return (
+    <div>
+      <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">{title}</h3>
+      <div className="flex flex-wrap gap-2">
+        {actions.map((action) => (
+          <button
+            key={action.label}
+            type="button"
+            onClick={action.onClick}
+            disabled={action.disabled}
+            title={action.title}
+            className={`rounded-full border border-hairline px-3 py-1.5 text-xs font-medium text-ink transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+              action.disabled ? '' : accentClass
+            }`}
+          >
+            {action.label}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
