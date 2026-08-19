@@ -20,10 +20,19 @@ const TABS = [
   { id: 'details', label: 'Details' },
 ]
 
-export default function CourseModal({ course, skills, librarySkills, onRefreshPickerData, onSave, onDelete, onClose }) {
+export default function CourseModal({
+  course,
+  skills,
+  librarySkills,
+  initialTab = 'overview',
+  onRefreshPickerData,
+  onSave,
+  onDelete,
+  onClose,
+}) {
   const { user } = useAuth()
   const isEditing = Boolean(course?.id)
-  const [tab, setTab] = useState('overview')
+  const [tab, setTab] = useState(initialTab)
   const [name, setName] = useState(course?.name ?? '')
   const [provider, setProvider] = useState(course?.provider ?? '')
   const [completedDate, setCompletedDate] = useState(course?.completed_date ?? '')

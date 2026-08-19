@@ -90,7 +90,7 @@ export default function CourseCatalogue() {
   function handleCardClick(course) {
     const enrollment = enrolledIds.get(course.id)
     if (enrollment) {
-      navigate(`/courses/${enrollment.id}`)
+      navigate(`/courses/${enrollment.id}`, { state: { backTo: '/training', backLabel: 'Training' } })
       return
     }
     setSelectedCourse(course)
