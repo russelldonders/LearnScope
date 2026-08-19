@@ -19,7 +19,6 @@ import { SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import InviteRaterModal from '../components/InviteRaterModal'
 import RecordActivityModal from '../components/RecordActivityModal'
-import BaselineQuizModal from '../components/BaselineQuizModal'
 import AssessBaselineModal from '../components/AssessBaselineModal'
 import SetTargetModal from '../components/SetTargetModal'
 import ValidateSkillModal from '../components/ValidateSkillModal'
@@ -30,6 +29,12 @@ import TagsField from '../components/TagsField'
 import { listOutgoingValidationRequests } from '../lib/skillValidationRequests'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
+import {
+  TRUST_STATUS,
+  computeTrustStatus,
+  classifyApplicationHistory,
+  describeApplicationHistory,
+} from '../lib/skillProficiencyModel'
 
 const TABS = [
   { id: 'history', label: 'Overview' },
@@ -55,7 +60,6 @@ export default function SkillDetail() {
   const [statements, setStatements] = useState([])
   const [skillTags, setSkillTags] = useState([])
   const [allTags, setAllTags] = useState([])
-  const [quizResults, setQuizResults] = useState([])
   const [targets, setTargets] = useState([])
   const [courseLinks, setCourseLinks] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(true)
@@ -66,7 +70,6 @@ export default function SkillDetail() {
   const [confirmKnowledgeOpen, setConfirmKnowledgeOpen] = useState(false)
   const [confirmingBaselineOpen, setConfirmingBaselineOpen] = useState(false)
   const [recordActivityOpen, setRecordActivityOpen] = useState(false)
-  const [quizOpen, setQuizOpen] = useState(false)
   const [assessMode, setAssessMode] = useState(null)
   const [targetOpen, setTargetOpen] = useState(false)
   const [validateOpen, setValidateOpen] = useState(false)
@@ -110,7 +113,6 @@ export default function SkillDetail() {
       { data: links },
       { data: st },
       tags,
-      { data: quizzes },
       { data: skillTargets },
       { data: courses },
       requests,
@@ -137,10 +139,6 @@ export default function SkillDetail() {
           .order('recorded_at', { ascending: false }),
         listSkillTags(skill.id),
         supabase
-          .from('skill_baseline_quizzes')
-          .select('id, score, total, created_at')
-          .eq('skill_id', skill.id),
-        supabase
           .from('skill_targets')
           .select('*')
           .eq('skill_id', skill.id)
@@ -159,7 +157,6 @@ export default function SkillDetail() {
     setStatements(st ?? [])
     setTargets(skillTargets ?? [])
     setSkillTags(tags ?? [])
-    setQuizResults(quizzes ?? [])
     setCourseLinks(courses ?? [])
     setValidationRequests(requests ?? [])
     setLoadingHistory(false)
@@ -232,10 +229,56 @@ export default function SkillDetail() {
   const knowledgeSelfAssessedCount = history.filter(
     (a) => (a.source === 'self' || !a.source) && a.axis === 'knowledge'
   ).length
-  const hasAnyEvaluationInput =
-    selfAssessedCount > 0 || peerRatings.length > 0 || statements.length > 0 || quizResults.length > 0
+  const hasAnyEvaluationInput = selfAssessedCount > 0 || peerRatings.length > 0 || statements.length > 0
   const hasAnyKnowledgeEvaluationInput = knowledgeSelfAssessedCount > 0
   const latestKnowledgeAssessment = history.find((a) => a.axis === 'knowledge') ?? null
+
+  // Practical-primary / knowledge-foundation model: derived, not stored --
+  // see skillProficiencyModel.js. Trust status is computed independently
+  // per axis and never blended into a level; application history only ever
+  // produces a descriptive label, never a number.
+  const applicationHistory = classifyApplicationHistory(statements)
+  const knowledgeConfirmed = history.some((a) => a.axis === 'knowledge' && a.source === 'diagnostic_confirmed')
+  const practicalTrust = skill
+    ? computeTrustStatus({
+        axis: 'practical',
+        selfAssessedCount,
+        evidenceCount: statements.length,
+        peerRatingsCount: peerRatings.length,
+        formallyValidated: ['validated', 'maintained'].includes(skill.lifecycle_stage),
+      })
+    : null
+  const knowledgeTrust = computeTrustStatus({
+    axis: 'knowledge',
+    selfAssessedCount: knowledgeSelfAssessedCount,
+    knowledgeConfirmed,
+  })
+  const evidenceAttachedCount = history.filter(
+    (a) => a.axis === 'practical' && (a.evidence_url || a.evidence_paths?.length)
+  ).length
+  const supportingSignals = [
+    peerRatings.length > 0 ? `${peerRatings.length} peer rating${peerRatings.length === 1 ? '' : 's'}` : null,
+    statements.length > 0 ? `${statements.length} activit${statements.length === 1 ? 'y' : 'ies'} logged` : null,
+    evidenceAttachedCount > 0 ? `${evidenceAttachedCount} evidence item${evidenceAttachedCount === 1 ? '' : 's'}` : null,
+  ].filter(Boolean)
+  const lastDemonstrated = statements[0]?.recorded_at
+    ? `Last demonstrated ${new Date(statements[0].recorded_at).toLocaleDateString()}`
+    : null
+  // Next milestone reuses the exact same Up Next logic shown lower on the
+  // page (computeUpNextItems), just previewed here as a single headline.
+  const upNextPreview = computeUpNextItems({
+    stage: skill?.lifecycle_stage,
+    selfAssessedCount,
+    knowledgeSelfAssessedCount,
+    hasKnowledgeLevel: Boolean(skill?.knowledge_level),
+    peerRatingsCount: peerRatings.length,
+    statementsCount: statements.length,
+    courseLinks,
+    hasTarget: targets.length > 0,
+    hasPendingExpertValidation: validationRequests.some((r) => r.status === 'pending'),
+  })
+  const nextMilestone = upNextPreview.find((item) => !item.done && !item.locked) ?? null
+
   const trainingScopeState = skill
     ? {
         skillId: skill.id,
@@ -263,7 +306,8 @@ export default function SkillDetail() {
 
         {skill && (
           <div className="bg-card border border-hairline rounded-lg p-6">
-            <div className="flex items-start flex-wrap gap-x-6 gap-y-3 mb-4">
+            <div className="mb-4">
+            <div className="flex items-start flex-wrap gap-x-6 gap-y-3">
               <div className="flex items-center gap-4">
                 <GrowthRing level={skill.level} size={56} />
                 <div>
@@ -279,7 +323,7 @@ export default function SkillDetail() {
                         : 'Not yet self-assessed'}
                   </p>
                   <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
-                    Practical
+                    Practical level
                   </p>
                 </div>
               </div>
@@ -287,18 +331,43 @@ export default function SkillDetail() {
                 <div className="flex items-center gap-3">
                   <GrowthRing
                     level={skill.knowledge_level}
-                    size={44}
+                    size={40}
                     labels={KNOWLEDGE_LEVEL_LABELS}
                     color="var(--color-slate)"
                   />
                   <div>
                     <p className="text-sm text-secondary">{KNOWLEDGE_LEVEL_LABELS[skill.knowledge_level]}</p>
                     <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
-                      Knowledge
+                      Knowledge foundation
                     </p>
                   </div>
                 </div>
               )}
+            </div>
+
+            {(applicationHistory.label || practicalTrust || knowledgeTrust) && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-3">
+                {describeApplicationHistory(applicationHistory) && (
+                  <span className="text-xs text-secondary">{describeApplicationHistory(applicationHistory)}</span>
+                )}
+                {practicalTrust && <TrustBadge axis="practical" status={practicalTrust} />}
+                {knowledgeTrust && <TrustBadge axis="knowledge" status={knowledgeTrust} />}
+              </div>
+            )}
+
+            {(supportingSignals.length > 0 || lastDemonstrated) && (
+              <p className="text-xs text-secondary mt-2">
+                {[...supportingSignals, lastDemonstrated].filter(Boolean).join(' · ')}
+              </p>
+            )}
+
+            {nextMilestone && (
+              <div className="rounded-md border border-hairline bg-paper px-3 py-2 mt-3">
+                <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Next milestone</p>
+                <p className="text-sm text-ink mt-0.5">{nextMilestone.label}</p>
+                <p className="text-xs text-secondary mt-0.5">{nextMilestone.description}</p>
+              </div>
+            )}
             </div>
 
             {lifecycleMapOpen && skill.lifecycle_stage && (
@@ -378,15 +447,6 @@ export default function SkillDetail() {
               />
             )}
 
-            {quizOpen && (
-              <BaselineQuizModal
-                skill={skill}
-                user={user}
-                onClose={() => setQuizOpen(false)}
-                onCompleted={loadHistory}
-              />
-            )}
-
             {assessMode && (
               <AssessBaselineModal
                 skill={skill}
@@ -394,7 +454,6 @@ export default function SkillDetail() {
                 assessments={history}
                 peerRatings={peerRatings}
                 statements={statements}
-                quizzes={quizResults}
                 mode={assessMode}
                 onClose={() => setAssessMode(null)}
                 onAssessed={() => {
@@ -427,8 +486,6 @@ export default function SkillDetail() {
                 assessments={history}
                 peerRatings={peerRatings}
                 statements={statements}
-                quizzes={quizResults}
-                courseLinks={courseLinks}
                 onClose={() => setValidateOpen(false)}
                 onValidated={() => {
                   loadHistory()
@@ -490,7 +547,7 @@ export default function SkillDetail() {
                     disabled={!hasAnyEvaluationInput}
                     title={
                       !hasAnyEvaluationInput
-                        ? 'Self-assess, invite a rating, record activity, or take the quiz first'
+                        ? 'Self-assess, invite a rating, or record activity first'
                         : undefined
                     }
                     className="w-full rounded-md bg-moss text-paper py-2.5 px-4 font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
@@ -525,7 +582,6 @@ export default function SkillDetail() {
                 relationshipLinks={relationshipLinks}
                 statements={statements}
                 courseLinks={courseLinks}
-                quizResults={quizResults}
                 targets={targets}
                 validationRequests={validationRequests}
                 validatorNames={validatorNames}
@@ -537,7 +593,6 @@ export default function SkillDetail() {
                 onSelfAssessKnowledge={() => setSelfAssessKnowledgeOpen(true)}
                 onInvite={() => setInviteOpen(true)}
                 onRecordActivity={() => setRecordActivityOpen(true)}
-                onQuiz={() => setQuizOpen(true)}
                 onAssessBaseline={() => setAssessMode('baseline')}
                 onSetTarget={() => setTargetOpen(true)}
                 onFindCourse={() => navigate('/training', { state: trainingScopeState })}
@@ -561,6 +616,26 @@ export default function SkillDetail() {
         )}
       </main>
     </div>
+  )
+}
+
+// Trust status is deliberately separate from proficiency -- it says how
+// well-supported the displayed level is, not how high it is, so it's
+// styled as a neutral pill rather than echoing the level's own color scale.
+// Confirmed/Validated (practical) and Confirmed (knowledge, its ceiling
+// today) get the axis's accent color; earlier tiers stay neutral.
+function TrustBadge({ axis, status }) {
+  const isKnowledge = axis === 'knowledge'
+  const isStrong = status === TRUST_STATUS.VALIDATED || status === TRUST_STATUS.CONFIRMED
+  const colorClass = isStrong
+    ? isKnowledge
+      ? 'border-slate text-slate'
+      : 'border-moss text-moss'
+    : 'border-hairline text-secondary'
+  return (
+    <span className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border ${colorClass}`}>
+      {isKnowledge ? 'Knowledge' : 'Practical'} trust · {status}
+    </span>
   )
 }
 
@@ -650,12 +725,10 @@ function UpNextSection({
   hasKnowledgeLevel,
   peerRatingsCount,
   statementsCount,
-  quizCount,
   onSelfAssess,
   onSelfAssessKnowledge,
   onInvite,
   onRecordActivity,
-  onQuiz,
   onSetTarget,
   onDemonstrateSkill,
   onFindCourse,
@@ -674,7 +747,6 @@ function UpNextSection({
     'confirm-baseline-quiz': onConfirmBaselineQuiz,
     invite: onInvite,
     activity: onRecordActivity,
-    quiz: onQuiz,
     target: onSetTarget,
     'find-course': onFindCourse,
     demonstrate: onDemonstrateSkill,
@@ -693,7 +765,6 @@ function UpNextSection({
     hasKnowledgeLevel,
     peerRatingsCount,
     statementsCount,
-    quizCount,
     courseLinks,
     hasTarget,
     hasPendingExpertValidation,
@@ -1072,7 +1143,6 @@ function HistorySection({
   relationshipLinks,
   statements,
   courseLinks,
-  quizResults,
   targets,
   validationRequests,
   validatorNames,
@@ -1084,7 +1154,6 @@ function HistorySection({
   onSelfAssessKnowledge,
   onInvite,
   onRecordActivity,
-  onQuiz,
   onAssessBaseline,
   onSetTarget,
   onFindCourse,
@@ -1221,12 +1290,10 @@ function HistorySection({
               hasKnowledgeLevel={hasKnowledgeLevel}
               peerRatingsCount={peerRatings.length}
               statementsCount={statements.length}
-              quizCount={quizResults.length}
               onSelfAssess={onSelfAssess}
               onSelfAssessKnowledge={onSelfAssessKnowledge}
               onInvite={onInvite}
               onRecordActivity={onRecordActivity}
-              onQuiz={onQuiz}
               onSetTarget={onSetTarget}
               onDemonstrateSkill={onDemonstrateSkill}
               onFindCourse={onFindCourse}
@@ -1621,7 +1688,7 @@ function TimelineEntry({
           </p>
         ) : entry.source === 'ai_baseline' ? (
           <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
-            AI-assessed baseline, from self-assessment, peer ratings, activity and quiz inputs
+            AI-assessed baseline, from self-assessment, peer ratings and activity
           </p>
         ) : (
           assessorName && (
@@ -1698,7 +1765,7 @@ function TimelineDetailModal({ event, assessorName, raterAvatars, onClose }) {
           <p className="text-sm text-secondary">Earned by completing {entry.courses.name}</p>
         ) : entry.source === 'ai_baseline' ? (
           <p className="text-sm text-secondary">
-            AI-assessed baseline, from self-assessment, peer ratings, activity and quiz inputs
+            AI-assessed baseline, from self-assessment, peer ratings and activity
           </p>
         ) : (
           assessorName && <p className="text-sm text-secondary">Self-assessed by {assessorName}</p>

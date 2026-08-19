@@ -14,25 +14,24 @@ const VALIDATION_SCHEMA = {
   additionalProperties: false,
 }
 
-function buildPrompt({ skillName, targetLevel, selfLevel, selfComments, activities, quizzes, peerRatings, courses }) {
+// Practical axis only. Completed training and knowledge-quiz performance are
+// deliberately excluded: finishing a course or passing a quiz shows exposure
+// to the material, not that the learner can reliably apply it -- neither
+// should count as scored evidence toward a practical target level.
+function buildPrompt({ skillName, targetLevel, selfLevel, selfComments, activities, peerRatings }) {
   const lines = []
   lines.push(`Skill: "${skillName.trim()}"`)
   lines.push(`Target level the learner is trying to reach: "${targetLevel}".`)
   lines.push('')
-  lines.push('Proficiency scale (low to high): Seedling, Sprout, Growing, Rooted, Flourishing.')
+  lines.push(
+    'Practical proficiency scale (low to high): Watching and learning, Trying it with support, Doing it independently, Handling the tricky stuff, Raising the standard.'
+  )
   lines.push('')
   lines.push(
     selfLevel
       ? `Self-assessment: the learner rates themself as "${selfLevel}".${selfComments ? ` Their comment: "${selfComments}"` : ''}`
       : 'Self-assessment: none given yet.'
   )
-  lines.push('')
-  if (Array.isArray(courses) && courses.length > 0) {
-    lines.push(`Completed training (${courses.length}):`)
-    courses.slice(0, 10).forEach((c) => lines.push(`- "${c.name}" completed ${c.date}`))
-  } else {
-    lines.push('Completed training: none.')
-  }
   lines.push('')
   if (Array.isArray(activities) && activities.length > 0) {
     lines.push(`Recorded activities (${activities.length}):`)
@@ -41,13 +40,6 @@ function buildPrompt({ skillName, targetLevel, selfLevel, selfComments, activiti
       .forEach((e) => lines.push(`- ${e.verb} "${e.activity}"${e.description ? `: ${e.description}` : ''} (${e.date})`))
   } else {
     lines.push('Recorded activities: none.')
-  }
-  lines.push('')
-  if (Array.isArray(quizzes) && quizzes.length > 0) {
-    lines.push(`Baseline knowledge quiz results (${quizzes.length}):`)
-    quizzes.slice(0, 3).forEach((q) => lines.push(`- Scored ${q.score}/${q.total} on ${q.date}`))
-  } else {
-    lines.push('Baseline knowledge quiz: not taken.')
   }
   lines.push('')
   if (Array.isArray(peerRatings) && peerRatings.length > 0) {
@@ -64,11 +56,11 @@ function buildPrompt({ skillName, targetLevel, selfLevel, selfComments, activiti
     lines.push('Peer ratings: none.')
   }
 
-  return `You are validating whether a learner has reached a target proficiency level for a skill they are tracking, by weighing everything they have recorded as evidence.
+  return `You are validating whether a learner has reached a target *practical* proficiency level for a skill they are tracking, by weighing everything they have recorded as evidence of what they can actually do. Practical proficiency means applying the skill, not just having studied it -- do not treat familiarity or understanding as proof of practical capability.
 
 ${lines.join('\n')}
 
-Weigh all the available evidence -- completed training, self-assessment, recorded activity, quiz performance, and peer ratings (using the given weights) -- to propose a single overall current level from this scale: 1=Seedling, 2=Sprout, 3=Growing, 4=Rooted, 5=Flourishing. If little or no evidence is available, default toward a conservative (lower) estimate rather than guessing high.
+Weigh all the available evidence -- self-assessment, recorded activity, and peer ratings (using the given weights) -- to propose a single overall current level from this scale: 1=Watching and learning, 2=Trying it with support, 3=Doing it independently, 4=Handling the tricky stuff, 5=Raising the standard. A single demonstration is weaker evidence than repeated or varied application -- weigh repetition and variety of context accordingly. If little or no evidence is available, default toward a conservative (lower) estimate rather than guessing high.
 
 Decide "passed" as true only if the evidence clearly supports the learner having reached the target level ("${targetLevel}") or higher; otherwise false.
 
@@ -93,7 +85,7 @@ export default async function handler(req, res) {
     return
   }
 
-  const { skillName, targetLevel, selfLevel, selfComments, activities, quizzes, peerRatings, courses } = req.body ?? {}
+  const { skillName, targetLevel, selfLevel, selfComments, activities, peerRatings } = req.body ?? {}
   if (!skillName || typeof skillName !== 'string') {
     res.status(400).json({ error: 'Missing skillName' })
     return
@@ -103,7 +95,7 @@ export default async function handler(req, res) {
     return
   }
 
-  const prompt = buildPrompt({ skillName, targetLevel, selfLevel, selfComments, activities, quizzes, peerRatings, courses })
+  const prompt = buildPrompt({ skillName, targetLevel, selfLevel, selfComments, activities, peerRatings })
 
   try {
     const response = await anthropic.messages.create({

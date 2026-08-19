@@ -23,7 +23,7 @@ export function buildWeightedPeerRatings(peerRatings, raterProgressRows) {
   })
 }
 
-export async function assessBaseline({ skill, selfLevel, selfComments, activities, quizzes, peerRatings }) {
+export async function assessBaseline({ skill, selfLevel, selfComments, activities, peerRatings }) {
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -38,7 +38,6 @@ export async function assessBaseline({ skill, selfLevel, selfComments, activitie
       selfLevel: selfLevel ? LEVEL_LABELS[selfLevel] : null,
       selfComments: selfComments || null,
       activities,
-      quizzes,
       peerRatings,
     }),
   })

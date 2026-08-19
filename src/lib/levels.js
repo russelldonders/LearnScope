@@ -1,9 +1,13 @@
+// Practical/demonstrated-capability scale -- the primary proficiency
+// measure. Deliberately describes what a learner can reliably *do*, not
+// what they understand (see KNOWLEDGE_LEVEL_LABELS) -- knowledge alone
+// never implies a practical level.
 export const LEVEL_LABELS = {
-  1: 'Seedling',
-  2: 'Sprout',
-  3: 'Growing',
-  4: 'Rooted',
-  5: 'Flourishing',
+  1: 'Watching and learning',
+  2: 'Trying it with support',
+  3: 'Doing it independently',
+  4: 'Handling the tricky stuff',
+  5: 'Raising the standard',
 }
 
 // A separate scale for the knowledge/understanding axis -- kept distinct

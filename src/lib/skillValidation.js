@@ -7,9 +7,7 @@ export async function validateSkillAgainstTarget({
   selfLevel,
   selfComments,
   activities,
-  quizzes,
   peerRatings,
-  courses,
 }) {
   const {
     data: { session },
@@ -26,9 +24,7 @@ export async function validateSkillAgainstTarget({
       selfLevel: selfLevel ? LEVEL_LABELS[selfLevel] : null,
       selfComments: selfComments || null,
       activities,
-      quizzes,
       peerRatings,
-      courses,
     }),
   })
   if (!res.ok) {

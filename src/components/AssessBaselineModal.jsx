@@ -19,7 +19,6 @@ export default function AssessBaselineModal({
   assessments,
   peerRatings,
   statements,
-  quizzes,
   mode = 'baseline',
   onClose,
   onAssessed,
@@ -32,8 +31,11 @@ export default function AssessBaselineModal({
   useEffect(() => {
     async function run() {
       try {
+        // axis === 'practical' matters here -- without it, a more recent
+        // knowledge self-assessment could get read as this skill's practical
+        // self-rating, leaking knowledge into the practical-only synthesis.
         const latestSelf = assessments
-          .filter((a) => a.source === 'self' || !a.source)
+          .filter((a) => (a.source === 'self' || !a.source) && a.axis === 'practical')
           .sort((a, b) => new Date(b.assessed_at) - new Date(a.assessed_at))[0]
 
         const raterProgress = peerRatings.length > 0 ? await fetchPeerRaterProgress(skill.id) : []
@@ -46,18 +48,11 @@ export default function AssessBaselineModal({
           date: new Date(s.recorded_at).toLocaleDateString(),
         }))
 
-        const quizPayload = quizzes.map((q) => ({
-          score: q.score,
-          total: q.total,
-          date: new Date(q.created_at).toLocaleDateString(),
-        }))
-
         const res = await assessBaseline({
           skill,
           selfLevel: latestSelf?.level ?? null,
           selfComments: latestSelf?.comments,
           activities,
-          quizzes: quizPayload,
           peerRatings: weightedPeerRatings,
         })
         setResult(res)
@@ -100,7 +95,7 @@ export default function AssessBaselineModal({
 
         {loading && (
           <p className="text-sm text-secondary">
-            Weighing self-assessment, peer ratings, activity and quiz results…
+            Weighing self-assessment, peer ratings and recorded activity…
           </p>
         )}
         {error && <p className="text-sm text-red-700">{error}</p>}

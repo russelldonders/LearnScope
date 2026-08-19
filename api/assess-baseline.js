@@ -13,11 +13,17 @@ const ASSESSMENT_SCHEMA = {
   additionalProperties: false,
 }
 
-function buildPrompt({ skillName, selfLevel, selfComments, activities, quizzes, peerRatings }) {
+// Practical axis only -- self-assessment, recorded activity and peer
+// ratings are all evidence of what the learner has actually *done*.
+// Knowledge (e.g. a quiz score) is deliberately excluded: it belongs to a
+// separate axis and must never blend into or raise this practical estimate.
+function buildPrompt({ skillName, selfLevel, selfComments, activities, peerRatings }) {
   const lines = []
   lines.push(`Skill: "${skillName.trim()}"`)
   lines.push('')
-  lines.push('Proficiency scale (low to high): Seedling, Sprout, Growing, Rooted, Flourishing.')
+  lines.push(
+    'Practical proficiency scale (low to high): Watching and learning, Trying it with support, Doing it independently, Handling the tricky stuff, Raising the standard.'
+  )
   lines.push('')
   lines.push(
     selfLevel
@@ -34,13 +40,6 @@ function buildPrompt({ skillName, selfLevel, selfComments, activities, quizzes, 
     lines.push('Recorded activities: none.')
   }
   lines.push('')
-  if (Array.isArray(quizzes) && quizzes.length > 0) {
-    lines.push(`Baseline knowledge quiz results (${quizzes.length}):`)
-    quizzes.slice(0, 3).forEach((q) => lines.push(`- Scored ${q.score}/${q.total} on ${q.date}`))
-  } else {
-    lines.push('Baseline knowledge quiz: not taken.')
-  }
-  lines.push('')
   if (Array.isArray(peerRatings) && peerRatings.length > 0) {
     lines.push(
       `Peer ratings (${peerRatings.length}), each with a credibility weight -- weight this rater's opinion in your judgement roughly proportional to the weight value, higher weight means give it more influence:`
@@ -55,11 +54,11 @@ function buildPrompt({ skillName, selfLevel, selfComments, activities, quizzes, 
     lines.push('Peer ratings: none.')
   }
 
-  return `You are helping a learner establish a baseline proficiency level for a skill they are tracking, by synthesizing several inputs into a single best-estimate level.
+  return `You are helping a learner establish a baseline *practical* proficiency level for a skill they are tracking, by synthesizing several inputs into a single best-estimate level. Practical proficiency is what someone can reliably do, not what they know in theory -- do not treat familiarity or understanding as proof of practical capability.
 
 ${lines.join('\n')}
 
-Weigh all the available evidence -- self-assessment, recorded activity, quiz performance, and peer ratings (using the given weights) -- to propose a single overall level from this scale: 1=Seedling, 2=Sprout, 3=Growing, 4=Rooted, 5=Flourishing. If little or no evidence is available, default toward a conservative (lower) estimate rather than guessing high. Return the level as an integer 1-5, and a short 2-4 sentence explanation of how you weighed the inputs.`
+Weigh all the available evidence -- self-assessment, recorded activity, and peer ratings (using the given weights) -- to propose a single overall level from this scale: 1=Watching and learning, 2=Trying it with support, 3=Doing it independently, 4=Handling the tricky stuff, 5=Raising the standard. A single demonstration is weaker evidence than repeated or varied application -- weigh repetition and variety of context accordingly. If little or no evidence is available, default toward a conservative (lower) estimate rather than guessing high. Return the level as an integer 1-5, and a short 2-4 sentence explanation of how you weighed the inputs.`
 }
 
 export default async function handler(req, res) {
@@ -80,13 +79,13 @@ export default async function handler(req, res) {
     return
   }
 
-  const { skillName, selfLevel, selfComments, activities, quizzes, peerRatings } = req.body ?? {}
+  const { skillName, selfLevel, selfComments, activities, peerRatings } = req.body ?? {}
   if (!skillName || typeof skillName !== 'string') {
     res.status(400).json({ error: 'Missing skillName' })
     return
   }
 
-  const prompt = buildPrompt({ skillName, selfLevel, selfComments, activities, quizzes, peerRatings })
+  const prompt = buildPrompt({ skillName, selfLevel, selfComments, activities, peerRatings })
 
   try {
     const response = await anthropic.messages.create({

@@ -52,7 +52,6 @@ async function loadUpNextRecommendations(userId) {
     { data: assessments },
     { data: peerRatings },
     { data: statements },
-    { data: quizzes },
     { data: courseLinks },
     { data: targets },
     { data: validationRequests },
@@ -60,7 +59,6 @@ async function loadUpNextRecommendations(userId) {
     supabase.from('skill_assessments').select('skill_id, source, axis').in('skill_id', ids),
     supabase.from('skill_peer_ratings').select('skill_id').in('skill_id', ids),
     supabase.from('xapi_statements').select('skill_id').eq('user_id', userId).in('skill_id', ids),
-    supabase.from('skill_baseline_quizzes').select('skill_id').in('skill_id', ids),
     supabase.from('skill_course_links').select('skill_id, courses(completed_date)').in('skill_id', ids),
     supabase.from('skill_targets').select('skill_id').in('skill_id', ids),
     supabase.from('skill_validation_requests').select('skill_id, status').in('skill_id', ids),
@@ -83,7 +81,6 @@ async function loadUpNextRecommendations(userId) {
   }
   const peerCounts = countBy(peerRatings)
   const statementCounts = countBy(statements)
-  const quizCounts = countBy(quizzes)
   const targetSkillIds = new Set((targets ?? []).map((t) => t.skill_id))
   const pendingValidationSkillIds = new Set(
     (validationRequests ?? []).filter((r) => r.status === 'pending').map((r) => r.skill_id)
@@ -103,7 +100,6 @@ async function loadUpNextRecommendations(userId) {
         hasKnowledgeLevel: Boolean(skill.knowledge_level),
         peerRatingsCount: peerCounts[skill.id] ?? 0,
         statementsCount: statementCounts[skill.id] ?? 0,
-        quizCount: quizCounts[skill.id] ?? 0,
         courseLinks: courseLinksBySkill[skill.id] ?? [],
         hasTarget: targetSkillIds.has(skill.id),
         hasPendingExpertValidation: pendingValidationSkillIds.has(skill.id),

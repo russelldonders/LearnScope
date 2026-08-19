@@ -13,7 +13,6 @@ export function computeUpNextItems({
   hasKnowledgeLevel,
   peerRatingsCount,
   statementsCount,
-  quizCount,
   courseLinks,
   hasTarget,
   hasPendingExpertValidation,
@@ -24,7 +23,7 @@ export function computeUpNextItems({
     // the knowledge self-assessment immediately leaves this stage, so
     // nothing else here is reachable until that trip is done and the skill
     // is back with a confirmed knowledge_level. Only then does the
-    // practical-axis checklist (self-assess, invite, quiz, activity, and
+    // practical-axis checklist (self-assess, invite, activity, and
     // eventually the AI "Assess Baseline" synthesis) become relevant --
     // none of it touches the knowledge axis.
     if (!hasKnowledgeLevel) {
@@ -51,14 +50,6 @@ export function computeUpNextItems({
         label: 'Invite others to assess your skill',
         description: 'Get an outside perspective on your level.',
         done: peerRatingsCount > 0,
-        locked: !hasSelfAssessed,
-        lockedReason: 'Self-assess your own level first.',
-      },
-      {
-        key: 'quiz',
-        label: 'Take a general knowledge quiz',
-        description: 'Answer a short AI-generated quiz to help inform your AI-assessed baseline.',
-        done: quizCount > 0,
         locked: !hasSelfAssessed,
         lockedReason: 'Self-assess your own level first.',
       },

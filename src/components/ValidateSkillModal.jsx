@@ -12,8 +12,6 @@ export default function ValidateSkillModal({
   assessments,
   peerRatings,
   statements,
-  quizzes,
-  courseLinks,
   onClose,
   onValidated,
 }) {
@@ -25,8 +23,11 @@ export default function ValidateSkillModal({
   useEffect(() => {
     async function run() {
       try {
+        // axis === 'practical' -- see AssessBaselineModal for why this
+        // matters: without it a knowledge self-assessment could leak into
+        // this practical-only synthesis if it happened to be more recent.
         const latestSelf = assessments
-          .filter((a) => a.source === 'self' || !a.source)
+          .filter((a) => (a.source === 'self' || !a.source) && a.axis === 'practical')
           .sort((a, b) => new Date(b.assessed_at) - new Date(a.assessed_at))[0]
 
         const raterProgress = peerRatings.length > 0 ? await fetchPeerRaterProgress(skill.id) : []
@@ -39,25 +40,13 @@ export default function ValidateSkillModal({
           date: new Date(s.recorded_at).toLocaleDateString(),
         }))
 
-        const quizPayload = quizzes.map((q) => ({
-          score: q.score,
-          total: q.total,
-          date: new Date(q.created_at).toLocaleDateString(),
-        }))
-
-        const courses = courseLinks
-          .filter((l) => l.courses?.completed_date)
-          .map((l) => ({ name: l.courses.name, date: new Date(l.courses.completed_date).toLocaleDateString() }))
-
         const res = await validateSkillAgainstTarget({
           skill,
           targetLevel: target.target_level,
           selfLevel: latestSelf?.level ?? null,
           selfComments: latestSelf?.comments,
           activities,
-          quizzes: quizPayload,
           peerRatings: weightedPeerRatings,
-          courses,
         })
         setResult(res)
       } catch (err) {
@@ -93,7 +82,7 @@ export default function ValidateSkillModal({
 
         {loading && (
           <p className="text-sm text-secondary">
-            Weighing training, self-assessment, peer ratings, activity and quiz results against your target…
+            Weighing self-assessment, peer ratings and recorded activity against your target…
           </p>
         )}
         {error && <p className="text-sm text-red-700">{error}</p>}
