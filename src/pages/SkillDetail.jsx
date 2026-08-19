@@ -384,7 +384,7 @@ export default function SkillDetail() {
                       : 'Not yet self-assessed'}
                   </p>
                   <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
-                    Knowledge foundation
+                    {knowledgeVerification ?? 'Knowledge foundation'}
                   </p>
                 </div>
               </div>
