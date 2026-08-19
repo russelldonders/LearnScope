@@ -242,6 +242,13 @@ export default function SkillDetail() {
   const hasAnyEvaluationInput = selfAssessedCount > 0 || peerRatings.length > 0 || practicalStatements.length > 0
   const hasAnyKnowledgeEvaluationInput = knowledgeSelfAssessedCount > 0
   const latestKnowledgeAssessment = history.find((a) => a.axis === 'knowledge') ?? null
+  // The header shows the confirmed level once one exists; until then it
+  // falls back to the latest self-assessment so the header reflects what the
+  // learner just told us rather than sitting on "Not yet self-assessed"
+  // through the whole self-assess -> confirm gap. The nearby verification
+  // badge still says "Self-assessed" vs "Confirmed", so this doesn't overstate
+  // how settled the number is -- it's shown, just not claimed as verified.
+  const displayedKnowledgeLevel = skill?.knowledge_level ?? latestKnowledgeAssessment?.level ?? null
 
   // Practical-primary / knowledge-foundation model: derived, not stored --
   // see skillProficiencyModel.js. Trust status is computed independently
@@ -369,10 +376,12 @@ export default function SkillDetail() {
                 </div>
               </div>
               <div className="flex items-center gap-4 sm:pl-6 sm:border-l sm:border-hairline">
-                <KnowledgeLevelBar level={skill.knowledge_level} size={40} />
+                <KnowledgeLevelBar level={displayedKnowledgeLevel} size={40} />
                 <div>
                   <p className="text-sm text-secondary">
-                    {skill.knowledge_level ? KNOWLEDGE_LEVEL_LABELS[skill.knowledge_level] : 'Not yet self-assessed'}
+                    {displayedKnowledgeLevel
+                      ? KNOWLEDGE_LEVEL_LABELS[displayedKnowledgeLevel]
+                      : 'Not yet self-assessed'}
                   </p>
                   <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
                     Knowledge foundation
