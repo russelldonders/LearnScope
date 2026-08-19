@@ -286,8 +286,38 @@ export default function SkillDetail() {
   ]
     .filter(Boolean)
     .join(' · ')
+  const trainingScopeState = skill
+    ? {
+        skillId: skill.id,
+        skillName: skill.name,
+        librarySkillId: skill.library_skill_id,
+        skillLevel: skill.level,
+        backTo: `/skills/${skill.id}`,
+      }
+    : null
+
   // Next milestone reuses the exact same Up Next logic shown lower on the
   // page (computeUpNextItems), just previewed here as a single headline.
+  // upNextHandlers mirrors UpNextSection's own key->handler map (see there)
+  // so the preview's button acts identically to clicking the same item in
+  // the full list, rather than only describing the action in text.
+  const upNextHandlers = {
+    'self-assess': () => setSelfAssessOpen(true),
+    'self-assess-knowledge': () => setSelfAssessKnowledgeOpen(true),
+    'confirm-baseline-quiz': () => setConfirmingBaselineOpen(true),
+    invite: () => setInviteOpen(true),
+    activity: () => setRecordActivityOpen(true),
+    target: () => setTargetOpen(true),
+    'find-course': () => navigate('/training', { state: trainingScopeState }),
+    demonstrate: handleDemonstrateSkill,
+    'record-activity': () => setRecordActivityOpen(true),
+    'self-assess-demonstrating': () => setSelfAssessOpen(true),
+    'invite-demonstrating': () => setInviteOpen(true),
+    validate: handleValidateSkillStage,
+    'invite-validating': () => setInviteOpen(true),
+    'request-validation': () => setExpertValidationOpen(true),
+    'ai-assessment': () => setValidateOpen(true),
+  }
   const upNextPreview = computeUpNextItems({
     stage: skill?.lifecycle_stage,
     selfAssessedCount,
@@ -301,16 +331,7 @@ export default function SkillDetail() {
     hasPendingExpertValidation: validationRequests.some((r) => r.status === 'pending'),
   })
   const nextMilestone = upNextPreview.find((item) => !item.done && !item.locked) ?? null
-
-  const trainingScopeState = skill
-    ? {
-        skillId: skill.id,
-        skillName: skill.name,
-        librarySkillId: skill.library_skill_id,
-        skillLevel: skill.level,
-        backTo: `/skills/${skill.id}`,
-      }
-    : null
+  const nextMilestoneAction = nextMilestone ? upNextHandlers[nextMilestone.key] : undefined
 
   return (
     <div className="min-h-screen bg-paper">
@@ -378,6 +399,15 @@ export default function SkillDetail() {
                 <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Next milestone</p>
                 <p className="text-sm text-ink mt-0.5">{nextMilestone.label}</p>
                 <p className="text-xs text-secondary mt-0.5">{nextMilestone.description}</p>
+                {nextMilestoneAction && (
+                  <button
+                    type="button"
+                    onClick={nextMilestoneAction}
+                    className="mt-2 rounded-md bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90"
+                  >
+                    Start
+                  </button>
+                )}
               </div>
             )}
 
