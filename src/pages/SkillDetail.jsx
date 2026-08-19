@@ -36,6 +36,7 @@ import {
   classifyApplicationHistory,
   describeApplicationHistory,
 } from '../lib/skillProficiencyModel'
+import { countSkillTrackers, listConnectionsWithSkill } from '../lib/skillStats'
 
 const TABS = [
   { id: 'history', label: 'Overview' },
@@ -78,6 +79,9 @@ export default function SkillDetail() {
   const [expertValidationOpen, setExpertValidationOpen] = useState(false)
   const [validationRequests, setValidationRequests] = useState([])
   const [validatorNames, setValidatorNames] = useState({})
+  const [connectionsWithSkill, setConnectionsWithSkill] = useState([])
+  const [totalTrackersCount, setTotalTrackersCount] = useState(0)
+  const [connectionsListOpen, setConnectionsListOpen] = useState(false)
 
   useEffect(() => {
     loadSkill()
@@ -88,6 +92,16 @@ export default function SkillDetail() {
   useEffect(() => {
     if (skill) loadHistory()
   }, [skill?.id])
+
+  useEffect(() => {
+    if (!skill?.library_skill_id) {
+      setConnectionsWithSkill([])
+      setTotalTrackersCount(0)
+      return
+    }
+    listConnectionsWithSkill(skill.library_skill_id, user.id).then(setConnectionsWithSkill)
+    countSkillTrackers(skill.library_skill_id).then(setTotalTrackersCount)
+  }, [skill?.library_skill_id])
 
   async function loadSkill() {
     setLoadingSkill(true)
@@ -445,7 +459,34 @@ export default function SkillDetail() {
                 ]}
               />
             </div>
+
+            {skill.library_skill_id && (
+              <div className="mt-4 pt-4 border-t border-hairline">
+                <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">Statistics</h3>
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+                  <button
+                    type="button"
+                    onClick={() => setConnectionsListOpen(true)}
+                    disabled={connectionsWithSkill.length === 0}
+                    className="text-ink underline decoration-dotted underline-offset-2 hover:text-moss disabled:no-underline disabled:cursor-default disabled:hover:text-ink"
+                  >
+                    {connectionsWithSkill.length} of your connections have this skill
+                  </button>
+                  <span className="text-secondary">
+                    {totalTrackersCount} {totalTrackersCount === 1 ? 'person' : 'people'} in total have this skill
+                  </span>
+                </div>
+              </div>
+            )}
             </div>
+
+            {connectionsListOpen && (
+              <ConnectionsWithSkillModal
+                connections={connectionsWithSkill}
+                skillName={skill.name}
+                onClose={() => setConnectionsListOpen(false)}
+              />
+            )}
 
             {inviteOpen && <InviteRaterModal skill={skill} onClose={() => setInviteOpen(false)} />}
 
@@ -665,6 +706,38 @@ export default function SkillDetail() {
           </div>
         )}
       </main>
+    </div>
+  )
+}
+
+// Only ever populated with connections who both track this skill AND have
+// opted into showing it (see listConnectionsWithSkill) -- no separate
+// privacy check needed here, the list itself is already scoped correctly.
+function ConnectionsWithSkillModal({ connections, skillName, onClose }) {
+  return (
+    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div
+        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-display text-2xl text-ink">Connections with {skillName}</h2>
+          <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
+            Close
+          </button>
+        </div>
+        {connections.length === 0 ? (
+          <p className="text-sm text-secondary">None of your connections track this skill yet.</p>
+        ) : (
+          <ul className="space-y-2">
+            {connections.map((c) => (
+              <li key={c.id} className="text-sm text-ink">
+                {c.name}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   )
 }
