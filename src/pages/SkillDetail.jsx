@@ -372,35 +372,20 @@ export default function SkillDetail() {
         {skill && (
           <div className="bg-card border border-hairline rounded-lg p-6">
             <div className="mb-4">
-            <div className="flex items-start flex-wrap gap-x-6 gap-y-4">
-              <div className="flex items-center gap-4">
-                <GrowthRing level={skill.level} size={56} />
-                <div>
-                  <h2 className="font-display text-2xl text-ink">{skill.name}</h2>
-                  <p className="text-sm text-secondary flex items-center gap-1.5">
-                    {!skill.level && skill.lifecycle_stage && (
-                      <LifecycleStageIcon stage={skill.lifecycle_stage} />
-                    )}
-                    {skill.level
-                      ? LEVEL_LABELS[skill.level]
-                      : skill.lifecycle_stage
-                        ? SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]
-                        : 'Not yet self-assessed'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 sm:pl-6 sm:border-l sm:border-hairline">
-                <KnowledgeLevelBar level={displayedKnowledgeLevel} size={40} />
-                <div>
-                  <p className="text-sm text-secondary">
-                    {displayedKnowledgeLevel
-                      ? KNOWLEDGE_LEVEL_LABELS[displayedKnowledgeLevel]
+            <div className="flex items-center gap-4">
+              <GrowthRing level={skill.level} size={56} />
+              <div>
+                <h2 className="font-display text-2xl text-ink">{skill.name}</h2>
+                <p className="text-sm text-secondary flex items-center gap-1.5">
+                  {!skill.level && skill.lifecycle_stage && (
+                    <LifecycleStageIcon stage={skill.lifecycle_stage} />
+                  )}
+                  {skill.level
+                    ? LEVEL_LABELS[skill.level]
+                    : skill.lifecycle_stage
+                      ? SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]
                       : 'Not yet self-assessed'}
-                  </p>
-                  <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
-                    {knowledgeVerification ?? 'Knowledge foundation'}
-                  </p>
-                </div>
+                </p>
               </div>
             </div>
 
@@ -435,6 +420,21 @@ export default function SkillDetail() {
               <ActionGroup
                 title="Knowledge"
                 accent="slate"
+                headerExtra={
+                  <div className="flex items-center gap-3 mb-3">
+                    <KnowledgeLevelBar level={displayedKnowledgeLevel} size={32} />
+                    <div>
+                      <p className="text-sm text-secondary">
+                        {displayedKnowledgeLevel
+                          ? KNOWLEDGE_LEVEL_LABELS[displayedKnowledgeLevel]
+                          : 'Not yet self-assessed'}
+                      </p>
+                      <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
+                        {knowledgeVerification ?? 'Knowledge foundation'}
+                      </p>
+                    </div>
+                  </div>
+                }
                 actions={[
                   { label: 'Rate your current level', onClick: () => setSelfAssessKnowledgeOpen(true) },
                   { label: 'Assess me', onClick: () => setConfirmingBaselineOpen(true) },
@@ -775,11 +775,12 @@ function VerificationBadge({ axis, status, detail }) {
 // (which recommends the single next step for the skill's current lifecycle
 // stage), every action here is reachable regardless of stage, so a learner
 // isn't limited to following the guided checklist in order.
-function ActionGroup({ title, accent, actions }) {
+function ActionGroup({ title, accent, actions, headerExtra }) {
   const accentClass = accent === 'slate' ? 'hover:border-slate hover:text-slate' : 'hover:border-moss hover:text-moss'
   return (
     <div>
       <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">{title}</h3>
+      {headerExtra}
       <div className="flex flex-wrap gap-2">
         {actions.map((action) => (
           <button
