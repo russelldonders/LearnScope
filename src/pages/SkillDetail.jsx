@@ -390,16 +390,13 @@ export default function SkillDetail() {
               </div>
             </div>
 
-            {(practicalVerification || knowledgeVerification) && (
+            {practicalVerification && (
               <div className="flex flex-wrap items-start gap-x-6 gap-y-2 mt-3">
-                {practicalVerification && (
-                  <VerificationBadge
-                    axis="practical"
-                    status={practicalVerification}
-                    detail={practicalVerificationDetail}
-                  />
-                )}
-                {knowledgeVerification && <VerificationBadge axis="knowledge" status={knowledgeVerification} />}
+                <VerificationBadge
+                  axis="practical"
+                  status={practicalVerification}
+                  detail={practicalVerificationDetail}
+                />
               </div>
             )}
 
