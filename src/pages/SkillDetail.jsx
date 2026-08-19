@@ -7,6 +7,7 @@ import { computeNextSelfAssessmentDate, isSelfAssessmentDue } from '../lib/check
 import { formatMonthYear } from '../lib/dates'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
+import KnowledgeLevelBar from '../components/KnowledgeLevelBar'
 import EvidenceFields from '../components/EvidenceFields'
 import TrackingReasonPicker from '../components/TrackingReasonPicker'
 import { LEVELS, LEVEL_LABELS, KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
@@ -335,27 +336,19 @@ export default function SkillDetail() {
                         ? SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]
                         : 'Not yet self-assessed'}
                   </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <KnowledgeLevelBar level={skill.knowledge_level} width={64} height={10} />
+                <div>
+                  <p className="text-sm text-secondary">
+                    {skill.knowledge_level ? KNOWLEDGE_LEVEL_LABELS[skill.knowledge_level] : 'Not yet self-assessed'}
+                  </p>
                   <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
-                    Practical level
+                    Knowledge foundation
                   </p>
                 </div>
               </div>
-              {skill.knowledge_level && (
-                <div className="flex items-center gap-3">
-                  <GrowthRing
-                    level={skill.knowledge_level}
-                    size={40}
-                    labels={KNOWLEDGE_LEVEL_LABELS}
-                    color="var(--color-slate)"
-                  />
-                  <div>
-                    <p className="text-sm text-secondary">{KNOWLEDGE_LEVEL_LABELS[skill.knowledge_level]}</p>
-                    <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
-                      Knowledge foundation
-                    </p>
-                  </div>
-                </div>
-              )}
             </div>
 
             {(applicationHistory.label || practicalTrust || knowledgeTrust) && (
@@ -797,7 +790,6 @@ function UpNextSection({
           title="See your lifecycle journey"
           className="shrink-0 flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide rounded-full px-2.5 py-1 border border-moss bg-moss text-paper whitespace-nowrap hover:opacity-90 transition-opacity"
         >
-          <LifecycleStageIcon stage={stage} />
           {SKILL_LIFECYCLE_LABELS[stage]}
         </button>
       </div>
