@@ -472,6 +472,30 @@ A task is complete only when:
 
 A feature appearing to work in the UI is not by itself sufficient evidence that the feature is complete.
 
+---
+
+## 17. Environments & Release Workflow
+
+Two separate Supabase projects:
+
+* **Staging** — used by local development and Vercel Preview deployments.
+* **Production** — used only by the Vercel Production deployment.
+
+Local `.env` must always point at Staging, never Production. Vercel's Preview and Production environment variable scopes must each point at their own project — never share one Supabase project across both scopes.
+
+Two Git branches:
+
+* `staging` — active development branch. Every push deploys a Vercel Preview build against Staging.
+* `master` — Vercel's Production branch. Updated only periodically, by merging `staging` in once a batch of changes is ready to release (not on every commit).
+
+Release checklist when merging `staging` into `master`:
+
+1. Diff `master..staging` for new files under `supabase/migrations/` — these have run against Staging but not yet Production.
+2. Apply those migrations to the Production Supabase project's SQL editor, one at a time in order, before or alongside the release (human-run, per Section 10 — never automated).
+3. Merge `staging` into `master` and push. Treat this as a deliberate release requiring explicit user confirmation each time, not a routine auto-push.
+
+`supabase/migrations/stage_bootstrap_consolidated.sql` is a convenience bundle (every numbered migration concatenated in order) for bootstrapping a brand-new Staging project from empty. Regenerate it whenever a new migration is added. Never run it against a database that already has some of those migrations applied individually.
+
 ## Subagent usage
 
 Use the custom agents in `.claude/agents/` when their specialism matches the task.
