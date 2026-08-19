@@ -11,7 +11,7 @@ import KnowledgeLevelBar from '../components/KnowledgeLevelBar'
 import EvidenceFields from '../components/EvidenceFields'
 import TrackingReasonPicker from '../components/TrackingReasonPicker'
 import { LEVELS, LEVEL_LABELS, KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
-import { SKILL_LIFECYCLE_LABELS, SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
+import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
 import { activityName, verbLabel, formatDuration, isDiagnosticStatement } from '../lib/xapiStatement'
 import { syncCurrentRoleLinks } from '../lib/currentRole'
@@ -76,7 +76,6 @@ export default function SkillDetail() {
   const [targetOpen, setTargetOpen] = useState(false)
   const [validateOpen, setValidateOpen] = useState(false)
   const [expertValidationOpen, setExpertValidationOpen] = useState(false)
-  const [lifecycleMapOpen, setLifecycleMapOpen] = useState(false)
   const [validationRequests, setValidationRequests] = useState([])
   const [validatorNames, setValidatorNames] = useState({})
 
@@ -383,14 +382,6 @@ export default function SkillDetail() {
             )}
             </div>
 
-            {lifecycleMapOpen && skill.lifecycle_stage && (
-              <LifecycleMapModal
-                stage={skill.lifecycle_stage}
-                highestStage={skill.highest_lifecycle_stage}
-                onClose={() => setLifecycleMapOpen(false)}
-              />
-            )}
-
             {inviteOpen && <InviteRaterModal skill={skill} onClose={() => setInviteOpen(false)} />}
 
             {selfAssessOpen && (
@@ -613,7 +604,6 @@ export default function SkillDetail() {
                 onValidateSkillStage={handleValidateSkillStage}
                 onRequestValidation={() => setValidateOpen(true)}
                 onRequestExpertValidation={() => setExpertValidationOpen(true)}
-                onOpenLifecycleMap={() => setLifecycleMapOpen(true)}
                 onConfirmBaselineQuiz={() => setConfirmingBaselineOpen(true)}
               />
             )}
@@ -661,82 +651,6 @@ function VerificationBadge({ axis, status, detail }) {
   )
 }
 
-function LifecycleMapModal({ stage, highestStage, onClose }) {
-  return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-2xl text-ink">Your journey</h2>
-          <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
-            Close
-          </button>
-        </div>
-        <LifecycleMap stage={stage} highestStage={highestStage} />
-      </div>
-    </div>
-  )
-}
-
-// Read-only view of every lifecycle stage this skill has ever reached, plus a
-// preview of the next one to unlock. Opened from the current-stage badge on
-// the Up Next box so the full journey stays a click away without cluttering
-// the page by default.
-function LifecycleMap({ stage, highestStage }) {
-  const currentIndex = SKILL_LIFECYCLE_FLOW_STAGES.findIndex((s) => s.value === stage)
-  const isException = stage === 'at_risk' || stage === 'archived'
-  // highest_lifecycle_stage never falls below the current stage (a
-  // database trigger keeps it that way) -- falling back to currentIndex
-  // just covers skills from before that column existed.
-  const highestIndexRaw = SKILL_LIFECYCLE_FLOW_STAGES.findIndex((s) => s.value === highestStage)
-  const highestIndex = highestIndexRaw >= 0 ? Math.max(highestIndexRaw, currentIndex) : currentIndex
-  const nextStageValue = highestIndex >= 0 ? SKILL_LIFECYCLE_FLOW_STAGES[highestIndex + 1]?.value : undefined
-  const slicedStages =
-    highestIndex >= 0 ? SKILL_LIFECYCLE_FLOW_STAGES.slice(0, highestIndex + 2) : SKILL_LIFECYCLE_FLOW_STAGES
-  // validated/maintained intentionally share a label (see skillLifecycle.js)
-  // -- collapse consecutive duplicates so the diagram never repeats a chip.
-  const visibleStages = slicedStages.filter((s, i) => i === 0 || s.label !== slicedStages[i - 1].label)
-
-  return (
-    <div>
-      <div className="flex items-center flex-wrap gap-y-1">
-        {visibleStages.map((s, i) => {
-          const isCurrent = !isException && s.value === stage
-          const isHighest = !isException && !isCurrent && s.value === highestStage
-          const isNext = !isException && s.value === nextStageValue
-          return (
-            <div key={s.value} className="flex items-center">
-              <span
-                className={`flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide rounded-full px-2.5 py-1 border whitespace-nowrap ${
-                  isCurrent
-                    ? 'bg-moss text-paper border-moss'
-                    : isHighest
-                      ? 'border-moss text-moss'
-                      : isNext
-                        ? 'border-dashed border-hairline text-secondary/50'
-                        : 'border-hairline text-secondary'
-                }`}
-              >
-                <LifecycleStageIcon stage={s.value} />
-                {s.label}
-              </span>
-              {i < visibleStages.length - 1 && <span className="w-4 h-px mx-1 shrink-0 bg-hairline" />}
-            </div>
-          )
-        })}
-      </div>
-      {isException && (
-        <span className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide text-gold border border-gold rounded-full px-2.5 py-1 mt-2">
-          <LifecycleStageIcon stage={stage} />
-          {SKILL_LIFECYCLE_LABELS[stage]}
-        </span>
-      )}
-    </div>
-  )
-}
-
 // The recommended next actions for a skill, keyed by lifecycle stage.
 // Only stages with a defined next step render this section at all --
 // later stages (demonstrated onward) have no single recommended action yet.
@@ -761,7 +675,6 @@ function UpNextSection({
   onRequestExpertValidation,
   hasPendingExpertValidation,
   hasTarget,
-  onOpenLifecycleMap,
   onConfirmBaselineQuiz,
 }) {
   const handlers = {
@@ -798,17 +711,7 @@ function UpNextSection({
 
   return (
     <div className="mb-6 rounded-md border border-hairline bg-paper p-4">
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <h3 className="font-mono text-xs uppercase tracking-wide text-secondary">Up Next</h3>
-        <button
-          type="button"
-          onClick={onOpenLifecycleMap}
-          title="See your lifecycle journey"
-          className="shrink-0 flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide rounded-full px-2.5 py-1 border border-moss bg-moss text-paper whitespace-nowrap hover:opacity-90 transition-opacity"
-        >
-          {SKILL_LIFECYCLE_LABELS[stage]}
-        </button>
-      </div>
+      <h3 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Up Next</h3>
       {items.length === 0 ? (
         <p className="text-sm text-secondary">Nothing outstanding right now.</p>
       ) : (
@@ -1184,7 +1087,6 @@ function HistorySection({
   onValidateSkillStage,
   onRequestValidation,
   onRequestExpertValidation,
-  onOpenLifecycleMap,
   onConfirmBaselineQuiz,
 }) {
   const navigate = useNavigate()
@@ -1331,7 +1233,6 @@ function HistorySection({
               onRequestExpertValidation={onRequestExpertValidation}
               hasPendingExpertValidation={pendingValidationRequests.length > 0}
               hasTarget={targets.length > 0}
-              onOpenLifecycleMap={onOpenLifecycleMap}
               onConfirmBaselineQuiz={onConfirmBaselineQuiz}
             />
             {events.map((event, i) => (
