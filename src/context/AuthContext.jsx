@@ -31,6 +31,13 @@ export function AuthProvider({ children }) {
         options: { emailRedirectTo: `${window.location.origin}/welcome` },
       }),
     signIn: (email, password) => supabase.auth.signInWithPassword({ email, password }),
+    // Also doubles as signup -- Supabase creates the account on first Google
+    // login automatically, already-verified since Google owns the email.
+    signInWithGoogle: (redirectTo) =>
+      supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: redirectTo ?? `${window.location.origin}/dashboard` },
+      }),
     signOut: () => supabase.auth.signOut(),
     resetPasswordForEmail: (email) =>
       supabase.auth.resetPasswordForEmail(email, {

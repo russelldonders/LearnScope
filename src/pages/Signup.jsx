@@ -2,15 +2,17 @@ import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getPendingInviteCode, clearPendingInviteCode } from '../lib/connections'
+import GoogleSignInButton from '../components/GoogleSignInButton'
 
 export default function Signup() {
-  const { signUp, user, loading } = useAuth()
+  const { signUp, signInWithGoogle, user, loading } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [confirmationSent, setConfirmationSent] = useState(false)
+  const [googleSubmitting, setGoogleSubmitting] = useState(false)
 
   if (loading) {
     return (
@@ -47,6 +49,21 @@ export default function Signup() {
     }
   }
 
+  async function handleGoogleSignIn() {
+    setError(null)
+    setGoogleSubmitting(true)
+    const pendingCode = getPendingInviteCode()
+    const redirectTo = pendingCode
+      ? `${window.location.origin}/rate/${pendingCode}`
+      : `${window.location.origin}/dashboard`
+    if (pendingCode) clearPendingInviteCode()
+    const { error } = await signInWithGoogle(redirectTo)
+    if (error) {
+      setError(error.message)
+      setGoogleSubmitting(false)
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-paper px-4">
       <div className="w-full max-w-sm bg-card border border-hairline rounded-lg p-8">
@@ -55,6 +72,21 @@ export default function Signup() {
           LearnScope
         </Link>
         <p className="text-secondary text-sm mb-6">Start tracking the skills you're growing.</p>
+
+        {!confirmationSent && (
+          <>
+            <GoogleSignInButton
+              onClick={handleGoogleSignIn}
+              disabled={googleSubmitting}
+              label="Sign up with Google"
+            />
+            <div className="flex items-center gap-3 my-5">
+              <span className="flex-1 h-px bg-hairline" />
+              <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">or</span>
+              <span className="flex-1 h-px bg-hairline" />
+            </div>
+          </>
+        )}
 
         {confirmationSent ? (
           <p className="text-sm text-ink">
