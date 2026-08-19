@@ -18,6 +18,7 @@ import Connections from './pages/Connections'
 import SkillsProfile from './pages/SkillsProfile'
 import CourseCatalogue from './pages/CourseCatalogue'
 import CourseDetail from './pages/CourseDetail'
+import CourseLearn from './pages/CourseLearn'
 import Learning from './pages/Learning'
 import ValidateRequest from './pages/ValidateRequest'
 
@@ -110,6 +111,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <CourseDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/courses/:id/learn"
+            element={
+              <ProtectedRoute>
+                <CourseLearn />
               </ProtectedRoute>
             }
           />

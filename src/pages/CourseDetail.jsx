@@ -206,6 +206,13 @@ export default function CourseDetail() {
               </div>
             </div>
 
+            <Link
+              to={`/courses/${id}/learn`}
+              className="inline-block mt-4 rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
+            >
+              {statements.length > 0 || achievements.length > 0 ? 'Continue learning' : 'Start learning'} →
+            </Link>
+
             {catalogueCourse?.synopsis && <p className="text-sm text-ink mt-4">{catalogueCourse.synopsis}</p>}
 
             {course.notes && (
