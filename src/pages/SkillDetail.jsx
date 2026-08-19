@@ -250,7 +250,7 @@ export default function SkillDetail() {
   // produces a descriptive label, never a number.
   const applicationHistory = classifyApplicationHistory(practicalStatements)
   const knowledgeConfirmed = history.some((a) => a.axis === 'knowledge' && a.source === 'diagnostic_confirmed')
-  const practicalTrust = skill
+  const practicalVerification = skill
     ? computeTrustStatus({
         axis: 'practical',
         selfAssessedCount,
@@ -259,7 +259,7 @@ export default function SkillDetail() {
         formallyValidated: ['validated', 'maintained'].includes(skill.lifecycle_stage),
       })
     : null
-  const knowledgeTrust = computeTrustStatus({
+  const knowledgeVerification = computeTrustStatus({
     axis: 'knowledge',
     selfAssessedCount: knowledgeSelfAssessedCount,
     knowledgeConfirmed,
@@ -277,6 +277,16 @@ export default function SkillDetail() {
   const lastDemonstrated = practicalStatements[0]?.recorded_at
     ? `Last demonstrated ${new Date(practicalStatements[0].recorded_at).toLocaleDateString()}`
     : null
+  // What backs the practical verification tier so far -- shown as a caption
+  // under its badge so "Evidence supported" reads together with how much
+  // evidence, rather than as a single flat tier with no sense of strength.
+  const practicalVerificationDetail = [
+    describeApplicationHistory(applicationHistory),
+    ...supportingSignals,
+    lastDemonstrated,
+  ]
+    .filter(Boolean)
+    .join(' · ')
   // Next milestone reuses the exact same Up Next logic shown lower on the
   // page (computeUpNextItems), just previewed here as a single headline.
   const upNextPreview = computeUpNextItems({
@@ -351,20 +361,17 @@ export default function SkillDetail() {
               </div>
             </div>
 
-            {(applicationHistory.label || practicalTrust || knowledgeTrust) && (
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-3">
-                {describeApplicationHistory(applicationHistory) && (
-                  <span className="text-xs text-secondary">{describeApplicationHistory(applicationHistory)}</span>
+            {(practicalVerification || knowledgeVerification) && (
+              <div className="flex flex-wrap items-start gap-x-6 gap-y-2 mt-3">
+                {practicalVerification && (
+                  <VerificationBadge
+                    axis="practical"
+                    status={practicalVerification}
+                    detail={practicalVerificationDetail}
+                  />
                 )}
-                {practicalTrust && <TrustBadge axis="practical" status={practicalTrust} />}
-                {knowledgeTrust && <TrustBadge axis="knowledge" status={knowledgeTrust} />}
+                {knowledgeVerification && <VerificationBadge axis="knowledge" status={knowledgeVerification} />}
               </div>
-            )}
-
-            {(supportingSignals.length > 0 || lastDemonstrated) && (
-              <p className="text-xs text-secondary mt-2">
-                {[...supportingSignals, lastDemonstrated].filter(Boolean).join(' · ')}
-              </p>
             )}
 
             {nextMilestone && (
@@ -625,12 +632,16 @@ export default function SkillDetail() {
   )
 }
 
-// Trust status is deliberately separate from proficiency -- it says how
-// well-supported the displayed level is, not how high it is, so it's
-// styled as a neutral pill rather than echoing the level's own color scale.
+// Verification level is deliberately separate from proficiency -- it says
+// how a displayed level was supported (self-assessed, evidence, peer
+// confirmation, formal validation), not how high it is, so it's styled as
+// a neutral pill rather than echoing the level's own color scale.
 // Confirmed/Validated (practical) and Confirmed (knowledge, its ceiling
-// today) get the axis's accent color; earlier tiers stay neutral.
-function TrustBadge({ axis, status }) {
+// today) get the axis's accent color; earlier tiers stay neutral. The tier
+// alone doesn't say how much evidence backs it -- `detail`, when given,
+// renders underneath as a caption so the badge and its supporting signals
+// read as one unit instead of a flat status with no sense of strength.
+function VerificationBadge({ axis, status, detail }) {
   const isKnowledge = axis === 'knowledge'
   const isStrong = status === TRUST_STATUS.VALIDATED || status === TRUST_STATUS.CONFIRMED
   const colorClass = isStrong
@@ -639,9 +650,14 @@ function TrustBadge({ axis, status }) {
       : 'border-moss text-moss'
     : 'border-hairline text-secondary'
   return (
-    <span className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border ${colorClass}`}>
-      {isKnowledge ? 'Knowledge' : 'Practical'} trust · {status}
-    </span>
+    <div className="flex flex-col gap-1 min-w-0">
+      <span
+        className={`w-fit font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border ${colorClass}`}
+      >
+        {isKnowledge ? 'Knowledge' : 'Practical'} verification · {status}
+      </span>
+      {detail && <span className="text-xs text-secondary">{detail}</span>}
+    </div>
   )
 }
 

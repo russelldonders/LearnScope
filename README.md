@@ -9,6 +9,19 @@ are, and the training or experience behind them — shown as growth rings, not p
 - Supabase (Postgres + email/password auth + row-level security)
 - Vercel (frontend hosting)
 
+## Environments
+
+LearnScope uses **two separate Supabase projects**:
+
+- **Staging** — used for local development (`npm run dev`) and manual testing. Local `.env` should
+  always point here, never at production.
+- **Production** — used only by the live Vercel deployment. Its URL/anon key live in Vercel's
+  **Production** environment variables, not in any file in this repo.
+
+Never point local `.env` at the production project — there is no sandboxing between local dev and
+whatever Supabase project `.env` names, so doing so means every local action (self-assessments,
+deletes, test data) happens against real learner data.
+
 ## Local setup
 
 1. **Install dependencies**
@@ -17,18 +30,23 @@ are, and the training or experience behind them — shown as growth rings, not p
    npm install
    ```
 
-2. **Create a Supabase project** at [supabase.com](https://supabase.com) (free tier is fine).
+2. **Use (or create) the Staging Supabase project** at [supabase.com](https://supabase.com) — this is
+   what local dev talks to. Don't reuse the production project here.
 
-3. **Run the database migration**
+3. **Bootstrap the schema** (first time only, on a fresh Staging project)
 
-   In the Supabase dashboard, open the SQL editor and run the contents of
-   [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql). This creates the `skills`
-   table and its row-level security policy, so each user can only see and edit their own rows.
+   In the Staging project's Supabase dashboard, open the SQL editor and run the contents of
+   [`supabase/migrations/stage_bootstrap_consolidated.sql`](supabase/migrations/stage_bootstrap_consolidated.sql) —
+   a single-pass bundle of every migration in `supabase/migrations/`, in order. Do not run this against
+   a database that already has some of these migrations applied individually (e.g. production); use the
+   numbered files under `supabase/migrations/` for that instead, applied one at a time in order. See the
+   comment at the top of that file, and regenerate it (re-concatenate the numbered migrations) whenever a
+   new one is added.
 
 4. **Set environment variables**
 
-   Copy `.env.example` to `.env` and fill in your project's URL and anon key (Supabase dashboard →
-   Project Settings → API):
+   Copy `.env.example` to `.env` and fill in the **Staging** project's URL and anon key (Supabase
+   dashboard → Staging project → Project Settings → API):
 
    ```bash
    cp .env.example .env
@@ -63,12 +81,15 @@ are, and the training or experience behind them — shown as growth rings, not p
 
 1. Push this repo to GitHub.
 2. In Vercel, import the repo as a new project (framework preset: Vite).
-3. Add the same two environment variables from `.env` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`)
-   under Project Settings → Environment Variables.
+3. Under Project Settings → Environment Variables, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
+   for the **Production** environment only, using the **production** Supabase project's URL/anon key
+   (Supabase dashboard → production project → Project Settings → API) — not the Staging project's values
+   from local `.env`. Bootstrap/maintain its schema the same way as Staging (see Local setup step 3), but
+   apply new migrations here individually as they're added, never via the consolidated bootstrap file.
 4. Deploy. Build command `npm run build`, output directory `dist` (Vercel detects these automatically
    for Vite).
-5. Add the production `/welcome` and `/reset-password` URLs to Supabase's Redirect URLs allow list (see
-   step 6 above).
+5. Add the production `/welcome` and `/reset-password` URLs to the **production** Supabase project's
+   Redirect URLs allow list (see step 6 above, but in the production project's dashboard).
 
 ## Project structure
 
