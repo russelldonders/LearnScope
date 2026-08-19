@@ -1,8 +1,7 @@
 import { supabase } from './supabaseClient'
+import { DIAGNOSTIC_EXTENSION_IRI, SKILL_EXTENSION_IRI } from './xapiStatement'
 
 const DIAGNOSTIC_VERB_IRI = 'https://learnscope.app/xapi/verbs/assessed'
-const DIAGNOSTIC_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/diagnostic'
-const SKILL_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/skill'
 
 // Server decides cache-hit vs. generate -- the client never writes to
 // skill_diagnostic_content directly (see api/generate-diagnostic-quiz.js).

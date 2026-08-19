@@ -2,6 +2,20 @@ import { XAPI_VERBS } from './xapiVerbs'
 
 export const SKILL_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/skill'
 export const COURSE_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/course'
+export const DIAGNOSTIC_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/diagnostic'
+
+// True for statements an automated diagnostic generated (e.g. the
+// Confirming Baseline knowledge-check quiz, see skillDiagnostics.js) rather
+// than something the learner deliberately logged as practical activity.
+// These must never count as practical-axis evidence -- Up Next's "Record an
+// activity", the application-history summary, or the AI baseline/validation
+// synthesis -- since they're knowledge-axis by construction. Matched on the
+// extension rather than the verb, since "Assessed" is also a normal verb
+// choice in the freeform Record Activity picker and a genuine practical
+// activity logged with that verb must not be excluded.
+export function isDiagnosticStatement(statement) {
+  return Boolean(statement?.result?.extensions?.[DIAGNOSTIC_EXTENSION_IRI])
+}
 
 // Statements about the same real-world activity (same name, same related
 // skill/course) should share one Activity id so anything consuming the

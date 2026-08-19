@@ -9,6 +9,7 @@ import GrowthRing from '../components/GrowthRing'
 import { LEVEL_LABELS } from '../lib/levels'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
+import { isDiagnosticStatement } from '../lib/xapiStatement'
 
 async function countRows(table, userId) {
   const { count } = await supabase
@@ -51,6 +52,7 @@ async function loadUpNextRecommendations(userId) {
   const [
     { data: assessments },
     { data: peerRatings },
+    { data: sentInvites },
     { data: statements },
     { data: courseLinks },
     { data: targets },
@@ -58,7 +60,8 @@ async function loadUpNextRecommendations(userId) {
   ] = await Promise.all([
     supabase.from('skill_assessments').select('skill_id, source, axis').in('skill_id', ids),
     supabase.from('skill_peer_ratings').select('skill_id').in('skill_id', ids),
-    supabase.from('xapi_statements').select('skill_id').eq('user_id', userId).in('skill_id', ids),
+    supabase.from('connection_invites').select('skill_id').in('skill_id', ids),
+    supabase.from('xapi_statements').select('skill_id, statement').eq('user_id', userId).in('skill_id', ids),
     supabase.from('skill_course_links').select('skill_id, courses(completed_date)').in('skill_id', ids),
     supabase.from('skill_targets').select('skill_id').in('skill_id', ids),
     supabase.from('skill_validation_requests').select('skill_id, status').in('skill_id', ids),
@@ -80,7 +83,11 @@ async function loadUpNextRecommendations(userId) {
     }
   }
   const peerCounts = countBy(peerRatings)
-  const statementCounts = countBy(statements)
+  const inviteCounts = countBy(sentInvites)
+  // Excludes the Confirming Baseline knowledge quiz's own xAPI attempt --
+  // that's knowledge-axis evidence, not practical activity (see
+  // isDiagnosticStatement / SkillDetail.jsx for the full reasoning).
+  const statementCounts = countBy((statements ?? []).filter((s) => !isDiagnosticStatement(s.statement)))
   const targetSkillIds = new Set((targets ?? []).map((t) => t.skill_id))
   const pendingValidationSkillIds = new Set(
     (validationRequests ?? []).filter((r) => r.status === 'pending').map((r) => r.skill_id)
@@ -99,6 +106,7 @@ async function loadUpNextRecommendations(userId) {
         knowledgeSelfAssessedCount: knowledgeSelfAssessedCounts[skill.id] ?? 0,
         hasKnowledgeLevel: Boolean(skill.knowledge_level),
         peerRatingsCount: peerCounts[skill.id] ?? 0,
+        invitesSentCount: inviteCounts[skill.id] ?? 0,
         statementsCount: statementCounts[skill.id] ?? 0,
         courseLinks: courseLinksBySkill[skill.id] ?? [],
         hasTarget: targetSkillIds.has(skill.id),

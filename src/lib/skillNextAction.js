@@ -12,11 +12,18 @@ export function computeUpNextItems({
   knowledgeSelfAssessedCount,
   hasKnowledgeLevel,
   peerRatingsCount,
+  invitesSentCount,
   statementsCount,
   courseLinks,
   hasTarget,
   hasPendingExpertValidation,
 }) {
+  // "Invite others" is done once the learner has taken the action of
+  // sending an invite -- it shouldn't stay stuck waiting on someone else to
+  // respond, since that's out of the learner's control. A peer rating
+  // arriving later still counts too, in case invites weren't tracked (e.g.
+  // legacy data before invitesSentCount existed).
+  const hasInvited = (invitesSentCount ?? 0) > 0 || peerRatingsCount > 0
   if (stage === 'identified') {
     // The knowledge axis is established and confirmed first, as its own
     // self-contained round trip through Confirming Baseline -- submitting
@@ -49,7 +56,7 @@ export function computeUpNextItems({
         key: 'invite',
         label: 'Invite others to assess your skill',
         description: 'Get an outside perspective on your level.',
-        done: peerRatingsCount > 0,
+        done: hasInvited,
         locked: !hasSelfAssessed,
         lockedReason: 'Self-assess your own level first.',
       },
@@ -132,7 +139,7 @@ export function computeUpNextItems({
         key: 'invite-demonstrating',
         label: 'Invite others to assess your skill',
         description: 'Get an outside perspective on your level.',
-        done: peerRatingsCount > 0,
+        done: hasInvited,
       },
       {
         key: 'validate',
@@ -149,7 +156,7 @@ export function computeUpNextItems({
         key: 'invite-validating',
         label: 'Invite others to assess your skill',
         description: 'Get an outside perspective on your level.',
-        done: peerRatingsCount > 0,
+        done: hasInvited,
       },
     ]
     if (hasTarget) {

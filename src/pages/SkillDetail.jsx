@@ -12,7 +12,7 @@ import TrackingReasonPicker from '../components/TrackingReasonPicker'
 import { LEVELS, LEVEL_LABELS, KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
 import { SKILL_LIFECYCLE_LABELS, SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
-import { activityName, verbLabel, formatDuration } from '../lib/xapiStatement'
+import { activityName, verbLabel, formatDuration, isDiagnosticStatement } from '../lib/xapiStatement'
 import { syncCurrentRoleLinks } from '../lib/currentRole'
 import { listTags, listSkillTags, addTagToSkill, removeSkillTagLink } from '../lib/skillTags'
 import { SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
@@ -55,6 +55,7 @@ export default function SkillDetail() {
   const [tab, setTab] = useState('history')
   const [history, setHistory] = useState([])
   const [peerRatings, setPeerRatings] = useState([])
+  const [invites, setInvites] = useState([])
   const [raterAvatars, setRaterAvatars] = useState({})
   const [relationshipLinks, setRelationshipLinks] = useState([])
   const [statements, setStatements] = useState([])
@@ -110,6 +111,7 @@ export default function SkillDetail() {
     const [
       { data: assessments },
       { data: ratings },
+      { data: sentInvites },
       { data: links },
       { data: st },
       tags,
@@ -127,6 +129,7 @@ export default function SkillDetail() {
           .select('*')
           .eq('skill_id', skill.id)
           .order('rated_at', { ascending: false }),
+        supabase.from('connection_invites').select('id, status').eq('skill_id', skill.id),
         supabase
           .from('skill_experience_links')
           .select('id, created_at, experience(id, title, organization, type, start_date, end_date)')
@@ -153,6 +156,7 @@ export default function SkillDetail() {
       ])
     setHistory(assessments ?? [])
     setPeerRatings(ratings ?? [])
+    setInvites(sentInvites ?? [])
     setRelationshipLinks(links ?? [])
     setStatements(st ?? [])
     setTargets(skillTargets ?? [])
@@ -229,7 +233,13 @@ export default function SkillDetail() {
   const knowledgeSelfAssessedCount = history.filter(
     (a) => (a.source === 'self' || !a.source) && a.axis === 'knowledge'
   ).length
-  const hasAnyEvaluationInput = selfAssessedCount > 0 || peerRatings.length > 0 || statements.length > 0
+  // The Confirming Baseline knowledge quiz logs its own xAPI attempt --
+  // that's knowledge-axis evidence, not practical activity, so it must be
+  // excluded here or it silently marks "Record an activity" done and
+  // inflates practical trust/history for a skill nobody has practiced yet.
+  const practicalStatements = statements.filter((s) => !isDiagnosticStatement(s.statement))
+  const invitesSentCount = invites.length
+  const hasAnyEvaluationInput = selfAssessedCount > 0 || peerRatings.length > 0 || practicalStatements.length > 0
   const hasAnyKnowledgeEvaluationInput = knowledgeSelfAssessedCount > 0
   const latestKnowledgeAssessment = history.find((a) => a.axis === 'knowledge') ?? null
 
@@ -237,13 +247,13 @@ export default function SkillDetail() {
   // see skillProficiencyModel.js. Trust status is computed independently
   // per axis and never blended into a level; application history only ever
   // produces a descriptive label, never a number.
-  const applicationHistory = classifyApplicationHistory(statements)
+  const applicationHistory = classifyApplicationHistory(practicalStatements)
   const knowledgeConfirmed = history.some((a) => a.axis === 'knowledge' && a.source === 'diagnostic_confirmed')
   const practicalTrust = skill
     ? computeTrustStatus({
         axis: 'practical',
         selfAssessedCount,
-        evidenceCount: statements.length,
+        evidenceCount: practicalStatements.length,
         peerRatingsCount: peerRatings.length,
         formallyValidated: ['validated', 'maintained'].includes(skill.lifecycle_stage),
       })
@@ -258,11 +268,13 @@ export default function SkillDetail() {
   ).length
   const supportingSignals = [
     peerRatings.length > 0 ? `${peerRatings.length} peer rating${peerRatings.length === 1 ? '' : 's'}` : null,
-    statements.length > 0 ? `${statements.length} activit${statements.length === 1 ? 'y' : 'ies'} logged` : null,
+    practicalStatements.length > 0
+      ? `${practicalStatements.length} activit${practicalStatements.length === 1 ? 'y' : 'ies'} logged`
+      : null,
     evidenceAttachedCount > 0 ? `${evidenceAttachedCount} evidence item${evidenceAttachedCount === 1 ? '' : 's'}` : null,
   ].filter(Boolean)
-  const lastDemonstrated = statements[0]?.recorded_at
-    ? `Last demonstrated ${new Date(statements[0].recorded_at).toLocaleDateString()}`
+  const lastDemonstrated = practicalStatements[0]?.recorded_at
+    ? `Last demonstrated ${new Date(practicalStatements[0].recorded_at).toLocaleDateString()}`
     : null
   // Next milestone reuses the exact same Up Next logic shown lower on the
   // page (computeUpNextItems), just previewed here as a single headline.
@@ -272,7 +284,8 @@ export default function SkillDetail() {
     knowledgeSelfAssessedCount,
     hasKnowledgeLevel: Boolean(skill?.knowledge_level),
     peerRatingsCount: peerRatings.length,
-    statementsCount: statements.length,
+    invitesSentCount,
+    statementsCount: practicalStatements.length,
     courseLinks,
     hasTarget: targets.length > 0,
     hasPendingExpertValidation: validationRequests.some((r) => r.status === 'pending'),
@@ -453,7 +466,7 @@ export default function SkillDetail() {
                 user={user}
                 assessments={history}
                 peerRatings={peerRatings}
-                statements={statements}
+                statements={practicalStatements}
                 mode={assessMode}
                 onClose={() => setAssessMode(null)}
                 onAssessed={() => {
@@ -485,7 +498,7 @@ export default function SkillDetail() {
                 target={targets[0]}
                 assessments={history}
                 peerRatings={peerRatings}
-                statements={statements}
+                statements={practicalStatements}
                 onClose={() => setValidateOpen(false)}
                 onValidated={() => {
                   loadHistory()
@@ -579,6 +592,7 @@ export default function SkillDetail() {
                 skill={skill}
                 history={history}
                 peerRatings={peerRatings}
+                invitesSentCount={invitesSentCount}
                 relationshipLinks={relationshipLinks}
                 statements={statements}
                 courseLinks={courseLinks}
@@ -586,7 +600,6 @@ export default function SkillDetail() {
                 validationRequests={validationRequests}
                 validatorNames={validatorNames}
                 loading={loadingHistory}
-                assessorName={assessorName}
                 raterAvatars={raterAvatars}
                 hasAnyEvaluationInput={hasAnyEvaluationInput}
                 onSelfAssess={() => setSelfAssessOpen(true)}
@@ -724,6 +737,7 @@ function UpNextSection({
   knowledgeSelfAssessedCount,
   hasKnowledgeLevel,
   peerRatingsCount,
+  invitesSentCount,
   statementsCount,
   onSelfAssess,
   onSelfAssessKnowledge,
@@ -764,6 +778,7 @@ function UpNextSection({
     knowledgeSelfAssessedCount,
     hasKnowledgeLevel,
     peerRatingsCount,
+    invitesSentCount,
     statementsCount,
     courseLinks,
     hasTarget,
@@ -1140,6 +1155,7 @@ function HistorySection({
   skill,
   history,
   peerRatings,
+  invitesSentCount,
   relationshipLinks,
   statements,
   courseLinks,
@@ -1147,7 +1163,6 @@ function HistorySection({
   validationRequests,
   validatorNames,
   loading,
-  assessorName,
   raterAvatars,
   hasAnyEvaluationInput,
   onSelfAssess,
@@ -1172,6 +1187,10 @@ function HistorySection({
   const knowledgeSelfAssessedCount = history.filter(
     (a) => (a.source === 'self' || !a.source) && a.axis === 'knowledge'
   ).length
+  // The Confirming Baseline knowledge quiz logs its own xAPI attempt --
+  // exclude it here too, same reasoning as the top-level SkillDetail
+  // component (see there for the full comment).
+  const practicalStatements = statements.filter((s) => !isDiagnosticStatement(s.statement))
   const hasKnowledgeLevel = Boolean(skill.knowledge_level)
   const pendingValidationRequests = validationRequests.filter((r) => r.status === 'pending')
   const decidedValidationRequests = validationRequests.filter((r) => r.status !== 'pending')
@@ -1217,7 +1236,7 @@ function HistorySection({
               createdAt: link.created_at,
               link,
             })),
-          ...statements.map((s) => ({ type: 'activity', date: s.recorded_at, createdAt: s.created_at, statement: s })),
+          ...practicalStatements.map((s) => ({ type: 'activity', date: s.recorded_at, createdAt: s.created_at, statement: s })),
           ...courseLinks
             .filter((link) => link.courses?.completed_date)
             .map((link) => ({
@@ -1289,7 +1308,8 @@ function HistorySection({
               knowledgeSelfAssessedCount={knowledgeSelfAssessedCount}
               hasKnowledgeLevel={hasKnowledgeLevel}
               peerRatingsCount={peerRatings.length}
-              statementsCount={statements.length}
+              invitesSentCount={invitesSentCount}
+              statementsCount={practicalStatements.length}
               onSelfAssess={onSelfAssess}
               onSelfAssessKnowledge={onSelfAssessKnowledge}
               onInvite={onInvite}
@@ -1316,7 +1336,6 @@ function HistorySection({
                 isLast={i === events.length - 1}
                 isMostRecent={i === mostRecentRatingIndex}
                 isBaseline={i === mostRecentBaselineIndex}
-                assessorName={assessorName}
                 raterAvatars={raterAvatars}
                 showAssessBaseline={showBaselineFlow && event.type === 'today'}
                 onAssessBaseline={onAssessBaseline}
@@ -1337,7 +1356,7 @@ function HistorySection({
       {selectedEvent && (
         <TimelineDetailModal
           event={selectedEvent}
-          assessorName={assessorName}
+          knowledgeLevelGuide={skill.knowledge_level_guide}
           raterAvatars={raterAvatars}
           onClose={() => setSelectedEvent(null)}
         />
@@ -1429,7 +1448,6 @@ function TimelineEntry({
   isLast,
   isMostRecent,
   isBaseline,
-  assessorName,
   raterAvatars,
   showAssessBaseline,
   onAssessBaseline,
@@ -1530,23 +1548,17 @@ function TimelineEntry({
     return (
       <div className="flex gap-3">
         <div className="flex flex-col items-center w-12 shrink-0">
-          <div className="flex items-center justify-center w-8 h-8 rounded-full border border-hairline bg-paper">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-secondary">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-          </div>
+          <LifecycleStageIcon stage="identified" size={14} className="text-secondary/70 mt-1" />
           {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
         </div>
-        <div className={`min-w-0 flex-1 mb-6 ${boxClass}`}>
-          <p className="text-sm font-medium text-ink">Skill added</p>
-          <p className="font-mono text-xs text-secondary mt-0.5">
+        <div className="min-w-0 flex-1 mb-3 flex items-center gap-2 text-xs text-secondary">
+          <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">Skill added</span>
+          {event.source && (
+            <span className="truncate min-w-0">{SKILL_SOURCE_LABELS[event.source] ?? event.source}</span>
+          )}
+          <span className="font-mono text-[10px] text-secondary/70 shrink-0 ml-auto">
             {new Date(event.date).toLocaleDateString()}
-          </p>
-          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
-            {assessorName ? `By ${assessorName}` : 'By you'}
-            {event.source ? ` · ${SKILL_SOURCE_LABELS[event.source] ?? event.source}` : ''}
-          </p>
+          </span>
         </div>
       </div>
     )
@@ -1691,11 +1703,7 @@ function TimelineEntry({
             AI-assessed baseline, from self-assessment, peer ratings and activity
           </p>
         ) : (
-          assessorName && (
-            <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
-              Self-assessed by {assessorName}
-            </p>
-          )
+          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">Self-assessed</p>
         )}
         {entry.experience?.title && (
           <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
@@ -1730,7 +1738,7 @@ function TimelineEntry({
   )
 }
 
-function TimelineDetailModal({ event, assessorName, raterAvatars, onClose }) {
+function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, onClose }) {
   let title = 'Details'
   let body = null
 
@@ -1761,6 +1769,11 @@ function TimelineDetailModal({ event, assessorName, raterAvatars, onClose }) {
             </span>
           )}
         </div>
+        {entry.axis === 'knowledge' && knowledgeLevelGuide?.[entry.level - 1] && (
+          <p className="text-sm text-ink bg-paper border border-hairline rounded-md p-2">
+            {knowledgeLevelGuide[entry.level - 1]}
+          </p>
+        )}
         {entry.source === 'course' && entry.courses?.name ? (
           <p className="text-sm text-secondary">Earned by completing {entry.courses.name}</p>
         ) : entry.source === 'ai_baseline' ? (
@@ -1768,7 +1781,7 @@ function TimelineDetailModal({ event, assessorName, raterAvatars, onClose }) {
             AI-assessed baseline, from self-assessment, peer ratings and activity
           </p>
         ) : (
-          assessorName && <p className="text-sm text-secondary">Self-assessed by {assessorName}</p>
+          <p className="text-sm text-secondary">Self-assessed</p>
         )}
         {entry.experience?.title && (
           <p className="text-sm text-secondary">
