@@ -321,7 +321,7 @@ export default function SkillDetail() {
         {skill && (
           <div className="bg-card border border-hairline rounded-lg p-6">
             <div className="mb-4">
-            <div className="flex items-start flex-wrap gap-x-6 gap-y-3">
+            <div className="flex items-start flex-wrap gap-x-6 gap-y-4">
               <div className="flex items-center gap-4">
                 <GrowthRing level={skill.level} size={56} />
                 <div>
@@ -338,8 +338,8 @@ export default function SkillDetail() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <KnowledgeLevelBar level={skill.knowledge_level} width={64} height={10} />
+              <div className="flex items-center gap-4 sm:pl-6 sm:border-l sm:border-hairline">
+                <KnowledgeLevelBar level={skill.knowledge_level} size={40} />
                 <div>
                   <p className="text-sm text-secondary">
                     {skill.knowledge_level ? KNOWLEDGE_LEVEL_LABELS[skill.knowledge_level] : 'Not yet self-assessed'}
