@@ -389,9 +389,18 @@ export default function SkillDetail() {
               </div>
             </div>
 
+            {practicalVerification && (
+              <div className="flex flex-wrap items-start gap-x-6 gap-y-2 mt-3">
+                <VerificationBadge
+                  axis="practical"
+                  status={practicalVerification}
+                  detail={practicalVerificationDetail}
+                />
+              </div>
+            )}
+
             <div className="mt-3">
               <ActionGroup
-                title="Practical Application"
                 accent="moss"
                 actions={[
                   { label: 'Self-assess your current level', onClick: () => setSelfAssessOpen(true) },
@@ -408,16 +417,6 @@ export default function SkillDetail() {
                 ]}
               />
             </div>
-
-            {practicalVerification && (
-              <div className="flex flex-wrap items-start gap-x-6 gap-y-2 mt-3">
-                <VerificationBadge
-                  axis="practical"
-                  status={practicalVerification}
-                  detail={practicalVerificationDetail}
-                />
-              </div>
-            )}
 
             {nextMilestone && (
               <div className="rounded-md border border-hairline bg-paper px-3 py-2 mt-3">
@@ -782,7 +781,7 @@ function ActionGroup({ title, accent, actions, headerExtra }) {
   const accentClass = accent === 'slate' ? 'hover:border-slate hover:text-slate' : 'hover:border-moss hover:text-moss'
   return (
     <div>
-      <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">{title}</h3>
+      {title && <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">{title}</h3>}
       {headerExtra}
       <div className="flex flex-wrap gap-2">
         {actions.map((action) => (
