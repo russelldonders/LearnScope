@@ -202,12 +202,13 @@ const EXTRACTION_SCHEMA = {
     profile: {
       type: 'object',
       properties: {
-        full_name: NULLABLE_STRING,
+        first_name: NULLABLE_STRING,
+        last_name: NULLABLE_STRING,
         country: NULLABLE_STRING,
         location: NULLABLE_STRING,
         language: NULLABLE_STRING,
       },
-      required: ['full_name', 'country', 'location', 'language'],
+      required: ['first_name', 'last_name', 'country', 'location', 'language'],
       additionalProperties: false,
     },
     skills: {
@@ -269,7 +270,7 @@ const EXTRACTION_SCHEMA = {
 
 const EXTRACTION_PROMPT = `Extract profile details, skills, courses/training, and education/employment experience from this CV or LinkedIn profile export.
 
-For profile: pull full name, country, current city/region (location), and primary language if stated or clearly inferable. Leave a field null if not present.
+For profile: pull first name and last name as separate fields, country, current city/region (location), and primary language if stated or clearly inferable. Leave a field null if not present.
 
 For skills: infer a reasonable proficiency level 1-5 (1 = beginner, 5 = expert) from years of experience, seniority language, or context; if genuinely unclear, use 3. Suggest 2-4 short, general tags per skill (e.g. "Technical", "Communication", "Leadership") rather than one rigid category. Mark current_role true only for skills clearly used in the most recent / current role (usually the first-listed or undated-end job); mark the rest false.
 

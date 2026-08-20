@@ -206,7 +206,12 @@ export default function ResumeImportReviewModal({
                 <span className="text-sm text-ink">
                   Fill in blank profile fields:{' '}
                   <span className="text-secondary">
-                    {[profileFields.full_name, profileFields.country, profileFields.location, profileFields.language]
+                    {[
+                      [profileFields.first_name, profileFields.last_name].filter(Boolean).join(' '),
+                      profileFields.country,
+                      profileFields.location,
+                      profileFields.language,
+                    ]
                       .filter(Boolean)
                       .join(' · ')}
                   </span>
