@@ -5,6 +5,13 @@ import { uploadAvatar, base64ToBlob } from '../lib/avatar'
 import { findOrCreateLibrarySkill } from '../lib/skillLibrary'
 import { addTagToSkill } from '../lib/skillTags'
 import { formatMonthYear } from '../lib/dates'
+import {
+  enableCurrentRole,
+  applyCurrentRoleSelection,
+  syncSkillIsCurrentRole,
+  listCurrentRoleExperiences,
+} from '../lib/currentRole'
+import CurrentRoleSelectModal from './CurrentRoleSelectModal'
 
 function useSelection(items) {
   const [selected, setSelected] = useState(() => new Set(items.map((_, i) => i)))
@@ -68,6 +75,7 @@ export default function ResumeImportReviewModal({
 
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState(null)
+  const [currentRolePrompt, setCurrentRolePrompt] = useState(null)
 
   const totalSelected = skills.selected.size + courses.selected.size + experience.selected.size
 
@@ -99,6 +107,8 @@ export default function ResumeImportReviewModal({
         user_id: user.id,
       }))
 
+    let currentRoleSkillIds = []
+
     try {
       if (selectedSkills.length) {
         const libraryIds = await Promise.all(
@@ -108,7 +118,10 @@ export default function ResumeImportReviewModal({
           name: s.name,
           level: s.level,
           notes: s.notes,
-          is_current_role: Boolean(s.current_role),
+          // Starts false regardless of the CV's "current role" guess -- set
+          // true below only once actually linked to a current-role
+          // experience, mirroring FindSkillModal/SkillDetail.
+          is_current_role: false,
           source: 'cv_import',
           library_skill_id: libraryIds[i],
           user_id: user.id,
@@ -135,6 +148,10 @@ export default function ResumeImportReviewModal({
             if (tagName?.trim()) await addTagToSkill(user.id, insertedSkills[i].id, tagName)
           }
         }
+
+        currentRoleSkillIds = insertedSkills
+          .filter((_, i) => Boolean(selectedSkills[i].current_role))
+          .map((s) => s.id)
       }
       if (courseRows.length) {
         const { error } = await supabase.from('courses').insert(courseRows)
@@ -152,11 +169,54 @@ export default function ResumeImportReviewModal({
         const url = await uploadAvatar(user.id, blob, extracted.photoContentType?.split('/')[1])
         onAvatarSet?.(url)
       }
+
+      if (currentRoleSkillIds.length > 0) {
+        // A CV can flag several skills as "current role" at once -- rather
+        // than prompting once per skill when the learner has multiple
+        // ongoing jobs, resolve the picker once for the whole batch and
+        // apply the same choice to every flagged skill.
+        const roles = await listCurrentRoleExperiences(user.id)
+        if (roles.length >= 2) {
+          setCurrentRolePrompt({ skillIds: currentRoleSkillIds, roles })
+          setImporting(false)
+          return
+        }
+        for (const skillId of currentRoleSkillIds) {
+          await enableCurrentRole(user.id, skillId)
+        }
+      }
+
       onImported()
     } catch (err) {
       setError(err.message)
       setImporting(false)
     }
+  }
+
+  async function handleCurrentRoleConfirm(experienceIds) {
+    for (const skillId of currentRolePrompt.skillIds) {
+      await applyCurrentRoleSelection(user.id, skillId, experienceIds)
+    }
+    setCurrentRolePrompt(null)
+    onImported()
+  }
+
+  async function handleCurrentRoleCancel() {
+    for (const skillId of currentRolePrompt.skillIds) {
+      await syncSkillIsCurrentRole(user.id, skillId)
+    }
+    setCurrentRolePrompt(null)
+    onImported()
+  }
+
+  if (currentRolePrompt) {
+    return (
+      <CurrentRoleSelectModal
+        roles={currentRolePrompt.roles}
+        onConfirm={handleCurrentRoleConfirm}
+        onCancel={handleCurrentRoleCancel}
+      />
+    )
   }
 
   return (
