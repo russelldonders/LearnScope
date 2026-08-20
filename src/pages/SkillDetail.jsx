@@ -109,7 +109,7 @@ export default function SkillDetail() {
     setNotFound(false)
     const { data, error } = await supabase
       .from('skills')
-      .select('*')
+      .select('*, skill_library(is_private)')
       .eq('id', id)
       .eq('user_id', user.id)
       .maybeSingle()
@@ -2233,6 +2233,11 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
         />
       )}
       <form onSubmit={handleSave} className="space-y-3">
+      <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">
+        {!skill.library_skill_id || skill.skill_library?.is_private
+          ? 'Custom skill — private to you'
+          : 'From the shared skill library'}
+      </p>
       <div>
         <label className="block text-sm text-secondary mb-1" htmlFor="detailName">
           Name
