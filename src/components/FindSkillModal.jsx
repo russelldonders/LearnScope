@@ -9,7 +9,8 @@ import GrowthRing from './GrowthRing'
 import EvidenceFields from './EvidenceFields'
 import TrackingReasonPicker from './TrackingReasonPicker'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
-import { syncCurrentRoleLinks } from '../lib/currentRole'
+import { enableCurrentRole, applyCurrentRoleSelection, syncSkillIsCurrentRole } from '../lib/currentRole'
+import CurrentRoleSelectModal from './CurrentRoleSelectModal'
 import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
 
 export default function FindSkillModal({ onClose, onCreated, experienceId }) {
@@ -24,6 +25,7 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
   const [selected, setSelected] = useState(null)
   const [isPrivate, setIsPrivate] = useState(false)
   const [isCurrentRole, setIsCurrentRole] = useState(false)
+  const [currentRolePrompt, setCurrentRolePrompt] = useState(null)
   const [trackingReason, setTrackingReason] = useState(null)
   const [assessNow, setAssessNow] = useState(false)
   const [level, setLevel] = useState(1)
@@ -103,7 +105,11 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
         .insert({
           name: selected.name.trim(),
           level: assessNow ? level : null,
-          is_current_role: isCurrentRole,
+          // Starts false regardless of the checkbox -- set true below only
+          // once actually linked to a current-role experience, so a skill
+          // can never end up flagged current-role with nothing behind it
+          // (e.g. if the multi-role picker gets abandoned).
+          is_current_role: false,
           tracking_reason: trackingReason,
           lifecycle_stage: 'identified',
           library_skill_id: libraryId,
@@ -131,8 +137,6 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
       ensureKnowledgeLevelGuide(skill).catch((guideErr) =>
         console.error('Knowledge level guide generation failed:', guideErr)
       )
-
-      await syncCurrentRoleLinks(user.id, skill.id, isCurrentRole)
 
       if (experienceId) {
         const { error: linkError } = await supabase.from('skill_experience_links').insert({
@@ -167,11 +171,46 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
         }
       }
 
+      if (isCurrentRole) {
+        const result = await enableCurrentRole(user.id, skill.id)
+        if (result.needsSelection) {
+          setCurrentRolePrompt({ skillId: skill.id, roles: result.roles })
+          setSaving(false)
+          return
+        }
+      }
+
       onCreated()
     } catch (err) {
       setError(err.message)
       setSaving(false)
     }
+  }
+
+  async function handleCurrentRoleConfirm(experienceIds) {
+    await applyCurrentRoleSelection(user.id, currentRolePrompt.skillId, experienceIds)
+    setCurrentRolePrompt(null)
+    onCreated()
+  }
+
+  async function handleCurrentRoleCancel() {
+    // Belt-and-suspenders: is_current_role was already inserted false and
+    // nothing got linked, so this should be a no-op -- but re-syncing
+    // guards against it drifting out of sync some other way. Any failure
+    // here propagates to CurrentRoleSelectModal's own error handling.
+    await syncSkillIsCurrentRole(user.id, currentRolePrompt.skillId)
+    setCurrentRolePrompt(null)
+    onCreated()
+  }
+
+  if (currentRolePrompt) {
+    return (
+      <CurrentRoleSelectModal
+        roles={currentRolePrompt.roles}
+        onConfirm={handleCurrentRoleConfirm}
+        onCancel={handleCurrentRoleCancel}
+      />
+    )
   }
 
   return (
@@ -298,7 +337,9 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
                   <span>
                     Part of my current role
                     <span className="block text-xs text-secondary/80 mt-0.5">
-                      Also links this skill to any ongoing employment entries on your Experience timeline.
+                      Links this skill to your current job on the Experience timeline — creates one
+                      called "Current role" if you don't have one yet, or asks which one if you
+                      have more than one.
                     </span>
                   </span>
                 </label>

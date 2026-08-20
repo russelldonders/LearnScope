@@ -14,7 +14,8 @@ import { LEVELS, LEVEL_LABELS, KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
 import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
 import { activityName, verbLabel, formatDuration, isDiagnosticStatement } from '../lib/xapiStatement'
-import { syncCurrentRoleLinks } from '../lib/currentRole'
+import { enableCurrentRole, disableCurrentRole, applyCurrentRoleSelection, syncSkillIsCurrentRole } from '../lib/currentRole'
+import CurrentRoleSelectModal from '../components/CurrentRoleSelectModal'
 import { listTags, listSkillTags, addTagToSkill, removeSkillTagLink } from '../lib/skillTags'
 import { SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
@@ -2110,6 +2111,7 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
   const [trackingReason, setTrackingReason] = useState(skill.tracking_reason ?? null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [currentRolePrompt, setCurrentRolePrompt] = useState(null)
 
   async function handleSave(e) {
     e.preventDefault()
@@ -2124,7 +2126,6 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
         .from('skills')
         .update({
           name: name.trim(),
-          is_current_role: isCurrentRole,
           tracking_reason: trackingReason,
         })
         .eq('id', skill.id)
@@ -2132,13 +2133,45 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
         if (isDuplicateSkillNameError(error)) throw new Error(duplicateSkillMessage(name))
         throw error
       }
-      await syncCurrentRoleLinks(user.id, skill.id, isCurrentRole)
+
+      // is_current_role itself is never written directly here -- it's set
+      // by enableCurrentRole/disableCurrentRole/syncSkillIsCurrentRole
+      // below, which only ever mark it true once actually linked to a
+      // current-role experience, so it can't end up stuck true with
+      // nothing behind it (e.g. if the multi-role picker gets abandoned).
+      // Only re-resolve when the checkbox actually changed -- otherwise
+      // every unrelated edit (renaming, tags) would re-prompt a learner
+      // with multiple current roles all over again.
+      if (isCurrentRole !== skill.is_current_role) {
+        if (isCurrentRole) {
+          const result = await enableCurrentRole(user.id, skill.id)
+          if (result.needsSelection) {
+            setCurrentRolePrompt({ roles: result.roles })
+            return
+          }
+        } else {
+          await disableCurrentRole(user.id, skill.id)
+        }
+      }
+
       onUpdated()
     } catch (err) {
       setError(err.message)
     } finally {
       setSaving(false)
     }
+  }
+
+  async function handleCurrentRoleConfirm(experienceIds) {
+    await applyCurrentRoleSelection(user.id, skill.id, experienceIds)
+    setCurrentRolePrompt(null)
+    onUpdated()
+  }
+
+  async function handleCurrentRoleCancel() {
+    await syncSkillIsCurrentRole(user.id, skill.id)
+    setCurrentRolePrompt(null)
+    onUpdated()
   }
 
   async function handleDelete() {
@@ -2157,7 +2190,15 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
   }
 
   return (
-    <form onSubmit={handleSave} className="space-y-3">
+    <>
+      {currentRolePrompt && (
+        <CurrentRoleSelectModal
+          roles={currentRolePrompt.roles}
+          onConfirm={handleCurrentRoleConfirm}
+          onCancel={handleCurrentRoleCancel}
+        />
+      )}
+      <form onSubmit={handleSave} className="space-y-3">
       <div>
         <label className="block text-sm text-secondary mb-1" htmlFor="detailName">
           Name
@@ -2189,7 +2230,9 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
         <span>
           Part of my current role
           <span className="block text-xs text-secondary/80 mt-0.5">
-            Also links this skill to any ongoing employment entries on your Experience timeline.
+            Links this skill to your current job on the Experience timeline — creates one called
+            "Current role" if you don't have one yet, or asks which one if you have more than
+            one.
           </span>
         </span>
       </label>
@@ -2215,7 +2258,8 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
           Delete skill
         </button>
       </div>
-    </form>
+      </form>
+    </>
   )
 }
 
