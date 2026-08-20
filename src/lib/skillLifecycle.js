@@ -4,7 +4,7 @@
 // and the lifecycle stepper never shows both at once (see
 // SKILL_LIFECYCLE_FLOW_STAGES / the "hide completed stages" behavior).
 export const SKILL_LIFECYCLE_STAGES = [
-  { value: 'identified', label: 'Establishing Baseline' },
+  { value: 'identified', label: 'Getting Started' },
   { value: 'confirming_baseline', label: 'Confirming Baseline' },
   { value: 'baseline_assessed', label: 'Target Setting' },
   { value: 'target_set', label: 'Developing' },
