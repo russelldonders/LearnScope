@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
@@ -43,12 +42,7 @@ export default function ProfilePrivacy() {
       <AppHeader />
 
       <main className="max-w-2xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="font-display text-xl text-ink">Privacy settings</h2>
-          <Link to="/profile" className="text-sm text-moss font-medium">
-            ← Back to profile
-          </Link>
-        </div>
+        <h2 className="font-display text-xl text-ink mb-6">Privacy settings</h2>
 
         {loading ? (
           <p className="text-secondary">Loading…</p>

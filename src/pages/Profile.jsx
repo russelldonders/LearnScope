@@ -1,17 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation as useRouterLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
 import ProfilePhoto from '../components/ProfilePhoto'
-import ImportProfileDataButton from '../components/ImportProfileDataButton'
 import { COUNTRIES } from '../lib/countries'
 import { LANGUAGES } from '../lib/languages'
 
 export default function Profile() {
   const { user, updateEmail } = useAuth()
-  const routerLocation = useRouterLocation()
-  const navigate = useNavigate()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
@@ -26,16 +22,6 @@ export default function Profile() {
 
   useEffect(() => {
     loadProfile()
-  }, [])
-
-  // Clear the "open the importer" flag from this history entry right after
-  // reading it, so navigating back/forward to this exact entry later
-  // doesn't silently reopen the importer -- it should only fire once, for
-  // the navigation that actually requested it.
-  useEffect(() => {
-    if (routerLocation.state?.openImport) {
-      navigate(routerLocation.pathname, { replace: true, state: {} })
-    }
   }, [])
 
   async function loadProfile() {
@@ -103,12 +89,7 @@ export default function Profile() {
       <AppHeader />
 
       <main className="max-w-2xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="font-display text-xl text-ink">Your profile</h2>
-          <Link to="/profile/privacy" className="text-sm text-moss font-medium">
-            Privacy settings →
-          </Link>
-        </div>
+        <h2 className="font-display text-xl text-ink mb-6">Your profile</h2>
 
         {loading ? (
           <p className="text-secondary">Loading…</p>
@@ -116,20 +97,6 @@ export default function Profile() {
           <div className="space-y-6">
             <div className="bg-card border border-hairline rounded-lg p-6">
               <ProfilePhoto avatarUrl={avatarUrl} onUploaded={setAvatarUrl} />
-              <div className="mt-4">
-                <ImportProfileDataButton
-                  autoOpen={Boolean(routerLocation.state?.openImport)}
-                  hasAvatar={Boolean(avatarUrl)}
-                  onAvatarSet={setAvatarUrl}
-                  onProfileFieldsFilled={(fields) => {
-                    if (fields.first_name && !firstName) setFirstName(fields.first_name)
-                    if (fields.last_name && !lastName) setLastName(fields.last_name)
-                    if (fields.country && !country) setCountry(fields.country)
-                    if (fields.location && !location) setLocation(fields.location)
-                    if (fields.language && !language) setLanguage(fields.language)
-                  }}
-                />
-              </div>
             </div>
 
             <form

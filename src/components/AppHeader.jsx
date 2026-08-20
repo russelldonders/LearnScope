@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
 
@@ -15,12 +15,12 @@ const NAV_LINKS = [
 const MENU_ITEMS = [
   { to: '/profile', label: 'Edit Profile' },
   { to: '/profile/privacy', label: 'Privacy Settings' },
+  { to: '/profile/import', label: 'Import Skills & Experience' },
 ]
 
 export default function AppHeader() {
   const { signOut, user } = useAuth()
   const location = useLocation()
-  const navigate = useNavigate()
   const [avatarUrl, setAvatarUrl] = useState(null)
   const [fullName, setFullName] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -54,11 +54,6 @@ export default function AppHeader() {
       document.removeEventListener('keydown', handleEscape)
     }
   }, [menuOpen])
-
-  function goToImport() {
-    setMenuOpen(false)
-    navigate('/profile', { state: { openImport: true } })
-  }
 
   return (
     <header className="border-b border-hairline bg-card">
@@ -111,13 +106,6 @@ export default function AppHeader() {
                       {item.label}
                     </Link>
                   ))}
-                  <button
-                    type="button"
-                    onClick={goToImport}
-                    className="block w-full text-left px-4 py-2 text-sm text-ink hover:bg-paper"
-                  >
-                    Import Skills & Experience
-                  </button>
                 </div>
               )}
             </div>

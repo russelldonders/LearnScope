@@ -15,6 +15,7 @@ import Experience from './pages/Experience'
 import ExperienceDetail from './pages/ExperienceDetail'
 import Profile from './pages/Profile'
 import ProfilePrivacy from './pages/ProfilePrivacy'
+import ProfileImport from './pages/ProfileImport'
 import Rate from './pages/Rate'
 import Connections from './pages/Connections'
 import SkillsProfile from './pages/SkillsProfile'
@@ -97,6 +98,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ProfilePrivacy />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile/import"
+            element={
+              <ProtectedRoute>
+                <ProfileImport />
               </ProtectedRoute>
             }
           />
