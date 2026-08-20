@@ -6,7 +6,7 @@ import { suggestTags } from '../lib/skillTags'
 // callbacks; the caller decides whether they hit the database immediately
 // (editing an existing skill) or just update local state (adding a new
 // one, applied once the skill itself is saved).
-export default function TagsField({ tags, onAddTag, onRemoveTag, skillName, allTags, datalistId }) {
+export default function TagsField({ tags, onAddTag, onRemoveTag, skillName, allTags, datalistId, readOnly = false }) {
   const [input, setInput] = useState('')
   const [suggestions, setSuggestions] = useState([])
   const [suggesting, setSuggesting] = useState(false)
@@ -58,6 +58,28 @@ export default function TagsField({ tags, onAddTag, onRemoveTag, skillName, allT
     } catch (err) {
       setError(err.message)
     }
+  }
+
+  if (readOnly) {
+    return (
+      <div>
+        <span className="block text-sm text-secondary mb-1">Tags</span>
+        {tags.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {tags.map((t, i) => (
+              <span
+                key={t.id ?? t.name ?? i}
+                className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
+              >
+                {t.name}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-secondary">No tags.</p>
+        )}
+      </div>
+    )
   }
 
   return (

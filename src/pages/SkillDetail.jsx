@@ -70,7 +70,6 @@ export default function SkillDetail() {
   const [inviteOpen, setInviteOpen] = useState(false)
   const [selfAssessOpen, setSelfAssessOpen] = useState(false)
   const [selfAssessKnowledgeOpen, setSelfAssessKnowledgeOpen] = useState(false)
-  const [confirmKnowledgeOpen, setConfirmKnowledgeOpen] = useState(false)
   const [confirmingBaselineOpen, setConfirmingBaselineOpen] = useState(false)
   const [recordActivityOpen, setRecordActivityOpen] = useState(false)
   const [assessMode, setAssessMode] = useState(null)
@@ -255,7 +254,6 @@ export default function SkillDetail() {
   const practicalStatements = statements.filter((s) => !isDiagnosticStatement(s.statement))
   const invitesSentCount = invites.length
   const hasAnyEvaluationInput = selfAssessedCount > 0 || peerRatings.length > 0 || practicalStatements.length > 0
-  const hasAnyKnowledgeEvaluationInput = knowledgeSelfAssessedCount > 0
   const latestKnowledgeAssessment = history.find((a) => a.axis === 'knowledge') ?? null
   // The header shows the confirmed level once one exists; until then it
   // falls back to the latest self-assessment so the header reflects what the
@@ -537,18 +535,6 @@ export default function SkillDetail() {
               />
             )}
 
-            {confirmKnowledgeOpen && (
-              <ConfirmKnowledgeLevelModal
-                skill={skill}
-                latestAssessment={latestKnowledgeAssessment}
-                onClose={() => setConfirmKnowledgeOpen(false)}
-                onConfirmed={() => {
-                  loadSkill()
-                  setConfirmKnowledgeOpen(false)
-                }}
-              />
-            )}
-
             {confirmingBaselineOpen && (
               <ConfirmingBaselineQuizModal
                 skill={skill}
@@ -682,20 +668,6 @@ export default function SkillDetail() {
                       onUpdated={loadSkill}
                       onDeleted={() => navigate(backTo, { state: { tab: 'skills' } })}
                     />
-                    <div className="border-t border-hairline pt-4">
-                      <h3 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">
-                        Knowledge
-                      </h3>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmKnowledgeOpen(true)}
-                        disabled={!hasAnyKnowledgeEvaluationInput}
-                        title={!hasAnyKnowledgeEvaluationInput ? 'Self-assess your knowledge first' : undefined}
-                        className="w-full rounded-md bg-moss text-paper py-2.5 px-4 font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        Confirm knowledge level
-                      </button>
-                    </div>
                     <SettingsSection skill={skill} onUpdated={loadSkill} />
                     <ScheduleSection skill={skill} onUpdated={loadSkill} />
                   </div>
@@ -1163,87 +1135,6 @@ function SelfAssessSection({ skill, user, axis = 'practical', onAssessed, onGuid
         {saving ? 'Saving…' : 'Save self-assessment'}
       </button>
     </form>
-  )
-}
-
-// Unlike the practical axis, there's no multi-source AI synthesis feeding
-// knowledge_level -- the learner's own self-assessment is the only signal.
-// This still keeps it an explicit, separate confirmation step (rather than
-// self-assessing silently moving the official value) so it stays under the
-// learner's control, same as "Evaluate Baseline" is for the practical axis.
-function ConfirmKnowledgeLevelModal({ skill, latestAssessment, onClose, onConfirmed }) {
-  const [level, setLevel] = useState(latestAssessment?.level ?? skill.knowledge_level ?? 1)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState(null)
-
-  async function handleConfirm() {
-    setError(null)
-    setSaving(true)
-    try {
-      const { error: updateError } = await supabase
-        .from('skills')
-        .update({ knowledge_level: level })
-        .eq('id', skill.id)
-      if (updateError) throw updateError
-      onConfirmed()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-2xl text-ink">Confirm knowledge level</h2>
-          <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
-            Close
-          </button>
-        </div>
-
-        {latestAssessment && (
-          <p className="text-sm text-secondary mb-3">
-            Your latest self-assessment{' '}
-            {latestAssessment.comments ? <>said: "{latestAssessment.comments}"</> : 'is set below.'} Adjust if
-            needed, then confirm it as your current knowledge level.
-          </p>
-        )}
-
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            {LEVELS.map((l) => (
-              <button
-                type="button"
-                key={l}
-                onClick={() => setLevel(l)}
-                className={`flex flex-col items-center gap-1 rounded-md px-1 py-1 ${
-                  level === l ? 'bg-moss/10' : ''
-                }`}
-              >
-                <GrowthRing level={l} size={36} labels={KNOWLEDGE_LEVEL_LABELS} color="var(--color-slate)" />
-                <span className="font-mono text-[10px] text-secondary">{KNOWLEDGE_LEVEL_LABELS[l]}</span>
-              </button>
-            ))}
-          </div>
-
-          {error && <p className="text-sm text-red-700">{error}</p>}
-
-          <button
-            type="button"
-            onClick={handleConfirm}
-            disabled={saving}
-            className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-          >
-            {saving ? 'Saving…' : 'Confirm knowledge level'}
-          </button>
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -2140,6 +2031,7 @@ function ScheduleSection({ skill, onUpdated }) {
 }
 
 function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user, onUpdated, onDeleted }) {
+  const isCustom = !skill.library_skill_id || skill.skill_library?.is_private
   const [name, setName] = useState(skill.name)
   const [isCurrentRole, setIsCurrentRole] = useState(skill.is_current_role)
   const [trackingReason, setTrackingReason] = useState(skill.tracking_reason ?? null)
@@ -2234,21 +2126,26 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
       )}
       <form onSubmit={handleSave} className="space-y-3">
       <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">
-        {!skill.library_skill_id || skill.skill_library?.is_private
-          ? 'Custom skill — private to you'
-          : 'From the shared skill library'}
+        {isCustom ? 'Custom skill — private to you' : 'From the shared skill library'}
       </p>
-      <div>
-        <label className="block text-sm text-secondary mb-1" htmlFor="detailName">
-          Name
-        </label>
-        <input
-          id="detailName"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-        />
-      </div>
+      {isCustom ? (
+        <div>
+          <label className="block text-sm text-secondary mb-1" htmlFor="detailName">
+            Name
+          </label>
+          <input
+            id="detailName"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+          />
+        </div>
+      ) : (
+        <div>
+          <span className="block text-sm text-secondary mb-1">Name</span>
+          <p className="text-ink text-sm">{skill.name}</p>
+        </div>
+      )}
 
       <TagsField
         tags={skillTags.map((t) => ({ id: t.id, name: t.tags?.name }))}
@@ -2257,6 +2154,7 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
         skillName={name}
         allTags={allTags}
         datalistId="tags-options-detail"
+        readOnly={!isCustom}
       />
 
       <label className="flex items-start gap-2 text-sm text-secondary">
