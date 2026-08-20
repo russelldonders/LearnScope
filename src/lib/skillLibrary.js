@@ -28,6 +28,19 @@ export function duplicateLibrarySkillMessage(error, name) {
   return `A skill named "${name.trim()}" already exists in the library — use the search above to find and add it instead.`
 }
 
+// Library entries linked to any of the given interest tags, via
+// skill_library_tags (0055) -- used to filter "skills you might want to
+// learn" without touching any other learner's private skill_tags rows.
+export async function listLibrarySkillIdsForTags(tagIds) {
+  if (!tagIds?.length) return []
+  const { data, error } = await supabase
+    .from('skill_library_tags')
+    .select('skill_library_id')
+    .in('tag_id', tagIds)
+  if (error) throw error
+  return [...new Set((data ?? []).map((r) => r.skill_library_id))]
+}
+
 // Case-insensitive exact-name match: reuse the existing library entry if
 // one exists, otherwise add a new one. Used wherever a user types a skill
 // name that isn't already in their personal list, so the same skill isn't

@@ -7,6 +7,8 @@ import GoogleSignInButton from '../components/GoogleSignInButton'
 export default function Signup() {
   const { signUp, signInWithGoogle, user, loading } = useAuth()
   const navigate = useNavigate()
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
@@ -28,9 +30,13 @@ export default function Signup() {
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (!firstName.trim() || !lastName.trim()) {
+      setError('Please enter your first and last name.')
+      return
+    }
     setError(null)
     setSubmitting(true)
-    const { data, error } = await signUp(email, password)
+    const { data, error } = await signUp(email, password, { firstName, lastName })
     setSubmitting(false)
     if (error) {
       setError(error.message)
@@ -94,6 +100,36 @@ export default function Signup() {
           </p>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm text-secondary mb-1" htmlFor="firstName">
+                  First name
+                </label>
+                <input
+                  id="firstName"
+                  type="text"
+                  required
+                  autoComplete="given-name"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-secondary mb-1" htmlFor="lastName">
+                  Last name
+                </label>
+                <input
+                  id="lastName"
+                  type="text"
+                  required
+                  autoComplete="family-name"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                />
+              </div>
+            </div>
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="email">
                 Email
@@ -134,12 +170,14 @@ export default function Signup() {
           </form>
         )}
 
-        <p className="text-sm text-secondary mt-6 text-center">
-          Already have an account?{' '}
-          <Link to="/login" className="text-moss font-medium">
-            Log in
-          </Link>
-        </p>
+        {!confirmationSent && (
+          <p className="text-sm text-secondary mt-6 text-center">
+            Already have an account?{' '}
+            <Link to="/login" className="text-moss font-medium">
+              Log in
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   )

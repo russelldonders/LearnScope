@@ -1,10 +1,11 @@
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth()
+  const { user, loading, needsOnboarding } = useAuth()
+  const location = useLocation()
 
-  if (loading) {
+  if (loading || (user && needsOnboarding === null)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-paper text-secondary">
         Loading…
@@ -14,6 +15,10 @@ export default function ProtectedRoute({ children }) {
 
   if (!user) {
     return <Navigate to="/login" replace />
+  }
+
+  if (needsOnboarding && location.pathname !== '/onboarding') {
+    return <Navigate to="/onboarding" replace />
   }
 
   return children

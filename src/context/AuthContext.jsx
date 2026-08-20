@@ -6,6 +6,9 @@ const AuthContext = createContext(undefined)
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
+  // null = not yet known, true/false = known. Only re-checked when the
+  // signed-in user actually changes, not on every token refresh.
+  const [needsOnboarding, setNeedsOnboarding] = useState(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -20,15 +23,47 @@ export function AuthProvider({ children }) {
     return () => listener.subscription.unsubscribe()
   }, [])
 
+  const userId = session?.user?.id ?? null
+
+  useEffect(() => {
+    if (!userId) {
+      setNeedsOnboarding(null)
+      return
+    }
+    supabase
+      .from('profiles')
+      .select('onboarding_completed_at')
+      .eq('id', userId)
+      .single()
+      .then(({ data, error }) => {
+        setNeedsOnboarding(!error && data ? !data.onboarding_completed_at : false)
+      })
+  }, [userId])
+
+  async function markOnboardingComplete() {
+    if (!userId) return { error: null }
+    const { error } = await supabase
+      .from('profiles')
+      .update({ onboarding_completed_at: new Date().toISOString() })
+      .eq('id', userId)
+    if (!error) setNeedsOnboarding(false)
+    return { error }
+  }
+
   const value = {
     session,
     user: session?.user ?? null,
     loading,
-    signUp: (email, password) =>
+    needsOnboarding,
+    markOnboardingComplete,
+    signUp: (email, password, { firstName, lastName } = {}) =>
       supabase.auth.signUp({
         email,
         password,
-        options: { emailRedirectTo: `${window.location.origin}/welcome` },
+        options: {
+          emailRedirectTo: `${window.location.origin}/welcome`,
+          data: { first_name: firstName?.trim() || null, last_name: lastName?.trim() || null },
+        },
       }),
     signIn: (email, password) => supabase.auth.signInWithPassword({ email, password }),
     // Also doubles as signup -- Supabase creates the account on first Google

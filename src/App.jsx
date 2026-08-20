@@ -7,6 +7,7 @@ import Signup from './pages/Signup'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import Welcome from './pages/Welcome'
+import Onboarding from './pages/Onboarding'
 import Dashboard from './pages/Dashboard'
 import Skills from './pages/Skills'
 import SkillDetail from './pages/SkillDetail'
@@ -34,6 +35,14 @@ function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/rate/:code" element={<Rate />} />
+          <Route
+            path="/onboarding"
+            element={
+              <ProtectedRoute>
+                <Onboarding />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/dashboard"
             element={
