@@ -103,6 +103,11 @@ export default function SetTargetModal({ skill, user, targets = [], currentLevel
                         Current
                       </span>
                     )}
+                    {current?.target_level === l && (
+                      <span className="font-mono text-[10px] uppercase tracking-wide text-secondary/70">
+                        Current target
+                      </span>
+                    )}
                   </button>
                   {targetLevel === l && (guideStatements[l - 1] ?? LEVEL_DESCRIPTIONS[l]) && (
                     <div className="px-3 pt-2 pb-4">
