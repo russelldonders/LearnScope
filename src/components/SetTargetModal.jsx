@@ -1,13 +1,14 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import GrowthRing from './GrowthRing'
 import { LEVELS, LEVEL_LABELS, LEVEL_DESCRIPTIONS } from '../lib/levels'
+import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
 
 // currentLevel is the panel's already-displayed practical level (falls back
 // through self-assessment history the same way the Can Do panel does -- see
 // displayedPracticalLevel in SkillDetail) so the default target selection
 // and "current" badge reflect what the learner actually sees on the page.
-export default function SetTargetModal({ skill, user, targets = [], currentLevel = null, onClose, onSet }) {
+export default function SetTargetModal({ skill, user, targets = [], currentLevel = null, onClose, onSet, onGuideGenerated }) {
   const current = targets[0] ?? null
   const isEdit = Boolean(current)
   const [targetLevel, setTargetLevel] = useState(current?.target_level ?? currentLevel ?? 3)
@@ -15,6 +16,25 @@ export default function SetTargetModal({ skill, user, targets = [], currentLevel
   const [comments, setComments] = useState(current?.comments ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [guideStatements, setGuideStatements] = useState([])
+
+  // Same per-skill AI guide as the self-assess picker (see
+  // ensurePracticalLevelGuide) -- LEVEL_DESCRIPTIONS is only a fallback
+  // while it's loading or if generation fails.
+  useEffect(() => {
+    let cancelled = false
+    ensurePracticalLevelGuide(skill)
+      .then((statements) => {
+        if (!cancelled) setGuideStatements(statements)
+        if (statements.length === 5) onGuideGenerated?.(statements)
+      })
+      .catch(() => {
+        if (!cancelled) setGuideStatements([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [skill.id])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -84,9 +104,11 @@ export default function SetTargetModal({ skill, user, targets = [], currentLevel
                       </span>
                     )}
                   </button>
-                  {targetLevel === l && LEVEL_DESCRIPTIONS[l] && (
+                  {targetLevel === l && (guideStatements[l - 1] ?? LEVEL_DESCRIPTIONS[l]) && (
                     <div className="px-3 pt-2 pb-4">
-                      <p className="text-xs text-secondary leading-relaxed">{LEVEL_DESCRIPTIONS[l]}</p>
+                      <p className="text-xs text-secondary leading-relaxed">
+                        {guideStatements[l - 1] ?? LEVEL_DESCRIPTIONS[l]}
+                      </p>
                     </div>
                   )}
                 </div>

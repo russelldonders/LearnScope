@@ -12,6 +12,7 @@ import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { enableCurrentRole, applyCurrentRoleSelection, syncSkillIsCurrentRole } from '../lib/currentRole'
 import CurrentRoleSelectModal from './CurrentRoleSelectModal'
 import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
+import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
 
 export default function FindSkillModal({ onClose, onCreated, experienceId }) {
   const { user } = useAuth()
@@ -131,11 +132,15 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
         console.error('Auto-tag suggestion failed:', tagErr)
       }
 
-      // Best-effort and not awaited -- precomputes the knowledge-level
-      // guidance now so it's already cached by the time the learner opens
-      // the knowledge self-assessment, without delaying skill creation.
+      // Best-effort and not awaited -- precomputes the knowledge- and
+      // practical-level guidance now so both are already cached by the
+      // time the learner opens either self-assessment, without delaying
+      // skill creation.
       ensureKnowledgeLevelGuide(skill).catch((guideErr) =>
         console.error('Knowledge level guide generation failed:', guideErr)
+      )
+      ensurePracticalLevelGuide(skill).catch((guideErr) =>
+        console.error('Practical level guide generation failed:', guideErr)
       )
 
       if (experienceId) {

@@ -30,6 +30,7 @@ import TagsField from '../components/TagsField'
 import { listOutgoingValidationRequests } from '../lib/skillValidationRequests'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
+import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
 import { computeTrustStatus } from '../lib/skillProficiencyModel'
 import { countSkillTrackers, listConnectionsWithSkill } from '../lib/skillStats'
 
@@ -611,6 +612,9 @@ export default function SkillDetail() {
                   loadSkill()
                   setSelfAssessOpen(false)
                 }}
+                onGuideGenerated={(statements) =>
+                  setSkill((s) => (s ? { ...s, practical_level_guide: statements } : s))
+                }
               />
             )}
 
@@ -650,7 +654,15 @@ export default function SkillDetail() {
                   setTargetOpen(true)
                 }}
                 onGuideGenerated={(statements) =>
-                  setSkill((s) => (s ? { ...s, knowledge_level_guide: statements } : s))
+                  setSkill((s) =>
+                    s
+                      ? {
+                          ...s,
+                          [levelDetailAxis === 'knowledge' ? 'knowledge_level_guide' : 'practical_level_guide']:
+                            statements,
+                        }
+                      : s
+                  )
                 }
               />
             )}
@@ -712,6 +724,9 @@ export default function SkillDetail() {
                   loadSkill()
                   setTargetOpen(false)
                 }}
+                onGuideGenerated={(statements) =>
+                  setSkill((s) => (s ? { ...s, practical_level_guide: statements } : s))
+                }
               />
             )}
 
@@ -907,20 +922,21 @@ function NestedSkillPanel({ title, accent, status, actions }) {
 // Explains what the learner's current (or most recent self-assessed)
 // level actually means, then offers the same self-assess/rate action as
 // the panel's own button -- reached by clicking the level itself rather
-// than only the explicit action button. Knowledge descriptions reuse the
-// per-skill AI guide (same source as the self-assess picker); practical
-// descriptions are the static, skill-agnostic LEVEL_DESCRIPTIONS.
+// than only the explicit action button. Both axes reuse the same
+// per-skill AI guide as their self-assess picker (see ensureKnowledgeLevelGuide
+// / ensurePracticalLevelGuide); LEVEL_DESCRIPTIONS is only a fallback for
+// the practical axis if generation hasn't completed or fails.
 function LevelDetailModal({ skill, axis, level, currentTarget, onClose, onSelfAssess, onSetTarget, onGuideGenerated }) {
   const isKnowledge = axis === 'knowledge'
   const labels = isKnowledge ? KNOWLEDGE_LEVEL_LABELS : LEVEL_LABELS
   const [guideStatements, setGuideStatements] = useState([])
-  const [guideLoading, setGuideLoading] = useState(isKnowledge)
+  const [guideLoading, setGuideLoading] = useState(true)
 
   useEffect(() => {
-    if (!isKnowledge) return
     let cancelled = false
     setGuideLoading(true)
-    ensureKnowledgeLevelGuide(skill)
+    const ensureGuide = isKnowledge ? ensureKnowledgeLevelGuide : ensurePracticalLevelGuide
+    ensureGuide(skill)
       .then((statements) => {
         if (!cancelled) setGuideStatements(statements)
         if (statements.length === 5) onGuideGenerated?.(statements)
@@ -936,7 +952,9 @@ function LevelDetailModal({ skill, axis, level, currentTarget, onClose, onSelfAs
     }
   }, [isKnowledge, skill.id])
 
-  const description = level ? (isKnowledge ? guideStatements[level - 1] : LEVEL_DESCRIPTIONS[level]) : null
+  const description = level
+    ? guideStatements[level - 1] ?? (!isKnowledge ? LEVEL_DESCRIPTIONS[level] : undefined)
+    : null
 
   return (
     <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
@@ -959,7 +977,7 @@ function LevelDetailModal({ skill, axis, level, currentTarget, onClose, onSelfAs
           <p className="text-base font-medium text-ink">{level ? labels[level] : 'Not yet self-assessed'}</p>
         </div>
         {level ? (
-          isKnowledge && guideLoading ? (
+          guideLoading && description == null ? (
             <p className="text-sm text-secondary mb-4">Loading guidance…</p>
           ) : (
             description && <p className="text-sm text-secondary mb-4">{description}</p>
@@ -971,17 +989,19 @@ function LevelDetailModal({ skill, axis, level, currentTarget, onClose, onSelfAs
               : "You haven't self-assessed your practical level for this skill yet."}
           </p>
         )}
-        {currentTarget && (
-          <div className="mb-4">
-            <div className="flex items-center gap-3">
-              <GrowthRing level={0} size={40} targetLevel={currentTarget.target_level} />
-              <p className="text-base font-medium text-ink">{LEVEL_LABELS[currentTarget.target_level]}</p>
+        {currentTarget && (() => {
+          const targetDescription =
+            guideStatements[currentTarget.target_level - 1] ?? LEVEL_DESCRIPTIONS[currentTarget.target_level]
+          return (
+            <div className="mb-4">
+              <div className="flex items-center gap-3">
+                <GrowthRing level={0} size={40} targetLevel={currentTarget.target_level} />
+                <p className="text-base font-medium text-ink">{LEVEL_LABELS[currentTarget.target_level]}</p>
+              </div>
+              {targetDescription && <p className="text-sm text-secondary mt-2">{targetDescription}</p>}
             </div>
-            {LEVEL_DESCRIPTIONS[currentTarget.target_level] && (
-              <p className="text-sm text-secondary mt-2">{LEVEL_DESCRIPTIONS[currentTarget.target_level]}</p>
-            )}
-          </div>
-        )}
+          )
+        })()}
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -1089,13 +1109,13 @@ function SelfAssessSection({ skill, user, axis = 'practical', currentLevel = nul
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [guideStatements, setGuideStatements] = useState([])
-  const [guideLoading, setGuideLoading] = useState(isKnowledge)
+  const [guideLoading, setGuideLoading] = useState(true)
 
   useEffect(() => {
-    if (!isKnowledge) return
     let cancelled = false
     setGuideLoading(true)
-    ensureKnowledgeLevelGuide(skill)
+    const ensureGuide = isKnowledge ? ensureKnowledgeLevelGuide : ensurePracticalLevelGuide
+    ensureGuide(skill)
       .then((statements) => {
         if (!cancelled) setGuideStatements(statements)
         // Cache the result on the in-memory skill too, so reopening this
@@ -1104,7 +1124,8 @@ function SelfAssessSection({ skill, user, axis = 'practical', currentLevel = nul
       })
       .catch(() => {
         // Guidance is a nice-to-have, not required to self-assess -- fail
-        // quietly and just fall back to the plain level picker.
+        // quietly and just fall back to the plain level picker (practical
+        // still has LEVEL_DESCRIPTIONS as a static fallback, see render).
         if (!cancelled) setGuideStatements([])
       })
       .finally(() => {
@@ -1212,17 +1233,17 @@ function SelfAssessSection({ skill, user, axis = 'practical', currentLevel = nul
               </button>
               {level === l && (
                 <div className="px-3 pt-2 pb-4">
-                  {isKnowledge ? (
-                    guideLoading ? (
-                      <p className="text-xs text-secondary leading-relaxed">Loading guidance…</p>
-                    ) : guideStatements[l - 1] ? (
-                      <p className="text-xs text-secondary leading-relaxed">{guideStatements[l - 1]}</p>
-                    ) : null
-                  ) : (
-                    LEVEL_DESCRIPTIONS[l] && (
-                      <p className="text-xs text-secondary leading-relaxed">{LEVEL_DESCRIPTIONS[l]}</p>
+                  {(() => {
+                    const levelDescription = guideStatements[l - 1] ?? (!isKnowledge ? LEVEL_DESCRIPTIONS[l] : undefined)
+                    if (guideLoading && levelDescription == null) {
+                      return <p className="text-xs text-secondary leading-relaxed">Loading guidance…</p>
+                    }
+                    return (
+                      levelDescription && (
+                        <p className="text-xs text-secondary leading-relaxed">{levelDescription}</p>
+                      )
                     )
-                  )}
+                  })()}
                 </div>
               )}
             </div>
