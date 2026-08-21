@@ -23,6 +23,17 @@
   --font-mono: 'IBM Plex Mono', monospace;
 }
 
+html {
+  /* Reserves the scrollbar's width permanently -- otherwise any page whose
+     content height crosses the viewport threshold (e.g. filtering a list
+     shorter than the screen) loses/gains the scrollbar and every centered,
+     max-width container visibly shifts a few pixels narrower or wider.
+     scrollbar-gutter only takes effect on a box whose overflow isn't
+     visible, so overflow-y has to be set explicitly too. */
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
 body {
   margin: 0;
   background: var(--color-paper);
