@@ -159,12 +159,6 @@ export default function Dashboard() {
         <div>
           <div className="flex items-center justify-between mb-6">
             <h2 className="font-display text-xl text-ink">Your overview</h2>
-            <Link
-              to="/training"
-              className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
-            >
-              Find training
-            </Link>
           </div>
 
           {loading ? (

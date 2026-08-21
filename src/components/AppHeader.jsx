@@ -106,15 +106,20 @@ export default function AppHeader() {
                       {item.label}
                     </Link>
                   ))}
+                  <div className="my-1 border-t border-hairline" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      signOut()
+                    }}
+                    className="block w-full text-left px-4 py-2 text-sm text-ink hover:bg-paper"
+                  >
+                    Log out
+                  </button>
                 </div>
               )}
             </div>
-            <button
-              onClick={signOut}
-              className="shrink-0 text-sm text-secondary hover:text-ink border border-hairline rounded-md px-3 py-1.5"
-            >
-              Log out
-            </button>
           </div>
         </div>
         <nav className="flex items-center flex-wrap gap-1 sm:gap-3 mt-3">
