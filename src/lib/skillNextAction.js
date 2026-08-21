@@ -168,7 +168,7 @@ export function computeUpNextItems({
       })
       items.push({
         key: 'ai-assessment',
-        label: 'Request AI Assessment',
+        label: '✨ Request AI Assessment',
         description: 'Weigh all your evidence against your target level and get feedback.',
         done: false,
       })
