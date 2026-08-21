@@ -64,20 +64,22 @@ export default function SkillsSection() {
       // self-assessed level, via the same fallback (see
       // displayedPracticalLevel in SkillDetail.jsx).
       const latestPracticalBySkillId = new Map()
+      // Whether *any* self-sourced row exists at all, not just the latest --
+      // matches the trust logic on the skill's own detail page (selfAssessedCount
+      // in SkillDetail.jsx): an AI baseline/evaluation run later doesn't erase
+      // the trust earned by an underlying self-assessment, since the AI result
+      // is a synthesis of that same evidence, not an independent source.
+      const selfAssessedSkillIds = new Set()
       for (const a of practicalAssessments ?? []) {
-        if (!latestPracticalBySkillId.has(a.skill_id)) latestPracticalBySkillId.set(a.skill_id, a)
+        if (!latestPracticalBySkillId.has(a.skill_id)) latestPracticalBySkillId.set(a.skill_id, a.level)
+        if (a.source === 'self' || !a.source) selfAssessedSkillIds.add(a.skill_id)
       }
       setSkills(
-        data.map((s) => {
-          const latest = latestPracticalBySkillId.get(s.id)
-          // skill.level itself is only ever set by an AI assessment or a
-          // completed course, never a plain self-assessment -- so the card's
-          // trust badge must only call this "Self-assessed" when there's no
-          // confirmed level yet and the fallback shown really is a
-          // self-assessment (source 'self', or legacy rows with no source).
-          const displayedLevelIsSelfAssessed = !s.level && (!latest || latest.source === 'self' || !latest.source)
-          return { ...s, displayedLevel: s.level ?? latest?.level ?? null, displayedLevelIsSelfAssessed }
-        })
+        data.map((s) => ({
+          ...s,
+          displayedLevel: s.level ?? latestPracticalBySkillId.get(s.id) ?? null,
+          displayedLevelIsSelfAssessed: selfAssessedSkillIds.has(s.id),
+        }))
       )
       const map = new Map()
       for (const link of tagLinks ?? []) {
