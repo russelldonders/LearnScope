@@ -171,6 +171,12 @@ export default function ResumeImportReviewModal({
           name: s.name,
           level: s.level,
           tracking_reason: s.tracking_reason,
+          // Matches FindSkillModal, which always starts a new skill at
+          // 'identified' regardless of whether a level was captured
+          // immediately -- without it, lifecycle_stage stays null and the
+          // skill never matches any branch of computeUpNextItems, silently
+          // dropping out of the Up Next checklist entirely.
+          lifecycle_stage: 'identified',
           // s.notes goes on the genesis skill_assessments row below as its
           // comments, same field a self-assessment uses -- not here, since
           // skills.notes isn't surfaced or editable anywhere on the skill
