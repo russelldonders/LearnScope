@@ -10,6 +10,19 @@ export const LEVEL_LABELS = {
   5: 'Raising the standard',
 }
 
+// Longer, skill-agnostic explanations of each practical level, shown when a
+// learner wants to know what a level actually means before self-assessing.
+// Unlike the knowledge axis (see knowledgeLevelGuide.js), these aren't
+// generated per-skill -- the practical scale describes demonstrated ability
+// in general terms that hold regardless of the specific skill.
+export const LEVEL_DESCRIPTIONS = {
+  1: "You've observed this being done, but haven't tried it yourself yet.",
+  2: "You can attempt this with guidance, supervision, or a reference to follow.",
+  3: "You can complete this on your own, without needing help.",
+  4: 'You can handle edge cases, complications, and unusual situations with confidence.',
+  5: "Others turn to you on this -- you're pushing quality or improving how it's done.",
+}
+
 // A separate scale for the knowledge/understanding axis -- kept distinct
 // from LEVEL_LABELS' growth metaphor since it describes what a learner
 // understands, not the practical ability tracked by skills.level.
