@@ -495,7 +495,11 @@ export default function SkillDetail() {
                     onClick={() => setLevelDetailAxis('practical')}
                     className="w-full flex items-center gap-3 text-left rounded-md -m-1 p-1 hover:bg-card transition-colors"
                   >
-                    <GrowthRing level={displayedPracticalLevel} size={28} />
+                    <GrowthRing
+                      level={displayedPracticalLevel}
+                      size={35}
+                      targetLevel={currentTarget?.target_level}
+                    />
                     <div>
                       <p className="text-sm text-secondary">
                         {displayedPracticalLevel ? LEVEL_LABELS[displayedPracticalLevel] : 'Not yet self-assessed'}
@@ -529,7 +533,6 @@ export default function SkillDetail() {
                       }
                       actions={[
                         { label: 'Record activity', onClick: () => setRecordActivityOpen(true) },
-                        { label: 'Set target', onClick: () => setTargetOpen(true) },
                         ...(canShowDemonstrateAction
                           ? [{ label: 'Demonstrate skill', onClick: handleDemonstrateSkill }]
                           : []),
@@ -639,11 +642,16 @@ export default function SkillDetail() {
                 skill={skill}
                 axis={levelDetailAxis}
                 level={levelDetailAxis === 'knowledge' ? displayedKnowledgeLevel : displayedPracticalLevel}
+                currentTarget={levelDetailAxis === 'practical' ? currentTarget : null}
                 onClose={() => setLevelDetailAxis(null)}
                 onSelfAssess={() => {
                   setLevelDetailAxis(null)
                   if (levelDetailAxis === 'knowledge') setSelfAssessKnowledgeOpen(true)
                   else setSelfAssessOpen(true)
+                }}
+                onSetTarget={() => {
+                  setLevelDetailAxis(null)
+                  setTargetOpen(true)
                 }}
                 onGuideGenerated={(statements) =>
                   setSkill((s) => (s ? { ...s, knowledge_level_guide: statements } : s))
@@ -902,7 +910,7 @@ function NestedSkillPanel({ title, accent, status, actions }) {
 // than only the explicit action button. Knowledge descriptions reuse the
 // per-skill AI guide (same source as the self-assess picker); practical
 // descriptions are the static, skill-agnostic LEVEL_DESCRIPTIONS.
-function LevelDetailModal({ skill, axis, level, onClose, onSelfAssess, onGuideGenerated }) {
+function LevelDetailModal({ skill, axis, level, currentTarget, onClose, onSelfAssess, onSetTarget, onGuideGenerated }) {
   const isKnowledge = axis === 'knowledge'
   const labels = isKnowledge ? KNOWLEDGE_LEVEL_LABELS : LEVEL_LABELS
   const [guideStatements, setGuideStatements] = useState([])
@@ -946,7 +954,7 @@ function LevelDetailModal({ skill, axis, level, onClose, onSelfAssess, onGuideGe
           {isKnowledge ? (
             <KnowledgeLevelBar level={level} size={32} />
           ) : (
-            <GrowthRing level={level} size={40} />
+            <GrowthRing level={level} size={40} targetLevel={currentTarget?.target_level} />
           )}
           <p className="text-base font-medium text-ink">{level ? labels[level] : 'Not yet self-assessed'}</p>
         </div>
@@ -963,13 +971,29 @@ function LevelDetailModal({ skill, axis, level, onClose, onSelfAssess, onGuideGe
               : "You haven't self-assessed your practical level for this skill yet."}
           </p>
         )}
-        <button
-          type="button"
-          onClick={onSelfAssess}
-          className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
-        >
-          {isKnowledge ? 'Rate your current level' : 'Self-assess your current level'}
-        </button>
+        {currentTarget && (
+          <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mb-4">
+            Target {LEVEL_LABELS[currentTarget.target_level]} by {formatMonthYear(currentTarget.target_date)}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onSelfAssess}
+            className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
+          >
+            {isKnowledge ? 'Rate your current level' : 'Self-assess your current level'}
+          </button>
+          {!isKnowledge && (
+            <button
+              type="button"
+              onClick={onSetTarget}
+              className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper"
+            >
+              Set target
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -1131,15 +1155,17 @@ function SelfAssessSection({ skill, user, axis = 'practical', onAssessed, onGuid
                 <span className="text-sm text-ink font-medium">{labels[l]}</span>
               </button>
               {level === l && (
-                <div className="px-3 pb-3">
+                <div className="px-3 pt-2 pb-4">
                   {isKnowledge ? (
                     guideLoading ? (
-                      <p className="text-xs text-secondary">Loading guidance…</p>
+                      <p className="text-xs text-secondary leading-relaxed">Loading guidance…</p>
                     ) : guideStatements[l - 1] ? (
-                      <p className="text-xs text-secondary">{guideStatements[l - 1]}</p>
+                      <p className="text-xs text-secondary leading-relaxed">{guideStatements[l - 1]}</p>
                     ) : null
                   ) : (
-                    LEVEL_DESCRIPTIONS[l] && <p className="text-xs text-secondary">{LEVEL_DESCRIPTIONS[l]}</p>
+                    LEVEL_DESCRIPTIONS[l] && (
+                      <p className="text-xs text-secondary leading-relaxed">{LEVEL_DESCRIPTIONS[l]}</p>
+                    )
                   )}
                 </div>
               )}

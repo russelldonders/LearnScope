@@ -8,6 +8,7 @@ export default function GrowthRing({
   showLabel = false,
   labels = LEVEL_LABELS,
   color = 'var(--color-gold)',
+  targetLevel = null,
 }) {
   const clampedLevel = Math.min(5, Math.max(0, level ?? 0))
   const label = level ? labels[level] : 'Not yet self-assessed'
@@ -30,6 +31,17 @@ export default function GrowthRing({
             />
           )
         })}
+        {targetLevel && (
+          <circle
+            cx="50"
+            cy="50"
+            r={RADII[targetLevel - 1]}
+            fill="none"
+            stroke="#dc2626"
+            strokeWidth={2}
+            strokeDasharray="7 5"
+          />
+        )}
         <circle cx="50" cy="50" r="3" fill={clampedLevel > 0 ? color : 'var(--color-hairline)'} />
       </svg>
       {showLabel && <span className="font-mono text-xs text-secondary">{label}</span>}
