@@ -33,9 +33,13 @@ export default function SkillsProfile() {
     setName(profile.full_name || 'This person')
     // Either opt-in can grant visibility -- skills_profile_visible for an
     // existing connection, profile_visible_to_skill_matches for someone who
-    // shares a skill but isn't connected yet. RLS enforces which skill rows
-    // actually come back either way (see 0016 and 0058's SELECT policies on
-    // skills), this is just which case to attempt the query for.
+    // shares a skill but isn't connected yet. RLS still gates which rows can
+    // come back at all (see 0016/0051 and 0058's SELECT policies on skills),
+    // but the "Skills open to being asked to validate are discoverable"
+    // policy (0042/0051) permits rows regardless of visible_on_profile, so
+    // the per-skill toggle from SkillDetail's SettingsSection must also be
+    // enforced explicitly here -- otherwise a skill opted into validator
+    // discovery but not into profile visibility would still show up.
     const mayBeVisible = Boolean(profile.skills_profile_visible || profile.profile_visible_to_skill_matches)
     setVisible(mayBeVisible)
 
@@ -45,6 +49,7 @@ export default function SkillsProfile() {
           .from('skills')
           .select('id, name, level')
           .eq('user_id', userId)
+          .eq('visible_on_profile', true)
           .order('name', { ascending: true }),
         supabase.from('skill_tags').select('skill_id, tags(name)').eq('user_id', userId),
       ])
