@@ -66,9 +66,15 @@ export default function SkillCard({ skill, onEdit }) {
             {KNOWLEDGE_LEVEL_LABELS[skill.knowledge_level]}
           </p>
         )}
-        {(practicalTrust || knowledgeTrust) && (
+        {/* Self-assessed is the common case on this grid (almost every
+            tracked skill has one) so it reads as noise on every card here --
+            only the rarer, more meaningful tiers get a badge. The skill's
+            own detail page still shows Self-assessed where it's the only
+            signal available. */}
+        {((practicalTrust && practicalTrust !== TRUST_STATUS.SELF_ASSESSED) ||
+          (knowledgeTrust && knowledgeTrust !== TRUST_STATUS.SELF_ASSESSED)) && (
           <div className="flex flex-wrap gap-1 mt-1.5">
-            {practicalTrust && (
+            {practicalTrust && practicalTrust !== TRUST_STATUS.SELF_ASSESSED && (
               <span
                 className={`font-mono text-[9px] uppercase tracking-wide rounded-full px-1.5 py-0.5 border ${
                   practicalTrust === TRUST_STATUS.VALIDATED || practicalTrust === TRUST_STATUS.CONFIRMED
@@ -79,7 +85,7 @@ export default function SkillCard({ skill, onEdit }) {
                 {practicalTrust}
               </span>
             )}
-            {knowledgeTrust && (
+            {knowledgeTrust && knowledgeTrust !== TRUST_STATUS.SELF_ASSESSED && (
               <span className="font-mono text-[9px] uppercase tracking-wide rounded-full px-1.5 py-0.5 border border-hairline text-secondary">
                 Knowledge · {knowledgeTrust}
               </span>
