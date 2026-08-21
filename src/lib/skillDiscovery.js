@@ -11,7 +11,15 @@ export async function listSkillMatches(libraryskillId) {
 }
 
 export async function sendConnectionRequest({ recipientId, skillId, message }) {
+  // The insert RLS policy requires auth.uid() = requester_id -- without
+  // setting it explicitly the column stays null and the policy check fails
+  // ("new row violates row-level security policy"), since there's no
+  // column default or trigger that fills it in server-side.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
   const { error } = await supabase.from('connection_requests').insert({
+    requester_id: user.id,
     recipient_id: recipientId,
     skill_id: skillId || null,
     message: message?.trim() || null,
