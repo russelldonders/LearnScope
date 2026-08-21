@@ -558,18 +558,21 @@ export default function SkillDetail() {
                       actions={[
                         { label: 'Invite others to assess', onClick: () => setInviteOpen(true) },
                         {
-                          label: 'Assess my current level',
-                          onClick: () => setAssessMode('evaluate'),
+                          // Same AI synthesis either way (weighs self-assessment,
+                          // peer ratings, and activity) -- before a target exists
+                          // it just updates the confirmed level (AssessBaselineModal);
+                          // once one does, it checks progress against that target
+                          // instead (ValidateSkillModal). One button, one label,
+                          // context decides which modal opens.
+                          label: '✨ Request AI assessment',
+                          onClick: () => (targets.length > 0 ? setValidateOpen(true) : setAssessMode('evaluate')),
                           disabled: !hasAnyEvaluationInput,
                           title: !hasAnyEvaluationInput
                             ? 'Self-assess, invite a rating, or record activity first'
                             : undefined,
                         },
                         ...(targets.length > 0
-                          ? [
-                              { label: 'Request validation', onClick: () => setExpertValidationOpen(true) },
-                              { label: '✨ Request AI assessment', onClick: () => setValidateOpen(true) },
-                            ]
+                          ? [{ label: 'Request validation', onClick: () => setExpertValidationOpen(true) }]
                           : []),
                       ]}
                     />
