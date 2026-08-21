@@ -165,7 +165,10 @@ export default function ResumeImportReviewModal({
         const skillRows = selectedSkills.map((s, i) => ({
           name: s.name,
           level: s.level,
-          notes: s.notes,
+          // s.notes goes on the genesis skill_assessments row below as its
+          // comments, same field a self-assessment uses -- not here, since
+          // skills.notes isn't surfaced or editable anywhere on the skill
+          // itself (only the grid card used to render it).
           // Starts false regardless of the CV's "current role" guess -- set
           // true below only once actually linked to a current-role
           // experience, mirroring FindSkillModal/SkillDetail.
@@ -183,11 +186,11 @@ export default function ResumeImportReviewModal({
           .select()
         if (error) throw error
 
-        const genesisAssessments = insertedSkills.map((s) => ({
+        const genesisAssessments = insertedSkills.map((s, i) => ({
           skill_id: s.id,
           user_id: user.id,
           level: s.level,
-          comments: s.notes,
+          comments: selectedSkills[i].notes,
         }))
         const { error: assessmentError } = await supabase
           .from('skill_assessments')

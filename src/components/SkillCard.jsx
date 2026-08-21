@@ -86,7 +86,6 @@ export default function SkillCard({ skill, onEdit }) {
             )}
           </div>
         )}
-        {skill.notes && <p className="text-sm text-secondary line-clamp-2 mt-0.5">{skill.notes}</p>}
         {skill.tracking_reason && (
           <span
             className="flex items-center gap-1 font-mono text-[10px] text-secondary mt-1"
