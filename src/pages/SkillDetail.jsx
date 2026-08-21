@@ -363,15 +363,15 @@ export default function SkillDetail() {
             <div className="mb-4">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-4">
-                <GrowthRing level={skill.level} size={56} />
+                <GrowthRing level={displayedPracticalLevel} size={56} />
                 <div>
                   <h2 className="font-display text-2xl text-ink">{skill.name}</h2>
                   <p className="text-sm text-secondary flex items-center gap-1.5">
-                    {!skill.level && skill.lifecycle_stage && (
+                    {!displayedPracticalLevel && skill.lifecycle_stage && (
                       <LifecycleStageIcon stage={skill.lifecycle_stage} />
                     )}
-                    {skill.level
-                      ? LEVEL_LABELS[skill.level]
+                    {displayedPracticalLevel
+                      ? LEVEL_LABELS[displayedPracticalLevel]
                       : skill.lifecycle_stage
                         ? SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]
                         : 'Not yet self-assessed'}

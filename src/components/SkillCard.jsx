@@ -9,6 +9,11 @@ import LifecycleStageIcon from './LifecycleStageIcon'
 
 export default function SkillCard({ skill, onEdit }) {
   const due = isSelfAssessmentDue(skill.next_checkin_date)
+  // Falls back to the latest self-assessment when skill.level itself hasn't
+  // moved yet (see displayedLevel in SkillsSection.jsx) -- matches the same
+  // fallback the skill's own detail page uses, so this card doesn't sit on
+  // "Not yet self-assessed" through the whole self-assess -> evaluate gap.
+  const displayedLevel = skill.displayedLevel ?? skill.level
 
   // Lightweight per-axis trust badge -- the grid card only has the skills
   // row itself (no peer-rating/activity/quiz counts without a much heavier
@@ -32,7 +37,7 @@ export default function SkillCard({ skill, onEdit }) {
       onClick={() => onEdit(skill)}
       className="text-left bg-card border border-hairline rounded-lg p-4 flex gap-4 items-center hover:border-moss transition-colors w-full relative"
     >
-      <GrowthRing level={skill.level} size={56} />
+      <GrowthRing level={displayedLevel} size={56} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <h3 className="font-display text-lg text-ink truncate min-w-0">{skill.name}</h3>

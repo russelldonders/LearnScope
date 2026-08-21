@@ -40,18 +40,36 @@ export default function SkillsSection() {
 
   async function loadSkills() {
     setLoading(true)
-    const [{ data, error }, { data: tagLinks }] = await Promise.all([
+    const [{ data, error }, { data: tagLinks }, { data: practicalAssessments }] = await Promise.all([
       supabase
         .from('skills')
         .select('*')
         .eq('user_id', user.id)
         .order('date_added', { ascending: false }),
       supabase.from('skill_tags').select('skill_id, tags(name)').eq('user_id', user.id),
+      supabase
+        .from('skill_assessments')
+        .select('skill_id, level, assessed_at')
+        .eq('user_id', user.id)
+        .eq('axis', 'practical')
+        .order('assessed_at', { ascending: false }),
     ])
     if (error) {
       setError(error.message)
     } else {
-      setSkills(data)
+      // skill.level only moves on an explicit baseline evaluation (or an
+      // import that sets it directly) -- without this fallback a skill
+      // that's only ever been self-assessed shows "Not yet self-assessed"
+      // here even though the skill's own detail page already shows the
+      // self-assessed level, via the same fallback (see
+      // displayedPracticalLevel in SkillDetail.jsx).
+      const latestPracticalBySkillId = new Map()
+      for (const a of practicalAssessments ?? []) {
+        if (!latestPracticalBySkillId.has(a.skill_id)) latestPracticalBySkillId.set(a.skill_id, a.level)
+      }
+      setSkills(
+        data.map((s) => ({ ...s, displayedLevel: s.level ?? latestPracticalBySkillId.get(s.id) ?? null }))
+      )
       const map = new Map()
       for (const link of tagLinks ?? []) {
         if (!link.tags?.name) continue
