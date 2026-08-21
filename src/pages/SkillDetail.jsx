@@ -353,6 +353,22 @@ export default function SkillDetail() {
   const nextMilestone = upNextPreview.find((item) => !item.done && !item.locked) ?? null
   const nextMilestoneAction = nextMilestone ? upNextHandlers[nextMilestone.key] : undefined
 
+  // Per-panel status figures for the five-panel layout below -- each panel
+  // shows its own axis independently of the others (deliberately not gated
+  // on lifecycle_stage), since knowledge/practical/training/practice/
+  // validation can all progress out of strict order.
+  const pendingCourseLinksCount = courseLinks.filter((l) => l.courses && !l.courses.completed_date).length
+  const completedCourseLinksCount = courseLinks.filter((l) => l.courses?.completed_date).length
+  const currentTarget = targets[0] ?? null
+  const pendingValidationRequestsCount = validationRequests.filter((r) => r.status === 'pending').length
+  const decidedValidationRequestsCount = validationRequests.length - pendingValidationRequestsCount
+  // "Demonstrate skill" / "Move to validating" do advance lifecycle_stage,
+  // so unlike the rest of the Practice panel's actions they stay gated --
+  // showing them outside their stage would let the stage go backwards or
+  // skip ahead of what computeUpNextItems considers reachable.
+  const canShowDemonstrateAction = upNextPreview.some((item) => item.key === 'demonstrate')
+  const canShowValidateAction = upNextPreview.some((item) => item.key === 'validate')
+
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
@@ -402,35 +418,6 @@ export default function SkillDetail() {
               </button>
             </div>
 
-            {practicalVerification && (
-              <div className="flex flex-wrap items-start gap-x-6 gap-y-2 mt-3">
-                <VerificationBadge
-                  axis="practical"
-                  status={practicalVerification}
-                  detail={practicalVerificationDetail}
-                />
-              </div>
-            )}
-
-            <div className="mt-3">
-              <ActionGroup
-                accent="moss"
-                actions={[
-                  { label: 'Self-assess your current level', onClick: () => setSelfAssessOpen(true) },
-                  { label: 'Invite connection to rate', onClick: () => setInviteOpen(true) },
-                  {
-                    label: 'Assess my current level',
-                    onClick: () => setAssessMode('evaluate'),
-                    disabled: !hasAnyEvaluationInput,
-                    title: !hasAnyEvaluationInput
-                      ? 'Self-assess, invite a rating, or record activity first'
-                      : undefined,
-                  },
-                  { label: 'Set target', onClick: () => setTargetOpen(true) },
-                ]}
-              />
-            </div>
-
             {nextMilestone && (
               <div className="rounded-md border border-hairline bg-paper px-3 py-2 mt-3">
                 <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Next milestone</p>
@@ -448,13 +435,13 @@ export default function SkillDetail() {
               </div>
             )}
 
-            <div className="mt-4 pt-4 border-t border-hairline">
-              <ActionGroup
-                title="Knowledge"
+            <div className="mt-4 pt-4 border-t border-hairline grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <SkillPanel
+                title="Know"
                 accent="slate"
-                headerExtra={
-                  <div className="flex items-center gap-3 mb-3">
-                    <KnowledgeLevelBar level={displayedKnowledgeLevel} size={32} />
+                status={
+                  <div className="flex items-center gap-3">
+                    <KnowledgeLevelBar level={displayedKnowledgeLevel} size={28} />
                     <div>
                       <p className="text-sm text-secondary">
                         {displayedKnowledgeLevel
@@ -471,6 +458,109 @@ export default function SkillDetail() {
                   { label: 'Rate your current level', onClick: () => setSelfAssessKnowledgeOpen(true) },
                   { label: 'Assess me', onClick: () => setConfirmingBaselineOpen(true) },
                   { label: 'Interview me', disabled: true, title: 'Coming soon' },
+                ]}
+              />
+
+              <SkillPanel
+                title="Can Do"
+                status={
+                  practicalVerification ? (
+                    <VerificationBadge
+                      axis="practical"
+                      status={practicalVerification}
+                      detail={practicalVerificationDetail}
+                    />
+                  ) : (
+                    <p className="text-sm text-secondary">Not yet self-assessed</p>
+                  )
+                }
+                actions={[
+                  { label: 'Self-assess your current level', onClick: () => setSelfAssessOpen(true) },
+                  { label: 'Invite connection to rate', onClick: () => setInviteOpen(true) },
+                  {
+                    label: 'Assess my current level',
+                    onClick: () => setAssessMode('evaluate'),
+                    disabled: !hasAnyEvaluationInput,
+                    title: !hasAnyEvaluationInput
+                      ? 'Self-assess, invite a rating, or record activity first'
+                      : undefined,
+                  },
+                ]}
+              />
+
+              <SkillPanel
+                title="Build"
+                status={
+                  <p className="text-sm text-secondary">
+                    {completedCourseLinksCount > 0 || pendingCourseLinksCount > 0
+                      ? [
+                          completedCourseLinksCount > 0 ? `${completedCourseLinksCount} completed` : null,
+                          pendingCourseLinksCount > 0 ? `${pendingCourseLinksCount} in progress` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')
+                      : 'No training linked yet'}
+                  </p>
+                }
+                actions={[
+                  {
+                    label: 'Find a course',
+                    onClick: () => navigate('/training', { state: trainingScopeState }),
+                  },
+                ]}
+              />
+
+              <SkillPanel
+                title="Practice"
+                status={
+                  <div>
+                    <p className="text-sm text-secondary">
+                      {practicalStatements.length} activit{practicalStatements.length === 1 ? 'y' : 'ies'} logged
+                      {relationshipLinks.length > 0
+                        ? ` · linked to ${relationshipLinks.length} experience entr${relationshipLinks.length === 1 ? 'y' : 'ies'}`
+                        : ''}
+                    </p>
+                    {currentTarget && (
+                      <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
+                        Target {LEVEL_LABELS[currentTarget.target_level]} by{' '}
+                        {formatMonthYear(currentTarget.target_date)}
+                      </p>
+                    )}
+                  </div>
+                }
+                actions={[
+                  { label: 'Record activity', onClick: () => setRecordActivityOpen(true) },
+                  { label: 'Set target', onClick: () => setTargetOpen(true) },
+                  ...(canShowDemonstrateAction
+                    ? [{ label: 'Demonstrate skill', onClick: handleDemonstrateSkill }]
+                    : []),
+                  ...(canShowValidateAction
+                    ? [{ label: 'Move to validating', onClick: handleValidateSkillStage }]
+                    : []),
+                ]}
+              />
+
+              <SkillPanel
+                title="Validate"
+                status={
+                  <p className="text-sm text-secondary">
+                    {peerRatings.length > 0
+                      ? `${peerRatings.length} peer rating${peerRatings.length === 1 ? '' : 's'}`
+                      : 'No peer ratings yet'}
+                    {pendingValidationRequestsCount > 0
+                      ? ` · ${pendingValidationRequestsCount} request${pendingValidationRequestsCount === 1 ? '' : 's'} pending`
+                      : ''}
+                    {decidedValidationRequestsCount > 0 ? ` · ${decidedValidationRequestsCount} decided` : ''}
+                  </p>
+                }
+                actions={[
+                  { label: 'Invite others to assess', onClick: () => setInviteOpen(true) },
+                  ...(targets.length > 0
+                    ? [
+                        { label: 'Request validation', onClick: () => setExpertValidationOpen(true) },
+                        { label: 'Request AI assessment', onClick: () => setValidateOpen(true) },
+                      ]
+                    : []),
                 ]}
               />
             </div>
@@ -806,6 +896,23 @@ function ActionGroup({ title, accent, actions, headerExtra }) {
           </button>
         ))}
       </div>
+    </div>
+  )
+}
+
+// One card in the skill page's five-panel layout (Know / Can Do / Build /
+// Practice / Validate) -- each axis gets equal visual weight and its own
+// status + actions, rather than the stage-linear single-file "Up Next"
+// checklist implying the axes must progress in lockstep.
+function SkillPanel({ title, accent, status, actions }) {
+  return (
+    <div className="rounded-md border border-hairline bg-paper p-4">
+      <ActionGroup
+        title={title}
+        accent={accent}
+        headerExtra={status && <div className="mb-3">{status}</div>}
+        actions={actions}
+      />
     </div>
   )
 }
