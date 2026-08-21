@@ -488,7 +488,7 @@ export default function SkillDetail() {
                       }
                       actions={[
                         { label: 'Assess me', onClick: () => setConfirmingBaselineOpen(true) },
-                        { label: 'Interview me', disabled: true, title: 'Coming soon' },
+                        { label: '✨ Interview me', disabled: true, title: 'Coming soon' },
                       ]}
                     />
                   </div>
