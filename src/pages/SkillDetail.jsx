@@ -397,7 +397,7 @@ export default function SkillDetail() {
                   onClick={() => setSettingsOpen(true)}
                   aria-label="Skill settings"
                   title="Skill settings"
-                  className="p-2 -m-2 rounded-md text-secondary hover:text-ink hover:bg-paper transition-colors"
+                  className="p-2 rounded-full bg-moss text-paper hover:opacity-90 transition-opacity"
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="3" />
