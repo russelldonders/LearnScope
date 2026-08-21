@@ -5,6 +5,7 @@ import { uploadAvatar, base64ToBlob } from '../lib/avatar'
 import { findOrCreateLibrarySkill, listLibrarySkills } from '../lib/skillLibrary'
 import { addTagToSkill } from '../lib/skillTags'
 import { formatMonthYear } from '../lib/dates'
+import { TRACKING_REASONS } from '../lib/trackingReasons'
 import {
   enableCurrentRole,
   applyCurrentRoleSelection,
@@ -46,7 +47,11 @@ export default function ResumeImportReviewModal({
   onImported,
 }) {
   const { user } = useAuth()
-  const skills = useSelection(extracted.skills ?? [])
+  // Best-guess default for "why are you tracking this" -- everything here
+  // came off a CV/LinkedIn export, which is inherently a work-history
+  // document, so 'work' is the safe default; still just a starting point,
+  // shown and editable per skill in SkillRow below, never applied silently.
+  const skills = useSelection((extracted.skills ?? []).map((s) => ({ ...s, tracking_reason: 'work' })))
   const courses = useSelection(extracted.courses ?? [])
   const experience = useSelection(extracted.experience ?? [])
   const [existingSkillNames, setExistingSkillNames] = useState(null)
@@ -165,6 +170,7 @@ export default function ResumeImportReviewModal({
         const skillRows = selectedSkills.map((s, i) => ({
           name: s.name,
           level: s.level,
+          tracking_reason: s.tracking_reason,
           // s.notes goes on the genesis skill_assessments row below as its
           // comments, same field a self-assessment uses -- not here, since
           // skills.notes isn't surfaced or editable anywhere on the skill
@@ -349,6 +355,7 @@ export default function ResumeImportReviewModal({
               onChange={(v) => sel.updateField(i, 'name', v)}
               onSinceChange={(v) => sel.updateField(i, 'since', v)}
               onKeepPrivateChange={(v) => sel.updateField(i, 'keepPrivate', v)}
+              onTrackingReasonChange={(v) => sel.updateField(i, 'tracking_reason', v)}
             />
           )}
         />
@@ -435,7 +442,17 @@ function Row({ checked, onToggle, disabled, children }) {
   )
 }
 
-function SkillRow({ item, checked, alreadyExists, libraryMatch, onToggle, onChange, onSinceChange, onKeepPrivateChange }) {
+function SkillRow({
+  item,
+  checked,
+  alreadyExists,
+  libraryMatch,
+  onToggle,
+  onChange,
+  onSinceChange,
+  onKeepPrivateChange,
+  onTrackingReasonChange,
+}) {
   return (
     <Row checked={checked && !alreadyExists} onToggle={onToggle} disabled={alreadyExists}>
       <input
@@ -459,6 +476,20 @@ function SkillRow({ item, checked, alreadyExists, libraryMatch, onToggle, onChan
               onChange={(e) => onSinceChange(e.target.value)}
               className="rounded border border-hairline bg-paper px-1.5 py-0.5 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-moss"
             />
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-secondary">
+            Why tracking
+            <select
+              value={item.tracking_reason ?? ''}
+              onChange={(e) => onTrackingReasonChange(e.target.value || null)}
+              className="rounded border border-hairline bg-paper px-1.5 py-0.5 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-moss"
+            >
+              {TRACKING_REASONS.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
           </label>
           {libraryMatch ? (
             <span className="text-xs text-secondary">
