@@ -411,7 +411,7 @@ export default function SkillDetail() {
 
             <div className="mt-4 pt-4 border-t border-hairline grid grid-cols-1 sm:grid-cols-2 gap-4">
               <SkillPanel
-                title="Know"
+                title="Knowledge"
                 accent="slate"
                 status={
                   <button
@@ -492,7 +492,7 @@ export default function SkillDetail() {
               />
 
               <SkillPanel
-                title="Can Do"
+                title="Application"
                 status={
                   <button
                     type="button"
@@ -992,7 +992,7 @@ function LevelDetailModal({ skill, axis, level, currentTarget, onClose, onSelfAs
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-2xl text-ink">{isKnowledge ? 'Know' : 'Can Do'}</h2>
+          <h2 className="font-display text-2xl text-ink">{isKnowledge ? 'Knowledge' : 'Application'}</h2>
           <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
             Close
           </button>
