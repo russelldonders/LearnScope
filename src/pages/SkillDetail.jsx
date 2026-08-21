@@ -385,7 +385,11 @@ export default function SkillDetail() {
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={() => (targets.length > 0 ? setValidateOpen(true) : setAssessMode('evaluate'))}
+                  onClick={() =>
+                    targets.length > 0
+                      ? setValidateOpen(true)
+                      : setAssessMode(skill.lifecycle_stage === 'identified' ? 'baseline' : 'evaluate')
+                  }
                   disabled={!hasAnyEvaluationInput}
                   title={!hasAnyEvaluationInput ? 'Self-assess, invite a rating, or record activity first' : undefined}
                   className="rounded-full bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
@@ -397,7 +401,7 @@ export default function SkillDetail() {
                   onClick={() => setSettingsOpen(true)}
                   aria-label="Skill settings"
                   title="Skill settings"
-                  className="p-2 rounded-full bg-moss text-paper hover:opacity-90 transition-opacity"
+                  className="p-2 -m-2 rounded-md text-moss hover:opacity-75 transition-opacity"
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="3" />
@@ -836,8 +840,6 @@ export default function SkillDetail() {
               validatorNames={validatorNames}
               loading={loadingHistory}
               raterAvatars={raterAvatars}
-              hasAnyEvaluationInput={hasAnyEvaluationInput}
-              onAssessBaseline={() => setAssessMode('baseline')}
               onSetTarget={() => setTargetOpen(true)}
             />
           </div>
@@ -1352,14 +1354,11 @@ function HistorySection({
   validatorNames,
   loading,
   raterAvatars,
-  hasAnyEvaluationInput,
-  onAssessBaseline,
   onSetTarget,
 }) {
   const navigate = useNavigate()
   const due = isSelfAssessmentDue(skill.next_checkin_date)
   const currentTarget = targets[0]
-  const showBaselineFlow = skill.lifecycle_stage === 'identified'
   // The Confirming Baseline knowledge quiz logs its own xAPI attempt --
   // exclude it here too, same reasoning as the top-level SkillDetail
   // component (see there for the full comment).
@@ -1486,9 +1485,6 @@ function HistorySection({
                 isMostRecent={i === mostRecentRatingIndex}
                 isBaseline={i === mostRecentBaselineIndex}
                 raterAvatars={raterAvatars}
-                showAssessBaseline={showBaselineFlow && event.type === 'today'}
-                onAssessBaseline={onAssessBaseline}
-                assessBaselineDisabled={!hasAnyEvaluationInput}
                 onSelect={
                   event.type === 'training'
                     ? () => goToCourse(event.link.courses.id)
@@ -1598,9 +1594,6 @@ function TimelineEntry({
   isMostRecent,
   isBaseline,
   raterAvatars,
-  showAssessBaseline,
-  onAssessBaseline,
-  assessBaselineDisabled,
   onSelect,
 }) {
   const boxClass = isMostRecent
@@ -1632,17 +1625,6 @@ function TimelineEntry({
             Today · {new Date(event.date).toLocaleDateString()}
           </span>
           <span className="flex-1 h-px bg-hairline" />
-          {showAssessBaseline && (
-            <button
-              type="button"
-              onClick={onAssessBaseline}
-              disabled={assessBaselineDisabled}
-              title={assessBaselineDisabled ? 'Complete at least one checklist item first' : undefined}
-              className="shrink-0 rounded-md bg-moss text-paper text-xs font-medium py-1 px-2.5 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Assess baseline
-            </button>
-          )}
         </div>
       </div>
     )
