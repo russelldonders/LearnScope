@@ -516,20 +516,12 @@ export default function SkillDetail() {
                     <NestedSkillPanel
                       title="Practice"
                       status={
-                        <div>
-                          <p className="text-sm text-secondary">
-                            {practicalStatements.length} activit{practicalStatements.length === 1 ? 'y' : 'ies'} logged
-                            {relationshipLinks.length > 0
-                              ? ` · linked to ${relationshipLinks.length} experience entr${relationshipLinks.length === 1 ? 'y' : 'ies'}`
-                              : ''}
-                          </p>
-                          {currentTarget && (
-                            <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
-                              Target {LEVEL_LABELS[currentTarget.target_level]} by{' '}
-                              {formatMonthYear(currentTarget.target_date)}
-                            </p>
-                          )}
-                        </div>
+                        <p className="text-sm text-secondary">
+                          {practicalStatements.length} activit{practicalStatements.length === 1 ? 'y' : 'ies'} logged
+                          {relationshipLinks.length > 0
+                            ? ` · linked to ${relationshipLinks.length} experience entr${relationshipLinks.length === 1 ? 'y' : 'ies'}`
+                            : ''}
+                        </p>
                       }
                       actions={[
                         { label: 'Record activity', onClick: () => setRecordActivityOpen(true) },
@@ -957,7 +949,7 @@ function LevelDetailModal({ skill, axis, level, currentTarget, onClose, onSelfAs
           {isKnowledge ? (
             <KnowledgeLevelBar level={level} size={32} />
           ) : (
-            <GrowthRing level={level} size={40} targetLevel={currentTarget?.target_level} />
+            <GrowthRing level={level} size={40} />
           )}
           <p className="text-base font-medium text-ink">{level ? labels[level] : 'Not yet self-assessed'}</p>
         </div>
@@ -975,9 +967,10 @@ function LevelDetailModal({ skill, axis, level, currentTarget, onClose, onSelfAs
           </p>
         )}
         {currentTarget && (
-          <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mb-4">
-            Target {LEVEL_LABELS[currentTarget.target_level]} by {formatMonthYear(currentTarget.target_date)}
-          </p>
+          <div className="flex items-center gap-3 mb-4">
+            <GrowthRing level={0} size={40} targetLevel={currentTarget.target_level} />
+            <p className="text-base font-medium text-ink">{LEVEL_LABELS[currentTarget.target_level]}</p>
+          </div>
         )}
         <div className="flex flex-wrap gap-2">
           <button
