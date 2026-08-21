@@ -17,7 +17,6 @@ import { activityName, verbLabel, formatDuration, isDiagnosticStatement } from '
 import { enableCurrentRole, disableCurrentRole, applyCurrentRoleSelection, syncSkillIsCurrentRole } from '../lib/currentRole'
 import CurrentRoleSelectModal from '../components/CurrentRoleSelectModal'
 import { listTags, listSkillTags, addTagToSkill, removeSkillTagLink } from '../lib/skillTags'
-import { SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import InviteRaterModal from '../components/InviteRaterModal'
 import RecordActivityModal from '../components/RecordActivityModal'
@@ -31,18 +30,8 @@ import TagsField from '../components/TagsField'
 import { listOutgoingValidationRequests } from '../lib/skillValidationRequests'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
-import {
-  TRUST_STATUS,
-  computeTrustStatus,
-  classifyApplicationHistory,
-  describeApplicationHistory,
-} from '../lib/skillProficiencyModel'
+import { computeTrustStatus } from '../lib/skillProficiencyModel'
 import { countSkillTrackers, listConnectionsWithSkill } from '../lib/skillStats'
-
-const TABS = [
-  { id: 'history', label: 'Overview' },
-  { id: 'training', label: 'Training' },
-]
 
 export default function SkillDetail() {
   const { id } = useParams()
@@ -54,7 +43,6 @@ export default function SkillDetail() {
   const [skill, setSkill] = useState(null)
   const [loadingSkill, setLoadingSkill] = useState(true)
   const [notFound, setNotFound] = useState(false)
-  const [tab, setTab] = useState('history')
   const [history, setHistory] = useState([])
   const [peerRatings, setPeerRatings] = useState([])
   const [invites, setInvites] = useState([])
@@ -262,12 +250,16 @@ export default function SkillDetail() {
   // badge still says "Self-assessed" vs "Confirmed", so this doesn't overstate
   // how settled the number is -- it's shown, just not claimed as verified.
   const displayedKnowledgeLevel = skill?.knowledge_level ?? latestKnowledgeAssessment?.level ?? null
+  // Same fallback for the practical axis -- skill.level only moves on an
+  // explicit baseline evaluation, so without this a self-assessment would
+  // leave the Can Do panel stuck on "Not yet self-assessed" through the
+  // whole self-assess -> evaluate gap, same reasoning as knowledge above.
+  const latestPracticalAssessment = history.find((a) => a.axis === 'practical') ?? null
+  const displayedPracticalLevel = skill?.level ?? latestPracticalAssessment?.level ?? null
 
   // Practical-primary / knowledge-foundation model: derived, not stored --
   // see skillProficiencyModel.js. Trust status is computed independently
-  // per axis and never blended into a level; application history only ever
-  // produces a descriptive label, never a number.
-  const applicationHistory = classifyApplicationHistory(practicalStatements)
+  // per axis and never blended into a level.
   const knowledgeConfirmed = history.some((a) => a.axis === 'knowledge' && a.source === 'diagnostic_confirmed')
   const practicalVerification = skill
     ? computeTrustStatus({
@@ -283,29 +275,6 @@ export default function SkillDetail() {
     selfAssessedCount: knowledgeSelfAssessedCount,
     knowledgeConfirmed,
   })
-  const evidenceAttachedCount = history.filter(
-    (a) => a.axis === 'practical' && (a.evidence_url || a.evidence_paths?.length)
-  ).length
-  const supportingSignals = [
-    peerRatings.length > 0 ? `${peerRatings.length} peer rating${peerRatings.length === 1 ? '' : 's'}` : null,
-    practicalStatements.length > 0
-      ? `${practicalStatements.length} activit${practicalStatements.length === 1 ? 'y' : 'ies'} logged`
-      : null,
-    evidenceAttachedCount > 0 ? `${evidenceAttachedCount} evidence item${evidenceAttachedCount === 1 ? '' : 's'}` : null,
-  ].filter(Boolean)
-  const lastDemonstrated = practicalStatements[0]?.recorded_at
-    ? `Last demonstrated ${new Date(practicalStatements[0].recorded_at).toLocaleDateString()}`
-    : null
-  // What backs the practical verification tier so far -- shown as a caption
-  // under its badge so "Evidence supported" reads together with how much
-  // evidence, rather than as a single flat tier with no sense of strength.
-  const practicalVerificationDetail = [
-    describeApplicationHistory(applicationHistory),
-    ...supportingSignals,
-    lastDemonstrated,
-  ]
-    .filter(Boolean)
-    .join(' · ')
   const trainingScopeState = skill
     ? {
         skillId: skill.id,
@@ -357,7 +326,7 @@ export default function SkillDetail() {
   // shows its own axis independently of the others (deliberately not gated
   // on lifecycle_stage), since knowledge/practical/training/practice/
   // validation can all progress out of strict order.
-  const pendingCourseLinksCount = courseLinks.filter((l) => l.courses && !l.courses.completed_date).length
+  const pendingCourseLinks = courseLinks.filter((l) => l.courses && !l.courses.completed_date)
   const completedCourseLinksCount = courseLinks.filter((l) => l.courses?.completed_date).length
   const currentTarget = targets[0] ?? null
   const pendingValidationRequestsCount = validationRequests.filter((r) => r.status === 'pending').length
@@ -435,7 +404,7 @@ export default function SkillDetail() {
               </div>
             )}
 
-            <div className="mt-4 pt-4 border-t border-hairline grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="mt-4 pt-4 border-t border-hairline grid grid-cols-1 sm:grid-cols-2 gap-4">
               <SkillPanel
                 title="Know"
                 accent="slate"
@@ -456,118 +425,153 @@ export default function SkillDetail() {
                 }
                 actions={[
                   { label: 'Rate your current level', onClick: () => setSelfAssessKnowledgeOpen(true) },
-                  { label: 'Assess me', onClick: () => setConfirmingBaselineOpen(true) },
-                  { label: 'Interview me', disabled: true, title: 'Coming soon' },
                 ]}
+                nested={
+                  <div className="space-y-3">
+                    <NestedSkillPanel
+                      title="Build"
+                      status={
+                        <div>
+                          {completedCourseLinksCount > 0 && (
+                            <p className="text-sm text-secondary">{completedCourseLinksCount} completed</p>
+                          )}
+                          {pendingCourseLinks.length > 0 ? (
+                            <ul className="space-y-1 mt-1 first:mt-0">
+                              {pendingCourseLinks.map((link) => (
+                                <li key={link.id}>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      navigate(`/courses/${link.courses.id}`, {
+                                        state: { backTo: `/skills/${skill.id}`, backLabel: skill.name },
+                                      })
+                                    }
+                                    className="text-sm text-ink underline decoration-dotted underline-offset-2 hover:text-moss text-left"
+                                  >
+                                    {link.courses.name}
+                                  </button>
+                                  <span className="text-xs text-secondary"> · enrolled</span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            completedCourseLinksCount === 0 && (
+                              <p className="text-sm text-secondary">No training linked yet</p>
+                            )
+                          )}
+                        </div>
+                      }
+                      actions={[
+                        {
+                          label: 'Find a course',
+                          onClick: () => navigate('/training', { state: trainingScopeState }),
+                        },
+                      ]}
+                    />
+                    <NestedSkillPanel
+                      title="Verify"
+                      status={
+                        <p className="text-sm text-secondary">
+                          {knowledgeConfirmed ? 'Confirmed via quiz' : 'Not yet confirmed'}
+                        </p>
+                      }
+                      actions={[
+                        { label: 'Assess me', onClick: () => setConfirmingBaselineOpen(true) },
+                        { label: 'Interview me', disabled: true, title: 'Coming soon' },
+                      ]}
+                    />
+                  </div>
+                }
               />
 
               <SkillPanel
                 title="Can Do"
                 status={
-                  practicalVerification ? (
-                    <VerificationBadge
-                      axis="practical"
-                      status={practicalVerification}
-                      detail={practicalVerificationDetail}
-                    />
-                  ) : (
-                    <p className="text-sm text-secondary">Not yet self-assessed</p>
-                  )
-                }
-                actions={[
-                  { label: 'Self-assess your current level', onClick: () => setSelfAssessOpen(true) },
-                  { label: 'Invite connection to rate', onClick: () => setInviteOpen(true) },
-                  {
-                    label: 'Assess my current level',
-                    onClick: () => setAssessMode('evaluate'),
-                    disabled: !hasAnyEvaluationInput,
-                    title: !hasAnyEvaluationInput
-                      ? 'Self-assess, invite a rating, or record activity first'
-                      : undefined,
-                  },
-                ]}
-              />
-
-              <SkillPanel
-                title="Build"
-                status={
-                  <p className="text-sm text-secondary">
-                    {completedCourseLinksCount > 0 || pendingCourseLinksCount > 0
-                      ? [
-                          completedCourseLinksCount > 0 ? `${completedCourseLinksCount} completed` : null,
-                          pendingCourseLinksCount > 0 ? `${pendingCourseLinksCount} in progress` : null,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')
-                      : 'No training linked yet'}
-                  </p>
-                }
-                actions={[
-                  {
-                    label: 'Find a course',
-                    onClick: () => navigate('/training', { state: trainingScopeState }),
-                  },
-                ]}
-              />
-
-              <SkillPanel
-                title="Practice"
-                status={
-                  <div>
-                    <p className="text-sm text-secondary">
-                      {practicalStatements.length} activit{practicalStatements.length === 1 ? 'y' : 'ies'} logged
-                      {relationshipLinks.length > 0
-                        ? ` · linked to ${relationshipLinks.length} experience entr${relationshipLinks.length === 1 ? 'y' : 'ies'}`
-                        : ''}
-                    </p>
-                    {currentTarget && (
-                      <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
-                        Target {LEVEL_LABELS[currentTarget.target_level]} by{' '}
-                        {formatMonthYear(currentTarget.target_date)}
+                  <div className="flex items-center gap-3">
+                    <GrowthRing level={displayedPracticalLevel} size={28} />
+                    <div>
+                      <p className="text-sm text-secondary">
+                        {displayedPracticalLevel ? LEVEL_LABELS[displayedPracticalLevel] : 'Not yet self-assessed'}
                       </p>
-                    )}
+                      <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
+                        {practicalVerification ?? 'Practical foundation'}
+                      </p>
+                    </div>
                   </div>
                 }
                 actions={[
-                  { label: 'Record activity', onClick: () => setRecordActivityOpen(true) },
-                  { label: 'Set target', onClick: () => setTargetOpen(true) },
-                  ...(canShowDemonstrateAction
-                    ? [{ label: 'Demonstrate skill', onClick: handleDemonstrateSkill }]
-                    : []),
-                  ...(canShowValidateAction
-                    ? [{ label: 'Move to validating', onClick: handleValidateSkillStage }]
-                    : []),
+                  { label: 'Self-assess your current level', onClick: () => setSelfAssessOpen(true) },
                 ]}
-              />
-
-              <SkillPanel
-                title="Validate"
-                status={
-                  <p className="text-sm text-secondary">
-                    {peerRatings.length > 0
-                      ? `${peerRatings.length} peer rating${peerRatings.length === 1 ? '' : 's'}`
-                      : 'No peer ratings yet'}
-                    {pendingValidationRequestsCount > 0
-                      ? ` · ${pendingValidationRequestsCount} request${pendingValidationRequestsCount === 1 ? '' : 's'} pending`
-                      : ''}
-                    {decidedValidationRequestsCount > 0 ? ` · ${decidedValidationRequestsCount} decided` : ''}
-                  </p>
+                nested={
+                  <div className="space-y-3">
+                    <NestedSkillPanel
+                      title="Practice"
+                      status={
+                        <div>
+                          <p className="text-sm text-secondary">
+                            {practicalStatements.length} activit{practicalStatements.length === 1 ? 'y' : 'ies'} logged
+                            {relationshipLinks.length > 0
+                              ? ` · linked to ${relationshipLinks.length} experience entr${relationshipLinks.length === 1 ? 'y' : 'ies'}`
+                              : ''}
+                          </p>
+                          {currentTarget && (
+                            <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
+                              Target {LEVEL_LABELS[currentTarget.target_level]} by{' '}
+                              {formatMonthYear(currentTarget.target_date)}
+                            </p>
+                          )}
+                        </div>
+                      }
+                      actions={[
+                        { label: 'Record activity', onClick: () => setRecordActivityOpen(true) },
+                        { label: 'Set target', onClick: () => setTargetOpen(true) },
+                        ...(canShowDemonstrateAction
+                          ? [{ label: 'Demonstrate skill', onClick: handleDemonstrateSkill }]
+                          : []),
+                        ...(canShowValidateAction
+                          ? [{ label: 'Move to validating', onClick: handleValidateSkillStage }]
+                          : []),
+                      ]}
+                    />
+                    <NestedSkillPanel
+                      title="Validate"
+                      status={
+                        <p className="text-sm text-secondary">
+                          {peerRatings.length > 0
+                            ? `${peerRatings.length} peer rating${peerRatings.length === 1 ? '' : 's'}`
+                            : 'No peer ratings yet'}
+                          {pendingValidationRequestsCount > 0
+                            ? ` · ${pendingValidationRequestsCount} request${pendingValidationRequestsCount === 1 ? '' : 's'} pending`
+                            : ''}
+                          {decidedValidationRequestsCount > 0 ? ` · ${decidedValidationRequestsCount} decided` : ''}
+                        </p>
+                      }
+                      actions={[
+                        { label: 'Invite others to assess', onClick: () => setInviteOpen(true) },
+                        {
+                          label: 'Assess my current level',
+                          onClick: () => setAssessMode('evaluate'),
+                          disabled: !hasAnyEvaluationInput,
+                          title: !hasAnyEvaluationInput
+                            ? 'Self-assess, invite a rating, or record activity first'
+                            : undefined,
+                        },
+                        ...(targets.length > 0
+                          ? [
+                              { label: 'Request validation', onClick: () => setExpertValidationOpen(true) },
+                              { label: 'Request AI assessment', onClick: () => setValidateOpen(true) },
+                            ]
+                          : []),
+                      ]}
+                    />
+                  </div>
                 }
-                actions={[
-                  { label: 'Invite others to assess', onClick: () => setInviteOpen(true) },
-                  ...(targets.length > 0
-                    ? [
-                        { label: 'Request validation', onClick: () => setExpertValidationOpen(true) },
-                        { label: 'Request AI assessment', onClick: () => setValidateOpen(true) },
-                      ]
-                    : []),
-                ]}
               />
             </div>
 
             {skill.library_skill_id && (
               <div className="mt-4 pt-4 border-t border-hairline">
-                <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">Statistics</h3>
+                <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">Learning Network</h3>
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
                   <button
                     type="button"
@@ -711,23 +715,6 @@ export default function SkillDetail() {
               />
             )}
 
-            <div className="flex items-center flex-wrap gap-1 border-b border-hairline mb-4">
-              {TABS.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setTab(t.id)}
-                  className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
-                    tab === t.id
-                      ? 'border-moss text-ink'
-                      : 'border-transparent text-secondary hover:text-ink'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
             {settingsOpen && (
               <div
                 className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-40"
@@ -765,43 +752,22 @@ export default function SkillDetail() {
               </div>
             )}
 
-            {tab === 'history' && (
-              <HistorySection
-                skill={skill}
-                history={history}
-                peerRatings={peerRatings}
-                invitesSentCount={invitesSentCount}
-                relationshipLinks={relationshipLinks}
-                statements={statements}
-                courseLinks={courseLinks}
-                targets={targets}
-                validationRequests={validationRequests}
-                validatorNames={validatorNames}
-                loading={loadingHistory}
-                raterAvatars={raterAvatars}
-                hasAnyEvaluationInput={hasAnyEvaluationInput}
-                onSelfAssess={() => setSelfAssessOpen(true)}
-                onSelfAssessKnowledge={() => setSelfAssessKnowledgeOpen(true)}
-                onInvite={() => setInviteOpen(true)}
-                onRecordActivity={() => setRecordActivityOpen(true)}
-                onAssessBaseline={() => setAssessMode('baseline')}
-                onSetTarget={() => setTargetOpen(true)}
-                onFindCourse={() => navigate('/training', { state: trainingScopeState })}
-                onDemonstrateSkill={handleDemonstrateSkill}
-                onValidateSkillStage={handleValidateSkillStage}
-                onRequestValidation={() => setValidateOpen(true)}
-                onRequestExpertValidation={() => setExpertValidationOpen(true)}
-                onConfirmBaselineQuiz={() => setConfirmingBaselineOpen(true)}
-              />
-            )}
-
-            {tab === 'training' && (
-              <TrainingSection
-                courseLinks={courseLinks}
-                loading={loadingHistory}
-                trainingScopeState={trainingScopeState}
-              />
-            )}
+            <HistorySection
+              skill={skill}
+              history={history}
+              peerRatings={peerRatings}
+              relationshipLinks={relationshipLinks}
+              statements={statements}
+              courseLinks={courseLinks}
+              targets={targets}
+              validationRequests={validationRequests}
+              validatorNames={validatorNames}
+              loading={loadingHistory}
+              raterAvatars={raterAvatars}
+              hasAnyEvaluationInput={hasAnyEvaluationInput}
+              onAssessBaseline={() => setAssessMode('baseline')}
+              onSetTarget={() => setTargetOpen(true)}
+            />
           </div>
         )}
       </main>
@@ -841,35 +807,6 @@ function ConnectionsWithSkillModal({ connections, skillName, onClose }) {
   )
 }
 
-// Verification level is deliberately separate from proficiency -- it says
-// how a displayed level was supported (self-assessed, evidence, peer
-// confirmation, formal validation), not how high it is, so it's styled as
-// a neutral pill rather than echoing the level's own color scale.
-// Confirmed/Validated (practical) and Confirmed (knowledge, its ceiling
-// today) get the axis's accent color; earlier tiers stay neutral. The tier
-// alone doesn't say how much evidence backs it -- `detail`, when given,
-// renders underneath as a caption so the badge and its supporting signals
-// read as one unit instead of a flat status with no sense of strength.
-function VerificationBadge({ axis, status, detail }) {
-  const isKnowledge = axis === 'knowledge'
-  const isStrong = status === TRUST_STATUS.VALIDATED || status === TRUST_STATUS.CONFIRMED
-  const colorClass = isStrong
-    ? isKnowledge
-      ? 'border-slate text-slate'
-      : 'border-moss text-moss'
-    : 'border-hairline text-secondary'
-  return (
-    <div className="flex flex-col gap-1 min-w-0">
-      <span
-        className={`w-fit font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border ${colorClass}`}
-      >
-        {isKnowledge ? 'Knowledge' : 'Practical'} verification · {status}
-      </span>
-      {detail && <span className="text-xs text-secondary">{detail}</span>}
-    </div>
-  )
-}
-
 // Always-available actions for a skill, grouped by axis -- unlike Up Next
 // (which recommends the single next step for the skill's current lifecycle
 // stage), every action here is reachable regardless of stage, so a learner
@@ -900,11 +837,13 @@ function ActionGroup({ title, accent, actions, headerExtra }) {
   )
 }
 
-// One card in the skill page's five-panel layout (Know / Can Do / Build /
-// Practice / Validate) -- each axis gets equal visual weight and its own
-// status + actions, rather than the stage-linear single-file "Up Next"
-// checklist implying the axes must progress in lockstep.
-function SkillPanel({ title, accent, status, actions }) {
+// One card in the skill page's status layout (Know / Can Do) -- each axis
+// gets its own status + actions, rather than the stage-linear single-file
+// "Up Next" checklist implying the axes must progress in lockstep. Build
+// and Verify nest inside Know; Practice and Validate nest inside Can Do
+// (via `nested`), since they're the supporting evidence/verification for
+// those axes rather than peer-level axes of their own.
+function SkillPanel({ title, accent, status, actions, nested }) {
   return (
     <div className="rounded-md border border-hairline bg-paper p-4">
       <ActionGroup
@@ -913,108 +852,24 @@ function SkillPanel({ title, accent, status, actions }) {
         headerExtra={status && <div className="mb-3">{status}</div>}
         actions={actions}
       />
+      {nested && <div className="mt-4 pt-4 border-t border-hairline">{nested}</div>}
     </div>
   )
 }
 
-// The recommended next actions for a skill, keyed by lifecycle stage.
-// Only stages with a defined next step render this section at all --
-// later stages (demonstrated onward) have no single recommended action yet.
-function UpNextSection({
-  stage,
-  selfAssessedCount,
-  knowledgeSelfAssessedCount,
-  hasKnowledgeLevel,
-  peerRatingsCount,
-  invitesSentCount,
-  statementsCount,
-  onSelfAssess,
-  onSelfAssessKnowledge,
-  onInvite,
-  onRecordActivity,
-  onSetTarget,
-  onDemonstrateSkill,
-  onFindCourse,
-  courseLinks,
-  onValidateSkillStage,
-  onRequestValidation,
-  onRequestExpertValidation,
-  hasPendingExpertValidation,
-  hasTarget,
-  onConfirmBaselineQuiz,
-}) {
-  const handlers = {
-    'self-assess': onSelfAssess,
-    'self-assess-knowledge': onSelfAssessKnowledge,
-    'confirm-baseline-quiz': onConfirmBaselineQuiz,
-    invite: onInvite,
-    activity: onRecordActivity,
-    target: onSetTarget,
-    'find-course': onFindCourse,
-    demonstrate: onDemonstrateSkill,
-    'record-activity': onRecordActivity,
-    'self-assess-demonstrating': onSelfAssess,
-    'invite-demonstrating': onInvite,
-    validate: onValidateSkillStage,
-    'invite-validating': onInvite,
-    'request-validation': onRequestExpertValidation,
-    'ai-assessment': onRequestValidation,
-  }
-  const items = computeUpNextItems({
-    stage,
-    selfAssessedCount,
-    knowledgeSelfAssessedCount,
-    hasKnowledgeLevel,
-    peerRatingsCount,
-    invitesSentCount,
-    statementsCount,
-    courseLinks,
-    hasTarget,
-    hasPendingExpertValidation,
-  }).map((item) => ({ ...item, onClick: handlers[item.key] }))
-
-  if (!stage) return null
-
+// Smaller variant of SkillPanel for a panel nested inside another (Build
+// and Verify inside Know; Practice and Validate inside Can Do) -- same
+// title/status/actions shape, lighter card so it reads as "part of" the
+// parent rather than a sibling.
+function NestedSkillPanel({ title, accent, status, actions }) {
   return (
-    <div className="mb-6 rounded-md border border-hairline bg-paper p-4">
-      <h3 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Up Next</h3>
-      {items.length === 0 ? (
-        <p className="text-sm text-secondary">Nothing outstanding right now.</p>
-      ) : (
-        <div className="space-y-2">
-          {items.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={item.locked ? undefined : item.onClick}
-              disabled={item.locked}
-              title={item.locked ? item.lockedReason : undefined}
-              className={`w-full flex items-center justify-between gap-3 rounded-md border border-hairline bg-card px-3 py-2.5 text-left transition-colors ${
-                item.locked ? 'opacity-50 cursor-not-allowed' : 'hover:border-moss'
-              }`}
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <span
-                  className={`shrink-0 flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold ${
-                    item.done ? 'bg-moss border-moss text-paper' : 'border-hairline text-secondary'
-                  }`}
-                >
-                  {item.done ? '✓' : ''}
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-sm text-ink">{item.label}</span>
-                  <span className="block text-xs text-secondary truncate">
-                    {item.locked ? item.lockedReason : item.description}
-                  </span>
-                </span>
-              </div>
-              <span className={`shrink-0 text-xs font-medium ${item.locked ? 'text-secondary' : 'text-moss'}`}>
-                {item.locked ? 'Locked' : item.done ? 'Redo' : 'Start'}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
+    <div className="rounded-md border border-hairline bg-card p-3">
+      <ActionGroup
+        title={title}
+        accent={accent}
+        headerExtra={status && <div className="mb-2">{status}</div>}
+        actions={actions}
+      />
     </div>
   )
 }
@@ -1251,7 +1106,6 @@ function HistorySection({
   skill,
   history,
   peerRatings,
-  invitesSentCount,
   relationshipLinks,
   statements,
   courseLinks,
@@ -1261,32 +1115,17 @@ function HistorySection({
   loading,
   raterAvatars,
   hasAnyEvaluationInput,
-  onSelfAssess,
-  onSelfAssessKnowledge,
-  onInvite,
-  onRecordActivity,
   onAssessBaseline,
   onSetTarget,
-  onFindCourse,
-  onDemonstrateSkill,
-  onValidateSkillStage,
-  onRequestValidation,
-  onRequestExpertValidation,
-  onConfirmBaselineQuiz,
 }) {
   const navigate = useNavigate()
   const due = isSelfAssessmentDue(skill.next_checkin_date)
   const currentTarget = targets[0]
   const showBaselineFlow = skill.lifecycle_stage === 'identified'
-  const selfAssessedCount = history.filter((a) => (a.source === 'self' || !a.source) && a.axis === 'practical').length
-  const knowledgeSelfAssessedCount = history.filter(
-    (a) => (a.source === 'self' || !a.source) && a.axis === 'knowledge'
-  ).length
   // The Confirming Baseline knowledge quiz logs its own xAPI attempt --
   // exclude it here too, same reasoning as the top-level SkillDetail
   // component (see there for the full comment).
   const practicalStatements = statements.filter((s) => !isDiagnosticStatement(s.statement))
-  const hasKnowledgeLevel = Boolean(skill.knowledge_level)
   const pendingValidationRequests = validationRequests.filter((r) => r.status === 'pending')
   const decidedValidationRequests = validationRequests.filter((r) => r.status !== 'pending')
   const [selectedEvent, setSelectedEvent] = useState(null)
@@ -1296,7 +1135,8 @@ function HistorySection({
   }
 
   return (
-    <div>
+    <div className="mt-4 pt-4 border-t border-hairline">
+      <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-3">Timeline</h3>
       {skill.next_checkin_date && (
         <div
           className={`flex items-center justify-between rounded-md border px-3 py-2 mb-6 ${
@@ -1397,29 +1237,6 @@ function HistorySection({
                 hasMore={i < pendingValidationRequests.length - 1 || events.length > 0}
               />
             ))}
-            <UpNextSection
-              stage={skill.lifecycle_stage}
-              selfAssessedCount={selfAssessedCount}
-              knowledgeSelfAssessedCount={knowledgeSelfAssessedCount}
-              hasKnowledgeLevel={hasKnowledgeLevel}
-              peerRatingsCount={peerRatings.length}
-              invitesSentCount={invitesSentCount}
-              statementsCount={practicalStatements.length}
-              onSelfAssess={onSelfAssess}
-              onSelfAssessKnowledge={onSelfAssessKnowledge}
-              onInvite={onInvite}
-              onRecordActivity={onRecordActivity}
-              onSetTarget={onSetTarget}
-              onDemonstrateSkill={onDemonstrateSkill}
-              onFindCourse={onFindCourse}
-              courseLinks={courseLinks}
-              onValidateSkillStage={onValidateSkillStage}
-              onRequestValidation={onRequestValidation}
-              onRequestExpertValidation={onRequestExpertValidation}
-              hasPendingExpertValidation={pendingValidationRequests.length > 0}
-              hasTarget={targets.length > 0}
-              onConfirmBaselineQuiz={onConfirmBaselineQuiz}
-            />
             {events.map((event, i) => (
               <TimelineEntry
                 key={
@@ -2304,72 +2121,6 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
       </div>
       </form>
     </>
-  )
-}
-
-function TrainingSection({ courseLinks, loading, trainingScopeState }) {
-  const navigate = useNavigate()
-
-  return (
-    <div>
-      <div className="flex items-center gap-2 mb-4">
-        <Link
-          to="/training"
-          state={trainingScopeState}
-          className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
-        >
-          Find training
-        </Link>
-      </div>
-
-      {loading ? (
-        <p className="text-sm text-secondary">Loading…</p>
-      ) : courseLinks.length === 0 ? (
-        <p className="text-sm text-secondary">No courses linked to this skill yet.</p>
-      ) : (
-        <ul className="space-y-2">
-          {courseLinks
-            .filter((link) => link.courses)
-            .map((link) => (
-              <li
-                key={link.id}
-                role="button"
-                tabIndex={0}
-                onClick={() =>
-                  navigate(`/courses/${link.courses.id}`, {
-                    state: { backTo: trainingScopeState?.backTo, backLabel: trainingScopeState?.skillName },
-                  })
-                }
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    navigate(`/courses/${link.courses.id}`, {
-                      state: { backTo: trainingScopeState?.backTo, backLabel: trainingScopeState?.skillName },
-                    })
-                  }
-                }}
-                className="bg-paper border border-hairline rounded-md px-3 py-2 cursor-pointer hover:border-moss transition-colors"
-              >
-                <p className="text-sm font-medium text-ink">{link.courses.name}</p>
-                <p className="font-mono text-xs text-secondary mt-0.5">
-                  {[
-                    link.courses.provider,
-                    link.courses.course_type,
-                    link.courses.duration,
-                    link.courses.completed_date &&
-                      `Completed ${new Date(link.courses.completed_date).toLocaleDateString()}`,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </p>
-                <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/80 mt-0.5">
-                  {SKILL_RELATIONSHIP_LABELS[link.relationship] ?? link.relationship}
-                </p>
-              </li>
-            ))}
-        </ul>
-      )}
-    </div>
   )
 }
 
