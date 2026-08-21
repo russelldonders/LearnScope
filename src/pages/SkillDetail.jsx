@@ -391,10 +391,16 @@ export default function SkillDetail() {
                       : setAssessMode(skill.lifecycle_stage === 'identified' ? 'baseline' : 'evaluate')
                   }
                   disabled={!hasAnyEvaluationInput}
-                  title={!hasAnyEvaluationInput ? 'Self-assess, invite a rating, or record activity first' : undefined}
-                  className="rounded-full bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Request AI assessment"
+                  title={
+                    !hasAnyEvaluationInput
+                      ? 'Self-assess, invite a rating, or record activity first'
+                      : 'Request AI assessment'
+                  }
+                  className="rounded-full bg-moss text-paper text-xs font-medium px-2.5 sm:px-3 py-1.5 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  ✨ Request AI assessment
+                  <span aria-hidden="true">✨</span>
+                  <span className="hidden sm:inline"> Request AI assessment</span>
                 </button>
                 <button
                   type="button"
