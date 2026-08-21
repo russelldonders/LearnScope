@@ -33,7 +33,7 @@ import { listOutgoingValidationRequests } from '../lib/skillValidationRequests'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
 import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
-import { computeTrustStatus } from '../lib/skillProficiencyModel'
+import { computeTrustStatus, TRUST_STATUS_COLORS } from '../lib/skillProficiencyModel'
 import { countSkillTrackers, listConnectionsWithSkill } from '../lib/skillStats'
 
 export default function SkillDetail() {
@@ -363,7 +363,11 @@ export default function SkillDetail() {
             <div className="mb-4">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-4">
-                <GrowthRing level={displayedPracticalLevel} size={56} />
+                <GrowthRing
+                  level={displayedPracticalLevel}
+                  size={56}
+                  color={TRUST_STATUS_COLORS[practicalVerification]}
+                />
                 <div>
                   <h2 className="font-display text-2xl text-ink">{skill.name}</h2>
                   <p className="text-sm text-secondary flex items-center gap-1.5">
@@ -503,6 +507,7 @@ export default function SkillDetail() {
                       level={displayedPracticalLevel}
                       size={35}
                       targetLevel={currentTarget?.target_level}
+                      color={TRUST_STATUS_COLORS[practicalVerification]}
                     />
                     <div>
                       <p className="text-sm text-secondary">
@@ -563,7 +568,7 @@ export default function SkillDetail() {
                         ...(targets.length > 0
                           ? [
                               { label: 'Request validation', onClick: () => setExpertValidationOpen(true) },
-                              { label: 'Request AI assessment', onClick: () => setValidateOpen(true) },
+                              { label: '✨ Request AI assessment', onClick: () => setValidateOpen(true) },
                             ]
                           : []),
                       ]}
@@ -660,6 +665,7 @@ export default function SkillDetail() {
                 skill={skill}
                 axis={levelDetailAxis}
                 level={levelDetailAxis === 'knowledge' ? displayedKnowledgeLevel : displayedPracticalLevel}
+                trustStatus={levelDetailAxis === 'practical' ? practicalVerification : null}
                 currentTarget={levelDetailAxis === 'practical' ? currentTarget : null}
                 onClose={() => setLevelDetailAxis(null)}
                 onSelfAssess={() => {
@@ -955,7 +961,17 @@ function NestedSkillPanel({ title, accent, status, actions }) {
 // per-skill AI guide as their self-assess picker (see ensureKnowledgeLevelGuide
 // / ensurePracticalLevelGuide); LEVEL_DESCRIPTIONS is only a fallback for
 // the practical axis if generation hasn't completed or fails.
-function LevelDetailModal({ skill, axis, level, currentTarget, onClose, onSelfAssess, onSetTarget, onGuideGenerated }) {
+function LevelDetailModal({
+  skill,
+  axis,
+  level,
+  trustStatus,
+  currentTarget,
+  onClose,
+  onSelfAssess,
+  onSetTarget,
+  onGuideGenerated,
+}) {
   const isKnowledge = axis === 'knowledge'
   const labels = isKnowledge ? KNOWLEDGE_LEVEL_LABELS : LEVEL_LABELS
   const [guideStatements, setGuideStatements] = useState([])
@@ -1001,7 +1017,7 @@ function LevelDetailModal({ skill, axis, level, currentTarget, onClose, onSelfAs
           {isKnowledge ? (
             <KnowledgeLevelBar level={level} size={32} />
           ) : (
-            <GrowthRing level={level} size={40} />
+            <GrowthRing level={level} size={40} color={TRUST_STATUS_COLORS[trustStatus]} />
           )}
           <p className="text-base font-medium text-ink">{level ? labels[level] : 'Not yet self-assessed'}</p>
         </div>

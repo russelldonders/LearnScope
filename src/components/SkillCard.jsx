@@ -4,7 +4,7 @@ import { isSelfAssessmentDue } from '../lib/checkin'
 import { TRACKING_REASON_LABELS } from '../lib/trackingReasons'
 import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
 import { KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
-import { TRUST_STATUS, computeTrustStatus } from '../lib/skillProficiencyModel'
+import { TRUST_STATUS, TRUST_STATUS_COLORS, computeTrustStatus } from '../lib/skillProficiencyModel'
 import LifecycleStageIcon from './LifecycleStageIcon'
 
 export default function SkillCard({ skill, onEdit }) {
@@ -24,7 +24,11 @@ export default function SkillCard({ skill, onEdit }) {
   // knowable from this row alone.
   const practicalTrust = computeTrustStatus({
     axis: 'practical',
-    selfAssessedCount: skill.level ? 1 : 0,
+    // displayedLevel (not skill.level) so a skill that's only ever been
+    // self-assessed still reads as Self-assessed here, matching the level
+    // shown on the icon itself instead of silently falling back to no
+    // trust tier at all.
+    selfAssessedCount: displayedLevel ? 1 : 0,
     formallyValidated: ['validated', 'maintained'].includes(skill.lifecycle_stage),
   })
   const knowledgeTrust = computeTrustStatus({
@@ -37,7 +41,7 @@ export default function SkillCard({ skill, onEdit }) {
       onClick={() => onEdit(skill)}
       className="text-left bg-card border border-hairline rounded-lg p-4 flex gap-4 items-center hover:border-moss transition-colors w-full relative"
     >
-      <GrowthRing level={displayedLevel} size={56} />
+      <GrowthRing level={displayedLevel} size={56} color={TRUST_STATUS_COLORS[practicalTrust]} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <h3 className="font-display text-lg text-ink truncate min-w-0">{skill.name}</h3>

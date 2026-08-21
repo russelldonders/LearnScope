@@ -11,6 +11,18 @@ export const TRUST_STATUS = {
   VALIDATED: 'Validated',
 }
 
+// Practical-axis GrowthRing color per trust tier -- how well-supported the
+// displayed level is, shown as color rather than just the caption text
+// underneath. Self-assessed/evidence-supported/confirmed step up the same
+// green ramp toward --color-moss; validated breaks to --color-slate so it
+// reads as a distinct kind of trust rather than just "darker green".
+export const TRUST_STATUS_COLORS = {
+  [TRUST_STATUS.SELF_ASSESSED]: 'var(--color-trust-self)',
+  [TRUST_STATUS.EVIDENCE_SUPPORTED]: 'var(--color-trust-evidence)',
+  [TRUST_STATUS.CONFIRMED]: 'var(--color-moss)',
+  [TRUST_STATUS.VALIDATED]: 'var(--color-slate)',
+}
+
 // Trust status is tracked independently per axis and is deliberately not a
 // proficiency score -- it says how well-supported the displayed level is,
 // not how high it is. Callers on a single skill (which already load peer
