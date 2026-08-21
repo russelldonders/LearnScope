@@ -1030,7 +1030,10 @@ function LevelDetailModal({
           ) : (
             <GrowthRing level={level} size={40} color={TRUST_STATUS_COLORS[trustStatus]} />
           )}
-          <p className="text-base font-medium text-ink">{level ? labels[level] : 'Not yet self-assessed'}</p>
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Current level</p>
+            <p className="text-base font-medium text-ink">{level ? labels[level] : 'Not yet self-assessed'}</p>
+          </div>
         </div>
         {level ? (
           guideLoading && description == null ? (
@@ -1052,7 +1055,13 @@ function LevelDetailModal({
             <div className="mb-4">
               <div className="flex items-center gap-3">
                 <GrowthRing level={0} size={40} targetLevel={currentTarget.target_level} />
-                <p className="text-base font-medium text-ink">{LEVEL_LABELS[currentTarget.target_level]}</p>
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Target</p>
+                  <p className="text-base font-medium text-ink">{LEVEL_LABELS[currentTarget.target_level]}</p>
+                  <p className="font-mono text-xs text-secondary/80 mt-0.5">
+                    By {new Date(`${currentTarget.target_date}T00:00:00`).toLocaleDateString()}
+                  </p>
+                </div>
               </div>
               {targetDescription && <p className="text-sm text-secondary mt-2">{targetDescription}</p>}
             </div>
