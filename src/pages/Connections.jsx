@@ -8,6 +8,7 @@ import {
   listMyPeerRatings,
   listConnections,
   listSentInvites,
+  listIncomingRateInvites,
   getProfiles,
   sendInviteEmail,
   revokeInvite,
@@ -22,6 +23,7 @@ export default function Connections() {
   const [ratings, setRatings] = useState([])
   const [allConnectionIds, setAllConnectionIds] = useState([])
   const [invites, setInvites] = useState([])
+  const [incomingRateInvites, setIncomingRateInvites] = useState([])
   const [validationRequests, setValidationRequests] = useState([])
   const [incomingRequests, setIncomingRequests] = useState([])
   const [respondingId, setRespondingId] = useState(null)
@@ -42,17 +44,25 @@ export default function Connections() {
     setLoading(true)
     setError(null)
     try {
-      const [ratingsData, connectionsData, invitesData, validationRequestsData, incomingRequestsData] =
-        await Promise.all([
-          listMyPeerRatings(),
-          listConnections(user.id),
-          listSentInvites(),
-          listIncomingPendingValidationRequests(),
-          listIncomingConnectionRequests(),
-        ])
+      const [
+        ratingsData,
+        connectionsData,
+        invitesData,
+        incomingRateInvitesData,
+        validationRequestsData,
+        incomingRequestsData,
+      ] = await Promise.all([
+        listMyPeerRatings(),
+        listConnections(user.id),
+        listSentInvites(),
+        listIncomingRateInvites(),
+        listIncomingPendingValidationRequests(),
+        listIncomingConnectionRequests(),
+      ])
       setRatings(ratingsData)
       setAllConnectionIds(connectionsData.map((c) => c.id))
       setInvites(invitesData)
+      setIncomingRateInvites(incomingRateInvitesData)
       setValidationRequests(validationRequestsData)
       setIncomingRequests(incomingRequestsData)
       const otherIds = ratingsData.map((r) => (r.rater_id === user.id ? r.skill_owner_id : r.rater_id))
@@ -174,6 +184,30 @@ export default function Connections() {
       <AppHeader />
 
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-10">
+        {incomingRateInvites.length > 0 && (
+          <div>
+            <h2 className="font-display text-xl text-ink mb-6">Invitations to rate</h2>
+            <div className="space-y-3">
+              {incomingRateInvites.map((invite) => (
+                <Link
+                  key={invite.id}
+                  to={`/rate/${invite.share_code}`}
+                  className="block bg-card border border-hairline rounded-lg p-4 hover:border-moss/60 transition-colors"
+                >
+                  <p className="text-sm text-ink">
+                    <strong>{invite.inviter_name || 'Someone'}</strong> wants your rating on their skill:{' '}
+                    <strong>{invite.skill_name}</strong>
+                    {invite.skill_category ? ` (${invite.skill_category})` : ''}
+                  </p>
+                  <p className="font-mono text-xs text-secondary mt-0.5">
+                    {new Date(invite.created_at).toLocaleDateString()}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
         {incomingRequests.length > 0 && (
           <div>
             <h2 className="font-display text-xl text-ink mb-6">Connection requests</h2>

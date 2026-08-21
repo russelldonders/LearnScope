@@ -2,16 +2,25 @@ import { supabase } from './supabaseClient'
 
 const PENDING_INVITE_KEY = 'ls_pending_invite_code'
 
+// localStorage, not sessionStorage -- the signup path routes through an
+// emailed confirmation link, which almost always opens in a new tab (or a
+// mail app's in-app browser). sessionStorage doesn't survive that, so the
+// invitee would land back on /welcome with no memory of the invite that
+// brought them here. Welcome.jsx also gets the code via a ?invite= query
+// param on the confirmation redirect itself (see signUp in AuthContext),
+// which is the more robust path since it survives even a different
+// device/browser than the one signup was started on -- this storage is the
+// same-browser fallback for the plain login/Google-OAuth paths.
 export function setPendingInviteCode(code) {
-  sessionStorage.setItem(PENDING_INVITE_KEY, code)
+  localStorage.setItem(PENDING_INVITE_KEY, code)
 }
 
 export function getPendingInviteCode() {
-  return sessionStorage.getItem(PENDING_INVITE_KEY)
+  return localStorage.getItem(PENDING_INVITE_KEY)
 }
 
 export function clearPendingInviteCode() {
-  sessionStorage.removeItem(PENDING_INVITE_KEY)
+  localStorage.removeItem(PENDING_INVITE_KEY)
 }
 
 export function isDuplicatePendingInviteError(error) {
@@ -66,6 +75,16 @@ export async function acceptInviteAndRate(code, level, comments) {
   })
   if (error) throw error
   return data
+}
+
+// Invites addressed to the current user's own email that they haven't
+// clicked through yet -- see list_incoming_rate_invites in
+// 0061_incoming_rate_invites.sql for why this needs a SECURITY DEFINER RPC
+// rather than a plain table select.
+export async function listIncomingRateInvites() {
+  const { data, error } = await supabase.rpc('list_incoming_rate_invites')
+  if (error) throw error
+  return (data ?? []).map((invite) => ({ ...invite, url: `${window.location.origin}/rate/${invite.share_code}` }))
 }
 
 export async function listSentInvites() {

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { getPendingInviteCode } from '../lib/connections'
 
 const AuthContext = createContext(undefined)
 
@@ -56,15 +57,23 @@ export function AuthProvider({ children }) {
     loading,
     needsOnboarding,
     markOnboardingComplete,
-    signUp: (email, password, { firstName, lastName } = {}) =>
-      supabase.auth.signUp({
+    // Carries a pending rate-invite code through as a query param on the
+    // confirmation-email redirect, rather than relying solely on
+    // localStorage -- the confirmation link is often opened on a different
+    // device/browser than the one signup was started on, where localStorage
+    // wouldn't be there either. Welcome.jsx reads it from the URL first.
+    signUp: (email, password, { firstName, lastName } = {}) => {
+      const pendingCode = getPendingInviteCode()
+      const redirectPath = pendingCode ? `/welcome?invite=${pendingCode}` : '/welcome'
+      return supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/welcome`,
+          emailRedirectTo: `${window.location.origin}${redirectPath}`,
           data: { first_name: firstName?.trim() || null, last_name: lastName?.trim() || null },
         },
-      }),
+      })
+    },
     signIn: (email, password) => supabase.auth.signInWithPassword({ email, password }),
     // Also doubles as signup -- Supabase creates the account on first Google
     // login automatically, already-verified since Google owns the email.

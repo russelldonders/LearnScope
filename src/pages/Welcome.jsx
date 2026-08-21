@@ -1,20 +1,25 @@
 import { useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getPendingInviteCode, clearPendingInviteCode } from '../lib/connections'
 
 export default function Welcome() {
   const { user, loading } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   useEffect(() => {
     if (!user) return
-    const pendingCode = getPendingInviteCode()
+    // The ?invite= query param (see signUp in AuthContext) survives the
+    // confirmation link being opened on a different device/browser than
+    // signup was started on; the stored code is just a same-browser
+    // fallback for other entry points into this page.
+    const pendingCode = searchParams.get('invite') || getPendingInviteCode()
     if (pendingCode) {
       clearPendingInviteCode()
       navigate(`/rate/${pendingCode}`)
     }
-  }, [user, navigate])
+  }, [user, navigate, searchParams])
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-paper px-4">
