@@ -604,6 +604,7 @@ export default function SkillDetail() {
                 skill={skill}
                 user={user}
                 currentLevel={displayedPracticalLevel}
+                history={history}
                 onClose={() => setSelfAssessOpen(false)}
                 onAssessed={() => {
                   loadHistory()
@@ -619,6 +620,7 @@ export default function SkillDetail() {
                 user={user}
                 axis="knowledge"
                 currentLevel={displayedKnowledgeLevel}
+                history={history}
                 onClose={() => setSelfAssessKnowledgeOpen(false)}
                 onAssessed={() => {
                   loadHistory()
@@ -701,7 +703,10 @@ export default function SkillDetail() {
                 user={user}
                 targets={targets}
                 currentLevel={displayedPracticalLevel}
-                onClose={() => setTargetOpen(false)}
+                onClose={() => {
+                  setTargetOpen(false)
+                  setLevelDetailAxis('practical')
+                }}
                 onSet={() => {
                   loadHistory()
                   loadSkill()
@@ -967,9 +972,14 @@ function LevelDetailModal({ skill, axis, level, currentTarget, onClose, onSelfAs
           </p>
         )}
         {currentTarget && (
-          <div className="flex items-center gap-3 mb-4">
-            <GrowthRing level={0} size={40} targetLevel={currentTarget.target_level} />
-            <p className="text-base font-medium text-ink">{LEVEL_LABELS[currentTarget.target_level]}</p>
+          <div className="mb-4">
+            <div className="flex items-center gap-3">
+              <GrowthRing level={0} size={40} targetLevel={currentTarget.target_level} />
+              <p className="text-base font-medium text-ink">{LEVEL_LABELS[currentTarget.target_level]}</p>
+            </div>
+            {LEVEL_DESCRIPTIONS[currentTarget.target_level] && (
+              <p className="text-sm text-secondary mt-2">{LEVEL_DESCRIPTIONS[currentTarget.target_level]}</p>
+            )}
           </div>
         )}
         <div className="flex flex-wrap gap-2">
@@ -995,7 +1005,16 @@ function LevelDetailModal({ skill, axis, level, currentTarget, onClose, onSelfAs
   )
 }
 
-function SelfAssessModal({ skill, user, axis = 'practical', currentLevel = null, onClose, onAssessed, onGuideGenerated }) {
+function SelfAssessModal({
+  skill,
+  user,
+  axis = 'practical',
+  currentLevel = null,
+  history = [],
+  onClose,
+  onAssessed,
+  onGuideGenerated,
+}) {
   return (
     <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
       <div
@@ -1018,6 +1037,37 @@ function SelfAssessModal({ skill, user, axis = 'practical', currentLevel = null,
           onAssessed={onAssessed}
           onGuideGenerated={onGuideGenerated}
         />
+        {(() => {
+          const axisHistory = history.filter((a) => a.axis === axis)
+          const labels = axis === 'knowledge' ? KNOWLEDGE_LEVEL_LABELS : LEVEL_LABELS
+          return (
+            axisHistory.length > 0 && (
+              <div className="mt-6 pt-4 border-t border-hairline opacity-50">
+                <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">
+                  {axis === 'knowledge' ? 'Knowledge' : 'Self-assessment'} history
+                </h3>
+                <ul className="space-y-2">
+                  {axisHistory.map((a) => (
+                    <li key={a.id} className="flex items-start gap-2 text-sm">
+                      {axis === 'knowledge' ? (
+                        <KnowledgeLevelBar level={a.level} size={28} />
+                      ) : (
+                        <GrowthRing level={a.level} size={28} />
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-ink">{labels[a.level]}</p>
+                        <p className="font-mono text-xs text-secondary">
+                          {new Date(a.assessed_at).toLocaleDateString()}
+                        </p>
+                        {a.comments && <p className="text-xs text-secondary mt-0.5">{a.comments}</p>}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
+          )
+        })()}
       </div>
     </div>
   )

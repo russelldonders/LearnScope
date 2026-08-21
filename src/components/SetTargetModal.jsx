@@ -58,22 +58,6 @@ export default function SetTargetModal({ skill, user, targets = [], currentLevel
         <h2 className="font-display text-2xl text-ink mb-1">{isEdit ? 'Edit target' : 'Set a target'}</h2>
         <p className="text-sm text-secondary mb-4">{skill.name}</p>
 
-        <div className="flex items-start gap-4 mb-4 pb-4 border-b border-hairline">
-          <div className="flex flex-col items-center gap-1 shrink-0">
-            <GrowthRing level={currentLevel} size={40} />
-            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">Current</span>
-            <span className="text-xs text-ink font-medium text-center">
-              {currentLevel ? LEVEL_LABELS[currentLevel] : 'Not yet self-assessed'}
-            </span>
-          </div>
-          <div className="flex flex-col items-center gap-1 shrink-0">
-            <GrowthRing level={0} size={40} targetLevel={targetLevel} />
-            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">Target</span>
-            <span className="text-xs text-ink font-medium text-center">{LEVEL_LABELS[targetLevel]}</span>
-          </div>
-          <p className="text-sm text-secondary leading-relaxed pt-1">{LEVEL_DESCRIPTIONS[targetLevel]}</p>
-        </div>
-
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <span className="block text-sm text-secondary mb-2">Target level</span>
