@@ -4,16 +4,28 @@ import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import { LEVEL_LABELS } from '../lib/levels'
-import { listMyPeerRatings, listSentInvites, getProfiles, sendInviteEmail, revokeInvite } from '../lib/connections'
+import {
+  listMyPeerRatings,
+  listConnections,
+  listSentInvites,
+  getProfiles,
+  sendInviteEmail,
+  revokeInvite,
+} from '../lib/connections'
 import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
+import { listIncomingConnectionRequests, respondToConnectionRequest } from '../lib/skillDiscovery'
 
 export default function Connections() {
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [ratings, setRatings] = useState([])
+  const [allConnectionIds, setAllConnectionIds] = useState([])
   const [invites, setInvites] = useState([])
   const [validationRequests, setValidationRequests] = useState([])
+  const [incomingRequests, setIncomingRequests] = useState([])
+  const [respondingId, setRespondingId] = useState(null)
+  const [respondError, setRespondError] = useState(null)
   const [profiles, setProfiles] = useState({})
   const [copiedId, setCopiedId] = useState(null)
   const [resendingId, setResendingId] = useState(null)
@@ -30,17 +42,31 @@ export default function Connections() {
     setLoading(true)
     setError(null)
     try {
-      const [ratingsData, invitesData, validationRequestsData] = await Promise.all([
-        listMyPeerRatings(),
-        listSentInvites(),
-        listIncomingPendingValidationRequests(),
-      ])
+      const [ratingsData, connectionsData, invitesData, validationRequestsData, incomingRequestsData] =
+        await Promise.all([
+          listMyPeerRatings(),
+          listConnections(user.id),
+          listSentInvites(),
+          listIncomingPendingValidationRequests(),
+          listIncomingConnectionRequests(),
+        ])
       setRatings(ratingsData)
+      setAllConnectionIds(connectionsData.map((c) => c.id))
       setInvites(invitesData)
       setValidationRequests(validationRequestsData)
+      setIncomingRequests(incomingRequestsData)
       const otherIds = ratingsData.map((r) => (r.rater_id === user.id ? r.skill_owner_id : r.rater_id))
       const requesterIds = validationRequestsData.map((r) => r.requester_id)
-      setProfiles(await getProfiles([...otherIds, ...requesterIds, user.id]))
+      const requestSenderIds = incomingRequestsData.map((r) => r.requester_id)
+      setProfiles(
+        await getProfiles([
+          ...otherIds,
+          ...connectionsData.map((c) => c.id),
+          ...requesterIds,
+          ...requestSenderIds,
+          user.id,
+        ])
+      )
     } catch (err) {
       setError(err.message)
     } finally {
@@ -48,8 +74,28 @@ export default function Connections() {
     }
   }
 
+  async function handleRequestResponse(requestId, accept) {
+    setRespondError(null)
+    setRespondingId(requestId)
+    try {
+      await respondToConnectionRequest(requestId, accept)
+      setIncomingRequests((prev) => prev.filter((r) => r.id !== requestId))
+      if (accept) await load()
+    } catch (err) {
+      setRespondError({ id: requestId, message: err.message })
+    } finally {
+      setRespondingId(null)
+    }
+  }
+
   const connections = useMemo(() => {
     const map = new Map()
+
+    // Every connection appears at least once, even one formed purely via an
+    // accepted request with no peer-rating history yet.
+    for (const id of allConnectionIds) {
+      map.set(id, { id, name: profiles[id]?.name || 'Someone', avatarUrl: profiles[id]?.avatarUrl || null, events: [] })
+    }
 
     for (const r of ratings) {
       const gaveRating = r.rater_id === user.id
@@ -73,9 +119,9 @@ export default function Connections() {
 
     const list = Array.from(map.values())
     for (const c of list) c.events.sort((a, b) => new Date(b.date) - new Date(a.date))
-    list.sort((a, b) => new Date(b.events[0].date) - new Date(a.events[0].date))
+    list.sort((a, b) => new Date(b.events[0]?.date ?? 0) - new Date(a.events[0]?.date ?? 0))
     return list
-  }, [ratings, profiles, user.id])
+  }, [ratings, allConnectionIds, profiles, user.id])
 
   const pendingInvites = useMemo(
     () => invites.filter((i) => i.status === 'pending' && i.invitee_email),
@@ -128,6 +174,53 @@ export default function Connections() {
       <AppHeader />
 
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-10">
+        {incomingRequests.length > 0 && (
+          <div>
+            <h2 className="font-display text-xl text-ink mb-6">Connection requests</h2>
+            <div className="space-y-3">
+              {incomingRequests.map((request) => (
+                <div key={request.id} className="bg-card border border-hairline rounded-lg p-4">
+                  <p className="text-sm text-ink">
+                    <strong>{profiles[request.requester_id]?.name || 'Someone'}</strong>
+                    {request.skills?.name ? (
+                      <>
+                        {' '}wants to connect over <strong>{request.skills.name}</strong>
+                      </>
+                    ) : (
+                      ' wants to connect'
+                    )}
+                  </p>
+                  {request.message && <p className="text-sm text-secondary mt-1">{request.message}</p>}
+                  <p className="font-mono text-xs text-secondary mt-1">
+                    {new Date(request.created_at).toLocaleDateString()}
+                  </p>
+                  {respondError?.id === request.id && (
+                    <p className="text-xs text-red-700 mt-1">{respondError.message}</p>
+                  )}
+                  <div className="flex items-center gap-2 mt-3">
+                    <button
+                      type="button"
+                      onClick={() => handleRequestResponse(request.id, true)}
+                      disabled={respondingId === request.id}
+                      className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRequestResponse(request.id, false)}
+                      disabled={respondingId === request.id}
+                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div>
           <h2 className="font-display text-xl text-ink mb-6">Your connections</h2>
 
@@ -137,7 +230,8 @@ export default function Connections() {
           {!loading && connections.length === 0 && (
             <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
               <p className="text-secondary">
-                No connections yet. Invite someone to rate a skill from that skill's detail view.
+                No connections yet. Invite someone to rate a skill, or connect with people tracking
+                the same skill from that skill's detail view.
               </p>
             </div>
           )}
@@ -155,6 +249,7 @@ export default function Connections() {
                   </span>
                 </Link>
                 <div className="space-y-3">
+                  {c.events.length === 0 && <p className="text-sm text-secondary">Connected</p>}
                   {c.events.map((e, i) => (
                     <div key={i} className="flex items-center gap-3">
                       <GrowthRing level={e.level} size={28} />

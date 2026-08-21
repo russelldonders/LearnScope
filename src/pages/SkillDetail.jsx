@@ -7,6 +7,8 @@ import { computeNextSelfAssessmentDate, isSelfAssessmentDue } from '../lib/check
 import { formatMonthYear } from '../lib/dates'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
+import PeopleWithSkillModal from '../components/PeopleWithSkillModal'
+import { getSearchPrivacySettings, listSearchableSkillIds, setSkillSearchable } from '../lib/skillDiscovery'
 import KnowledgeLevelBar from '../components/KnowledgeLevelBar'
 import EvidenceFields from '../components/EvidenceFields'
 import TrackingReasonPicker from '../components/TrackingReasonPicker'
@@ -70,6 +72,7 @@ export default function SkillDetail() {
   const [connectionsWithSkill, setConnectionsWithSkill] = useState([])
   const [totalTrackersCount, setTotalTrackersCount] = useState(0)
   const [connectionsListOpen, setConnectionsListOpen] = useState(false)
+  const [peopleWithSkillOpen, setPeopleWithSkillOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [levelDetailAxis, setLevelDetailAxis] = useState(null)
 
@@ -572,23 +575,38 @@ export default function SkillDetail() {
 
             {skill.library_skill_id && (
               <div className="mt-4 pt-4 border-t border-hairline">
-                <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">Learning Network</h3>
+                <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">Skill Network</h3>
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
                   <button
                     type="button"
                     onClick={() => setConnectionsListOpen(true)}
                     disabled={connectionsWithSkill.length === 0}
-                    className="text-ink underline decoration-dotted underline-offset-2 hover:text-moss disabled:no-underline disabled:cursor-default disabled:hover:text-ink"
+                    className="flex items-center gap-1.5 text-ink underline decoration-dotted underline-offset-2 hover:text-moss disabled:no-underline disabled:cursor-default disabled:hover:text-ink"
                   >
+                    <PeopleIcon />
                     {connectionsWithSkill.length} of your connections have this skill
                   </button>
-                  <span className="text-secondary">
+                  <button
+                    type="button"
+                    onClick={() => setPeopleWithSkillOpen(true)}
+                    className="flex items-center gap-1.5 text-ink underline decoration-dotted underline-offset-2 hover:text-moss"
+                  >
+                    <PeopleIcon />
                     {totalTrackersCount} {totalTrackersCount === 1 ? 'person' : 'people'} in total have this skill
-                  </span>
+                  </button>
                 </div>
               </div>
             )}
             </div>
+
+            {peopleWithSkillOpen && (
+              <PeopleWithSkillModal
+                librarySkillId={skill.library_skill_id}
+                skillName={skill.name}
+                skillId={skill.id}
+                onClose={() => setPeopleWithSkillOpen(false)}
+              />
+            )}
 
             {connectionsListOpen && (
               <ConnectionsWithSkillModal
@@ -790,7 +808,7 @@ export default function SkillDetail() {
                       onUpdated={loadSkill}
                       onDeleted={() => navigate(backTo, { state: { tab: 'skills' } })}
                     />
-                    <SettingsSection skill={skill} onUpdated={loadSkill} />
+                    <SettingsSection skill={skill} user={user} onUpdated={loadSkill} />
                     <ScheduleSection skill={skill} onUpdated={loadSkill} />
                   </div>
                 </div>
@@ -817,6 +835,17 @@ export default function SkillDetail() {
         )}
       </main>
     </div>
+  )
+}
+
+function PeopleIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
   )
 }
 
@@ -2314,13 +2343,44 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
   )
 }
 
-function SettingsSection({ skill, onUpdated }) {
+function SettingsSection({ skill, user, onUpdated }) {
   const [visible, setVisible] = useState(skill.visible_on_profile ?? false)
   const [validateConnections, setValidateConnections] = useState(skill.offer_validate_connections ?? false)
   const [validateOthers, setValidateOthers] = useState(skill.offer_validate_others ?? false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const canOfferValidation = skill.lifecycle_stage === 'validated' || skill.lifecycle_stage === 'maintained'
+  const [searchVisibilityMode, setSearchVisibilityMode] = useState(null)
+  const [searchable, setSearchable] = useState(false)
+  const [searchableLoading, setSearchableLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([getSearchPrivacySettings(user.id), listSearchableSkillIds(user.id)])
+      .then(([settings, ids]) => {
+        if (cancelled) return
+        setSearchVisibilityMode(settings.skill_search_visibility)
+        setSearchable(ids.has(skill.id))
+      })
+      .finally(() => {
+        if (!cancelled) setSearchableLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [user.id, skill.id])
+
+  async function handleSearchableToggle(checked) {
+    setError(null)
+    setSaving(true)
+    try {
+      await setSkillSearchable(user.id, skill.id, checked)
+      setSearchable(checked)
+    } catch (err) {
+      setError(err.message)
+    }
+    setSaving(false)
+  }
 
   async function handleToggle(checked) {
     setError(null)
@@ -2375,6 +2435,28 @@ function SettingsSection({ skill, onUpdated }) {
           </span>
         </label>
       </div>
+
+      {!searchableLoading && searchVisibilityMode === 'selective' && skill.library_skill_id && (
+        <div>
+          <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Skill search</h4>
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              checked={searchable}
+              disabled={saving}
+              onChange={(e) => handleSearchableToggle(e.target.checked)}
+              className="mt-0.5 rounded border-hairline"
+            />
+            <span className="text-sm text-ink">
+              Show this skill when others search
+              <span className="block text-xs text-secondary mt-0.5">
+                Your Privacy settings are set to "Choose which skills to show" — this is the same
+                list, editable from either place.
+              </span>
+            </span>
+          </label>
+        </div>
+      )}
 
       {canOfferValidation && (
         <div>

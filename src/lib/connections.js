@@ -123,26 +123,37 @@ export async function getProfiles(userIds) {
   return Object.fromEntries((data ?? []).map((p) => [p.id, { name: p.full_name, avatarUrl: p.avatar_url }]))
 }
 
-// Distinct people the user has a rating history with, one row each (most
-// recent interaction wins since listMyPeerRatings is already sorted desc),
-// with an email resolved for either direction — needed so the invite flow
-// can offer "pick an existing connection" instead of retyping an address.
+// Everyone the user is connected to, from the connections table (see
+// 0058_skill_discovery_and_connections.sql) — not just people they have a
+// rating history with; a direct connection request that's been accepted
+// counts too, even with no peer rating between them yet. Email is still
+// enriched from rating history where available (connections formed purely
+// via a request have no email snapshot), needed so the invite flow can
+// offer "pick an existing connection" instead of retyping an address.
 export async function listConnections(currentUserId) {
+  const { data: rows, error } = await supabase.from('connections').select('user_a_id, user_b_id')
+  if (error) throw error
+  const otherIds = [
+    ...new Set((rows ?? []).map((c) => (c.user_a_id === currentUserId ? c.user_b_id : c.user_a_id))),
+  ]
+  if (otherIds.length === 0) return []
+
   const ratings = await listMyPeerRatings()
-  const map = new Map()
+  const emailById = new Map()
+  const fallbackNameById = new Map()
   for (const r of ratings) {
     const gaveRating = r.rater_id === currentUserId
     const otherId = gaveRating ? r.skill_owner_id : r.rater_id
-    if (map.has(otherId)) continue
-    map.set(otherId, {
-      email: gaveRating ? r.skill_owner_email : r.rater_email,
-      fallbackName: gaveRating ? null : r.rater_name,
-    })
+    if (!emailById.has(otherId)) {
+      emailById.set(otherId, gaveRating ? r.skill_owner_email : r.rater_email)
+      if (!gaveRating) fallbackNameById.set(otherId, r.rater_name)
+    }
   }
-  const names = await getProfileNames([...map.keys()])
-  return [...map.entries()].map(([id, v]) => ({
+
+  const names = await getProfileNames(otherIds)
+  return otherIds.map((id) => ({
     id,
-    email: v.email || null,
-    name: names[id] || v.fallbackName || v.email || 'Someone',
+    email: emailById.get(id) || null,
+    name: names[id] || fallbackNameById.get(id) || emailById.get(id) || 'Someone',
   }))
 }

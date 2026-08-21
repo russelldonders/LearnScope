@@ -22,7 +22,7 @@ export default function SkillsProfile() {
     setError(null)
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('full_name, skills_profile_visible')
+      .select('full_name, skills_profile_visible, profile_visible_to_skill_matches')
       .eq('id', userId)
       .single()
     if (profileError) {
@@ -31,9 +31,15 @@ export default function SkillsProfile() {
       return
     }
     setName(profile.full_name || 'This person')
-    setVisible(Boolean(profile.skills_profile_visible))
+    // Either opt-in can grant visibility -- skills_profile_visible for an
+    // existing connection, profile_visible_to_skill_matches for someone who
+    // shares a skill but isn't connected yet. RLS enforces which skill rows
+    // actually come back either way (see 0016 and 0058's SELECT policies on
+    // skills), this is just which case to attempt the query for.
+    const mayBeVisible = Boolean(profile.skills_profile_visible || profile.profile_visible_to_skill_matches)
+    setVisible(mayBeVisible)
 
-    if (profile.skills_profile_visible) {
+    if (mayBeVisible) {
       const [{ data, error: skillsError }, { data: tagLinks }] = await Promise.all([
         supabase
           .from('skills')
