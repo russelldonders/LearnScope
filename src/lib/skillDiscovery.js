@@ -42,11 +42,17 @@ export async function listSentConnectionRequests() {
   return data ?? []
 }
 
+// Goes through the respond_to_connection_request RPC rather than a direct
+// table update -- RLS can restrict which rows are updatable but not which
+// columns change, so accept/decline is handled server-side (see
+// 0060_fix_connection_request_and_skill_search_gaps.sql) to stop a
+// recipient from rewriting requester_id and forging a connection to
+// someone who never sent them anything.
 export async function respondToConnectionRequest(requestId, accept) {
-  const { error } = await supabase
-    .from('connection_requests')
-    .update({ status: accept ? 'accepted' : 'declined' })
-    .eq('id', requestId)
+  const { error } = await supabase.rpc('respond_to_connection_request', {
+    p_request_id: requestId,
+    p_accept: accept,
+  })
   if (error) throw error
 }
 
