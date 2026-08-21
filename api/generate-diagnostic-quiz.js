@@ -25,12 +25,34 @@ const QUIZ_SCHEMA = {
   additionalProperties: false,
 }
 
+// Bumped from 1 -- earlier-cached quizzes were generated before options were
+// shuffled and reliably put the correct answer first, so this forces a fresh
+// (shuffled) generation instead of serving that stale, biased content.
+const PROMPT_VERSION = 2
+
 const KNOWLEDGE_LEVEL_LABELS = {
   1: 'Unfamiliar',
   2: 'Aware',
   3: 'Familiar',
   4: 'Knowledgeable',
   5: 'Deep understanding',
+}
+
+// LLM-generated multiple choice tends to put the correct option first far
+// more often than chance would -- shuffle each question's options (Fisher-
+// Yates) before caching, so the bias doesn't get baked into content that's
+// then served identically to every learner who takes this skill/level quiz.
+function shuffleOptions(q) {
+  const order = q.options.map((_, i) => i)
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[order[i], order[j]] = [order[j], order[i]]
+  }
+  return {
+    ...q,
+    options: order.map((i) => q.options[i]),
+    correctIndex: order.indexOf(q.correctIndex),
+  }
 }
 
 function toDiagnosticContent(questions) {
@@ -86,7 +108,7 @@ export default async function handler(req, res) {
       .eq('axis', 'knowledge')
       .eq('library_skill_id', librarySkillId)
       .eq('level', level)
-      .eq('prompt_version', 1)
+      .eq('prompt_version', PROMPT_VERSION)
       .maybeSingle()
     if (cached) {
       res.status(200).json({ diagnosticContentId: cached.id, content: cached.content })
@@ -118,7 +140,7 @@ Return exactly 10 questions.`
 
     const textBlock = response.content.find((b) => b.type === 'text')
     const { questions } = JSON.parse(textBlock.text)
-    const content = toDiagnosticContent(questions)
+    const content = toDiagnosticContent(questions.map(shuffleOptions))
 
     if (!librarySkillId) {
       res.status(200).json({ diagnosticContentId: null, content })
@@ -134,6 +156,7 @@ Return exactly 10 questions.`
         skill_name: skillName.trim(),
         level,
         content,
+        prompt_version: PROMPT_VERSION,
       })
       .select('id, content')
       .single()
@@ -148,7 +171,7 @@ Return exactly 10 questions.`
           .eq('axis', 'knowledge')
           .eq('library_skill_id', librarySkillId)
           .eq('level', level)
-          .eq('prompt_version', 1)
+          .eq('prompt_version', PROMPT_VERSION)
           .single()
         if (existing) {
           res.status(200).json({ diagnosticContentId: existing.id, content: existing.content })
