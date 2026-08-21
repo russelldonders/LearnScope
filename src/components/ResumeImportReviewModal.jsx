@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { uploadAvatar, base64ToBlob } from '../lib/avatar'
-import { findOrCreateLibrarySkill } from '../lib/skillLibrary'
+import { findOrCreateLibrarySkill, listLibrarySkills } from '../lib/skillLibrary'
 import { addTagToSkill } from '../lib/skillTags'
 import { formatMonthYear } from '../lib/dates'
 import {
@@ -33,6 +33,10 @@ function useSelection(items) {
   return { selected, values, toggle, updateField }
 }
 
+const courseKey = (c) => `${(c.name ?? '').toLowerCase().trim()}|${(c.provider ?? '').toLowerCase().trim()}`
+const experienceKey = (e) =>
+  `${(e.title ?? '').toLowerCase().trim()}|${(e.organization ?? '').toLowerCase().trim()}|${e.start_date ?? ''}`
+
 export default function ResumeImportReviewModal({
   extracted,
   hasAvatar,
@@ -46,6 +50,9 @@ export default function ResumeImportReviewModal({
   const courses = useSelection(extracted.courses ?? [])
   const experience = useSelection(extracted.experience ?? [])
   const [existingSkillNames, setExistingSkillNames] = useState(null)
+  const [existingCourseKeys, setExistingCourseKeys] = useState(null)
+  const [existingExperienceKeys, setExistingExperienceKeys] = useState(null)
+  const [libraryMatches, setLibraryMatches] = useState(null)
 
   // Skills already in the profile can't be imported again (name must be
   // unique per learner) -- fetch them once so duplicate rows can be shown
@@ -64,6 +71,45 @@ export default function ResumeImportReviewModal({
           }
         })
       })
+  }, [])
+
+  // Same idea as existingSkillNames, but for courses/experience -- re-importing
+  // the same document (or two overlapping ones) shouldn't create duplicate rows.
+  useEffect(() => {
+    supabase
+      .from('courses')
+      .select('name, provider')
+      .eq('user_id', user.id)
+      .then(({ data }) => {
+        const keys = new Set((data ?? []).map(courseKey))
+        setExistingCourseKeys(keys)
+        courses.values.forEach((c, i) => {
+          if (keys.has(courseKey(c)) && courses.selected.has(i)) courses.toggle(i)
+        })
+      })
+  }, [])
+
+  useEffect(() => {
+    supabase
+      .from('experience')
+      .select('title, organization, start_date')
+      .eq('user_id', user.id)
+      .then(({ data }) => {
+        const keys = new Set((data ?? []).map(experienceKey))
+        setExistingExperienceKeys(keys)
+        experience.values.forEach((e, i) => {
+          if (keys.has(experienceKey(e)) && experience.selected.has(i)) experience.toggle(i)
+        })
+      })
+  }, [])
+
+  // Lets each skill row show whether it'll link to an existing shared-library
+  // skill (name/tags lock afterward) or create a new one (learner can choose
+  // to keep it private) -- rather than that happening silently during import.
+  useEffect(() => {
+    listLibrarySkills().then((rows) => {
+      setLibraryMatches(new Map(rows.map((r) => [r.name.toLowerCase().trim(), r])))
+    })
   }, [])
 
   const profileFields = extracted.profile ?? {}
@@ -87,7 +133,7 @@ export default function ResumeImportReviewModal({
       (s, i) => skills.selected.has(i) && !existingSkillNames?.has(s.name.toLowerCase().trim())
     )
     const courseRows = courses.values
-      .filter((_, i) => courses.selected.has(i))
+      .filter((c, i) => courses.selected.has(i) && !existingCourseKeys?.has(courseKey(c)))
       .map((c) => ({
         name: c.name,
         provider: c.provider,
@@ -96,7 +142,7 @@ export default function ResumeImportReviewModal({
         user_id: user.id,
       }))
     const experienceRows = experience.values
-      .filter((_, i) => experience.selected.has(i))
+      .filter((e, i) => experience.selected.has(i) && !existingExperienceKeys?.has(experienceKey(e)))
       .map((e) => ({
         type: e.type,
         title: e.title,
@@ -112,7 +158,9 @@ export default function ResumeImportReviewModal({
     try {
       if (selectedSkills.length) {
         const libraryIds = await Promise.all(
-          selectedSkills.map((s) => findOrCreateLibrarySkill(s.name, null, user.id))
+          selectedSkills.map((s) =>
+            findOrCreateLibrarySkill(s.name, null, user.id, Boolean(s.keepPrivate))
+          )
         )
         const skillRows = selectedSkills.map((s, i) => ({
           name: s.name,
@@ -125,6 +173,9 @@ export default function ResumeImportReviewModal({
           source: 'cv_import',
           library_skill_id: libraryIds[i],
           user_id: user.id,
+          // Blank unless the learner filled in "Since" -- otherwise this
+          // stays on the column default (import time), same as before.
+          ...(s.since ? { date_added: s.since } : {}),
         }))
         const { data: insertedSkills, error } = await supabase
           .from('skills')
@@ -290,8 +341,11 @@ export default function ResumeImportReviewModal({
               item={item}
               checked={sel.selected.has(i)}
               alreadyExists={Boolean(existingSkillNames?.has(item.name.toLowerCase().trim()))}
+              libraryMatch={libraryMatches?.get(item.name.toLowerCase().trim())}
               onToggle={() => sel.toggle(i)}
               onChange={(v) => sel.updateField(i, 'name', v)}
+              onSinceChange={(v) => sel.updateField(i, 'since', v)}
+              onKeepPrivateChange={(v) => sel.updateField(i, 'keepPrivate', v)}
             />
           )}
         />
@@ -304,6 +358,7 @@ export default function ResumeImportReviewModal({
               key={i}
               item={item}
               checked={sel.selected.has(i)}
+              alreadyExists={Boolean(existingCourseKeys?.has(courseKey(item)))}
               onToggle={() => sel.toggle(i)}
               onChange={(v) => sel.updateField(i, 'name', v)}
             />
@@ -318,6 +373,7 @@ export default function ResumeImportReviewModal({
               key={i}
               item={item}
               checked={sel.selected.has(i)}
+              alreadyExists={Boolean(existingExperienceKeys?.has(experienceKey(item)))}
               onToggle={() => sel.toggle(i)}
               onChange={(v) => sel.updateField(i, 'title', v)}
             />
@@ -376,7 +432,7 @@ function Row({ checked, onToggle, disabled, children }) {
   )
 }
 
-function SkillRow({ item, checked, alreadyExists, onToggle, onChange }) {
+function SkillRow({ item, checked, alreadyExists, libraryMatch, onToggle, onChange, onSinceChange, onKeepPrivateChange }) {
   return (
     <Row checked={checked && !alreadyExists} onToggle={onToggle} disabled={alreadyExists}>
       <input
@@ -390,38 +446,71 @@ function SkillRow({ item, checked, alreadyExists, onToggle, onChange }) {
         {item.current_role ? ' · Current role' : ''}
         {alreadyExists ? ' · Already in your profile' : ''}
       </p>
+      {!alreadyExists && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          <label className="flex items-center gap-1.5 text-xs text-secondary">
+            Since
+            <input
+              type="date"
+              value={item.since ?? ''}
+              onChange={(e) => onSinceChange(e.target.value)}
+              className="rounded border border-hairline bg-paper px-1.5 py-0.5 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-moss"
+            />
+          </label>
+          {libraryMatch ? (
+            <span className="text-xs text-secondary">
+              Matches the library skill "{libraryMatch.name}" — name and tags will stay fixed
+              after import.
+            </span>
+          ) : (
+            <label className="flex items-center gap-1.5 text-xs text-secondary">
+              <input
+                type="checkbox"
+                checked={Boolean(item.keepPrivate)}
+                onChange={(e) => onKeepPrivateChange(e.target.checked)}
+                className="rounded border-hairline"
+              />
+              Keep private (public skills join the shared library and can't be renamed later)
+            </label>
+          )}
+        </div>
+      )}
     </Row>
   )
 }
 
-function CourseRow({ item, checked, onToggle, onChange }) {
+function CourseRow({ item, checked, alreadyExists, onToggle, onChange }) {
   return (
-    <Row checked={checked} onToggle={onToggle}>
+    <Row checked={checked && !alreadyExists} onToggle={onToggle} disabled={alreadyExists}>
       <input
         value={item.name}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full bg-transparent font-display text-ink border-b border-transparent focus:border-hairline focus:outline-none"
+        disabled={alreadyExists}
+        className="w-full bg-transparent font-display text-ink border-b border-transparent focus:border-hairline focus:outline-none disabled:opacity-60"
       />
       <p className="text-xs text-secondary mt-0.5">
         {item.provider}
         {item.completed_date ? ` · ${formatMonthYear(item.completed_date)}` : ''}
+        {alreadyExists ? ' · Already in your profile' : ''}
       </p>
     </Row>
   )
 }
 
-function ExperienceRow({ item, checked, onToggle, onChange }) {
+function ExperienceRow({ item, checked, alreadyExists, onToggle, onChange }) {
   return (
-    <Row checked={checked} onToggle={onToggle}>
+    <Row checked={checked && !alreadyExists} onToggle={onToggle} disabled={alreadyExists}>
       <input
         value={item.title}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full bg-transparent font-display text-ink border-b border-transparent focus:border-hairline focus:outline-none"
+        disabled={alreadyExists}
+        className="w-full bg-transparent font-display text-ink border-b border-transparent focus:border-hairline focus:outline-none disabled:opacity-60"
       />
       <p className="text-xs text-secondary mt-0.5">
         {item.organization} · {item.type === 'education' ? 'Education' : 'Employment'} ·{' '}
         {formatMonthYear(item.start_date)} –{' '}
         {item.end_date ? formatMonthYear(item.end_date) : 'Present'}
+        {alreadyExists ? ' · Already in your profile' : ''}
       </p>
     </Row>
   )

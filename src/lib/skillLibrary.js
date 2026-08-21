@@ -45,7 +45,7 @@ export async function listLibrarySkillIdsForTags(tagIds) {
 // one exists, otherwise add a new one. Used wherever a user types a skill
 // name that isn't already in their personal list, so the same skill isn't
 // re-invented with slightly different casing every time someone creates it.
-export async function findOrCreateLibrarySkill(name, category, userId) {
+export async function findOrCreateLibrarySkill(name, category, userId, isPrivate = false) {
   const trimmed = name.trim()
   const { data: existing } = await supabase
     .from('skill_library')
@@ -57,7 +57,7 @@ export async function findOrCreateLibrarySkill(name, category, userId) {
 
   const { data, error } = await supabase
     .from('skill_library')
-    .insert({ name: trimmed, category: category?.trim() || null, created_by: userId })
+    .insert({ name: trimmed, category: category?.trim() || null, created_by: userId, is_private: isPrivate })
     .select('id')
     .single()
   if (error) {
