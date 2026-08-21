@@ -62,7 +62,12 @@ export default function SkillCard({ skill, onEdit }) {
         )}
         {skill.knowledge_level && (
           <p className="flex items-center gap-1.5 text-xs text-secondary mt-1">
-            <GrowthRing level={skill.knowledge_level} size={16} labels={KNOWLEDGE_LEVEL_LABELS} color="var(--color-slate)" />
+            <GrowthRing
+              level={skill.knowledge_level}
+              size={16}
+              labels={KNOWLEDGE_LEVEL_LABELS}
+              color={TRUST_STATUS_COLORS[knowledgeTrust]}
+            />
             {KNOWLEDGE_LEVEL_LABELS[skill.knowledge_level]}
           </p>
         )}

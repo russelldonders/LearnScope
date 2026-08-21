@@ -444,7 +444,11 @@ export default function SkillDetail() {
                     onClick={() => setLevelDetailAxis('knowledge')}
                     className="w-full flex items-center gap-3 text-left rounded-md -m-1 p-1 hover:bg-card transition-colors"
                   >
-                    <KnowledgeLevelBar level={displayedKnowledgeLevel} size={28} />
+                    <KnowledgeLevelBar
+                      level={displayedKnowledgeLevel}
+                      size={28}
+                      color={TRUST_STATUS_COLORS[knowledgeVerification]}
+                    />
                     <div>
                       <p className="text-sm text-secondary">
                         {displayedKnowledgeLevel
@@ -678,7 +682,7 @@ export default function SkillDetail() {
                 skill={skill}
                 axis={levelDetailAxis}
                 level={levelDetailAxis === 'knowledge' ? displayedKnowledgeLevel : displayedPracticalLevel}
-                trustStatus={levelDetailAxis === 'practical' ? practicalVerification : null}
+                trustStatus={levelDetailAxis === 'knowledge' ? knowledgeVerification : practicalVerification}
                 currentTarget={levelDetailAxis === 'practical' ? currentTarget : null}
                 onClose={() => setLevelDetailAxis(null)}
                 onSelfAssess={() => {
@@ -1026,7 +1030,7 @@ function LevelDetailModal({
         </div>
         <div className="flex items-center gap-3 mb-3">
           {isKnowledge ? (
-            <KnowledgeLevelBar level={level} size={32} />
+            <KnowledgeLevelBar level={level} size={32} color={TRUST_STATUS_COLORS[trustStatus]} />
           ) : (
             <GrowthRing level={level} size={40} color={TRUST_STATUS_COLORS[trustStatus]} />
           )}
