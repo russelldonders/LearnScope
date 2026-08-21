@@ -611,6 +611,7 @@ export default function SkillDetail() {
               <SelfAssessModal
                 skill={skill}
                 user={user}
+                currentLevel={displayedPracticalLevel}
                 onClose={() => setSelfAssessOpen(false)}
                 onAssessed={() => {
                   loadHistory()
@@ -625,6 +626,7 @@ export default function SkillDetail() {
                 skill={skill}
                 user={user}
                 axis="knowledge"
+                currentLevel={displayedKnowledgeLevel}
                 onClose={() => setSelfAssessKnowledgeOpen(false)}
                 onAssessed={() => {
                   loadHistory()
@@ -706,6 +708,7 @@ export default function SkillDetail() {
                 skill={skill}
                 user={user}
                 targets={targets}
+                currentLevel={displayedPracticalLevel}
                 onClose={() => setTargetOpen(false)}
                 onSet={() => {
                   loadHistory()
@@ -999,7 +1002,7 @@ function LevelDetailModal({ skill, axis, level, currentTarget, onClose, onSelfAs
   )
 }
 
-function SelfAssessModal({ skill, user, axis = 'practical', onClose, onAssessed, onGuideGenerated }) {
+function SelfAssessModal({ skill, user, axis = 'practical', currentLevel = null, onClose, onAssessed, onGuideGenerated }) {
   return (
     <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
       <div
@@ -1018,6 +1021,7 @@ function SelfAssessModal({ skill, user, axis = 'practical', onClose, onAssessed,
           skill={skill}
           user={user}
           axis={axis}
+          currentLevel={currentLevel}
           onAssessed={onAssessed}
           onGuideGenerated={onGuideGenerated}
         />
@@ -1026,10 +1030,16 @@ function SelfAssessModal({ skill, user, axis = 'practical', onClose, onAssessed,
   )
 }
 
-function SelfAssessSection({ skill, user, axis = 'practical', onAssessed, onGuideGenerated }) {
+// currentLevel is the panel's already-displayed level (falls back through
+// self-assessment history the same way the panel does -- see
+// displayedKnowledgeLevel/displayedPracticalLevel in SkillDetail) so the
+// picker's default selection and "current" badge match what the learner
+// actually sees before opening this modal, not the raw skill.level/
+// knowledge_level which stays null until a baseline is formally evaluated.
+function SelfAssessSection({ skill, user, axis = 'practical', currentLevel = null, onAssessed, onGuideGenerated }) {
   const isKnowledge = axis === 'knowledge'
   const labels = isKnowledge ? KNOWLEDGE_LEVEL_LABELS : LEVEL_LABELS
-  const [level, setLevel] = useState((isKnowledge ? skill.knowledge_level : skill.level) ?? 1)
+  const [level, setLevel] = useState(currentLevel ?? 1)
   const [comments, setComments] = useState('')
   const [evidenceUrl, setEvidenceUrl] = useState('')
   const [evidenceFiles, setEvidenceFiles] = useState([])
@@ -1153,6 +1163,9 @@ function SelfAssessSection({ skill, user, axis = 'practical', onAssessed, onGuid
               >
                 <GrowthRing level={l} size={28} labels={labels} color={isKnowledge ? 'var(--color-slate)' : undefined} />
                 <span className="text-sm text-ink font-medium">{labels[l]}</span>
+                {currentLevel === l && (
+                  <span className="font-mono text-[10px] uppercase tracking-wide text-secondary/70">Current</span>
+                )}
               </button>
               {level === l && (
                 <div className="px-3 pt-2 pb-4">

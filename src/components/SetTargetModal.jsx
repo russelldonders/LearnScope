@@ -1,14 +1,16 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import GrowthRing from './GrowthRing'
-import { LEVELS, LEVEL_LABELS } from '../lib/levels'
+import { LEVELS, LEVEL_LABELS, LEVEL_DESCRIPTIONS } from '../lib/levels'
 
-export default function SetTargetModal({ skill, user, targets = [], onClose, onSet }) {
+// currentLevel is the panel's already-displayed practical level (falls back
+// through self-assessment history the same way the Can Do panel does -- see
+// displayedPracticalLevel in SkillDetail) so the default target selection
+// and "current" badge reflect what the learner actually sees on the page.
+export default function SetTargetModal({ skill, user, targets = [], currentLevel = null, onClose, onSet }) {
   const current = targets[0] ?? null
   const isEdit = Boolean(current)
-  const [targetLevel, setTargetLevel] = useState(
-    current?.target_level ?? (skill.level ? Math.min(skill.level + 1, 5) : 3)
-  )
+  const [targetLevel, setTargetLevel] = useState(current?.target_level ?? currentLevel ?? 3)
   const [targetDate, setTargetDate] = useState(current?.target_date ?? '')
   const [comments, setComments] = useState(current?.comments ?? '')
   const [saving, setSaving] = useState(false)
@@ -56,22 +58,54 @@ export default function SetTargetModal({ skill, user, targets = [], onClose, onS
         <h2 className="font-display text-2xl text-ink mb-1">{isEdit ? 'Edit target' : 'Set a target'}</h2>
         <p className="text-sm text-secondary mb-4">{skill.name}</p>
 
+        <div className="flex items-start gap-4 mb-4 pb-4 border-b border-hairline">
+          <div className="flex flex-col items-center gap-1 shrink-0">
+            <GrowthRing level={currentLevel} size={40} />
+            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">Current</span>
+            <span className="text-xs text-ink font-medium text-center">
+              {currentLevel ? LEVEL_LABELS[currentLevel] : 'Not yet self-assessed'}
+            </span>
+          </div>
+          <div className="flex flex-col items-center gap-1 shrink-0">
+            <GrowthRing level={0} size={40} targetLevel={targetLevel} />
+            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">Target</span>
+            <span className="text-xs text-ink font-medium text-center">{LEVEL_LABELS[targetLevel]}</span>
+          </div>
+          <p className="text-sm text-secondary leading-relaxed pt-1">{LEVEL_DESCRIPTIONS[targetLevel]}</p>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <span className="block text-sm text-secondary mb-2">Target level</span>
-            <div className="flex items-center justify-between">
+            <div className="space-y-2">
               {LEVELS.map((l) => (
-                <button
-                  type="button"
+                <div
                   key={l}
-                  onClick={() => setTargetLevel(l)}
-                  className={`flex flex-col items-center gap-1 rounded-md px-1 py-1 ${
-                    targetLevel === l ? 'bg-moss/10' : ''
+                  className={`rounded-md border overflow-hidden ${
+                    targetLevel === l ? 'border-moss' : 'border-hairline'
                   }`}
                 >
-                  <GrowthRing level={l} size={36} />
-                  <span className="font-mono text-[10px] text-secondary">{LEVEL_LABELS[l]}</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setTargetLevel(l)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${
+                      targetLevel === l ? 'bg-moss/10' : 'hover:bg-paper'
+                    }`}
+                  >
+                    <GrowthRing level={l} size={28} />
+                    <span className="text-sm text-ink font-medium">{LEVEL_LABELS[l]}</span>
+                    {currentLevel === l && (
+                      <span className="font-mono text-[10px] uppercase tracking-wide text-secondary/70">
+                        Current
+                      </span>
+                    )}
+                  </button>
+                  {targetLevel === l && LEVEL_DESCRIPTIONS[l] && (
+                    <div className="px-3 pt-2 pb-4">
+                      <p className="text-xs text-secondary leading-relaxed">{LEVEL_DESCRIPTIONS[l]}</p>
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           </div>
