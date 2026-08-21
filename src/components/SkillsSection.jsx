@@ -49,7 +49,7 @@ export default function SkillsSection() {
       supabase.from('skill_tags').select('skill_id, tags(name)').eq('user_id', user.id),
       supabase
         .from('skill_assessments')
-        .select('skill_id, level, assessed_at')
+        .select('skill_id, level, source, assessed_at')
         .eq('user_id', user.id)
         .eq('axis', 'practical')
         .order('assessed_at', { ascending: false }),
@@ -65,10 +65,19 @@ export default function SkillsSection() {
       // displayedPracticalLevel in SkillDetail.jsx).
       const latestPracticalBySkillId = new Map()
       for (const a of practicalAssessments ?? []) {
-        if (!latestPracticalBySkillId.has(a.skill_id)) latestPracticalBySkillId.set(a.skill_id, a.level)
+        if (!latestPracticalBySkillId.has(a.skill_id)) latestPracticalBySkillId.set(a.skill_id, a)
       }
       setSkills(
-        data.map((s) => ({ ...s, displayedLevel: s.level ?? latestPracticalBySkillId.get(s.id) ?? null }))
+        data.map((s) => {
+          const latest = latestPracticalBySkillId.get(s.id)
+          // skill.level itself is only ever set by an AI assessment or a
+          // completed course, never a plain self-assessment -- so the card's
+          // trust badge must only call this "Self-assessed" when there's no
+          // confirmed level yet and the fallback shown really is a
+          // self-assessment (source 'self', or legacy rows with no source).
+          const displayedLevelIsSelfAssessed = !s.level && (!latest || latest.source === 'self' || !latest.source)
+          return { ...s, displayedLevel: s.level ?? latest?.level ?? null, displayedLevelIsSelfAssessed }
+        })
       )
       const map = new Map()
       for (const link of tagLinks ?? []) {

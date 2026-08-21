@@ -24,16 +24,19 @@ export default function SkillCard({ skill, onEdit }) {
   // knowable from this row alone.
   const practicalTrust = computeTrustStatus({
     axis: 'practical',
-    // displayedLevel (not skill.level) so a skill that's only ever been
-    // self-assessed still reads as Self-assessed here, matching the level
-    // shown on the icon itself instead of silently falling back to no
-    // trust tier at all.
-    selfAssessedCount: displayedLevel ? 1 : 0,
+    // displayedLevelIsSelfAssessed (not just "is there a level") so a level
+    // set by an AI assessment or completed course doesn't get badged as
+    // Self-assessed just because something is shown on the icon -- see
+    // SkillsSection.jsx for how it's derived.
+    selfAssessedCount: skill.displayedLevelIsSelfAssessed ? 1 : 0,
     formallyValidated: ['validated', 'maintained'].includes(skill.lifecycle_stage),
   })
   const knowledgeTrust = computeTrustStatus({
     axis: 'knowledge',
-    selfAssessedCount: skill.knowledge_level ? 1 : 0,
+    // skill.knowledge_level is only ever written by the Confirming Baseline
+    // quiz (see ConfirmingBaselineQuizModal), never a plain self-assessment,
+    // so whenever it's set the badge should read Confirmed, not Self-assessed.
+    knowledgeConfirmed: Boolean(skill.knowledge_level),
   })
 
   return (
