@@ -2155,6 +2155,49 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
     }
   }
 
+  // A library-linked skill isn't wholly this learner's to destroy the way a
+  // custom one is -- "Drop" archives it instead (reusing the existing
+  // archived lifecycle stage) so it disappears from the active list while
+  // history (assessments, evidence, tags, peer ratings) stays intact and
+  // the skill can be restored later.
+  async function handleDrop() {
+    if (
+      !confirm(
+        `Drop "${skill.name}"? It'll be archived and removed from your active skills list. Your history stays intact and you can restore it anytime.`
+      )
+    ) {
+      return
+    }
+    setSaving(true)
+    try {
+      const { error } = await supabase
+        .from('skills')
+        .update({ lifecycle_stage: 'archived' })
+        .eq('id', skill.id)
+      if (error) throw error
+      onDeleted()
+    } catch (err) {
+      setError(err.message)
+      setSaving(false)
+    }
+  }
+
+  async function handleRestore() {
+    setSaving(true)
+    try {
+      const { error } = await supabase
+        .from('skills')
+        .update({ lifecycle_stage: null })
+        .eq('id', skill.id)
+      if (error) throw error
+      onUpdated()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <>
       {currentRolePrompt && (
@@ -2216,6 +2259,12 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
 
       <TrackingReasonPicker value={trackingReason} onChange={setTrackingReason} />
 
+      {skill.lifecycle_stage === 'archived' && (
+        <p className="text-sm text-secondary bg-paper border border-hairline rounded-md px-3 py-2">
+          This skill is archived and hidden from your active skills list. Restore it to track it again.
+        </p>
+      )}
+
       {error && <p className="text-sm text-red-700">{error}</p>}
 
       <div className="flex items-center gap-2">
@@ -2226,14 +2275,34 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
         >
           {saving ? 'Saving…' : 'Save details'}
         </button>
-        <button
-          type="button"
-          onClick={handleDelete}
-          disabled={saving}
-          className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-        >
-          Delete skill
-        </button>
+        {isCustom ? (
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={saving}
+            className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+          >
+            Delete skill
+          </button>
+        ) : skill.lifecycle_stage === 'archived' ? (
+          <button
+            type="button"
+            onClick={handleRestore}
+            disabled={saving}
+            className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+          >
+            Restore skill
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleDrop}
+            disabled={saving}
+            className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+          >
+            Drop skill
+          </button>
+        )}
       </div>
       </form>
     </>

@@ -106,14 +106,22 @@ export default function SkillsSection() {
     setLoading(false)
   }
 
+  const [showArchived, setShowArchived] = useState(false)
+
+  // Dropped (library-linked) skills are archived rather than deleted -- see
+  // handleDrop in SkillDetail.jsx -- so they need to disappear from the
+  // active list here without losing their history.
+  const activeSkills = useMemo(() => skills.filter((s) => s.lifecycle_stage !== 'archived'), [skills])
+  const archivedSkills = useMemo(() => skills.filter((s) => s.lifecycle_stage === 'archived'), [skills])
+
   const filteredSkills = useMemo(
     () =>
-      skills.filter(
+      activeSkills.filter(
         (s) =>
           (!tagFilter || (tagsBySkill.get(s.id) ?? []).includes(tagFilter)) &&
           (!trackingReasonFilter || s.tracking_reason === trackingReasonFilter)
       ),
-    [skills, tagFilter, tagsBySkill, trackingReasonFilter]
+    [activeSkills, tagFilter, tagsBySkill, trackingReasonFilter]
   )
   const currentRoleSkills = useMemo(
     () => filteredSkills.filter((s) => s.is_current_role),
@@ -146,13 +154,13 @@ export default function SkillsSection() {
       {loading && <p className="text-secondary">Loading…</p>}
       {error && <p className="text-red-700 text-sm">{error}</p>}
 
-      {!loading && skills.length === 0 && (
+      {!loading && activeSkills.length === 0 && archivedSkills.length === 0 && (
         <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
           <p className="text-secondary">No skills logged yet. Add your first one.</p>
         </div>
       )}
 
-      {!loading && skills.length > 0 && (
+      {!loading && activeSkills.length > 0 && (
         <>
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <button
@@ -210,7 +218,7 @@ export default function SkillsSection() {
         </>
       )}
 
-      {!loading && skills.length > 0 && filteredSkills.length === 0 && (
+      {!loading && activeSkills.length > 0 && filteredSkills.length === 0 && (
         <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
           <p className="text-secondary">No skills match this filter.</p>
         </div>
@@ -244,6 +252,24 @@ export default function SkillsSection() {
             skills={otherSkills}
             onEdit={(skill) => navigate(`/skills/${skill.id}`)}
           />
+        </div>
+      )}
+
+      {archivedSkills.length > 0 && (
+        <div className="mt-10 pt-6 border-t border-hairline">
+          <button
+            type="button"
+            onClick={() => setShowArchived((v) => !v)}
+            className="text-sm text-moss font-medium mb-4"
+          >
+            {showArchived ? 'Hide' : 'Show'} dropped skills ({archivedSkills.length})
+          </button>
+          {showArchived && (
+            <SkillGrid
+              skills={archivedSkills}
+              onEdit={(skill) => navigate(`/skills/${skill.id}`)}
+            />
+          )}
         </div>
       )}
 
