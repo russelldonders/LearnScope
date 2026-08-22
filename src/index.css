@@ -15,7 +15,7 @@
      breaks to --color-slate rather than going darker still, so "formally
      validated" reads as a distinct kind of trust, not just "more of the
      same green". */
-  --color-trust-self: #c3d9bb;
+  --color-trust-self: #a9c9a0;
   --color-trust-evidence: #8fb885;
 
   --font-display: 'Fraunces', serif;

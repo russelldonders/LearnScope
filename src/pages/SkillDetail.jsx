@@ -1053,24 +1053,13 @@ function LevelDetailModal({
         </div>
         <div className="flex items-center gap-3 mb-3">
           {isKnowledge ? (
-            <KnowledgeLevelBar
-              level={level}
-              size={32}
-              color={TRUST_STATUS_COLORS[trustStatus]}
-              milestoneLevel={knowledgeMilestone}
-              milestoneColor={TRUST_STATUS_COLORS[TRUST_STATUS.CONFIRMED]}
-            />
+            <KnowledgeLevelBar level={level} size={32} color={TRUST_STATUS_COLORS[trustStatus]} />
           ) : (
             <GrowthRing level={level} size={40} color={TRUST_STATUS_COLORS[trustStatus]} />
           )}
           <div>
             <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Current level</p>
             <p className="text-base font-medium text-ink">{level ? labels[level] : 'Not yet self-assessed'}</p>
-            {knowledgeMilestone && (
-              <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
-                Confirmed to {KNOWLEDGE_LEVEL_LABELS[knowledgeMilestone]} · self-assessed higher since
-              </p>
-            )}
           </div>
         </div>
         {level ? (
@@ -1086,6 +1075,29 @@ function LevelDetailModal({
               : "You haven't self-assessed your practical level for this skill yet."}
           </p>
         )}
+        {/* Mirrors the practical Current/Target pair below -- a newer
+            self-assessment claiming higher than the last confirmed
+            knowledge_level is shown as its own block rather than folded
+            into the current level's icon, same reasoning as Target. */}
+        {knowledgeMilestone && (() => {
+          const confirmedDescription = guideStatements[knowledgeMilestone - 1]
+          return (
+            <div className="mb-4">
+              <div className="flex items-center gap-3">
+                <KnowledgeLevelBar
+                  level={knowledgeMilestone}
+                  size={32}
+                  color={TRUST_STATUS_COLORS[TRUST_STATUS.CONFIRMED]}
+                />
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Confirmed</p>
+                  <p className="text-base font-medium text-ink">{KNOWLEDGE_LEVEL_LABELS[knowledgeMilestone]}</p>
+                </div>
+              </div>
+              {confirmedDescription && <p className="text-sm text-secondary mt-2">{confirmedDescription}</p>}
+            </div>
+          )
+        })()}
         {currentTarget && (() => {
           const targetDescription =
             guideStatements[currentTarget.target_level - 1] ?? LEVEL_DESCRIPTIONS[currentTarget.target_level]
@@ -1322,11 +1334,16 @@ function SelfAssessSection({ skill, user, axis = 'practical', currentLevel = nul
         <div className="space-y-2">
           {LEVELS.map((l) => {
             const locked = confirmedFloor != null && l < confirmedFloor
+            // The badge belongs on the confirmed level's own row -- not on
+            // the locked rows below it, which was easy to misread as "a
+            // higher level is confirmed" attached to the wrong level.
+            const isConfirmedRow = confirmedFloor != null && l === confirmedFloor
+            const badges = [isConfirmedRow && 'Confirmed', currentLevel === l && 'Current'].filter(Boolean)
             return (
             <div
               key={l}
               className={`rounded-md border overflow-hidden ${
-                level === l ? 'border-moss' : 'border-hairline'
+                level === l ? 'border-moss' : isConfirmedRow ? 'border-moss/50' : 'border-hairline'
               } ${locked ? 'opacity-40' : ''}`}
             >
               <button
@@ -1335,17 +1352,20 @@ function SelfAssessSection({ skill, user, axis = 'practical', currentLevel = nul
                 disabled={locked}
                 title={locked ? `Already confirmed at ${labels[confirmedFloor]} -- can't self-assess lower` : undefined}
                 className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${
-                  locked ? 'cursor-not-allowed' : level === l ? 'bg-moss/10' : 'hover:bg-paper'
+                  locked
+                    ? 'cursor-not-allowed'
+                    : level === l
+                      ? 'bg-moss/10'
+                      : isConfirmedRow
+                        ? 'bg-moss/5 hover:bg-paper'
+                        : 'hover:bg-paper'
                 }`}
               >
                 <GrowthRing level={l} size={28} labels={labels} color={isKnowledge ? 'var(--color-slate)' : undefined} />
                 <span className="text-sm text-ink font-medium">{labels[l]}</span>
-                {currentLevel === l && (
-                  <span className="font-mono text-[10px] uppercase tracking-wide text-secondary/70">Current</span>
-                )}
-                {locked && (
+                {badges.length > 0 && (
                   <span className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 ml-auto">
-                    Already confirmed higher
+                    {badges.join(' · ')}
                   </span>
                 )}
               </button>
