@@ -6,6 +6,7 @@ import { listConnections } from '../lib/connections'
 import AppHeader from '../components/AppHeader'
 import RecordActivitySection from '../components/RecordActivitySection'
 import GrowthRing from '../components/GrowthRing'
+import CourseThumbnail from '../components/CourseThumbnail'
 import { LEVEL_LABELS } from '../lib/levels'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
@@ -17,6 +18,21 @@ async function countRows(table, userId) {
     .select('id', { count: 'exact', head: true })
     .eq('user_id', userId)
   return count ?? 0
+}
+
+// "In progress" isn't a stored flag anywhere -- a course counts as current
+// training purely by having no completed_date, independent of whether it's
+// linked to any skill (see courses/skill_course_links in the schema).
+async function loadCurrentLearning(userId) {
+  const { data, error } = await supabase
+    .from('courses')
+    .select('id, name, provider, course_type, duration')
+    .eq('user_id', userId)
+    .is('completed_date', null)
+    .order('created_at', { ascending: false })
+    .limit(8)
+  if (error) return []
+  return data ?? []
 }
 
 async function loadRecentGrowth(userId) {
@@ -129,6 +145,7 @@ export default function Dashboard() {
   const [counts, setCounts] = useState(null)
   const [recentGrowth, setRecentGrowth] = useState([])
   const [upNext, setUpNext] = useState([])
+  const [currentLearning, setCurrentLearning] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -137,17 +154,19 @@ export default function Dashboard() {
 
   async function loadSummary() {
     setLoading(true)
-    const [skills, courses, experience, connections, growth, upNextRecommendations] = await Promise.all([
+    const [skills, courses, experience, connections, growth, upNextRecommendations, learning] = await Promise.all([
       countRows('skills', user.id),
       countRows('courses', user.id),
       countRows('experience', user.id),
       listConnections(user.id).then((c) => c.length),
       loadRecentGrowth(user.id),
       loadUpNextRecommendations(user.id),
+      loadCurrentLearning(user.id),
     ])
     setCounts({ skills, courses, experience, connections })
     setRecentGrowth(growth)
     setUpNext(upNextRecommendations)
+    setCurrentLearning(learning)
     setLoading(false)
   }
 
@@ -212,6 +231,13 @@ export default function Dashboard() {
           </div>
         )}
 
+        {!loading && currentLearning.length > 0 && (
+          <div>
+            <h2 className="font-display text-xl text-ink mb-6">Current learning</h2>
+            <CurrentLearningSlider courses={currentLearning} />
+          </div>
+        )}
+
         {!loading && recentGrowth.length > 0 && (
           <div>
             <h2 className="font-display text-xl text-ink mb-6">Recent growth</h2>
@@ -241,15 +267,14 @@ export default function Dashboard() {
   )
 }
 
-// A horizontally scrollable row rather than a JS carousel -- native scroll
-// snapping gives the same swipe-through feel on touch devices without a new
-// dependency, and degrades to a plain scrollable list anywhere it doesn't.
-// The scrollbar itself is hidden (see .scrollbar-hide in index.css) and a
-// wheel listener redirects ordinary vertical mouse-wheel input into
-// horizontal scroll while hovering -- desktop mice only have a vertical
-// wheel, so without this a mouse user would have no way to move the slider
-// at all once the scrollbar is hidden.
-function UpNextSlider({ recommendations }) {
+// Shared by every horizontally scrollable row on this page (native scroll
+// snapping rather than a JS carousel, so it degrades to a plain scrollable
+// list anywhere the extras below don't apply). The scrollbar itself is
+// hidden (see .scrollbar-hide in index.css) and this redirects ordinary
+// vertical mouse-wheel input into horizontal scroll while hovering --
+// desktop mice only have a vertical wheel, so without this a mouse user
+// would have no way to move the slider at all once the scrollbar is hidden.
+function useHorizontalWheelScroll() {
   const scrollerRef = useRef(null)
 
   useEffect(() => {
@@ -271,6 +296,12 @@ function UpNextSlider({ recommendations }) {
     return () => el.removeEventListener('wheel', handleWheel)
   }, [])
 
+  return scrollerRef
+}
+
+function UpNextSlider({ recommendations }) {
+  const scrollerRef = useHorizontalWheelScroll()
+
   return (
     <div
       ref={scrollerRef}
@@ -288,6 +319,34 @@ function UpNextSlider({ recommendations }) {
           </div>
           <p className="text-sm text-ink font-medium">{item.label}</p>
           <p className="text-xs text-secondary mt-1">{item.description}</p>
+        </Link>
+      ))}
+    </div>
+  )
+}
+
+function CurrentLearningSlider({ courses }) {
+  const scrollerRef = useHorizontalWheelScroll()
+
+  return (
+    <div
+      ref={scrollerRef}
+      className="scrollbar-hide flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 -mx-4 px-4 sm:mx-0 sm:px-0"
+    >
+      {courses.map((course) => (
+        <Link
+          key={course.id}
+          to={`/courses/${course.id}`}
+          state={{ backTo: '/dashboard', backLabel: 'Dashboard' }}
+          className="snap-start shrink-0 w-56 bg-card border border-hairline rounded-lg overflow-hidden hover:border-moss transition-colors"
+        >
+          <CourseThumbnail name={course.name} provider={course.provider} className="h-20 w-full" />
+          <div className="p-3">
+            <h3 className="font-display text-base text-ink truncate">{course.name}</h3>
+            <p className="font-mono text-xs text-secondary mt-1 truncate">
+              {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ') || 'In progress'}
+            </p>
+          </div>
         </Link>
       ))}
     </div>
