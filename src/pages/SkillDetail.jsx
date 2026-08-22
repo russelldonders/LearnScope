@@ -857,6 +857,7 @@ export default function SkillDetail() {
 
             <HistorySection
               skill={skill}
+              assessorName={assessorName}
               history={history}
               peerRatings={peerRatings}
               relationshipLinks={relationshipLinks}
@@ -1433,6 +1434,7 @@ const TIMELINE_DETAIL_TYPES = new Set(['assessment', 'peer', 'relationship', 'ac
 
 function HistorySection({
   skill,
+  assessorName,
   history,
   peerRatings,
   relationshipLinks,
@@ -1574,6 +1576,7 @@ function HistorySection({
                 isMostRecent={i === mostRecentRatingIndex}
                 isBaseline={i === mostRecentBaselineIndex}
                 raterAvatars={raterAvatars}
+                assessorName={assessorName}
                 onSelect={
                   event.type === 'training'
                     ? () => goToCourse(event.link.courses.id)
@@ -1592,6 +1595,7 @@ function HistorySection({
           event={selectedEvent}
           knowledgeLevelGuide={skill.knowledge_level_guide}
           raterAvatars={raterAvatars}
+          assessorName={assessorName}
           onClose={() => setSelectedEvent(null)}
         />
       )}
@@ -1683,6 +1687,7 @@ function TimelineEntry({
   isMostRecent,
   isBaseline,
   raterAvatars,
+  assessorName,
   onSelect,
 }) {
   const boxClass = isMostRecent
@@ -1922,8 +1927,16 @@ function TimelineEntry({
           <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
             AI-assessed baseline, from self-assessment, peer ratings and activity
           </p>
+        ) : entry.source === 'ai_evaluation' ? (
+          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+            AI assessment, evaluated against your target level
+          </p>
+        ) : entry.source === 'diagnostic_confirmed' ? (
+          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">Confirmed via knowledge check</p>
         ) : (
-          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">Self-assessed</p>
+          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+            Self-assessed by {assessorName || 'you'}
+          </p>
         )}
         {entry.experience?.title && (
           <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
@@ -1958,7 +1971,7 @@ function TimelineEntry({
   )
 }
 
-function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, onClose }) {
+function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assessorName, onClose }) {
   let title = 'Details'
   let body = null
 
@@ -2000,8 +2013,12 @@ function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, onClose
           <p className="text-sm text-secondary">
             AI-assessed baseline, from self-assessment, peer ratings and activity
           </p>
+        ) : entry.source === 'ai_evaluation' ? (
+          <p className="text-sm text-secondary">AI assessment, evaluated against your target level</p>
+        ) : entry.source === 'diagnostic_confirmed' ? (
+          <p className="text-sm text-secondary">Confirmed via knowledge check</p>
         ) : (
-          <p className="text-sm text-secondary">Self-assessed</p>
+          <p className="text-sm text-secondary">Self-assessed by {assessorName || 'you'}</p>
         )}
         {entry.experience?.title && (
           <p className="text-sm text-secondary">
