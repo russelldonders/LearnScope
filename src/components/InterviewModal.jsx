@@ -169,7 +169,7 @@ export default function InterviewModal({ skill, user, actor, latestKnowledgeAsse
   return (
     <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
       <div
-        className="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] flex flex-col"
+        className="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] flex flex-col overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between mb-1">
