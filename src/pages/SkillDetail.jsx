@@ -352,7 +352,7 @@ export default function SkillDetail() {
   const pendingValidationRequestsCount = validationRequests.filter((r) => r.status === 'pending').length
   const decidedValidationRequestsCount = validationRequests.length - pendingValidationRequestsCount
   // "Demonstrate skill" / "Move to validating" do advance lifecycle_stage,
-  // so unlike the rest of the Practice panel's actions they stay gated --
+  // so unlike the rest of the Put into Practice panel's actions they stay gated --
   // showing them outside their stage would let the stage go backwards or
   // skip ahead of what computeUpNextItems considers reachable.
   const canShowDemonstrateAction = upNextPreview.some((item) => item.key === 'demonstrate')
@@ -482,7 +482,7 @@ export default function SkillDetail() {
                 nested={
                   <div className="space-y-3">
                     <NestedSkillPanel
-                      title="Build"
+                      title="Learn"
                       status={
                         <div>
                           {completedCourseLinksCount > 0 && (
@@ -565,7 +565,7 @@ export default function SkillDetail() {
                 nested={
                   <div className="space-y-3">
                     <NestedSkillPanel
-                      title="Practice"
+                      title="Put into Practice"
                       status={
                         <p className="text-sm text-secondary">
                           {practicalStatements.length} activit{practicalStatements.length === 1 ? 'y' : 'ies'} logged
@@ -952,8 +952,8 @@ function ActionGroup({ title, accent, actions, headerExtra }) {
 
 // One card in the skill page's status layout (Know / Can Do) -- each axis
 // gets its own status + actions, rather than the stage-linear single-file
-// "Up Next" checklist implying the axes must progress in lockstep. Build
-// and Verify nest inside Know; Practice and Validate nest inside Can Do
+// "Up Next" checklist implying the axes must progress in lockstep. Learn
+// and Verify nest inside Know; Put into Practice and Validate nest inside Can Do
 // (via `nested`), since they're the supporting evidence/verification for
 // those axes rather than peer-level axes of their own.
 function SkillPanel({ title, accent, status, actions, nested }) {
@@ -970,8 +970,8 @@ function SkillPanel({ title, accent, status, actions, nested }) {
   )
 }
 
-// Smaller variant of SkillPanel for a panel nested inside another (Build
-// and Verify inside Know; Practice and Validate inside Can Do) -- same
+// Smaller variant of SkillPanel for a panel nested inside another (Learn
+// and Verify inside Know; Put into Practice and Validate inside Can Do) -- same
 // title/status/actions shape, lighter card so it reads as "part of" the
 // parent rather than a sibling.
 function NestedSkillPanel({ title, accent, status, actions }) {
