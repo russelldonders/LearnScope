@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { uploadEvidenceFiles, getEvidenceSignedUrl } from '../lib/skillEvidence'
-import { computeNextSelfAssessmentDate, isSelfAssessmentDue } from '../lib/checkin'
+import { computeNextSelfAssessmentDate, isSelfAssessmentDue, todayDateString } from '../lib/checkin'
 import { formatMonthYear } from '../lib/dates'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
@@ -855,6 +855,49 @@ export default function SkillDetail() {
               </div>
             )}
 
+            {(skill.next_checkin_date || currentTarget) && (
+              <div className="mt-4 pt-4 border-t border-hairline">
+                <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-3">Upcoming</h3>
+                <div className="space-y-2">
+                  {skill.next_checkin_date && (
+                    <div
+                      className={`flex items-center justify-between rounded-md border px-3 py-2 ${
+                        isSelfAssessmentDue(skill.next_checkin_date)
+                          ? 'border-gold bg-gold/10'
+                          : 'border-hairline bg-paper'
+                      }`}
+                    >
+                      <span className="font-mono text-xs uppercase tracking-wide text-secondary">
+                        Next self-assessment
+                      </span>
+                      <span
+                        className={`text-sm font-medium ${
+                          isSelfAssessmentDue(skill.next_checkin_date) ? 'text-gold' : 'text-ink'
+                        }`}
+                      >
+                        {new Date(`${skill.next_checkin_date}T00:00:00`).toLocaleDateString()}
+                        {isSelfAssessmentDue(skill.next_checkin_date) ? ' · Due' : ''}
+                      </span>
+                    </div>
+                  )}
+                  {currentTarget && (
+                    <button
+                      type="button"
+                      onClick={() => setTargetOpen(true)}
+                      className="w-full flex items-center justify-between rounded-md border border-hairline bg-paper px-3 py-2 text-left hover:border-moss/60 transition-colors"
+                    >
+                      <span className="font-mono text-xs uppercase tracking-wide text-secondary">
+                        Target {LEVEL_LABELS[currentTarget.target_level]}
+                      </span>
+                      <span className="text-sm font-medium text-ink">
+                        {new Date(`${currentTarget.target_date}T00:00:00`).toLocaleDateString()}
+                      </span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             <HistorySection
               skill={skill}
               assessorName={assessorName}
@@ -863,12 +906,10 @@ export default function SkillDetail() {
               relationshipLinks={relationshipLinks}
               statements={statements}
               courseLinks={courseLinks}
-              targets={targets}
               validationRequests={validationRequests}
               validatorNames={validatorNames}
               loading={loadingHistory}
               raterAvatars={raterAvatars}
-              onSetTarget={() => setTargetOpen(true)}
             />
           </div>
         )}
@@ -1232,6 +1273,21 @@ function SelfAssessSection({ skill, user, axis = 'practical', currentLevel = nul
   const [error, setError] = useState(null)
   const [guideStatements, setGuideStatements] = useState([])
   const [guideLoading, setGuideLoading] = useState(true)
+  // The check-in cadence is a practical-review schedule (see handleSubmit),
+  // so these only ever apply/render for the practical axis. Defaults to the
+  // already-recurring schedule advanced forward from today, same as the old
+  // silent auto-advance did -- just visible and editable now instead of
+  // happening invisibly.
+  const [nextCheckinDate, setNextCheckinDate] = useState(() => {
+    if (isKnowledge) return ''
+    if (skill.checkin_frequency_value && skill.checkin_frequency_unit) {
+      return computeNextSelfAssessmentDate(null, skill.checkin_frequency_value, skill.checkin_frequency_unit)
+    }
+    return skill.next_checkin_date ?? ''
+  })
+  const [recurring, setRecurring] = useState(!isKnowledge && Boolean(skill.checkin_frequency_unit))
+  const [frequencyValue, setFrequencyValue] = useState(skill.checkin_frequency_value ?? 1)
+  const [frequencyUnit, setFrequencyUnit] = useState(skill.checkin_frequency_unit ?? 'months')
 
   useEffect(() => {
     let cancelled = false
@@ -1261,6 +1317,10 @@ function SelfAssessSection({ skill, user, axis = 'practical', currentLevel = nul
   async function handleSubmit(e) {
     e.preventDefault()
     setError(null)
+    if (!isKnowledge && nextCheckinDate && nextCheckinDate < todayDateString()) {
+      setError("Next self-assessment date can't be in the past.")
+      return
+    }
     setSaving(true)
     try {
       const { data: assessment, error: assessmentError } = await supabase
@@ -1291,16 +1351,16 @@ function SelfAssessSection({ skill, user, axis = 'practical', currentLevel = nul
       // baseline" / "Evaluate Baseline" (practical) or the Confirming
       // Baseline quiz / "Confirm knowledge level" (knowledge) action does
       // that. The check-in cadence is a practical-review schedule, so only
-      // a practical self-assessment reschedules it.
-      if (!isKnowledge && skill.checkin_frequency_value && skill.checkin_frequency_unit) {
+      // a practical self-assessment touches it -- explicitly, from whatever
+      // the learner set in the schedule fields below, rather than the old
+      // silent auto-advance.
+      if (!isKnowledge) {
         const { error: skillError } = await supabase
           .from('skills')
           .update({
-            next_checkin_date: computeNextSelfAssessmentDate(
-              null,
-              skill.checkin_frequency_value,
-              skill.checkin_frequency_unit
-            ),
+            next_checkin_date: nextCheckinDate || null,
+            checkin_frequency_value: recurring ? frequencyValue : null,
+            checkin_frequency_unit: recurring ? frequencyUnit : null,
           })
           .eq('id', skill.id)
         if (skillError) throw skillError
@@ -1417,6 +1477,49 @@ function SelfAssessSection({ skill, user, axis = 'practical', currentLevel = nul
         />
       )}
 
+      {!isKnowledge && (
+        <div className="border-t border-hairline pt-3 space-y-2">
+          <span className="block text-sm text-secondary">Next self-assessment</span>
+          <input
+            type="date"
+            value={nextCheckinDate}
+            min={todayDateString()}
+            onChange={(e) => setNextCheckinDate(e.target.value)}
+            className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+          />
+          <label className="flex items-center gap-2 text-sm text-secondary">
+            <input
+              type="checkbox"
+              checked={recurring}
+              onChange={(e) => setRecurring(e.target.checked)}
+              className="rounded border-hairline"
+            />
+            Set up regular self-assessments
+          </label>
+          {recurring && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-secondary">Every</span>
+              <input
+                type="number"
+                min={1}
+                value={frequencyValue}
+                onChange={(e) => setFrequencyValue(Number(e.target.value) || 1)}
+                className="w-16 rounded-md border border-hairline bg-paper px-2 py-1.5 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+              <select
+                value={frequencyUnit}
+                onChange={(e) => setFrequencyUnit(e.target.value)}
+                className="rounded-md border border-hairline bg-paper px-2 py-1.5 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+              >
+                <option value="weeks">weeks</option>
+                <option value="months">months</option>
+                <option value="years">years</option>
+              </select>
+            </div>
+          )}
+        </div>
+      )}
+
       {error && <p className="text-sm text-red-700">{error}</p>}
 
       <button
@@ -1440,16 +1543,12 @@ function HistorySection({
   relationshipLinks,
   statements,
   courseLinks,
-  targets,
   validationRequests,
   validatorNames,
   loading,
   raterAvatars,
-  onSetTarget,
 }) {
   const navigate = useNavigate()
-  const due = isSelfAssessmentDue(skill.next_checkin_date)
-  const currentTarget = targets[0]
   // The Confirming Baseline knowledge quiz logs its own xAPI attempt --
   // exclude it here too, same reasoning as the top-level SkillDetail
   // component (see there for the full comment).
@@ -1465,21 +1564,6 @@ function HistorySection({
   return (
     <div className="mt-4 pt-4 border-t border-hairline">
       <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-3">Timeline</h3>
-      {skill.next_checkin_date && (
-        <div
-          className={`flex items-center justify-between rounded-md border px-3 py-2 mb-6 ${
-            due ? 'border-gold bg-gold/10' : 'border-hairline bg-paper'
-          }`}
-        >
-          <span className="font-mono text-xs uppercase tracking-wide text-secondary">
-            Next planned self-assessment
-          </span>
-          <span className={`text-sm font-medium ${due ? 'text-gold' : 'text-ink'}`}>
-            {new Date(`${skill.next_checkin_date}T00:00:00`).toLocaleDateString()}
-            {due ? ' · Due' : ''}
-          </span>
-        </div>
-      )}
 
       {loading && <p className="text-sm text-secondary">Loading…</p>}
       {!loading && (() => {
@@ -1542,13 +1626,6 @@ function HistorySection({
 
         return (
           <div>
-            {currentTarget && (
-              <TargetTimelineEntry
-                target={currentTarget}
-                hasMore={pendingCourseLinks.length > 0 || pendingValidationRequests.length > 0 || events.length > 0}
-                onClick={onSetTarget}
-              />
-            )}
             {pendingCourseLinks.map((link, i) => (
               <PendingTrainingEntry
                 key={link.id}
@@ -1599,36 +1676,6 @@ function HistorySection({
           onClose={() => setSelectedEvent(null)}
         />
       )}
-    </div>
-  )
-}
-
-function TargetTimelineEntry({ target, hasMore, onClick }) {
-  return (
-    <div className="flex gap-3">
-      <div className="flex flex-col items-center w-12 shrink-0">
-        <div className="rounded-full border-2 border-dashed border-hairline p-0.5">
-          <GrowthRing level={target.target_level} size={32} />
-        </div>
-        {hasMore && <span className="w-px flex-1 bg-hairline mt-1" />}
-      </div>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onClick}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            onClick()
-          }
-        }}
-        className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper/60 p-3 cursor-pointer hover:border-moss/60 transition-colors"
-      >
-        <p className="text-sm text-secondary">
-          Target {LEVEL_LABELS[target.target_level]} aimed to be achieved by{' '}
-          {new Date(`${target.target_date}T00:00:00`).toLocaleDateString()}
-        </p>
-      </div>
     </div>
   )
 }
@@ -2194,6 +2241,13 @@ function ScheduleSection({ skill, onUpdated }) {
   async function handleSave(e) {
     e.preventDefault()
     setError(null)
+    // The date input's min attribute is just a UI hint -- browsers still
+    // let a typed/pasted value through, so this is the actual guarantee a
+    // check-in can never be scheduled in the past.
+    if (nextCheckinDate && nextCheckinDate < todayDateString()) {
+      setError("Next self-assessment date can't be in the past.")
+      return
+    }
     setSaving(true)
     setSaved(false)
     try {
@@ -2229,6 +2283,7 @@ function ScheduleSection({ skill, onUpdated }) {
           id="nextCheckinDate"
           type="date"
           value={nextCheckinDate}
+          min={todayDateString()}
           onChange={(e) => setNextCheckinDate(e.target.value)}
           className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
         />

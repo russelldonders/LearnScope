@@ -1,3 +1,9 @@
+// Used as the `min` on every self-assessment scheduling date input, so a
+// learner can never schedule a check-in that's already in the past.
+export function todayDateString() {
+  return new Date().toISOString().slice(0, 10)
+}
+
 export function computeNextSelfAssessmentDate(fromDateStr, value, unit) {
   const from = fromDateStr ? new Date(`${fromDateStr}T00:00:00`) : new Date()
   const next = new Date(from)
@@ -9,6 +15,5 @@ export function computeNextSelfAssessmentDate(fromDateStr, value, unit) {
 
 export function isSelfAssessmentDue(nextDate) {
   if (!nextDate) return false
-  const today = new Date().toISOString().slice(0, 10)
-  return nextDate <= today
+  return nextDate <= todayDateString()
 }
