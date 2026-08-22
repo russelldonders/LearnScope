@@ -48,7 +48,17 @@ async function loadConnectionsActivity() {
   }
 }
 
+const RECENT_GROWTH_WINDOW_DAYS = 28
+
+function daysAgoLabel(dateStr) {
+  const days = Math.floor((Date.now() - new Date(dateStr).getTime()) / (24 * 60 * 60 * 1000))
+  if (days <= 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  return `${days} days ago`
+}
+
 async function loadRecentGrowth(userId) {
+  const cutoff = new Date(Date.now() - RECENT_GROWTH_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString()
   // Practical only -- the knowledge axis uses a different label scale, and
   // this widget only knows LEVEL_LABELS.
   const { data, error } = await supabase
@@ -56,6 +66,7 @@ async function loadRecentGrowth(userId) {
     .select('id, skill_id, level, assessed_at, skills(name)')
     .eq('user_id', userId)
     .eq('axis', 'practical')
+    .gte('assessed_at', cutoff)
     .order('assessed_at', { ascending: false })
     .limit(3)
   if (error || !data || data.length === 0) return []
@@ -321,7 +332,7 @@ export default function Dashboard() {
                     )}
                   </div>
                   <p className="font-mono text-xs text-secondary shrink-0 self-start">
-                    {new Date(row.assessed_at).toLocaleDateString()}
+                    {daysAgoLabel(row.assessed_at)}
                   </p>
                 </Link>
               ))}
