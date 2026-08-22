@@ -26,7 +26,14 @@ export default function ConfirmingBaselineQuizModal({
   onClose,
   onConfirmed,
 }) {
-  const calibratedLevel = skill.knowledge_level ?? latestKnowledgeAssessment?.level ?? 1
+  // The latest knowledge-axis event wins, same reasoning as
+  // displayedKnowledgeLevel in SkillDetail.jsx: a self-assessment made after
+  // the last confirmation is a claim of having grown beyond it, so the quiz
+  // should pitch at that new claim, not silently keep testing the old
+  // confirmed level forever. When nothing newer exists, latestKnowledgeAssessment
+  // *is* the confirmation (same value as skill.knowledge_level), so this is
+  // safe in the normal case too.
+  const calibratedLevel = latestKnowledgeAssessment?.level ?? skill.knowledge_level ?? 1
 
   const [diagnosticContentId, setDiagnosticContentId] = useState(null)
   const [content, setContent] = useState(null)
