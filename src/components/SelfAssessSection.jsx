@@ -117,7 +117,7 @@ export default function SelfAssessSection({ skill, user, axis = 'practical', cur
           .from('skills')
           .update({
             next_checkin_date: nextCheckinDate || null,
-            checkin_frequency_value: recurring ? frequencyValue : null,
+            checkin_frequency_value: recurring ? Math.max(1, Math.floor(Number(frequencyValue)) || 1) : null,
             checkin_frequency_unit: recurring ? frequencyUnit : null,
           })
           .eq('id', skill.id)
@@ -243,7 +243,7 @@ export default function SelfAssessSection({ skill, user, axis = 'practical', cur
             value={nextCheckinDate}
             min={todayDateString()}
             onChange={(e) => setNextCheckinDate(e.target.value)}
-            className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+            className="w-full min-w-0 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
           />
           <label className="flex items-center gap-2 text-sm text-secondary">
             <input
@@ -261,8 +261,9 @@ export default function SelfAssessSection({ skill, user, axis = 'practical', cur
                 type="number"
                 min={1}
                 value={frequencyValue}
-                onChange={(e) => setFrequencyValue(Number(e.target.value) || 1)}
-                className="w-16 rounded-md border border-hairline bg-paper px-2 py-1.5 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+                onChange={(e) => setFrequencyValue(e.target.value)}
+                onBlur={(e) => setFrequencyValue(Math.max(1, Math.floor(Number(e.target.value)) || 1))}
+                className="w-16 min-w-0 rounded-md border border-hairline bg-paper px-2 py-1.5 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
               />
               <select
                 value={frequencyUnit}
