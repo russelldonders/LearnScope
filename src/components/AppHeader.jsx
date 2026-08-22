@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
+import { listIncomingRateInvites } from '../lib/connections'
 
 const NAV_LINKS = [
   { to: '/dashboard', label: 'Home' },
@@ -24,6 +25,7 @@ export default function AppHeader() {
   const [avatarUrl, setAvatarUrl] = useState(null)
   const [fullName, setFullName] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [pendingActionCount, setPendingActionCount] = useState(0)
   const menuRef = useRef(null)
 
   useEffect(() => {
@@ -37,6 +39,34 @@ export default function AppHeader() {
         setAvatarUrl(data?.avatar_url ?? null)
         setFullName(data?.full_name ?? null)
       })
+  }, [user])
+
+  // Everything on the Connections page that's actually waiting on this
+  // learner to do something -- pending connection requests, validation
+  // requests, and rate invites addressed to them -- not invites/requests
+  // they sent themselves, which are waiting on someone else instead.
+  useEffect(() => {
+    if (!user) return
+    let cancelled = false
+    Promise.all([
+      supabase
+        .from('connection_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('recipient_id', user.id)
+        .eq('status', 'pending'),
+      supabase
+        .from('skill_validation_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('validator_id', user.id)
+        .eq('status', 'pending'),
+      listIncomingRateInvites(),
+    ]).then(([{ count: requestCount }, { count: validationCount }, rateInvites]) => {
+      if (cancelled) return
+      setPendingActionCount((requestCount ?? 0) + (validationCount ?? 0) + rateInvites.length)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [user])
 
   useEffect(() => {
@@ -127,13 +157,18 @@ export default function AppHeader() {
             <Link
               key={link.to}
               to={link.to}
-              className={`text-sm rounded-md px-2.5 py-1.5 whitespace-nowrap ${
+              className={`flex items-center gap-1.5 text-sm rounded-md px-2.5 py-1.5 whitespace-nowrap ${
                 location.pathname === link.to
                   ? 'text-ink font-medium bg-paper'
                   : 'text-secondary hover:text-ink'
               }`}
             >
               {link.label}
+              {link.to === '/connections' && pendingActionCount > 0 && (
+                <span className="flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-moss text-paper text-xs font-medium">
+                  {pendingActionCount}
+                </span>
+              )}
             </Link>
           ))}
         </nav>
