@@ -1,19 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { uploadEvidenceFiles } from '../lib/skillEvidence'
 import { listLibrarySkills, isDuplicateLibrarySkillError, duplicateLibrarySkillMessage } from '../lib/skillLibrary'
 import { listTags, addTagToSkill, suggestTags } from '../lib/skillTags'
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
-import GrowthRing from './GrowthRing'
-import EvidenceFields from './EvidenceFields'
 import TrackingReasonPicker from './TrackingReasonPicker'
-import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { enableCurrentRole, applyCurrentRoleSelection, syncSkillIsCurrentRole } from '../lib/currentRole'
 import CurrentRoleSelectModal from './CurrentRoleSelectModal'
 import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
 import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
+import SelfAssessSection from './SelfAssessSection'
 
+// 'search' / 'settings' create the skill itself; 'knowledge' / 'practical'
+// are the two rating steps that follow, each independently skippable since
+// skills.level and skills.knowledge_level are both nullable -- skipping just
+// means no skill_assessments row gets inserted for that axis, which is
+// already a fully-supported "not yet self-assessed" state everywhere else
+// in the app (see SelfAssessSection).
 export default function FindSkillModal({ onClose, onCreated, experienceId }) {
   const { user } = useAuth()
   const [mode, setMode] = useState('search')
@@ -28,11 +31,7 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
   const [isCurrentRole, setIsCurrentRole] = useState(false)
   const [currentRolePrompt, setCurrentRolePrompt] = useState(null)
   const [trackingReason, setTrackingReason] = useState(null)
-  const [assessNow, setAssessNow] = useState(false)
-  const [level, setLevel] = useState(1)
-  const [comments, setComments] = useState('')
-  const [evidenceUrl, setEvidenceUrl] = useState('')
-  const [evidenceFiles, setEvidenceFiles] = useState([])
+  const [createdSkill, setCreatedSkill] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
@@ -105,7 +104,10 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
         .from('skills')
         .insert({
           name: selected.name.trim(),
-          level: assessNow ? level : null,
+          // Rating happens in the wizard steps that follow, via the same
+          // self-assessment path used everywhere else -- never set directly
+          // at creation time.
+          level: null,
           // Starts false regardless of the checkbox -- set true below only
           // once actually linked to a current-role experience, so a skill
           // can never end up flagged current-role with nothing behind it
@@ -122,6 +124,7 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
         if (isDuplicateSkillNameError(skillError)) throw new Error(duplicateSkillMessage(selected.name))
         throw skillError
       }
+      setCreatedSkill(skill)
 
       try {
         const suggested = await suggestTags(selected.name, allTags.map((t) => t.name))
@@ -134,8 +137,8 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
 
       // Best-effort and not awaited -- precomputes the knowledge- and
       // practical-level guidance now so both are already cached by the
-      // time the learner opens either self-assessment, without delaying
-      // skill creation.
+      // time the wizard's rating steps (or the learner, if skipped for now)
+      // open either self-assessment.
       ensureKnowledgeLevelGuide(skill).catch((guideErr) =>
         console.error('Knowledge level guide generation failed:', guideErr)
       )
@@ -152,30 +155,6 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
         if (linkError) throw linkError
       }
 
-      if (assessNow) {
-        const { data: assessment, error: assessmentError } = await supabase
-          .from('skill_assessments')
-          .insert({
-            skill_id: skill.id,
-            user_id: user.id,
-            level,
-            comments: comments.trim() || null,
-            evidence_url: evidenceUrl.trim() || null,
-          })
-          .select()
-          .single()
-        if (assessmentError) throw assessmentError
-
-        if (evidenceFiles.length > 0) {
-          const paths = await uploadEvidenceFiles(user.id, skill.id, assessment.id, evidenceFiles)
-          const { error: updateError } = await supabase
-            .from('skill_assessments')
-            .update({ evidence_paths: paths })
-            .eq('id', assessment.id)
-          if (updateError) throw updateError
-        }
-      }
-
       if (isCurrentRole) {
         const result = await enableCurrentRole(user.id, skill.id)
         if (result.needsSelection) {
@@ -185,7 +164,8 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
         }
       }
 
-      onCreated()
+      setSaving(false)
+      setMode('knowledge')
     } catch (err) {
       setError(err.message)
       setSaving(false)
@@ -195,7 +175,7 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
   async function handleCurrentRoleConfirm(experienceIds) {
     await applyCurrentRoleSelection(user.id, currentRolePrompt.skillId, experienceIds)
     setCurrentRolePrompt(null)
-    onCreated()
+    setMode('knowledge')
   }
 
   async function handleCurrentRoleCancel() {
@@ -205,7 +185,16 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
     // here propagates to CurrentRoleSelectModal's own error handling.
     await syncSkillIsCurrentRole(user.id, currentRolePrompt.skillId)
     setCurrentRolePrompt(null)
-    onCreated()
+    setMode('knowledge')
+  }
+
+  // Once the skill row exists (from the 'knowledge'/'practical' steps
+  // onward), there's nothing left to abandon -- closing the modal should
+  // finish up (and refresh the caller's list) rather than silently leaving
+  // an already-created skill out of view until the next natural reload.
+  function handleDismiss() {
+    if (createdSkill) onCreated()
+    else onClose()
   }
 
   if (currentRolePrompt) {
@@ -219,7 +208,7 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={handleDismiss}>
       <div
         className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
@@ -293,6 +282,7 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
             >
               ← Back to search
             </button>
+            <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1">Step 1 of 3</p>
             <h2 className="font-display text-2xl text-ink mb-4">
               {selected.isNew ? 'Create a skill' : `Add "${selected.name}"`}
             </h2>
@@ -352,64 +342,6 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
 
               <TrackingReasonPicker value={trackingReason} onChange={setTrackingReason} required />
 
-              <label className="flex items-center gap-2 text-sm text-secondary border-t border-hairline pt-4">
-                <input
-                  type="checkbox"
-                  checked={assessNow}
-                  onChange={(e) => setAssessNow(e.target.checked)}
-                  className="rounded border-hairline"
-                />
-                Self-assess this skill now
-              </label>
-
-              {assessNow ? (
-                <>
-                  <div>
-                    <span className="block text-sm text-secondary mb-2">Level</span>
-                    <div className="flex items-center justify-between">
-                      {LEVELS.map((l) => (
-                        <button
-                          type="button"
-                          key={l}
-                          onClick={() => setLevel(l)}
-                          className={`flex flex-col items-center gap-1 rounded-md px-1 py-1 ${
-                            level === l ? 'bg-moss/10' : ''
-                          }`}
-                        >
-                          <GrowthRing level={l} size={40} />
-                          <span className="font-mono text-[10px] text-secondary">{LEVEL_LABELS[l]}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm text-secondary mb-1" htmlFor="comments">
-                      Why this level? (optional)
-                    </label>
-                    <textarea
-                      id="comments"
-                      rows={3}
-                      value={comments}
-                      onChange={(e) => setComments(e.target.value)}
-                      placeholder="Context, examples, self-assessment notes…"
-                      className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                    />
-                  </div>
-
-                  <EvidenceFields
-                    evidenceUrl={evidenceUrl}
-                    onEvidenceUrlChange={setEvidenceUrl}
-                    files={evidenceFiles}
-                    onFilesChange={setEvidenceFiles}
-                  />
-                </>
-              ) : (
-                <p className="text-xs text-secondary">
-                  You can self-assess this skill any time from its card.
-                </p>
-              )}
-
               {error && <p className="text-sm text-red-700">{error}</p>}
 
               <div className="flex items-center gap-2 pt-2">
@@ -418,7 +350,7 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
                   disabled={saving}
                   className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
                 >
-                  {saving ? 'Saving…' : 'Save'}
+                  {saving ? 'Saving…' : 'Continue'}
                 </button>
                 <button
                   type="button"
@@ -429,6 +361,60 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
                 </button>
               </div>
             </form>
+          </>
+        )}
+
+        {mode === 'knowledge' && createdSkill && (
+          <>
+            <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1">Step 2 of 3</p>
+            <h2 className="font-display text-2xl text-ink mb-1">Rate your knowledge</h2>
+            <p className="text-sm text-secondary mb-4">
+              How well do you understand "{createdSkill.name}" in theory? You can skip this and rate it later
+              from the skill's page.
+            </p>
+            <SelfAssessSection
+              skill={createdSkill}
+              user={user}
+              axis="knowledge"
+              onAssessed={() => setMode('practical')}
+              onGuideGenerated={(statements) =>
+                setCreatedSkill((s) => (s ? { ...s, knowledge_level_guide: statements } : s))
+              }
+            />
+            <button
+              type="button"
+              onClick={() => setMode('practical')}
+              className="w-full rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper mt-3"
+            >
+              Skip for now
+            </button>
+          </>
+        )}
+
+        {mode === 'practical' && createdSkill && (
+          <>
+            <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1">Step 3 of 3</p>
+            <h2 className="font-display text-2xl text-ink mb-1">Rate your practical ability</h2>
+            <p className="text-sm text-secondary mb-4">
+              How would you rate applying "{createdSkill.name}" in practice? You can skip this and rate it
+              later from the skill's page.
+            </p>
+            <SelfAssessSection
+              skill={createdSkill}
+              user={user}
+              axis="practical"
+              onAssessed={onCreated}
+              onGuideGenerated={(statements) =>
+                setCreatedSkill((s) => (s ? { ...s, practical_level_guide: statements } : s))
+              }
+            />
+            <button
+              type="button"
+              onClick={onCreated}
+              className="w-full rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper mt-3"
+            >
+              Skip for now
+            </button>
           </>
         )}
       </div>
