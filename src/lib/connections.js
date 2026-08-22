@@ -23,6 +23,12 @@ export function clearPendingInviteCode() {
   localStorage.removeItem(PENDING_INVITE_KEY)
 }
 
+// Opens WhatsApp (the app on mobile, web/desktop WhatsApp otherwise) with a
+// pre-filled message -- just a wa.me deep link, no API key or auth needed.
+export function whatsappShareUrl(text) {
+  return `https://wa.me/?text=${encodeURIComponent(text)}`
+}
+
 export function isDuplicatePendingInviteError(error) {
   return error?.code === '23505' && error?.message?.includes('connection_invites_unique_pending_idx')
 }

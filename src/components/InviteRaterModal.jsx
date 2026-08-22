@@ -7,6 +7,7 @@ import {
   sendInviteEmail,
   isDuplicatePendingInviteError,
   duplicatePendingInviteMessage,
+  whatsappShareUrl,
 } from '../lib/connections'
 
 export default function InviteRaterModal({ skill, onClose }) {
@@ -119,6 +120,14 @@ export default function InviteRaterModal({ skill, onClose }) {
                 {copied ? 'Copied!' : 'Copy'}
               </button>
             </div>
+            <a
+              href={whatsappShareUrl(`Can you rate my skill "${skill.name}" on LearnScope? ${result.url}`)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block w-full text-center rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper"
+            >
+              Share via WhatsApp
+            </a>
             <button
               type="button"
               onClick={onClose}

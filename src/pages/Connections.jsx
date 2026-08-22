@@ -12,6 +12,7 @@ import {
   getProfiles,
   sendInviteEmail,
   revokeInvite,
+  whatsappShareUrl,
 } from '../lib/connections'
 import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
 import { listIncomingConnectionRequests, respondToConnectionRequest } from '../lib/skillDiscovery'
@@ -380,6 +381,14 @@ export default function Connections() {
                     >
                       {copiedId === invite.id ? 'Copied!' : 'Copy link'}
                     </button>
+                    <a
+                      href={whatsappShareUrl(`Can you rate my skill "${invite.skills?.name}" on LearnScope? ${invite.url}`)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+                    >
+                      WhatsApp
+                    </a>
                     <button
                       type="button"
                       onClick={() => handleRevoke(invite)}
