@@ -75,26 +75,20 @@ export default function SkillCard({ skill, onEdit }) {
             tracked skill has one) so it reads as noise on every card here --
             only the rarer, more meaningful tiers get a badge. The skill's
             own detail page still shows Self-assessed where it's the only
-            signal available. */}
-        {((practicalTrust && practicalTrust !== TRUST_STATUS.SELF_ASSESSED) ||
-          (knowledgeTrust && knowledgeTrust !== TRUST_STATUS.SELF_ASSESSED)) && (
+            signal available. Knowledge has no separate badge here at all --
+            the level shown just above (skill.knowledge_level, always the
+            confirmed value) already says everything this tag would. */}
+        {practicalTrust && practicalTrust !== TRUST_STATUS.SELF_ASSESSED && (
           <div className="flex flex-wrap gap-1 mt-1.5">
-            {practicalTrust && practicalTrust !== TRUST_STATUS.SELF_ASSESSED && (
-              <span
-                className={`font-mono text-[9px] uppercase tracking-wide rounded-full px-1.5 py-0.5 border ${
-                  practicalTrust === TRUST_STATUS.VALIDATED || practicalTrust === TRUST_STATUS.CONFIRMED
-                    ? 'border-moss text-moss'
-                    : 'border-hairline text-secondary'
-                }`}
-              >
-                {practicalTrust}
-              </span>
-            )}
-            {knowledgeTrust && knowledgeTrust !== TRUST_STATUS.SELF_ASSESSED && (
-              <span className="font-mono text-[9px] uppercase tracking-wide rounded-full px-1.5 py-0.5 border border-hairline text-secondary">
-                Knowledge · {knowledgeTrust}
-              </span>
-            )}
+            <span
+              className={`font-mono text-[9px] uppercase tracking-wide rounded-full px-1.5 py-0.5 border ${
+                practicalTrust === TRUST_STATUS.VALIDATED || practicalTrust === TRUST_STATUS.CONFIRMED
+                  ? 'border-moss text-moss'
+                  : 'border-hairline text-secondary'
+              }`}
+            >
+              {practicalTrust}
+            </span>
           </div>
         )}
         {skill.tracking_reason && (
