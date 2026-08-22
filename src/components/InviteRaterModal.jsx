@@ -13,19 +13,24 @@ import {
 import { isMobileDevice } from '../lib/device'
 import WhatsAppIcon from './WhatsAppIcon'
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 export default function InviteRaterModal({ skill, onClose }) {
   const { user } = useAuth()
-  const [email, setEmail] = useState('')
   const [inviterName, setInviterName] = useState(null)
   const [connections, setConnections] = useState([])
-  const [sendingConnectionId, setSendingConnectionId] = useState(null)
-  const [sentConnectionId, setSentConnectionId] = useState(null)
-  const [connectionError, setConnectionError] = useState(null)
+  const [selectedConnectionIds, setSelectedConnectionIds] = useState(new Set())
+  const [connectionStatus, setConnectionStatus] = useState(new Map())
+  const [sendingConnections, setSendingConnections] = useState(false)
+
+  const [emails, setEmails] = useState([])
+  const [emailInput, setEmailInput] = useState('')
+  const [emailInputError, setEmailInputError] = useState(null)
+  const [emailStatus, setEmailStatus] = useState(new Map())
+  const [sendingEmails, setSendingEmails] = useState(false)
+
   const [link, setLink] = useState(null)
   const [linkError, setLinkError] = useState(null)
-  const [sending, setSending] = useState(false)
-  const [error, setError] = useState(null)
-  const [emailSentTo, setEmailSentTo] = useState(null)
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
@@ -46,37 +51,99 @@ export default function InviteRaterModal({ skill, onClose }) {
     await sendInviteEmail({ toEmail, inviterName, skillName: skill.name, shareUrl: invite.url })
   }
 
-  async function handleInviteConnection(connection) {
-    setConnectionError(null)
-    setSendingConnectionId(connection.id)
-    try {
-      await sendInviteTo(connection.email)
-      setSentConnectionId(connection.id)
-    } catch (err) {
-      setConnectionError({
-        id: connection.id,
-        message: isDuplicatePendingInviteError(err)
-          ? duplicatePendingInviteMessage(connection.email)
-          : err.message,
+  function toggleConnection(id) {
+    setSelectedConnectionIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function handleInviteConnections() {
+    const targets = connections.filter((c) => selectedConnectionIds.has(c.id) && connectionStatus.get(c.id) !== 'sent')
+    if (targets.length === 0) return
+    setSendingConnections(true)
+    setConnectionStatus((prev) => {
+      const next = new Map(prev)
+      for (const c of targets) next.set(c.id, 'sending')
+      return next
+    })
+    await Promise.all(
+      targets.map(async (c) => {
+        try {
+          await sendInviteTo(c.email)
+          setConnectionStatus((prev) => new Map(prev).set(c.id, 'sent'))
+        } catch (err) {
+          setConnectionStatus((prev) =>
+            new Map(prev).set(
+              c.id,
+              isDuplicatePendingInviteError(err) ? duplicatePendingInviteMessage(c.email) : err.message
+            )
+          )
+        }
       })
-    } finally {
-      setSendingConnectionId(null)
+    )
+    setSendingConnections(false)
+  }
+
+  function commitEmailInput() {
+    const value = emailInput.trim()
+    if (!value) return
+    setEmailInputError(null)
+    if (!EMAIL_RE.test(value)) {
+      setEmailInputError('That doesn\'t look like a valid email address.')
+      return
+    }
+    if (emails.includes(value)) {
+      setEmailInput('')
+      return
+    }
+    setEmails((prev) => [...prev, value])
+    setEmailInput('')
+  }
+
+  function handleEmailInputKeyDown(e) {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault()
+      commitEmailInput()
     }
   }
 
-  async function handleSendEmail(e) {
+  function removeEmail(value) {
+    setEmails((prev) => prev.filter((e) => e !== value))
+    setEmailStatus((prev) => {
+      if (!prev.has(value)) return prev
+      const next = new Map(prev)
+      next.delete(value)
+      return next
+    })
+  }
+
+  async function handleSendEmails(e) {
     e.preventDefault()
-    if (!email.trim()) return
-    setError(null)
-    setSending(true)
-    try {
-      await sendInviteTo(email.trim())
-      setEmailSentTo(email.trim())
-    } catch (err) {
-      setError(isDuplicatePendingInviteError(err) ? duplicatePendingInviteMessage(email.trim()) : err.message)
-    } finally {
-      setSending(false)
-    }
+    commitEmailInput()
+    const targets = emails.filter((addr) => emailStatus.get(addr) !== 'sent')
+    if (targets.length === 0) return
+    setSendingEmails(true)
+    setEmailStatus((prev) => {
+      const next = new Map(prev)
+      for (const addr of targets) next.set(addr, 'sending')
+      return next
+    })
+    await Promise.all(
+      targets.map(async (addr) => {
+        try {
+          await sendInviteTo(addr)
+          setEmailStatus((prev) => new Map(prev).set(addr, 'sent'))
+        } catch (err) {
+          setEmailStatus((prev) =>
+            new Map(prev).set(addr, isDuplicatePendingInviteError(err) ? duplicatePendingInviteMessage(addr) : err.message)
+          )
+        }
+      })
+    )
+    setSendingEmails(false)
   }
 
   function handleCopy() {
@@ -85,10 +152,12 @@ export default function InviteRaterModal({ skill, onClose }) {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const selectedCount = [...selectedConnectionIds].filter((id) => connectionStatus.get(id) !== 'sent').length
+
   return (
     <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
       <div
-        className="w-full max-w-sm bg-card border border-hairline rounded-lg p-6"
+        className="w-full max-w-sm bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="font-display text-2xl text-ink mb-1">Invite someone to rate this</h2>
@@ -101,29 +170,56 @@ export default function InviteRaterModal({ skill, onClose }) {
         <div className="space-y-5">
           {connections.length > 0 && (
             <div>
-              <span className="block text-sm text-secondary mb-1">Invite an existing connection</span>
-              <div className="flex flex-wrap gap-2">
-                {connections.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => handleInviteConnection(c)}
-                    disabled={sendingConnectionId === c.id || sentConnectionId === c.id}
-                    className={`font-mono text-xs rounded-full px-3 py-1 border transition-colors disabled:opacity-60 ${
-                      sentConnectionId === c.id
-                        ? 'bg-moss text-paper border-moss'
-                        : 'border-hairline text-secondary hover:text-ink'
-                    }`}
-                  >
-                    {sendingConnectionId === c.id
-                      ? 'Sending…'
-                      : sentConnectionId === c.id
-                        ? `Sent to ${c.name}`
-                        : c.name}
-                  </button>
-                ))}
+              <span className="block text-sm text-secondary mb-1">Invite existing connections</span>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {connections.map((c) => {
+                  const status = connectionStatus.get(c.id)
+                  const selected = selectedConnectionIds.has(c.id)
+                  const isError = status && status !== 'sending' && status !== 'sent'
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => toggleConnection(c.id)}
+                      disabled={status === 'sending' || status === 'sent'}
+                      className={`font-mono text-xs rounded-full px-3 py-1 border transition-colors disabled:opacity-60 ${
+                        status === 'sent'
+                          ? 'bg-moss text-paper border-moss'
+                          : isError
+                            ? 'border-red-700 text-red-700'
+                            : selected
+                              ? 'bg-moss text-paper border-moss'
+                              : 'border-hairline text-secondary hover:text-ink'
+                      }`}
+                    >
+                      {status === 'sending'
+                        ? `${c.name}…`
+                        : status === 'sent'
+                          ? `${c.name} ✓`
+                          : c.name}
+                    </button>
+                  )
+                })}
               </div>
-              {connectionError && <p className="text-xs text-red-700 mt-1">{connectionError.message}</p>}
+              {[...connectionStatus.entries()]
+                .filter(([, status]) => status && status !== 'sending' && status !== 'sent')
+                .map(([id, message]) => (
+                  <p key={id} className="text-xs text-red-700 mt-1">
+                    {message}
+                  </p>
+                ))}
+              <button
+                type="button"
+                onClick={handleInviteConnections}
+                disabled={selectedCount === 0 || sendingConnections}
+                className="w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper disabled:opacity-60"
+              >
+                {sendingConnections
+                  ? 'Sending…'
+                  : selectedCount > 0
+                    ? `Invite ${selectedCount} selected`
+                    : 'Invite selected'}
+              </button>
             </div>
           )}
 
@@ -146,26 +242,60 @@ export default function InviteRaterModal({ skill, onClose }) {
             </a>
           )}
 
-          <form onSubmit={handleSendEmail} className="space-y-2">
+          <form onSubmit={handleSendEmails} className="space-y-2">
             <label className="block text-sm text-secondary" htmlFor="inviteEmail">
               Invite by email
             </label>
+            {emails.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {emails.map((addr) => {
+                  const status = emailStatus.get(addr)
+                  const isError = status && status !== 'sending' && status !== 'sent'
+                  return (
+                    <span
+                      key={addr}
+                      className={`flex items-center gap-1.5 font-mono text-xs rounded-full pl-3 pr-1.5 py-1 border ${
+                        status === 'sent'
+                          ? 'bg-moss text-paper border-moss'
+                          : isError
+                            ? 'border-red-700 text-red-700'
+                            : 'border-hairline text-ink'
+                      }`}
+                    >
+                      {status === 'sending' ? `${addr}…` : status === 'sent' ? `${addr} ✓` : addr}
+                      {status !== 'sending' && status !== 'sent' && (
+                        <button
+                          type="button"
+                          onClick={() => removeEmail(addr)}
+                          aria-label={`Remove ${addr}`}
+                          className="hover:opacity-70"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </span>
+                  )
+                })}
+              </div>
+            )}
             <input
               id="inviteEmail"
-              type="email"
+              type="text"
               placeholder="someone@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              onKeyDown={handleEmailInputKeyDown}
+              onBlur={commitEmailInput}
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
             />
-            {emailSentTo && <p className="text-sm text-ink">Invite sent to {emailSentTo}.</p>}
-            {error && <p className="text-sm text-red-700">{error}</p>}
+            <p className="text-xs text-secondary">Press Enter or comma to add more than one.</p>
+            {emailInputError && <p className="text-sm text-red-700">{emailInputError}</p>}
             <button
               type="submit"
-              disabled={sending || !email.trim()}
+              disabled={sendingEmails || (emails.length === 0 && !emailInput.trim())}
               className="w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper disabled:opacity-60"
             >
-              {sending ? 'Sending…' : 'Send by email'}
+              {sendingEmails ? 'Sending…' : emails.length > 1 ? `Send to ${emails.length}` : 'Send by email'}
             </button>
           </form>
 
