@@ -30,6 +30,7 @@ const VISIBILITY_OPTIONS = [
 export default function ProfilePrivacy() {
   const { user } = useAuth()
   const [skillsProfileVisible, setSkillsProfileVisible] = useState(false)
+  const [activityFeedVisible, setActivityFeedVisible] = useState(false)
   const [profileVisibleToMatches, setProfileVisibleToMatches] = useState(false)
   const [searchVisibility, setSearchVisibility] = useState('hidden')
   const [autoIncludeNewSkills, setAutoIncludeNewSkills] = useState(false)
@@ -49,6 +50,7 @@ export default function ProfilePrivacy() {
         getSearchPrivacySettings(user.id),
       ])
       setSkillsProfileVisible(data?.skills_profile_visible ?? false)
+      setActivityFeedVisible(searchSettings?.activity_feed_visible ?? false)
       setProfileVisibleToMatches(searchSettings?.profile_visible_to_skill_matches ?? false)
       setSearchVisibility(searchSettings?.skill_search_visibility ?? 'hidden')
       setAutoIncludeNewSkills(searchSettings?.auto_include_new_skills_in_search ?? false)
@@ -70,6 +72,18 @@ export default function ProfilePrivacy() {
       setPrivacyError(error.message)
     } else {
       setSkillsProfileVisible(checked)
+    }
+    setPrivacySaving(false)
+  }
+
+  async function handleActivityFeedToggle(checked) {
+    setPrivacyError(null)
+    setPrivacySaving(true)
+    try {
+      await updateSearchPrivacySettings(user.id, { activity_feed_visible: checked })
+      setActivityFeedVisible(checked)
+    } catch (err) {
+      setPrivacyError(err.message)
     }
     setPrivacySaving(false)
   }
@@ -158,6 +172,31 @@ export default function ProfilePrivacy() {
                   <span className="block text-xs text-secondary mt-0.5">
                     Only applies to people who find you via skill search below — doesn't change
                     who can find you in the first place.
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            <div className="bg-card border border-hairline rounded-lg p-6">
+              <h3 className="font-display text-lg text-ink mb-1">Activity feed</h3>
+              <p className="text-sm text-secondary mb-4">
+                Control whether your milestones show up in your connections' "What your
+                connections are up to" feed.
+              </p>
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={activityFeedVisible}
+                  disabled={privacySaving}
+                  onChange={(e) => handleActivityFeedToggle(e.target.checked)}
+                  className="mt-0.5 rounded border-hairline"
+                />
+                <span className="text-sm text-ink">
+                  Let your connections see your activity
+                  <span className="block text-xs text-secondary mt-0.5">
+                    Shows things like skills confirmed, new skills or experience added, and
+                    courses started — only to people you're already connected with, and off by
+                    default.
                   </span>
                 </span>
               </label>

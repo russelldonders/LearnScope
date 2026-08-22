@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
-import { listConnections } from '../lib/connections'
+import { listConnections, listConnectionsActivity } from '../lib/connections'
 import AppHeader from '../components/AppHeader'
 import RecordActivitySection from '../components/RecordActivitySection'
 import GrowthRing from '../components/GrowthRing'
 import CourseThumbnail from '../components/CourseThumbnail'
+import PersonAvatar from '../components/PersonAvatar'
 import { LEVEL_LABELS } from '../lib/levels'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
@@ -33,6 +34,18 @@ async function loadCurrentLearning(userId) {
     .limit(8)
   if (error) return []
   return data ?? []
+}
+
+// Failing this shouldn't take down the rest of the dashboard -- the RPC is
+// brand new and this is the one query on the page reading other people's
+// data, so it's the most likely to surface an unexpected RLS/permission
+// edge case in practice.
+async function loadConnectionsActivity() {
+  try {
+    return await listConnectionsActivity(20)
+  } catch {
+    return []
+  }
 }
 
 async function loadRecentGrowth(userId) {
@@ -146,6 +159,7 @@ export default function Dashboard() {
   const [recentGrowth, setRecentGrowth] = useState([])
   const [upNext, setUpNext] = useState([])
   const [currentLearning, setCurrentLearning] = useState([])
+  const [connectionsActivity, setConnectionsActivity] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -154,19 +168,22 @@ export default function Dashboard() {
 
   async function loadSummary() {
     setLoading(true)
-    const [skills, courses, experience, connections, growth, upNextRecommendations, learning] = await Promise.all([
-      countRows('skills', user.id),
-      countRows('courses', user.id),
-      countRows('experience', user.id),
-      listConnections(user.id).then((c) => c.length),
-      loadRecentGrowth(user.id),
-      loadUpNextRecommendations(user.id),
-      loadCurrentLearning(user.id),
-    ])
+    const [skills, courses, experience, connections, growth, upNextRecommendations, learning, activity] =
+      await Promise.all([
+        countRows('skills', user.id),
+        countRows('courses', user.id),
+        countRows('experience', user.id),
+        listConnections(user.id).then((c) => c.length),
+        loadRecentGrowth(user.id),
+        loadUpNextRecommendations(user.id),
+        loadCurrentLearning(user.id),
+        loadConnectionsActivity(),
+      ])
     setCounts({ skills, courses, experience, connections })
     setRecentGrowth(growth)
     setUpNext(upNextRecommendations)
     setCurrentLearning(learning)
+    setConnectionsActivity(activity)
     setLoading(false)
   }
 
@@ -261,8 +278,69 @@ export default function Dashboard() {
           </div>
         )}
 
+        {!loading && connectionsActivity.length > 0 && (
+          <div>
+            <h2 className="font-display text-xl text-ink mb-6">What your connections are up to</h2>
+            <ConnectionsActivityFeed events={connectionsActivity} />
+          </div>
+        )}
+
         <RecordActivitySection />
       </main>
+    </div>
+  )
+}
+
+// Turns one list_connections_activity (0063) row into a plain-language
+// sentence -- everything the RPC needs to say is already in the row itself
+// (skill_name/level/detail), never a client-side lookup, since each row is
+// independently privacy-checked server-side and shouldn't need extra trust.
+function describeActivityEvent(event) {
+  const level = event.level ? LEVEL_LABELS[event.level] : null
+  switch (event.event_type) {
+    case 'skill_confirmed':
+      return `confirmed ${level ?? 'a level'} in ${event.skill_name}`
+    case 'skill_validated':
+      return `had ${event.skill_name} validated at ${level ?? 'their target level'}`
+    case 'skill_added':
+      return `started tracking ${event.skill_name}`
+    case 'experience_added':
+      return `added ${event.detail}`
+    case 'course_started':
+      return `started ${event.detail}`
+    case 'target_set':
+      return `set a target of ${level ?? 'a new level'} for ${event.skill_name}`
+    default:
+      return null
+  }
+}
+
+function ConnectionsActivityFeed({ events }) {
+  return (
+    <div className="space-y-2">
+      {events.map((event, i) => {
+        const description = describeActivityEvent(event)
+        if (!description) return null
+        return (
+          <div
+            key={`${event.event_type}-${event.actor_id}-${event.event_at}-${i}`}
+            className="flex items-start gap-3 bg-card border border-hairline rounded-lg px-4 py-3"
+          >
+            <PersonAvatar name={event.full_name} avatarUrl={event.avatar_url} size={9} />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-ink">
+                <span className="font-medium">{event.full_name || 'A connection'}</span> {description}
+              </p>
+              {event.event_type === 'skill_confirmed' && event.detail && (
+                <p className="text-xs text-secondary mt-0.5">{event.detail}</p>
+              )}
+            </div>
+            <p className="font-mono text-xs text-secondary shrink-0">
+              {new Date(event.event_at).toLocaleDateString()}
+            </p>
+          </div>
+        )
+      })}
     </div>
   )
 }

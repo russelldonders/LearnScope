@@ -176,3 +176,13 @@ export async function listConnections(currentUserId) {
     name: names[id] || fallbackNameById.get(id) || emailById.get(id) || 'Someone',
   }))
 }
+
+// Recent milestones from connections who've opted into activity_feed_visible
+// (see ProfilePrivacy.jsx) -- list_connections_activity (0063) re-checks the
+// connection and the opt-in itself per row, so this never needs to filter
+// client-side.
+export async function listConnectionsActivity(limit = 30) {
+  const { data, error } = await supabase.rpc('list_connections_activity', { p_limit: limit })
+  if (error) throw error
+  return data ?? []
+}

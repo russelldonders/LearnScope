@@ -67,7 +67,9 @@ export async function respondToConnectionRequest(requestId, accept) {
 export async function getSearchPrivacySettings(userId) {
   const { data, error } = await supabase
     .from('profiles')
-    .select('skill_search_visibility, auto_include_new_skills_in_search, profile_visible_to_skill_matches')
+    .select(
+      'skill_search_visibility, auto_include_new_skills_in_search, profile_visible_to_skill_matches, activity_feed_visible'
+    )
     .eq('id', userId)
     .single()
   if (error) throw error
