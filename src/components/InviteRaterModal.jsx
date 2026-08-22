@@ -10,6 +10,7 @@ import {
   duplicatePendingInviteMessage,
   whatsappShareUrl,
 } from '../lib/connections'
+import { isMobileDevice } from '../lib/device'
 import WhatsAppIcon from './WhatsAppIcon'
 
 export default function InviteRaterModal({ skill, onClose }) {
@@ -17,7 +18,9 @@ export default function InviteRaterModal({ skill, onClose }) {
   const [email, setEmail] = useState('')
   const [inviterName, setInviterName] = useState(null)
   const [connections, setConnections] = useState([])
-  const [selectedConnectionId, setSelectedConnectionId] = useState(null)
+  const [sendingConnectionId, setSendingConnectionId] = useState(null)
+  const [sentConnectionId, setSentConnectionId] = useState(null)
+  const [connectionError, setConnectionError] = useState(null)
   const [link, setLink] = useState(null)
   const [linkError, setLinkError] = useState(null)
   const [sending, setSending] = useState(false)
@@ -38,19 +41,27 @@ export default function InviteRaterModal({ skill, onClose }) {
       .catch((err) => setLinkError(err.message))
   }, [user])
 
-  function handleSelectConnection(connection) {
-    if (selectedConnectionId === connection.id) {
-      setSelectedConnectionId(null)
-      setEmail('')
-    } else {
-      setSelectedConnectionId(connection.id)
-      setEmail(connection.email)
-    }
+  async function sendInviteTo(toEmail) {
+    const invite = await createInvite(skill.id, toEmail, user.id)
+    await sendInviteEmail({ toEmail, inviterName, skillName: skill.name, shareUrl: invite.url })
   }
 
-  function handleEmailChange(value) {
-    setEmail(value)
-    setSelectedConnectionId(null)
+  async function handleInviteConnection(connection) {
+    setConnectionError(null)
+    setSendingConnectionId(connection.id)
+    try {
+      await sendInviteTo(connection.email)
+      setSentConnectionId(connection.id)
+    } catch (err) {
+      setConnectionError({
+        id: connection.id,
+        message: isDuplicatePendingInviteError(err)
+          ? duplicatePendingInviteMessage(connection.email)
+          : err.message,
+      })
+    } finally {
+      setSendingConnectionId(null)
+    }
   }
 
   async function handleSendEmail(e) {
@@ -59,13 +70,7 @@ export default function InviteRaterModal({ skill, onClose }) {
     setError(null)
     setSending(true)
     try {
-      const invite = await createInvite(skill.id, email.trim(), user.id)
-      await sendInviteEmail({
-        toEmail: email.trim(),
-        inviterName,
-        skillName: skill.name,
-        shareUrl: invite.url,
-      })
+      await sendInviteTo(email.trim())
       setEmailSentTo(email.trim())
     } catch (err) {
       setError(isDuplicatePendingInviteError(err) ? duplicatePendingInviteMessage(email.trim()) : err.message)
@@ -93,95 +98,102 @@ export default function InviteRaterModal({ skill, onClose }) {
 
         {linkError && <p className="text-sm text-red-700 mb-4">{linkError}</p>}
 
-        <div className="space-y-2 mb-4">
-          <p className="text-sm text-ink">Share this link with them:</p>
-          <div className="flex items-center gap-2">
-            <input
-              readOnly
-              value={link ? link.url : 'Generating link…'}
-              onFocus={(e) => e.target.select()}
-              className="flex-1 min-w-0 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-xs font-mono focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={handleCopy}
-              disabled={!link}
-              className="shrink-0 rounded-md border border-hairline text-ink py-2 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-            >
-              {copied ? 'Copied!' : 'Copy'}
-            </button>
-          </div>
-          <a
-            href={link ? whatsappShareUrl(`Can you rate my skill "${skill.name}" on LearnScope? ${link.url}`) : undefined}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-disabled={!link}
-            className={`flex items-center justify-center gap-2 w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper ${
-              !link ? 'pointer-events-none opacity-60' : ''
-            }`}
-          >
-            <WhatsAppIcon />
-            Share via WhatsApp
-          </a>
-        </div>
-
-        <form onSubmit={handleSendEmail} className="space-y-4 pt-4 border-t border-hairline">
-          <p className="text-sm text-secondary">Or send it by email:</p>
-
+        <div className="space-y-5">
           {connections.length > 0 && (
             <div>
-              <span className="block text-sm text-secondary mb-1">
-                Choose an existing connection
-              </span>
+              <span className="block text-sm text-secondary mb-1">Invite an existing connection</span>
               <div className="flex flex-wrap gap-2">
                 {connections.map((c) => (
                   <button
                     key={c.id}
                     type="button"
-                    onClick={() => handleSelectConnection(c)}
-                    className={`font-mono text-xs rounded-full px-3 py-1 border transition-colors ${
-                      selectedConnectionId === c.id
+                    onClick={() => handleInviteConnection(c)}
+                    disabled={sendingConnectionId === c.id || sentConnectionId === c.id}
+                    className={`font-mono text-xs rounded-full px-3 py-1 border transition-colors disabled:opacity-60 ${
+                      sentConnectionId === c.id
                         ? 'bg-moss text-paper border-moss'
                         : 'border-hairline text-secondary hover:text-ink'
                     }`}
                   >
-                    {c.name}
+                    {sendingConnectionId === c.id
+                      ? 'Sending…'
+                      : sentConnectionId === c.id
+                        ? `Sent to ${c.name}`
+                        : c.name}
                   </button>
                 ))}
               </div>
+              {connectionError && <p className="text-xs text-red-700 mt-1">{connectionError.message}</p>}
             </div>
           )}
 
-          <div>
-            <label className="block text-sm text-secondary mb-1" htmlFor="inviteEmail">
-              Email
+          {isMobileDevice() && (
+            <a
+              href={
+                link
+                  ? whatsappShareUrl(`Can you rate my skill "${skill.name}" on LearnScope? ${link.url}`)
+                  : undefined
+              }
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-disabled={!link}
+              className={`flex items-center justify-center gap-2 w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper ${
+                !link ? 'pointer-events-none opacity-60' : ''
+              }`}
+            >
+              <WhatsAppIcon />
+              Share via WhatsApp
+            </a>
+          )}
+
+          <form onSubmit={handleSendEmail} className="space-y-2">
+            <label className="block text-sm text-secondary" htmlFor="inviteEmail">
+              Invite by email
             </label>
             <input
               id="inviteEmail"
               type="email"
               placeholder="someone@example.com"
               value={email}
-              onChange={(e) => handleEmailChange(e.target.value)}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
             />
+            {emailSentTo && <p className="text-sm text-ink">Invite sent to {emailSentTo}.</p>}
+            {error && <p className="text-sm text-red-700">{error}</p>}
+            <button
+              type="submit"
+              disabled={sending || !email.trim()}
+              className="w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper disabled:opacity-60"
+            >
+              {sending ? 'Sending…' : 'Send by email'}
+            </button>
+          </form>
+
+          <div>
+            <span className="block text-sm text-secondary mb-1">Or copy the share link</span>
+            <div className="flex items-center gap-2">
+              <input
+                readOnly
+                value={link ? link.url : 'Generating link…'}
+                onFocus={(e) => e.target.select()}
+                className="flex-1 min-w-0 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-xs font-mono focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={handleCopy}
+                disabled={!link}
+                className="shrink-0 rounded-md border border-hairline text-ink py-2 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+              >
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
           </div>
-
-          {emailSentTo && <p className="text-sm text-ink">Invite sent to {emailSentTo}.</p>}
-          {error && <p className="text-sm text-red-700">{error}</p>}
-
-          <button
-            type="submit"
-            disabled={sending || !email.trim()}
-            className="w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper disabled:opacity-60"
-          >
-            {sending ? 'Sending…' : 'Send by email'}
-          </button>
-        </form>
+        </div>
 
         <button
           type="button"
           onClick={onClose}
-          className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 mt-4"
+          className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 mt-5"
         >
           Close
         </button>
