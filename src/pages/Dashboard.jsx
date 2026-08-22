@@ -58,8 +58,43 @@ async function loadRecentGrowth(userId) {
     .eq('axis', 'practical')
     .order('assessed_at', { ascending: false })
     .limit(3)
-  if (error) return []
-  return data ?? []
+  if (error || !data || data.length === 0) return []
+
+  const skillIds = [...new Set(data.map((row) => row.skill_id))]
+
+  // One extra pair of queries (not per-row) to attach what each highlighted
+  // jump was *from*, and the skill's current target if it has one -- both
+  // scoped to just the handful of skills already shown here.
+  const [{ data: history }, { data: targets }] = await Promise.all([
+    supabase
+      .from('skill_assessments')
+      .select('skill_id, level, assessed_at')
+      .eq('user_id', userId)
+      .eq('axis', 'practical')
+      .in('skill_id', skillIds)
+      .order('assessed_at', { ascending: true }),
+    supabase
+      .from('skill_targets')
+      .select('skill_id, target_level, target_date')
+      .eq('user_id', userId)
+      .in('skill_id', skillIds)
+      .order('created_at', { ascending: false }),
+  ])
+
+  // Most recent target per skill wins (a skill can accumulate several over
+  // time) -- first match survives since targets is already newest-first.
+  const targetBySkill = new Map()
+  for (const t of targets ?? []) {
+    if (!targetBySkill.has(t.skill_id)) targetBySkill.set(t.skill_id, t)
+  }
+
+  return data.map((row) => {
+    const priorLevels = (history ?? []).filter(
+      (h) => h.skill_id === row.skill_id && h.assessed_at < row.assessed_at
+    )
+    const previousLevel = priorLevels.length > 0 ? priorLevels[priorLevels.length - 1].level : null
+    return { ...row, previousLevel, target: targetBySkill.get(row.skill_id) ?? null }
+  })
 }
 
 const STAGE_ORDER = Object.fromEntries(SKILL_LIFECYCLE_FLOW_STAGES.map((s, i) => [s.value, i]))
@@ -258,18 +293,38 @@ export default function Dashboard() {
         {!loading && recentGrowth.length > 0 && (
           <div>
             <h2 className="font-display text-xl text-ink mb-6">Recent growth</h2>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {recentGrowth.map((row) => (
                 <Link
                   key={row.id}
                   to={`/skills/${row.skill_id}`}
-                  className="flex items-center justify-between gap-2 bg-card border border-hairline rounded-lg px-4 py-3 hover:border-moss transition-colors"
+                  className="flex items-center gap-4 bg-card border border-hairline rounded-lg px-4 py-4 hover:border-moss transition-colors"
                 >
-                  <p className="text-sm text-ink">
-                    {row.skills?.name ?? 'Skill'}{' '}
-                    <span className="text-secondary">→ {LEVEL_LABELS[row.level]}</span>
-                  </p>
-                  <p className="font-mono text-xs text-secondary shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
+                    {row.previousLevel && (
+                      <>
+                        <GrowthRing level={row.previousLevel} size={38} color="var(--color-hairline)" />
+                        <GrowthArrow />
+                      </>
+                    )}
+                    <GrowthRing level={row.level} size={56} targetLevel={row.target?.target_level} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-ink truncate">{row.skills?.name ?? 'Skill'}</p>
+                    <p className="text-sm">
+                      {row.previousLevel && (
+                        <span className="text-secondary">{LEVEL_LABELS[row.previousLevel]} → </span>
+                      )}
+                      <span className="text-ink font-medium">{LEVEL_LABELS[row.level]}</span>
+                    </p>
+                    {row.target && (
+                      <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-1">
+                        Target: {LEVEL_LABELS[row.target.target_level]} by{' '}
+                        {new Date(`${row.target.target_date}T00:00:00`).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                  <p className="font-mono text-xs text-secondary shrink-0 self-start">
                     {new Date(row.assessed_at).toLocaleDateString()}
                   </p>
                 </Link>
@@ -428,6 +483,25 @@ function CurrentLearningSlider({ courses }) {
         </Link>
       ))}
     </div>
+  )
+}
+
+function GrowthArrow() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="var(--color-secondary)"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="shrink-0"
+    >
+      <path d="M5 12h14" />
+      <path d="M13 6l6 6-6 6" />
+    </svg>
   )
 }
 
