@@ -1338,7 +1338,7 @@ function SelfAssessSection({ skill, user, axis = 'practical', currentLevel = nul
             // the locked rows below it, which was easy to misread as "a
             // higher level is confirmed" attached to the wrong level.
             const isConfirmedRow = confirmedFloor != null && l === confirmedFloor
-            const badges = [isConfirmedRow && 'Confirmed', currentLevel === l && 'Current'].filter(Boolean)
+            const badges = [isConfirmedRow && 'Confirmed', currentLevel === l && 'Current Self-Assess'].filter(Boolean)
             return (
             <div
               key={l}
