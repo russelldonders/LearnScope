@@ -40,20 +40,26 @@ export default function SkillsSection() {
 
   async function loadSkills() {
     setLoading(true)
-    const [{ data, error }, { data: tagLinks }, { data: practicalAssessments }] = await Promise.all([
-      supabase
-        .from('skills')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('date_added', { ascending: false }),
-      supabase.from('skill_tags').select('skill_id, tags(name)').eq('user_id', user.id),
-      supabase
-        .from('skill_assessments')
-        .select('skill_id, level, source, assessed_at')
-        .eq('user_id', user.id)
-        .eq('axis', 'practical')
-        .order('assessed_at', { ascending: false }),
-    ])
+    const [{ data, error }, { data: tagLinks }, { data: practicalAssessments }, { data: skillTargets }] =
+      await Promise.all([
+        supabase
+          .from('skills')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('date_added', { ascending: false }),
+        supabase.from('skill_tags').select('skill_id, tags(name)').eq('user_id', user.id),
+        supabase
+          .from('skill_assessments')
+          .select('skill_id, level, source, assessed_at')
+          .eq('user_id', user.id)
+          .eq('axis', 'practical')
+          .order('assessed_at', { ascending: false }),
+        supabase
+          .from('skill_targets')
+          .select('skill_id, target_level, created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false }),
+      ])
     if (error) {
       setError(error.message)
     } else {
@@ -74,11 +80,19 @@ export default function SkillsSection() {
         if (!latestPracticalBySkillId.has(a.skill_id)) latestPracticalBySkillId.set(a.skill_id, a.level)
         if (a.source === 'self' || !a.source) selfAssessedSkillIds.add(a.skill_id)
       }
+      // Most recent target per skill (a skill can be re-targeted over time,
+      // same history-preserving pattern as skill_assessments) -- matches
+      // currentTarget = targets[0] on the skill's own detail page.
+      const latestTargetLevelBySkillId = new Map()
+      for (const t of skillTargets ?? []) {
+        if (!latestTargetLevelBySkillId.has(t.skill_id)) latestTargetLevelBySkillId.set(t.skill_id, t.target_level)
+      }
       setSkills(
         data.map((s) => ({
           ...s,
           displayedLevel: s.level ?? latestPracticalBySkillId.get(s.id) ?? null,
           displayedLevelIsSelfAssessed: selfAssessedSkillIds.has(s.id),
+          targetLevel: latestTargetLevelBySkillId.get(s.id) ?? null,
         }))
       )
       const map = new Map()

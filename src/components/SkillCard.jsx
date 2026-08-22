@@ -44,7 +44,12 @@ export default function SkillCard({ skill, onEdit }) {
       onClick={() => onEdit(skill)}
       className="text-left bg-card border border-hairline rounded-lg p-4 flex gap-4 items-center hover:border-moss transition-colors w-full relative"
     >
-      <GrowthRing level={displayedLevel} size={56} color={TRUST_STATUS_COLORS[practicalTrust]} />
+      <GrowthRing
+        level={displayedLevel}
+        size={56}
+        color={TRUST_STATUS_COLORS[practicalTrust]}
+        targetLevel={skill.targetLevel}
+      />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <h3 className="font-display text-lg text-ink truncate min-w-0">{skill.name}</h3>
