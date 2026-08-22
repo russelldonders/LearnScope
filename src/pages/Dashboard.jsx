@@ -301,20 +301,16 @@ export default function Dashboard() {
                   className="flex items-center gap-4 bg-card border border-hairline rounded-lg px-4 py-4 hover:border-moss transition-colors"
                 >
                   <div className="flex items-center gap-2 shrink-0">
-                    {row.previousLevel && (
-                      <>
-                        <GrowthRing level={row.previousLevel} size={38} color="var(--color-hairline)" />
-                        <GrowthArrow />
-                      </>
-                    )}
+                    <GrowthRing level={row.previousLevel} size={38} color="var(--color-hairline)" />
+                    <GrowthArrow />
                     <GrowthRing level={row.level} size={56} targetLevel={row.target?.target_level} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-ink truncate">{row.skills?.name ?? 'Skill'}</p>
                     <p className="text-sm">
-                      {row.previousLevel && (
-                        <span className="text-secondary">{LEVEL_LABELS[row.previousLevel]} → </span>
-                      )}
+                      <span className="text-secondary">
+                        {row.previousLevel ? LEVEL_LABELS[row.previousLevel] : 'New'} →{' '}
+                      </span>
                       <span className="text-ink font-medium">{LEVEL_LABELS[row.level]}</span>
                     </p>
                     {row.target && (
@@ -403,16 +399,26 @@ function ConnectionsActivityFeed({ events }) {
 // Shared by every horizontally scrollable row on this page (native scroll
 // snapping rather than a JS carousel, so it degrades to a plain scrollable
 // list anywhere the extras below don't apply). The scrollbar itself is
-// hidden (see .scrollbar-hide in index.css) and this redirects ordinary
+// hidden (see .scrollbar-hide in index.css). This redirects ordinary
 // vertical mouse-wheel input into horizontal scroll while hovering --
 // desktop mice only have a vertical wheel, so without this a mouse user
-// would have no way to move the slider at all once the scrollbar is hidden.
-function useHorizontalWheelScroll() {
+// would have no way to move the slider at all once the scrollbar is hidden
+// -- and also tracks scroll position so callers can show/hide click-to-
+// scroll arrows for trackpads/mice with no horizontal input at all.
+function useHorizontalScroller() {
   const scrollerRef = useRef(null)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
 
   useEffect(() => {
     const el = scrollerRef.current
     if (!el) return
+
+    function updateEdges() {
+      setCanScrollLeft(el.scrollLeft > 0)
+      setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
+    }
+
     function handleWheel(e) {
       if (e.deltaY === 0) return
       // Let the wheel event fall through to normal page scroll once the
@@ -425,63 +431,112 @@ function useHorizontalWheelScroll() {
       e.preventDefault()
       el.scrollLeft += e.deltaY
     }
+
+    updateEdges()
     el.addEventListener('wheel', handleWheel, { passive: false })
-    return () => el.removeEventListener('wheel', handleWheel)
+    el.addEventListener('scroll', updateEdges, { passive: true })
+    window.addEventListener('resize', updateEdges)
+    return () => {
+      el.removeEventListener('wheel', handleWheel)
+      el.removeEventListener('scroll', updateEdges)
+      window.removeEventListener('resize', updateEdges)
+    }
   }, [])
 
-  return scrollerRef
+  function scrollByPage(direction) {
+    const el = scrollerRef.current
+    if (!el) return
+    el.scrollBy({ left: direction * el.clientWidth * 0.8, behavior: 'smooth' })
+  }
+
+  return { scrollerRef, canScrollLeft, canScrollRight, scrollByPage }
+}
+
+function SliderArrow({ direction, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={direction === 'left' ? 'Scroll left' : 'Scroll right'}
+      className={`hidden sm:flex absolute top-1/2 -translate-y-1/2 z-10 items-center justify-center w-8 h-8 rounded-full bg-card border border-hairline shadow-sm hover:border-moss ${
+        direction === 'left' ? '-left-3' : '-right-3'
+      }`}
+    >
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="var(--color-ink)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={direction === 'left' ? { transform: 'scaleX(-1)' } : undefined}
+      >
+        <polyline points="9 6 15 12 9 18" />
+      </svg>
+    </button>
+  )
 }
 
 function UpNextSlider({ recommendations }) {
-  const scrollerRef = useHorizontalWheelScroll()
+  const { scrollerRef, canScrollLeft, canScrollRight, scrollByPage } = useHorizontalScroller()
 
   return (
-    <div
-      ref={scrollerRef}
-      className="scrollbar-hide flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 -mx-4 px-4 sm:mx-0 sm:px-0"
-    >
-      {recommendations.map(({ skill, item }) => (
-        <Link
-          key={skill.id}
-          to={`/skills/${skill.id}`}
-          className="snap-start shrink-0 w-64 bg-card border border-hairline rounded-lg p-4 hover:border-moss transition-colors"
-        >
-          <div className="flex items-center gap-3 mb-3">
-            <GrowthRing level={skill.level} size={40} />
-            <h3 className="font-display text-base text-ink truncate min-w-0">{skill.name}</h3>
-          </div>
-          <p className="text-sm text-ink font-medium">{item.label}</p>
-          <p className="text-xs text-secondary mt-1">{item.description}</p>
-        </Link>
-      ))}
+    <div className="relative">
+      {canScrollLeft && <SliderArrow direction="left" onClick={() => scrollByPage(-1)} />}
+      <div
+        ref={scrollerRef}
+        className="scrollbar-hide flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 -mx-4 px-4 sm:mx-0 sm:px-0"
+      >
+        {recommendations.map(({ skill, item }) => (
+          <Link
+            key={skill.id}
+            to={`/skills/${skill.id}`}
+            className="snap-start shrink-0 w-64 bg-card border border-hairline rounded-lg p-4 hover:border-moss transition-colors"
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <GrowthRing level={skill.level} size={40} />
+              <h3 className="font-display text-base text-ink truncate min-w-0">{skill.name}</h3>
+            </div>
+            <p className="text-sm text-ink font-medium">{item.label}</p>
+            <p className="text-xs text-secondary mt-1">{item.description}</p>
+          </Link>
+        ))}
+      </div>
+      {canScrollRight && <SliderArrow direction="right" onClick={() => scrollByPage(1)} />}
     </div>
   )
 }
 
 function CurrentLearningSlider({ courses }) {
-  const scrollerRef = useHorizontalWheelScroll()
+  const { scrollerRef, canScrollLeft, canScrollRight, scrollByPage } = useHorizontalScroller()
 
   return (
-    <div
-      ref={scrollerRef}
-      className="scrollbar-hide flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 -mx-4 px-4 sm:mx-0 sm:px-0"
-    >
-      {courses.map((course) => (
-        <Link
-          key={course.id}
-          to={`/courses/${course.id}`}
-          state={{ backTo: '/dashboard', backLabel: 'Dashboard' }}
-          className="snap-start shrink-0 w-56 bg-card border border-hairline rounded-lg overflow-hidden hover:border-moss transition-colors"
-        >
-          <CourseThumbnail name={course.name} provider={course.provider} className="h-20 w-full" />
-          <div className="p-3">
-            <h3 className="font-display text-base text-ink truncate">{course.name}</h3>
-            <p className="font-mono text-xs text-secondary mt-1 truncate">
-              {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ') || 'In progress'}
-            </p>
-          </div>
-        </Link>
-      ))}
+    <div className="relative">
+      {canScrollLeft && <SliderArrow direction="left" onClick={() => scrollByPage(-1)} />}
+      <div
+        ref={scrollerRef}
+        className="scrollbar-hide flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 -mx-4 px-4 sm:mx-0 sm:px-0"
+      >
+        {courses.map((course) => (
+          <Link
+            key={course.id}
+            to={`/courses/${course.id}`}
+            state={{ backTo: '/dashboard', backLabel: 'Dashboard' }}
+            className="snap-start shrink-0 w-56 bg-card border border-hairline rounded-lg overflow-hidden hover:border-moss transition-colors"
+          >
+            <CourseThumbnail name={course.name} provider={course.provider} className="h-20 w-full" />
+            <div className="p-3">
+              <h3 className="font-display text-base text-ink truncate">{course.name}</h3>
+              <p className="font-mono text-xs text-secondary mt-1 truncate">
+                {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ') || 'In progress'}
+              </p>
+            </div>
+          </Link>
+        ))}
+      </div>
+      {canScrollRight && <SliderArrow direction="right" onClick={() => scrollByPage(1)} />}
     </div>
   )
 }
