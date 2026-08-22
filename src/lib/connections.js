@@ -47,6 +47,28 @@ export async function createInvite(skillId, email, inviterId) {
   return { ...data, url: `${window.location.origin}/rate/${data.share_code}` }
 }
 
+// The general-purpose "share this however you like" link shown as soon as
+// the invite modal opens (see InviteRaterModal), as opposed to createInvite,
+// which always mints a new row -- reused here so repeatedly opening/closing
+// the modal doesn't leave a trail of unused pending invites behind. There's
+// no unique index to lean on for this (connection_invites_unique_pending_idx
+// only applies once an email is attached), so the dedup happens here.
+export async function getOrCreateShareLink(skillId, inviterId) {
+  const { data: existing, error: selectError } = await supabase
+    .from('connection_invites')
+    .select('id, share_code')
+    .eq('skill_id', skillId)
+    .eq('inviter_id', inviterId)
+    .eq('status', 'pending')
+    .is('invitee_email', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (selectError) throw selectError
+  if (existing) return { ...existing, url: `${window.location.origin}/rate/${existing.share_code}` }
+  return createInvite(skillId, null, inviterId)
+}
+
 // Shared by the first-send flow (InviteRaterModal) and the resend action on
 // the Connections page so both go through the same Resend-backed endpoint.
 export async function sendInviteEmail({ toEmail, inviterName, skillName, shareUrl }) {

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
+import WhatsAppIcon from '../components/WhatsAppIcon'
 import { LEVEL_LABELS } from '../lib/levels'
 import {
   listMyPeerRatings,
@@ -385,8 +386,9 @@ export default function Connections() {
                       href={whatsappShareUrl(`Can you rate my skill "${invite.skills?.name}" on LearnScope? ${invite.url}`)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+                      className="flex items-center gap-1.5 rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
                     >
+                      <WhatsAppIcon size={14} />
                       WhatsApp
                     </a>
                     <button
