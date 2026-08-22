@@ -91,3 +91,108 @@ export async function saveDiagnosticAttempt({
 
   return { score, total }
 }
+
+// Server decides cache-hit vs. generate, same reasoning as the quiz above.
+export async function fetchOrGenerateInterviewPlan({ skill, level }) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  const res = await fetch('/api/generate-interview-plan', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ skillName: skill.name, level, librarySkillId: skill.library_skill_id ?? null }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error || 'Failed to prepare interview.')
+  }
+  return res.json()
+}
+
+// One stateless turn: server holds no session state, the client resends the
+// growing transcript each time (same shape the Anthropic Messages API takes
+// natively -- alternating user/assistant turns starting with the learner's
+// first answer, since the plan's opening question is shown to the learner
+// directly from cached content rather than round-tripping through the model).
+export async function sendInterviewTurn({ skillName, level, plan, transcript }) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  const res = await fetch('/api/interview-turn', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ skillName, level, plan, transcript }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error || 'Failed to continue the interview.')
+  }
+  return res.json()
+}
+
+// Same evidence shape as saveDiagnosticAttempt (diagnosticType 'interview'
+// instead of 'quiz') -- the full Q&A transcript is stored as the record's
+// evidence rather than just the final level, so the confirmed level stays
+// auditable back to what was actually said, not just an AI's bare verdict.
+export async function saveInterviewAttempt({
+  user,
+  actor,
+  skill,
+  diagnosticContentId,
+  calibratedLevel,
+  confirmedLevel,
+  transcript,
+  reasoning,
+}) {
+  const statement = {
+    id: crypto.randomUUID(),
+    actor: { objectType: 'Agent', name: actor.name, mbox: `mailto:${actor.email}` },
+    verb: { id: DIAGNOSTIC_VERB_IRI, display: { 'en-US': 'Assessed' } },
+    object: {
+      id: `https://learnscope.app/activities/diagnostic/${diagnosticContentId ?? crypto.randomUUID()}`,
+      objectType: 'Activity',
+      definition: {
+        type: 'http://adlnet.gov/expapi/activities/assessment',
+        name: { 'en-US': `Confirming baseline (interview): ${skill.name} (Knowledge level ${calibratedLevel})` },
+        // No interactionType: xAPI's vocabulary (choice/true-false/fill-in/
+        // matching/performance/sequencing/likert/numeric/other/long-fill-in)
+        // has nothing for a free-form conversation, and 'interview' isn't a
+        // real value -- diagnosticType below already records what kind of
+        // check this was, so the field is just omitted rather than guessed.
+      },
+    },
+    result: {
+      extensions: {
+        [DIAGNOSTIC_EXTENSION_IRI]: {
+          diagnosticContentId,
+          diagnosticType: 'interview',
+          axis: 'knowledge',
+          calibratedLevel,
+          confirmedLevel,
+          transcript,
+          reasoning,
+        },
+      },
+    },
+    context: {
+      extensions: {
+        [SKILL_EXTENSION_IRI]: { id: skill.id, name: skill.name },
+      },
+    },
+    timestamp: new Date().toISOString(),
+  }
+
+  const { error } = await supabase.from('xapi_statements').insert({
+    user_id: user.id,
+    statement,
+    recorded_at: statement.timestamp,
+    skill_id: skill.id,
+  })
+  if (error) throw error
+}

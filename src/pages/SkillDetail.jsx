@@ -27,6 +27,7 @@ import SetTargetModal from '../components/SetTargetModal'
 import ValidateSkillModal from '../components/ValidateSkillModal'
 import RequestValidationModal from '../components/RequestValidationModal'
 import ConfirmingBaselineQuizModal from '../components/ConfirmingBaselineQuizModal'
+import InterviewModal from '../components/InterviewModal'
 import LifecycleStageIcon from '../components/LifecycleStageIcon'
 import TagsField from '../components/TagsField'
 import { listOutgoingValidationRequests } from '../lib/skillValidationRequests'
@@ -62,6 +63,7 @@ export default function SkillDetail() {
   const [selfAssessOpen, setSelfAssessOpen] = useState(false)
   const [selfAssessKnowledgeOpen, setSelfAssessKnowledgeOpen] = useState(false)
   const [confirmingBaselineOpen, setConfirmingBaselineOpen] = useState(false)
+  const [interviewOpen, setInterviewOpen] = useState(false)
   const [recordActivityOpen, setRecordActivityOpen] = useState(false)
   const [assessMode, setAssessMode] = useState(null)
   const [targetOpen, setTargetOpen] = useState(false)
@@ -525,12 +527,12 @@ export default function SkillDetail() {
                       title="Verify"
                       status={
                         <p className="text-sm text-secondary">
-                          {knowledgeConfirmed ? 'Confirmed via quiz' : 'Not yet confirmed'}
+                          {knowledgeConfirmed ? 'Confirmed' : 'Not yet confirmed'}
                         </p>
                       }
                       actions={[
-                        { label: 'Assess me', onClick: () => setConfirmingBaselineOpen(true) },
-                        { label: '✨ Interview me', disabled: true, title: 'Coming soon' },
+                        { label: 'Take a quiz', onClick: () => setConfirmingBaselineOpen(true) },
+                        { label: '✨ Interview me', onClick: () => setInterviewOpen(true) },
                       ]}
                     />
                   </div>
@@ -736,6 +738,21 @@ export default function SkillDetail() {
                   loadHistory()
                   loadSkill()
                   setConfirmingBaselineOpen(false)
+                }}
+              />
+            )}
+
+            {interviewOpen && (
+              <InterviewModal
+                skill={skill}
+                user={user}
+                actor={{ name: assessorName, email: user.email }}
+                latestKnowledgeAssessment={latestKnowledgeAssessment}
+                onClose={() => setInterviewOpen(false)}
+                onConfirmed={() => {
+                  loadHistory()
+                  loadSkill()
+                  setInterviewOpen(false)
                 }}
               />
             )}
