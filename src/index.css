@@ -41,6 +41,17 @@ body {
   font-family: var(--font-sans);
 }
 
+/* For horizontally-scrolling rows (e.g. the dashboard's Up Next slider)
+   that want a natural scroll/swipe feel without the OS's thick horizontal
+   scrollbar chrome sitting under them. */
+.scrollbar-hide {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none; /* Chromium/Safari */
+}
+
 @layer base {
   button:not(:disabled),
   [role='button'] {

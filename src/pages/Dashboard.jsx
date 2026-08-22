@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
@@ -244,9 +244,38 @@ export default function Dashboard() {
 // A horizontally scrollable row rather than a JS carousel -- native scroll
 // snapping gives the same swipe-through feel on touch devices without a new
 // dependency, and degrades to a plain scrollable list anywhere it doesn't.
+// The scrollbar itself is hidden (see .scrollbar-hide in index.css) and a
+// wheel listener redirects ordinary vertical mouse-wheel input into
+// horizontal scroll while hovering -- desktop mice only have a vertical
+// wheel, so without this a mouse user would have no way to move the slider
+// at all once the scrollbar is hidden.
 function UpNextSlider({ recommendations }) {
+  const scrollerRef = useRef(null)
+
+  useEffect(() => {
+    const el = scrollerRef.current
+    if (!el) return
+    function handleWheel(e) {
+      if (e.deltaY === 0) return
+      // Let the wheel event fall through to normal page scroll once the
+      // slider is already at the end in that direction, rather than
+      // trapping it -- so scrolling past this section still just scrolls
+      // the page.
+      const atStart = el.scrollLeft <= 0
+      const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1
+      if ((e.deltaY < 0 && atStart) || (e.deltaY > 0 && atEnd)) return
+      e.preventDefault()
+      el.scrollLeft += e.deltaY
+    }
+    el.addEventListener('wheel', handleWheel, { passive: false })
+    return () => el.removeEventListener('wheel', handleWheel)
+  }, [])
+
   return (
-    <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
+    <div
+      ref={scrollerRef}
+      className="scrollbar-hide flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 -mx-4 px-4 sm:mx-0 sm:px-0"
+    >
       {recommendations.map(({ skill, item }) => (
         <Link
           key={skill.id}
