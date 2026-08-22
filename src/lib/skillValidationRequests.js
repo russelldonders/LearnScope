@@ -71,11 +71,18 @@ export async function listOutgoingValidationRequests(skillId) {
 // Requests addressed to the current user as validator, still awaiting their
 // decision -- surfaced outside the skill itself (e.g. on Connections) since
 // the validator doesn't necessarily track this skill's owner's page.
-export async function listIncomingPendingValidationRequests() {
+//
+// RLS allows a user to see rows where they're either the requester or the
+// validator, so without this filter a request the current user *sent* came
+// back here too -- rendered as "addressed to you", it showed their own name
+// asking themselves to confirm a skill (same bug as the connection-requests
+// list below).
+export async function listIncomingPendingValidationRequests(userId) {
   const { data, error } = await supabase
     .from('skill_validation_requests')
     .select('id, target_level, created_at, skill_id, requester_id, skills(name)')
     .eq('status', 'pending')
+    .eq('validator_id', userId)
     .order('created_at', { ascending: false })
   if (error) throw error
   return data ?? []

@@ -31,20 +31,26 @@ export function isDuplicatePendingRequestError(error) {
   return error?.code === '23505' && error?.message?.includes('connection_requests_pending_pair_idx')
 }
 
-export async function listIncomingConnectionRequests() {
+// RLS on connection_requests allows a user to see rows where they're either
+// side (requester or recipient), so without this filter a sent request came
+// back here too -- rendered as "incoming", it showed the current user's own
+// name as someone wanting to connect with themselves.
+export async function listIncomingConnectionRequests(userId) {
   const { data, error } = await supabase
     .from('connection_requests')
     .select('id, requester_id, skill_id, message, status, created_at, skills(name)')
     .eq('status', 'pending')
+    .eq('recipient_id', userId)
     .order('created_at', { ascending: false })
   if (error) throw error
   return data ?? []
 }
 
-export async function listSentConnectionRequests() {
+export async function listSentConnectionRequests(userId) {
   const { data, error } = await supabase
     .from('connection_requests')
     .select('id, recipient_id, skill_id, message, status, created_at, skills(name)')
+    .eq('requester_id', userId)
     .order('created_at', { ascending: false })
   if (error) throw error
   return data ?? []

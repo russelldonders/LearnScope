@@ -58,8 +58,8 @@ export default function Connections() {
         listConnections(user.id),
         listSentInvites(),
         listIncomingRateInvites(),
-        listIncomingPendingValidationRequests(),
-        listIncomingConnectionRequests(),
+        listIncomingPendingValidationRequests(user.id),
+        listIncomingConnectionRequests(user.id),
       ])
       setRatings(ratingsData)
       setAllConnectionIds(connectionsData.map((c) => c.id))
