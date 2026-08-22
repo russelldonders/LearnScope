@@ -6,6 +6,7 @@ import { listCatalogueCourses, listEnrolledCatalogueIds, enrolInCatalogueCourse 
 import { LEVEL_LABELS } from '../lib/levels'
 import AppHeader from '../components/AppHeader'
 import FilterRow from '../components/FilterRow'
+import CourseThumbnail from '../components/CourseThumbnail'
 
 export default function CourseCatalogue() {
   const { user } = useAuth()
@@ -242,50 +243,53 @@ export default function CourseCatalogue() {
                     handleCardClick(course)
                   }
                 }}
-                className="bg-card border border-hairline rounded-lg p-4 flex flex-col cursor-pointer hover:border-moss transition-colors"
+                className="bg-card border border-hairline rounded-lg overflow-hidden flex flex-col cursor-pointer hover:border-moss transition-colors"
               >
-                <h3 className="font-display text-lg text-ink">{course.name}</h3>
-                <p className="font-mono text-xs text-secondary mt-0.5">
-                  {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ')}
-                </p>
-                {course.synopsis && <p className="text-sm text-secondary mt-2 flex-1">{course.synopsis}</p>}
-                {(course.skillEntries.length > 0 || course.tags.length > 0) && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {course.skillEntries.map((e) => (
-                      <span
-                        key={e.skillId}
-                        className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5"
-                      >
-                        {e.skillName} · {LEVEL_LABELS[e.level]}
-                      </span>
-                    ))}
-                    {course.tags.map((t) => (
-                      <span
-                        key={t.id}
-                        className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
-                      >
-                        {t.name}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleEnrol(course)
-                  }}
-                  disabled={enrolled || enrollingId === course.id}
-                  className="mt-3 self-start rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {completed
-                    ? 'Completed ✓'
-                    : enrolled
-                      ? 'Enrolled ✓'
-                      : enrollingId === course.id
-                        ? 'Enrolling…'
-                        : 'Enrol'}
-                </button>
+                <CourseThumbnail name={course.name} provider={course.provider} className="h-24 w-full shrink-0" />
+                <div className="p-4 flex flex-col flex-1">
+                  <h3 className="font-display text-lg text-ink">{course.name}</h3>
+                  <p className="font-mono text-xs text-secondary mt-0.5">
+                    {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ')}
+                  </p>
+                  {course.synopsis && <p className="text-sm text-secondary mt-2 flex-1">{course.synopsis}</p>}
+                  {(course.skillEntries.length > 0 || course.tags.length > 0) && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {course.skillEntries.map((e) => (
+                        <span
+                          key={e.skillId}
+                          className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5"
+                        >
+                          {e.skillName} · {LEVEL_LABELS[e.level]}
+                        </span>
+                      ))}
+                      {course.tags.map((t) => (
+                        <span
+                          key={t.id}
+                          className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
+                        >
+                          {t.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleEnrol(course)
+                    }}
+                    disabled={enrolled || enrollingId === course.id}
+                    className="mt-3 self-start rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {completed
+                      ? 'Completed ✓'
+                      : enrolled
+                        ? 'Enrolled ✓'
+                        : enrollingId === course.id
+                          ? 'Enrolling…'
+                          : 'Enrol'}
+                  </button>
+                </div>
               </div>
             )
           })}

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
+import CourseThumbnail from '../components/CourseThumbnail'
 
 export default function Learning() {
   const { user } = useAuth()
@@ -102,33 +103,36 @@ function CourseGrid({ courses, skillsByCourse }) {
             key={course.id}
             to={`/courses/${course.id}`}
             state={{ backTo: '/learning', backLabel: 'Learning' }}
-            className="bg-card border border-hairline rounded-lg p-4 flex flex-col hover:border-moss transition-colors"
+            className="bg-card border border-hairline rounded-lg overflow-hidden flex flex-col hover:border-moss transition-colors"
           >
-            <h3 className="font-display text-lg text-ink">{course.name}</h3>
-            <p className="font-mono text-xs text-secondary mt-0.5">
-              {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ')}
-            </p>
-            <p className="font-mono text-xs mt-2">
-              {course.completed_date ? (
-                <span className="text-moss">
-                  Completed {new Date(course.completed_date).toLocaleDateString()}
-                </span>
-              ) : (
-                <span className="text-secondary">In progress</span>
-              )}
-            </p>
-            {skills.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2">
-                {skills.map((s) => (
-                  <span
-                    key={s.id}
-                    className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5"
-                  >
-                    {s.name}
+            <CourseThumbnail name={course.name} provider={course.provider} className="h-24 w-full shrink-0" />
+            <div className="p-4 flex flex-col flex-1">
+              <h3 className="font-display text-lg text-ink">{course.name}</h3>
+              <p className="font-mono text-xs text-secondary mt-0.5">
+                {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ')}
+              </p>
+              <p className="font-mono text-xs mt-2">
+                {course.completed_date ? (
+                  <span className="text-moss">
+                    Completed {new Date(course.completed_date).toLocaleDateString()}
                   </span>
-                ))}
-              </div>
-            )}
+                ) : (
+                  <span className="text-secondary">In progress</span>
+                )}
+              </p>
+              {skills.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {skills.map((s) => (
+                    <span
+                      key={s.id}
+                      className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5"
+                    >
+                      {s.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           </Link>
         )
       })}
