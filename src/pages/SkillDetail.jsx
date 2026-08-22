@@ -863,10 +863,14 @@ export default function SkillDetail() {
                       onRemoveTag={handleRemoveTag}
                       user={user}
                       onUpdated={loadSkill}
-                      onDeleted={() => navigate(backTo, { state: { tab: 'skills' } })}
                     />
                     <SettingsSection skill={skill} user={user} onUpdated={loadSkill} />
                     <ScheduleSection skill={skill} onUpdated={loadSkill} />
+                    <DeleteSection
+                      skill={skill}
+                      onUpdated={loadSkill}
+                      onDeleted={() => navigate(backTo, { state: { tab: 'skills' } })}
+                    />
                   </div>
                 </div>
               </div>
@@ -2070,7 +2074,7 @@ function ScheduleSection({ skill, onUpdated }) {
   )
 }
 
-function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user, onUpdated, onDeleted }) {
+function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user, onUpdated }) {
   const isCustom = !skill.library_skill_id || skill.skill_library?.is_private
   const [name, setName] = useState(skill.name)
   const [isCurrentRole, setIsCurrentRole] = useState(skill.is_current_role)
@@ -2140,6 +2144,88 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
     onUpdated()
   }
 
+  return (
+    <>
+      {currentRolePrompt && (
+        <CurrentRoleSelectModal
+          roles={currentRolePrompt.roles}
+          onConfirm={handleCurrentRoleConfirm}
+          onCancel={handleCurrentRoleCancel}
+        />
+      )}
+      <form onSubmit={handleSave} className="space-y-3">
+      <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">
+        {isCustom ? 'Custom skill — private to you' : 'From the shared skill library'}
+      </p>
+      {isCustom && (
+        <>
+          <div>
+            <label className="block text-sm text-secondary mb-1" htmlFor="detailName">
+              Name
+            </label>
+            <input
+              id="detailName"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+            />
+          </div>
+
+          <TagsField
+            tags={skillTags.map((t) => ({ id: t.id, name: t.tags?.name }))}
+            onAddTag={onAddTag}
+            onRemoveTag={onRemoveTag}
+            skillName={name}
+            allTags={allTags}
+            datalistId="tags-options-detail"
+          />
+        </>
+      )}
+
+      <TrackingReasonPicker value={trackingReason} onChange={setTrackingReason} />
+
+      <label className="flex items-start gap-2 text-sm text-secondary">
+        <input
+          type="checkbox"
+          checked={isCurrentRole}
+          onChange={(e) => setIsCurrentRole(e.target.checked)}
+          className="mt-0.5 rounded border-hairline"
+        />
+        <span>
+          Part of my current role
+          <span className="block text-xs text-secondary/80 mt-0.5">
+            Links this skill to your current job on the Experience timeline — creates one called
+            "Current role" if you don't have one yet, or asks which one if you have more than
+            one.
+          </span>
+        </span>
+      </label>
+
+      {error && <p className="text-sm text-red-700">{error}</p>}
+
+      <div className="flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={saving}
+          className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+        >
+          {saving ? 'Saving…' : 'Save details'}
+        </button>
+      </div>
+      </form>
+    </>
+  )
+}
+
+// Kept as its own bottom-of-modal section, separate from the rest of the
+// editable details, so a destructive/semi-destructive action never sits
+// next to routine fields a learner is casually editing.
+function DeleteSection({ skill, onUpdated, onDeleted }) {
+  const isCustom = !skill.library_skill_id || skill.skill_library?.is_private
+  const isArchived = skill.lifecycle_stage === 'archived'
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
   async function handleDelete() {
     if (!confirm(`Delete "${skill.name}" and all of its self-assessment history? This can't be undone.`)) {
       return
@@ -2199,113 +2285,47 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
   }
 
   return (
-    <>
-      {currentRolePrompt && (
-        <CurrentRoleSelectModal
-          roles={currentRolePrompt.roles}
-          onConfirm={handleCurrentRoleConfirm}
-          onCancel={handleCurrentRoleCancel}
-        />
-      )}
-      <form onSubmit={handleSave} className="space-y-3">
-      <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">
-        {isCustom ? 'Custom skill — private to you' : 'From the shared skill library'}
+    <div className="pt-6 border-t border-hairline">
+      <h3 className="font-display text-base text-ink mb-2">
+        {isCustom ? 'Delete this skill' : 'Drop this skill'}
+      </h3>
+      <p className="text-sm text-secondary mb-3">
+        {isCustom
+          ? "Permanently deletes this skill and everything tied to it — self-assessments, evidence, tags, targets, and peer ratings. This can't be undone."
+          : isArchived
+            ? 'This skill is archived and hidden from your active skills list, but its history is untouched. Restore it to track it again.'
+            : "Archives this skill and removes it from your active skills list. Nothing is deleted — your history stays intact and you can restore it anytime."}
       </p>
+      {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
       {isCustom ? (
-        <div>
-          <label className="block text-sm text-secondary mb-1" htmlFor="detailName">
-            Name
-          </label>
-          <input
-            id="detailName"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-          />
-        </div>
-      ) : (
-        <div>
-          <span className="block text-sm text-secondary mb-1">Name</span>
-          <p className="text-ink text-sm">{skill.name}</p>
-        </div>
-      )}
-
-      <TagsField
-        tags={skillTags.map((t) => ({ id: t.id, name: t.tags?.name }))}
-        onAddTag={onAddTag}
-        onRemoveTag={onRemoveTag}
-        skillName={name}
-        allTags={allTags}
-        datalistId="tags-options-detail"
-        readOnly={!isCustom}
-      />
-
-      <label className="flex items-start gap-2 text-sm text-secondary">
-        <input
-          type="checkbox"
-          checked={isCurrentRole}
-          onChange={(e) => setIsCurrentRole(e.target.checked)}
-          className="mt-0.5 rounded border-hairline"
-        />
-        <span>
-          Part of my current role
-          <span className="block text-xs text-secondary/80 mt-0.5">
-            Links this skill to your current job on the Experience timeline — creates one called
-            "Current role" if you don't have one yet, or asks which one if you have more than
-            one.
-          </span>
-        </span>
-      </label>
-
-      <TrackingReasonPicker value={trackingReason} onChange={setTrackingReason} />
-
-      {skill.lifecycle_stage === 'archived' && (
-        <p className="text-sm text-secondary bg-paper border border-hairline rounded-md px-3 py-2">
-          This skill is archived and hidden from your active skills list. Restore it to track it again.
-        </p>
-      )}
-
-      {error && <p className="text-sm text-red-700">{error}</p>}
-
-      <div className="flex items-center gap-2">
         <button
-          type="submit"
+          type="button"
+          onClick={handleDelete}
+          disabled={saving}
+          className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+        >
+          Delete skill
+        </button>
+      ) : isArchived ? (
+        <button
+          type="button"
+          onClick={handleRestore}
           disabled={saving}
           className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
         >
-          {saving ? 'Saving…' : 'Save details'}
+          Restore skill
         </button>
-        {isCustom ? (
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={saving}
-            className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-          >
-            Delete skill
-          </button>
-        ) : skill.lifecycle_stage === 'archived' ? (
-          <button
-            type="button"
-            onClick={handleRestore}
-            disabled={saving}
-            className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-          >
-            Restore skill
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={handleDrop}
-            disabled={saving}
-            className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-          >
-            Drop skill
-          </button>
-        )}
-      </div>
-      </form>
-    </>
+      ) : (
+        <button
+          type="button"
+          onClick={handleDrop}
+          disabled={saving}
+          className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+        >
+          Drop skill
+        </button>
+      )}
+    </div>
   )
 }
 
