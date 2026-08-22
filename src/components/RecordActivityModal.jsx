@@ -1,13 +1,12 @@
 import { useState } from 'react'
 import { XAPI_VERBS } from '../lib/xapiVerbs'
-import { buildStatement, validateStatement } from '../lib/xapiStatement'
+import { buildStatement } from '../lib/xapiStatement'
 
 function todayDate() {
   return new Date().toISOString().slice(0, 10)
 }
 
 export default function RecordActivityModal({ actor, skills, relatedCourse, relatedSkill: fixedSkill, onSave, onClose }) {
-  const [rawMode, setRawMode] = useState(false)
   const [verbValue, setVerbValue] = useState('experienced')
   const [activityTitle, setActivityTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -15,68 +14,31 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
   const [durationHours, setDurationHours] = useState('')
   const [durationMinutes, setDurationMinutes] = useState('')
   const [relatedSkillId, setRelatedSkillId] = useState('')
-  const [rawJson, setRawJson] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [showDuration, setShowDuration] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
-
-  function switchToRaw() {
-    if (!rawJson) {
-      try {
-        const relatedSkill =
-          fixedSkill ?? (relatedSkillId ? { id: relatedSkillId, name: skills.find((s) => s.id === relatedSkillId)?.name } : null)
-        const statement = buildStatement({
-          actor,
-          verbValue,
-          activityName: activityTitle.trim() || 'Untitled activity',
-          description: description.trim() || null,
-          timestamp: date,
-          relatedSkill,
-          relatedCourse,
-          durationHours,
-          durationMinutes,
-        })
-        setRawJson(JSON.stringify(statement, null, 2))
-      } catch {
-        setRawJson('{\n  \n}')
-      }
-    }
-    setRawMode(true)
-  }
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError(null)
     let statement
     try {
-      if (rawMode) {
-        let parsed
-        try {
-          parsed = JSON.parse(rawJson)
-        } catch {
-          throw new Error('Raw statement is not valid JSON.')
-        }
-        const validationError = validateStatement(parsed)
-        if (validationError) throw new Error(validationError)
-        statement = parsed
-      } else {
-        if (!activityTitle.trim()) throw new Error('An activity name is required.')
-        if (!date) throw new Error('A date is required.')
-        const relatedSkill =
-          fixedSkill ?? (relatedSkillId ? { id: relatedSkillId, name: skills.find((s) => s.id === relatedSkillId)?.name } : null)
-        statement = buildStatement({
-          actor,
-          verbValue,
-          activityName: activityTitle.trim(),
-          description: description.trim() || null,
-          timestamp: date,
-          relatedSkill,
-          relatedCourse,
-          durationHours,
-          durationMinutes,
-        })
-      }
+      if (!activityTitle.trim()) throw new Error('An activity name is required.')
+      if (!date) throw new Error('A date is required.')
+      const relatedSkill =
+        fixedSkill ?? (relatedSkillId ? { id: relatedSkillId, name: skills.find((s) => s.id === relatedSkillId)?.name } : null)
+      statement = buildStatement({
+        actor,
+        verbValue,
+        activityName: activityTitle.trim(),
+        description: description.trim() || null,
+        timestamp: date,
+        relatedSkill,
+        relatedCourse,
+        durationHours,
+        durationMinutes,
+      })
     } catch (err) {
       setError(err.message)
       return
@@ -107,177 +69,142 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {!rawMode ? (
-            <>
-              <div>
-                <label className="block text-sm text-secondary mb-1" htmlFor="activityTitle">
-                  What happened?
-                </label>
-                <div className="flex items-stretch gap-2">
-                  <span className="flex items-center text-ink shrink-0">I</span>
-                  <select
-                    id="verb"
-                    value={verbValue}
-                    onChange={(e) => setVerbValue(e.target.value)}
-                    aria-label="What happened"
-                    className="shrink-0 rounded-md border border-hairline bg-paper pl-2 pr-6 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                  >
-                    {XAPI_VERBS.map((v) => (
-                      <option key={v.value} value={v.value}>
-                        {v.label.toLowerCase()}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    id="activityTitle"
-                    required
-                    value={activityTitle}
-                    onChange={(e) => setActivityTitle(e.target.value)}
-                    placeholder={
-                      fixedSkill
-                        ? `something related to "${fixedSkill.name}"…`
-                        : 'a retro for the team, a 10k, a production incident…'
-                    }
-                    className="flex-1 min-w-0 rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                  />
-                </div>
-              </div>
+          <div>
+            <label className="block text-sm text-secondary mb-1" htmlFor="activityTitle">
+              What happened?
+            </label>
+            <div className="flex items-stretch gap-2">
+              <span className="flex items-center text-ink shrink-0">I</span>
+              <select
+                id="verb"
+                value={verbValue}
+                onChange={(e) => setVerbValue(e.target.value)}
+                aria-label="What happened"
+                className="shrink-0 rounded-md border border-hairline bg-paper pl-2 pr-6 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              >
+                {XAPI_VERBS.map((v) => (
+                  <option key={v.value} value={v.value}>
+                    {v.label.toLowerCase()}
+                  </option>
+                ))}
+              </select>
+              <input
+                id="activityTitle"
+                required
+                value={activityTitle}
+                onChange={(e) => setActivityTitle(e.target.value)}
+                placeholder={
+                  fixedSkill
+                    ? `something related to "${fixedSkill.name}"…`
+                    : 'a retro for the team, a 10k, a production incident…'
+                }
+                className="flex-1 min-w-0 rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+            </div>
+          </div>
 
-              <div>
-                <label className="block text-sm text-secondary mb-1" htmlFor="date">
-                  When?
-                </label>
+          <div>
+            <label className="block text-sm text-secondary mb-1" htmlFor="date">
+              When?
+            </label>
+            <input
+              id="date"
+              type="date"
+              required
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+            />
+          </div>
+
+          {!fixedSkill && skills.length > 0 && (
+            <div>
+              <label className="block text-sm text-secondary mb-1" htmlFor="relatedSkill">
+                Related skill (optional)
+              </label>
+              <select
+                id="relatedSkill"
+                value={relatedSkillId}
+                onChange={(e) => setRelatedSkillId(e.target.value)}
+                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              >
+                <option value="">— None —</option>
+                {skills.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            {!showDuration && (
+              <button
+                type="button"
+                onClick={() => setShowDuration(true)}
+                className="text-xs text-secondary hover:text-ink underline"
+              >
+                + Add how long it took
+              </button>
+            )}
+            {!showNotes && (
+              <button
+                type="button"
+                onClick={() => setShowNotes(true)}
+                className="text-xs text-secondary hover:text-ink underline"
+              >
+                + Add more detail
+              </button>
+            )}
+          </div>
+
+          {showDuration && (
+            <div>
+              <span className="block text-sm text-secondary mb-1">How long did it take?</span>
+              <div className="flex items-center gap-2">
                 <input
-                  id="date"
-                  type="date"
-                  required
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
+                  type="number"
+                  min="0"
+                  inputMode="numeric"
+                  value={durationHours}
+                  onChange={(e) => setDurationHours(e.target.value)}
+                  placeholder="0"
+                  aria-label="Hours"
                   className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
                 />
-              </div>
-
-              {!fixedSkill && skills.length > 0 && (
-                <div>
-                  <label className="block text-sm text-secondary mb-1" htmlFor="relatedSkill">
-                    Related skill (optional)
-                  </label>
-                  <select
-                    id="relatedSkill"
-                    value={relatedSkillId}
-                    onChange={(e) => setRelatedSkillId(e.target.value)}
-                    className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                  >
-                    <option value="">— None —</option>
-                    {skills.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div className="flex flex-wrap gap-x-4 gap-y-1">
-                {!showDuration && (
-                  <button
-                    type="button"
-                    onClick={() => setShowDuration(true)}
-                    className="text-xs text-secondary hover:text-ink underline"
-                  >
-                    + Add how long it took
-                  </button>
-                )}
-                {!showNotes && (
-                  <button
-                    type="button"
-                    onClick={() => setShowNotes(true)}
-                    className="text-xs text-secondary hover:text-ink underline"
-                  >
-                    + Add more detail
-                  </button>
-                )}
-              </div>
-
-              {showDuration && (
-                <div>
-                  <span className="block text-sm text-secondary mb-1">How long did it take?</span>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min="0"
-                      inputMode="numeric"
-                      value={durationHours}
-                      onChange={(e) => setDurationHours(e.target.value)}
-                      placeholder="0"
-                      aria-label="Hours"
-                      className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                    />
-                    <span className="text-sm text-secondary shrink-0">h</span>
-                    <input
-                      type="number"
-                      min="0"
-                      max="59"
-                      inputMode="numeric"
-                      value={durationMinutes}
-                      onChange={(e) => setDurationMinutes(e.target.value)}
-                      placeholder="0"
-                      aria-label="Minutes"
-                      className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                    />
-                    <span className="text-sm text-secondary shrink-0">m</span>
-                  </div>
-                </div>
-              )}
-
-              {showNotes && (
-                <div>
-                  <label className="block text-sm text-secondary mb-1" htmlFor="description">
-                    Anything else worth remembering?
-                  </label>
-                  <textarea
-                    id="description"
-                    rows={3}
-                    autoFocus
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Any detail worth remembering…"
-                    className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                  />
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={switchToRaw}
-                className="text-xs text-secondary hover:text-ink underline"
-              >
-                Edit raw xAPI statement JSON instead
-              </button>
-            </>
-          ) : (
-            <>
-              <div>
-                <label className="block text-sm text-secondary mb-1" htmlFor="rawJson">
-                  xAPI statement (JSON)
-                </label>
-                <textarea
-                  id="rawJson"
-                  rows={16}
-                  value={rawJson}
-                  onChange={(e) => setRawJson(e.target.value)}
-                  spellCheck={false}
-                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-xs font-mono focus:outline-none focus:ring-2 focus:ring-moss"
+                <span className="text-sm text-secondary shrink-0">h</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="59"
+                  inputMode="numeric"
+                  value={durationMinutes}
+                  onChange={(e) => setDurationMinutes(e.target.value)}
+                  placeholder="0"
+                  aria-label="Minutes"
+                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
                 />
+                <span className="text-sm text-secondary shrink-0">m</span>
               </div>
-              <button
-                type="button"
-                onClick={() => setRawMode(false)}
-                className="text-xs text-secondary hover:text-ink underline"
-              >
-                Back to guided form
-              </button>
-            </>
+            </div>
+          )}
+
+          {showNotes && (
+            <div>
+              <label className="block text-sm text-secondary mb-1" htmlFor="description">
+                Anything else worth remembering?
+              </label>
+              <textarea
+                id="description"
+                rows={3}
+                autoFocus
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Any detail worth remembering…"
+                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+            </div>
           )}
 
           {error && <p className="text-sm text-red-700">{error}</p>}

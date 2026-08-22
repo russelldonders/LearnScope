@@ -113,17 +113,6 @@ export function buildStatement({
   return statement
 }
 
-// Minimal structural check for statements typed/pasted in raw JSON mode.
-export function validateStatement(statement) {
-  if (!statement || typeof statement !== 'object') return 'Statement must be a JSON object.'
-  if (!statement.verb?.id) return 'Statement is missing verb.id.'
-  if (!statement.object?.definition?.name) return 'Statement is missing object.definition.name.'
-  if (!statement.timestamp || Number.isNaN(Date.parse(statement.timestamp))) {
-    return 'Statement is missing a valid timestamp.'
-  }
-  return null
-}
-
 export function activityName(statement) {
   const names = statement.object?.definition?.name
   if (!names) return '(untitled activity)'
