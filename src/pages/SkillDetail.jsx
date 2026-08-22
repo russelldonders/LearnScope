@@ -33,7 +33,7 @@ import { listOutgoingValidationRequests } from '../lib/skillValidationRequests'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
 import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
-import { computeTrustStatus, TRUST_STATUS_COLORS } from '../lib/skillProficiencyModel'
+import { computeTrustStatus, TRUST_STATUS, TRUST_STATUS_COLORS } from '../lib/skillProficiencyModel'
 import { countSkillTrackers, listConnectionsWithSkill } from '../lib/skillStats'
 
 export default function SkillDetail() {
@@ -248,13 +248,25 @@ export default function SkillDetail() {
   const invitesSentCount = invites.length
   const hasAnyEvaluationInput = selfAssessedCount > 0 || peerRatings.length > 0 || practicalStatements.length > 0
   const latestKnowledgeAssessment = history.find((a) => a.axis === 'knowledge') ?? null
-  // The header shows the confirmed level once one exists; until then it
-  // falls back to the latest self-assessment so the header reflects what the
-  // learner just told us rather than sitting on "Not yet self-assessed"
-  // through the whole self-assess -> confirm gap. The nearby verification
-  // badge still says "Self-assessed" vs "Confirmed", so this doesn't overstate
-  // how settled the number is -- it's shown, just not claimed as verified.
-  const displayedKnowledgeLevel = skill?.knowledge_level ?? latestKnowledgeAssessment?.level ?? null
+  // The most recent knowledge-axis event wins, whichever kind it is. A fresh
+  // self-assessment after a confirmation is a claim of having grown beyond
+  // what was verified -- it should immediately become what's shown, with the
+  // trust badge dropping back to Self-assessed (see knowledgeConfirmed
+  // below), not stay silently shadowed by the older confirmed number. Before
+  // anything is confirmed this is just the latest self-assessment, same as
+  // before.
+  const displayedKnowledgeLevel = latestKnowledgeAssessment?.level ?? skill?.knowledge_level ?? null
+  // The confirmed level (skills.knowledge_level, set only by the Confirming
+  // Baseline quiz) never moves on a plain self-assessment -- it's the floor
+  // a later self-assessment can't be set below (see SelfAssessSection) and,
+  // when a newer self-assessment has since claimed higher, the boundary
+  // shown in the level bar's colour gradient between "confirmed" and
+  // "self-assessed since" (see the milestoneLevel prop below).
+  const confirmedKnowledgeLevel = skill?.knowledge_level ?? null
+  const knowledgeMilestone =
+    confirmedKnowledgeLevel && displayedKnowledgeLevel && confirmedKnowledgeLevel < displayedKnowledgeLevel
+      ? confirmedKnowledgeLevel
+      : null
   // Same fallback for the practical axis -- skill.level only moves on an
   // explicit baseline evaluation, so without this a self-assessment would
   // leave the Can Do panel stuck on "Not yet self-assessed" through the
@@ -265,7 +277,10 @@ export default function SkillDetail() {
   // Practical-primary / knowledge-foundation model: derived, not stored --
   // see skillProficiencyModel.js. Trust status is computed independently
   // per axis and never blended into a level.
-  const knowledgeConfirmed = history.some((a) => a.axis === 'knowledge' && a.source === 'diagnostic_confirmed')
+  // Only the *latest* knowledge event counts as confirmation, not "ever
+  // confirmed at any point" -- otherwise a newer self-assessment could never
+  // knock the trust badge back down to Self-assessed the way it should.
+  const knowledgeConfirmed = latestKnowledgeAssessment?.source === 'diagnostic_confirmed'
   const practicalVerification = skill
     ? computeTrustStatus({
         axis: 'practical',
@@ -448,6 +463,8 @@ export default function SkillDetail() {
                       level={displayedKnowledgeLevel}
                       size={28}
                       color={TRUST_STATUS_COLORS[knowledgeVerification]}
+                      milestoneLevel={knowledgeMilestone}
+                      milestoneColor={TRUST_STATUS_COLORS[TRUST_STATUS.CONFIRMED]}
                     />
                     <div>
                       <p className="text-sm text-secondary">
@@ -989,6 +1006,12 @@ function LevelDetailModal({
 }) {
   const isKnowledge = axis === 'knowledge'
   const labels = isKnowledge ? KNOWLEDGE_LEVEL_LABELS : LEVEL_LABELS
+  // A newer self-assessment can claim higher than the last confirmed
+  // knowledge_level -- when it has, the bar splits at the confirmed level so
+  // "verified" and "claimed since" read as visually distinct, not one flat
+  // colour overstating how settled the higher number is.
+  const knowledgeMilestone =
+    isKnowledge && skill.knowledge_level && level && skill.knowledge_level < level ? skill.knowledge_level : null
   const [guideStatements, setGuideStatements] = useState([])
   const [guideLoading, setGuideLoading] = useState(true)
 
@@ -1030,13 +1053,24 @@ function LevelDetailModal({
         </div>
         <div className="flex items-center gap-3 mb-3">
           {isKnowledge ? (
-            <KnowledgeLevelBar level={level} size={32} color={TRUST_STATUS_COLORS[trustStatus]} />
+            <KnowledgeLevelBar
+              level={level}
+              size={32}
+              color={TRUST_STATUS_COLORS[trustStatus]}
+              milestoneLevel={knowledgeMilestone}
+              milestoneColor={TRUST_STATUS_COLORS[TRUST_STATUS.CONFIRMED]}
+            />
           ) : (
             <GrowthRing level={level} size={40} color={TRUST_STATUS_COLORS[trustStatus]} />
           )}
           <div>
             <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Current level</p>
             <p className="text-base font-medium text-ink">{level ? labels[level] : 'Not yet self-assessed'}</p>
+            {knowledgeMilestone && (
+              <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+                Confirmed to {KNOWLEDGE_LEVEL_LABELS[knowledgeMilestone]} · self-assessed higher since
+              </p>
+            )}
           </div>
         </div>
         {level ? (
@@ -1171,7 +1205,13 @@ function SelfAssessModal({
 function SelfAssessSection({ skill, user, axis = 'practical', currentLevel = null, onAssessed, onGuideGenerated }) {
   const isKnowledge = axis === 'knowledge'
   const labels = isKnowledge ? KNOWLEDGE_LEVEL_LABELS : LEVEL_LABELS
-  const [level, setLevel] = useState(currentLevel ?? 1)
+  // Once a knowledge level has been confirmed via the quiz, a later
+  // self-assessment can only claim that level or higher -- selecting lower
+  // would silently contradict a result the learner already demonstrated.
+  // No such floor exists for practical (nothing plays an equivalent
+  // "verified, can't walk back" role there).
+  const confirmedFloor = isKnowledge ? skill.knowledge_level : null
+  const [level, setLevel] = useState(Math.max(currentLevel ?? 1, confirmedFloor ?? 1))
   const [comments, setComments] = useState('')
   const [evidenceUrl, setEvidenceUrl] = useState('')
   const [evidenceFiles, setEvidenceFiles] = useState([])
@@ -1280,24 +1320,33 @@ function SelfAssessSection({ skill, user, axis = 'practical', currentLevel = nul
           {isKnowledge ? 'What you already know' : 'Level now'}
         </span>
         <div className="space-y-2">
-          {LEVELS.map((l) => (
+          {LEVELS.map((l) => {
+            const locked = confirmedFloor != null && l < confirmedFloor
+            return (
             <div
               key={l}
               className={`rounded-md border overflow-hidden ${
                 level === l ? 'border-moss' : 'border-hairline'
-              }`}
+              } ${locked ? 'opacity-40' : ''}`}
             >
               <button
                 type="button"
-                onClick={() => setLevel(l)}
+                onClick={() => !locked && setLevel(l)}
+                disabled={locked}
+                title={locked ? `Already confirmed at ${labels[confirmedFloor]} -- can't self-assess lower` : undefined}
                 className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${
-                  level === l ? 'bg-moss/10' : 'hover:bg-paper'
+                  locked ? 'cursor-not-allowed' : level === l ? 'bg-moss/10' : 'hover:bg-paper'
                 }`}
               >
                 <GrowthRing level={l} size={28} labels={labels} color={isKnowledge ? 'var(--color-slate)' : undefined} />
                 <span className="text-sm text-ink font-medium">{labels[l]}</span>
                 {currentLevel === l && (
                   <span className="font-mono text-[10px] uppercase tracking-wide text-secondary/70">Current</span>
+                )}
+                {locked && (
+                  <span className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 ml-auto">
+                    Already confirmed higher
+                  </span>
                 )}
               </button>
               {level === l && (
@@ -1316,7 +1365,8 @@ function SelfAssessSection({ skill, user, axis = 'practical', currentLevel = nul
                 </div>
               )}
             </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 
