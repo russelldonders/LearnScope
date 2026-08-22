@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { usePendingActions } from '../context/PendingActionsContext'
 import { supabase } from '../lib/supabaseClient'
 import { getEvidenceSignedUrl } from '../lib/skillEvidence'
 import { decideValidationRequest } from '../lib/skillValidationRequests'
@@ -19,6 +20,7 @@ const SOURCE_LABELS = {
 export default function ValidateRequest() {
   const { requestId } = useParams()
   const { user } = useAuth()
+  const { refreshPendingActionCount } = usePendingActions()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [request, setRequest] = useState(null)
@@ -95,6 +97,7 @@ export default function ValidateRequest() {
     setDeciding(true)
     try {
       await decideValidationRequest(requestId, confirmed, comments)
+      refreshPendingActionCount()
       await load()
     } catch (err) {
       setDecideError(err.message)

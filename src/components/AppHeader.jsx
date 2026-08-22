@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { usePendingActions } from '../context/PendingActionsContext'
 import { supabase } from '../lib/supabaseClient'
-import { listIncomingRateInvites } from '../lib/connections'
 
 const NAV_LINKS = [
   { to: '/dashboard', label: 'Home' },
@@ -21,11 +21,11 @@ const MENU_ITEMS = [
 
 export default function AppHeader() {
   const { signOut, user } = useAuth()
+  const { pendingActionCount } = usePendingActions()
   const location = useLocation()
   const [avatarUrl, setAvatarUrl] = useState(null)
   const [fullName, setFullName] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [pendingActionCount, setPendingActionCount] = useState(0)
   const menuRef = useRef(null)
 
   useEffect(() => {
@@ -39,34 +39,6 @@ export default function AppHeader() {
         setAvatarUrl(data?.avatar_url ?? null)
         setFullName(data?.full_name ?? null)
       })
-  }, [user])
-
-  // Everything on the Connections page that's actually waiting on this
-  // learner to do something -- pending connection requests, validation
-  // requests, and rate invites addressed to them -- not invites/requests
-  // they sent themselves, which are waiting on someone else instead.
-  useEffect(() => {
-    if (!user) return
-    let cancelled = false
-    Promise.all([
-      supabase
-        .from('connection_requests')
-        .select('id', { count: 'exact', head: true })
-        .eq('recipient_id', user.id)
-        .eq('status', 'pending'),
-      supabase
-        .from('skill_validation_requests')
-        .select('id', { count: 'exact', head: true })
-        .eq('validator_id', user.id)
-        .eq('status', 'pending'),
-      listIncomingRateInvites(),
-    ]).then(([{ count: requestCount }, { count: validationCount }, rateInvites]) => {
-      if (cancelled) return
-      setPendingActionCount((requestCount ?? 0) + (validationCount ?? 0) + rateInvites.length)
-    })
-    return () => {
-      cancelled = true
-    }
   }, [user])
 
   useEffect(() => {

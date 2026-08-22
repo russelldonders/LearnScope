@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { usePendingActions } from '../context/PendingActionsContext'
 import GrowthRing from '../components/GrowthRing'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import {
@@ -13,6 +14,7 @@ import {
 export default function Rate() {
   const { code } = useParams()
   const { user, loading: authLoading } = useAuth()
+  const { refreshPendingActionCount } = usePendingActions()
   const navigate = useNavigate()
   const [preview, setPreview] = useState(undefined)
   const [level, setLevel] = useState(3)
@@ -37,6 +39,7 @@ export default function Rate() {
     setSubmitting(true)
     try {
       await acceptInviteAndRate(code, level, comments)
+      refreshPendingActionCount()
       setDone(true)
     } catch (err) {
       setError(err.message)

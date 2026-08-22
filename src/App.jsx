@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
+import { PendingActionsProvider } from './context/PendingActionsContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
@@ -29,6 +30,7 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <PendingActionsProvider>
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
@@ -167,6 +169,7 @@ function App() {
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </PendingActionsProvider>
       </AuthProvider>
     </BrowserRouter>
   )

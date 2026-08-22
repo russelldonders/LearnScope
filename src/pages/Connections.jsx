@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { usePendingActions } from '../context/PendingActionsContext'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import WhatsAppIcon from '../components/WhatsAppIcon'
@@ -20,6 +21,7 @@ import { listIncomingConnectionRequests, respondToConnectionRequest } from '../l
 
 export default function Connections() {
   const { user } = useAuth()
+  const { refreshPendingActionCount } = usePendingActions()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [ratings, setRatings] = useState([])
@@ -92,6 +94,7 @@ export default function Connections() {
     try {
       await respondToConnectionRequest(requestId, accept)
       setIncomingRequests((prev) => prev.filter((r) => r.id !== requestId))
+      refreshPendingActionCount()
       if (accept) await load()
     } catch (err) {
       setRespondError({ id: requestId, message: err.message })
