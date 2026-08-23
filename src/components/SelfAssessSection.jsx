@@ -56,6 +56,13 @@ export default function SelfAssessSection({
   const [recurring, setRecurring] = useState(!isKnowledge && Boolean(skill.checkin_frequency_unit))
   const [frequencyValue, setFrequencyValue] = useState(skill.checkin_frequency_value ?? 1)
   const [frequencyUnit, setFrequencyUnit] = useState(skill.checkin_frequency_unit ?? 'months')
+  // Starts open only if a schedule already exists to show/edit -- otherwise
+  // this is an opt-in, same as the evidence checkbox above, rather than
+  // showing the date picker (which can misbehave on narrow mobile widths)
+  // unasked-for on every fresh self-assessment.
+  const [scheduleNextReview, setScheduleNextReview] = useState(
+    !isKnowledge && Boolean(skill.next_checkin_date || skill.checkin_frequency_unit)
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -85,7 +92,7 @@ export default function SelfAssessSection({
   async function handleSubmit(e) {
     e.preventDefault()
     setError(null)
-    if (!isKnowledge && nextCheckinDate && nextCheckinDate < todayDateString()) {
+    if (!isKnowledge && scheduleNextReview && nextCheckinDate && nextCheckinDate < todayDateString()) {
       setError("Next self-assessment date can't be in the past.")
       return
     }
@@ -99,13 +106,13 @@ export default function SelfAssessSection({
           level,
           axis,
           comments: comments.trim() || null,
-          evidence_url: evidenceUrl.trim() || null,
+          evidence_url: showEvidence ? evidenceUrl.trim() || null : null,
         })
         .select()
         .single()
       if (assessmentError) throw assessmentError
 
-      if (evidenceFiles.length > 0) {
+      if (showEvidence && evidenceFiles.length > 0) {
         const paths = await uploadEvidenceFiles(user.id, skill.id, assessment.id, evidenceFiles)
         const { error: updateError } = await supabase
           .from('skill_assessments')
@@ -126,9 +133,10 @@ export default function SelfAssessSection({
         const { error: skillError } = await supabase
           .from('skills')
           .update({
-            next_checkin_date: nextCheckinDate || null,
-            checkin_frequency_value: recurring ? Math.max(1, Math.floor(Number(frequencyValue)) || 1) : null,
-            checkin_frequency_unit: recurring ? frequencyUnit : null,
+            next_checkin_date: scheduleNextReview ? nextCheckinDate || null : null,
+            checkin_frequency_value:
+              scheduleNextReview && recurring ? Math.max(1, Math.floor(Number(frequencyValue)) || 1) : null,
+            checkin_frequency_unit: scheduleNextReview && recurring ? frequencyUnit : null,
           })
           .eq('id', skill.id)
         if (skillError) throw skillError
@@ -267,44 +275,58 @@ export default function SelfAssessSection({
       )}
 
       {!isKnowledge && (
-        <div className="border-t border-hairline pt-3 space-y-2">
-          <span className="block text-sm text-secondary">Next self-assessment</span>
-          <input
-            type="date"
-            value={nextCheckinDate}
-            min={todayDateString()}
-            onChange={(e) => setNextCheckinDate(e.target.value)}
-            className="w-full min-w-0 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-          />
+        <div className="border-t border-hairline pt-3">
           <label className="flex items-center gap-2 text-sm text-secondary">
             <input
               type="checkbox"
-              checked={recurring}
-              onChange={(e) => setRecurring(e.target.checked)}
+              checked={scheduleNextReview}
+              onChange={(e) => setScheduleNextReview(e.target.checked)}
               className="rounded border-hairline"
             />
-            Set up regular self-assessments
+            Schedule next self-review
           </label>
-          {recurring && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-secondary">Every</span>
-              <input
-                type="number"
-                min={1}
-                value={frequencyValue}
-                onChange={(e) => setFrequencyValue(e.target.value)}
-                onBlur={(e) => setFrequencyValue(Math.max(1, Math.floor(Number(e.target.value)) || 1))}
-                className="w-16 min-w-0 rounded-md border border-hairline bg-paper px-2 py-1.5 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-              />
-              <select
-                value={frequencyUnit}
-                onChange={(e) => setFrequencyUnit(e.target.value)}
-                className="rounded-md border border-hairline bg-paper px-2 py-1.5 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-              >
-                <option value="weeks">weeks</option>
-                <option value="months">months</option>
-                <option value="years">years</option>
-              </select>
+          {scheduleNextReview && (
+            <div className="mt-2 space-y-2">
+              <div className="w-full min-w-0 max-w-full overflow-x-auto">
+                <input
+                  type="date"
+                  value={nextCheckinDate}
+                  min={todayDateString()}
+                  onChange={(e) => setNextCheckinDate(e.target.value)}
+                  className="w-full min-w-0 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm text-secondary">
+                <input
+                  type="checkbox"
+                  checked={recurring}
+                  onChange={(e) => setRecurring(e.target.checked)}
+                  className="rounded border-hairline"
+                />
+                Set up regular self-assessments
+              </label>
+              {recurring && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-secondary">Every</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={frequencyValue}
+                    onChange={(e) => setFrequencyValue(e.target.value)}
+                    onBlur={(e) => setFrequencyValue(Math.max(1, Math.floor(Number(e.target.value)) || 1))}
+                    className="w-16 min-w-0 rounded-md border border-hairline bg-paper px-2 py-1.5 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+                  />
+                  <select
+                    value={frequencyUnit}
+                    onChange={(e) => setFrequencyUnit(e.target.value)}
+                    className="rounded-md border border-hairline bg-paper px-2 py-1.5 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+                  >
+                    <option value="weeks">weeks</option>
+                    <option value="months">months</option>
+                    <option value="years">years</option>
+                  </select>
+                </div>
+              )}
             </div>
           )}
         </div>

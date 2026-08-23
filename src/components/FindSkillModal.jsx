@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { listLibrarySkills, isDuplicateLibrarySkillError, duplicateLibrarySkillMessage } from '../lib/skillLibrary'
@@ -34,6 +34,16 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
   const [createdSkill, setCreatedSkill] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const scrollRef = useRef(null)
+
+  // The scrollable card is one persistent DOM node across every step (only
+  // its children swap), so it otherwise keeps whatever scrollTop the
+  // previous step left it at -- a long step 2 scrolled down before
+  // advancing left step 3 opening already scrolled partway down instead of
+  // at its own top.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 })
+  }, [mode])
 
   useEffect(() => {
     listLibrarySkills()
@@ -210,6 +220,7 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
   return (
     <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={handleDismiss}>
       <div
+        ref={scrollRef}
         className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
