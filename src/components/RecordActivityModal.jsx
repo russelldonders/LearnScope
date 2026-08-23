@@ -71,36 +71,38 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm text-secondary mb-1" htmlFor="activityTitle">
-              What happened?
+              What did you do?
             </label>
-            <div className="flex items-stretch gap-2">
-              <span className="flex items-center text-ink shrink-0">I</span>
-              <select
-                id="verb"
-                value={verbValue}
-                onChange={(e) => setVerbValue(e.target.value)}
-                aria-label="What happened"
-                className="shrink-0 rounded-md border border-hairline bg-paper pl-2 pr-6 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-              >
-                {XAPI_VERBS.map((v) => (
-                  <option key={v.value} value={v.value}>
-                    {v.label.toLowerCase()}
-                  </option>
-                ))}
-              </select>
-              <input
-                id="activityTitle"
-                required
-                value={activityTitle}
-                onChange={(e) => setActivityTitle(e.target.value)}
-                placeholder={
-                  fixedSkill
-                    ? `something related to "${fixedSkill.name}"…`
-                    : 'a retro for the team, a 10k, a production incident…'
-                }
-                className="flex-1 min-w-0 rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-              />
-            </div>
+            <input
+              id="activityTitle"
+              required
+              value={activityTitle}
+              onChange={(e) => setActivityTitle(e.target.value)}
+              placeholder={
+                fixedSkill
+                  ? `something related to "${fixedSkill.name}"…`
+                  : 'a retro for the team, a 10k, a production incident…'
+              }
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-secondary mb-1" htmlFor="verb">
+              How would you describe it?
+            </label>
+            <select
+              id="verb"
+              value={verbValue}
+              onChange={(e) => setVerbValue(e.target.value)}
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+            >
+              {XAPI_VERBS.map((v) => (
+                <option key={v.value} value={v.value}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
