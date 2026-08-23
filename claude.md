@@ -41,7 +41,7 @@ Don't implement these unless explicitly requested. Let future possibilities infl
 
 ## 6. Architecture
 
-React 19 + Vite 8, client-rendered SPA (`react-router-dom`). JavaScript/JSX — not TypeScript. Database: Supabase/Postgres, RLS on every table. Auth: Supabase Auth, email/password with confirmation. Hosting: Vercel. Backend: static app plus limited serverless functions under `api/`. Styling: Tailwind CSS v4 via `@theme` in `src/index.css`. Shared UI: lightweight shared components, no formal design-system package. Package manager: npm. No test framework configured. Migrations: sequential hand-written SQL in `supabase/migrations/` via the Supabase CLI — Claude may push to Staging; Production stays manual (see §10).
+React 19 + Vite 8, client-rendered SPA (`react-router-dom`). JavaScript/JSX — not TypeScript. Database: Supabase/Postgres, RLS on every table. Auth: Supabase Auth, email/password with confirmation. Hosting: Vercel. Backend: static app plus limited serverless functions under `api/`. Styling: Tailwind CSS v4 via `@theme` in `src/index.css`. Shared UI: lightweight shared components, no formal design-system package. Package manager: npm. Testing: Vitest (unit/component) + Playwright (e2e, Chromium). Migrations: sequential hand-written SQL in `supabase/migrations/` via the Supabase CLI — Claude may push to Staging; Production stays manual (see §10).
 
 **Direction** — prefer a modular monolith unless there's a demonstrated technical, scaling, security or deployment reason to separate a capability. Different customer types alone don't justify microservices; learners, organisations, training providers, coaches and other experiences should reuse shared domain capabilities. Keep sensible module/domain boundaries so capabilities could be separated later if genuinely required. Prefer simple architecture over speculative abstraction.
 
@@ -54,10 +54,12 @@ React 19 + Vite 8, client-rendered SPA (`react-router-dom`). JavaScript/JSX — 
 * Shared constants/labels: `src/lib/`
 * Migrations: `supabase/migrations/`
 * Serverless functions: `api/`
+* Unit/component tests: colocated as `*.test.js` next to the code they test (e.g. `src/lib/dates.test.js`)
+* E2e tests: `e2e/`
 
 Routes: `/`, `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/welcome`, `/rate/:code`, `/dashboard`, `/profile`, `/connections`.
 
-No generated database types, no automated tests. Update this map only when implementation changes make it materially inaccurate.
+No generated database types. Update this map only when implementation changes make it materially inaccurate.
 
 ## 8. Development Rules
 
@@ -118,7 +120,7 @@ Production migration execution remains human-controlled unless explicitly change
 
 **Implement** — make the smallest coherent change satisfying the requirement; stay within requested scope.
 
-**Verify** — run `npm run lint` and `npm run build`, plus relevant automated tests when a framework exists. Never claim a command/check passed unless it actually ran. Where automated coverage doesn't exist, reason through and report affected user flows that remain manually verifiable.
+**Verify** — run `npm run lint`, `npm run build`, and `npm run test:run`; run `npm run test:e2e` when the change is browser-observable. Never claim a command/check passed unless it actually ran. Where automated coverage doesn't exist for the affected behaviour, reason through and report affected user flows that remain manually verifiable.
 
 **Report** — keep concise: what changed, files changed, database changes, verification performed, unresolved risks/deferred items.
 
@@ -142,9 +144,11 @@ If an action could reasonably cause production data loss or significant security
 * Development: `npm run dev`
 * Lint: `npm run lint`
 * Build: `npm run build`
+* Unit/component tests: `npm run test` (watch) / `npm run test:run` (single run)
+* E2e tests: `npm run test:e2e` (headless) / `npm run test:e2e:ui` (interactive)
 * Migrate Staging: `npx supabase db reset` then `npx supabase db push` (see §10)
 
-Not available: type-check (JS project, n/a), automated tests (no framework configured), automated Production migrations (manual via SQL editor, see §17). Never invent a command.
+Not available: type-check (JS project, n/a), automated Production migrations (manual via SQL editor, see §17). Never invent a command.
 
 ## 16. Definition of Done
 
