@@ -15,7 +15,7 @@ import WhatsAppIcon from './WhatsAppIcon'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-export default function InviteRaterModal({ skill, onClose }) {
+export default function InviteRaterModal({ skill, afterSelfAssessment = false, onClose }) {
   const { user } = useAuth()
   const [inviterName, setInviterName] = useState(null)
   const [connections, setConnections] = useState([])
@@ -160,9 +160,13 @@ export default function InviteRaterModal({ skill, onClose }) {
         className="w-full max-w-sm bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="font-display text-2xl text-ink mb-1">Invite someone to rate this</h2>
+        <h2 className="font-display text-2xl text-ink mb-1">
+          {afterSelfAssessment ? "Now invite someone to confirm it" : 'Invite someone to rate this'}
+        </h2>
         <p className="text-sm text-secondary mb-4">
-          They'll be asked to rate "{skill.name}" once they log in or sign up.
+          {afterSelfAssessment
+            ? `You've rated "${skill.name}" yourself — invite someone else to rate it too, so it's not just your own word for it.`
+            : `They'll be asked to rate "${skill.name}" once they log in or sign up.`}
         </p>
 
         {linkError && <p className="text-sm text-red-700 mb-4">{linkError}</p>}

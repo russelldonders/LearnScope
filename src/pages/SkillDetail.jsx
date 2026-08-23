@@ -60,6 +60,7 @@ export default function SkillDetail() {
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [assessorName, setAssessorName] = useState(null)
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [inviteAfterSelfAssess, setInviteAfterSelfAssess] = useState(false)
   const [selfAssessOpen, setSelfAssessOpen] = useState(false)
   const [selfAssessKnowledgeOpen, setSelfAssessKnowledgeOpen] = useState(false)
   const [confirmingBaselineOpen, setConfirmingBaselineOpen] = useState(false)
@@ -657,7 +658,16 @@ export default function SkillDetail() {
               />
             )}
 
-            {inviteOpen && <InviteRaterModal skill={skill} onClose={() => setInviteOpen(false)} />}
+            {inviteOpen && (
+              <InviteRaterModal
+                skill={skill}
+                afterSelfAssessment={inviteAfterSelfAssess}
+                onClose={() => {
+                  setInviteOpen(false)
+                  setInviteAfterSelfAssess(false)
+                }}
+              />
+            )}
 
             {selfAssessOpen && (
               <SelfAssessModal
@@ -670,6 +680,8 @@ export default function SkillDetail() {
                   loadHistory()
                   loadSkill()
                   setSelfAssessOpen(false)
+                  setInviteAfterSelfAssess(true)
+                  setInviteOpen(true)
                 }}
                 onGuideGenerated={(statements) =>
                   setSkill((s) => (s ? { ...s, practical_level_guide: statements } : s))
