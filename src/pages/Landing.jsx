@@ -75,8 +75,7 @@ export default function Landing() {
             ))}
           </div>
           <p className="text-center text-secondary text-sm mt-6 max-w-md mx-auto">
-            Every skill grows one ring at a time — from your first attempts to raising the
-            standard for others.
+            Every skill grows one ring at a time — from beginner to expert.
           </p>
         </section>
 

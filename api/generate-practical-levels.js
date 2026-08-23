@@ -41,11 +41,11 @@ export default async function handler(req, res) {
 
   const prompt = `Write 5 short statements describing what a learner's demonstrated, practical ability at "${skillName.trim()}" looks like at each of 5 levels, from least to most developed:
 
-1. Watching and learning -- has observed it being done, hasn't tried it themselves
-2. Trying it with support -- can attempt it with guidance, supervision, or a reference
-3. Doing it independently -- can complete it alone, without needing help
-4. Handling the tricky stuff -- can manage edge cases, complications, and unusual situations with confidence
-5. Raising the standard -- others turn to them on this; they push quality or improve how it's done
+1. Beginner -- has observed it being done, hasn't tried it themselves
+2. Developing -- can attempt it with guidance, supervision, or a reference
+3. Capable -- can complete it alone, without needing help
+4. Skilled -- confident handling harder or less familiar situations, not just the routine ones
+5. Expert -- others turn to them on this; they push quality or improve how it's done
 
 For each level write one concise, second-person sentence (starting "You...") describing what that level of demonstrated, hands-on ability specifically looks like for "${skillName.trim()}" -- not a generic description that could apply to any skill. Focus on what they can practically do, not what they understand in theory. Return exactly 5 statements in order from level 1 to level 5.`
 
