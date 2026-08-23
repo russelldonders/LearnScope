@@ -413,7 +413,7 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
               onGuideGenerated={(statements) =>
                 setCreatedSkill((s) => (s ? { ...s, practical_level_guide: statements } : s))
               }
-              submitLabel="Save & Next"
+              submitLabel="Save & Close"
               secondaryAction={{ label: 'Skip for now', onClick: onCreated }}
             />
           </>
