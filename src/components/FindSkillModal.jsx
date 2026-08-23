@@ -380,14 +380,9 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
               onGuideGenerated={(statements) =>
                 setCreatedSkill((s) => (s ? { ...s, knowledge_level_guide: statements } : s))
               }
+              submitLabel="Save & Next"
+              secondaryAction={{ label: 'Skip for now', onClick: () => setMode('practical') }}
             />
-            <button
-              type="button"
-              onClick={() => setMode('practical')}
-              className="w-full rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper mt-3"
-            >
-              Skip for now
-            </button>
           </>
         )}
 
@@ -407,14 +402,9 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
               onGuideGenerated={(statements) =>
                 setCreatedSkill((s) => (s ? { ...s, practical_level_guide: statements } : s))
               }
+              submitLabel="Save & Next"
+              secondaryAction={{ label: 'Skip for now', onClick: onCreated }}
             />
-            <button
-              type="button"
-              onClick={onCreated}
-              className="w-full rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper mt-3"
-            >
-              Skip for now
-            </button>
           </>
         )}
       </div>

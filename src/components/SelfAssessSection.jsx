@@ -14,7 +14,16 @@ import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
 // picker's default selection and "current" badge match what the learner
 // actually sees before opening this, not the raw skill.level/
 // knowledge_level which stays null until a baseline is formally evaluated.
-export default function SelfAssessSection({ skill, user, axis = 'practical', currentLevel = null, onAssessed, onGuideGenerated }) {
+export default function SelfAssessSection({
+  skill,
+  user,
+  axis = 'practical',
+  currentLevel = null,
+  onAssessed,
+  onGuideGenerated,
+  submitLabel = 'Save self-assessment',
+  secondaryAction = null,
+}) {
   const isKnowledge = axis === 'knowledge'
   const labels = isKnowledge ? KNOWLEDGE_LEVEL_LABELS : LEVEL_LABELS
   // Once a knowledge level has been confirmed via the quiz, a later
@@ -25,6 +34,7 @@ export default function SelfAssessSection({ skill, user, axis = 'practical', cur
   const confirmedFloor = isKnowledge ? skill.knowledge_level : null
   const [level, setLevel] = useState(Math.max(currentLevel ?? 1, confirmedFloor ?? 1))
   const [comments, setComments] = useState('')
+  const [showEvidence, setShowEvidence] = useState(false)
   const [evidenceUrl, setEvidenceUrl] = useState('')
   const [evidenceFiles, setEvidenceFiles] = useState([])
   const [saving, setSaving] = useState(false)
@@ -191,10 +201,18 @@ export default function SelfAssessSection({ skill, user, axis = 'practical', cur
               {level === l && (
                 <div className="px-3 pt-2 pb-4">
                   {(() => {
-                    const levelDescription = guideStatements[l - 1] ?? (!isKnowledge ? LEVEL_DESCRIPTIONS[l] : undefined)
-                    if (guideLoading && levelDescription == null) {
+                    // The practical axis has a static generic fallback
+                    // (LEVEL_DESCRIPTIONS) while knowledge doesn't -- but
+                    // showing it immediately meant practical never displayed
+                    // a loading state at all, just silently swapped the
+                    // generic text for the AI-generated one once it arrived.
+                    // Loading now always wins first, on both axes, so the
+                    // fallback only ever appears once the guide call has
+                    // genuinely finished (and failed to produce anything).
+                    if (guideLoading) {
                       return <p className="text-xs text-secondary leading-relaxed">Loading guidance…</p>
                     }
+                    const levelDescription = guideStatements[l - 1] ?? (!isKnowledge ? LEVEL_DESCRIPTIONS[l] : undefined)
                     return (
                       levelDescription && (
                         <p className="text-xs text-secondary leading-relaxed">{levelDescription}</p>
@@ -227,12 +245,25 @@ export default function SelfAssessSection({ skill, user, axis = 'practical', cur
       </div>
 
       {!isKnowledge && (
-        <EvidenceFields
-          evidenceUrl={evidenceUrl}
-          onEvidenceUrlChange={setEvidenceUrl}
-          files={evidenceFiles}
-          onFilesChange={setEvidenceFiles}
-        />
+        <div>
+          <label className="flex items-center gap-2 text-sm text-secondary">
+            <input
+              type="checkbox"
+              checked={showEvidence}
+              onChange={(e) => setShowEvidence(e.target.checked)}
+              className="rounded border-hairline"
+            />
+            Provide evidence
+          </label>
+          {showEvidence && (
+            <EvidenceFields
+              evidenceUrl={evidenceUrl}
+              onEvidenceUrlChange={setEvidenceUrl}
+              files={evidenceFiles}
+              onFilesChange={setEvidenceFiles}
+            />
+          )}
+        </div>
       )}
 
       {!isKnowledge && (
@@ -281,13 +312,25 @@ export default function SelfAssessSection({ skill, user, axis = 'practical', cur
 
       {error && <p className="text-sm text-red-700">{error}</p>}
 
-      <button
-        type="submit"
-        disabled={saving}
-        className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-      >
-        {saving ? 'Saving…' : 'Save self-assessment'}
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={saving}
+          className="flex-1 rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+        >
+          {saving ? 'Saving…' : submitLabel}
+        </button>
+        {secondaryAction && (
+          <button
+            type="button"
+            onClick={secondaryAction.onClick}
+            disabled={saving}
+            className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
+          >
+            {secondaryAction.label}
+          </button>
+        )}
+      </div>
     </form>
   )
 }
