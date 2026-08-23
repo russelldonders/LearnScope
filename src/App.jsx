@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { PendingActionsProvider } from './context/PendingActionsContext'
 import ProtectedRoute from './components/ProtectedRoute'
+import PlatformAdminRoute from './components/PlatformAdminRoute'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
@@ -26,6 +27,11 @@ import CourseDetail from './pages/CourseDetail'
 import CourseLearn from './pages/CourseLearn'
 import Learning from './pages/Learning'
 import ValidateRequest from './pages/ValidateRequest'
+import AdminUsers from './pages/admin/AdminUsers'
+import AdminProviders from './pages/admin/AdminProviders'
+import AdminCatalogue from './pages/admin/AdminCatalogue'
+import AdminSkills from './pages/admin/AdminSkills'
+import AdminTags from './pages/admin/AdminTags'
 
 function App() {
   return (
@@ -174,6 +180,46 @@ function App() {
               <ProtectedRoute>
                 <ValidateRequest />
               </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <PlatformAdminRoute>
+                <AdminUsers />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/providers"
+            element={
+              <PlatformAdminRoute>
+                <AdminProviders />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/catalogue"
+            element={
+              <PlatformAdminRoute>
+                <AdminCatalogue />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/skills"
+            element={
+              <PlatformAdminRoute>
+                <AdminSkills />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/tags"
+            element={
+              <PlatformAdminRoute>
+                <AdminTags />
+              </PlatformAdminRoute>
             }
           />
           <Route path="*" element={<Navigate to="/" replace />} />

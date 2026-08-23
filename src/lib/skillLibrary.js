@@ -1,9 +1,12 @@
 import { supabase } from './supabaseClient'
 
+// Learner-facing search: deactivated entries (platform-admin moderation,
+// see AdminSkills) shouldn't be findable/reusable here.
 export async function listLibrarySkills() {
   const { data, error } = await supabase
     .from('skill_library')
     .select('id, name, category, description, is_private')
+    .eq('status', 'active')
     .order('name')
     .limit(500)
   if (error) throw error
@@ -51,6 +54,7 @@ export async function findOrCreateLibrarySkill(name, category, userId, isPrivate
     .from('skill_library')
     .select('id')
     .ilike('name', trimmed)
+    .eq('status', 'active')
     .limit(1)
     .maybeSingle()
   if (existing) return existing.id
@@ -62,13 +66,21 @@ export async function findOrCreateLibrarySkill(name, category, userId, isPrivate
     .single()
   if (error) {
     if (error.code === '23505') {
+      // Re-apply the same active-only filter as the initial lookup above --
+      // without it, a name collision with a platform-admin-deactivated
+      // entry (0066) would silently resolve to and reuse that moderated
+      // row, bypassing deactivation entirely.
       const { data: retry } = await supabase
         .from('skill_library')
         .select('id')
         .ilike('name', trimmed)
+        .eq('status', 'active')
         .limit(1)
         .maybeSingle()
       if (retry) return retry.id
+      throw new Error(
+        `A skill named "${trimmed}" already exists but has been deactivated. Contact support if you believe this is a mistake.`
+      )
     }
     throw error
   }

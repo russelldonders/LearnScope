@@ -20,7 +20,7 @@ const MENU_ITEMS = [
 ]
 
 export default function AppHeader() {
-  const { signOut, user } = useAuth()
+  const { signOut, user, isPlatformAdmin } = useAuth()
   const { pendingActionCount } = usePendingActions()
   const location = useLocation()
   const [avatarUrl, setAvatarUrl] = useState(null)
@@ -108,6 +108,15 @@ export default function AppHeader() {
                       {item.label}
                     </Link>
                   ))}
+                  {isPlatformAdmin && (
+                    <Link
+                      to="/admin"
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-4 py-2 text-sm text-ink hover:bg-paper"
+                    >
+                      Platform console
+                    </Link>
+                  )}
                   <div className="my-1 border-t border-hairline" />
                   <button
                     type="button"

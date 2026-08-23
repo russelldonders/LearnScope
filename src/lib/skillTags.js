@@ -1,7 +1,14 @@
 import { supabase } from './supabaseClient'
 
+// Learner-facing: excludes tags a platform admin has blacklisted (see
+// AdminTags) so they can't be picked or suggested for new skills.
 export async function listTags() {
-  const { data, error } = await supabase.from('tags').select('id, name').order('name').limit(500)
+  const { data, error } = await supabase
+    .from('tags')
+    .select('id, name')
+    .eq('is_blacklisted', false)
+    .order('name')
+    .limit(500)
   if (error) throw error
   return data ?? []
 }
@@ -14,6 +21,7 @@ export async function findOrCreateTag(name, userId) {
     .from('tags')
     .select('id')
     .ilike('name', trimmed)
+    .eq('is_blacklisted', false)
     .limit(1)
     .maybeSingle()
   if (existing) return existing.id
@@ -25,13 +33,21 @@ export async function findOrCreateTag(name, userId) {
     .single()
   if (error) {
     if (error.code === '23505') {
+      // Re-apply the same not-blacklisted filter as the initial lookup
+      // above -- without it, a name collision with a platform-admin-
+      // blacklisted tag (0066) would silently resolve to and reuse that
+      // moderated row, bypassing the blacklist entirely.
       const { data: retry } = await supabase
         .from('tags')
         .select('id')
         .ilike('name', trimmed)
+        .eq('is_blacklisted', false)
         .limit(1)
         .maybeSingle()
       if (retry) return retry.id
+      throw new Error(
+        `The tag "${trimmed}" already exists but has been blacklisted. Contact support if you believe this is a mistake.`
+      )
     }
     throw error
   }

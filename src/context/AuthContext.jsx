@@ -10,6 +10,11 @@ export function AuthProvider({ children }) {
   // null = not yet known, true/false = known. Only re-checked when the
   // signed-in user actually changes, not on every token refresh.
   const [needsOnboarding, setNeedsOnboarding] = useState(null)
+  // Same null-until-known pattern as needsOnboarding -- PlatformAdminRoute
+  // needs to distinguish "not yet checked" from "checked, not an admin" so
+  // it doesn't redirect an actual admin away before the check resolves.
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(null)
+  const [organisationMemberships, setOrganisationMemberships] = useState([])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -41,6 +46,25 @@ export function AuthProvider({ children }) {
       })
   }, [userId])
 
+  useEffect(() => {
+    if (!userId) {
+      setIsPlatformAdmin(null)
+      setOrganisationMemberships([])
+      return
+    }
+    supabase
+      .from('platform_admins')
+      .select('user_id')
+      .eq('user_id', userId)
+      .maybeSingle()
+      .then(({ data, error }) => setIsPlatformAdmin(!error && Boolean(data)))
+    supabase
+      .from('organisation_members')
+      .select('organisation_id, role')
+      .eq('user_id', userId)
+      .then(({ data, error }) => setOrganisationMemberships(!error && data ? data : []))
+  }, [userId])
+
   async function markOnboardingComplete() {
     if (!userId) return { error: null }
     const { error } = await supabase
@@ -56,6 +80,8 @@ export function AuthProvider({ children }) {
     user: session?.user ?? null,
     loading,
     needsOnboarding,
+    isPlatformAdmin,
+    organisationMemberships,
     markOnboardingComplete,
     // Carries a pending rate-invite code through as a query param on the
     // confirmation-email redirect, rather than relying solely on

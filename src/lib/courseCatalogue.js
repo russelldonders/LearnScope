@@ -16,17 +16,31 @@ function mapCatalogueCourse(course) {
   }
 }
 
+// Learner-facing browse: only approved entries. RLS already scopes what a
+// non-admin/non-org-member can see (0066), but filtering explicitly here
+// keeps a platform admin's own normal browsing from surfacing every other
+// provider's drafts/pending entries too (RLS lets them see those since
+// they're an admin, but this view isn't the moderation queue).
 export async function listCatalogueCourses() {
-  const { data, error } = await supabase.from('course_catalogue').select(CATALOGUE_SELECT).order('name')
+  const { data, error } = await supabase
+    .from('course_catalogue')
+    .select(CATALOGUE_SELECT)
+    .eq('status', 'approved')
+    .order('name')
   if (error) throw error
   return (data ?? []).map(mapCatalogueCourse)
 }
 
+// Same approved-only scoping as listCatalogueCourses, for the same
+// defence-in-depth reason: RLS (0066) already restricts a non-admin/
+// non-org-member caller to approved rows, but filtering explicitly here
+// keeps this learner-facing detail lookup from depending solely on RLS.
 export async function getCatalogueCourse(id) {
   const { data, error } = await supabase
     .from('course_catalogue')
     .select(CATALOGUE_SELECT)
     .eq('id', id)
+    .eq('status', 'approved')
     .maybeSingle()
   if (error) throw error
   return data ? mapCatalogueCourse(data) : null
