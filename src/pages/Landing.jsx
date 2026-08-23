@@ -49,8 +49,8 @@ export default function Landing() {
             Track the skills you're growing, for life.
           </h1>
           <p className="text-secondary text-lg max-w-xl mx-auto mt-4">
-            Log what you know, how proficient you are, and the training or experience behind it —
-            shown as growth rings, not progress bars.
+            Skills, experience, learning and the evidence behind them — recorded with real dates
+            and shown as growth rings, not progress bars. It's your record, not your employer's.
           </p>
           <div className="flex items-center justify-center gap-3 mt-8">
             <Link
@@ -75,8 +75,42 @@ export default function Landing() {
             ))}
           </div>
           <p className="text-center text-secondary text-sm mt-6 max-w-md mx-auto">
-            Every skill grows one ring at a time — from Seedling to Flourishing.
+            Every skill grows one ring at a time — from your first attempts to raising the
+            standard for others.
           </p>
+        </section>
+
+        <section className="py-12 border-t border-hairline">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="bg-card border border-hairline rounded-lg p-6">
+              <h3 className="font-display text-lg text-ink mb-1">A real history, not a snapshot</h3>
+              <p className="text-sm text-secondary">
+                Proficiency, courses and achievements keep the date they actually happened, so you
+                can see how you got here — not just where you are now.
+              </p>
+            </div>
+            <div className="bg-card border border-hairline rounded-lg p-6">
+              <h3 className="font-display text-lg text-ink mb-1">Evidence, not just claims</h3>
+              <p className="text-sm text-secondary">
+                Self-assessments, courses, peer ratings and formal validations each carry their own
+                weight — a skill you've proven looks different from one you've only logged.
+              </p>
+            </div>
+            <div className="bg-card border border-hairline rounded-lg p-6">
+              <h3 className="font-display text-lg text-ink mb-1">Your whole development story</h3>
+              <p className="text-sm text-secondary">
+                Employment and education, courses and training, and the skills tied to each one —
+                connected in one record instead of scattered across CVs and certificates.
+              </p>
+            </div>
+            <div className="bg-card border border-hairline rounded-lg p-6">
+              <h3 className="font-display text-lg text-ink mb-1">You control who sees it</h3>
+              <p className="text-sm text-secondary">
+                Nothing is shared with an employer, recruiter or connection unless you explicitly
+                allow it.
+              </p>
+            </div>
+          </div>
         </section>
       </main>
     </div>
