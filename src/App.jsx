@@ -17,6 +17,7 @@ import ExperienceDetail from './pages/ExperienceDetail'
 import Profile from './pages/Profile'
 import ProfilePrivacy from './pages/ProfilePrivacy'
 import ProfileImport from './pages/ProfileImport'
+import ProfileExport from './pages/ProfileExport'
 import Rate from './pages/Rate'
 import Connections from './pages/Connections'
 import SkillsProfile from './pages/SkillsProfile'
@@ -108,6 +109,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ProfileImport />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile/export"
+            element={
+              <ProtectedRoute>
+                <ProfileExport />
               </ProtectedRoute>
             }
           />
