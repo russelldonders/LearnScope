@@ -266,6 +266,13 @@ export default function SkillDetail() {
   // shown in the level bar's colour gradient between "confirmed" and
   // "self-assessed since" (see the milestoneLevel prop below).
   const confirmedKnowledgeLevel = skill?.knowledge_level ?? null
+  // Neither tool has anything to pitch a level at yet -- no self-assessment,
+  // no prior confirmation. Rather than silently defaulting to "Unfamiliar"
+  // (which would test someone who's actually advanced as a total beginner),
+  // the quiz/interview switch into calibration mode: find the level from
+  // scratch instead of confirming an assumed one. See ConfirmingBaselineQuizModal
+  // and InterviewModal.
+  const knowledgeCalibrating = latestKnowledgeAssessment == null && confirmedKnowledgeLevel == null
   const knowledgeMilestone =
     confirmedKnowledgeLevel && displayedKnowledgeLevel && confirmedKnowledgeLevel < displayedKnowledgeLevel
       ? confirmedKnowledgeLevel
@@ -745,6 +752,7 @@ export default function SkillDetail() {
                 user={user}
                 actor={{ name: assessorName, email: user.email }}
                 latestKnowledgeAssessment={latestKnowledgeAssessment}
+                calibrating={knowledgeCalibrating}
                 onClose={() => setConfirmingBaselineOpen(false)}
                 onConfirmed={() => {
                   loadHistory()
@@ -760,6 +768,7 @@ export default function SkillDetail() {
                 user={user}
                 actor={{ name: assessorName, email: user.email }}
                 latestKnowledgeAssessment={latestKnowledgeAssessment}
+                calibrating={knowledgeCalibrating}
                 onClose={() => setInterviewOpen(false)}
                 onConfirmed={() => {
                   loadHistory()

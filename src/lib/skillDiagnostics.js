@@ -93,7 +93,9 @@ export async function saveDiagnosticAttempt({
 }
 
 // Server decides cache-hit vs. generate, same reasoning as the quiz above.
-export async function fetchOrGenerateInterviewPlan({ skill, level }) {
+// calibrate=true (no level) produces a plan spanning the full 1-5 range
+// instead of one pitched at a single level -- see api/generate-interview-plan.js.
+export async function fetchOrGenerateInterviewPlan({ skill, level, calibrate = false }) {
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -103,7 +105,12 @@ export async function fetchOrGenerateInterviewPlan({ skill, level }) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify({ skillName: skill.name, level, librarySkillId: skill.library_skill_id ?? null }),
+    body: JSON.stringify({
+      skillName: skill.name,
+      level,
+      calibrate,
+      librarySkillId: skill.library_skill_id ?? null,
+    }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
@@ -117,7 +124,7 @@ export async function fetchOrGenerateInterviewPlan({ skill, level }) {
 // natively -- alternating user/assistant turns starting with the learner's
 // first answer, since the plan's opening question is shown to the learner
 // directly from cached content rather than round-tripping through the model).
-export async function sendInterviewTurn({ skillName, level, plan, transcript }) {
+export async function sendInterviewTurn({ skillName, level, calibrate = false, plan, transcript }) {
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -127,7 +134,7 @@ export async function sendInterviewTurn({ skillName, level, plan, transcript }) 
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify({ skillName, level, plan, transcript }),
+    body: JSON.stringify({ skillName, level, calibrate, plan, transcript }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))

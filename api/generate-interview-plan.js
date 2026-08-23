@@ -43,19 +43,24 @@ export default async function handler(req, res) {
     return
   }
 
-  const { skillName, level, librarySkillId } = req.body ?? {}
+  const { skillName, level, librarySkillId, calibrate } = req.body ?? {}
   if (!skillName || typeof skillName !== 'string') {
     res.status(400).json({ error: 'Missing skillName' })
     return
   }
-  if (!level || level < 1 || level > 5) {
+  if (!calibrate && (!level || level < 1 || level > 5)) {
     res.status(400).json({ error: 'Missing or invalid level' })
     return
   }
 
   const admin = supabaseAdmin()
 
-  if (librarySkillId) {
+  // Calibration plans span all 5 levels rather than being pitched at one, so
+  // they don't fit skill_diagnostic_content's per-level identity (level is
+  // NOT NULL there, see 0049) -- generated fresh each time rather than
+  // adding a schema carve-out for a mode that only fires once per skill,
+  // right before any knowledge signal exists at all.
+  if (!calibrate && librarySkillId) {
     const { data: cached } = await admin
       .from('skill_diagnostic_content')
       .select('id, content')
@@ -72,7 +77,14 @@ export default async function handler(req, res) {
   }
 
   const levelLabel = KNOWLEDGE_LEVEL_LABELS[level]
-  const prompt = `You are preparing a short conversational interview to verify whether someone's theoretical knowledge of "${skillName.trim()}" genuinely reaches the "${levelLabel}" level (level ${level} of 5 on this scale: 1 Unfamiliar, 2 Aware, 3 Familiar, 4 Knowledgeable, 5 Deep understanding).
+  const prompt = calibrate
+    ? `You are preparing a short conversational interview to find out, from scratch, what level someone's theoretical knowledge of "${skillName.trim()}" genuinely reaches on this scale: 1 Unfamiliar, 2 Aware, 3 Familiar, 4 Knowledgeable, 5 Deep understanding. Nothing is known about their level yet -- they haven't self-assessed or been checked before -- so this must be able to distinguish anywhere across the full range, not just confirm one assumed level.
+
+Produce:
+- openingQuestion: a single warm, conversational opening question (1-2 sentences) that gets them talking about their understanding of this skill, pitched broadly enough to work whether they turn out to be a complete beginner or deeply experienced.
+- topics: 4-6 short topic/concept labels, ordered roughly from foundational to advanced, that together help place someone anywhere on the 1-5 scale.
+- rubric: 2-4 sentences describing what distinguishes each rough band (beginner/intermediate/advanced) of answer, for an interviewer to judge against.`
+    : `You are preparing a short conversational interview to verify whether someone's theoretical knowledge of "${skillName.trim()}" genuinely reaches the "${levelLabel}" level (level ${level} of 5 on this scale: 1 Unfamiliar, 2 Aware, 3 Familiar, 4 Knowledgeable, 5 Deep understanding).
 
 Produce:
 - openingQuestion: a single warm, conversational opening question (1-2 sentences) that gets them talking about their understanding of this skill.
@@ -107,7 +119,7 @@ Pitch everything specifically at level ${level} ("${levelLabel}") -- not easier,
       rubric: String(plan.rubric ?? '').slice(0, 1000),
     }
 
-    if (!librarySkillId) {
+    if (!librarySkillId || calibrate) {
       res.status(200).json({ diagnosticContentId: null, content })
       return
     }

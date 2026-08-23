@@ -13,8 +13,23 @@ const SpeechRecognitionAPI =
 // free-response back-and-forth instead of fixed questions. See
 // skill_diagnostic_content's diagnostic_type check constraint (migration
 // 0049), which reserved 'interview' alongside 'quiz' for exactly this.
-export default function InterviewModal({ skill, user, actor, latestKnowledgeAssessment, onClose, onConfirmed }) {
-  const calibratedLevel = latestKnowledgeAssessment?.level ?? skill.knowledge_level ?? 1
+//
+// calibrating (from SkillDetail.jsx: no self-assessment and no prior
+// confirmation exist to pitch at) switches this from "confirm the level I
+// was pitched at" to "find the level from scratch" -- the model has no fixed
+// ceiling and adapts within the single conversation instead, rather than the
+// quiz's round-by-round bracket walk (a back-and-forth naturally reads its
+// own difficulty as it goes, so one pass is enough here).
+export default function InterviewModal({
+  skill,
+  user,
+  actor,
+  latestKnowledgeAssessment,
+  calibrating = false,
+  onClose,
+  onConfirmed,
+}) {
+  const calibratedLevel = calibrating ? null : (latestKnowledgeAssessment?.level ?? skill.knowledge_level ?? 1)
 
   const [diagnosticContentId, setDiagnosticContentId] = useState(null)
   const [plan, setPlan] = useState(null)
@@ -33,7 +48,7 @@ export default function InterviewModal({ skill, user, actor, latestKnowledgeAsse
   const recognitionRef = useRef(null)
 
   useEffect(() => {
-    fetchOrGenerateInterviewPlan({ skill, level: calibratedLevel })
+    fetchOrGenerateInterviewPlan({ skill, level: calibratedLevel, calibrate: calibrating })
       .then(({ diagnosticContentId: id, content }) => {
         if (!content?.openingQuestion) throw new Error("Couldn't prepare an interview for this skill.")
         setDiagnosticContentId(id)
@@ -105,6 +120,7 @@ export default function InterviewModal({ skill, user, actor, latestKnowledgeAsse
       const result = await sendInterviewTurn({
         skillName: skill.name,
         level: calibratedLevel,
+        calibrate: calibrating,
         plan,
         transcript: apiTranscript,
       })
@@ -150,7 +166,9 @@ export default function InterviewModal({ skill, user, actor, latestKnowledgeAsse
         level: confirmedLevel,
         axis: 'knowledge',
         source: 'diagnostic_confirmed',
-        comments: `Confirmed via conversational interview: ${reasoning}`,
+        comments: calibrating
+          ? `Calibrated via conversational interview -- no self-assessment existed to pitch at, so this found the level from scratch: ${reasoning}`
+          : `Confirmed via conversational interview: ${reasoning}`,
       })
       if (assessError) throw assessError
 
@@ -176,7 +194,7 @@ export default function InterviewModal({ skill, user, actor, latestKnowledgeAsse
           <div>
             <h2 className="font-display text-2xl text-ink">Interview me</h2>
             <p className="text-sm text-secondary">
-              {skill.name} · pitched at {KNOWLEDGE_LEVEL_LABELS[calibratedLevel]}
+              {skill.name} · {calibrating ? 'finding your level' : `pitched at ${KNOWLEDGE_LEVEL_LABELS[calibratedLevel]}`}
             </p>
           </div>
           {typeof window !== 'undefined' && window.speechSynthesis && (
