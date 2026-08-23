@@ -41,7 +41,7 @@ Don't implement these unless explicitly requested. Let future possibilities infl
 
 ## 6. Architecture
 
-React 19 + Vite 8, client-rendered SPA (`react-router-dom`). JavaScript/JSX — not TypeScript. Database: Supabase/Postgres, RLS on every table. Auth: Supabase Auth, email/password with confirmation. Hosting: Vercel. Backend: static app plus limited serverless functions under `api/`. Styling: Tailwind CSS v4 via `@theme` in `src/index.css`. Shared UI: lightweight shared components, no formal design-system package. Package manager: npm. No test framework configured. Migrations: sequential hand-written SQL in `supabase/migrations/`, applied manually by the project owner.
+React 19 + Vite 8, client-rendered SPA (`react-router-dom`). JavaScript/JSX — not TypeScript. Database: Supabase/Postgres, RLS on every table. Auth: Supabase Auth, email/password with confirmation. Hosting: Vercel. Backend: static app plus limited serverless functions under `api/`. Styling: Tailwind CSS v4 via `@theme` in `src/index.css`. Shared UI: lightweight shared components, no formal design-system package. Package manager: npm. No test framework configured. Migrations: sequential hand-written SQL in `supabase/migrations/` via the Supabase CLI — Claude may push to Staging; Production stays manual (see §10).
 
 **Direction** — prefer a modular monolith unless there's a demonstrated technical, scaling, security or deployment reason to separate a capability. Different customer types alone don't justify microservices; learners, organisations, training providers, coaches and other experiences should reuse shared domain capabilities. Keep sensible module/domain boundaries so capabilities could be separated later if genuinely required. Prefer simple architecture over speculative abstraction.
 
@@ -80,13 +80,25 @@ No generated database types, no automated tests. Update this map only when imple
 
 ## 10. Database Changes
 
-Before modifying the schema: inspect relevant existing migrations/usage; determine whether an existing concept can support the requirement; consider existing data, historical integrity, RLS, backwards compatibility, and rollback.
+Before modifying the schema: inspect relevant existing migrations/usage; determine whether an existing concept can support the requirement; consider existing data, historical integrity, RLS, backwards compatibility, and rollback. Never weaken RLS simply to make functionality work.
 
-Use the existing sequential SQL migration approach. Never manually modify production schema as part of implementation, and never weaken RLS simply to make functionality work.
+For destructive/potentially destructive migrations, explicitly identify: affected tables, affected data, data-loss risk, migration approach, rollback strategy. Ask before running any destructive migration on Staging.
 
-For destructive/potentially destructive migrations, explicitly identify: affected tables, affected data, data-loss risk, migration approach, rollback strategy.
+**Environments**: Local = default dev. Staging = Claude may apply migrations (workflow below). Production = never modify without explicit approval for that specific deployment.
 
-Production migration execution remains a human-controlled action unless explicitly changed by the project owner.
+**CLI**: `npx supabase ...` (project-local). Staging project ref: `ussqcmfxbbtncjvepuyn` — before any remote DB command, confirm the linked project matches this ref; if uncertain, stop and ask.
+
+**Migration workflow**, every schema change:
+1. New file in `supabase/migrations/`; never edit an already-applied one.
+2. `npx supabase db reset` locally — proceed only if it succeeds.
+3. `npx supabase db push` to apply to Staging.
+4. Verify it applied; regenerate `stage_bootstrap_consolidated.sql` (§17).
+
+All persistent schema changes go through a migration file.
+
+**Never automatically**, Staging or Production: modify Production, reset a remote database, repair remote migration history, drop tables/columns containing data, run destructive bulk DELETE/UPDATE, weaken/disable RLS, or use production credentials to bypass this workflow.
+
+Production migration execution remains human-controlled unless explicitly changed by the project owner.
 
 ## 11. UI / UX
 
@@ -130,8 +142,9 @@ If an action could reasonably cause production data loss or significant security
 * Development: `npm run dev`
 * Lint: `npm run lint`
 * Build: `npm run build`
+* Migrate Staging: `npx supabase db reset` then `npx supabase db push` (see §10)
 
-Not available: type-check (JS project, n/a), automated tests (no framework configured), automated migrations (none — applied manually by the project owner via the next sequential SQL file in `supabase/migrations/`). Never invent a command.
+Not available: type-check (JS project, n/a), automated tests (no framework configured), automated Production migrations (manual via SQL editor, see §17). Never invent a command.
 
 ## 16. Definition of Done
 
