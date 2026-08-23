@@ -67,7 +67,7 @@ export default function SkillCard({ skill, onEdit }) {
           </p>
         )}
         {(displayedLevel || skill.knowledge_level) && (
-          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-secondary mt-1">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-secondary mt-1">
             {displayedLevel && (
               <span className="flex items-center gap-1.5">
                 <GrowthRing level={displayedLevel} size={16} color={TRUST_STATUS_COLORS[practicalTrust]} />
@@ -84,7 +84,7 @@ export default function SkillCard({ skill, onEdit }) {
                 {KNOWLEDGE_LEVEL_LABELS[skill.knowledge_level]}
               </span>
             )}
-          </p>
+          </div>
         )}
         {/* Self-assessed is the common case on this grid (almost every
             tracked skill has one) so it reads as noise on every card here --
