@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
-import { listConnections, listConnectionsActivity } from '../lib/connections'
+import { listConnections, listConnectionsActivity, listIncomingRateInvites, getProfiles } from '../lib/connections'
+import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
 import AppHeader from '../components/AppHeader'
 import RecordActivitySection from '../components/RecordActivitySection'
 import GrowthRing from '../components/GrowthRing'
@@ -12,6 +13,7 @@ import { LEVEL_LABELS } from '../lib/levels'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
 import { isDiagnosticStatement } from '../lib/xapiStatement'
+import { isSelfAssessmentDue, todayDateString } from '../lib/checkin'
 
 async function countRows(table, userId) {
   const { count } = await supabase
@@ -46,6 +48,81 @@ async function loadConnectionsActivity() {
   } catch {
     return []
   }
+}
+
+// How far ahead a due date has to be before it's worth interrupting the
+// dashboard with -- anything already overdue (next_checkin_date/target_date
+// in the past) is always included regardless of this window, since that's
+// even more urgent than "coming up soon".
+const REMINDER_WINDOW_DAYS = 14
+
+function reminderCutoff() {
+  return new Date(Date.now() + REMINDER_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+}
+
+// Skills with a scheduled self-assessment check-in that's already due or
+// coming up soon -- see isSelfAssessmentDue/next_checkin_date (SkillCard
+// shows the same "due" flag per-card on the skills grid; this surfaces it
+// centrally instead of requiring a learner to notice it card-by-card).
+async function loadUpcomingSelfAssessments(userId) {
+  const { data, error } = await supabase
+    .from('skills')
+    .select('id, name, next_checkin_date')
+    .eq('user_id', userId)
+    .not('next_checkin_date', 'is', null)
+    .lte('next_checkin_date', reminderCutoff())
+    .order('next_checkin_date', { ascending: true })
+  if (error) return []
+  return data ?? []
+}
+
+// Only the most recent target per skill -- a skill can accumulate several
+// targets over time (same "latest wins" pattern as latestTargetLevelBySkillId
+// in SkillsSection.jsx), so an old, already-superseded target_date shouldn't
+// still nag once a newer target has replaced it.
+async function loadUpcomingTargets(userId) {
+  const { data, error } = await supabase
+    .from('skill_targets')
+    .select('id, skill_id, target_level, target_date, created_at, skills(name)')
+    .eq('user_id', userId)
+    .not('target_date', 'is', null)
+    .order('created_at', { ascending: false })
+  if (error) return []
+  const latestBySkill = new Map()
+  for (const t of data ?? []) {
+    if (!latestBySkill.has(t.skill_id)) latestBySkill.set(t.skill_id, t)
+  }
+  const cutoff = reminderCutoff()
+  return [...latestBySkill.values()]
+    .filter((t) => t.target_date <= cutoff)
+    .sort((a, b) => a.target_date.localeCompare(b.target_date))
+}
+
+// "Reviews of others" -- tasks waiting on this learner to look at someone
+// else's skill, not their own: an invite to rate a connection's skill, or a
+// validation request naming them as the validator. Reuses the exact same
+// lib functions the Connections page's own "Invitations to rate" / "Requests
+// to validate" sections already fetch (see Connections.jsx) rather than a
+// second implementation of the same query.
+async function loadPendingReviewTasks(userId) {
+  const [rateInvites, validationRequests] = await Promise.all([
+    listIncomingRateInvites(),
+    listIncomingPendingValidationRequests(userId),
+  ])
+  const profiles = await getProfiles(validationRequests.map((r) => r.requester_id))
+  const rateTasks = rateInvites.map((invite) => ({
+    key: `rate-${invite.id}`,
+    label: `Rate ${invite.inviter_name || 'someone'}'s "${invite.skill_name}"`,
+    date: invite.created_at,
+    to: `/rate/${invite.share_code}`,
+  }))
+  const validationTasks = validationRequests.map((r) => ({
+    key: `validate-${r.id}`,
+    label: `Confirm ${profiles[r.requester_id]?.name || 'someone'} reached ${LEVEL_LABELS[r.target_level]} in "${r.skills?.name}"`,
+    date: r.created_at,
+    to: `/validate-request/${r.id}`,
+  }))
+  return [...rateTasks, ...validationTasks].sort((a, b) => new Date(b.date) - new Date(a.date))
 }
 
 const RECENT_GROWTH_WINDOW_DAYS = 28
@@ -206,6 +283,9 @@ export default function Dashboard() {
   const [upNext, setUpNext] = useState([])
   const [currentLearning, setCurrentLearning] = useState([])
   const [connectionsActivity, setConnectionsActivity] = useState([])
+  const [upcomingSelfAssessments, setUpcomingSelfAssessments] = useState([])
+  const [upcomingTargets, setUpcomingTargets] = useState([])
+  const [pendingReviewTasks, setPendingReviewTasks] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -214,22 +294,39 @@ export default function Dashboard() {
 
   async function loadSummary() {
     setLoading(true)
-    const [skills, courses, experience, connections, growth, upNextRecommendations, learning, activity] =
-      await Promise.all([
-        countRows('skills', user.id),
-        countRows('courses', user.id),
-        countRows('experience', user.id),
-        listConnections(user.id).then((c) => c.length),
-        loadRecentGrowth(user.id),
-        loadUpNextRecommendations(user.id),
-        loadCurrentLearning(user.id),
-        loadConnectionsActivity(),
-      ])
+    const [
+      skills,
+      courses,
+      experience,
+      connections,
+      growth,
+      upNextRecommendations,
+      learning,
+      activity,
+      selfAssessmentsDue,
+      targetsDue,
+      reviewTasks,
+    ] = await Promise.all([
+      countRows('skills', user.id),
+      countRows('courses', user.id),
+      countRows('experience', user.id),
+      listConnections(user.id).then((c) => c.length),
+      loadRecentGrowth(user.id),
+      loadUpNextRecommendations(user.id),
+      loadCurrentLearning(user.id),
+      loadConnectionsActivity(),
+      loadUpcomingSelfAssessments(user.id),
+      loadUpcomingTargets(user.id),
+      loadPendingReviewTasks(user.id),
+    ])
     setCounts({ skills, courses, experience, connections })
     setRecentGrowth(growth)
     setUpNext(upNextRecommendations)
     setCurrentLearning(learning)
     setConnectionsActivity(activity)
+    setUpcomingSelfAssessments(selfAssessmentsDue)
+    setUpcomingTargets(targetsDue)
+    setPendingReviewTasks(reviewTasks)
     setLoading(false)
   }
 
@@ -287,6 +384,53 @@ export default function Dashboard() {
           )}
         </div>
 
+        {!loading &&
+          (upcomingSelfAssessments.length > 0 || upcomingTargets.length > 0 || pendingReviewTasks.length > 0) && (
+            <div>
+              <h2 className="font-display text-xl text-ink mb-6">Needs your attention</h2>
+              <div className="space-y-6">
+                {upcomingSelfAssessments.length > 0 && (
+                  <ReminderGroup title="Self-assessments due">
+                    {upcomingSelfAssessments.map((s) => (
+                      <ReminderRow
+                        key={s.id}
+                        to={`/skills/${s.id}`}
+                        label={s.name}
+                        dateLabel={new Date(`${s.next_checkin_date}T00:00:00`).toLocaleDateString()}
+                        overdue={isSelfAssessmentDue(s.next_checkin_date)}
+                      />
+                    ))}
+                  </ReminderGroup>
+                )}
+                {upcomingTargets.length > 0 && (
+                  <ReminderGroup title="Target dates">
+                    {upcomingTargets.map((t) => (
+                      <ReminderRow
+                        key={t.id}
+                        to={`/skills/${t.skill_id}`}
+                        label={`${t.skills?.name ?? 'Skill'} → ${LEVEL_LABELS[t.target_level]}`}
+                        dateLabel={new Date(`${t.target_date}T00:00:00`).toLocaleDateString()}
+                        overdue={t.target_date <= todayDateString()}
+                      />
+                    ))}
+                  </ReminderGroup>
+                )}
+                {pendingReviewTasks.length > 0 && (
+                  <ReminderGroup title="Waiting on your review">
+                    {pendingReviewTasks.map((task) => (
+                      <ReminderRow
+                        key={task.key}
+                        to={task.to}
+                        label={task.label}
+                        dateLabel={new Date(task.date).toLocaleDateString()}
+                      />
+                    ))}
+                  </ReminderGroup>
+                )}
+              </div>
+            </div>
+          )}
+
         {!loading && upNext.length > 0 && (
           <div>
             <h2 className="font-display text-xl text-ink mb-6">Up next</h2>
@@ -297,7 +441,7 @@ export default function Dashboard() {
         {!loading && currentLearning.length > 0 && (
           <div>
             <h2 className="font-display text-xl text-ink mb-6">Current learning</h2>
-            <CurrentLearningSlider courses={currentLearning} />
+            <CurrentLearningPanel courses={currentLearning} />
           </div>
         )}
 
@@ -520,34 +664,25 @@ function UpNextSlider({ recommendations }) {
   )
 }
 
-function CurrentLearningSlider({ courses }) {
-  const { scrollerRef, canScrollLeft, canScrollRight, scrollByPage } = useHorizontalScroller()
-
+function CurrentLearningPanel({ courses }) {
   return (
-    <div className="relative">
-      {canScrollLeft && <SliderArrow direction="left" onClick={() => scrollByPage(-1)} />}
-      <div
-        ref={scrollerRef}
-        className="scrollbar-hide flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 -mx-4 px-4 sm:mx-0 sm:px-0"
-      >
-        {courses.map((course) => (
-          <Link
-            key={course.id}
-            to={`/courses/${course.id}`}
-            state={{ backTo: '/dashboard', backLabel: 'Dashboard' }}
-            className="snap-start shrink-0 w-56 bg-card border border-hairline rounded-lg overflow-hidden hover:border-moss transition-colors"
-          >
-            <CourseThumbnail name={course.name} provider={course.provider} className="h-20 w-full" />
-            <div className="p-3">
-              <h3 className="font-display text-base text-ink truncate">{course.name}</h3>
-              <p className="font-mono text-xs text-secondary mt-1 truncate">
-                {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ') || 'In progress'}
-              </p>
-            </div>
-          </Link>
-        ))}
-      </div>
-      {canScrollRight && <SliderArrow direction="right" onClick={() => scrollByPage(1)} />}
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      {courses.map((course) => (
+        <Link
+          key={course.id}
+          to={`/courses/${course.id}`}
+          state={{ backTo: '/dashboard', backLabel: 'Dashboard' }}
+          className="bg-card border border-hairline rounded-lg overflow-hidden hover:border-moss transition-colors"
+        >
+          <CourseThumbnail name={course.name} provider={course.provider} className="h-20 w-full" />
+          <div className="p-3">
+            <h3 className="font-display text-base text-ink truncate">{course.name}</h3>
+            <p className="font-mono text-xs text-secondary mt-1 truncate">
+              {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ') || 'In progress'}
+            </p>
+          </div>
+        </Link>
+      ))}
     </div>
   )
 }
@@ -568,6 +703,27 @@ function GrowthArrow() {
       <path d="M5 12h14" />
       <path d="M13 6l6 6-6 6" />
     </svg>
+  )
+}
+
+function ReminderGroup({ title, children }) {
+  return (
+    <div>
+      <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">{title}</h3>
+      <div className="space-y-2">{children}</div>
+    </div>
+  )
+}
+
+function ReminderRow({ to, label, dateLabel, overdue = false }) {
+  return (
+    <Link
+      to={to}
+      className="flex items-center justify-between gap-3 bg-card border border-hairline rounded-lg px-4 py-3 hover:border-moss transition-colors"
+    >
+      <span className="text-sm text-ink truncate min-w-0">{label}</span>
+      <span className={`font-mono text-xs shrink-0 ${overdue ? 'text-gold' : 'text-secondary'}`}>{dateLabel}</span>
+    </Link>
   )
 }
 
