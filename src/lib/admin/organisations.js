@@ -45,5 +45,5 @@ export async function removeOrganisationMember(memberRowId) {
 // invite and re-verify the caller's org-admin/platform-admin authority
 // server-side (see api/org/invite-staff.js).
 export async function inviteOrganisationStaff(organisationId, email, role) {
-  return callAdminApi('/api/org/invite-staff', { organisationId, email, role })
+  return callAdminApi('inviteOrgStaff', { organisationId, email, role })
 }

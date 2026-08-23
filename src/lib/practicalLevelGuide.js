@@ -4,13 +4,13 @@ export async function generatePracticalLevelGuide(skillName) {
   const {
     data: { session },
   } = await supabase.auth.getSession()
-  const res = await fetch('/api/generate-practical-levels', {
+  const res = await fetch('/api/generate-level-guide', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify({ skillName }),
+    body: JSON.stringify({ skillName, axis: 'practical' }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))

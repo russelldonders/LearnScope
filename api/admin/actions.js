@@ -1,0 +1,240 @@
+import { verifySupabaseUser } from '../_lib/auth.js'
+import { supabaseAdmin } from '../_lib/supabaseAdmin.js'
+
+// Single dispatcher for every platform-admin/org-admin service-role action,
+// rather than one serverless function per action -- Vercel's Hobby plan
+// caps deployments at 12 serverless functions, and this project was
+// already at that cap before the admin console existed. Each action below
+// re-verifies the caller's authority server-side exactly as its own
+// function would have, since this route uses the service-role key and
+// bypasses RLS entirely.
+
+const PER_PAGE = 200
+const VALID_ORG_ROLES = ['admin', 'trainer']
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' })
+    return
+  }
+
+  const authHeader = req.headers.authorization
+  if (!authHeader?.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'Missing authorization' })
+    return
+  }
+
+  const caller = await verifySupabaseUser(authHeader.slice(7))
+  if (!caller) {
+    res.status(401).json({ error: 'Invalid or expired session' })
+    return
+  }
+
+  const { action, ...payload } = req.body ?? {}
+
+  try {
+    const admin = supabaseAdmin()
+    switch (action) {
+      case 'listUsers':
+        await listUsers(admin, caller, res)
+        return
+      case 'inviteUser':
+        await inviteUser(admin, caller, payload, res)
+        return
+      case 'setUserBlocked':
+        await setUserBlocked(admin, caller, payload, res)
+        return
+      case 'inviteOrgStaff':
+        await inviteOrgStaff(admin, caller, payload, res)
+        return
+      default:
+        res.status(400).json({ error: 'Unknown action' })
+    }
+  } catch (err) {
+    console.error(`admin/actions (${action}) error:`, err)
+    res.status(500).json({ error: err.message || 'Request failed.' })
+  }
+}
+
+async function isPlatformAdmin(admin, userId) {
+  const { data, error } = await admin.from('platform_admins').select('user_id').eq('user_id', userId).maybeSingle()
+  if (error) throw error
+  return Boolean(data)
+}
+
+// profiles has no email column (email lives on auth.users only), and the
+// client can't call auth.admin.listUsers itself -- so this listing has to
+// happen server-side either way. Doing the profiles/platform_admins join
+// here too, rather than adding a client-facing "platform admins can read
+// every profile" RLS policy, keeps that broader read grant out of the
+// standing permission model entirely.
+async function listUsers(admin, caller, res) {
+  if (!(await isPlatformAdmin(admin, caller.id))) {
+    res.status(403).json({ error: 'Platform admin access required' })
+    return
+  }
+
+  let page = 1
+  const users = []
+  while (true) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: PER_PAGE })
+    if (error) throw error
+    users.push(...data.users)
+    if (data.users.length < PER_PAGE) break
+    page += 1
+  }
+
+  const { data: profiles, error: profilesError } = await admin.from('profiles').select('id, full_name, account_status')
+  if (profilesError) throw profilesError
+  const profileById = new Map(profiles.map((p) => [p.id, p]))
+
+  const { data: adminRows, error: adminRowsError } = await admin.from('platform_admins').select('user_id')
+  if (adminRowsError) throw adminRowsError
+  const adminIds = new Set(adminRows.map((r) => r.user_id))
+
+  const result = users.map((u) => {
+    const profile = profileById.get(u.id)
+    return {
+      id: u.id,
+      email: u.email,
+      createdAt: u.created_at,
+      lastSignInAt: u.last_sign_in_at ?? null,
+      fullName: profile?.full_name ?? null,
+      accountStatus: profile?.account_status ?? 'active',
+      isPlatformAdmin: adminIds.has(u.id),
+    }
+  })
+
+  res.status(200).json({ users: result })
+}
+
+async function inviteUser(admin, caller, { email, grantPlatformAdmin }, res) {
+  if (!email || typeof email !== 'string') {
+    res.status(400).json({ error: 'Missing email' })
+    return
+  }
+
+  if (!(await isPlatformAdmin(admin, caller.id))) {
+    res.status(403).json({ error: 'Platform admin access required' })
+    return
+  }
+
+  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email.trim())
+  if (inviteError) throw inviteError
+
+  if (grantPlatformAdmin) {
+    const { error: grantError } = await admin
+      .from('platform_admins')
+      .insert({ user_id: invited.user.id, granted_by: caller.id })
+    if (grantError) throw grantError
+  }
+
+  res.status(200).json({ ok: true, userId: invited.user.id })
+}
+
+async function setUserBlocked(admin, caller, { userId, blocked }, res) {
+  if (!userId || typeof blocked !== 'boolean') {
+    res.status(400).json({ error: 'Missing userId or blocked' })
+    return
+  }
+
+  if (!(await isPlatformAdmin(admin, caller.id))) {
+    res.status(403).json({ error: 'Platform admin access required' })
+    return
+  }
+
+  if (blocked && userId === caller.id) {
+    res.status(400).json({ error: "You can't block your own account." })
+    return
+  }
+
+  // If the target is a platform admin, blocking them must not leave the
+  // console with no one left who can un-block anyone -- check whether any
+  // other platform admin is still unblocked before proceeding.
+  if (blocked) {
+    const { data: targetAdminRow, error: targetAdminError } = await admin
+      .from('platform_admins')
+      .select('user_id')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (targetAdminError) throw targetAdminError
+
+    if (targetAdminRow) {
+      const { data: allAdmins, error: allAdminsError } = await admin.from('platform_admins').select('user_id')
+      if (allAdminsError) throw allAdminsError
+
+      const otherAdminIds = allAdmins.map((a) => a.user_id).filter((id) => id !== userId)
+      let otherActiveAdminExists = false
+      if (otherAdminIds.length > 0) {
+        const { data: otherAdminProfiles, error: otherAdminProfilesError } = await admin
+          .from('profiles')
+          .select('id, account_status')
+          .in('id', otherAdminIds)
+        if (otherAdminProfilesError) throw otherAdminProfilesError
+        otherActiveAdminExists = otherAdminProfiles.some((p) => p.account_status !== 'blocked')
+      }
+
+      if (!otherActiveAdminExists) {
+        res.status(400).json({ error: 'Cannot block the last remaining platform admin.' })
+        return
+      }
+    }
+  }
+
+  // '876000h' (100 years) is the conventional "effectively permanent" ban
+  // used with Supabase's auth admin API; 'none' clears any active ban.
+  const { error: banError } = await admin.auth.admin.updateUserById(userId, {
+    ban_duration: blocked ? '876000h' : 'none',
+  })
+  if (banError) throw banError
+
+  // Mirrors the ban onto profiles.account_status so the console can show
+  // status without a second auth-admin round trip. The DB trigger from
+  // 0065 only allows this column to change via a platform admin (checked
+  // above) or a service-role caller (this one) -- never by the user
+  // themselves.
+  const { error: statusError } = await admin
+    .from('profiles')
+    .update({ account_status: blocked ? 'blocked' : 'active' })
+    .eq('id', userId)
+  if (statusError) throw statusError
+
+  res.status(200).json({ ok: true })
+}
+
+async function inviteOrgStaff(admin, caller, { organisationId, email, role }, res) {
+  if (!organisationId || !email || !VALID_ORG_ROLES.includes(role)) {
+    res.status(400).json({ error: 'Missing or invalid organisationId, email, or role' })
+    return
+  }
+
+  // Re-derive the caller's authority server-side -- platform admin, or an
+  // 'admin' member of this specific organisation -- never trust the
+  // client's claim about who they are.
+  if (!(await isPlatformAdmin(admin, caller.id))) {
+    const { data: memberRow, error: memberCheckError } = await admin
+      .from('organisation_members')
+      .select('role')
+      .eq('organisation_id', organisationId)
+      .eq('user_id', caller.id)
+      .maybeSingle()
+    if (memberCheckError) throw memberCheckError
+    if (!memberRow || memberRow.role !== 'admin') {
+      res.status(403).json({ error: 'Organisation admin access required' })
+      return
+    }
+  }
+
+  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email.trim())
+  if (inviteError) throw inviteError
+
+  const { error: memberInsertError } = await admin.from('organisation_members').insert({
+    organisation_id: organisationId,
+    user_id: invited.user.id,
+    role,
+    invited_by: caller.id,
+  })
+  if (memberInsertError) throw memberInsertError
+
+  res.status(200).json({ ok: true, userId: invited.user.id })
+}
