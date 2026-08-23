@@ -14,6 +14,7 @@ import { computeUpNextItems } from '../lib/skillNextAction'
 import { SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
 import { isDiagnosticStatement } from '../lib/xapiStatement'
 import { isSelfAssessmentDue, todayDateString } from '../lib/checkin'
+import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 
 async function countRows(table, userId) {
   const { count } = await supabase
@@ -41,12 +42,14 @@ async function loadCurrentLearning(userId) {
 // Failing this shouldn't take down the rest of the dashboard -- the RPC is
 // brand new and this is the one query on the page reading other people's
 // data, so it's the most likely to surface an unexpected RLS/permission
-// edge case in practice.
+// edge case in practice. The error is still reported back rather than
+// swallowed, though, so a real failure isn't indistinguishable on screen
+// from a connection with no activity to show.
 async function loadConnectionsActivity() {
   try {
-    return await listConnectionsActivity(20)
-  } catch {
-    return []
+    return { data: await listConnectionsActivity(5), error: null }
+  } catch (err) {
+    return { data: [], error: err.message || 'Something went wrong.' }
   }
 }
 
@@ -126,13 +129,6 @@ async function loadPendingReviewTasks(userId) {
 }
 
 const RECENT_GROWTH_WINDOW_DAYS = 28
-
-function daysAgoLabel(dateStr) {
-  const days = Math.floor((Date.now() - new Date(dateStr).getTime()) / (24 * 60 * 60 * 1000))
-  if (days <= 0) return 'Today'
-  if (days === 1) return 'Yesterday'
-  return `${days} days ago`
-}
 
 async function loadRecentGrowth(userId) {
   const cutoff = new Date(Date.now() - RECENT_GROWTH_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString()
@@ -283,6 +279,7 @@ export default function Dashboard() {
   const [upNext, setUpNext] = useState([])
   const [currentLearning, setCurrentLearning] = useState([])
   const [connectionsActivity, setConnectionsActivity] = useState([])
+  const [connectionsActivityError, setConnectionsActivityError] = useState(null)
   const [upcomingSelfAssessments, setUpcomingSelfAssessments] = useState([])
   const [upcomingTargets, setUpcomingTargets] = useState([])
   const [pendingReviewTasks, setPendingReviewTasks] = useState([])
@@ -302,7 +299,7 @@ export default function Dashboard() {
       growth,
       upNextRecommendations,
       learning,
-      activity,
+      activityResult,
       selfAssessmentsDue,
       targetsDue,
       reviewTasks,
@@ -323,11 +320,18 @@ export default function Dashboard() {
     setRecentGrowth(growth)
     setUpNext(upNextRecommendations)
     setCurrentLearning(learning)
-    setConnectionsActivity(activity)
+    setConnectionsActivity(activityResult.data)
+    setConnectionsActivityError(activityResult.error)
     setUpcomingSelfAssessments(selfAssessmentsDue)
     setUpcomingTargets(targetsDue)
     setPendingReviewTasks(reviewTasks)
     setLoading(false)
+  }
+
+  async function retryConnectionsActivity() {
+    const result = await loadConnectionsActivity()
+    setConnectionsActivity(result.data)
+    setConnectionsActivityError(result.error)
   }
 
   return (
@@ -396,7 +400,7 @@ export default function Dashboard() {
                         key={s.id}
                         to={`/skills/${s.id}`}
                         label={s.name}
-                        dateLabel={new Date(`${s.next_checkin_date}T00:00:00`).toLocaleDateString()}
+                        date={s.next_checkin_date}
                         overdue={isSelfAssessmentDue(s.next_checkin_date)}
                       />
                     ))}
@@ -409,7 +413,7 @@ export default function Dashboard() {
                         key={t.id}
                         to={`/skills/${t.skill_id}`}
                         label={`${t.skills?.name ?? 'Skill'} → ${LEVEL_LABELS[t.target_level]}`}
-                        dateLabel={new Date(`${t.target_date}T00:00:00`).toLocaleDateString()}
+                        date={t.target_date}
                         overdue={t.target_date <= todayDateString()}
                       />
                     ))}
@@ -418,12 +422,7 @@ export default function Dashboard() {
                 {pendingReviewTasks.length > 0 && (
                   <ReminderGroup title="Waiting on your review">
                     {pendingReviewTasks.map((task) => (
-                      <ReminderRow
-                        key={task.key}
-                        to={task.to}
-                        label={task.label}
-                        dateLabel={new Date(task.date).toLocaleDateString()}
-                      />
+                      <ReminderRow key={task.key} to={task.to} label={task.label} date={task.date} />
                     ))}
                   </ReminderGroup>
                 )}
@@ -469,14 +468,20 @@ export default function Dashboard() {
                       <span className="text-ink font-medium">{LEVEL_LABELS[row.level]}</span>
                     </p>
                     {row.target && (
-                      <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-1">
-                        Target: {LEVEL_LABELS[row.target.target_level]} by{' '}
-                        {new Date(`${row.target.target_date}T00:00:00`).toLocaleDateString()}
+                      <p
+                        className="font-mono text-[11px] uppercase tracking-wide text-secondary mt-1"
+                        title={formatAbsoluteDate(row.target.target_date)}
+                      >
+                        Target: {LEVEL_LABELS[row.target.target_level]} ·{' '}
+                        {formatRelativeDate(row.target.target_date)}
                       </p>
                     )}
                   </div>
-                  <p className="font-mono text-xs text-secondary shrink-0 self-start">
-                    {daysAgoLabel(row.assessed_at)}
+                  <p
+                    className="font-mono text-xs text-secondary shrink-0 self-start"
+                    title={formatAbsoluteDate(row.assessed_at)}
+                  >
+                    {formatRelativeDate(row.assessed_at)}
                   </p>
                 </Link>
               ))}
@@ -484,10 +489,23 @@ export default function Dashboard() {
           </div>
         )}
 
-        {!loading && connectionsActivity.length > 0 && (
+        {!loading && (connectionsActivity.length > 0 || connectionsActivityError) && (
           <div>
             <h2 className="font-display text-xl text-ink mb-6">What your connections are up to</h2>
-            <ConnectionsActivityFeed events={connectionsActivity} />
+            {connectionsActivityError ? (
+              <div className="flex items-center justify-between gap-3 bg-card border border-hairline rounded-lg px-4 py-3">
+                <p className="text-sm text-secondary">Couldn't load your connections' activity.</p>
+                <button
+                  type="button"
+                  onClick={retryConnectionsActivity}
+                  className="shrink-0 text-sm text-moss font-medium hover:opacity-90"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : (
+              <ConnectionsActivityFeed events={connectionsActivity} />
+            )}
           </div>
         )}
 
@@ -541,8 +559,8 @@ function ConnectionsActivityFeed({ events }) {
                 <p className="text-xs text-secondary mt-0.5">{event.detail}</p>
               )}
             </div>
-            <p className="font-mono text-xs text-secondary shrink-0">
-              {new Date(event.event_at).toLocaleDateString()}
+            <p className="font-mono text-xs text-secondary shrink-0" title={formatAbsoluteDate(event.event_at)}>
+              {formatRelativeDate(event.event_at)}
             </p>
           </div>
         )
@@ -709,20 +727,25 @@ function GrowthArrow() {
 function ReminderGroup({ title, children }) {
   return (
     <div>
-      <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">{title}</h3>
+      <h3 className="font-mono text-[11px] uppercase tracking-wide text-secondary mb-2">{title}</h3>
       <div className="space-y-2">{children}</div>
     </div>
   )
 }
 
-function ReminderRow({ to, label, dateLabel, overdue = false }) {
+function ReminderRow({ to, label, date, overdue = false }) {
   return (
     <Link
       to={to}
       className="flex items-center justify-between gap-3 bg-card border border-hairline rounded-lg px-4 py-3 hover:border-moss transition-colors"
     >
       <span className="text-sm text-ink truncate min-w-0">{label}</span>
-      <span className={`font-mono text-xs shrink-0 ${overdue ? 'text-gold' : 'text-secondary'}`}>{dateLabel}</span>
+      <span
+        className={`font-mono text-xs shrink-0 ${overdue ? 'text-gold' : 'text-secondary'}`}
+        title={formatAbsoluteDate(date)}
+      >
+        {formatRelativeDate(date)}
+      </span>
     </Link>
   )
 }

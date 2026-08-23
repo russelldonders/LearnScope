@@ -8,7 +8,9 @@
   --color-gold: #b8912a;
   --color-slate: #3d5a73;
   --color-hairline: #d7dac9;
-  --color-secondary: #7c8873;
+  /* Darkened from #7c8873 -- the lighter shade fell to 3.2-3.5:1 against
+     --color-paper/--color-card, under the 4.5:1 WCAG AA floor for text. */
+  --color-secondary: #5a6752;
 
   /* Practical-axis trust tiers, lightest to darkest -- self-assessed and
      evidence-supported step up to --color-moss (confirmed); validated

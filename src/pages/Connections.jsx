@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { usePendingActions } from '../context/PendingActionsContext'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
+import ConfirmDialog from '../components/ConfirmDialog'
 import { LEVEL_LABELS } from '../lib/levels'
 import {
   listMyPeerRatings,
@@ -39,6 +40,7 @@ export default function Connections() {
   const [resendError, setResendError] = useState(null)
   const [revokingId, setRevokingId] = useState(null)
   const [revokeError, setRevokeError] = useState(null)
+  const [pendingRevoke, setPendingRevoke] = useState(null)
 
   useEffect(() => {
     load()
@@ -167,9 +169,6 @@ export default function Connections() {
   }
 
   async function handleRevoke(invite) {
-    if (!confirm(`Revoke the invite to ${invite.invitee_email}? They'll no longer be able to use this link.`)) {
-      return
-    }
     setRevokeError(null)
     setRevokingId(invite.id)
     try {
@@ -179,6 +178,7 @@ export default function Connections() {
       setRevokeError({ id: invite.id, message: err.message })
     } finally {
       setRevokingId(null)
+      setPendingRevoke(null)
     }
   }
 
@@ -389,7 +389,7 @@ export default function Connections() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleRevoke(invite)}
+                      onClick={() => setPendingRevoke(invite)}
                       disabled={revokingId === invite.id}
                       className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
                     >
@@ -402,6 +402,15 @@ export default function Connections() {
           </div>
         )}
       </main>
+
+      {pendingRevoke && (
+        <ConfirmDialog
+          message={`Revoke the invite to ${pendingRevoke.invitee_email}? They'll no longer be able to use this link.`}
+          onConfirm={() => handleRevoke(pendingRevoke)}
+          onCancel={() => setPendingRevoke(null)}
+          confirming={revokingId === pendingRevoke.id}
+        />
+      )}
     </div>
   )
 }

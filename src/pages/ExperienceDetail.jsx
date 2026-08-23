@@ -14,6 +14,7 @@ import OrganizationLogo from '../components/OrganizationLogo'
 import OrganizationUrlField from '../components/OrganizationUrlField'
 import ExperienceModal from '../components/ExperienceModal'
 import AddExperienceButton from '../components/AddExperienceButton'
+import ConfirmDialog from '../components/ConfirmDialog'
 
 const NESTABLE_PARENT_TYPES = ['employment', 'volunteer']
 
@@ -268,6 +269,7 @@ function DetailsTab({ item, onSave, onDelete }) {
   const [description, setDescription] = useState(item.description ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const config = EXPERIENCE_TYPE_CONFIG[type] ?? EXPERIENCE_TYPE_CONFIG.employment
 
@@ -297,13 +299,14 @@ function DetailsTab({ item, onSave, onDelete }) {
   }
 
   async function handleDelete() {
-    if (!confirm(`Delete "${item.title}"? This can't be undone.`)) return
     setSaving(true)
     try {
       await onDelete()
     } catch (err) {
       setError(err.message)
       setSaving(false)
+    } finally {
+      setConfirmingDelete(false)
     }
   }
 
@@ -431,13 +434,22 @@ function DetailsTab({ item, onSave, onDelete }) {
         </button>
         <button
           type="button"
-          onClick={handleDelete}
+          onClick={() => setConfirmingDelete(true)}
           disabled={saving}
           className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm hover:bg-paper disabled:opacity-60"
         >
           Delete experience
         </button>
       </div>
+
+      {confirmingDelete && (
+        <ConfirmDialog
+          message={`Delete "${item.title}"? This can't be undone.`}
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmingDelete(false)}
+          confirming={saving}
+        />
+      )}
     </form>
   )
 }

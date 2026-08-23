@@ -30,6 +30,7 @@ import ConfirmingBaselineQuizModal from '../components/ConfirmingBaselineQuizMod
 import InterviewModal from '../components/InterviewModal'
 import LifecycleStageIcon from '../components/LifecycleStageIcon'
 import TagsField from '../components/TagsField'
+import ConfirmDialog from '../components/ConfirmDialog'
 import { listOutgoingValidationRequests } from '../lib/skillValidationRequests'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
@@ -2246,11 +2247,10 @@ function DeleteSection({ skill, onUpdated, onDeleted }) {
   const isArchived = skill.lifecycle_stage === 'archived'
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [confirmingDrop, setConfirmingDrop] = useState(false)
 
   async function handleDelete() {
-    if (!confirm(`Delete "${skill.name}" and all of its self-assessment history? This can't be undone.`)) {
-      return
-    }
     setSaving(true)
     try {
       const { error } = await supabase.from('skills').delete().eq('id', skill.id)
@@ -2259,6 +2259,8 @@ function DeleteSection({ skill, onUpdated, onDeleted }) {
     } catch (err) {
       setError(err.message)
       setSaving(false)
+    } finally {
+      setConfirmingDelete(false)
     }
   }
 
@@ -2268,13 +2270,6 @@ function DeleteSection({ skill, onUpdated, onDeleted }) {
   // history (assessments, evidence, tags, peer ratings) stays intact and
   // the skill can be restored later.
   async function handleDrop() {
-    if (
-      !confirm(
-        `Drop "${skill.name}"? It'll be archived and removed from your active skills list. Your history stays intact and you can restore it anytime.`
-      )
-    ) {
-      return
-    }
     setSaving(true)
     try {
       const { error } = await supabase
@@ -2286,6 +2281,8 @@ function DeleteSection({ skill, onUpdated, onDeleted }) {
     } catch (err) {
       setError(err.message)
       setSaving(false)
+    } finally {
+      setConfirmingDrop(false)
     }
   }
 
@@ -2321,7 +2318,7 @@ function DeleteSection({ skill, onUpdated, onDeleted }) {
       {isCustom ? (
         <button
           type="button"
-          onClick={handleDelete}
+          onClick={() => setConfirmingDelete(true)}
           disabled={saving}
           className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
         >
@@ -2339,12 +2336,31 @@ function DeleteSection({ skill, onUpdated, onDeleted }) {
       ) : (
         <button
           type="button"
-          onClick={handleDrop}
+          onClick={() => setConfirmingDrop(true)}
           disabled={saving}
           className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
         >
           Drop skill
         </button>
+      )}
+
+      {confirmingDelete && (
+        <ConfirmDialog
+          message={`Delete "${skill.name}" and all of its self-assessment history? This can't be undone.`}
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmingDelete(false)}
+          confirming={saving}
+        />
+      )}
+
+      {confirmingDrop && (
+        <ConfirmDialog
+          message={`Drop "${skill.name}"? It'll be archived and removed from your active skills list. Your history stays intact and you can restore it anytime.`}
+          confirmLabel="Drop"
+          onConfirm={handleDrop}
+          onCancel={() => setConfirmingDrop(false)}
+          confirming={saving}
+        />
       )}
     </div>
   )

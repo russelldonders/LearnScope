@@ -12,6 +12,7 @@ import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDu
 import GrowthRing from './GrowthRing'
 import EvidenceFields from './EvidenceFields'
 import RecordActivityModal from './RecordActivityModal'
+import ConfirmDialog from './ConfirmDialog'
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -41,6 +42,7 @@ export default function CourseModal({
   const [notes, setNotes] = useState(course?.notes ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const [linkedExperiences, setLinkedExperiences] = useState([])
   const [skillLinks, setSkillLinks] = useState([])
@@ -108,13 +110,14 @@ export default function CourseModal({
   }
 
   async function handleDelete() {
-    if (!confirm(`Delete "${course.name}"? This can't be undone.`)) return
     setSaving(true)
     try {
       await onDelete(course.id)
     } catch (err) {
       setError(err.message)
       setSaving(false)
+    } finally {
+      setConfirmingDelete(false)
     }
   }
 
@@ -255,7 +258,7 @@ export default function CourseModal({
               {isEditing && (
                 <button
                   type="button"
-                  onClick={handleDelete}
+                  onClick={() => setConfirmingDelete(true)}
                   disabled={saving}
                   className="rounded-md border border-hairline text-red-700 py-2 px-4 hover:bg-paper disabled:opacity-60"
                 >
@@ -311,6 +314,15 @@ export default function CourseModal({
           />
         )}
       </div>
+
+      {confirmingDelete && (
+        <ConfirmDialog
+          message={`Delete "${course.name}"? This can't be undone.`}
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmingDelete(false)}
+          confirming={saving}
+        />
+      )}
     </div>
   )
 }
@@ -919,6 +931,8 @@ function ActivitiesSubsection({ course, skills, statements, onChange, user }) {
   const [actorName, setActorName] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [error, setError] = useState(null)
+  const [pendingDeleteId, setPendingDeleteId] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     supabase
@@ -941,11 +955,13 @@ function ActivitiesSubsection({ course, skills, statements, onChange, user }) {
     await onChange()
   }
 
-  async function handleDelete(id) {
-    if (!confirm("Delete this recorded activity? This can't be undone.")) return
-    const { error } = await supabase.from('xapi_statements').delete().eq('id', id)
+  async function confirmDelete() {
+    setDeleting(true)
+    const { error } = await supabase.from('xapi_statements').delete().eq('id', pendingDeleteId)
     if (error) setError(error.message)
     else await onChange()
+    setDeleting(false)
+    setPendingDeleteId(null)
   }
 
   return (
@@ -990,7 +1006,7 @@ function ActivitiesSubsection({ course, skills, statements, onChange, user }) {
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleDelete(s.id)}
+                    onClick={() => setPendingDeleteId(s.id)}
                     className="shrink-0 text-xs text-red-700 font-medium"
                   >
                     Remove
@@ -1010,6 +1026,15 @@ function ActivitiesSubsection({ course, skills, statements, onChange, user }) {
           relatedCourse={{ id: course.id, name: course.name }}
           onSave={handleSave}
           onClose={() => setModalOpen(false)}
+        />
+      )}
+
+      {pendingDeleteId && (
+        <ConfirmDialog
+          message="Delete this recorded activity? This can't be undone."
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDeleteId(null)}
+          confirming={deleting}
         />
       )}
     </div>

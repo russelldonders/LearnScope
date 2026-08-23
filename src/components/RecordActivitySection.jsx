@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import RecordActivityModal from './RecordActivityModal'
+import ConfirmDialog from './ConfirmDialog'
 import { activityName, verbLabel, relatedSkillFromStatement, formatDuration } from '../lib/xapiStatement'
+import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 
 const RECENT_LIMIT = 6
 
@@ -14,6 +16,8 @@ export default function RecordActivitySection() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [modalOpen, setModalOpen] = useState(false)
+  const [pendingDeleteId, setPendingDeleteId] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     loadStatements()
@@ -58,11 +62,13 @@ export default function RecordActivitySection() {
     await loadStatements()
   }
 
-  async function handleDelete(id) {
-    if (!confirm("Delete this recorded activity? This can't be undone.")) return
-    const { error } = await supabase.from('xapi_statements').delete().eq('id', id)
+  async function confirmDelete() {
+    setDeleting(true)
+    const { error } = await supabase.from('xapi_statements').delete().eq('id', pendingDeleteId)
     if (error) setError(error.message)
     else await loadStatements()
+    setDeleting(false)
+    setPendingDeleteId(null)
   }
 
   return (
@@ -101,13 +107,13 @@ export default function RecordActivitySection() {
             >
               <div className="min-w-0">
                 <p className="text-sm text-ink">
-                  <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
+                  <span className="font-mono text-[11px] uppercase tracking-wide text-secondary">
                     {verbLabel(row.statement)}
                   </span>{' '}
                   {activityName(row.statement)}
                 </p>
-                <p className="font-mono text-xs text-secondary mt-0.5">
-                  {new Date(row.recorded_at).toLocaleDateString()}
+                <p className="font-mono text-xs text-secondary mt-0.5" title={formatAbsoluteDate(row.recorded_at)}>
+                  {formatRelativeDate(row.recorded_at)}
                   {duration ? ` · ${duration}` : ''}
                   {relatedSkill ? ` · ${relatedSkill.name}` : ''}
                 </p>
@@ -119,7 +125,7 @@ export default function RecordActivitySection() {
               </div>
               <button
                 type="button"
-                onClick={() => handleDelete(row.id)}
+                onClick={() => setPendingDeleteId(row.id)}
                 className="shrink-0 text-xs text-red-700 font-medium"
               >
                 Remove
@@ -141,6 +147,15 @@ export default function RecordActivitySection() {
           skills={skills}
           onSave={handleSave}
           onClose={() => setModalOpen(false)}
+        />
+      )}
+
+      {pendingDeleteId && (
+        <ConfirmDialog
+          message="Delete this recorded activity? This can't be undone."
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDeleteId(null)}
+          confirming={deleting}
         />
       )}
     </section>
