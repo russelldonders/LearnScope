@@ -154,32 +154,6 @@ export default function SkillsSection() {
 
   return (
     <section>
-      {!loading && skillGaps.length > 0 && (
-        <div className="mb-10">
-          <h2 className="font-display text-xl text-ink mb-4">Your skill gaps</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {skillGaps.map((skill) => (
-              <button
-                key={skill.id}
-                type="button"
-                onClick={() => navigate(`/skills/${skill.id}`)}
-                className="text-left bg-card border border-hairline rounded-lg p-4 flex items-center gap-4 hover:border-moss transition-colors w-full"
-              >
-                <GrowthRing level={skill.displayedLevel} size={48} targetLevel={skill.targetLevel} />
-                <div className="min-w-0 flex-1">
-                  <h3 className="font-display text-base text-ink truncate">{skill.name}</h3>
-                  <p className="text-sm text-secondary">
-                    {skill.displayedLevel ? LEVEL_LABELS[skill.displayedLevel] : 'Not yet assessed'}
-                    {' → target '}
-                    {LEVEL_LABELS[skill.targetLevel]}
-                  </p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       <div className="flex items-center justify-between mb-6">
         <h2 className="font-display text-xl text-ink">Your skills</h2>
         <button
@@ -255,6 +229,32 @@ export default function SkillsSection() {
             </>
           )}
         </>
+      )}
+
+      {!loading && skillGaps.length > 0 && (
+        <div className="mb-10">
+          <h2 className="font-display text-xl text-ink mb-4">Your skill gaps</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {skillGaps.map((skill) => (
+              <button
+                key={skill.id}
+                type="button"
+                onClick={() => navigate(`/skills/${skill.id}`)}
+                className="text-left bg-card border border-hairline rounded-lg p-4 flex items-center gap-4 hover:border-moss transition-colors w-full"
+              >
+                <GrowthRing level={skill.displayedLevel} size={48} targetLevel={skill.targetLevel} />
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-display text-base text-ink truncate">{skill.name}</h3>
+                  <p className="text-sm text-secondary">
+                    {skill.displayedLevel ? LEVEL_LABELS[skill.displayedLevel] : 'Not yet assessed'}
+                    {' → target '}
+                    {LEVEL_LABELS[skill.targetLevel]}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
       {!loading && activeSkills.length > 0 && filteredSkills.length === 0 && (
