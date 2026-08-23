@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext'
 import { usePendingActions } from '../context/PendingActionsContext'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
-import WhatsAppIcon from '../components/WhatsAppIcon'
 import { LEVEL_LABELS } from '../lib/levels'
 import {
   listMyPeerRatings,
@@ -15,7 +14,6 @@ import {
   getSharedSkillCounts,
   sendInviteEmail,
   revokeInvite,
-  whatsappShareUrl,
 } from '../lib/connections'
 import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
 import { listIncomingConnectionRequests, respondToConnectionRequest } from '../lib/skillDiscovery'
@@ -353,7 +351,7 @@ export default function Connections() {
               {pendingInvites.map((invite) => (
                 <div
                   key={invite.id}
-                  className="bg-card border border-hairline rounded-lg p-4 flex items-center justify-between gap-3"
+                  className="bg-card border border-hairline rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
                 >
                   <div className="min-w-0">
                     <p className="text-sm text-ink">
@@ -369,7 +367,7 @@ export default function Connections() {
                       <p className="text-xs text-red-700 mt-1">{revokeError.message}</p>
                     )}
                   </div>
-                  <div className="shrink-0 flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                     <button
                       type="button"
                       onClick={() => handleResend(invite)}
@@ -389,15 +387,6 @@ export default function Connections() {
                     >
                       {copiedId === invite.id ? 'Copied!' : 'Copy link'}
                     </button>
-                    <a
-                      href={whatsappShareUrl(`Can you rate my skill "${invite.skills?.name}" on LearnScope? ${invite.url}`)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
-                    >
-                      <WhatsAppIcon size={14} />
-                      WhatsApp
-                    </a>
                     <button
                       type="button"
                       onClick={() => handleRevoke(invite)}
