@@ -3,7 +3,7 @@ import TrackingReasonIcon from './TrackingReasonIcon'
 import { isSelfAssessmentDue } from '../lib/checkin'
 import { TRACKING_REASON_LABELS } from '../lib/trackingReasons'
 import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
-import { KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
+import { LEVEL_LABELS, KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
 import { TRUST_STATUS, TRUST_STATUS_COLORS, computeTrustStatus } from '../lib/skillProficiencyModel'
 import LifecycleStageIcon from './LifecycleStageIcon'
 
@@ -49,7 +49,6 @@ export default function SkillCard({ skill, onEdit }) {
         size={56}
         color={TRUST_STATUS_COLORS[practicalTrust]}
         targetLevel={skill.targetLevel}
-        showLabel
       />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -64,6 +63,12 @@ export default function SkillCard({ skill, onEdit }) {
           <p className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide text-secondary mt-0.5">
             <LifecycleStageIcon stage={skill.lifecycle_stage} />
             {SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]}
+          </p>
+        )}
+        {displayedLevel && (
+          <p className="flex items-center gap-1.5 text-xs text-secondary mt-1">
+            <GrowthRing level={displayedLevel} size={16} color={TRUST_STATUS_COLORS[practicalTrust]} />
+            {LEVEL_LABELS[displayedLevel]}
           </p>
         )}
         {skill.knowledge_level && (
