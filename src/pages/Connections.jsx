@@ -12,6 +12,7 @@ import {
   listSentInvites,
   listIncomingRateInvites,
   getProfiles,
+  getSharedSkillCounts,
   sendInviteEmail,
   revokeInvite,
   whatsappShareUrl,
@@ -33,6 +34,7 @@ export default function Connections() {
   const [respondingId, setRespondingId] = useState(null)
   const [respondError, setRespondError] = useState(null)
   const [profiles, setProfiles] = useState({})
+  const [sharedSkillCounts, setSharedSkillCounts] = useState({})
   const [copiedId, setCopiedId] = useState(null)
   const [resendingId, setResendingId] = useState(null)
   const [resentId, setResentId] = useState(null)
@@ -72,15 +74,13 @@ export default function Connections() {
       const otherIds = ratingsData.map((r) => (r.rater_id === user.id ? r.skill_owner_id : r.rater_id))
       const requesterIds = validationRequestsData.map((r) => r.requester_id)
       const requestSenderIds = incomingRequestsData.map((r) => r.requester_id)
-      setProfiles(
-        await getProfiles([
-          ...otherIds,
-          ...connectionsData.map((c) => c.id),
-          ...requesterIds,
-          ...requestSenderIds,
-          user.id,
-        ])
-      )
+      const connectionIds = [...new Set([...connectionsData.map((c) => c.id), ...otherIds])]
+      const [profilesData, sharedSkillCountsData] = await Promise.all([
+        getProfiles([...otherIds, ...connectionsData.map((c) => c.id), ...requesterIds, ...requestSenderIds, user.id]),
+        getSharedSkillCounts(user.id, connectionIds),
+      ])
+      setProfiles(profilesData)
+      setSharedSkillCounts(sharedSkillCountsData)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -278,15 +278,19 @@ export default function Connections() {
           <div className="space-y-4">
             {connections.map((c) => (
               <div key={c.id} className="bg-card border border-hairline rounded-lg p-4">
-                <Link
-                  to={`/skills-profile/${c.id}`}
-                  className="flex items-center gap-2 mb-3 group w-fit"
-                >
-                  <ConnectionAvatar name={c.name} avatarUrl={c.avatarUrl} />
-                  <span className="font-display text-lg text-ink group-hover:text-moss group-hover:underline">
-                    {c.name}
-                  </span>
-                </Link>
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  <Link to={`/skills-profile/${c.id}`} className="flex items-center gap-2 group w-fit">
+                    <ConnectionAvatar name={c.name} avatarUrl={c.avatarUrl} />
+                    <span className="font-display text-lg text-ink group-hover:text-moss group-hover:underline">
+                      {c.name}
+                    </span>
+                  </Link>
+                  {sharedSkillCounts[c.id] > 0 && (
+                    <span className="font-mono text-xs text-secondary border border-hairline rounded-full px-2 py-0.5">
+                      {sharedSkillCounts[c.id]} shared skill{sharedSkillCounts[c.id] === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </div>
                 <div className="space-y-3">
                   {c.events.length === 0 && <p className="text-sm text-secondary">Connected</p>}
                   {c.events.map((e, i) => (

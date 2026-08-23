@@ -205,6 +205,43 @@ export async function listConnections(currentUserId) {
   }))
 }
 
+// Skills both users track from the shared library catalog (see
+// 0013_skill_library.sql) -- library_skill_id ties a personal skill row to
+// the reusable catalog entry, so two people's rows count as "the same
+// skill" when they reference the same library_skill_id, not just a matching
+// name. RLS on skills only returns a connection's rows when they've made
+// that skill visible_on_profile and opted skills_profile_visible on (see
+// "Connections can view visible skills profiles", 0051) -- so like
+// SkillsProfile.jsx, this only ever counts skills the other person has
+// chosen to show, never their private tracking list.
+export async function getSharedSkillCounts(userId, otherUserIds) {
+  const ids = [...new Set(otherUserIds)].filter((id) => id && id !== userId)
+  if (ids.length === 0) return {}
+
+  const [{ data: mine, error: mineError }, { data: theirs, error: theirsError }] = await Promise.all([
+    supabase.from('skills').select('library_skill_id').eq('user_id', userId).not('library_skill_id', 'is', null),
+    supabase.from('skills').select('user_id, library_skill_id').in('user_id', ids).not('library_skill_id', 'is', null),
+  ])
+  if (mineError) throw mineError
+  if (theirsError) throw theirsError
+
+  const mySkillIds = new Set((mine ?? []).map((s) => s.library_skill_id))
+  const theirSkillIdsByUser = new Map()
+  for (const row of theirs ?? []) {
+    if (!theirSkillIdsByUser.has(row.user_id)) theirSkillIdsByUser.set(row.user_id, new Set())
+    theirSkillIdsByUser.get(row.user_id).add(row.library_skill_id)
+  }
+
+  const counts = {}
+  for (const id of ids) counts[id] = 0
+  for (const [otherId, idSet] of theirSkillIdsByUser) {
+    let count = 0
+    for (const libId of idSet) if (mySkillIds.has(libId)) count++
+    counts[otherId] = count
+  }
+  return counts
+}
+
 // Recent milestones from connections who've opted into activity_feed_visible
 // (see ProfilePrivacy.jsx) -- list_connections_activity (0063) re-checks the
 // connection and the opt-in itself per row, so this never needs to filter
