@@ -1,4 +1,5 @@
 import GrowthRing from './GrowthRing'
+import KnowledgeLevelBar from './KnowledgeLevelBar'
 import TrackingReasonIcon from './TrackingReasonIcon'
 import { isSelfAssessmentDue } from '../lib/checkin'
 import { TRACKING_REASON_LABELS } from '../lib/trackingReasons'
@@ -65,21 +66,24 @@ export default function SkillCard({ skill, onEdit }) {
             {SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]}
           </p>
         )}
-        {displayedLevel && (
-          <p className="flex items-center gap-1.5 text-xs text-secondary mt-1">
-            <GrowthRing level={displayedLevel} size={16} color={TRUST_STATUS_COLORS[practicalTrust]} />
-            {LEVEL_LABELS[displayedLevel]}
-          </p>
-        )}
-        {skill.knowledge_level && (
-          <p className="flex items-center gap-1.5 text-xs text-secondary mt-1">
-            <GrowthRing
-              level={skill.knowledge_level}
-              size={16}
-              labels={KNOWLEDGE_LEVEL_LABELS}
-              color={TRUST_STATUS_COLORS[knowledgeTrust]}
-            />
-            {KNOWLEDGE_LEVEL_LABELS[skill.knowledge_level]}
+        {(displayedLevel || skill.knowledge_level) && (
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-secondary mt-1">
+            {displayedLevel && (
+              <span className="flex items-center gap-1.5">
+                <GrowthRing level={displayedLevel} size={16} color={TRUST_STATUS_COLORS[practicalTrust]} />
+                {LEVEL_LABELS[displayedLevel]}
+              </span>
+            )}
+            {skill.knowledge_level && (
+              <span className="flex items-center gap-1.5">
+                <KnowledgeLevelBar
+                  level={skill.knowledge_level}
+                  size={16}
+                  color={TRUST_STATUS_COLORS[knowledgeTrust]}
+                />
+                {KNOWLEDGE_LEVEL_LABELS[skill.knowledge_level]}
+              </span>
+            )}
           </p>
         )}
         {/* Self-assessed is the common case on this grid (almost every
