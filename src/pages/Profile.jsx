@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
@@ -7,7 +8,8 @@ import { COUNTRIES } from '../lib/countries'
 import { LANGUAGES } from '../lib/languages'
 
 export default function Profile() {
-  const { user, updateEmail } = useAuth()
+  const { user, updateEmail, signOut } = useAuth()
+  const navigate = useNavigate()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
@@ -19,6 +21,9 @@ export default function Profile() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [savedMessage, setSavedMessage] = useState(null)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState(null)
 
   useEffect(() => {
     loadProfile()
@@ -82,6 +87,28 @@ export default function Profile() {
     }
 
     setSaving(false)
+  }
+
+  async function handleDeleteAccount() {
+    setDeleteError(null)
+    setDeleting(true)
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      const res = await fetch('/api/delete-account', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Failed to delete account.')
+
+      await signOut()
+      navigate('/')
+    } catch (err) {
+      setDeleteError(err.message)
+      setDeleting(false)
+    }
   }
 
   return (
@@ -214,6 +241,50 @@ export default function Profile() {
                 {saving ? 'Saving…' : 'Save changes'}
               </button>
             </form>
+
+            <div className="bg-card border border-hairline rounded-lg p-6">
+              <h3 className="font-display text-lg text-ink mb-1">Your data</h3>
+              <p className="text-sm text-secondary mb-4">
+                Download a copy of everything in your LearnScope record.
+              </p>
+              <Link
+                to="/profile/export"
+                className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper inline-block"
+              >
+                Download my data
+              </Link>
+            </div>
+
+            <div className="bg-card border border-red-200 rounded-lg p-6">
+              <h3 className="font-display text-lg text-ink mb-1">Delete account</h3>
+              <p className="text-sm text-secondary mb-4">
+                Permanently deletes your account and everything in it — skills, courses,
+                experience, connections, and evidence files. Peer ratings and validations you gave
+                to other learners stay as their evidence, with your identity removed. This can't be
+                undone.
+              </p>
+              <label className="block text-sm text-ink mb-2">
+                Type <span className="font-mono font-semibold">DELETE</span> to confirm
+              </label>
+              <input
+                type="text"
+                value={deleteConfirmText}
+                disabled={deleting}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                className="w-full max-w-xs rounded-md border border-hairline px-3 py-1.5 text-sm mb-3"
+              />
+              <div>
+                <button
+                  type="button"
+                  disabled={deleteConfirmText !== 'DELETE' || deleting}
+                  onClick={handleDeleteAccount}
+                  className="rounded-md bg-red-700 text-white py-1.5 px-3 text-sm font-medium hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {deleting ? 'Deleting…' : 'Permanently delete my account'}
+                </button>
+              </div>
+              {deleteError && <p className="text-sm text-red-700 mt-3">{deleteError}</p>}
+            </div>
           </div>
         )}
       </main>

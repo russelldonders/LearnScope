@@ -14,7 +14,7 @@ const NAV_LINKS = [
 ]
 
 const MENU_ITEMS = [
-  { to: '/profile', label: 'Edit Profile' },
+  { to: '/profile', label: 'Profile' },
   { to: '/profile/privacy', label: 'Privacy Settings' },
   { to: '/profile/import', label: 'Import Skills & Experience' },
 ]
