@@ -49,6 +49,7 @@ export default function SkillCard({ skill, onEdit }) {
         size={56}
         color={TRUST_STATUS_COLORS[practicalTrust]}
         targetLevel={skill.targetLevel}
+        showLabel
       />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
