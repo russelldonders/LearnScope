@@ -3,31 +3,22 @@ import { useAuth } from '../../context/AuthContext'
 import AdminLayout from './AdminLayout'
 import {
   listAllCatalogueCourses,
-  createPlatformCourse,
   approveCatalogueCourse,
   rejectCatalogueCourse,
   setCatalogueCourseStatus,
 } from '../../lib/admin/catalogue'
-import { listOrganisations } from '../../lib/admin/organisations'
 
 const STATUS_FILTERS = ['all', 'draft', 'pending_approval', 'approved', 'rejected', 'inactive']
-
-const EMPTY_FORM = { name: '', provider: '', courseType: '', duration: '', synopsis: '', organisationId: '' }
 
 export default function AdminCatalogue() {
   const { user } = useAuth()
   const [courses, setCourses] = useState([])
-  const [organisations, setOrganisations] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [statusFilter, setStatusFilter] = useState('all')
   const [actioningId, setActioningId] = useState(null)
   const [rejectingId, setRejectingId] = useState(null)
   const [rejectionReason, setRejectionReason] = useState('')
-
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState(EMPTY_FORM)
-  const [creating, setCreating] = useState(false)
 
   useEffect(() => {
     load()
@@ -37,9 +28,7 @@ export default function AdminCatalogue() {
     setLoading(true)
     setError(null)
     try {
-      const [courseData, orgData] = await Promise.all([listAllCatalogueCourses(), listOrganisations()])
-      setCourses(courseData)
-      setOrganisations(orgData)
+      setCourses(await listAllCatalogueCourses())
     } catch (err) {
       setError(err.message)
     } finally {
@@ -93,22 +82,6 @@ export default function AdminCatalogue() {
     }
   }
 
-  async function handleCreate(e) {
-    e.preventDefault()
-    setCreating(true)
-    setError(null)
-    try {
-      await createPlatformCourse(user.id, form)
-      setForm(EMPTY_FORM)
-      setShowForm(false)
-      await load()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setCreating(false)
-    }
-  }
-
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -127,104 +100,7 @@ export default function AdminCatalogue() {
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => setShowForm((v) => !v)}
-            className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
-          >
-            {showForm ? 'Cancel' : '+ New platform course'}
-          </button>
         </div>
-
-        {showForm && (
-          <form onSubmit={handleCreate} className="bg-card border border-hairline rounded-lg p-4 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm text-secondary mb-1" htmlFor="courseName">
-                  Name
-                </label>
-                <input
-                  id="courseName"
-                  required
-                  value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-secondary mb-1" htmlFor="courseProvider">
-                  Provider (free text)
-                </label>
-                <input
-                  id="courseProvider"
-                  value={form.provider}
-                  onChange={(e) => setForm((f) => ({ ...f, provider: e.target.value }))}
-                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-secondary mb-1" htmlFor="courseType">
-                  Course type
-                </label>
-                <input
-                  id="courseType"
-                  value={form.courseType}
-                  onChange={(e) => setForm((f) => ({ ...f, courseType: e.target.value }))}
-                  placeholder="Online, In-person, Workshop…"
-                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-secondary mb-1" htmlFor="courseDuration">
-                  Duration
-                </label>
-                <input
-                  id="courseDuration"
-                  value={form.duration}
-                  onChange={(e) => setForm((f) => ({ ...f, duration: e.target.value }))}
-                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <label className="block text-sm text-secondary mb-1" htmlFor="courseOrg">
-                  Owning organisation (optional — leave blank for a platform-curated entry)
-                </label>
-                <select
-                  id="courseOrg"
-                  value={form.organisationId}
-                  onChange={(e) => setForm((f) => ({ ...f, organisationId: e.target.value }))}
-                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                >
-                  <option value="">Platform-curated (no organisation)</option>
-                  {organisations.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="sm:col-span-2">
-                <label className="block text-sm text-secondary mb-1" htmlFor="courseSynopsis">
-                  Synopsis
-                </label>
-                <textarea
-                  id="courseSynopsis"
-                  rows={3}
-                  value={form.synopsis}
-                  onChange={(e) => setForm((f) => ({ ...f, synopsis: e.target.value }))}
-                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                />
-              </div>
-            </div>
-            <button
-              type="submit"
-              disabled={creating}
-              className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90 disabled:opacity-60"
-            >
-              {creating ? 'Creating…' : 'Create & publish'}
-            </button>
-          </form>
-        )}
 
         {error && <p className="text-sm text-red-700">{error}</p>}
 

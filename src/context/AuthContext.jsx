@@ -14,7 +14,10 @@ export function AuthProvider({ children }) {
   // needs to distinguish "not yet checked" from "checked, not an admin" so
   // it doesn't redirect an actual admin away before the check resolves.
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(null)
-  const [organisationMemberships, setOrganisationMemberships] = useState([])
+  // Same null-until-known pattern as isPlatformAdmin -- ProviderAdminRoute
+  // needs to tell "not yet checked" apart from "checked, no memberships",
+  // since an empty array would otherwise look identical to both.
+  const [organisationMemberships, setOrganisationMemberships] = useState(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -49,7 +52,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!userId) {
       setIsPlatformAdmin(null)
-      setOrganisationMemberships([])
+      setOrganisationMemberships(null)
       return
     }
     supabase

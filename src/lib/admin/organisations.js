@@ -25,6 +25,17 @@ export async function setOrganisationStatus(id, status) {
   if (error) throw error
 }
 
+export async function updateOrganisation(id, { name, url }) {
+  const { data, error } = await supabase
+    .from('organisations')
+    .update({ name: name.trim(), url: url?.trim() || null, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
 export async function listOrganisationMembers(organisationId) {
   const { data, error } = await supabase
     .from('organisation_members')

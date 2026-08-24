@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext'
 import { PendingActionsProvider } from './context/PendingActionsContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import PlatformAdminRoute from './components/PlatformAdminRoute'
+import ProviderAdminRoute from './components/ProviderAdminRoute'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
@@ -32,6 +33,7 @@ import AdminProviders from './pages/admin/AdminProviders'
 import AdminCatalogue from './pages/admin/AdminCatalogue'
 import AdminSkills from './pages/admin/AdminSkills'
 import AdminTags from './pages/admin/AdminTags'
+import ProviderConsole from './pages/provider/ProviderConsole'
 
 function App() {
   return (
@@ -180,6 +182,14 @@ function App() {
               <ProtectedRoute>
                 <ValidateRequest />
               </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/provider"
+            element={
+              <ProviderAdminRoute>
+                <ProviderConsole />
+              </ProviderAdminRoute>
             }
           />
           <Route

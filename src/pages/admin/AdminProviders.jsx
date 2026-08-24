@@ -4,6 +4,7 @@ import AdminLayout from './AdminLayout'
 import {
   listOrganisations,
   createOrganisation,
+  updateOrganisation,
   setOrganisationStatus,
   listOrganisationMembers,
   removeOrganisationMember,
@@ -20,6 +21,9 @@ export default function AdminProviders() {
   const [creating, setCreating] = useState(false)
 
   const [expandedId, setExpandedId] = useState(null)
+  const [editingId, setEditingId] = useState(null)
+  const [editForm, setEditForm] = useState({ name: '', url: '' })
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     load()
@@ -60,6 +64,28 @@ export default function AdminProviders() {
       await load()
     } catch (err) {
       setError(err.message)
+    }
+  }
+
+  function startEdit(org) {
+    setEditingId(org.id)
+    setEditForm({ name: org.name, url: org.url ?? '' })
+    setError(null)
+  }
+
+  async function handleSaveEdit(e, orgId) {
+    e.preventDefault()
+    if (!editForm.name.trim()) return
+    setSaving(true)
+    setError(null)
+    try {
+      await updateOrganisation(orgId, editForm)
+      setEditingId(null)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -104,30 +130,96 @@ export default function AdminProviders() {
           <div className="space-y-3">
             {organisations.map((org) => (
               <div key={org.id} className="bg-card border border-hairline rounded-lg overflow-hidden">
-                <div className="flex items-center justify-between gap-3 p-4">
-                  <div>
-                    <p className="text-ink font-medium">{org.name}</p>
-                    <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mt-0.5">
-                      {org.type} · {org.status}
-                    </p>
+                {editingId === org.id ? (
+                  <form
+                    onSubmit={(e) => handleSaveEdit(e, org.id)}
+                    className="p-4 space-y-3"
+                  >
+                    <div>
+                      <label className="block text-sm text-secondary mb-1" htmlFor={`orgEditName-${org.id}`}>
+                        Name
+                      </label>
+                      <input
+                        id={`orgEditName-${org.id}`}
+                        required
+                        value={editForm.name}
+                        onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                        className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-secondary mb-1" htmlFor={`orgEditUrl-${org.id}`}>
+                        Website URL
+                      </label>
+                      <input
+                        id={`orgEditUrl-${org.id}`}
+                        type="url"
+                        placeholder="https://…"
+                        value={editForm.url}
+                        onChange={(e) => setEditForm((f) => ({ ...f, url: e.target.value }))}
+                        className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="submit"
+                        disabled={saving}
+                        className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+                      >
+                        {saving ? 'Saving…' : 'Save'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingId(null)}
+                        className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="flex items-center justify-between gap-3 p-4">
+                    <div className="min-w-0">
+                      <p className="text-ink font-medium">{org.name}</p>
+                      <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mt-0.5">
+                        {org.type} · {org.status}
+                      </p>
+                      {org.url && (
+                        <a
+                          href={org.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-moss font-medium mt-1 inline-block truncate max-w-full"
+                        >
+                          {org.url}
+                        </a>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(org)}
+                        className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedId((id) => (id === org.id ? null : org.id))}
+                        className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper"
+                      >
+                        {expandedId === org.id ? 'Hide staff' : 'Manage staff'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStatus(org)}
+                        className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper"
+                      >
+                        {org.status === 'active' ? 'Deactivate' : 'Reactivate'}
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setExpandedId((id) => (id === org.id ? null : org.id))}
-                      className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper"
-                    >
-                      {expandedId === org.id ? 'Hide staff' : 'Manage staff'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleToggleStatus(org)}
-                      className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper"
-                    >
-                      {org.status === 'active' ? 'Deactivate' : 'Reactivate'}
-                    </button>
-                  </div>
-                </div>
+                )}
                 {expandedId === org.id && <OrganisationStaffPanel organisation={org} />}
               </div>
             ))}
@@ -138,7 +230,9 @@ export default function AdminProviders() {
   )
 }
 
-function OrganisationStaffPanel({ organisation }) {
+// Exported so the provider-facing console (src/pages/provider/) can reuse
+// the same invite/remove staff UI, scoped to a provider's own organisation.
+export function OrganisationStaffPanel({ organisation }) {
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)

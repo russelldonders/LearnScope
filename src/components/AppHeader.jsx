@@ -20,7 +20,7 @@ const MENU_ITEMS = [
 ]
 
 export default function AppHeader() {
-  const { signOut, user, isPlatformAdmin } = useAuth()
+  const { signOut, user, isPlatformAdmin, organisationMemberships } = useAuth()
   const { pendingActionCount } = usePendingActions()
   const location = useLocation()
   const [avatarUrl, setAvatarUrl] = useState(null)
@@ -115,6 +115,15 @@ export default function AppHeader() {
                       className="block px-4 py-2 text-sm text-ink hover:bg-paper"
                     >
                       Platform console
+                    </Link>
+                  )}
+                  {organisationMemberships?.length > 0 && (
+                    <Link
+                      to="/provider"
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-4 py-2 text-sm text-ink hover:bg-paper"
+                    >
+                      Provider console
                     </Link>
                   )}
                   <div className="my-1 border-t border-hairline" />
