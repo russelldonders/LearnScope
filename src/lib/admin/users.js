@@ -12,3 +12,11 @@ export async function inviteUser(email, grantPlatformAdmin = false) {
 export async function setUserBlocked(userId, blocked) {
   return callAdminApi('setUserBlocked', { userId, blocked })
 }
+
+export async function getUserLinkages(userId) {
+  return callAdminApi('getUserLinkages', { userId })
+}
+
+export async function deleteUser(userId) {
+  return callAdminApi('deleteUser', { userId })
+}

@@ -1,5 +1,6 @@
 import { verifySupabaseUser } from '../_lib/auth.js'
 import { supabaseAdmin } from '../_lib/supabaseAdmin.js'
+import { deleteUserEvidenceFiles } from '../_lib/evidenceStorage.js'
 
 // Single dispatcher for every platform-admin/org-admin service-role action,
 // rather than one serverless function per action -- Vercel's Hobby plan
@@ -57,6 +58,12 @@ export default async function handler(req, res) {
         return
       case 'setUserBlocked':
         await setUserBlocked(admin, caller, payload, res)
+        return
+      case 'getUserLinkages':
+        await getUserLinkages(admin, caller, payload, res)
+        return
+      case 'deleteUser':
+        await deleteUser(admin, caller, payload, res)
         return
       case 'inviteOrgStaff':
         await inviteOrgStaff(admin, caller, payload, res)
@@ -215,6 +222,191 @@ async function setUserBlocked(admin, caller, { userId, blocked }, res) {
     .update({ account_status: blocked ? 'blocked' : 'active' })
     .eq('id', userId)
   if (statusError) throw statusError
+
+  res.status(200).json({ ok: true })
+}
+
+// Counts what a hard delete would take with it, so the console can warn the
+// admin before they confirm -- mirrors the categories the self-service
+// "Delete account" flow on Profile.jsx already warns about (skills, courses,
+// experience, connections), plus the two things unique to an admin deleting
+// someone *else's* account: which organisations they'd lose access to, and
+// whether they're the platform's last remaining admin.
+async function getUserLinkages(admin, caller, { userId }, res) {
+  if (!userId) {
+    res.status(400).json({ error: 'Missing userId' })
+    return
+  }
+
+  if (!(await isPlatformAdmin(admin, caller.id))) {
+    res.status(403).json({ error: 'Platform admin access required' })
+    return
+  }
+
+  const { count: skillsCount, error: skillsError } = await admin
+    .from('skills')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+  if (skillsError) throw skillsError
+
+  const { count: coursesCount, error: coursesError } = await admin
+    .from('courses')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+  if (coursesError) throw coursesError
+
+  const { count: experienceCount, error: experienceError } = await admin
+    .from('experience')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+  if (experienceError) throw experienceError
+
+  const { count: connectionsAsA, error: connectionsAError } = await admin
+    .from('connections')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_a_id', userId)
+  if (connectionsAError) throw connectionsAError
+
+  const { count: connectionsAsB, error: connectionsBError } = await admin
+    .from('connections')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_b_id', userId)
+  if (connectionsBError) throw connectionsBError
+
+  const { data: orgMemberRows, error: orgMemberError } = await admin
+    .from('organisation_members')
+    .select('organisation_id, role')
+    .eq('user_id', userId)
+  if (orgMemberError) throw orgMemberError
+
+  let organisations = []
+  if (orgMemberRows.length > 0) {
+    const { data: orgRows, error: orgError } = await admin
+      .from('organisations')
+      .select('id, name')
+      .in('id', orgMemberRows.map((m) => m.organisation_id))
+    if (orgError) throw orgError
+    const nameById = new Map(orgRows.map((o) => [o.id, o.name]))
+    organisations = orgMemberRows.map((m) => ({ name: nameById.get(m.organisation_id) ?? 'Unknown organisation', role: m.role }))
+  }
+
+  const { data: targetAdminRow, error: targetAdminError } = await admin
+    .from('platform_admins')
+    .select('user_id')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (targetAdminError) throw targetAdminError
+
+  let isLastPlatformAdmin = false
+  if (targetAdminRow) {
+    const { data: allAdmins, error: allAdminsError } = await admin.from('platform_admins').select('user_id')
+    if (allAdminsError) throw allAdminsError
+    isLastPlatformAdmin = allAdmins.length <= 1
+  }
+
+  res.status(200).json({
+    counts: {
+      skills: skillsCount ?? 0,
+      courses: coursesCount ?? 0,
+      experience: experienceCount ?? 0,
+      connections: (connectionsAsA ?? 0) + (connectionsAsB ?? 0),
+    },
+    organisations,
+    isPlatformAdmin: Boolean(targetAdminRow),
+    isLastPlatformAdmin,
+  })
+}
+
+// Hard delete -- irreversible, unlike setUserBlocked above. The client is
+// required to have shown the admin the getUserLinkages summary and gotten
+// an explicit typed confirmation first (AdminUsers.jsx's DeleteUserDialog),
+// but this re-checks the two things that must never happen regardless of
+// what the client did: deleting your own account this way, or removing the
+// platform's last admin.
+async function deleteUser(admin, caller, { userId }, res) {
+  if (!userId) {
+    res.status(400).json({ error: 'Missing userId' })
+    return
+  }
+
+  if (!(await isPlatformAdmin(admin, caller.id))) {
+    res.status(403).json({ error: 'Platform admin access required' })
+    return
+  }
+
+  if (userId === caller.id) {
+    res.status(400).json({ error: "You can't delete your own account from here." })
+    return
+  }
+
+  // Confirms userId is a real account before running any scrub steps below --
+  // otherwise a typo'd/stale id would silently no-op every scrub update
+  // (0 rows matched) and only fail later at auth.admin.deleteUser(), which
+  // would then misleadingly log as a "PARTIAL FAILURE" despite nothing
+  // having actually been scrubbed.
+  const { data: targetUser, error: targetUserError } = await admin.auth.admin.getUserById(userId)
+  if (targetUserError || !targetUser?.user) {
+    res.status(404).json({ error: 'User not found.' })
+    return
+  }
+
+  const { data: targetAdminRow, error: targetAdminError } = await admin
+    .from('platform_admins')
+    .select('user_id')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (targetAdminError) throw targetAdminError
+
+  if (targetAdminRow) {
+    const { data: allAdmins, error: allAdminsError } = await admin.from('platform_admins').select('user_id')
+    if (allAdminsError) throw allAdminsError
+    if (allAdmins.length <= 1) {
+      res.status(400).json({ error: 'Cannot delete the last remaining platform admin.' })
+      return
+    }
+  }
+
+  // Same scrub as delete_own_account_scrub (0064), targeting an admin-chosen
+  // user instead of auth.uid() -- safe to do with plain service-role calls
+  // here (rather than that migration's SECURITY DEFINER RPC) since this
+  // handler has already independently verified the caller's authority above.
+  const { error: ratingScrubError } = await admin
+    .from('skill_peer_ratings')
+    .update({ rater_name: null, rater_email: null })
+    .eq('rater_id', userId)
+  if (ratingScrubError) throw ratingScrubError
+
+  const { error: validationScrubError } = await admin
+    .from('skill_validation_requests')
+    .update({
+      status: 'declined',
+      decided_at: new Date().toISOString(),
+      decision_comments: 'Validator account was deleted.',
+    })
+    .eq('validator_id', userId)
+    .eq('status', 'pending')
+  if (validationScrubError) throw validationScrubError
+
+  const { error: privateLibraryError } = await admin
+    .from('skill_library')
+    .delete()
+    .eq('created_by', userId)
+    .eq('is_private', true)
+  if (privateLibraryError) throw privateLibraryError
+
+  // From here on, the scrub above has already committed. If anything below
+  // fails, the account survives but that scrub can't be undone -- log it
+  // distinctly so a partial failure doesn't read the same as an ordinary one.
+  try {
+    await deleteUserEvidenceFiles(admin, userId)
+
+    const { error: deleteError } = await admin.auth.admin.deleteUser(userId)
+    if (deleteError) throw deleteError
+  } catch (err) {
+    console.error(`admin deleteUser PARTIAL FAILURE for user ${userId}: scrub already committed, account NOT deleted -`, err)
+    res.status(500).json({ error: 'Failed to delete account.' })
+    return
+  }
 
   res.status(200).json({ ok: true })
 }
