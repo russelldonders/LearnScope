@@ -26,6 +26,8 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
   const [uploading, setUploading] = useState(false)
   const [pendingDelete, setPendingDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [fileName, setFileName] = useState('')
+  const [dragActive, setDragActive] = useState(false)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -58,12 +60,27 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
       else await uploadScormResource(organisationId, userId, file, title)
       setTitle('')
       if (fileInputRef.current) fileInputRef.current.value = ''
+      setFileName('')
       await load()
     } catch (err) {
       setError(err.message)
     } finally {
       setUploading(false)
     }
+  }
+
+  function setSelectedFile(file) {
+    if (!file || !fileInputRef.current) return
+    const transfer = new DataTransfer()
+    transfer.items.add(file)
+    fileInputRef.current.files = transfer.files
+    setFileName(file.name)
+  }
+
+  function handleDrop(e) {
+    e.preventDefault()
+    setDragActive(false)
+    setSelectedFile(e.dataTransfer.files?.[0])
   }
 
   async function handleDelete() {
@@ -178,16 +195,53 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
             className="w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
           />
         </div>
-        <div>
+        <div className="flex-1 min-w-[220px]">
           <label className="block text-xs text-secondary mb-1" htmlFor="resourceFile">
             File
           </label>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                fileInputRef.current?.click()
+              }
+            }}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setDragActive(true)
+            }}
+            onDragLeave={() => setDragActive(false)}
+            onDrop={handleDrop}
+            className={`flex items-center gap-2 rounded-md border-2 border-dashed px-3 py-2 text-sm cursor-pointer transition-colors ${
+              dragActive
+                ? 'border-moss bg-moss/5 text-ink'
+                : 'border-hairline text-secondary hover:border-moss/60 hover:text-ink'
+            }`}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              className="shrink-0"
+            >
+              <path d="M12 16V4M12 4l-4 4M12 4l4 4" />
+              <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+            </svg>
+            <span className="truncate">{fileName || 'Click to upload or drag and drop'}</span>
+          </div>
           <input
             id="resourceFile"
             ref={fileInputRef}
             type="file"
             accept={type === 'scorm' ? '.zip' : type === 'video' ? 'video/*' : undefined}
-            className="text-sm text-ink"
+            onChange={(e) => setFileName(e.target.files?.[0]?.name || '')}
+            className="sr-only"
           />
         </div>
         <button

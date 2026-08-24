@@ -119,11 +119,11 @@ export default function AppHeader({ hideNavLinks = false }) {
                   )}
                   {organisationMemberships?.length > 0 && (
                     <Link
-                      to="/provider"
+                      to={location.pathname.startsWith('/provider') ? '/dashboard' : '/provider'}
                       onClick={() => setMenuOpen(false)}
                       className="block px-4 py-2 text-sm text-ink hover:bg-paper"
                     >
-                      Provider console
+                      {location.pathname.startsWith('/provider') ? 'Switch to learner mode' : 'Provider console'}
                     </Link>
                   )}
                   <div className="my-1 border-t border-hairline" />

@@ -208,7 +208,7 @@ export default function AdminProviders() {
                         onClick={() => setExpandedId((id) => (id === org.id ? null : org.id))}
                         className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper"
                       >
-                        {expandedId === org.id ? 'Hide staff' : 'Manage staff'}
+                        {expandedId === org.id ? 'Hide users' : 'Manage users'}
                       </button>
                       <button
                         type="button"
@@ -267,7 +267,7 @@ export function OrganisationStaffPanel({ organisation }) {
       const result = await inviteOrganisationStaff(organisation.id, email.trim(), role)
       setMessage(
         result.alreadyExisted
-          ? `${email.trim()} already had a LearnScope account — sent them a request to accept staff access.`
+          ? `${email.trim()} already had a LearnScope account — sent them a request to accept access.`
           : `Invitation sent to ${email.trim()}.`
       )
       setEmail('')
@@ -294,7 +294,7 @@ export function OrganisationStaffPanel({ organisation }) {
       <form onSubmit={handleInvite} className="flex flex-wrap items-end gap-2">
         <div className="flex-1 min-w-[180px]">
           <label className="block text-xs text-secondary mb-1" htmlFor={`staffEmail-${organisation.id}`}>
-            Invite staff by email
+            Invite users by email
           </label>
           <input
             id={`staffEmail-${organisation.id}`}
@@ -332,9 +332,9 @@ export function OrganisationStaffPanel({ organisation }) {
       {error && <p className="text-xs text-red-700">{error}</p>}
 
       {loading ? (
-        <p className="text-xs text-secondary">Loading staff…</p>
+        <p className="text-xs text-secondary">Loading users…</p>
       ) : members.length === 0 ? (
-        <p className="text-xs text-secondary">No staff members yet.</p>
+        <p className="text-xs text-secondary">No users yet.</p>
       ) : (
         <ul className="divide-y divide-hairline">
           {members.map((m) => (

@@ -277,7 +277,7 @@ async function inviteOrgStaff(admin, caller, { organisationId, email, role }, re
     // staff (or already have a pending invite) here, surface that plainly
     // rather than a raw constraint error.
     if (memberInsertError.code === '23505') {
-      res.status(409).json({ error: 'This person is already staff (or already invited) at this organisation.' })
+      res.status(409).json({ error: 'This person is already a user (or already invited) at this organisation.' })
       return
     }
     throw memberInsertError
@@ -345,7 +345,7 @@ async function notifyOrgInvitePending(admin, email, organisationId, role) {
       body: JSON.stringify({
         from: 'LearnScope <onboarding@resend.dev>',
         to: email,
-        subject: `${orgName} wants to add you as staff on LearnScope`,
+        subject: `${orgName} wants to add you on LearnScope`,
         html: `
           <p><strong>${escapeHtml(orgName)}</strong> wants to add you as ${roleLabel} on LearnScope.</p>
           <p>Sign in to your existing account and check your Connections page to accept or decline.</p>

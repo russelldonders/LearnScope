@@ -22,7 +22,7 @@ const STATUS_LABELS = {
 
 const SECTIONS = [
   { key: 'training', label: 'Training' },
-  { key: 'staff', label: 'Staff', adminOnly: true },
+  { key: 'staff', label: 'Users', adminOnly: true },
   { key: 'resources', label: 'Resources' },
 ]
 
@@ -87,7 +87,7 @@ export default function ProviderConsole() {
       <main className="max-w-5xl mx-auto px-4 py-8">
         <h2 className="font-display text-xl text-ink mb-1">Provider console</h2>
         <p className="text-sm text-secondary mb-6">
-          Create and build out training, then submit it for approval, manage your organisation's staff, and
+          Create and build out training, then submit it for approval, manage your organisation's users, and
           maintain a shared library of resources.
         </p>
 
@@ -98,7 +98,7 @@ export default function ProviderConsole() {
         ) : myOrgs.length === 0 ? (
           <p className="text-secondary">
             {myOrgIds.length > 0
-              ? "The organisation(s) you're staff at are currently deactivated."
+              ? "The organisation(s) you're a user of are currently deactivated."
               : "You're not part of any provider organisation."}
           </p>
         ) : (

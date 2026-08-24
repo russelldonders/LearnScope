@@ -282,7 +282,7 @@ export default function Connections() {
 
         {orgInvites.length > 0 && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-6">Provider staff invitations</h2>
+            <h2 className="font-display text-xl text-ink mb-6">Provider invitations</h2>
             <div className="space-y-3">
               {orgInvites.map((invite) => (
                 <div key={invite.id} className="bg-card border border-hairline rounded-lg p-4">
