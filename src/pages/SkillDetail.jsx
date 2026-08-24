@@ -1381,7 +1381,7 @@ function HistorySection({
         // specifically -- self-assessments and peer ratings are additional
         // input toward an evaluation, not a baseline in their own right.
         const mostRecentBaselineIndex = events.findIndex(
-          (e) => e.type === 'assessment' && e.entry.source === 'ai_baseline'
+          (e) => e.type === 'assessment' && e.entry.source === 'ai_baseline' && e.entry.axis === 'practical'
         )
 
         return (
@@ -1540,15 +1540,17 @@ function TimelineEntry({
           {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
         </div>
         <div
-          className="min-w-0 flex-1 mb-3 flex items-center gap-2 text-xs text-secondary cursor-pointer hover:text-ink transition-colors"
+          className={`min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3 ${onSelect ? 'cursor-pointer hover:border-moss/60 transition-colors' : ''}`}
           {...clickableProps}
         >
-          <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">{verbLabel(s.statement)}</span>
-          <span className="truncate min-w-0">{activityName(s.statement)}</span>
-          <span className="font-mono text-[10px] text-secondary/70 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">{verbLabel(s.statement)}</span>
+            <p className="text-sm font-medium text-ink truncate min-w-0">{activityName(s.statement)}</p>
+          </div>
+          <p className="font-mono text-xs text-secondary mt-0.5">
             {new Date(s.recorded_at).toLocaleDateString()}
             {formatDuration(s.statement) ? ` · ${formatDuration(s.statement)}` : ''}
-          </span>
+          </p>
         </div>
       </div>
     )
@@ -1563,14 +1565,17 @@ function TimelineEntry({
           {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
         </div>
         <div
-          className="min-w-0 flex-1 mb-3 flex items-center gap-2 text-xs text-secondary cursor-pointer hover:text-ink transition-colors"
+          className={`min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3 ${onSelect ? 'cursor-pointer hover:border-moss/60 transition-colors' : ''}`}
           {...clickableProps}
         >
-          <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">Training</span>
-          <span className="truncate min-w-0">{course.name}</span>
-          <span className="font-mono text-[10px] text-secondary/70 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">Training</span>
+            <p className="text-sm font-medium text-ink truncate min-w-0">{course.name}</p>
+          </div>
+          <p className="font-mono text-xs text-secondary mt-0.5">
             {new Date(course.completed_date).toLocaleDateString()}
-          </span>
+          </p>
+          {onSelect && <p className="font-mono text-[10px] text-moss mt-1">View course →</p>}
         </div>
       </div>
     )
@@ -1583,14 +1588,14 @@ function TimelineEntry({
           <LifecycleStageIcon stage="identified" size={14} className="text-secondary/70 mt-1" />
           {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
         </div>
-        <div className="min-w-0 flex-1 mb-3 flex items-center gap-2 text-xs text-secondary">
-          <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">Skill added</span>
+        <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3">
+          <p className="text-sm font-medium text-ink">Skill added</p>
           {event.source && (
-            <span className="truncate min-w-0">{SKILL_SOURCE_LABELS[event.source] ?? event.source}</span>
+            <p className="font-mono text-[10px] text-secondary mt-0.5">{SKILL_SOURCE_LABELS[event.source] ?? event.source}</p>
           )}
-          <span className="font-mono text-[10px] text-secondary/70 shrink-0 ml-auto">
+          <p className="font-mono text-xs text-secondary mt-0.5">
             {new Date(event.date).toLocaleDateString()}
-          </span>
+          </p>
         </div>
       </div>
     )
@@ -1614,7 +1619,7 @@ function TimelineEntry({
           <p className="font-mono text-xs text-secondary mt-0.5">
             {new Date(rating.rated_at).toLocaleDateString()}
           </p>
-          <p className="font-mono text-[10px] text-secondary/80 mt-0.5 flex items-center gap-1.5">
+          <p className="font-mono text-[10px] text-secondary mt-0.5 flex items-center gap-1.5">
             <RaterAvatar url={raterAvatars?.[rating.rater_id]} />
             Rated by {rating.rater_name || rating.rater_email || 'a connection'}
           </p>
@@ -1647,7 +1652,7 @@ function TimelineEntry({
           <p className="font-mono text-xs text-secondary mt-0.5">
             {formatMonthYear(exp.start_date)} – {exp.end_date ? formatMonthYear(exp.end_date) : 'present'}
           </p>
-          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+          <p className="font-mono text-[10px] text-secondary mt-0.5">
             {exp.type === 'education' ? 'Used during study' : 'Used during employment'} · {exp.organization}
           </p>
         </div>
@@ -1727,26 +1732,26 @@ function TimelineEntry({
           {new Date(entry.assessed_at).toLocaleDateString()}
         </p>
         {entry.source === 'course' && entry.courses?.name ? (
-          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+          <p className="font-mono text-[10px] text-secondary mt-0.5">
             Earned by completing {entry.courses.name}
           </p>
         ) : entry.source === 'ai_baseline' ? (
-          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+          <p className="font-mono text-[10px] text-secondary mt-0.5">
             AI-assessed baseline, from self-assessment, peer ratings and activity
           </p>
         ) : entry.source === 'ai_evaluation' ? (
-          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+          <p className="font-mono text-[10px] text-secondary mt-0.5">
             AI assessment, evaluated against your target level
           </p>
         ) : entry.source === 'diagnostic_confirmed' ? (
-          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">Confirmed via knowledge check</p>
+          <p className="font-mono text-[10px] text-secondary mt-0.5">Confirmed via knowledge check</p>
         ) : (
-          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+          <p className="font-mono text-[10px] text-secondary mt-0.5">
             Self-assessed by {assessorName || 'you'}
           </p>
         )}
         {entry.experience?.title && (
-          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+          <p className="font-mono text-[10px] text-secondary mt-0.5">
             During {entry.experience.title} · {entry.experience.organization}
           </p>
         )}
@@ -1950,6 +1955,7 @@ function RaterAvatar({ url, size = 16 }) {
 function EvidenceAttachmentLink({ path, index }) {
   const [signedUrl, setSignedUrl] = useState(null)
   const [loadingUrl, setLoadingUrl] = useState(false)
+  const [error, setError] = useState(null)
 
   async function handleViewEvidence() {
     if (signedUrl) {
@@ -1957,24 +1963,30 @@ function EvidenceAttachmentLink({ path, index }) {
       return
     }
     setLoadingUrl(true)
+    setError(null)
     try {
       const url = await getEvidenceSignedUrl(path)
       setSignedUrl(url)
       window.open(url, '_blank', 'noopener')
+    } catch {
+      setError("Couldn't load — try again")
     } finally {
       setLoadingUrl(false)
     }
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleViewEvidence}
-      disabled={loadingUrl}
-      className="text-xs text-moss font-medium"
-    >
-      {loadingUrl ? 'Loading…' : `Attachment ${index + 1}`}
-    </button>
+    <span className="inline-flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={handleViewEvidence}
+        disabled={loadingUrl}
+        className="text-xs text-moss font-medium"
+      >
+        {loadingUrl ? 'Loading…' : `Attachment ${index + 1}`}
+      </button>
+      {error && <span className="text-xs text-red-700">{error}</span>}
+    </span>
   )
 }
 
