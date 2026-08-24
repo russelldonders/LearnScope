@@ -40,10 +40,12 @@ export async function createPlatformCourse(userId, { name, provider, courseType,
 }
 
 // Provider console equivalent of createPlatformCourse: an organisation's
-// own member (admin or trainer) submits into their own organisation_id at
-// 'pending_approval' -- RLS (0066) rejects anything else from this role, so
+// own member (admin or trainer) creates into their own organisation_id, as
+// a 'draft' -- not immediately submitted, so they can keep building it out
+// (edit details, attach content) before choosing to submit it for review.
+// RLS (0066) rejects anything but draft/pending_approval from this role, so
 // there's no way to self-approve from here even if the app layer tried.
-export async function submitProviderCourse(userId, organisationId, { name, provider, courseType, duration, synopsis }) {
+export async function createProviderCourse(userId, organisationId, { name, provider, courseType, duration, synopsis }) {
   const { data, error } = await supabase
     .from('course_catalogue')
     .insert({
@@ -54,12 +56,30 @@ export async function submitProviderCourse(userId, organisationId, { name, provi
       synopsis: synopsis?.trim() || null,
       organisation_id: organisationId,
       created_by: userId,
-      status: 'pending_approval',
+      status: 'draft',
     })
     .select()
     .single()
   if (error) throw error
   return data
+}
+
+// Editing is only possible while draft/rejected (RLS 0066's `using` clause
+// for the org-members update policy), matching what the provider console UI
+// exposes an edit affordance for -- pending_approval/approved rows are
+// read-only from here regardless.
+export async function updateProviderCourse(id, { name, provider, courseType, duration, synopsis }) {
+  const { error } = await supabase
+    .from('course_catalogue')
+    .update({
+      name: name.trim(),
+      provider: provider?.trim() || null,
+      course_type: courseType?.trim() || null,
+      duration: duration?.trim() || null,
+      synopsis: synopsis?.trim() || null,
+    })
+    .eq('id', id)
+  if (error) throw error
 }
 
 // Providers can only list their own organisation's catalogue entries (RLS

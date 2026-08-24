@@ -36,14 +36,12 @@ export async function updateOrganisation(id, { name, url }) {
   return data
 }
 
+// Routed through the service-role dispatcher (listOrgMembers) rather than a
+// direct RLS-scoped query, since organisation_members alone only has
+// user_id -- email lives on auth.users, which the client can't read.
 export async function listOrganisationMembers(organisationId) {
-  const { data, error } = await supabase
-    .from('organisation_members')
-    .select('id, user_id, role, status, created_at')
-    .eq('organisation_id', organisationId)
-    .order('created_at')
-  if (error) throw error
-  return data ?? []
+  const { members } = await callAdminApi('listOrgMembers', { organisationId })
+  return members ?? []
 }
 
 export async function removeOrganisationMember(memberRowId) {

@@ -61,6 +61,9 @@ export default async function handler(req, res) {
       case 'inviteOrgStaff':
         await inviteOrgStaff(admin, caller, payload, res)
         return
+      case 'listOrgMembers':
+        await listOrgMembers(admin, caller, payload, res)
+        return
       default:
         res.status(400).json({ error: 'Unknown action' })
     }
@@ -216,28 +219,33 @@ async function setUserBlocked(admin, caller, { userId, blocked }, res) {
   res.status(200).json({ ok: true })
 }
 
+// Platform admin, or an 'admin' member of this specific organisation --
+// never trust the client's claim about who they are. Shared by every
+// org-scoped action below; sends the 403 itself so callers can just
+// `if (!(await requireOrgAdmin(...))) return`.
+async function requireOrgAdmin(admin, caller, organisationId, res) {
+  if (await isPlatformAdmin(admin, caller.id)) return true
+  const { data: memberRow, error: memberCheckError } = await admin
+    .from('organisation_members')
+    .select('role')
+    .eq('organisation_id', organisationId)
+    .eq('user_id', caller.id)
+    .maybeSingle()
+  if (memberCheckError) throw memberCheckError
+  if (!memberRow || memberRow.role !== 'admin') {
+    res.status(403).json({ error: 'Organisation admin access required' })
+    return false
+  }
+  return true
+}
+
 async function inviteOrgStaff(admin, caller, { organisationId, email, role }, res) {
   if (!organisationId || !email || !VALID_ORG_ROLES.includes(role)) {
     res.status(400).json({ error: 'Missing or invalid organisationId, email, or role' })
     return
   }
 
-  // Re-derive the caller's authority server-side -- platform admin, or an
-  // 'admin' member of this specific organisation -- never trust the
-  // client's claim about who they are.
-  if (!(await isPlatformAdmin(admin, caller.id))) {
-    const { data: memberRow, error: memberCheckError } = await admin
-      .from('organisation_members')
-      .select('role')
-      .eq('organisation_id', organisationId)
-      .eq('user_id', caller.id)
-      .maybeSingle()
-    if (memberCheckError) throw memberCheckError
-    if (!memberRow || memberRow.role !== 'admin') {
-      res.status(403).json({ error: 'Organisation admin access required' })
-      return
-    }
-  }
+  if (!(await requireOrgAdmin(admin, caller, organisationId, res))) return
 
   // An existing LearnScope user (they signed up themselves, or already
   // belongs to another organisation) shouldn't get a "create your account"
@@ -286,6 +294,34 @@ async function inviteOrgStaff(admin, caller, { organisationId, email, role }, re
   }
 
   res.status(200).json({ ok: true, userId, alreadyExisted: Boolean(existingUserId) })
+}
+
+// organisation_members only stores user_id -- profiles has no email column
+// (same reasoning as listUsers() above), so the staff list needs a
+// service-role lookup to show something more useful than a raw uuid.
+async function listOrgMembers(admin, caller, { organisationId }, res) {
+  if (!organisationId) {
+    res.status(400).json({ error: 'Missing organisationId' })
+    return
+  }
+
+  if (!(await requireOrgAdmin(admin, caller, organisationId, res))) return
+
+  const { data: members, error: membersError } = await admin
+    .from('organisation_members')
+    .select('id, user_id, role, status, created_at')
+    .eq('organisation_id', organisationId)
+    .order('created_at')
+  if (membersError) throw membersError
+
+  const details = await Promise.all(
+    members.map(async (m) => {
+      const { data, error } = await admin.auth.admin.getUserById(m.user_id)
+      return { ...m, email: error ? null : (data?.user?.email ?? null) }
+    })
+  )
+
+  res.status(200).json({ members: details })
 }
 
 function escapeHtml(str) {

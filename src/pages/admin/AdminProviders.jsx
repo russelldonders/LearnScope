@@ -339,7 +339,7 @@ export function OrganisationStaffPanel({ organisation }) {
         <ul className="divide-y divide-hairline">
           {members.map((m) => (
             <li key={m.id} className="flex items-center justify-between gap-2 py-2 text-sm">
-              <span className="text-ink font-mono text-xs truncate">{m.user_id}</span>
+              <span className="text-ink text-xs truncate">{m.email || m.user_id}</span>
               <span className="text-secondary text-xs shrink-0">
                 {m.role}
                 {m.status === 'pending' && ' · pending'}
