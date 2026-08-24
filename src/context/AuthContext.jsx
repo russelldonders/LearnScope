@@ -10,6 +10,12 @@ export function AuthProvider({ children }) {
   // null = not yet known, true/false = known. Only re-checked when the
   // signed-in user actually changes, not on every token refresh.
   const [needsOnboarding, setNeedsOnboarding] = useState(null)
+  // Same null-until-known pattern -- catches the one gap left by making
+  // Signup.jsx's name fields required: an account created through an
+  // admin/provider invite never goes through Signup at all, so first_name/
+  // last_name can still land null (see api/admin/actions.js's inviteUser/
+  // inviteOrgStaff, which call inviteUserByEmail with no name metadata).
+  const [needsName, setNeedsName] = useState(null)
   // Same null-until-known pattern as needsOnboarding -- PlatformAdminRoute
   // needs to distinguish "not yet checked" from "checked, not an admin" so
   // it doesn't redirect an actual admin away before the check resolves.
@@ -37,15 +43,33 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!userId) {
       setNeedsOnboarding(null)
+      setNeedsName(null)
       return
     }
     supabase
       .from('profiles')
-      .select('onboarding_completed_at')
+      .select('onboarding_completed_at, first_name, last_name')
       .eq('id', userId)
       .single()
       .then(({ data, error }) => {
         setNeedsOnboarding(!error && data ? !data.onboarding_completed_at : false)
+        setNeedsName(!error && data ? !data.first_name?.trim() || !data.last_name?.trim() : false)
+      })
+  }, [userId])
+
+  // Called by Profile.jsx after a successful save -- without this, fixing a
+  // blank name wouldn't clear needsName until the next full page load/re-
+  // auth, so ProtectedRoute would keep redirecting back to /profile even
+  // though the account no longer needs it.
+  const refreshNeedsName = useCallback(() => {
+    if (!userId) return
+    supabase
+      .from('profiles')
+      .select('first_name, last_name')
+      .eq('id', userId)
+      .single()
+      .then(({ data, error }) => {
+        setNeedsName(!error && data ? !data.first_name?.trim() || !data.last_name?.trim() : false)
       })
   }, [userId])
 
@@ -89,9 +113,11 @@ export function AuthProvider({ children }) {
     user: session?.user ?? null,
     loading,
     needsOnboarding,
+    needsName,
     isPlatformAdmin,
     organisationMemberships,
     refreshOrganisationMemberships,
+    refreshNeedsName,
     markOnboardingComplete,
     // Carries a pending rate-invite code through as a query param on the
     // confirmation-email redirect, rather than relying solely on

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AdminLayout from './AdminLayout'
 import { listUsers, inviteUser, setUserBlocked, getUserLinkages, deleteUser } from '../../lib/admin/users'
@@ -122,8 +123,16 @@ export default function AdminUsers() {
               <tbody>
                 {users.map((u) => (
                   <tr key={u.id} className="border-b border-hairline last:border-0">
-                    <td className="px-4 py-2 text-ink whitespace-nowrap">{u.fullName || '—'}</td>
-                    <td className="px-4 py-2 text-ink">{u.email}</td>
+                    <td className="px-4 py-2 text-ink whitespace-nowrap">
+                      <Link to={`/admin/users/${u.id}`} className="hover:text-moss hover:underline">
+                        {u.fullName || '—'}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-2 text-ink">
+                      <Link to={`/admin/users/${u.id}`} className="hover:text-moss hover:underline">
+                        {u.email}
+                      </Link>
+                    </td>
                     <td className="px-4 py-2">
                       <span
                         className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border whitespace-nowrap ${
@@ -136,7 +145,14 @@ export default function AdminUsers() {
                       </span>
                     </td>
                     <td className="px-4 py-2 text-secondary whitespace-nowrap">
-                      {u.isPlatformAdmin ? 'Platform admin' : ''}
+                      <div className="flex flex-col gap-0.5">
+                        {u.isPlatformAdmin && <span>Platform admin</span>}
+                        {u.organisationMemberships.map((m, i) => (
+                          <span key={i}>
+                            {m.organisationName} ({m.role})
+                          </span>
+                        ))}
+                      </div>
                     </td>
                     <td className="px-4 py-2 text-right">
                       <div className="flex items-center justify-end gap-2">

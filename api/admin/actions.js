@@ -62,6 +62,9 @@ export default async function handler(req, res) {
       case 'getUserLinkages':
         await getUserLinkages(admin, caller, payload, res)
         return
+      case 'getUserProfile':
+        await getUserProfile(admin, caller, payload, res)
+        return
       case 'deleteUser':
         await deleteUser(admin, caller, payload, res)
         return
@@ -116,6 +119,26 @@ async function listUsers(admin, caller, res) {
   if (adminRowsError) throw adminRowsError
   const adminIds = new Set(adminRows.map((r) => r.user_id))
 
+  // Active org memberships only -- a 'pending' row (0070) isn't a real role
+  // yet, the invite just hasn't been accepted, so it shouldn't read as one
+  // in a list that's meant to show what access someone actually has.
+  const { data: orgMemberRows, error: orgMemberRowsError } = await admin
+    .from('organisation_members')
+    .select('user_id, organisation_id, role')
+    .eq('status', 'active')
+  if (orgMemberRowsError) throw orgMemberRowsError
+
+  const { data: orgs, error: orgsError } = await admin.from('organisations').select('id, name')
+  if (orgsError) throw orgsError
+  const orgNameById = new Map(orgs.map((o) => [o.id, o.name]))
+
+  const orgMembershipsByUser = new Map()
+  for (const m of orgMemberRows) {
+    const list = orgMembershipsByUser.get(m.user_id) ?? []
+    list.push({ organisationName: orgNameById.get(m.organisation_id) ?? 'Unknown organisation', role: m.role })
+    orgMembershipsByUser.set(m.user_id, list)
+  }
+
   const result = users.map((u) => {
     const profile = profileById.get(u.id)
     return {
@@ -125,6 +148,7 @@ async function listUsers(admin, caller, res) {
       lastSignInAt: u.last_sign_in_at ?? null,
       fullName: profile?.full_name ?? null,
       accountStatus: profile?.account_status ?? 'active',
+      organisationMemberships: orgMembershipsByUser.get(u.id) ?? [],
       isPlatformAdmin: adminIds.has(u.id),
     }
   })
@@ -314,6 +338,133 @@ async function getUserLinkages(admin, caller, { userId }, res) {
     organisations,
     isPlatformAdmin: Boolean(targetAdminRow),
     isLastPlatformAdmin,
+  })
+}
+
+// Full read-only dossier for the platform console's user detail page --
+// everything getUserLinkages above only counts, spelled out, plus platform
+// admin status and org roles including pending (not just active) ones so an
+// admin investigating an account can see an invite still awaiting
+// acceptance. Deliberately service-role/RLS-bypassing (like every other
+// action in this file) rather than a client-side query modeled on
+// SkillsProfile.jsx, since that page only shows what the *viewed* user has
+// opted into sharing -- a platform admin needs to see the whole record
+// regardless of the learner's own visibility toggles.
+async function getUserProfile(admin, caller, { userId }, res) {
+  if (!userId) {
+    res.status(400).json({ error: 'Missing userId' })
+    return
+  }
+
+  if (!(await isPlatformAdmin(admin, caller.id))) {
+    res.status(403).json({ error: 'Platform admin access required' })
+    return
+  }
+
+  const { data: targetUser, error: targetUserError } = await admin.auth.admin.getUserById(userId)
+  if (targetUserError || !targetUser?.user) {
+    res.status(404).json({ error: 'User not found.' })
+    return
+  }
+
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .select('first_name, last_name, account_status, country, location, language, avatar_url')
+    .eq('id', userId)
+    .maybeSingle()
+  if (profileError) throw profileError
+
+  const { data: skills, error: skillsError } = await admin
+    .from('skills')
+    .select('id, name, category, level')
+    .eq('user_id', userId)
+    .order('name')
+  if (skillsError) throw skillsError
+
+  const { data: courses, error: coursesError } = await admin
+    .from('courses')
+    .select('id, name, provider, completed_date')
+    .eq('user_id', userId)
+    .order('completed_date', { ascending: false })
+  if (coursesError) throw coursesError
+
+  const { data: experience, error: experienceError } = await admin
+    .from('experience')
+    .select('id, type, title, organization, start_date, end_date')
+    .eq('user_id', userId)
+    .order('start_date', { ascending: false })
+  if (experienceError) throw experienceError
+
+  const { data: connectionRows, error: connectionsError } = await admin
+    .from('connections')
+    .select('id, user_a_id, user_b_id')
+    .or(`user_a_id.eq.${userId},user_b_id.eq.${userId}`)
+  if (connectionsError) throw connectionsError
+
+  const counterpartIds = connectionRows.map((c) => (c.user_a_id === userId ? c.user_b_id : c.user_a_id))
+  let connections = []
+  if (counterpartIds.length > 0) {
+    const { data: counterpartProfiles, error: counterpartError } = await admin
+      .from('profiles')
+      .select('id, first_name, last_name')
+      .in('id', counterpartIds)
+    if (counterpartError) throw counterpartError
+    const profileById = new Map(counterpartProfiles.map((p) => [p.id, p]))
+    connections = counterpartIds.map((id) => {
+      const p = profileById.get(id)
+      const name = [p?.first_name, p?.last_name].filter(Boolean).join(' ')
+      return { id, name: name || null }
+    })
+  }
+
+  const { data: orgMemberRows, error: orgMemberError } = await admin
+    .from('organisation_members')
+    .select('organisation_id, role, status')
+    .eq('user_id', userId)
+  if (orgMemberError) throw orgMemberError
+
+  let organisationMemberships = []
+  if (orgMemberRows.length > 0) {
+    const { data: orgRows, error: orgError } = await admin
+      .from('organisations')
+      .select('id, name')
+      .in('id', orgMemberRows.map((m) => m.organisation_id))
+    if (orgError) throw orgError
+    const nameById = new Map(orgRows.map((o) => [o.id, o.name]))
+    organisationMemberships = orgMemberRows.map((m) => ({
+      organisationName: nameById.get(m.organisation_id) ?? 'Unknown organisation',
+      role: m.role,
+      status: m.status,
+    }))
+  }
+
+  const { data: targetAdminRow, error: targetAdminError } = await admin
+    .from('platform_admins')
+    .select('user_id')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (targetAdminError) throw targetAdminError
+
+  res.status(200).json({
+    profile: {
+      id: userId,
+      email: targetUser.user.email,
+      firstName: profile?.first_name ?? null,
+      lastName: profile?.last_name ?? null,
+      accountStatus: profile?.account_status ?? 'active',
+      country: profile?.country ?? null,
+      location: profile?.location ?? null,
+      language: profile?.language ?? null,
+      avatarUrl: profile?.avatar_url ?? null,
+      createdAt: targetUser.user.created_at,
+      lastSignInAt: targetUser.user.last_sign_in_at ?? null,
+    },
+    isPlatformAdmin: Boolean(targetAdminRow),
+    organisationMemberships,
+    skills,
+    courses,
+    experience,
+    connections,
   })
 }
 

@@ -17,6 +17,10 @@ export async function getUserLinkages(userId) {
   return callAdminApi('getUserLinkages', { userId })
 }
 
+export async function getUserProfile(userId) {
+  return callAdminApi('getUserProfile', { userId })
+}
+
 export async function deleteUser(userId) {
   return callAdminApi('deleteUser', { userId })
 }

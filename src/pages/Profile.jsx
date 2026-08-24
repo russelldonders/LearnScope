@@ -8,7 +8,7 @@ import { COUNTRIES } from '../lib/countries'
 import { LANGUAGES } from '../lib/languages'
 
 export default function Profile() {
-  const { user, updateEmail, signOut } = useAuth()
+  const { user, updateEmail, signOut, refreshNeedsName } = useAuth()
   const navigate = useNavigate()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -50,15 +50,20 @@ export default function Profile() {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    setError(null)
     setSavedMessage(null)
+
+    if (!firstName.trim() || !lastName.trim()) {
+      setError('Please enter your first and last name.')
+      return
+    }
+    setError(null)
     setSaving(true)
 
     const { error: profileError } = await supabase
       .from('profiles')
       .update({
-        first_name: firstName.trim() || null,
-        last_name: lastName.trim() || null,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
         country: country || null,
         location: location.trim() || null,
         language: language || null,
@@ -71,6 +76,7 @@ export default function Profile() {
       setSaving(false)
       return
     }
+    refreshNeedsName()
 
     if (email.trim() !== user.email) {
       const { error: emailError } = await updateEmail(email.trim())
@@ -137,6 +143,7 @@ export default function Profile() {
                   </label>
                   <input
                     id="firstName"
+                    required
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
@@ -148,6 +155,7 @@ export default function Profile() {
                   </label>
                   <input
                     id="lastName"
+                    required
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"

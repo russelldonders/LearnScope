@@ -29,6 +29,7 @@ import CourseLearn from './pages/CourseLearn'
 import Learning from './pages/Learning'
 import ValidateRequest from './pages/ValidateRequest'
 import AdminUsers from './pages/admin/AdminUsers'
+import AdminUserDetail from './pages/admin/AdminUserDetail'
 import AdminProviders from './pages/admin/AdminProviders'
 import AdminCatalogue from './pages/admin/AdminCatalogue'
 import AdminSkills from './pages/admin/AdminSkills'
@@ -197,6 +198,14 @@ function App() {
             element={
               <PlatformAdminRoute>
                 <AdminUsers />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/users/:userId"
+            element={
+              <PlatformAdminRoute>
+                <AdminUserDetail />
               </PlatformAdminRoute>
             }
           />
