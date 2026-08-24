@@ -12,6 +12,20 @@ import { supabaseAdmin } from '../_lib/supabaseAdmin.js'
 const PER_PAGE = 200
 const VALID_ORG_ROLES = ['admin', 'trainer']
 
+// Without an explicit redirectTo, Supabase Auth falls back to the project's
+// dashboard-configured Site URL for invite emails -- fine for the
+// client-side auth flows in AuthContext.jsx (they all pass
+// window.location.origin explicitly), but this runs server-side with no
+// window. APP_URL must be set in Vercel per environment (Preview/Staging
+// vs Production) and the resulting URL added to the Supabase project's
+// Redirect URLs allow-list, or Supabase silently falls back to Site URL
+// anyway. No fallback URL guess here -- an unset APP_URL should surface as
+// a real Site-URL-configured link (however it's currently set) rather than
+// silently degrade to something possibly wrong.
+function inviteRedirectTo() {
+  return process.env.APP_URL ? { redirectTo: `${process.env.APP_URL}/reset-password` } : undefined
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
@@ -119,7 +133,7 @@ async function inviteUser(admin, caller, { email, grantPlatformAdmin }, res) {
     return
   }
 
-  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email.trim())
+  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email.trim(), inviteRedirectTo())
   if (inviteError) throw inviteError
 
   if (grantPlatformAdmin) {
@@ -225,7 +239,7 @@ async function inviteOrgStaff(admin, caller, { organisationId, email, role }, re
     }
   }
 
-  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email.trim())
+  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email.trim(), inviteRedirectTo())
   if (inviteError) throw inviteError
 
   const { error: memberInsertError } = await admin.from('organisation_members').insert({
