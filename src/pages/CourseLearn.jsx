@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import {
-  listCourseContentItems,
+  listCourseResources,
   listContentProgress,
   markContentComplete,
   contentFileUrl,
@@ -46,7 +46,7 @@ export default function CourseLearn() {
     setCourse(data)
 
     if (data.catalogue_course_id) {
-      const contentItems = await listCourseContentItems(data.catalogue_course_id)
+      const contentItems = await listCourseResources(data.catalogue_course_id)
       setItems(contentItems)
       setProgressByItemId(await listContentProgress(user.id, contentItems.map((i) => i.id)))
       setCurrentItemId((prev) => prev ?? contentItems[0]?.id ?? null)

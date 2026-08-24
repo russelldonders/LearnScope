@@ -8,21 +8,65 @@ const BUCKET = 'course-content'
 // containing a ".." segment or starting with "/" would otherwise let
 // scormLaunchUrl's `${storage_path}/${launch_path}` concatenation resolve
 // (the browser normalizes ../ against the URL path) into a *different*
-// course's storage folder, defeating the "unlisted by uuid" model draft
+// resource's storage folder, defeating the "unlisted by uuid" model draft
 // content otherwise relies on (see 0071's migration comment).
 function isSafeRelativePath(p) {
   if (!p || p.startsWith('/') || p.startsWith('\\')) return false
   return !p.split(/[/\\]/).some((segment) => segment === '..')
 }
 
-export async function listCourseContentItems(courseId) {
+// An organisation's whole content library (video/file/SCORM), independent
+// of which courses it's attached to -- see 0073's migration comment for why
+// this moved off course_content_items (one row per course) to
+// content_resources (one row per org, reusable via course_content_links).
+export async function listOrganisationResources(organisationId) {
   const { data, error } = await supabase
-    .from('course_content_items')
+    .from('content_resources')
     .select('*')
+    .eq('organisation_id', organisationId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+// Resources attached to one specific course, in that course's own order --
+// the same resource can appear (independently ordered) in more than one
+// course's list, since attachment is many-to-many. Each returned object is
+// the resource itself plus `linkId` (the course_content_links row id,
+// needed to unlink) and `position`.
+export async function listCourseResources(courseId) {
+  const { data, error } = await supabase
+    .from('course_content_links')
+    .select('id, position, resource:content_resources(*)')
     .eq('course_id', courseId)
     .order('position')
   if (error) throw error
-  return data ?? []
+  return (data ?? []).map((link) => ({ ...link.resource, linkId: link.id, position: link.position }))
+}
+
+async function nextLinkPosition(courseId) {
+  const { count, error } = await supabase
+    .from('course_content_links')
+    .select('id', { count: 'exact', head: true })
+    .eq('course_id', courseId)
+  if (error) throw error
+  return count ?? 0
+}
+
+export async function linkResourceToCourse(courseId, resourceId) {
+  const position = await nextLinkPosition(courseId)
+  const { error } = await supabase
+    .from('course_content_links')
+    .insert({ course_id: courseId, resource_id: resourceId, position })
+  if (error) throw error
+}
+
+// Detaches a resource from this course -- the resource itself (and any
+// other course it's attached to) is untouched, matching the "unlinking
+// doesn't delete the underlying record" rule everywhere else in this app.
+export async function unlinkResourceFromCourse(linkId) {
+  const { error } = await supabase.from('course_content_links').delete().eq('id', linkId)
+  if (error) throw error
 }
 
 // Served through the app's own domain (vercel.json's /course-content/*
@@ -47,60 +91,51 @@ export function scormLaunchUrl(item) {
 // SCORM items track their own progress via ScormPlayer's window.API
 // (LMSSetValue/LMSCommit/LMSFinish); this is for video/file items, which
 // have no runtime of their own -- just a plain "the learner said they're
-// done" marker.
-export async function listContentProgress(userId, contentItemIds) {
-  if (contentItemIds.length === 0) return {}
+// done" marker. Progress is keyed by resource id, not by course -- a
+// resource watched/completed once stays completed wherever else it's
+// attached, rather than tracking a separate completion per course.
+export async function listContentProgress(userId, resourceIds) {
+  if (resourceIds.length === 0) return {}
   const { data, error } = await supabase
     .from('course_content_progress')
     .select('content_item_id, status, score')
     .eq('user_id', userId)
-    .in('content_item_id', contentItemIds)
+    .in('content_item_id', resourceIds)
   if (error) throw error
   return Object.fromEntries((data ?? []).map((p) => [p.content_item_id, p]))
 }
 
-export async function markContentComplete(contentItemId, userId) {
+export async function markContentComplete(resourceId, userId) {
   const { error } = await supabase.from('course_content_progress').upsert(
-    { content_item_id: contentItemId, user_id: userId, status: 'completed', updated_at: new Date().toISOString() },
+    { content_item_id: resourceId, user_id: userId, status: 'completed', updated_at: new Date().toISOString() },
     { onConflict: 'content_item_id,user_id' }
   )
   if (error) throw error
 }
 
-async function nextPosition(courseId) {
-  const { count, error } = await supabase
-    .from('course_content_items')
-    .select('id', { count: 'exact', head: true })
-    .eq('course_id', courseId)
-  if (error) throw error
-  return count ?? 0
+export async function uploadVideoResource(organisationId, userId, file, title) {
+  return uploadSingleFileResource(organisationId, userId, file, title, 'video')
 }
 
-export async function uploadVideoContent(courseId, userId, file, title) {
-  return uploadSingleFileContent(courseId, userId, file, title, 'video')
+export async function uploadFileResource(organisationId, userId, file, title) {
+  return uploadSingleFileResource(organisationId, userId, file, title, 'file')
 }
 
-export async function uploadFileContent(courseId, userId, file, title) {
-  return uploadSingleFileContent(courseId, userId, file, title, 'file')
-}
-
-async function uploadSingleFileContent(courseId, userId, file, title, type) {
+async function uploadSingleFileResource(organisationId, userId, file, title, type) {
   const itemId = crypto.randomUUID()
-  const path = `${courseId}/${itemId}/${file.name}`
+  const path = `${organisationId}/${itemId}/${file.name}`
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)
     .upload(path, file, { contentType: file.type })
   if (uploadError) throw uploadError
 
-  const position = await nextPosition(courseId)
   const { data, error } = await supabase
-    .from('course_content_items')
+    .from('content_resources')
     .insert({
       id: itemId,
-      course_id: courseId,
+      organisation_id: organisationId,
       type,
       title: title?.trim() || file.name,
-      position,
       storage_path: path,
       file_name: file.name,
       created_by: userId,
@@ -116,7 +151,7 @@ async function uploadSingleFileContent(courseId, userId, file, title, type) {
 // no single "the file" to upload, so the zip is extracted client-side
 // (JSZip) and every entry is uploaded individually under one folder, then
 // the manifest tells us which extracted file is the actual launch page.
-export async function uploadScormContent(courseId, userId, zipFile, title) {
+export async function uploadScormResource(organisationId, userId, zipFile, title) {
   const zip = await JSZip.loadAsync(zipFile)
 
   const manifestEntry = zip.file(/^imsmanifest\.xml$/i)[0]
@@ -130,7 +165,7 @@ export async function uploadScormContent(courseId, userId, zipFile, title) {
   }
 
   const itemId = crypto.randomUUID()
-  const folderPrefix = `${courseId}/${itemId}`
+  const folderPrefix = `${organisationId}/${itemId}`
 
   const entries = Object.values(zip.files).filter((entry) => !entry.dir)
   for (const entry of entries) {
@@ -144,15 +179,13 @@ export async function uploadScormContent(courseId, userId, zipFile, title) {
     if (uploadError) throw uploadError
   }
 
-  const position = await nextPosition(courseId)
   const { data, error } = await supabase
-    .from('course_content_items')
+    .from('content_resources')
     .insert({
       id: itemId,
-      course_id: courseId,
+      organisation_id: organisationId,
       type: 'scorm',
       title: title?.trim() || zipFile.name,
-      position,
       storage_path: folderPrefix,
       file_name: zipFile.name,
       launch_path: launchPath,
@@ -212,7 +245,7 @@ function guessContentType(filename) {
   return map[ext] || 'application/octet-stream'
 }
 
-// Recursively removes every object under a content item's storage prefix --
+// Recursively removes every object under a resource's storage prefix --
 // storage.list() only returns one folder level at a time, so this walks the
 // tree for SCORM items (many nested files); video/file items are a single
 // path so this resolves in one call.
@@ -252,8 +285,12 @@ async function removeStorageFolder(prefix) {
   }
 }
 
-export async function deleteContentItem(item) {
-  await removeStorageFolder(item.storage_path)
-  const { error } = await supabase.from('course_content_items').delete().eq('id', item.id)
+// Deletes the resource itself (and its storage files) -- not just an
+// attachment. course_content_links rows referencing it cascade-delete at
+// the DB level (0073), so it disappears from every course it was attached
+// to, not just the one you were looking at when you deleted it.
+export async function deleteResource(resource) {
+  await removeStorageFolder(resource.storage_path)
+  const { error } = await supabase.from('content_resources').delete().eq('id', resource.id)
   if (error) throw error
 }

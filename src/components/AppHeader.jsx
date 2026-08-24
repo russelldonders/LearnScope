@@ -19,7 +19,7 @@ const MENU_ITEMS = [
   { to: '/profile/import', label: 'Import Skills & Experience' },
 ]
 
-export default function AppHeader() {
+export default function AppHeader({ hideNavLinks = false }) {
   const { signOut, user, isPlatformAdmin, organisationMemberships } = useAuth()
   const { pendingActionCount } = usePendingActions()
   const location = useLocation()
@@ -142,26 +142,28 @@ export default function AppHeader() {
             </div>
           </div>
         </div>
-        <nav className="flex items-center flex-wrap gap-1 sm:gap-3 mt-3">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className={`flex items-center gap-1.5 text-sm rounded-md px-2.5 py-1.5 whitespace-nowrap ${
-                location.pathname === link.to
-                  ? 'text-ink font-medium bg-paper'
-                  : 'text-secondary hover:text-ink'
-              }`}
-            >
-              {link.label}
-              {link.to === '/connections' && pendingActionCount > 0 && (
-                <span className="flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-moss text-paper text-xs font-medium">
-                  {pendingActionCount}
-                </span>
-              )}
-            </Link>
-          ))}
-        </nav>
+        {!hideNavLinks && (
+          <nav className="flex items-center flex-wrap gap-1 sm:gap-3 mt-3">
+            {NAV_LINKS.map((link) => (
+              <Link
+                key={link.to}
+                to={link.to}
+                className={`flex items-center gap-1.5 text-sm rounded-md px-2.5 py-1.5 whitespace-nowrap ${
+                  location.pathname === link.to
+                    ? 'text-ink font-medium bg-paper'
+                    : 'text-secondary hover:text-ink'
+                }`}
+              >
+                {link.label}
+                {link.to === '/connections' && pendingActionCount > 0 && (
+                  <span className="flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-moss text-paper text-xs font-medium">
+                    {pendingActionCount}
+                  </span>
+                )}
+              </Link>
+            ))}
+          </nav>
+        )}
       </div>
     </header>
   )

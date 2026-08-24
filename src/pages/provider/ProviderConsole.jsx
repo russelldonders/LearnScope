@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
 import { OrganisationStaffPanel } from '../admin/AdminProviders'
 import CourseContentSection from '../../components/CourseContentSection'
+import ResourceLibrarySection from '../../components/ResourceLibrarySection'
 import { listOrganisations } from '../../lib/admin/organisations'
 import {
   listOrganisationCatalogueCourses,
@@ -19,6 +20,12 @@ const STATUS_LABELS = {
   inactive: 'Inactive',
 }
 
+const SECTIONS = [
+  { key: 'training', label: 'Training' },
+  { key: 'staff', label: 'Staff', adminOnly: true },
+  { key: 'resources', label: 'Resources' },
+]
+
 const EMPTY_FORM = { name: '', provider: '', courseType: '', duration: '', synopsis: '' }
 
 // Console for a provider's own staff (organisation_members rows) -- built on
@@ -33,6 +40,7 @@ export default function ProviderConsole() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selectedOrgId, setSelectedOrgId] = useState(null)
+  const [activeSection, setActiveSection] = useState('training')
 
   const myOrgIds = useMemo(
     () => (organisationMemberships ?? []).map((m) => m.organisation_id),
@@ -48,6 +56,10 @@ export default function ProviderConsole() {
   )
   const myRole = (organisationMemberships ?? []).find((m) => m.organisation_id === selectedOrgId)?.role
   const selectedOrg = myOrgs.find((o) => o.id === selectedOrgId)
+  // Guards against a stale 'staff' tab surviving a switch to an org where
+  // the current user isn't an admin (staff isn't in that org's own tab
+  // bar, but activeSection state persists across the org switch).
+  const currentSection = activeSection === 'staff' && myRole !== 'admin' ? 'training' : activeSection
 
   useEffect(() => {
     listOrganisations()
@@ -64,13 +76,19 @@ export default function ProviderConsole() {
     }
   }, [myOrgs, selectedOrgId])
 
+  const visibleSections = SECTIONS.filter((s) => !s.adminOnly || myRole === 'admin')
+
   return (
     <div className="min-h-screen bg-paper">
-      <AppHeader />
+      {/* hideNavLinks: this console is a distinct workspace from the
+          learner-facing app -- the learner nav (Skills/Experience/etc.)
+          isn't relevant here and just adds noise/wrong-context links. */}
+      <AppHeader hideNavLinks />
       <main className="max-w-5xl mx-auto px-4 py-8">
         <h2 className="font-display text-xl text-ink mb-1">Provider console</h2>
         <p className="text-sm text-secondary mb-6">
-          Create and build out training, then submit it for approval, and manage your organisation's staff.
+          Create and build out training, then submit it for approval, manage your organisation's staff, and
+          maintain a shared library of resources.
         </p>
 
         {error && <p className="text-sm text-red-700 mb-4">{error}</p>}
@@ -86,7 +104,7 @@ export default function ProviderConsole() {
         ) : (
           <>
             {myOrgs.length > 1 && (
-              <div className="flex items-center flex-wrap gap-1 mb-6 border-b border-hairline">
+              <div className="flex items-center flex-wrap gap-1 mb-4 border-b border-hairline">
                 {myOrgs.map((org) => (
                   <button
                     key={org.id}
@@ -105,15 +123,34 @@ export default function ProviderConsole() {
             )}
 
             {selectedOrg && (
-              <div className="space-y-8">
-                <ProviderTrainingSection key={selectedOrg.id} organisation={selectedOrg} userId={user.id} />
-                {myRole === 'admin' && (
-                  <div>
-                    <h3 className="font-display text-lg text-ink mb-3">Staff</h3>
-                    <div className="bg-card border border-hairline rounded-lg overflow-hidden">
-                      <OrganisationStaffPanel organisation={selectedOrg} />
-                    </div>
+              <div>
+                <div className="flex items-center flex-wrap gap-1 mb-6 border-b border-hairline">
+                  {visibleSections.map((section) => (
+                    <button
+                      key={section.key}
+                      type="button"
+                      onClick={() => setActiveSection(section.key)}
+                      className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
+                        currentSection === section.key
+                          ? 'border-moss text-ink font-medium'
+                          : 'border-transparent text-secondary hover:text-ink'
+                      }`}
+                    >
+                      {section.label}
+                    </button>
+                  ))}
+                </div>
+
+                {currentSection === 'training' && (
+                  <ProviderTrainingSection key={selectedOrg.id} organisation={selectedOrg} userId={user.id} />
+                )}
+                {currentSection === 'staff' && myRole === 'admin' && (
+                  <div className="bg-card border border-hairline rounded-lg overflow-hidden">
+                    <OrganisationStaffPanel organisation={selectedOrg} />
                   </div>
+                )}
+                {currentSection === 'resources' && (
+                  <ResourceLibrarySection key={selectedOrg.id} organisationId={selectedOrg.id} userId={user.id} />
                 )}
               </div>
             )}
@@ -260,6 +297,7 @@ function ProviderTrainingSection({ organisation, userId }) {
               key={course.id}
               course={course}
               userId={userId}
+              organisationId={organisation.id}
               isEditing={editingId === course.id}
               onToggleEdit={() => setEditingId((id) => (id === course.id ? null : course.id))}
               onSaved={load}
@@ -274,7 +312,7 @@ function ProviderTrainingSection({ organisation, userId }) {
 // Only draft/rejected rows are editable -- RLS (0066) already restricts the
 // org-members update policy's `using` clause to those two statuses, so this
 // mirrors the database's own rule rather than inventing a separate one.
-function CourseCard({ course, userId, isEditing, onToggleEdit, onSaved }) {
+function CourseCard({ course, userId, organisationId, isEditing, onToggleEdit, onSaved }) {
   const editable = course.status === 'draft' || course.status === 'rejected'
   const [form, setForm] = useState({
     name: course.name,
@@ -403,7 +441,7 @@ function CourseCard({ course, userId, isEditing, onToggleEdit, onSaved }) {
       </div>
 
       <div className="pt-3 border-t border-hairline">
-        <CourseContentSection courseId={course.id} userId={userId} />
+        <CourseContentSection courseId={course.id} organisationId={organisationId} userId={userId} />
       </div>
 
       {error && <p className="text-xs text-red-700">{error}</p>}
