@@ -39,7 +39,7 @@ export async function updateOrganisation(id, { name, url }) {
 export async function listOrganisationMembers(organisationId) {
   const { data, error } = await supabase
     .from('organisation_members')
-    .select('id, user_id, role, created_at')
+    .select('id, user_id, role, status, created_at')
     .eq('organisation_id', organisationId)
     .order('created_at')
   if (error) throw error

@@ -264,8 +264,12 @@ export function OrganisationStaffPanel({ organisation }) {
     setMessage(null)
     setError(null)
     try {
-      await inviteOrganisationStaff(organisation.id, email.trim(), role)
-      setMessage(`Invitation sent to ${email.trim()}.`)
+      const result = await inviteOrganisationStaff(organisation.id, email.trim(), role)
+      setMessage(
+        result.alreadyExisted
+          ? `${email.trim()} already had a LearnScope account — sent them a request to accept staff access.`
+          : `Invitation sent to ${email.trim()}.`
+      )
       setEmail('')
       await load()
     } catch (err) {
@@ -336,7 +340,10 @@ export function OrganisationStaffPanel({ organisation }) {
           {members.map((m) => (
             <li key={m.id} className="flex items-center justify-between gap-2 py-2 text-sm">
               <span className="text-ink font-mono text-xs truncate">{m.user_id}</span>
-              <span className="text-secondary text-xs shrink-0">{m.role}</span>
+              <span className="text-secondary text-xs shrink-0">
+                {m.role}
+                {m.status === 'pending' && ' · pending'}
+              </span>
               <button
                 type="button"
                 onClick={() => handleRemove(m)}

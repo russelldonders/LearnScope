@@ -18,9 +18,10 @@ import {
 } from '../lib/connections'
 import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
 import { listIncomingConnectionRequests, respondToConnectionRequest } from '../lib/skillDiscovery'
+import { listMyPendingOrgInvites, decideOrgInvite } from '../lib/organisationInvites'
 
 export default function Connections() {
-  const { user } = useAuth()
+  const { user, refreshOrganisationMemberships } = useAuth()
   const { refreshPendingActionCount } = usePendingActions()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -30,6 +31,9 @@ export default function Connections() {
   const [incomingRateInvites, setIncomingRateInvites] = useState([])
   const [validationRequests, setValidationRequests] = useState([])
   const [incomingRequests, setIncomingRequests] = useState([])
+  const [orgInvites, setOrgInvites] = useState([])
+  const [orgInviteDecidingId, setOrgInviteDecidingId] = useState(null)
+  const [orgInviteError, setOrgInviteError] = useState(null)
   const [respondingId, setRespondingId] = useState(null)
   const [respondError, setRespondError] = useState(null)
   const [profiles, setProfiles] = useState({})
@@ -57,6 +61,7 @@ export default function Connections() {
         incomingRateInvitesData,
         validationRequestsData,
         incomingRequestsData,
+        orgInvitesData,
       ] = await Promise.all([
         listMyPeerRatings(),
         listConnections(user.id),
@@ -64,6 +69,7 @@ export default function Connections() {
         listIncomingRateInvites(),
         listIncomingPendingValidationRequests(user.id),
         listIncomingConnectionRequests(user.id),
+        listMyPendingOrgInvites(user.id),
       ])
       setRatings(ratingsData)
       setAllConnectionIds(connectionsData.map((c) => c.id))
@@ -71,6 +77,7 @@ export default function Connections() {
       setIncomingRateInvites(incomingRateInvitesData)
       setValidationRequests(validationRequestsData)
       setIncomingRequests(incomingRequestsData)
+      setOrgInvites(orgInvitesData)
       const otherIds = ratingsData.map((r) => (r.rater_id === user.id ? r.skill_owner_id : r.rater_id))
       const requesterIds = validationRequestsData.map((r) => r.requester_id)
       const requestSenderIds = incomingRequestsData.map((r) => r.requester_id)
@@ -85,6 +92,21 @@ export default function Connections() {
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleOrgInviteResponse(memberId, accept) {
+    setOrgInviteError(null)
+    setOrgInviteDecidingId(memberId)
+    try {
+      await decideOrgInvite(memberId, accept)
+      setOrgInvites((prev) => prev.filter((i) => i.id !== memberId))
+      refreshPendingActionCount()
+      if (accept) refreshOrganisationMemberships()
+    } catch (err) {
+      setOrgInviteError({ id: memberId, message: err.message })
+    } finally {
+      setOrgInviteDecidingId(null)
     }
   }
 
@@ -247,6 +269,46 @@ export default function Connections() {
                       type="button"
                       onClick={() => handleRequestResponse(request.id, false)}
                       disabled={respondingId === request.id}
+                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {orgInvites.length > 0 && (
+          <div>
+            <h2 className="font-display text-xl text-ink mb-6">Provider staff invitations</h2>
+            <div className="space-y-3">
+              {orgInvites.map((invite) => (
+                <div key={invite.id} className="bg-card border border-hairline rounded-lg p-4">
+                  <p className="text-sm text-ink">
+                    <strong>{invite.organisations?.name || 'A provider organisation'}</strong> wants to add you as{' '}
+                    {invite.role === 'admin' ? 'an admin' : 'a trainer'}
+                  </p>
+                  <p className="font-mono text-xs text-secondary mt-1">
+                    {new Date(invite.created_at).toLocaleDateString()}
+                  </p>
+                  {orgInviteError?.id === invite.id && (
+                    <p className="text-xs text-red-700 mt-1">{orgInviteError.message}</p>
+                  )}
+                  <div className="flex items-center gap-2 mt-3">
+                    <button
+                      type="button"
+                      onClick={() => handleOrgInviteResponse(invite.id, true)}
+                      disabled={orgInviteDecidingId === invite.id}
+                      className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOrgInviteResponse(invite.id, false)}
+                      disabled={orgInviteDecidingId === invite.id}
                       className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
                     >
                       Decline

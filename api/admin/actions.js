@@ -239,16 +239,105 @@ async function inviteOrgStaff(admin, caller, { organisationId, email, role }, re
     }
   }
 
-  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email.trim(), inviteRedirectTo())
-  if (inviteError) throw inviteError
+  // An existing LearnScope user (they signed up themselves, or already
+  // belongs to another organisation) shouldn't get a "create your account"
+  // invite email and shouldn't error the whole action -- inviteUserByEmail
+  // only makes sense for someone with no account yet. But they also haven't
+  // agreed to anything, so unlike a brand-new invite (where clicking the
+  // Supabase invite-email link *is* the consent step), this inserts as
+  // 'pending' -- is_org_admin/is_org_member (0070) don't grant access for a
+  // pending row, so nothing changes for this org until the invited user
+  // explicitly accepts via decide_org_invite, surfaced to them on
+  // /connections (see PendingActionsContext, listMyPendingOrgInvites).
+  const existingUserId = await findUserIdByEmail(admin, email.trim())
+  let userId = existingUserId
+  if (!userId) {
+    const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email.trim(), inviteRedirectTo())
+    if (inviteError) throw inviteError
+    userId = invited.user.id
+  }
 
   const { error: memberInsertError } = await admin.from('organisation_members').insert({
     organisation_id: organisationId,
-    user_id: invited.user.id,
+    user_id: userId,
     role,
     invited_by: caller.id,
+    ...(existingUserId ? { status: 'pending' } : {}),
   })
-  if (memberInsertError) throw memberInsertError
+  if (memberInsertError) {
+    // unique_violation on (organisation_id, user_id) -- they're already
+    // staff (or already have a pending invite) here, surface that plainly
+    // rather than a raw constraint error.
+    if (memberInsertError.code === '23505') {
+      res.status(409).json({ error: 'This person is already staff (or already invited) at this organisation.' })
+      return
+    }
+    throw memberInsertError
+  }
 
-  res.status(200).json({ ok: true, userId: invited.user.id })
+  // An existing user gets no Supabase invite email (there's nothing to
+  // accept there -- they already have an account), so this is the only
+  // signal they get that an org wants to add them as staff. Best-effort: a
+  // failed notification shouldn't undo the pending row that already
+  // succeeded above -- they can still find and accept/decline it from
+  // /connections without ever seeing this email.
+  if (existingUserId) {
+    await notifyOrgInvitePending(admin, email.trim(), organisationId, role)
+  }
+
+  res.status(200).json({ ok: true, userId, alreadyExisted: Boolean(existingUserId) })
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ))
+}
+
+async function notifyOrgInvitePending(admin, email, organisationId, role) {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) return
+
+  const { data: org } = await admin.from('organisations').select('name').eq('id', organisationId).maybeSingle()
+  const orgName = org?.name || 'a provider organisation'
+  const roleLabel = role === 'admin' ? 'an admin' : 'a trainer'
+
+  try {
+    const resendRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'LearnScope <onboarding@resend.dev>',
+        to: email,
+        subject: `${orgName} wants to add you as staff on LearnScope`,
+        html: `
+          <p><strong>${escapeHtml(orgName)}</strong> wants to add you as ${roleLabel} on LearnScope.</p>
+          <p>Sign in to your existing account and check your Connections page to accept or decline.</p>
+        `,
+      }),
+    })
+    if (!resendRes.ok) {
+      const detail = await resendRes.text()
+      console.error('notifyOrgInvitePending: Resend error', resendRes.status, detail)
+    }
+  } catch (err) {
+    console.error('Failed to send org-invite-pending notification email:', err)
+  }
+}
+
+// Same manual-pagination pattern as listUsers() above -- profiles has no
+// email column (email lives on auth.users only), and this project doesn't
+// otherwise rely on GoTrue's admin listUsers accepting an email filter, so
+// stay consistent with the one lookup pattern already used here.
+async function findUserIdByEmail(admin, email) {
+  const target = email.toLowerCase()
+  let page = 1
+  while (true) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: PER_PAGE })
+    if (error) throw error
+    const match = data.users.find((u) => u.email?.toLowerCase() === target)
+    if (match) return match.id
+    if (data.users.length < PER_PAGE) return null
+    page += 1
+  }
 }

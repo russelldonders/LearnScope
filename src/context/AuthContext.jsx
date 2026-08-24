@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { getPendingInviteCode } from '../lib/connections'
 
@@ -49,6 +49,16 @@ export function AuthProvider({ children }) {
       })
   }, [userId])
 
+  const refreshOrganisationMemberships = useCallback(() => {
+    if (!userId) return
+    supabase
+      .from('organisation_members')
+      .select('organisation_id, role')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .then(({ data, error }) => setOrganisationMemberships(!error && data ? data : []))
+  }, [userId])
+
   useEffect(() => {
     if (!userId) {
       setIsPlatformAdmin(null)
@@ -61,11 +71,7 @@ export function AuthProvider({ children }) {
       .eq('user_id', userId)
       .maybeSingle()
       .then(({ data, error }) => setIsPlatformAdmin(!error && Boolean(data)))
-    supabase
-      .from('organisation_members')
-      .select('organisation_id, role')
-      .eq('user_id', userId)
-      .then(({ data, error }) => setOrganisationMemberships(!error && data ? data : []))
+    refreshOrganisationMemberships()
   }, [userId])
 
   async function markOnboardingComplete() {
@@ -85,6 +91,7 @@ export function AuthProvider({ children }) {
     needsOnboarding,
     isPlatformAdmin,
     organisationMemberships,
+    refreshOrganisationMemberships,
     markOnboardingComplete,
     // Carries a pending rate-invite code through as a query param on the
     // confirmation-email redirect, rather than relying solely on
