@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
 import { OrganisationStaffPanel } from '../admin/AdminProviders'
+import CourseContentSection from '../../components/CourseContentSection'
 import { listOrganisations } from '../../lib/admin/organisations'
 import {
   listOrganisationCatalogueCourses,
@@ -258,6 +259,7 @@ function ProviderTrainingSection({ organisation, userId }) {
             <CourseCard
               key={course.id}
               course={course}
+              userId={userId}
               isEditing={editingId === course.id}
               onToggleEdit={() => setEditingId((id) => (id === course.id ? null : course.id))}
               onSaved={load}
@@ -272,7 +274,7 @@ function ProviderTrainingSection({ organisation, userId }) {
 // Only draft/rejected rows are editable -- RLS (0066) already restricts the
 // org-members update policy's `using` clause to those two statuses, so this
 // mirrors the database's own rule rather than inventing a separate one.
-function CourseCard({ course, isEditing, onToggleEdit, onSaved }) {
+function CourseCard({ course, userId, isEditing, onToggleEdit, onSaved }) {
   const editable = course.status === 'draft' || course.status === 'rejected'
   const [form, setForm] = useState({
     name: course.name,
@@ -398,6 +400,10 @@ function CourseCard({ course, isEditing, onToggleEdit, onSaved }) {
             className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
           />
         </div>
+      </div>
+
+      <div className="pt-3 border-t border-hairline">
+        <CourseContentSection courseId={course.id} userId={userId} />
       </div>
 
       {error && <p className="text-xs text-red-700">{error}</p>}
