@@ -12,6 +12,18 @@ export async function countSkillTrackers(librarySkillId) {
   return data ?? 0
 }
 
+// Per-level breakdown of the same count -- see 0076's skill_level_stats for
+// why this is grouped-count-only too (no user identities, so no privacy
+// opt-in needed to expose it, unlike list_skill_matches).
+export async function getSkillLevelStats(librarySkillId) {
+  if (!librarySkillId) return []
+  const { data, error } = await supabase.rpc('skill_level_stats', {
+    p_library_skill_id: librarySkillId,
+  })
+  if (error) throw error
+  return data ?? []
+}
+
 // Which of the current user's connections also track this same skill
 // (matched via the shared skill_library entry, same identity used for
 // validator eligibility elsewhere). Filtering to the connection id list

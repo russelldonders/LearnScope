@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import AdminLayout from './AdminLayout'
 import { listAllLibrarySkills, updateLibrarySkill, setLibrarySkillStatus } from '../../lib/admin/skills'
+
+const TYPE_LABELS = { global: 'Global', personal: 'Personal', provider: 'Provider' }
 
 export default function AdminSkills() {
   const [skills, setSkills] = useState([])
@@ -88,7 +91,9 @@ export default function AdminSkills() {
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div>
                     <p className="text-ink font-medium">
-                      {skill.name}
+                      <Link to={`/admin/skills/${skill.id}`} className="hover:text-moss hover:underline">
+                        {skill.name}
+                      </Link>
                       {skill.is_private && (
                         <span className="ml-1.5 font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-1.5 py-0.5">
                           Private
@@ -98,6 +103,10 @@ export default function AdminSkills() {
                     <p className="text-xs text-secondary mt-0.5">
                       {skill.category || 'No category'}
                       {skill.description ? ` — ${skill.description}` : ''}
+                    </p>
+                    <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mt-1">
+                      {TYPE_LABELS[skill.type]}
+                      {skill.ownerName ? ` · ${skill.ownerName}` : ''}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">

@@ -33,6 +33,7 @@ import AdminUserDetail from './pages/admin/AdminUserDetail'
 import AdminProviders from './pages/admin/AdminProviders'
 import AdminCatalogue from './pages/admin/AdminCatalogue'
 import AdminSkills from './pages/admin/AdminSkills'
+import AdminSkillDetail from './pages/admin/AdminSkillDetail'
 import AdminTags from './pages/admin/AdminTags'
 import ProviderConsole from './pages/provider/ProviderConsole'
 
@@ -230,6 +231,14 @@ function App() {
             element={
               <PlatformAdminRoute>
                 <AdminSkills />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/skills/:skillId"
+            element={
+              <PlatformAdminRoute>
+                <AdminSkillDetail />
               </PlatformAdminRoute>
             }
           />

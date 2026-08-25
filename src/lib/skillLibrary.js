@@ -20,13 +20,17 @@ export function isDuplicateLibrarySkillError(error) {
   return (
     error?.code === '23505' &&
     (error?.message?.includes('skill_library_public_name_lower_idx') ||
-      error?.message?.includes('skill_library_private_name_lower_idx'))
+      error?.message?.includes('skill_library_private_name_lower_idx') ||
+      error?.message?.includes('skill_library_org_name_lower_idx'))
   )
 }
 
 export function duplicateLibrarySkillMessage(error, name) {
   if (error?.message?.includes('skill_library_private_name_lower_idx')) {
     return `You already have a private skill named "${name.trim()}".`
+  }
+  if (error?.message?.includes('skill_library_org_name_lower_idx')) {
+    return `Your organisation already has a skill named "${name.trim()}".`
   }
   return `A skill named "${name.trim()}" already exists in the library — use the search above to find and add it instead.`
 }

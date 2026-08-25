@@ -4,6 +4,7 @@ import AppHeader from '../../components/AppHeader'
 import { OrganisationStaffPanel } from '../admin/AdminProviders'
 import CourseContentSection from '../../components/CourseContentSection'
 import ResourceLibrarySection from '../../components/ResourceLibrarySection'
+import ProviderSkillsSection from '../../components/ProviderSkillsSection'
 import { listOrganisations } from '../../lib/admin/organisations'
 import {
   listOrganisationCatalogueCourses,
@@ -22,6 +23,7 @@ const STATUS_LABELS = {
 
 const SECTIONS = [
   { key: 'training', label: 'Training' },
+  { key: 'skills', label: 'Skills' },
   { key: 'staff', label: 'Users', adminOnly: true },
   { key: 'resources', label: 'Resources' },
 ]
@@ -143,6 +145,9 @@ export default function ProviderConsole() {
 
                 {currentSection === 'training' && (
                   <ProviderTrainingSection key={selectedOrg.id} organisation={selectedOrg} userId={user.id} />
+                )}
+                {currentSection === 'skills' && (
+                  <ProviderSkillsSection key={selectedOrg.id} organisationId={selectedOrg.id} userId={user.id} />
                 )}
                 {currentSection === 'staff' && myRole === 'admin' && (
                   <div className="bg-card border border-hairline rounded-lg overflow-hidden">
