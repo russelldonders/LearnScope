@@ -245,7 +245,12 @@ export default function CourseCatalogue() {
                 }}
                 className="bg-card border border-hairline rounded-lg overflow-hidden flex flex-col cursor-pointer hover:border-moss transition-colors"
               >
-                <CourseThumbnail name={course.name} provider={course.provider} className="h-24 w-full shrink-0" />
+                <CourseThumbnail
+                  name={course.name}
+                  provider={course.provider}
+                  logoUrl={course.logoUrl}
+                  className="h-24 w-full shrink-0"
+                />
                 <div className="p-4 flex flex-col flex-1">
                   <h3 className="font-display text-lg text-ink">{course.name}</h3>
                   <p className="font-mono text-xs text-secondary mt-0.5">

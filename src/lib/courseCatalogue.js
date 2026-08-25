@@ -2,7 +2,8 @@ import { supabase } from './supabaseClient'
 
 const CATALOGUE_SELECT = `*,
   course_catalogue_skills(id, level, skill_library(id, name)),
-  course_catalogue_tags(id, tags(id, name))`
+  course_catalogue_tags(id, tags(id, name)),
+  organisations(logo_url)`
 
 function mapCatalogueCourse(course) {
   return {
@@ -13,6 +14,10 @@ function mapCatalogueCourse(course) {
     tags: (course.course_catalogue_tags ?? [])
       .filter((t) => t.tags)
       .map((t) => ({ id: t.tags.id, name: t.tags.name })),
+    // Platform-curated entries (organisation_id null, 0066) have no
+    // organisation to embed, and a provider that's never set a logo (0081)
+    // has organisations.logo_url null -- both just mean no badge to show.
+    logoUrl: course.organisations?.logo_url ?? null,
   }
 }
 
