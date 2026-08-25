@@ -17,7 +17,10 @@ export default function AdminLayout({ children }) {
 
   return (
     <div className="min-h-screen bg-paper">
-      <AppHeader />
+      {/* hideNavLinks: same reasoning as ProviderConsole.jsx -- this console
+          is a distinct workspace from the learner-facing app, with its own
+          nav (below) for switching between admin sections. */}
+      <AppHeader hideNavLinks />
       <main className="max-w-5xl mx-auto px-4 py-8">
         <h2 className="font-display text-xl text-ink mb-1">Platform console</h2>
         <p className="text-sm text-secondary mb-6">

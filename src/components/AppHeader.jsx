@@ -110,11 +110,11 @@ export default function AppHeader({ hideNavLinks = false }) {
                   ))}
                   {isPlatformAdmin && (
                     <Link
-                      to="/admin"
+                      to={location.pathname.startsWith('/admin') ? '/dashboard' : '/admin'}
                       onClick={() => setMenuOpen(false)}
                       className="block px-4 py-2 text-sm text-ink hover:bg-paper"
                     >
-                      Platform console
+                      {location.pathname.startsWith('/admin') ? 'Switch to learner mode' : 'Platform console'}
                     </Link>
                   )}
                   {organisationMemberships?.length > 0 && (
