@@ -24,6 +24,20 @@ export async function getSkillLevelStats(librarySkillId) {
   return data ?? []
 }
 
+// One real, already-generated learner's level-guide text for this library
+// skill (see 0083_skill_level_guide_sample.sql for why this has to be an
+// RPC rather than a direct `skills` query) -- either field may be null if
+// no tracker has generated that axis's guide yet, and the whole result is
+// null if nobody's generated either.
+export async function getSkillLevelGuideSample(librarySkillId) {
+  if (!librarySkillId) return null
+  const { data, error } = await supabase.rpc('skill_level_guide_sample', {
+    p_library_skill_id: librarySkillId,
+  })
+  if (error) throw error
+  return data?.[0] ?? null
+}
+
 // Which of the current user's connections also track this same skill
 // (matched via the shared skill_library entry, same identity used for
 // validator eligibility elsewhere). Filtering to the connection id list

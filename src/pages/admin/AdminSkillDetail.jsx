@@ -2,41 +2,53 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import AdminLayout from './AdminLayout'
 import { getLibrarySkill } from '../../lib/admin/skills'
-import { countSkillTrackers, getSkillLevelStats } from '../../lib/skillStats'
+import { countSkillTrackers, getSkillLevelStats, getSkillLevelGuideSample } from '../../lib/skillStats'
 import { LEVEL_LABELS, LEVEL_DESCRIPTIONS, KNOWLEDGE_LEVEL_LABELS, LEVELS } from '../../lib/levels'
 
 const TYPE_LABELS = { global: 'Global', personal: 'Personal', provider: 'Provider' }
 
 // Read-only overview for a platform admin drilling into one skill_library
-// entry -- who owns it, what each level actually means (levels.js is
-// deliberately skill-agnostic, see its own comments, so there's no
-// per-skill definition to show beyond the one shared scale), and how many
-// people track it at each level. Level stats come from the count-only
-// skill_level_stats RPC (0076) rather than a direct `skills` query, since a
-// platform admin has no standing RLS access to every learner's personal
-// skills rows.
+// entry -- who owns it, what each level means for *this* skill specifically
+// (a real learner's already-generated guide text, via the anonymous
+// skill_level_guide_sample RPC -- see 0083 for why this can't be a direct
+// `skills` query), shown Knowledge/Application side by side the same way
+// SkillDetail.jsx's own two-axis panels are, and how many people track it
+// at each level. Level stats come from the count-only skill_level_stats RPC
+// (0076) rather than a direct `skills` query, since a platform admin has no
+// standing RLS access to every learner's personal skills rows.
 export default function AdminSkillDetail() {
   const { skillId } = useParams()
   const [skill, setSkill] = useState(null)
   const [totalTrackers, setTotalTrackers] = useState(0)
   const [levelStats, setLevelStats] = useState([])
+  const [guideSample, setGuideSample] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   useEffect(() => {
     setLoading(true)
     setError(null)
-    Promise.all([getLibrarySkill(skillId), countSkillTrackers(skillId), getSkillLevelStats(skillId)])
-      .then(([skillData, total, stats]) => {
+    Promise.all([
+      getLibrarySkill(skillId),
+      countSkillTrackers(skillId),
+      getSkillLevelStats(skillId),
+      getSkillLevelGuideSample(skillId),
+    ])
+      .then(([skillData, total, stats, sample]) => {
         setSkill(skillData)
         setTotalTrackers(total)
         setLevelStats(stats)
+        setGuideSample(sample)
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }, [skillId])
 
   const countByLevel = new Map(levelStats.map((s) => [s.level, s.tracker_count]))
+  const knowledgeGuide =
+    guideSample?.knowledge_level_guide?.length === 5 ? guideSample.knowledge_level_guide : null
+  const practicalGuide =
+    guideSample?.practical_level_guide?.length === 5 ? guideSample.practical_level_guide : null
 
   return (
     <AdminLayout>
@@ -80,23 +92,23 @@ export default function AdminSkillDetail() {
 
             <div>
               <h3 className="font-display text-lg text-ink mb-2">Level definitions</h3>
-              <div className="bg-card border border-hairline rounded-lg overflow-hidden">
-                <ul className="divide-y divide-hairline">
-                  {LEVELS.map((level) => (
-                    <li key={level} className="px-4 py-2 text-sm flex items-start justify-between gap-3">
-                      <span className="text-ink shrink-0 w-28">
-                        {level}. {LEVEL_LABELS[level]}
-                      </span>
-                      <span className="text-secondary text-xs text-right">{LEVEL_DESCRIPTIONS[level]}</span>
-                    </li>
-                  ))}
-                </ul>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <LevelGuideColumn
+                  title="Knowledge"
+                  axisLabel="knowledge"
+                  labels={KNOWLEDGE_LEVEL_LABELS}
+                  statements={knowledgeGuide}
+                  skillName={skill.name}
+                />
+                <LevelGuideColumn
+                  title="Application"
+                  axisLabel="application"
+                  labels={LEVEL_LABELS}
+                  statements={practicalGuide}
+                  fallbackDescriptions={LEVEL_DESCRIPTIONS}
+                  skillName={skill.name}
+                />
               </div>
-              <p className="text-xs text-secondary mt-1">
-                Levels are the same scale across every skill — a learner's knowledge understanding of{' '}
-                {skill.name} ({KNOWLEDGE_LEVEL_LABELS[1]}–{KNOWLEDGE_LEVEL_LABELS[5]}) is tracked separately from
-                this practical/demonstrated scale.
-              </p>
             </div>
 
             <div>
@@ -133,5 +145,38 @@ export default function AdminSkillDetail() {
         )}
       </div>
     </AdminLayout>
+  )
+}
+
+// One axis's 5 levels -- skill-specific statements when a real learner has
+// already generated them (see skill_level_guide_sample), otherwise the
+// generic scale (practical only has one to fall back to; knowledge has no
+// generic long-form description, just the label, see levels.js).
+function LevelGuideColumn({ title, axisLabel, labels, statements, fallbackDescriptions, skillName }) {
+  return (
+    <div>
+      <h4 className="font-display text-base text-ink mb-2">{title}</h4>
+      <div className="bg-card border border-hairline rounded-lg overflow-hidden">
+        <ul className="divide-y divide-hairline">
+          {LEVELS.map((level) => {
+            const description = statements ? statements[level - 1] : fallbackDescriptions?.[level]
+            return (
+              <li key={level} className="px-4 py-2 text-sm">
+                <p className="text-ink font-medium">
+                  {level}. {labels[level]}
+                </p>
+                {description && <p className="text-secondary text-xs mt-0.5">{description}</p>}
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+      {!statements && (
+        <p className="text-xs text-secondary mt-1">
+          No learner has generated a {axisLabel} guide for {skillName} yet
+          {fallbackDescriptions ? ' — showing the generic scale' : ''}.
+        </p>
+      )}
+    </div>
   )
 }
