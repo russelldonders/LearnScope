@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import {
+  listCourseSections,
   listCourseResources,
   listContentProgress,
   markContentComplete,
@@ -13,12 +14,29 @@ import AppHeader from '../components/AppHeader'
 
 const TYPE_LABELS = { video: 'Video', file: 'File', scorm: 'SCORM package' }
 
+// Items come back ordered by their own `position`, which only resets to 0
+// within each section (see courseContent.js's nextLinkPosition) -- sorting
+// by (section position, item position) re-interleaves them correctly for a
+// multi-section course, rather than relying on row order alone. Shared by
+// both the initial "first item" pick in load() and the orderedItems memo,
+// so the item chosen as current on first load always matches what actually
+// renders first in the nav/right pane.
+function sortBySection(contentItems, sectionRows) {
+  const positionById = new Map(sectionRows.map((s) => [s.id, s.position]))
+  return [...contentItems].sort((a, b) => {
+    const posA = a.sectionId ? (positionById.get(a.sectionId) ?? Infinity) : Infinity
+    const posB = b.sectionId ? (positionById.get(b.sectionId) ?? Infinity) : Infinity
+    return posA !== posB ? posA - posB : a.position - b.position
+  })
+}
+
 export default function CourseLearn() {
   const { id } = useParams()
   const { user } = useAuth()
   const navigate = useNavigate()
 
   const [course, setCourse] = useState(null)
+  const [sections, setSections] = useState([])
   const [items, setItems] = useState([])
   const [progressByItemId, setProgressByItemId] = useState({})
   const [loading, setLoading] = useState(true)
@@ -46,10 +64,15 @@ export default function CourseLearn() {
     setCourse(data)
 
     if (data.catalogue_course_id) {
-      const contentItems = await listCourseResources(data.catalogue_course_id)
+      const [sectionRows, contentItems] = await Promise.all([
+        listCourseSections(data.catalogue_course_id),
+        listCourseResources(data.catalogue_course_id),
+      ])
+      setSections(sectionRows)
       setItems(contentItems)
       setProgressByItemId(await listContentProgress(user.id, contentItems.map((i) => i.id)))
-      setCurrentItemId((prev) => prev ?? contentItems[0]?.id ?? null)
+      const firstItem = sortBySection(contentItems, sectionRows)[0]
+      setCurrentItemId((prev) => prev ?? firstItem?.id ?? null)
     }
     setLoading(false)
   }
@@ -58,17 +81,43 @@ export default function CourseLearn() {
     setProgressByItemId(await listContentProgress(user.id, items.map((i) => i.id)))
   }
 
+  const orderedItems = useMemo(() => sortBySection(items, sections), [items, sections])
+
+  // Groups the nav by section, in section order, with anything left
+  // ungrouped (no section, or its section was deleted) trailing at the end
+  // -- a course with no sections at all (shouldn't normally happen once
+  // every course has at least a "General" one, see 0078's backfill) just
+  // renders as one unlabeled group, same as the old flat list.
+  const groupedNav = useMemo(() => {
+    const bySection = new Map()
+    for (const item of orderedItems) {
+      const key = item.sectionId ?? 'ungrouped'
+      if (!bySection.has(key)) bySection.set(key, [])
+      bySection.get(key).push(item)
+    }
+    const groups = []
+    for (const section of sections) {
+      if (bySection.has(section.id)) groups.push({ key: section.id, title: section.title, items: bySection.get(section.id) })
+    }
+    if (bySection.has('ungrouped')) {
+      groups.push({ key: 'ungrouped', title: sections.length > 0 ? 'Other' : null, items: bySection.get('ungrouped') })
+    }
+    return groups
+  }, [orderedItems, sections])
+
   async function handleMarkComplete(item) {
     await markContentComplete(item.id, user.id)
     await refreshProgress()
-    const next = items[currentIndex + 1]
+    const next = orderedItems[currentIndex + 1]
     if (next) setCurrentItemId(next.id)
   }
 
-  const currentIndex = items.findIndex((i) => i.id === currentItemId)
-  const currentItem = items[currentIndex]
-  const completedCount = items.filter((i) => progressByItemId[i.id]?.status && progressByItemId[i.id].status !== 'not_attempted').length
-  const progress = items.length ? Math.round((completedCount / items.length) * 100) : 0
+  const currentIndex = orderedItems.findIndex((i) => i.id === currentItemId)
+  const currentItem = orderedItems[currentIndex]
+  const completedCount = orderedItems.filter(
+    (i) => progressByItemId[i.id]?.status && progressByItemId[i.id].status !== 'not_attempted'
+  ).length
+  const progress = orderedItems.length ? Math.round((completedCount / orderedItems.length) * 100) : 0
 
   return (
     <div className="min-h-screen bg-paper">
@@ -81,7 +130,7 @@ export default function CourseLearn() {
         {loading && <p className="text-secondary">Loading…</p>}
         {notFound && <p className="text-secondary">Course not found.</p>}
 
-        {course && items.length === 0 && !loading && (
+        {course && orderedItems.length === 0 && !loading && (
           <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
             <p className="text-secondary">
               {course.provider ? `${course.provider} hasn't` : "The provider hasn't"} added any content to this
@@ -95,7 +144,7 @@ export default function CourseLearn() {
             <div className="flex items-center justify-between gap-4 flex-wrap mb-2">
               <h2 className="font-display text-2xl text-ink">{course.name}</h2>
               <p className="font-mono text-xs text-secondary shrink-0">
-                {completedCount} / {items.length} complete
+                {completedCount} / {orderedItems.length} complete
               </p>
             </div>
             <div className="h-1.5 rounded-full bg-hairline overflow-hidden mb-8">
@@ -104,35 +153,44 @@ export default function CourseLearn() {
 
             <div className="grid md:grid-cols-[280px_1fr] gap-6">
               <nav>
-                <ul className="space-y-1">
-                  {items.map((item) => {
-                    const isCurrent = item.id === currentItem.id
-                    const status = progressByItemId[item.id]?.status
-                    const isDone = Boolean(status) && status !== 'not_attempted'
-                    return (
-                      <li key={item.id}>
-                        <button
-                          type="button"
-                          onClick={() => setCurrentItemId(item.id)}
-                          className={`w-full flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors ${
-                            isCurrent
-                              ? 'bg-card border border-moss text-ink'
-                              : 'border border-transparent text-secondary hover:bg-card hover:text-ink'
-                          }`}
-                        >
-                          <span
-                            className={`shrink-0 flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold ${
-                              isDone ? 'bg-moss border-moss text-paper' : 'border-hairline text-secondary'
-                            }`}
-                          >
-                            {isDone ? '✓' : ''}
-                          </span>
-                          <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
+                {groupedNav.map((group) => (
+                  <div key={group.key} className="mb-4 last:mb-0">
+                    {group.title && (
+                      <p className="font-mono text-[10px] uppercase tracking-wide text-secondary px-2.5 mb-1">
+                        {group.title}
+                      </p>
+                    )}
+                    <ul className="space-y-1">
+                      {group.items.map((item) => {
+                        const isCurrent = item.id === currentItem.id
+                        const status = progressByItemId[item.id]?.status
+                        const isDone = Boolean(status) && status !== 'not_attempted'
+                        return (
+                          <li key={item.id}>
+                            <button
+                              type="button"
+                              onClick={() => setCurrentItemId(item.id)}
+                              className={`w-full flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors ${
+                                isCurrent
+                                  ? 'bg-card border border-moss text-ink'
+                                  : 'border border-transparent text-secondary hover:bg-card hover:text-ink'
+                              }`}
+                            >
+                              <span
+                                className={`shrink-0 flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold ${
+                                  isDone ? 'bg-moss border-moss text-paper' : 'border-hairline text-secondary'
+                                }`}
+                              >
+                                {isDone ? '✓' : ''}
+                              </span>
+                              <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
+                ))}
               </nav>
 
               <div className="bg-card border border-hairline rounded-lg p-6">
@@ -152,9 +210,10 @@ export default function CourseLearn() {
                 )}
 
                 {currentItem.type === 'file' && (
-                  // download, not target="_blank" -- see CourseContentSection's
-                  // matching comment: an unrestricted-type upload served
-                  // same-origin must never be opened as a navigation.
+                  // download, not target="_blank" -- an unrestricted-type
+                  // upload served same-origin must never be opened as a
+                  // navigation (same reasoning as the provider editor's
+                  // matching file-download link).
                   <a
                     href={contentFileUrl(currentItem)}
                     download={currentItem.file_name || true}
@@ -188,10 +247,10 @@ export default function CourseLearn() {
                       className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
                     >
                       {progressByItemId[currentItem.id]?.status
-                        ? currentIndex + 1 < items.length
+                        ? currentIndex + 1 < orderedItems.length
                           ? 'Next'
                           : 'Done'
-                        : currentIndex + 1 < items.length
+                        : currentIndex + 1 < orderedItems.length
                           ? 'Mark complete & continue'
                           : 'Mark complete'}
                     </button>
@@ -199,7 +258,7 @@ export default function CourseLearn() {
                   {currentIndex > 0 && (
                     <button
                       type="button"
-                      onClick={() => setCurrentItemId(items[currentIndex - 1].id)}
+                      onClick={() => setCurrentItemId(orderedItems[currentIndex - 1].id)}
                       className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper"
                     >
                       Previous

@@ -33,32 +33,121 @@ export async function listOrganisationResources(organisationId) {
 // the same resource can appear (independently ordered) in more than one
 // course's list, since attachment is many-to-many. Each returned object is
 // the resource itself plus `linkId` (the course_content_links row id,
-// needed to unlink) and `position`.
+// needed to unlink), `position` (order within its section), and
+// `sectionId` (0078) -- callers that don't care about section grouping
+// (e.g. CourseLearn's flat prev/next sequencing) can just ignore it.
 export async function listCourseResources(courseId) {
   const { data, error } = await supabase
     .from('course_content_links')
-    .select('id, position, resource:content_resources(*)')
+    .select('id, position, section_id, resource:content_resources(*)')
     .eq('course_id', courseId)
     .order('position')
   if (error) throw error
-  return (data ?? []).map((link) => ({ ...link.resource, linkId: link.id, position: link.position }))
+  return (data ?? []).map((link) => ({
+    ...link.resource,
+    linkId: link.id,
+    position: link.position,
+    sectionId: link.section_id,
+  }))
 }
 
-async function nextLinkPosition(courseId) {
+// -- course_sections (0078): named, ordered groups of a course's content --
+
+export async function listCourseSections(courseId) {
+  const { data, error } = await supabase
+    .from('course_sections')
+    .select('id, title, position')
+    .eq('course_id', courseId)
+    .order('position')
+  if (error) throw error
+  return data ?? []
+}
+
+async function nextSectionPosition(courseId) {
   const { count, error } = await supabase
-    .from('course_content_links')
+    .from('course_sections')
     .select('id', { count: 'exact', head: true })
     .eq('course_id', courseId)
   if (error) throw error
   return count ?? 0
 }
 
-export async function linkResourceToCourse(courseId, resourceId) {
-  const position = await nextLinkPosition(courseId)
+export async function createCourseSection(courseId, title) {
+  const position = await nextSectionPosition(courseId)
+  const { data, error } = await supabase
+    .from('course_sections')
+    .insert({ course_id: courseId, title: title.trim(), position })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function renameCourseSection(sectionId, title) {
+  const { error } = await supabase.from('course_sections').update({ title: title.trim() }).eq('id', sectionId)
+  if (error) throw error
+}
+
+// Deletes the section only -- any content still linked into it stays
+// attached to the course (course_content_links.section_id is "on delete set
+// null", 0078), it just becomes ungrouped rather than being detached.
+export async function deleteCourseSection(sectionId) {
+  const { error } = await supabase.from('course_sections').delete().eq('id', sectionId)
+  if (error) throw error
+}
+
+// Swaps this section with its immediate neighbour -- the simplest reorder
+// primitive that needs no drag-and-drop dependency; `sections` is the
+// caller's already-loaded, position-ordered list.
+export async function moveCourseSection(sections, sectionId, direction) {
+  const index = sections.findIndex((s) => s.id === sectionId)
+  const swapIndex = direction === 'up' ? index - 1 : index + 1
+  if (index === -1 || swapIndex < 0 || swapIndex >= sections.length) return
+  const a = sections[index]
+  const b = sections[swapIndex]
+  const { error: errorA } = await supabase.from('course_sections').update({ position: b.position }).eq('id', a.id)
+  if (errorA) throw errorA
+  const { error: errorB } = await supabase.from('course_sections').update({ position: a.position }).eq('id', b.id)
+  if (errorB) throw errorB
+}
+
+async function nextLinkPosition(sectionId) {
+  const { count, error } = await supabase
+    .from('course_content_links')
+    .select('id', { count: 'exact', head: true })
+    .eq('section_id', sectionId)
+  if (error) throw error
+  return count ?? 0
+}
+
+export async function linkResourceToCourse(courseId, resourceId, sectionId) {
+  const position = await nextLinkPosition(sectionId)
   const { error } = await supabase
     .from('course_content_links')
-    .insert({ course_id: courseId, resource_id: resourceId, position })
+    .insert({ course_id: courseId, resource_id: resourceId, section_id: sectionId, position })
   if (error) throw error
+}
+
+// Swaps this item with its immediate neighbour within the same section --
+// `sectionItems` is the caller's already-loaded, position-ordered list for
+// just that one section (moving an item between sections isn't supported
+// here; detach and re-add to the other section instead).
+export async function moveContentLink(sectionItems, linkId, direction) {
+  const index = sectionItems.findIndex((r) => r.linkId === linkId)
+  const swapIndex = direction === 'up' ? index - 1 : index + 1
+  if (index === -1 || swapIndex < 0 || swapIndex >= sectionItems.length) return
+  const a = sectionItems[index]
+  const b = sectionItems[swapIndex]
+  const { error: errorA } = await supabase
+    .from('course_content_links')
+    .update({ position: b.position })
+    .eq('id', a.linkId)
+  if (errorA) throw errorA
+  const { error: errorB } = await supabase
+    .from('course_content_links')
+    .update({ position: a.position })
+    .eq('id', b.linkId)
+  if (errorB) throw errorB
 }
 
 // Detaches a resource from this course -- the resource itself (and any

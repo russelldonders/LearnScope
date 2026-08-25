@@ -36,6 +36,7 @@ import AdminSkills from './pages/admin/AdminSkills'
 import AdminSkillDetail from './pages/admin/AdminSkillDetail'
 import AdminTags from './pages/admin/AdminTags'
 import ProviderConsole from './pages/provider/ProviderConsole'
+import ProviderCourseEditor from './pages/provider/ProviderCourseEditor'
 
 function App() {
   return (
@@ -191,6 +192,14 @@ function App() {
             element={
               <ProviderAdminRoute>
                 <ProviderConsole />
+              </ProviderAdminRoute>
+            }
+          />
+          <Route
+            path="/provider/training/:courseId"
+            element={
+              <ProviderAdminRoute>
+                <ProviderCourseEditor />
               </ProviderAdminRoute>
             }
           />

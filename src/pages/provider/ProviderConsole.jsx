@@ -1,17 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
 import { OrganisationStaffPanel } from '../admin/AdminProviders'
-import CourseContentSection from '../../components/CourseContentSection'
 import ResourceLibrarySection from '../../components/ResourceLibrarySection'
 import ProviderSkillsSection from '../../components/ProviderSkillsSection'
 import { listOrganisations } from '../../lib/admin/organisations'
-import {
-  listOrganisationCatalogueCourses,
-  createProviderCourse,
-  updateProviderCourse,
-  setCatalogueCourseStatus,
-} from '../../lib/admin/catalogue'
+import { listOrganisationCatalogueCourses, createProviderCourse } from '../../lib/admin/catalogue'
 
 const STATUS_LABELS = {
   draft: 'Draft',
@@ -167,13 +162,13 @@ export default function ProviderConsole() {
 }
 
 function ProviderTrainingSection({ organisation, userId }) {
+  const navigate = useNavigate()
   const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [creating, setCreating] = useState(false)
-  const [editingId, setEditingId] = useState(null)
 
   useEffect(() => {
     load()
@@ -199,10 +194,9 @@ function ProviderTrainingSection({ organisation, userId }) {
       const created = await createProviderCourse(userId, organisation.id, form)
       setForm(EMPTY_FORM)
       setShowForm(false)
-      await load()
-      // Land straight in edit mode -- creating is just the first step, the
-      // provider keeps building the course out from here.
-      setEditingId(created.id)
+      // Land straight in the course's own editor -- creating is just the
+      // first step, the provider keeps building it out from there.
+      navigate(`/provider/training/${created.id}`)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -298,15 +292,7 @@ function ProviderTrainingSection({ organisation, userId }) {
       ) : (
         <div className="space-y-2">
           {courses.map((course) => (
-            <CourseCard
-              key={course.id}
-              course={course}
-              userId={userId}
-              organisationId={organisation.id}
-              isEditing={editingId === course.id}
-              onToggleEdit={() => setEditingId((id) => (id === course.id ? null : course.id))}
-              onSaved={load}
-            />
+            <CourseCard key={course.id} course={course} />
           ))}
         </div>
       )}
@@ -314,167 +300,28 @@ function ProviderTrainingSection({ organisation, userId }) {
   )
 }
 
-// Only draft/rejected rows are editable -- RLS (0066) already restricts the
-// org-members update policy's `using` clause to those two statuses, so this
-// mirrors the database's own rule rather than inventing a separate one.
-function CourseCard({ course, userId, organisationId, isEditing, onToggleEdit, onSaved }) {
+// Summary only -- editing (metadata, sections, content) happens on the
+// course's own page (ProviderCourseEditor), the same way AdminUserDetail/
+// AdminSkillDetail moved their consoles' inline expansions onto dedicated
+// pages once there was more than a form's worth of detail to show.
+function CourseCard({ course }) {
   const editable = course.status === 'draft' || course.status === 'rejected'
-  const [form, setForm] = useState({
-    name: course.name,
-    provider: course.provider ?? '',
-    courseType: course.course_type ?? '',
-    duration: course.duration ?? '',
-    synopsis: course.synopsis ?? '',
-  })
-  const [saving, setSaving] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState(null)
-
-  async function handleSave(e) {
-    e.preventDefault()
-    setSaving(true)
-    setError(null)
-    try {
-      await updateProviderCourse(course.id, form)
-      await onSaved()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function handleSubmitForApproval() {
-    setSubmitting(true)
-    setError(null)
-    try {
-      await updateProviderCourse(course.id, form)
-      await setCatalogueCourseStatus(course.id, 'pending_approval')
-      onToggleEdit()
-      await onSaved()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  if (!isEditing) {
-    const clickableProps = editable
-      ? {
-          role: 'button',
-          tabIndex: 0,
-          onClick: onToggleEdit,
-          onKeyDown: (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault()
-              onToggleEdit()
-            }
-          },
-        }
-      : {}
-    return (
-      <div
-        className={`bg-card border border-hairline rounded-lg p-3 ${editable ? 'cursor-pointer hover:border-moss/60 transition-colors' : ''}`}
-        {...clickableProps}
-      >
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-ink font-medium">{course.name}</p>
-          <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
-            {STATUS_LABELS[course.status] ?? course.status}
-          </span>
-        </div>
-        {course.synopsis && <p className="text-sm text-secondary mt-1">{course.synopsis}</p>}
-        {course.status === 'rejected' && course.rejection_reason && (
-          <p className="text-xs text-red-700 mt-1">Rejected: {course.rejection_reason}</p>
-        )}
-        {editable && <p className="font-mono text-[10px] text-moss mt-1">Click to edit →</p>}
-      </div>
-    )
-  }
-
   return (
-    <form onSubmit={handleSave} className="bg-card border border-moss/40 rounded-lg p-3 space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-sm text-secondary mb-1" htmlFor={`courseName-${course.id}`}>
-            Name
-          </label>
-          <input
-            id={`courseName-${course.id}`}
-            required
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-          />
-        </div>
-        <div>
-          <label className="block text-sm text-secondary mb-1" htmlFor={`courseType-${course.id}`}>
-            Course type
-          </label>
-          <input
-            id={`courseType-${course.id}`}
-            value={form.courseType}
-            onChange={(e) => setForm((f) => ({ ...f, courseType: e.target.value }))}
-            placeholder="Online, In-person, Workshop…"
-            className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-          />
-        </div>
-        <div>
-          <label className="block text-sm text-secondary mb-1" htmlFor={`courseDuration-${course.id}`}>
-            Duration
-          </label>
-          <input
-            id={`courseDuration-${course.id}`}
-            value={form.duration}
-            onChange={(e) => setForm((f) => ({ ...f, duration: e.target.value }))}
-            className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-          />
-        </div>
-        <div className="sm:col-span-2">
-          <label className="block text-sm text-secondary mb-1" htmlFor={`courseSynopsis-${course.id}`}>
-            Synopsis
-          </label>
-          <textarea
-            id={`courseSynopsis-${course.id}`}
-            rows={3}
-            value={form.synopsis}
-            onChange={(e) => setForm((f) => ({ ...f, synopsis: e.target.value }))}
-            className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-          />
-        </div>
+    <Link
+      to={`/provider/training/${course.id}`}
+      className="block bg-card border border-hairline rounded-lg p-3 hover:border-moss/60 transition-colors"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-ink font-medium">{course.name}</p>
+        <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
+          {STATUS_LABELS[course.status] ?? course.status}
+        </span>
       </div>
-
-      <div className="pt-3 border-t border-hairline">
-        <CourseContentSection courseId={course.id} organisationId={organisationId} userId={userId} />
-      </div>
-
-      {error && <p className="text-xs text-red-700">{error}</p>}
-
-      <div className="flex items-center gap-2 flex-wrap">
-        <button
-          type="submit"
-          disabled={saving || submitting}
-          className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-        >
-          {saving ? 'Saving…' : 'Save changes'}
-        </button>
-        <button
-          type="button"
-          onClick={handleSubmitForApproval}
-          disabled={saving || submitting}
-          className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-        >
-          {submitting ? 'Submitting…' : 'Submit for approval'}
-        </button>
-        <button
-          type="button"
-          onClick={onToggleEdit}
-          className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
-        >
-          Cancel
-        </button>
-      </div>
-    </form>
+      {course.synopsis && <p className="text-sm text-secondary mt-1">{course.synopsis}</p>}
+      {course.status === 'rejected' && course.rejection_reason && (
+        <p className="text-xs text-red-700 mt-1">Rejected: {course.rejection_reason}</p>
+      )}
+      <p className="font-mono text-[10px] text-moss mt-1">{editable ? 'Edit →' : 'View →'}</p>
+    </Link>
   )
 }

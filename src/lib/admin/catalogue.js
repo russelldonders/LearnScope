@@ -96,6 +96,16 @@ export async function listOrganisationCatalogueCourses(organisationId) {
   return data ?? []
 }
 
+// Single-course fetch for the provider course editor page -- RLS (course_
+// catalogue's own select policy) already scopes this to approved courses,
+// the caller's own organisation's courses, or a platform admin, so a `null`
+// result here just means "not found or not visible to you", not an error.
+export async function getCatalogueCourse(id) {
+  const { data, error } = await supabase.from('course_catalogue').select('*').eq('id', id).maybeSingle()
+  if (error) throw error
+  return data
+}
+
 export async function approveCatalogueCourse(id, userId) {
   const { error } = await supabase
     .from('course_catalogue')
