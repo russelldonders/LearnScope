@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import AdminLayout from './AdminLayout'
+import ConfirmDialog from '../../components/ConfirmDialog'
 import {
   listOrganisations,
   createOrganisation,
@@ -241,6 +242,8 @@ export function OrganisationStaffPanel({ organisation }) {
   const [role, setRole] = useState('admin')
   const [inviting, setInviting] = useState(false)
   const [message, setMessage] = useState(null)
+  const [removeTarget, setRemoveTarget] = useState(null)
+  const [removing, setRemoving] = useState(false)
 
   useEffect(() => {
     load()
@@ -279,13 +282,17 @@ export function OrganisationStaffPanel({ organisation }) {
     }
   }
 
-  async function handleRemove(member) {
+  async function handleRemove() {
     setError(null)
+    setRemoving(true)
     try {
-      await removeOrganisationMember(member.id)
+      await removeOrganisationMember(removeTarget.id)
+      setRemoveTarget(null)
       await load()
     } catch (err) {
       setError(err.message)
+    } finally {
+      setRemoving(false)
     }
   }
 
@@ -346,7 +353,7 @@ export function OrganisationStaffPanel({ organisation }) {
               </span>
               <button
                 type="button"
-                onClick={() => handleRemove(m)}
+                onClick={() => setRemoveTarget(m)}
                 className="shrink-0 text-xs text-red-700 hover:underline"
               >
                 Remove
@@ -354,6 +361,15 @@ export function OrganisationStaffPanel({ organisation }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {removeTarget && (
+        <ConfirmDialog
+          message={`Remove ${removeTarget.email || removeTarget.user_id} from ${organisation.name}? They'll lose their ${removeTarget.role} access.`}
+          onConfirm={handleRemove}
+          onCancel={() => setRemoveTarget(null)}
+          confirming={removing}
+        />
       )}
     </div>
   )
