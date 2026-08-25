@@ -25,15 +25,53 @@ export async function setOrganisationStatus(id, status) {
   if (error) throw error
 }
 
-export async function updateOrganisation(id, { name, url }) {
-  const { data, error } = await supabase
-    .from('organisations')
-    .update({ name: name.trim(), url: url?.trim() || null, updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .select()
-    .single()
+// Only touches the fields actually passed -- AdminProviders.jsx's edit form
+// only ever sends {name, url}, and shouldn't silently null out `about` just
+// because it doesn't know about that field; the provider-facing settings
+// modal (OrganisationSettingsModal.jsx) does the reverse, sending
+// {url, about} without `name` -- 0081's identity-change trigger only fires
+// on an actual value change, so omitting `name` entirely here is what lets
+// an org admin's update through without needing platform-admin rights.
+export async function updateOrganisation(id, { name, url, about } = {}) {
+  const fields = { updated_at: new Date().toISOString() }
+  if (name !== undefined) fields.name = name.trim()
+  if (url !== undefined) fields.url = url?.trim() || null
+  if (about !== undefined) fields.about = about?.trim() || null
+
+  const { data, error } = await supabase.from('organisations').update(fields).eq('id', id).select().single()
   if (error) throw error
   return data
+}
+
+// Same public-bucket, upsert-in-place pattern as src/lib/avatar.js's
+// uploadAvatar, scoped by organisation_id instead of user_id (0081).
+export async function uploadOrganisationLogo(organisationId, fileOrBlob) {
+  const ext = fileOrBlob.type?.split('/')[1] || 'png'
+  const path = `${organisationId}/logo.${ext}`
+
+  const { error: uploadError } = await supabase.storage
+    .from('org-logos')
+    .upload(path, fileOrBlob, { upsert: true, contentType: fileOrBlob.type })
+  if (uploadError) throw uploadError
+
+  const { data } = supabase.storage.from('org-logos').getPublicUrl(path)
+  const url = `${data.publicUrl}?t=${Date.now()}`
+
+  const { error: orgError } = await supabase
+    .from('organisations')
+    .update({ logo_url: url, updated_at: new Date().toISOString() })
+    .eq('id', organisationId)
+  if (orgError) throw orgError
+
+  return url
+}
+
+export async function removeOrganisationLogo(organisationId) {
+  const { error } = await supabase
+    .from('organisations')
+    .update({ logo_url: null, updated_at: new Date().toISOString() })
+    .eq('id', organisationId)
+  if (error) throw error
 }
 
 // Routed through the service-role dispatcher (listOrgMembers) rather than a

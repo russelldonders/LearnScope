@@ -5,6 +5,7 @@ import AppHeader from '../../components/AppHeader'
 import { OrganisationStaffPanel } from '../admin/AdminProviders'
 import ResourceLibrarySection from '../../components/ResourceLibrarySection'
 import ProviderSkillsSection from '../../components/ProviderSkillsSection'
+import OrganisationSettingsModal from '../../components/OrganisationSettingsModal'
 import { listOrganisations } from '../../lib/admin/organisations'
 import { listOrganisationCatalogueCourses, createProviderCourse } from '../../lib/admin/catalogue'
 
@@ -38,6 +39,7 @@ export default function ProviderConsole() {
   const [error, setError] = useState(null)
   const [selectedOrgId, setSelectedOrgId] = useState(null)
   const [activeSection, setActiveSection] = useState('training')
+  const [showSettings, setShowSettings] = useState(false)
 
   const myOrgIds = useMemo(
     () => (organisationMemberships ?? []).map((m) => m.organisation_id),
@@ -59,13 +61,14 @@ export default function ProviderConsole() {
   const currentSection = activeSection === 'staff' && myRole !== 'admin' ? 'training' : activeSection
 
   useEffect(() => {
-    listOrganisations()
-      .then((data) => {
-        setOrganisations(data)
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
+    reloadOrganisations().finally(() => setLoading(false))
   }, [])
+
+  function reloadOrganisations() {
+    return listOrganisations()
+      .then((data) => setOrganisations(data))
+      .catch((err) => setError(err.message))
+  }
 
   useEffect(() => {
     if (!selectedOrgId && myOrgs.length > 0) {
@@ -121,21 +124,37 @@ export default function ProviderConsole() {
 
             {selectedOrg && (
               <div>
-                <div className="flex items-center flex-wrap gap-1 mb-6 border-b border-hairline">
-                  {visibleSections.map((section) => (
+                <div className="flex items-center justify-between gap-2 mb-6 border-b border-hairline">
+                  <div className="flex items-center flex-wrap gap-1">
+                    {visibleSections.map((section) => (
+                      <button
+                        key={section.key}
+                        type="button"
+                        onClick={() => setActiveSection(section.key)}
+                        className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
+                          currentSection === section.key
+                            ? 'border-moss text-ink font-medium'
+                            : 'border-transparent text-secondary hover:text-ink'
+                        }`}
+                      >
+                        {section.label}
+                      </button>
+                    ))}
+                  </div>
+                  {myRole === 'admin' && (
                     <button
-                      key={section.key}
                       type="button"
-                      onClick={() => setActiveSection(section.key)}
-                      className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
-                        currentSection === section.key
-                          ? 'border-moss text-ink font-medium'
-                          : 'border-transparent text-secondary hover:text-ink'
-                      }`}
+                      onClick={() => setShowSettings(true)}
+                      title="Organisation settings"
+                      aria-label="Organisation settings"
+                      className="shrink-0 mb-2 w-8 h-8 rounded-md border border-hairline text-secondary hover:text-ink hover:bg-paper flex items-center justify-center"
                     >
-                      {section.label}
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="3" />
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                      </svg>
                     </button>
-                  ))}
+                  )}
                 </div>
 
                 {currentSection === 'training' && (
@@ -157,6 +176,16 @@ export default function ProviderConsole() {
           </>
         )}
       </main>
+
+      {showSettings && selectedOrg && (
+        <OrganisationSettingsModal
+          organisation={selectedOrg}
+          onClose={() => {
+            setShowSettings(false)
+            reloadOrganisations()
+          }}
+        />
+      )}
     </div>
   )
 }
