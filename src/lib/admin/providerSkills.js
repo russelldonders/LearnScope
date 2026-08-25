@@ -1,26 +1,37 @@
 import { supabase } from '../supabaseClient'
 
-// The provider console's "Skills" tab: browsing shows the shared public
-// library plus this organisation's own provider-specific entries (RLS,
-// 0076, would silently drop any other org's provider-specific rows even if
-// this filter didn't -- narrowing here just avoids asking for rows the
-// caller could never see). Deactivated (platform-admin-moderated) entries
-// are excluded, same as the learner-facing listLibrarySkills.
-export async function listOrganisationLibrarySkills(organisationId) {
+// The provider console's "Skills" tab shows this organisation's offered-
+// skills roster (organisation_offered_skills, 0076) as the primary list --
+// skill_library_id is a real FK, so PostgREST can embed the skill's details
+// directly instead of a second round-trip. Rows whose skill_library entry
+// no longer resolves under RLS (shouldn't normally happen -- 0077 requires
+// the referenced skill to already be visible to this org) are dropped
+// defensively rather than rendered with missing details.
+export async function listOrganisationOfferedSkills(organisationId) {
   const { data, error } = await supabase
-    .from('skill_library')
-    .select('id, name, category, description, organisation_id')
-    .eq('status', 'active')
-    .or(`organisation_id.is.null,organisation_id.eq.${organisationId}`)
-    .order('name')
-    .limit(1000)
+    .from('organisation_offered_skills')
+    .select('id, skill_library:skill_library_id(id, name, category, description, organisation_id)')
+    .eq('organisation_id', organisationId)
+    .order('created_at', { ascending: false })
   if (error) throw error
-  return data ?? []
+  return (data ?? [])
+    .filter((r) => r.skill_library)
+    .map((r) => ({
+      offeredId: r.id,
+      skillLibraryId: r.skill_library.id,
+      name: r.skill_library.name,
+      category: r.skill_library.category,
+      description: r.skill_library.description,
+      isOwnOrgSkill: r.skill_library.organisation_id === organisationId,
+    }))
 }
 
 // Creates a skill scoped to this organisation only -- never appears in the
 // public library or another organisation's browse list (0076's RLS),
-// distinct from is_private which is a single learner's own privacy setting.
+// distinct from is_private which is a single learner's own privacy
+// setting -- then immediately adds it to the org's offered roster, since
+// only this org can ever see the skill at all, so leaving it un-offered
+// would make it invisible everywhere, including to its own creator.
 export async function createProviderLibrarySkill(userId, organisationId, { name, category, description }) {
   const { data, error } = await supabase
     .from('skill_library')
@@ -31,21 +42,11 @@ export async function createProviderLibrarySkill(userId, organisationId, { name,
       organisation_id: organisationId,
       created_by: userId,
     })
-    .select('id, name, category, description, organisation_id')
+    .select('id')
     .single()
   if (error) throw error
+  await addOfferedSkill(organisationId, data.id, userId)
   return data
-}
-
-// The standalone "skills we offer our customers" roster (organisation_
-// offered_skills, 0076) -- independent of any specific course.
-export async function listOfferedSkillIds(organisationId) {
-  const { data, error } = await supabase
-    .from('organisation_offered_skills')
-    .select('skill_library_id')
-    .eq('organisation_id', organisationId)
-  if (error) throw error
-  return (data ?? []).map((r) => r.skill_library_id)
 }
 
 export async function addOfferedSkill(organisationId, skillLibraryId, userId) {
@@ -55,6 +56,9 @@ export async function addOfferedSkill(organisationId, skillLibraryId, userId) {
   if (error) throw error
 }
 
+// Only removes the roster association -- the underlying skill_library row
+// (public or this org's own) is never deleted, same "unlink, don't delete
+// the source record" rule as every other association in this app.
 export async function removeOfferedSkill(organisationId, skillLibraryId) {
   const { error } = await supabase
     .from('organisation_offered_skills')
