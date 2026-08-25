@@ -10,9 +10,10 @@ import {
   contentFileUrl,
 } from '../lib/courseContent'
 import ScormPlayer from '../components/ScormPlayer'
+import XapiPlayer from '../components/XapiPlayer'
 import AppHeader from '../components/AppHeader'
 
-const TYPE_LABELS = { video: 'Video', file: 'File', scorm: 'SCORM package' }
+const TYPE_LABELS = { video: 'Video', file: 'File', scorm: 'SCORM package', xapi: 'xAPI package' }
 
 // Items come back ordered by their own `position`, which only resets to 0
 // within each section (see courseContent.js's nextLinkPosition) -- sorting
@@ -237,6 +238,10 @@ export default function CourseLearn() {
                     userId={user.id}
                     onProgress={refreshProgress}
                   />
+                )}
+
+                {currentItem.type === 'xapi' && (
+                  <XapiPlayer key={currentItem.id} contentItem={currentItem} userId={user.id} courseId={course.id} />
                 )}
 
                 <div className="flex items-center gap-2 mt-6 pt-4 border-t border-hairline">

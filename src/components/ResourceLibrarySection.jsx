@@ -4,13 +4,15 @@ import {
   uploadVideoResource,
   uploadFileResource,
   uploadScormResource,
+  uploadXapiResource,
   deleteResource,
   contentFileUrl,
 } from '../lib/courseContent'
 import ScormPlayer from './ScormPlayer'
+import XapiPlayer from './XapiPlayer'
 import ConfirmDialog from './ConfirmDialog'
 
-const TYPE_LABELS = { video: 'Video', file: 'File', scorm: 'SCORM package' }
+const TYPE_LABELS = { video: 'Video', file: 'File', scorm: 'SCORM package', xapi: 'xAPI package' }
 
 // An organisation's whole content library -- upload once here, then attach
 // (link) into however many courses need it from that course's own edit
@@ -57,7 +59,8 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
     try {
       if (type === 'video') await uploadVideoResource(organisationId, userId, file, title)
       else if (type === 'file') await uploadFileResource(organisationId, userId, file, title)
-      else await uploadScormResource(organisationId, userId, file, title)
+      else if (type === 'scorm') await uploadScormResource(organisationId, userId, file, title)
+      else await uploadXapiResource(organisationId, userId, file, title)
       setTitle('')
       if (fileInputRef.current) fileInputRef.current.value = ''
       setFileName('')
@@ -161,6 +164,11 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
                   <ScormPlayer contentItem={resource} userId={userId} />
                 </div>
               )}
+              {previewingId === resource.id && resource.type === 'xapi' && (
+                <div className="mt-2">
+                  <XapiPlayer contentItem={resource} userId={userId} />
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -182,6 +190,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
             <option value="video">Video</option>
             <option value="file">File</option>
             <option value="scorm">SCORM package (.zip)</option>
+            <option value="xapi">xAPI package (.zip)</option>
           </select>
         </div>
         <div className="flex-1 min-w-[160px]">
@@ -239,7 +248,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
             id="resourceFile"
             ref={fileInputRef}
             type="file"
-            accept={type === 'scorm' ? '.zip' : type === 'video' ? 'video/*' : undefined}
+            accept={type === 'scorm' || type === 'xapi' ? '.zip' : type === 'video' ? 'video/*' : undefined}
             onChange={(e) => setFileName(e.target.files?.[0]?.name || '')}
             className="sr-only"
           />

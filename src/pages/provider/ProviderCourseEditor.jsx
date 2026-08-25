@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
 import ScormPlayer from '../../components/ScormPlayer'
+import XapiPlayer from '../../components/XapiPlayer'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import { getCatalogueCourse, updateProviderCourse, setCatalogueCourseStatus } from '../../lib/admin/catalogue'
 import {
@@ -19,10 +20,11 @@ import {
   uploadVideoResource,
   uploadFileResource,
   uploadScormResource,
+  uploadXapiResource,
   contentFileUrl,
 } from '../../lib/courseContent'
 
-const TYPE_LABELS = { video: 'Video', file: 'File', scorm: 'SCORM package' }
+const TYPE_LABELS = { video: 'Video', file: 'File', scorm: 'SCORM package', xapi: 'xAPI package' }
 const STATUS_LABELS = {
   draft: 'Draft',
   pending_approval: 'Pending approval',
@@ -482,6 +484,11 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
                 <ScormPlayer contentItem={item} userId={userId} />
               </div>
             )}
+            {previewingId === item.id && item.type === 'xapi' && (
+              <div className="mt-2">
+                <XapiPlayer contentItem={item} userId={userId} />
+              </div>
+            )}
           </li>
         ))}
       </ul>
@@ -618,7 +625,9 @@ function SectionCard({
           ? await uploadVideoResource(organisationId, userId, file, uploadTitle)
           : uploadType === 'file'
             ? await uploadFileResource(organisationId, userId, file, uploadTitle)
-            : await uploadScormResource(organisationId, userId, file, uploadTitle)
+            : uploadType === 'scorm'
+              ? await uploadScormResource(organisationId, userId, file, uploadTitle)
+              : await uploadXapiResource(organisationId, userId, file, uploadTitle)
       await linkResourceToCourse(courseId, resource.id, section.id)
       setUploadTitle('')
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -754,6 +763,11 @@ function SectionCard({
                   <ScormPlayer contentItem={item} userId={userId} />
                 </div>
               )}
+              {previewingId === item.id && item.type === 'xapi' && (
+                <div className="mt-2">
+                  <XapiPlayer contentItem={item} userId={userId} />
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -817,6 +831,7 @@ function SectionCard({
                   <option value="video">Video</option>
                   <option value="file">File</option>
                   <option value="scorm">SCORM package (.zip)</option>
+                  <option value="xapi">xAPI package (.zip)</option>
                 </select>
               </div>
               <div className="flex-1 min-w-[140px]">
@@ -834,7 +849,13 @@ function SectionCard({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept={uploadType === 'scorm' ? '.zip' : uploadType === 'video' ? 'video/*' : undefined}
+                  accept={
+                    uploadType === 'scorm' || uploadType === 'xapi'
+                      ? '.zip'
+                      : uploadType === 'video'
+                        ? 'video/*'
+                        : undefined
+                  }
                   className="text-xs text-secondary"
                 />
               </div>

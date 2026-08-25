@@ -172,6 +172,10 @@ export function contentFileUrl(item) {
   return publicUrlFor(item.storage_path)
 }
 
+// Shared by SCORM and xAPI packages alike -- both are "storage_path folder
+// + launch_path entry file" content, just launched differently (SCORM via
+// window.API, xAPI via URL query params -- see ScormPlayer.jsx/
+// XapiPlayer.jsx).
 export function scormLaunchUrl(item) {
   if (!item.launch_path) return null
   return publicUrlFor(`${item.storage_path}/${item.launch_path}`)
@@ -235,11 +239,26 @@ async function uploadSingleFileResource(organisationId, userId, file, title, typ
   return data
 }
 
-// SCORM 1.2/2004 packages ship as a zip of many interlinked files
-// (html/js/css/images) referencing each other by relative path -- there's
-// no single "the file" to upload, so the zip is extracted client-side
-// (JSZip) and every entry is uploaded individually under one folder, then
-// the manifest tells us which extracted file is the actual launch page.
+// Shared by SCORM and xAPI uploads -- both ship as a zip of many
+// interlinked files (html/js/css/images) referencing each other by
+// relative path, so there's no single "the file" to upload; every entry is
+// extracted client-side (JSZip) and uploaded individually under one folder.
+async function uploadZipEntries(zip, folderPrefix) {
+  const entries = Object.values(zip.files).filter((entry) => !entry.dir)
+  for (const entry of entries) {
+    if (!isSafeRelativePath(entry.name)) {
+      throw new Error(`This package contains an unsafe file path ("${entry.name}") and can't be uploaded.`)
+    }
+    const blob = await entry.async('blob')
+    const { error: uploadError } = await supabase.storage
+      .from(BUCKET)
+      .upload(`${folderPrefix}/${entry.name}`, blob, { contentType: guessContentType(entry.name) })
+    if (uploadError) throw uploadError
+  }
+}
+
+// SCORM 1.2/2004 packages -- the manifest tells us which extracted file is
+// the actual launch page.
 export async function uploadScormResource(organisationId, userId, zipFile, title) {
   const zip = await JSZip.loadAsync(zipFile)
 
@@ -255,18 +274,7 @@ export async function uploadScormResource(organisationId, userId, zipFile, title
 
   const itemId = crypto.randomUUID()
   const folderPrefix = `${organisationId}/${itemId}`
-
-  const entries = Object.values(zip.files).filter((entry) => !entry.dir)
-  for (const entry of entries) {
-    if (!isSafeRelativePath(entry.name)) {
-      throw new Error(`This package contains an unsafe file path ("${entry.name}") and can't be uploaded.`)
-    }
-    const blob = await entry.async('blob')
-    const { error: uploadError } = await supabase.storage
-      .from(BUCKET)
-      .upload(`${folderPrefix}/${entry.name}`, blob, { contentType: guessContentType(entry.name) })
-    if (uploadError) throw uploadError
-  }
+  await uploadZipEntries(zip, folderPrefix)
 
   const { data, error } = await supabase
     .from('content_resources')
@@ -281,6 +289,83 @@ export async function uploadScormResource(organisationId, userId, zipFile, title
       created_by: userId,
     })
     .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+// xAPI (Tin Can) packages -- same zip-of-files shape as SCORM, but the
+// manifest is tincan.xml, not imsmanifest.xml, and its schema is simpler
+// (one or more <activity><launch> entries; the first activity's launch is
+// used, matching how a content_resources row represents one launchable
+// thing). Played back via XapiPlayer.jsx, which speaks the launch URL +
+// LRS convention rather than SCORM's window.API.
+export async function uploadXapiResource(organisationId, userId, zipFile, title) {
+  const zip = await JSZip.loadAsync(zipFile)
+
+  const manifestEntry = zip.file(/^tincan\.xml$/i)[0]
+  if (!manifestEntry) {
+    throw new Error('This doesn\'t look like an xAPI package -- no tincan.xml found in the zip.')
+  }
+  const manifestXml = await manifestEntry.async('string')
+  const launchPath = parseTincanLaunchPath(manifestXml)
+  if (!launchPath) {
+    throw new Error('Could not determine a launch page from tincan.xml.')
+  }
+
+  const itemId = crypto.randomUUID()
+  const folderPrefix = `${organisationId}/${itemId}`
+  await uploadZipEntries(zip, folderPrefix)
+
+  const { data, error } = await supabase
+    .from('content_resources')
+    .insert({
+      id: itemId,
+      organisation_id: organisationId,
+      type: 'xapi',
+      title: title?.trim() || zipFile.name,
+      storage_path: folderPrefix,
+      file_name: zipFile.name,
+      launch_path: launchPath,
+      created_by: userId,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+// Takes the first <activity>'s <launch> element -- multi-activity packages
+// exist, but a content_resources row always represents one launchable
+// thing, same as SCORM's single launch_path.
+function parseTincanLaunchPath(manifestXml) {
+  const doc = new DOMParser().parseFromString(manifestXml, 'application/xml')
+  if (doc.querySelector('parsererror')) return null
+
+  const launch = doc.getElementsByTagName('launch')[0]
+  const href = launch?.textContent?.trim()
+  return href && isSafeRelativePath(href) ? href : null
+}
+
+// A stable activity identifier derived from our own resource id, rather
+// than trusting whatever `id` an uploaded package's tincan.xml happens to
+// declare -- an uploaded manifest is untrusted content, and activity
+// identity is what statements key off of, so it shouldn't be sourced from
+// data the uploader controls.
+export function xapiActivityId(resource) {
+  return `https://learnscope.app/xapi/activities/${resource.id}`
+}
+
+// One row per "launch" -- see 0079_xapi_resources.sql for why this exists
+// (the package authenticates its own statement submissions with this
+// session's token, not a Supabase session). courseId is optional: previewing
+// a resource from the org's library, not yet attached to an enrolled
+// course, has no course context.
+export async function createXapiLaunchSession(resourceId, userId, courseId = null) {
+  const { data, error } = await supabase
+    .from('xapi_launch_sessions')
+    .insert({ resource_id: resourceId, user_id: userId, course_id: courseId })
+    .select('id, token')
     .single()
   if (error) throw error
   return data
