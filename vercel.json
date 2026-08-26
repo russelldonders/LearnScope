@@ -2,12 +2,5 @@
   "functions": {
     "api/parse-cv.js": { "maxDuration": 60 }
   },
-  "routes": [
-    {
-      "src": "/course-content/(.*)",
-      "dest": "${VITE_SUPABASE_URL}/storage/v1/object/public/course-content/$1",
-      "env": ["VITE_SUPABASE_URL"]
-    }
-  ],
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
