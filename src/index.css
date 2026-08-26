@@ -78,6 +78,11 @@ body {
   font-family: var(--font-sans);
 }
 
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--color-gold);
+  outline-offset: 3px;
+}
+
 /* For horizontally-scrolling rows (e.g. the dashboard's Up Next slider)
    that want a natural scroll/swipe feel without the OS's thick horizontal
    scrollbar chrome sitting under them. */
