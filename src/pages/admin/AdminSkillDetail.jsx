@@ -45,10 +45,16 @@ export default function AdminSkillDetail() {
   }, [skillId])
 
   const countByLevel = new Map(levelStats.map((s) => [s.level, s.tracker_count]))
+  // Shared library cache (0089) is the current source of truth going
+  // forward; guideSample (0083's per-tracker sample) only still matters for
+  // skills that predate that cache, or unlinked skills that never get a
+  // shared entry.
   const knowledgeGuide =
-    guideSample?.knowledge_level_guide?.length === 5 ? guideSample.knowledge_level_guide : null
+    (skill?.knowledge_level_guide?.length === 5 ? skill.knowledge_level_guide : null) ??
+    (guideSample?.knowledge_level_guide?.length === 5 ? guideSample.knowledge_level_guide : null)
   const practicalGuide =
-    guideSample?.practical_level_guide?.length === 5 ? guideSample.practical_level_guide : null
+    (skill?.practical_level_guide?.length === 5 ? skill.practical_level_guide : null) ??
+    (guideSample?.practical_level_guide?.length === 5 ? guideSample.practical_level_guide : null)
 
   return (
     <AdminLayout>

@@ -53,8 +53,15 @@ export async function listAllLibrarySkills() {
   return attachOwnerInfo(data ?? [])
 }
 
+// Includes the shared level-guide cache columns (0089) on top of
+// ADMIN_SKILL_SELECT -- only needed for this single-skill detail fetch, not
+// the list view, so kept out of the shared constant.
 export async function getLibrarySkill(id) {
-  const { data, error } = await supabase.from('skill_library').select(ADMIN_SKILL_SELECT).eq('id', id).single()
+  const { data, error } = await supabase
+    .from('skill_library')
+    .select(`${ADMIN_SKILL_SELECT}, knowledge_level_guide, practical_level_guide`)
+    .eq('id', id)
+    .single()
   if (error) throw error
   const [withOwner] = await attachOwnerInfo([data])
   return withOwner

@@ -105,14 +105,23 @@ export default function SkillDetail() {
     setNotFound(false)
     const { data, error } = await supabase
       .from('skills')
-      .select('*, skill_library(is_private)')
+      .select('*, skill_library(is_private, knowledge_level_guide, practical_level_guide)')
       .eq('id', id)
       .eq('user_id', user.id)
       .maybeSingle()
     if (error || !data) {
       setNotFound(true)
     } else {
-      setSkill(data)
+      // The per-instance columns stay authoritative for a fully custom skill
+      // (no library_skill_id); for a library-linked one they're only ever
+      // populated pre-0089, so fall back to the shared library cache -- same
+      // guide text either way, just resolved without an extra round trip if
+      // it's already sitting in the join above.
+      setSkill({
+        ...data,
+        knowledge_level_guide: data.knowledge_level_guide ?? data.skill_library?.knowledge_level_guide ?? null,
+        practical_level_guide: data.practical_level_guide ?? data.skill_library?.practical_level_guide ?? null,
+      })
     }
     setLoadingSkill(false)
   }
