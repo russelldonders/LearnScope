@@ -204,21 +204,24 @@ export function scormLaunchUrl(item) {
   return publicUrlFor(`${item.storage_path}/${item.launch_path}`)
 }
 
-// SCORM packages are commonly built by authoring tools that touch
-// localStorage/sessionStorage unconditionally at startup (bookmarking,
-// settings) with no fallback for it being unavailable -- and inside the
-// sandboxed iframe (deliberately no allow-same-origin; see ScormPlayer.jsx),
-// accessing either throws a SecurityError, uncaught, which stops the
-// package's own script from ever finishing its own init and rendering
-// anything. Fetches the launch page itself (a normal same-origin fetch from
-// this unsandboxed page -- no different from the browser's own request for
-// it) and injects an in-memory storage shim plus a <base> tag (so the
-// package's own relative asset paths still resolve correctly once loaded
-// via srcdoc instead of src) at the very start of <head>, before any of the
-// package's own script/link tags. The shim is a plain classic <script>
-// (not type="module"), which blocks HTML parsing until it runs, guaranteeing
-// it executes before any later script in the document -- including deferred
-// module scripts, which only run after parsing finishes.
+// SCORM packages are commonly built by authoring tools whose bundled
+// dependencies (this "imc Express" demo included -- an i18next-style
+// language detector, going by its own console banner) unconditionally probe
+// localStorage/sessionStorage/document.cookie at startup, with no fallback
+// for any of them being unavailable -- and inside the sandboxed iframe
+// (deliberately no allow-same-origin; see ScormPlayer.jsx), accessing any
+// of them throws a SecurityError, uncaught, which stops the package's own
+// script before it renders anything. Fetches the launch page itself (a
+// normal same-origin fetch from this unsandboxed page -- no different from
+// the browser's own request for it) and injects an in-memory shim for all
+// three plus a <base> tag (so the package's own relative asset paths still
+// resolve correctly once loaded via srcdoc instead of src) at the very
+// start of <head>, before any of the package's own script/link tags. The
+// shim is a plain classic <script> (not type="module"), which blocks HTML
+// parsing until it runs, guaranteeing it executes before any later script
+// in the document -- including deferred module scripts, which only run
+// after parsing finishes. Add more shimmed APIs here if another package
+// trips over something else the same way (indexedDB is a likely next one).
 //
 // srcdoc necessarily discards the loaded document's own URL (it becomes
 // about:srcdoc, with no query string) -- fine for SCORM, which never reads
@@ -240,6 +243,21 @@ const STORAGE_SHIM_SCRIPT = `<script>(function(){
   }
   try { Object.defineProperty(window, 'localStorage', { value: memoryStorage(), configurable: true }); } catch (e) {}
   try { Object.defineProperty(window, 'sessionStorage', { value: memoryStorage(), configurable: true }); } catch (e) {}
+  try {
+    var cookieJar = {};
+    Object.defineProperty(document, 'cookie', {
+      configurable: true,
+      get: function(){
+        return Object.keys(cookieJar).map(function(k){ return k + '=' + cookieJar[k]; }).join('; ');
+      },
+      set: function(v){
+        var str = String(v);
+        var eq = str.indexOf('=');
+        if (eq === -1) return;
+        cookieJar[str.slice(0, eq).trim()] = str.slice(eq + 1).split(';')[0];
+      },
+    });
+  } catch (e) {}
 })();</` + `script>`
 
 export async function fetchShimmedLaunchDoc(launchUrl) {
