@@ -185,7 +185,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
                 </div>
               </div>
               {previewingId === resource.id && resource.type === 'video' && (
-                <video src={contentFileUrl(resource)} controls className="w-full mt-2 rounded-md bg-ink" />
+                <video src={contentFileUrl(resource)} controls className="w-full mt-2 rounded-md bg-black" />
               )}
               {previewingId === resource.id && resource.type === 'scorm' && (
                 <div className="mt-2">

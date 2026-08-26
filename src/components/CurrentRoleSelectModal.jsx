@@ -40,7 +40,7 @@ export default function CurrentRoleSelectModal({ roles, onConfirm, onCancel }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={handleCancel}>
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={handleCancel}>
       <div
         className="w-full max-w-md bg-card border border-hairline rounded-lg p-6"
         onClick={(e) => e.stopPropagation()}

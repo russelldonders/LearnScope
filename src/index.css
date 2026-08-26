@@ -1,5 +1,11 @@
 @import 'tailwindcss';
 
+/* Applies dark: variants (and, more importantly, the CSS-variable overrides
+   below) whenever an ancestor carries .dark -- ThemeContext toggles that
+   class on <html>, rather than relying on the OS-level prefers-color-scheme
+   media query, so a signed-in learner's stored preference always wins. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-ink: #20301f;
   --color-paper: #eef0e7;
@@ -23,6 +29,35 @@
   --font-display: 'Fraunces', serif;
   --font-sans: 'IBM Plex Sans', sans-serif;
   --font-mono: 'IBM Plex Mono', monospace;
+}
+
+/* Dark mode: every existing bg-paper/text-ink/bg-card/etc. utility in the
+   app already compiles to var(--color-*) rather than a literal hex (how
+   Tailwind v4's @theme works), so re-pointing those same custom properties
+   here is enough to reskin the whole app -- no component needed a dark:
+   variant added. Values are chosen (and contrast-checked against the new
+   --color-paper/--color-card, not just eyeballed) to clear WCAG AA's 4.5:1
+   text contrast floor, same bar --color-secondary's own comment above holds
+   itself to. --color-red-700 is Tailwind's own built-in token, overridden
+   here too because the app leans on `text-red-700` for every error message
+   (Profile.jsx's delete-account error, form validation, etc.) -- the
+   default red-700 only clears ~2.6:1 against this dark paper, so it's
+   swapped for a lighter red that still reads as "red-700" everywhere it's
+   used. Deliberately NOT overridden: --color-gold/--color-trust-self/
+   --color-trust-evidence, which already clear 4.5:1 against the dark
+   backgrounds below unchanged, and bg-black/[opacity] modal scrims plus the
+   video-player letterbox background, which were moved off --color-ink (see
+   ConfirmDialog.jsx etc.) precisely so they stay dark in both themes rather
+   than flipping with the text color. */
+.dark {
+  --color-ink: #e8ebe0;
+  --color-paper: #182019;
+  --color-card: #212b20;
+  --color-moss: #86ba78;
+  --color-slate: #7fa3c2;
+  --color-hairline: #33402e;
+  --color-secondary: #9aa892;
+  --color-red-700: #f87171;
 }
 
 html {

@@ -859,7 +859,7 @@ export default function SkillDetail() {
 
             {settingsOpen && (
               <div
-                className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-40"
+                className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-40"
                 onClick={() => setSettingsOpen(false)}
               >
                 <div
@@ -977,7 +977,7 @@ function PeopleIcon() {
 // privacy check needed here, the list itself is already scoped correctly.
 function ConnectionsWithSkillModal({ connections, skillName, onClose }) {
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
       <div
         className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
@@ -1125,7 +1125,7 @@ function LevelDetailModal({
     : null
 
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
       <div
         className="w-full max-w-md bg-card border border-hairline rounded-lg p-6"
         onClick={(e) => e.stopPropagation()}
@@ -1236,7 +1236,7 @@ function SelfAssessModal({
   onGuideGenerated,
 }) {
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
       <div
         className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
@@ -1909,7 +1909,7 @@ function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assesso
   }
 
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
       <div
         className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}

@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
+import { ThemeProvider } from './context/ThemeContext'
 import { PendingActionsProvider } from './context/PendingActionsContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import PlatformAdminRoute from './components/PlatformAdminRoute'
@@ -42,6 +43,7 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <ThemeProvider>
         <PendingActionsProvider>
         <Routes>
           <Route path="/" element={<Landing />} />
@@ -262,6 +264,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </PendingActionsProvider>
+        </ThemeProvider>
       </AuthProvider>
     </BrowserRouter>
   )

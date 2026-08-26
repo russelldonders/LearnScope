@@ -483,7 +483,7 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
               </div>
             </div>
             {previewingId === item.id && item.type === 'video' && (
-              <video src={contentFileUrl(item)} controls className="w-full mt-2 rounded-md bg-ink" />
+              <video src={contentFileUrl(item)} controls className="w-full mt-2 rounded-md bg-black" />
             )}
             {previewingId === item.id && item.type === 'scorm' && (
               <div className="mt-2">
@@ -771,7 +771,7 @@ function SectionCard({
                 </div>
               </div>
               {previewingId === item.id && item.type === 'video' && (
-                <video src={contentFileUrl(item)} controls className="w-full mt-2 rounded-md bg-ink" />
+                <video src={contentFileUrl(item)} controls className="w-full mt-2 rounded-md bg-black" />
               )}
               {previewingId === item.id && item.type === 'scorm' && (
                 <div className="mt-2">

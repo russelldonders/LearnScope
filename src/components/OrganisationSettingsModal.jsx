@@ -69,7 +69,7 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-[60]" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[60]" onClick={onClose}>
       <div
         className="w-full max-w-lg bg-card border border-hairline rounded-lg p-6"
         onClick={(e) => e.stopPropagation()}

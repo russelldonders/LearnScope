@@ -4,7 +4,7 @@
 // (z-50) when a destructive action is confirmed from inside one.
 export default function ConfirmDialog({ message, confirmLabel = 'Delete', onConfirm, onCancel, confirming = false }) {
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-[60]" onClick={onCancel}>
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[60]" onClick={onCancel}>
       <div
         className="w-full max-w-sm bg-card border border-hairline rounded-lg p-6"
         onClick={(e) => e.stopPropagation()}

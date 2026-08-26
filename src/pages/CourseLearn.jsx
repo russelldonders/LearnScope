@@ -212,7 +212,7 @@ export default function CourseLearn() {
                     src={contentFileUrl(currentItem)}
                     controls
                     onEnded={() => handleMarkComplete(currentItem)}
-                    className="w-full rounded-md bg-ink"
+                    className="w-full rounded-md bg-black"
                   />
                 )}
 

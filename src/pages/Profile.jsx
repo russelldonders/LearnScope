@@ -2,13 +2,21 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import AppHeader from '../components/AppHeader'
 import ProfilePhoto from '../components/ProfilePhoto'
 import { COUNTRIES } from '../lib/countries'
 import { LANGUAGES } from '../lib/languages'
 
+const THEME_OPTIONS = [
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+  { value: 'system', label: 'System' },
+]
+
 export default function Profile() {
   const { user, updateEmail, signOut, refreshNeedsName } = useAuth()
+  const { preference: themePreference, setPreference: setThemePreference } = useTheme()
   const navigate = useNavigate()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -130,6 +138,30 @@ export default function Profile() {
           <div className="space-y-6">
             <div className="bg-card border border-hairline rounded-lg p-6">
               <ProfilePhoto avatarUrl={avatarUrl} onUploaded={setAvatarUrl} />
+            </div>
+
+            <div className="bg-card border border-hairline rounded-lg p-6">
+              <h3 className="font-display text-lg text-ink mb-1">Appearance</h3>
+              <p className="text-sm text-secondary mb-4">
+                Choose how LearnScope looks. This follows your account to any device you sign in on.
+              </p>
+              <div className="inline-flex rounded-md border border-hairline overflow-hidden" role="group" aria-label="Appearance">
+                {THEME_OPTIONS.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setThemePreference(value)}
+                    aria-pressed={themePreference === value}
+                    className={`py-1.5 px-3 text-sm font-medium border-r border-hairline last:border-r-0 ${
+                      themePreference === value
+                        ? 'bg-moss text-paper'
+                        : 'text-ink hover:bg-paper'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <form
