@@ -1,3 +1,5 @@
+import { useRef } from 'react'
+
 // Shared shape + helpers for a video resource's non-destructive edit
 // (content_resources.video_edit, 0087) -- trim points, a CSS-filter-style
 // color adjustment, playback speed, and a list of timed/positioned text or
@@ -78,4 +80,50 @@ export function formatTime(seconds) {
   const m = Math.floor(s / 60)
   const rem = (s % 60).toFixed(1).padStart(4, '0')
   return `${m}:${rem}`
+}
+
+// Applies trimStart/trimEnd to a <video>'s actual playback -- shared by
+// EditedVideoPlayer (real playback, reads a saved edit) and
+// VideoEditorModal's own preview (reads the in-progress, unsaved edit), so
+// "what trim looks like" can't drift between editing and the real thing.
+// `onEnded` fires once when playback reaches trimEnd, mirroring native
+// <video> onEnded firing once per run-off-the-end rather than once per
+// element lifetime (re-armed on seeking back before trimEnd).
+export function useTrimPlayback(edit, onEnded) {
+  const endedFiredRef = useRef(false)
+
+  function handleLoadedMetadata(e) {
+    e.currentTarget.playbackRate = edit.playbackRate
+    if (edit.trimStart > 0) e.currentTarget.currentTime = edit.trimStart
+  }
+
+  function handleTimeUpdate(e) {
+    if (edit.trimEnd != null && e.currentTarget.currentTime >= edit.trimEnd && !endedFiredRef.current) {
+      endedFiredRef.current = true
+      e.currentTarget.pause()
+      onEnded?.()
+    }
+  }
+
+  function handleSeeking(e) {
+    // Scrubbing before the trim start snaps forward to it -- trim is a
+    // soft/non-destructive playback window (the underlying file is
+    // untouched), but a viewer/editor dragging the native seek bar
+    // shouldn't be able to land in the pre-trim portion any more than they
+    // could with a truly trimmed file.
+    if (e.currentTarget.currentTime < edit.trimStart) {
+      e.currentTarget.currentTime = edit.trimStart
+      return
+    }
+    if (e.currentTarget.currentTime < (edit.trimEnd ?? Infinity)) endedFiredRef.current = false
+  }
+
+  function handleNativeEnded() {
+    if (!endedFiredRef.current) {
+      endedFiredRef.current = true
+      onEnded?.()
+    }
+  }
+
+  return { handleLoadedMetadata, handleTimeUpdate, handleSeeking, handleNativeEnded }
 }

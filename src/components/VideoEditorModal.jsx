@@ -10,6 +10,7 @@ import {
   createTextOverlay,
   formatTime,
   normalizeVideoEdit,
+  useTrimPlayback,
 } from '../lib/videoEdit'
 
 const TABS = [
@@ -41,6 +42,7 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
   const previewRef = useRef(null)
 
   const selectedOverlay = edit.overlays.find((o) => o.id === selectedOverlayId) ?? null
+  const trim = useTrimPlayback(edit)
 
   function handleLoadedMetadata(e) {
     const d = e.currentTarget.duration
@@ -119,34 +121,54 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
             ref={videoRef}
             src={contentFileUrl(resource)}
             controls
-            onLoadedMetadata={handleLoadedMetadata}
-            onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+            onLoadedMetadata={(e) => {
+              handleLoadedMetadata(e)
+              trim.handleLoadedMetadata(e)
+            }}
+            onTimeUpdate={(e) => {
+              trim.handleTimeUpdate(e)
+              setCurrentTime(e.currentTarget.currentTime)
+            }}
+            onSeeking={trim.handleSeeking}
+            onEnded={trim.handleNativeEnded}
             style={{ filter: buildFilterCss(edit.filter) }}
             className="w-full max-h-[45vh] block"
           />
           <div className="absolute inset-0">
-            {edit.overlays.map((o) => (
-              <div
-                key={o.id}
-                onPointerDown={(e) => startDrag(e, o.id)}
-                onPointerMove={(e) => handleDragMove(e, o.id)}
-                className={`absolute -translate-x-1/2 -translate-y-1/2 cursor-move select-none max-w-[80%] text-center px-1 rounded ${
-                  selectedOverlayId === o.id ? 'ring-2 ring-gold' : ''
-                }`}
-                style={{ left: `${o.x}%`, top: `${o.y}%` }}
-              >
-                {o.kind === 'text' ? (
-                  <span
-                    style={{ color: o.color, fontSize: OVERLAY_SIZE_PX[o.size] }}
-                    className="font-bold whitespace-pre-wrap [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]"
-                  >
-                    {o.content}
-                  </span>
-                ) : (
-                  <span style={{ fontSize: OVERLAY_SIZE_PX[o.size] }}>{o.content}</span>
-                )}
-              </div>
-            ))}
+            {edit.overlays.map((o) => {
+              // Scrubbing/playing the preview shows overlays exactly like
+              // real playback would (see EditedVideoPlayer) -- that's the
+              // "slide yourself and see the edits in place" behavior. The
+              // one exception is whichever overlay is currently selected:
+              // it stays visible (dimmed if outside its own window) so it's
+              // always draggable, rather than vanishing out from under you
+              // the moment you scrub away from its time range.
+              const inWindow = currentTime >= o.startTime && currentTime <= o.endTime
+              const isSelected = selectedOverlayId === o.id
+              if (!inWindow && !isSelected) return null
+              return (
+                <div
+                  key={o.id}
+                  onPointerDown={(e) => startDrag(e, o.id)}
+                  onPointerMove={(e) => handleDragMove(e, o.id)}
+                  className={`absolute -translate-x-1/2 -translate-y-1/2 cursor-move select-none max-w-[80%] text-center px-1 rounded ${
+                    isSelected ? 'ring-2 ring-gold' : ''
+                  } ${!inWindow ? 'opacity-40' : ''}`}
+                  style={{ left: `${o.x}%`, top: `${o.y}%` }}
+                >
+                  {o.kind === 'text' ? (
+                    <span
+                      style={{ color: o.color, fontSize: OVERLAY_SIZE_PX[o.size] }}
+                      className="font-bold whitespace-pre-wrap [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]"
+                    >
+                      {o.content}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: OVERLAY_SIZE_PX[o.size] }}>{o.content}</span>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
 
