@@ -20,9 +20,15 @@ export default function EditedVideoPlayer({ resource, onEnded, className = '', c
 
   return (
     <div className="relative">
+      {/* Without playsInline, mobile Safari plays <video> in its own native
+          fullscreen player by default -- a separate OS-level layer the
+          overlay div below can never render on top of, so trim/overlays
+          would silently disappear on exactly the devices most likely to
+          watch a course video. */}
       <video
         src={contentFileUrl(resource)}
         controls={controls}
+        playsInline
         onLoadedMetadata={trim.handleLoadedMetadata}
         onTimeUpdate={(e) => {
           trim.handleTimeUpdate(e)

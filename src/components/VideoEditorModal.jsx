@@ -117,10 +117,14 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
           className="relative bg-black rounded-md overflow-hidden"
           style={{ touchAction: 'none' }}
         >
+          {/* See EditedVideoPlayer.jsx -- without this, mobile Safari pops
+              playback into its own native fullscreen layer, where the
+              overlay div below (and dragging) can't reach it. */}
           <video
             ref={videoRef}
             src={contentFileUrl(resource)}
             controls
+            playsInline
             onLoadedMetadata={(e) => {
               handleLoadedMetadata(e)
               trim.handleLoadedMetadata(e)
