@@ -5,6 +5,7 @@ import {
   uploadFileResource,
   uploadScormResource,
   uploadXapiResource,
+  addExternalVideoResource,
   deleteResource,
   contentFileUrl,
 } from '../lib/courseContent'
@@ -12,7 +13,13 @@ import ScormPlayer from './ScormPlayer'
 import XapiPlayer from './XapiPlayer'
 import ConfirmDialog from './ConfirmDialog'
 
-const TYPE_LABELS = { video: 'Video', file: 'File', scorm: 'SCORM package', xapi: 'xAPI package' }
+const TYPE_LABELS = {
+  video: 'Video',
+  file: 'File',
+  scorm: 'SCORM package',
+  xapi: 'xAPI package',
+  external_video: 'External video',
+}
 
 // An organisation's whole content library -- upload once here, then attach
 // (link) into however many courses need it from that course's own edit
@@ -30,6 +37,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
   const [deleting, setDeleting] = useState(false)
   const [fileName, setFileName] = useState('')
   const [dragActive, setDragActive] = useState(false)
+  const [videoUrl, setVideoUrl] = useState('')
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -49,6 +57,26 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
   }
 
   async function handleUpload() {
+    if (type === 'external_video') {
+      if (!videoUrl.trim()) {
+        setError('Paste a YouTube or Vimeo link first.')
+        return
+      }
+      setUploading(true)
+      setError(null)
+      try {
+        await addExternalVideoResource(organisationId, userId, videoUrl, title)
+        setTitle('')
+        setVideoUrl('')
+        await load()
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setUploading(false)
+      }
+      return
+    }
+
     const file = fileInputRef.current?.files[0]
     if (!file) {
       setError('Choose a file first.')
@@ -169,6 +197,15 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
                   <XapiPlayer contentItem={resource} userId={userId} />
                 </div>
               )}
+              {previewingId === resource.id && resource.type === 'external_video' && (
+                <iframe
+                  src={resource.external_url}
+                  title={resource.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  className="w-full aspect-video mt-2 rounded-md"
+                />
+              )}
             </li>
           ))}
         </ul>
@@ -191,6 +228,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
             <option value="file">File</option>
             <option value="scorm">SCORM package (.zip)</option>
             <option value="xapi">xAPI package (.zip)</option>
+            <option value="external_video">External video (YouTube/Vimeo)</option>
           </select>
         </div>
         <div className="flex-1 min-w-[160px]">
@@ -204,6 +242,20 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
             className="w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
           />
         </div>
+        {type === 'external_video' ? (
+          <div className="flex-1 min-w-[220px]">
+            <label className="block text-xs text-secondary mb-1" htmlFor="resourceVideoUrl">
+              YouTube or Vimeo link
+            </label>
+            <input
+              id="resourceVideoUrl"
+              value={videoUrl}
+              onChange={(e) => setVideoUrl(e.target.value)}
+              placeholder="https://www.youtube.com/watch?v=..."
+              className="w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+            />
+          </div>
+        ) : (
         <div className="flex-1 min-w-[220px]">
           <label className="block text-xs text-secondary mb-1" htmlFor="resourceFile">
             File
@@ -253,6 +305,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
             className="sr-only"
           />
         </div>
+        )}
         <button
           type="button"
           onClick={handleUpload}

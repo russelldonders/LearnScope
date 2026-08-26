@@ -24,7 +24,13 @@ import {
   contentFileUrl,
 } from '../../lib/courseContent'
 
-const TYPE_LABELS = { video: 'Video', file: 'File', scorm: 'SCORM package', xapi: 'xAPI package' }
+const TYPE_LABELS = {
+  video: 'Video',
+  file: 'File',
+  scorm: 'SCORM package',
+  xapi: 'xAPI package',
+  external_video: 'External video',
+}
 const STATUS_LABELS = {
   draft: 'Draft',
   pending_approval: 'Pending approval',
@@ -489,6 +495,15 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
                 <XapiPlayer contentItem={item} userId={userId} />
               </div>
             )}
+            {previewingId === item.id && item.type === 'external_video' && (
+              <iframe
+                src={item.external_url}
+                title={item.title}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                className="w-full aspect-video mt-2 rounded-md"
+              />
+            )}
           </li>
         ))}
       </ul>
@@ -767,6 +782,15 @@ function SectionCard({
                 <div className="mt-2">
                   <XapiPlayer contentItem={item} userId={userId} />
                 </div>
+              )}
+              {previewingId === item.id && item.type === 'external_video' && (
+                <iframe
+                  src={item.external_url}
+                  title={item.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  className="w-full aspect-video mt-2 rounded-md"
+                />
               )}
             </li>
           ))}

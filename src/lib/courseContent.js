@@ -210,6 +210,57 @@ export async function uploadVideoResource(organisationId, userId, file, title) {
   return uploadSingleFileResource(organisationId, userId, file, title, 'video')
 }
 
+// Rebuilds a bare embed URL from a YouTube/Vimeo watch link ourselves,
+// rather than storing (and later using as an iframe src) whatever the
+// provider actually pasted -- an allowlisted host plus an id we extracted
+// keeps arbitrary query-string content out of the stored URL, so there's no
+// path from a crafted link to embedding a different, attacker-chosen page.
+function externalVideoEmbedUrl(url) {
+  let parsed
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new Error('Enter a valid video URL.')
+  }
+  const host = parsed.hostname.replace(/^www\./, '')
+
+  if (host === 'youtube.com' || host === 'm.youtube.com') {
+    const id = parsed.pathname === '/watch' ? parsed.searchParams.get('v') : parsed.pathname.match(/^\/(?:embed|shorts)\/([^/?]+)/)?.[1]
+    if (id) return `https://www.youtube.com/embed/${id}`
+  }
+  if (host === 'youtu.be') {
+    const id = parsed.pathname.slice(1)
+    if (id) return `https://www.youtube.com/embed/${id}`
+  }
+  if (host === 'vimeo.com') {
+    const id = parsed.pathname.match(/^\/(\d+)/)?.[1]
+    if (id) return `https://player.vimeo.com/video/${id}`
+  }
+  if (host === 'player.vimeo.com') {
+    const id = parsed.pathname.match(/^\/video\/(\d+)/)?.[1]
+    if (id) return `https://player.vimeo.com/video/${id}`
+  }
+
+  throw new Error('Only YouTube and Vimeo links are supported.')
+}
+
+export async function addExternalVideoResource(organisationId, userId, url, title) {
+  const embedUrl = externalVideoEmbedUrl(url.trim())
+  const { data, error } = await supabase
+    .from('content_resources')
+    .insert({
+      organisation_id: organisationId,
+      type: 'external_video',
+      title: title?.trim() || url.trim(),
+      external_url: embedUrl,
+      created_by: userId,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
 export async function uploadFileResource(organisationId, userId, file, title) {
   return uploadSingleFileResource(organisationId, userId, file, title, 'file')
 }
@@ -464,7 +515,7 @@ async function removeStorageFolder(prefix) {
 // the DB level (0073), so it disappears from every course it was attached
 // to, not just the one you were looking at when you deleted it.
 export async function deleteResource(resource) {
-  await removeStorageFolder(resource.storage_path)
+  if (resource.type !== 'external_video') await removeStorageFolder(resource.storage_path)
   const { error } = await supabase.from('content_resources').delete().eq('id', resource.id)
   if (error) throw error
 }

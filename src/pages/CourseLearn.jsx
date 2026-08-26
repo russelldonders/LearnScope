@@ -13,7 +13,13 @@ import ScormPlayer from '../components/ScormPlayer'
 import XapiPlayer from '../components/XapiPlayer'
 import AppHeader from '../components/AppHeader'
 
-const TYPE_LABELS = { video: 'Video', file: 'File', scorm: 'SCORM package', xapi: 'xAPI package' }
+const TYPE_LABELS = {
+  video: 'Video',
+  file: 'File',
+  scorm: 'SCORM package',
+  xapi: 'xAPI package',
+  external_video: 'External video',
+}
 
 // Items come back ordered by their own `position`, which only resets to 0
 // within each section (see courseContent.js's nextLinkPosition) -- sorting
@@ -242,6 +248,17 @@ export default function CourseLearn() {
 
                 {currentItem.type === 'xapi' && (
                   <XapiPlayer key={currentItem.id} contentItem={currentItem} userId={user.id} courseId={course.id} />
+                )}
+
+                {currentItem.type === 'external_video' && (
+                  <iframe
+                    key={currentItem.id}
+                    src={currentItem.external_url}
+                    title={currentItem.title}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    className="w-full aspect-video rounded-md"
+                  />
                 )}
 
                 <div className="flex items-center gap-2 mt-6 pt-4 border-t border-hairline">
