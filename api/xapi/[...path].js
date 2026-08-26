@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { Readable } from 'node:stream'
 import { supabaseAdmin } from '../_lib/supabaseAdmin.js'
 
 // A minimal Learning Record Store for uploaded xAPI/Tin Can packages (see
@@ -12,9 +13,15 @@ import { supabaseAdmin } from '../_lib/supabaseAdmin.js'
 //
 // One function file handles every /api/xapi/* route (Vercel catch-all) --
 // this project sits at the Hobby plan's 12-function cap (see
-// api/admin/actions.js and api/send-email.js), so this reuses the same
-// "one file, many routes/actions" shape rather than one file per xAPI
-// resource.
+// api/admin/actions.js and api/send-email.js): confirmed the hard way --
+// adding a genuine 13th function (api/course-content/[...path].js) made
+// Vercel deploys fail outright, and Vercel Routing Middleware turned out not
+// to be an escape hatch either (this Vite build preset never wires a root
+// middleware.js into the routing manifest without an extra Vite-specific
+// Vercel build plugin this project doesn't have). So this file also handles
+// the course-content resource-serving proxy (see handleContent below) --
+// unrelated to xAPI statements, but reusing the same "one file, many
+// routes/actions" shape and route budget rather than adding a 13th file.
 //
 // Auth is per-launch, not per-user-session: a package is launched with a
 // short-lived xapi_launch_sessions token embedded in its own launch URL
@@ -168,6 +175,87 @@ async function handleStatements(req, res) {
   res.status(405).json({ error: 'Method not allowed' })
 }
 
+// Public GET-only proxy for the course-content storage bucket (see
+// courseContent.js's uploadZipEntries/uploadSingleFileResource) -- fetches
+// straight from Supabase Storage's public object endpoint and re-serves the
+// bytes, same-origin, under /api/xapi/content/*. SCORM's own
+// window.parent.API contract (ScormPlayer.jsx) only works same-origin,
+// which is why this exists as a same-origin proxy rather than linking
+// straight to Supabase's own storage domain.
+//
+// Supabase deliberately overrides Content-Type to text/plain for html/js/
+// css/json/xml/svg served from a public bucket -- an anti-phishing measure
+// with no upload-time or query-string opt-out (see
+// https://github.com/orgs/supabase/discussions/39110). Uploaded SCORM/xAPI
+// packages are made of exactly those file types, so without correcting the
+// header here their launch pages would render as raw markup instead of
+// executing. Every other extension (video, images, generic downloads)
+// passes through with Supabase's own headers unchanged, including Range/206
+// forwarding so video seeking keeps working.
+const CONTENT_OVERRIDE_TYPES = {
+  html: 'text/html; charset=utf-8',
+  htm: 'text/html; charset=utf-8',
+  js: 'application/javascript; charset=utf-8',
+  mjs: 'application/javascript; charset=utf-8',
+  css: 'text/css; charset=utf-8',
+  json: 'application/json; charset=utf-8',
+  xml: 'application/xml; charset=utf-8',
+  svg: 'image/svg+xml',
+}
+
+async function handleContent(req, res, contentPath) {
+  if (contentPath.length === 0) {
+    res.status(404).end()
+    return
+  }
+
+  let upstream
+  try {
+    const objectPath = contentPath.map(encodeURIComponent).join('/')
+    const upstreamUrl = `${process.env.VITE_SUPABASE_URL}/storage/v1/object/public/course-content/${objectPath}`
+    const range = req.headers.range
+    upstream = await fetch(upstreamUrl, {
+      method: req.method === 'HEAD' ? 'HEAD' : 'GET',
+      headers: range ? { range } : undefined,
+    })
+  } catch (err) {
+    console.error('course-content proxy fetch error:', err)
+    res.status(502).end()
+    return
+  }
+  if (!upstream.ok) {
+    res.status(upstream.status).end()
+    return
+  }
+
+  // fetch() already transparently decodes any transport encoding, so the
+  // upstream's own content-encoding/content-length headers (if present) no
+  // longer describe the bytes we're about to send -- forwarding them as-is
+  // would make the client try to re-decode (or mis-size) an already-decoded
+  // body.
+  const hadContentEncoding = upstream.headers.has('content-encoding')
+  const headers = Object.fromEntries(upstream.headers)
+  delete headers['content-encoding']
+  if (hadContentEncoding) delete headers['content-length']
+
+  const ext = contentPath[contentPath.length - 1]?.split('.').pop()?.toLowerCase()
+  const overrideType = CONTENT_OVERRIDE_TYPES[ext]
+  if (overrideType) {
+    headers['content-type'] = overrideType
+    // Supabase's override sometimes pairs with a forced attachment
+    // disposition -- drop it so the file still renders inline in the
+    // iframe rather than triggering a download.
+    delete headers['content-disposition']
+  }
+
+  res.writeHead(upstream.status, headers)
+  if (req.method === 'HEAD' || !upstream.body) {
+    res.end()
+    return
+  }
+  Readable.fromWeb(upstream.body).pipe(res)
+}
+
 export default async function handler(req, res) {
   setCorsHeaders(res)
   if (req.method === 'OPTIONS') {
@@ -185,6 +273,10 @@ export default async function handler(req, res) {
     }
     if (resource === 'statements') {
       await handleStatements(req, res)
+      return
+    }
+    if (resource === 'content') {
+      await handleContent(req, res, path.slice(1))
       return
     }
     res.status(404).json({ error: 'Not found' })
