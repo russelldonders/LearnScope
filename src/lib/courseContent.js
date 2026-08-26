@@ -158,14 +158,16 @@ export async function unlinkResourceFromCourse(linkId) {
   if (error) throw error
 }
 
-// Served through the app's own domain (vercel.json's /course-content/*
-// proxy to the storage bucket), not Supabase's own public URL -- SCORM
-// content run in an iframe needs to be same-origin with the parent page for
-// window.parent.API to be reachable at all (cross-origin, the browser
-// blocks that property access outright, no matter what CORS headers say).
-// Video/file use the same scheme too, for one consistent URL shape.
+// Served through the app's own domain (api/course-content/[...path].js,
+// which proxies to the storage bucket and corrects Content-Type -- see that
+// file's own comment for why a plain vercel.json routes proxy wasn't
+// enough), not Supabase's own public URL -- SCORM content run in an iframe
+// needs to be same-origin with the parent page for window.parent.API to be
+// reachable at all (cross-origin, the browser blocks that property access
+// outright, no matter what CORS headers say). Video/file use the same
+// scheme too, for one consistent URL shape.
 function publicUrlFor(path) {
-  return `/course-content/${path}`
+  return `/api/course-content/${path}`
 }
 
 export function contentFileUrl(item) {
