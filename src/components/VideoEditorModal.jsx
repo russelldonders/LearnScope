@@ -8,6 +8,7 @@ import {
   clamp,
   createIconOverlay,
   createTextOverlay,
+  formatTime,
   normalizeVideoEdit,
 } from '../lib/videoEdit'
 
@@ -31,6 +32,7 @@ const SIZES = ['small', 'medium', 'large']
 export default function VideoEditorModal({ resource, onClose, onSaved }) {
   const [edit, setEdit] = useState(() => normalizeVideoEdit(resource.video_edit))
   const [duration, setDuration] = useState(null)
+  const [currentTime, setCurrentTime] = useState(0)
   const [tab, setTab] = useState('text')
   const [selectedOverlayId, setSelectedOverlayId] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -43,7 +45,14 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
   function handleLoadedMetadata(e) {
     const d = e.currentTarget.duration
     setDuration(d)
-    setEdit((prev) => (prev.trimEnd == null ? { ...prev, trimEnd: d } : prev))
+    setEdit((prev) => ({
+      ...prev,
+      trimEnd: prev.trimEnd == null ? d : prev.trimEnd,
+      // Any overlay added before metadata loaded got created with
+      // endTime: 0 (duration wasn't known yet) -- back-fill it to the
+      // whole video now rather than leaving it permanently invisible.
+      overlays: prev.overlays.map((o) => (o.endTime === 0 ? { ...o, endTime: d } : o)),
+    }))
   }
 
   function updateOverlay(id, patch) {
@@ -111,6 +120,7 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
             src={contentFileUrl(resource)}
             controls
             onLoadedMetadata={handleLoadedMetadata}
+            onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
             style={{ filter: buildFilterCss(edit.filter) }}
             className="w-full max-h-[45vh] block"
           />
@@ -205,6 +215,7 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
             <TrimTab
               edit={edit}
               duration={duration}
+              currentTime={currentTime}
               onChange={(patch) => setEdit((prev) => ({ ...prev, ...patch }))}
               getCurrentTime={() => videoRef.current?.currentTime ?? 0}
             />
@@ -277,37 +288,19 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
                 ))}
               </div>
 
-              <div className="flex items-center gap-3 flex-wrap">
-                <label className="flex items-center gap-1.5 text-xs text-secondary">
-                  Show from
-                  <input
-                    type="number"
-                    min={0}
-                    max={duration ?? undefined}
-                    step={0.1}
-                    value={Number(selectedOverlay.startTime).toFixed(1)}
-                    onChange={(e) =>
-                      updateOverlay(selectedOverlay.id, { startTime: clamp(Number(e.target.value) || 0, 0, duration ?? Infinity) })
-                    }
-                    className="w-20 rounded-md border border-hairline bg-paper px-2 py-1 text-xs text-ink"
+              <div>
+                <p className="text-xs text-secondary mb-1">Show on video from…until</p>
+                {duration ? (
+                  <TimelineRangeSlider
+                    duration={duration}
+                    start={selectedOverlay.startTime}
+                    end={selectedOverlay.endTime}
+                    currentTime={currentTime}
+                    onChange={({ start, end }) => updateOverlay(selectedOverlay.id, { startTime: start, endTime: end })}
                   />
-                  s
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-secondary">
-                  until
-                  <input
-                    type="number"
-                    min={0}
-                    max={duration ?? undefined}
-                    step={0.1}
-                    value={Number(selectedOverlay.endTime).toFixed(1)}
-                    onChange={(e) =>
-                      updateOverlay(selectedOverlay.id, { endTime: clamp(Number(e.target.value) || 0, 0, duration ?? Infinity) })
-                    }
-                    className="w-20 rounded-md border border-hairline bg-paper px-2 py-1 text-xs text-ink"
-                  />
-                  s
-                </label>
+                ) : (
+                  <p className="text-xs text-secondary">Loading video…</p>
+                )}
               </div>
             </div>
           )}
@@ -338,51 +331,92 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
   )
 }
 
-function TrimTab({ edit, duration, onChange, getCurrentTime }) {
-  const max = duration ?? undefined
+function TrimTab({ edit, duration, currentTime, onChange, getCurrentTime }) {
+  if (!duration) return <p className="text-sm text-secondary">Loading video…</p>
   return (
-    <div className="flex items-center gap-3 flex-wrap">
-      <label className="flex items-center gap-1.5 text-sm text-ink">
-        Start
-        <input
-          type="number"
-          min={0}
-          max={max}
-          step={0.1}
-          value={Number(edit.trimStart).toFixed(1)}
-          onChange={(e) => onChange({ trimStart: clamp(Number(e.target.value) || 0, 0, duration ?? Infinity) })}
-          className="w-20 rounded-md border border-hairline bg-paper px-2 py-1 text-sm text-ink"
-        />
-        s
-      </label>
-      <button
-        type="button"
-        onClick={() => onChange({ trimStart: getCurrentTime() })}
-        className="text-xs text-moss font-medium"
-      >
-        Use current position
-      </button>
+    <div>
+      <TimelineRangeSlider
+        duration={duration}
+        start={edit.trimStart}
+        end={edit.trimEnd ?? duration}
+        currentTime={currentTime}
+        onChange={({ start, end }) => onChange({ trimStart: start, trimEnd: end })}
+      />
+      <div className="flex items-center gap-4 mt-1">
+        <button type="button" onClick={() => onChange({ trimStart: getCurrentTime() })} className="text-xs text-moss font-medium">
+          Set start to current position
+        </button>
+        <button type="button" onClick={() => onChange({ trimEnd: getCurrentTime() })} className="text-xs text-moss font-medium">
+          Set end to current position
+        </button>
+      </div>
+    </div>
+  )
+}
 
-      <label className="flex items-center gap-1.5 text-sm text-ink">
-        End
-        <input
-          type="number"
-          min={0}
-          max={max}
-          step={0.1}
-          value={Number(edit.trimEnd ?? duration ?? 0).toFixed(1)}
-          onChange={(e) => onChange({ trimEnd: clamp(Number(e.target.value) || 0, 0, duration ?? Infinity) })}
-          className="w-20 rounded-md border border-hairline bg-paper px-2 py-1 text-sm text-ink"
+// Shared by the Trim tab (trimStart/trimEnd) and each selected overlay's
+// visibility window (startTime/endTime) -- a horizontal track with two
+// pointer-draggable handles, plus a playhead tick synced to the preview
+// video's currentTime for context. Replaces a pair of plain number inputs
+// that fought typing (their `value` was a freshly `.toFixed(1)`-formatted
+// string on every keystroke, resetting the cursor mid-edit) with direct
+// manipulation instead -- same drag-via-pointer-capture technique already
+// used for positioning overlays on the video canvas above.
+const MIN_RANGE_GAP = 0.1
+
+function TimelineRangeSlider({ duration, start, end, currentTime, onChange }) {
+  const trackRef = useRef(null)
+
+  function timeAtClientX(clientX) {
+    const rect = trackRef.current?.getBoundingClientRect()
+    if (!rect || !rect.width) return 0
+    return clamp(((clientX - rect.left) / rect.width) * duration, 0, duration)
+  }
+
+  function handleMove(e, which) {
+    if (e.buttons !== 1) return
+    const t = timeAtClientX(e.clientX)
+    if (which === 'start') onChange({ start: clamp(t, 0, end - MIN_RANGE_GAP), end })
+    else onChange({ start, end: clamp(t, start + MIN_RANGE_GAP, duration) })
+  }
+
+  const startPct = (start / duration) * 100
+  const endPct = (end / duration) * 100
+  const playheadPct = clamp((currentTime / duration) * 100, 0, 100)
+
+  return (
+    <div>
+      <div ref={trackRef} className="relative h-6" style={{ touchAction: 'none' }}>
+        <div className="absolute top-1/2 -translate-y-1/2 w-full h-1.5 rounded-full bg-hairline" />
+        <div
+          className="absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-moss"
+          style={{ left: `${startPct}%`, width: `${Math.max(0, endPct - startPct)}%` }}
         />
-        s
-      </label>
-      <button
-        type="button"
-        onClick={() => onChange({ trimEnd: getCurrentTime() })}
-        className="text-xs text-moss font-medium"
-      >
-        Use current position
-      </button>
+        <div
+          className="absolute top-1/2 -translate-y-1/2 w-px h-4 bg-gold"
+          style={{ left: `${playheadPct}%` }}
+          title={`Playhead: ${formatTime(currentTime)}`}
+        />
+        {[
+          { key: 'start', pct: startPct },
+          { key: 'end', pct: endPct },
+        ].map(({ key, pct }) => (
+          <div
+            key={key}
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              e.currentTarget.setPointerCapture(e.pointerId)
+            }}
+            onPointerMove={(e) => handleMove(e, key)}
+            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-moss border-2 border-card shadow cursor-ew-resize"
+            style={{ left: `${pct}%` }}
+          />
+        ))}
+      </div>
+      <div className="flex items-center justify-between text-[10px] font-mono text-secondary mt-0.5">
+        <span>{formatTime(start)}</span>
+        <span>{formatTime(end)}</span>
+      </div>
     </div>
   )
 }

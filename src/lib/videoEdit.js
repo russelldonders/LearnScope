@@ -69,3 +69,13 @@ export function createIconOverlay(emoji, duration) {
 export function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value))
 }
+
+// m:ss.s, for the timeline slider's handle labels -- read-only display, so
+// unlike the number inputs it replaced there's no controlled-input/cursor
+// fight to worry about.
+export function formatTime(seconds) {
+  const s = Math.max(0, seconds || 0)
+  const m = Math.floor(s / 60)
+  const rem = (s % 60).toFixed(1).padStart(4, '0')
+  return `${m}:${rem}`
+}
