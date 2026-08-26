@@ -112,6 +112,8 @@ function CourseHeader({ course, canEdit, onSaved }) {
   })
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [unpublishing, setUnpublishing] = useState(false)
+  const [confirmingUnpublish, setConfirmingUnpublish] = useState(false)
   const [error, setError] = useState(null)
 
   async function handleSave(e) {
@@ -142,6 +144,20 @@ function CourseHeader({ course, canEdit, onSaved }) {
     }
   }
 
+  async function handleUnpublish() {
+    setUnpublishing(true)
+    setError(null)
+    try {
+      await setCatalogueCourseStatus(course.id, 'draft')
+      setConfirmingUnpublish(false)
+      await onSaved()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setUnpublishing(false)
+    }
+  }
+
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
       <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
@@ -155,8 +171,33 @@ function CourseHeader({ course, canEdit, onSaved }) {
         <p className="text-sm text-red-700 mb-4">Rejected: {course.rejection_reason}</p>
       )}
 
+      {error && <p className="text-sm text-red-700 mb-4">{error}</p>}
+
+      {course.status === 'approved' && (
+        <div className="mb-4">
+          {course.synopsis && <p className="text-sm text-secondary mb-3">{course.synopsis}</p>}
+          <button
+            type="button"
+            onClick={() => setConfirmingUnpublish(true)}
+            className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+          >
+            Unpublish to edit
+          </button>
+        </div>
+      )}
+
+      {confirmingUnpublish && (
+        <ConfirmDialog
+          message="This removes the course from the public training catalogue until you resubmit it for approval. Learners already partway through it keep their access and progress in the meantime."
+          confirmLabel="Unpublish"
+          confirming={unpublishing}
+          onConfirm={handleUnpublish}
+          onCancel={() => setConfirmingUnpublish(false)}
+        />
+      )}
+
       {!canEdit ? (
-        course.synopsis && <p className="text-sm text-secondary">{course.synopsis}</p>
+        course.status !== 'approved' && course.synopsis && <p className="text-sm text-secondary">{course.synopsis}</p>
       ) : (
         <form onSubmit={handleSave} className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -208,8 +249,6 @@ function CourseHeader({ course, canEdit, onSaved }) {
               />
             </div>
           </div>
-
-          {error && <p className="text-sm text-red-700">{error}</p>}
 
           <div className="flex items-center gap-2 flex-wrap">
             <button

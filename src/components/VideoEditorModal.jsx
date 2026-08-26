@@ -134,7 +134,13 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
             style={{ filter: buildFilterCss(edit.filter) }}
             className="w-full max-h-[45vh] block"
           />
-          <div className="absolute inset-0">
+          {/* pointer-events-none on the layer itself -- otherwise this
+              full-size transparent div, sitting above the <video> in
+              stacking order, would swallow every click meant for the
+              browser's native controls (play, scrub, fullscreen) even in
+              the empty space between overlays. Each overlay item opts back
+              in with pointer-events-auto so dragging still works. */}
+          <div className="absolute inset-0 pointer-events-none">
             {edit.overlays.map((o) => {
               // Scrubbing/playing the preview shows overlays exactly like
               // real playback would (see EditedVideoPlayer) -- that's the
@@ -151,7 +157,7 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
                   key={o.id}
                   onPointerDown={(e) => startDrag(e, o.id)}
                   onPointerMove={(e) => handleDragMove(e, o.id)}
-                  className={`absolute -translate-x-1/2 -translate-y-1/2 cursor-move select-none max-w-[80%] text-center px-1 rounded ${
+                  className={`absolute -translate-x-1/2 -translate-y-1/2 cursor-move select-none max-w-[80%] text-center px-1 rounded pointer-events-auto ${
                     isSelected ? 'ring-2 ring-gold' : ''
                   } ${!inWindow ? 'opacity-40' : ''}`}
                   style={{ left: `${o.x}%`, top: `${o.y}%` }}
