@@ -175,7 +175,18 @@ export async function unlinkResourceFromCourse(linkId) {
 // html/js/css/json/xml/svg extensions Supabase's public bucket endpoint
 // otherwise serves back as text/plain (an anti-phishing measure with no
 // upload-time or query-string opt-out --
-// https://github.com/orgs/supabase/discussions/39110) -- see vercel.json.
+// https://github.com/orgs/supabase/discussions/39110), and also strip
+// Supabase's own `Content-Security-Policy: default-src 'none'; sandbox`
+// response header on those same extensions -- a second, independent layer
+// of the same anti-abuse hardening, which otherwise blocks all script
+// execution for the document regardless of the embedding iframe's own
+// sandbox tokens (CSP `sandbox` is additive/more-restrictive, never less).
+// Deliberately widens the known, tracked course-content-bucket XSS exposure
+// (a malicious upload navigated to directly, top-level, outside the
+// sandboxed player, can now execute script where before it silently
+// couldn't) -- an explicit, accepted tradeoff to make SCORM/xAPI content
+// work at all before the real fix (an isolated content origin) exists; see
+// that memory/issue before changing this again.
 function publicUrlFor(path) {
   return `/course-content/${path}`
 }
