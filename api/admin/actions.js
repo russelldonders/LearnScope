@@ -83,6 +83,41 @@ export default async function handler(req, res) {
   }
 }
 
+// GoTrue reports the total page count on the first page's response (via a
+// Link header supabase-js parses into `lastPage`), so the remaining pages
+// can be fetched together instead of one-at-a-time -- turns what was N
+// sequential round-trips into effectively 2. Falls back to the old
+// one-page-at-a-time loop only if that header is ever missing despite a
+// full first page, since then the true page count isn't known upfront.
+async function listAllAuthUsers(admin) {
+  const { data: firstPage, error: firstPageError } = await admin.auth.admin.listUsers({ page: 1, perPage: PER_PAGE })
+  if (firstPageError) throw firstPageError
+
+  const users = [...firstPage.users]
+  if (firstPage.users.length < PER_PAGE) return users
+
+  if (firstPage.lastPage > 1) {
+    const remainingPages = await Promise.all(
+      Array.from({ length: firstPage.lastPage - 1 }, (_, i) => admin.auth.admin.listUsers({ page: i + 2, perPage: PER_PAGE }))
+    )
+    for (const { data, error } of remainingPages) {
+      if (error) throw error
+      users.push(...data.users)
+    }
+    return users
+  }
+
+  let page = 2
+  while (true) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: PER_PAGE })
+    if (error) throw error
+    users.push(...data.users)
+    if (data.users.length < PER_PAGE) break
+    page += 1
+  }
+  return users
+}
+
 async function isPlatformAdmin(admin, userId) {
   const { data, error } = await admin.from('platform_admins').select('user_id').eq('user_id', userId).maybeSingle()
   if (error) throw error
@@ -101,34 +136,32 @@ async function listUsers(admin, caller, res) {
     return
   }
 
-  let page = 1
-  const users = []
-  while (true) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: PER_PAGE })
-    if (error) throw error
-    users.push(...data.users)
-    if (data.users.length < PER_PAGE) break
-    page += 1
-  }
+  // The four reads below are all independent of each other and of the auth
+  // user list -- fire them together instead of one-at-a-time so total
+  // latency is the slowest of the five, not the sum of all five.
+  const [users, profilesResult, adminRowsResult, orgMemberRowsResult, orgsResult] = await Promise.all([
+    listAllAuthUsers(admin),
+    admin.from('profiles').select('id, full_name, account_status'),
+    admin.from('platform_admins').select('user_id'),
+    // Active org memberships only -- a 'pending' row (0070) isn't a real role
+    // yet, the invite just hasn't been accepted, so it shouldn't read as one
+    // in a list that's meant to show what access someone actually has.
+    admin.from('organisation_members').select('user_id, organisation_id, role').eq('status', 'active'),
+    admin.from('organisations').select('id, name'),
+  ])
 
-  const { data: profiles, error: profilesError } = await admin.from('profiles').select('id, full_name, account_status')
+  const { data: profiles, error: profilesError } = profilesResult
   if (profilesError) throw profilesError
   const profileById = new Map(profiles.map((p) => [p.id, p]))
 
-  const { data: adminRows, error: adminRowsError } = await admin.from('platform_admins').select('user_id')
+  const { data: adminRows, error: adminRowsError } = adminRowsResult
   if (adminRowsError) throw adminRowsError
   const adminIds = new Set(adminRows.map((r) => r.user_id))
 
-  // Active org memberships only -- a 'pending' row (0070) isn't a real role
-  // yet, the invite just hasn't been accepted, so it shouldn't read as one
-  // in a list that's meant to show what access someone actually has.
-  const { data: orgMemberRows, error: orgMemberRowsError } = await admin
-    .from('organisation_members')
-    .select('user_id, organisation_id, role')
-    .eq('status', 'active')
+  const { data: orgMemberRows, error: orgMemberRowsError } = orgMemberRowsResult
   if (orgMemberRowsError) throw orgMemberRowsError
 
-  const { data: orgs, error: orgsError } = await admin.from('organisations').select('id, name')
+  const { data: orgs, error: orgsError } = orgsResult
   if (orgsError) throw orgsError
   const orgNameById = new Map(orgs.map((o) => [o.id, o.name]))
 
