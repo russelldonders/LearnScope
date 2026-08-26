@@ -8,7 +8,7 @@ import { LEVEL_LABELS, KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
 import { TRUST_STATUS, TRUST_STATUS_COLORS, computeTrustStatus } from '../lib/skillProficiencyModel'
 import LifecycleStageIcon from './LifecycleStageIcon'
 
-export default function SkillCard({ skill, onEdit }) {
+export default function SkillCard({ skill, onEdit, compact = false }) {
   const due = isSelfAssessmentDue(skill.next_checkin_date)
   // Falls back to the latest self-assessment when skill.level itself hasn't
   // moved yet (see displayedLevel in SkillsSection.jsx) -- matches the same
@@ -60,13 +60,30 @@ export default function SkillCard({ skill, onEdit }) {
             </span>
           )}
         </div>
-        {skill.lifecycle_stage && SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage] && (
+        {compact && (
+          <>
+            <p className="text-sm text-secondary mt-1">
+              {displayedLevel ? LEVEL_LABELS[displayedLevel] : 'Not yet assessed'}
+              {skill.targetLevel ? ` → target ${LEVEL_LABELS[skill.targetLevel]}` : ''}
+            </p>
+            <p className="text-sm font-medium text-moss mt-2">
+              {due
+                ? 'Update your self-assessment'
+                : !displayedLevel
+                  ? 'Assess your current level'
+                  : skill.targetLevel && displayedLevel < skill.targetLevel
+                    ? `Work toward ${LEVEL_LABELS[skill.targetLevel]}`
+                    : 'View skill'}
+            </p>
+          </>
+        )}
+        {!compact && skill.lifecycle_stage && SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage] && (
           <p className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide text-secondary mt-0.5">
             <LifecycleStageIcon stage={skill.lifecycle_stage} />
             {SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]}
           </p>
         )}
-        {(displayedLevel || skill.knowledge_level) && (
+        {!compact && (displayedLevel || skill.knowledge_level) && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-secondary mt-1">
             {displayedLevel && (
               <span className="flex items-center gap-1.5">
@@ -93,7 +110,7 @@ export default function SkillCard({ skill, onEdit }) {
             signal available. Knowledge has no separate badge here at all --
             the level shown just above (skill.knowledge_level, always the
             confirmed value) already says everything this tag would. */}
-        {practicalTrust && practicalTrust !== TRUST_STATUS.SELF_ASSESSED && (
+        {!compact && practicalTrust && practicalTrust !== TRUST_STATUS.SELF_ASSESSED && (
           <div className="flex flex-wrap gap-1 mt-1.5">
             <span
               className={`font-mono text-[9px] uppercase tracking-wide rounded-full px-1.5 py-0.5 border ${
@@ -106,7 +123,7 @@ export default function SkillCard({ skill, onEdit }) {
             </span>
           </div>
         )}
-        {skill.tracking_reason && (
+        {!compact && skill.tracking_reason && (
           <span
             className="flex items-center gap-1 font-mono text-[10px] text-secondary mt-1"
             title={TRACKING_REASON_LABELS[skill.tracking_reason]}
