@@ -11,6 +11,7 @@ import {
 } from '../lib/courseContent'
 import ScormPlayer from '../components/ScormPlayer'
 import XapiPlayer from '../components/XapiPlayer'
+import EditedVideoPlayer from '../components/EditedVideoPlayer'
 import AppHeader from '../components/AppHeader'
 
 const TYPE_LABELS = {
@@ -207,10 +208,9 @@ export default function CourseLearn() {
                 <h3 className="font-display text-xl text-ink mb-4">{currentItem.title}</h3>
 
                 {currentItem.type === 'video' && (
-                  <video
+                  <EditedVideoPlayer
                     key={currentItem.id}
-                    src={contentFileUrl(currentItem)}
-                    controls
+                    resource={currentItem}
                     onEnded={() => handleMarkComplete(currentItem)}
                     className="w-full rounded-md bg-black"
                   />

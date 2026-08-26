@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
 import ScormPlayer from '../../components/ScormPlayer'
 import XapiPlayer from '../../components/XapiPlayer'
+import EditedVideoPlayer from '../../components/EditedVideoPlayer'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import { getCatalogueCourse, updateProviderCourse, setCatalogueCourseStatus } from '../../lib/admin/catalogue'
 import {
@@ -483,7 +484,7 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
               </div>
             </div>
             {previewingId === item.id && item.type === 'video' && (
-              <video src={contentFileUrl(item)} controls className="w-full mt-2 rounded-md bg-black" />
+              <EditedVideoPlayer resource={item} className="w-full mt-2 rounded-md bg-black" />
             )}
             {previewingId === item.id && item.type === 'scorm' && (
               <div className="mt-2">
@@ -771,7 +772,7 @@ function SectionCard({
                 </div>
               </div>
               {previewingId === item.id && item.type === 'video' && (
-                <video src={contentFileUrl(item)} controls className="w-full mt-2 rounded-md bg-black" />
+                <EditedVideoPlayer resource={item} className="w-full mt-2 rounded-md bg-black" />
               )}
               {previewingId === item.id && item.type === 'scorm' && (
                 <div className="mt-2">

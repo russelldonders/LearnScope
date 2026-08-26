@@ -261,6 +261,20 @@ export async function addExternalVideoResource(organisationId, userId, url, titl
   return data
 }
 
+// Non-destructive video edit (trim/filter/speed/overlays, 0087) -- see
+// videoEdit.js for the stored shape. Applied at playback time only; never
+// touches the uploaded file or storage.
+export async function updateVideoEdit(resourceId, videoEdit) {
+  const { data, error } = await supabase
+    .from('content_resources')
+    .update({ video_edit: videoEdit })
+    .eq('id', resourceId)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
 export async function uploadFileResource(organisationId, userId, file, title) {
   return uploadSingleFileResource(organisationId, userId, file, title, 'file')
 }

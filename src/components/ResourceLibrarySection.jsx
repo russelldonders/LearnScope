@@ -12,6 +12,8 @@ import {
 import ScormPlayer from './ScormPlayer'
 import XapiPlayer from './XapiPlayer'
 import ConfirmDialog from './ConfirmDialog'
+import EditedVideoPlayer from './EditedVideoPlayer'
+import VideoEditorModal from './VideoEditorModal'
 
 const TYPE_LABELS = {
   video: 'Video',
@@ -38,6 +40,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
   const [fileName, setFileName] = useState('')
   const [dragActive, setDragActive] = useState(false)
   const [videoUrl, setVideoUrl] = useState('')
+  const [editingResource, setEditingResource] = useState(null)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -175,6 +178,15 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
                       {previewingId === resource.id ? 'Hide preview' : 'Preview'}
                     </button>
                   )}
+                  {resource.type === 'video' && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingResource(resource)}
+                      className="text-xs text-moss font-medium"
+                    >
+                      Edit
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setPendingDelete(resource)}
@@ -185,7 +197,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
                 </div>
               </div>
               {previewingId === resource.id && resource.type === 'video' && (
-                <video src={contentFileUrl(resource)} controls className="w-full mt-2 rounded-md bg-black" />
+                <EditedVideoPlayer resource={resource} className="w-full mt-2 rounded-md bg-black" />
               )}
               {previewingId === resource.id && resource.type === 'scorm' && (
                 <div className="mt-2">
@@ -323,6 +335,14 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
           confirming={deleting}
           onConfirm={handleDelete}
           onCancel={() => setPendingDelete(null)}
+        />
+      )}
+
+      {editingResource && (
+        <VideoEditorModal
+          resource={editingResource}
+          onClose={() => setEditingResource(null)}
+          onSaved={(saved) => setResources((prev) => prev.map((r) => (r.id === saved.id ? saved : r)))}
         />
       )}
     </div>
