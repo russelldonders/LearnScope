@@ -158,17 +158,26 @@ export async function unlinkResourceFromCourse(linkId) {
   if (error) throw error
 }
 
-// Served through the app's own domain (api/xapi/[...path].js's
-// handleContent, which proxies to the storage bucket and corrects
-// Content-Type -- see that function's own comment for why it lives there
-// and why a plain vercel.json routes proxy wasn't enough), not Supabase's
-// own public URL -- SCORM content run in an iframe needs to be same-origin
-// with the parent page for window.parent.API to be reachable at all
-// (cross-origin, the browser blocks that property access outright, no
-// matter what CORS headers say). Video/file use the same scheme too, for
-// one consistent URL shape.
+// Served through the app's own domain (vercel.json's /course-content/*
+// proxy to the storage bucket), not Supabase's own public URL -- SCORM
+// content run in an iframe needs to be same-origin with the parent page for
+// window.parent.API to be reachable at all (cross-origin, the browser
+// blocks that property access outright, no matter what CORS headers say).
+// Video/file use the same scheme too, for one consistent URL shape.
+//
+// The proxy is a plain vercel.json `routes` external-URL rewrite rather
+// than a Vercel function/middleware -- both were tried and both failed for
+// the same reason: this project's zero-config Vite routing serves the SPA
+// shell instead of a function for "navigate"-type requests (exactly what an
+// iframe's src load is), even when the path matches a real function route.
+// `routes` isn't subject to that, since it's a raw proxy rule rather than a
+// function invocation. Its `transforms` force the right Content-Type on the
+// html/js/css/json/xml/svg extensions Supabase's public bucket endpoint
+// otherwise serves back as text/plain (an anti-phishing measure with no
+// upload-time or query-string opt-out --
+// https://github.com/orgs/supabase/discussions/39110) -- see vercel.json.
 function publicUrlFor(path) {
-  return `/api/xapi/content/${path}`
+  return `/course-content/${path}`
 }
 
 export function contentFileUrl(item) {
