@@ -204,6 +204,58 @@ export function scormLaunchUrl(item) {
   return publicUrlFor(`${item.storage_path}/${item.launch_path}`)
 }
 
+// SCORM packages are commonly built by authoring tools that touch
+// localStorage/sessionStorage unconditionally at startup (bookmarking,
+// settings) with no fallback for it being unavailable -- and inside the
+// sandboxed iframe (deliberately no allow-same-origin; see ScormPlayer.jsx),
+// accessing either throws a SecurityError, uncaught, which stops the
+// package's own script from ever finishing its own init and rendering
+// anything. Fetches the launch page itself (a normal same-origin fetch from
+// this unsandboxed page -- no different from the browser's own request for
+// it) and injects an in-memory storage shim plus a <base> tag (so the
+// package's own relative asset paths still resolve correctly once loaded
+// via srcdoc instead of src) at the very start of <head>, before any of the
+// package's own script/link tags. The shim is a plain classic <script>
+// (not type="module"), which blocks HTML parsing until it runs, guaranteeing
+// it executes before any later script in the document -- including deferred
+// module scripts, which only run after parsing finishes.
+//
+// srcdoc necessarily discards the loaded document's own URL (it becomes
+// about:srcdoc, with no query string) -- fine for SCORM, which never reads
+// its launch URL and talks to window.parent.API instead, but NOT usable for
+// xAPI, whose launch convention (ADL Launch) requires the endpoint/auth/
+// actor/registration/activity_id it reads from its own location.search to
+// still be there. Only call this for SCORM.
+const STORAGE_SHIM_SCRIPT = `<script>(function(){
+  function memoryStorage(){
+    var data = new Map();
+    return {
+      getItem: function(k){ return data.has(k) ? data.get(k) : null; },
+      setItem: function(k, v){ data.set(String(k), String(v)); },
+      removeItem: function(k){ data.delete(k); },
+      clear: function(){ data.clear(); },
+      key: function(i){ return Array.from(data.keys())[i] ?? null; },
+      get length(){ return data.size; },
+    };
+  }
+  try { Object.defineProperty(window, 'localStorage', { value: memoryStorage(), configurable: true }); } catch (e) {}
+  try { Object.defineProperty(window, 'sessionStorage', { value: memoryStorage(), configurable: true }); } catch (e) {}
+})();</` + `script>`
+
+export async function fetchShimmedLaunchDoc(launchUrl) {
+  const res = await fetch(launchUrl)
+  if (!res.ok) throw new Error(`Could not load launch page (${res.status}).`)
+  const html = await res.text()
+
+  const baseHref = new URL(launchUrl, window.location.origin)
+  baseHref.pathname = baseHref.pathname.slice(0, baseHref.pathname.lastIndexOf('/') + 1)
+  const injected = `<base href="${baseHref.href}">${STORAGE_SHIM_SCRIPT}`
+
+  if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (match) => `${match}${injected}`)
+  if (/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, (match) => `${match}${injected}`)
+  return injected + html
+}
+
 // SCORM items track their own progress via ScormPlayer's window.API
 // (LMSSetValue/LMSCommit/LMSFinish); this is for video/file items, which
 // have no runtime of their own -- just a plain "the learner said they're
