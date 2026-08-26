@@ -8,10 +8,12 @@ import { LEVEL_LABELS } from '../lib/levels'
 import { SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
 import { activityName, verbLabel, formatDuration } from '../lib/xapiStatement'
 import { computeCourseUpNextItems } from '../lib/courseNextAction'
+import { listCourseProgressByCatalogueId } from '../lib/courseContent'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import CourseModal from '../components/CourseModal'
 import RecordActivityModal from '../components/RecordActivityModal'
+import ProgressBar from '../components/ProgressBar'
 
 export default function CourseDetail() {
   const { id } = useParams()
@@ -30,6 +32,7 @@ export default function CourseDetail() {
   const [allSkills, setAllSkills] = useState([])
   const [librarySkills, setLibrarySkills] = useState([])
   const [assessorName, setAssessorName] = useState('')
+  const [contentProgress, setContentProgress] = useState(null)
 
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
@@ -69,6 +72,7 @@ export default function CourseDetail() {
       library,
       { data: profile },
       catalogue,
+      progressByCatalogueId,
     ] = await Promise.all([
       supabase
         .from('skill_course_links')
@@ -93,6 +97,7 @@ export default function CourseDetail() {
       listLibrarySkills(),
       supabase.from('profiles').select('full_name').eq('id', user.id).single(),
       data.catalogue_course_id ? getCatalogueCourse(data.catalogue_course_id) : Promise.resolve(null),
+      listCourseProgressByCatalogueId([data.catalogue_course_id], user.id),
     ])
 
     setSkillLinks((links ?? []).filter((l) => l.skills))
@@ -103,6 +108,7 @@ export default function CourseDetail() {
     setLibrarySkills(library)
     setAssessorName(profile?.full_name || user.email)
     setCatalogueCourse(catalogue)
+    setContentProgress(progressByCatalogueId[data.catalogue_course_id] ?? null)
     setLoading(false)
   }
 
@@ -205,6 +211,20 @@ export default function CourseDetail() {
                 </button>
               </div>
             </div>
+
+            {contentProgress?.total > 0 && (
+              <div className="mt-4">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
+                    {Math.round((contentProgress.completed / contentProgress.total) * 100)}% complete
+                  </span>
+                  <span className="font-mono text-[10px] text-secondary">
+                    {contentProgress.completed}/{contentProgress.total}
+                  </span>
+                </div>
+                <ProgressBar percent={Math.round((contentProgress.completed / contentProgress.total) * 100)} />
+              </div>
+            )}
 
             <Link
               to={`/courses/${id}/learn`}

@@ -198,6 +198,37 @@ export async function listContentProgress(userId, resourceIds) {
   return Object.fromEntries((data ?? []).map((p) => [p.content_item_id, p]))
 }
 
+// Aggregates course_content_progress across one or more catalogue courses at
+// once -- a tile grid of many enrolled courses needs every course's percent
+// in one page load, not one query per course. Returns
+// { [catalogueCourseId]: { completed, total } }; a catalogue course with no
+// linked resources yet (or not passed in) is simply absent from the result,
+// since there's nothing meaningful to show a percentage for. Reuses
+// listContentProgress's own "what counts as complete" rule (status set and
+// not 'not_attempted') rather than re-deriving it here.
+export async function listCourseProgressByCatalogueId(catalogueCourseIds, userId) {
+  const ids = [...new Set(catalogueCourseIds.filter(Boolean))]
+  if (ids.length === 0) return {}
+
+  const { data: links, error } = await supabase
+    .from('course_content_links')
+    .select('course_id, resource_id')
+    .in('course_id', ids)
+  if (error) throw error
+
+  const resourceIds = [...new Set((links ?? []).map((l) => l.resource_id))]
+  const progressByResourceId = await listContentProgress(userId, resourceIds)
+
+  const result = {}
+  for (const link of links ?? []) {
+    const entry = result[link.course_id] ?? (result[link.course_id] = { completed: 0, total: 0 })
+    entry.total += 1
+    const status = progressByResourceId[link.resource_id]?.status
+    if (status && status !== 'not_attempted') entry.completed += 1
+  }
+  return result
+}
+
 export async function markContentComplete(resourceId, userId) {
   const { error } = await supabase.from('course_content_progress').upsert(
     { content_item_id: resourceId, user_id: userId, status: 'completed', updated_at: new Date().toISOString() },

@@ -13,6 +13,7 @@ import ScormPlayer from '../components/ScormPlayer'
 import XapiPlayer from '../components/XapiPlayer'
 import EditedVideoPlayer from '../components/EditedVideoPlayer'
 import AppHeader from '../components/AppHeader'
+import ProgressBar from '../components/ProgressBar'
 
 const TYPE_LABELS = {
   video: 'Video',
@@ -155,9 +156,7 @@ export default function CourseLearn() {
                 {completedCount} / {orderedItems.length} complete
               </p>
             </div>
-            <div className="h-1.5 rounded-full bg-hairline overflow-hidden mb-8">
-              <div className="h-full bg-moss rounded-full transition-all" style={{ width: `${progress}%` }} />
-            </div>
+            <ProgressBar percent={progress} className="mb-8" />
 
             <div className="grid md:grid-cols-[280px_1fr] gap-6">
               <nav>
