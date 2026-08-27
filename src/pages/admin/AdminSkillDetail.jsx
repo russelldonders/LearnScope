@@ -4,6 +4,8 @@ import AdminLayout from './AdminLayout'
 import { getLibrarySkill } from '../../lib/admin/skills'
 import { countSkillTrackers, getSkillLevelStats, getSkillLevelGuideSample } from '../../lib/skillStats'
 import { LEVEL_LABELS, LEVEL_DESCRIPTIONS, KNOWLEDGE_LEVEL_LABELS, LEVELS } from '../../lib/levels'
+import SkillTestQuestionsModal from '../../components/SkillTestQuestionsModal'
+import SkillKnowledgeStatsModal from '../../components/SkillKnowledgeStatsModal'
 
 const TYPE_LABELS = { global: 'Global', personal: 'Personal', provider: 'Provider' }
 
@@ -24,6 +26,8 @@ export default function AdminSkillDetail() {
   const [guideSample, setGuideSample] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [showQuestions, setShowQuestions] = useState(false)
+  const [showKnowledgeStats, setShowKnowledgeStats] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -97,7 +101,25 @@ export default function AdminSkillDetail() {
             </div>
 
             <div>
-              <h3 className="font-display text-lg text-ink mb-2">Level definitions</h3>
+              <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                <h3 className="font-display text-lg text-ink">Level definitions</h3>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowQuestions(true)}
+                    className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+                  >
+                    View test questions
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowKnowledgeStats(true)}
+                    className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+                  >
+                    View assessment stats
+                  </button>
+                </div>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <LevelGuideColumn
                   title="Knowledge"
@@ -148,6 +170,21 @@ export default function AdminSkillDetail() {
               </div>
             </div>
           </>
+        )}
+
+        {showQuestions && (
+          <SkillTestQuestionsModal
+            librarySkillId={skillId}
+            skillName={skill?.name}
+            onClose={() => setShowQuestions(false)}
+          />
+        )}
+        {showKnowledgeStats && (
+          <SkillKnowledgeStatsModal
+            librarySkillId={skillId}
+            skillName={skill?.name}
+            onClose={() => setShowKnowledgeStats(false)}
+          />
         )}
       </div>
     </AdminLayout>
