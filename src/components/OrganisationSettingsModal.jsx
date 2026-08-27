@@ -191,6 +191,20 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
                 >
                   {copied ? 'Copied!' : 'Copy link'}
                 </button>
+                <a
+                  href={publicProfileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Open in a new window"
+                  aria-label="Open public provider page in a new window"
+                  className="flex items-center justify-center w-6 h-6 rounded-md border border-hairline text-ink hover:bg-paper shrink-0"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    <path d="M15 3h6v6" />
+                    <path d="M10 14 21 3" />
+                  </svg>
+                </a>
               </div>
             )}
           </div>
