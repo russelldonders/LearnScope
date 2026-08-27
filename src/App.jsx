@@ -22,6 +22,7 @@ import ProfilePrivacy from './pages/ProfilePrivacy'
 import ProfileImport from './pages/ProfileImport'
 import ProfileExport from './pages/ProfileExport'
 import Rate from './pages/Rate'
+import ProviderProfile from './pages/ProviderProfile'
 import Connections from './pages/Connections'
 import Actions from './pages/Actions'
 import SkillsProfile from './pages/SkillsProfile'
@@ -54,6 +55,7 @@ function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/rate/:code" element={<Rate />} />
+          <Route path="/providers/:slug" element={<ProviderProfile />} />
           <Route
             path="/onboarding"
             element={

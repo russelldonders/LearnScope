@@ -3,7 +3,7 @@ import { supabase } from './supabaseClient'
 const CATALOGUE_SELECT = `*,
   course_catalogue_skills(id, level, skill_library(id, name)),
   course_catalogue_tags(id, tags(id, name)),
-  organisations(logo_url)`
+  organisations(logo_url, slug, public_profile_enabled)`
 
 function mapCatalogueCourse(course) {
   return {
@@ -18,6 +18,10 @@ function mapCatalogueCourse(course) {
     // organisation to embed, and a provider that's never set a logo (0081)
     // has organisations.logo_url null -- both just mean no badge to show.
     logoUrl: course.organisations?.logo_url ?? null,
+    // Only set when the provider has actually opted into a public page
+    // (0090) -- otherwise the provider name stays plain text rather than
+    // linking to a page that would just say "not available".
+    providerSlug: course.organisations?.public_profile_enabled ? (course.organisations?.slug ?? null) : null,
   }
 }
 

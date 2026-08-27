@@ -29,14 +29,16 @@ export async function setOrganisationStatus(id, status) {
 // only ever sends {name, url}, and shouldn't silently null out `about` just
 // because it doesn't know about that field; the provider-facing settings
 // modal (OrganisationSettingsModal.jsx) does the reverse, sending
-// {url, about} without `name` -- 0081's identity-change trigger only fires
-// on an actual value change, so omitting `name` entirely here is what lets
-// an org admin's update through without needing platform-admin rights.
-export async function updateOrganisation(id, { name, url, about } = {}) {
+// {url, about, publicProfileEnabled} without `name` -- 0081's identity-change
+// trigger only fires on an actual value change, so omitting `name` entirely
+// here is what lets an org admin's update through without needing
+// platform-admin rights.
+export async function updateOrganisation(id, { name, url, about, publicProfileEnabled } = {}) {
   const fields = { updated_at: new Date().toISOString() }
   if (name !== undefined) fields.name = name.trim()
   if (url !== undefined) fields.url = url?.trim() || null
   if (about !== undefined) fields.about = about?.trim() || null
+  if (publicProfileEnabled !== undefined) fields.public_profile_enabled = publicProfileEnabled
 
   const { data, error } = await supabase.from('organisations').update(fields).eq('id', id).select().single()
   if (error) throw error

@@ -254,7 +254,20 @@ export default function CourseCatalogue() {
                 <div className="p-4 flex flex-col flex-1">
                   <h3 className="font-display text-lg text-ink">{course.name}</h3>
                   <p className="font-mono text-xs text-secondary mt-0.5">
-                    {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ')}
+                    {course.provider &&
+                      (course.providerSlug ? (
+                        <Link
+                          to={`/providers/${course.providerSlug}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="hover:text-moss hover:underline"
+                        >
+                          {course.provider}
+                        </Link>
+                      ) : (
+                        course.provider
+                      ))}
+                    {course.provider && (course.course_type || course.duration) && ' · '}
+                    {[course.course_type, course.duration].filter(Boolean).join(' · ')}
                   </p>
                   {course.synopsis && <p className="text-sm text-secondary mt-2 flex-1">{course.synopsis}</p>}
                   {(course.skillEntries.length > 0 || course.tags.length > 0) && (
@@ -329,7 +342,16 @@ function CourseDetailModal({ course, enrolled, completed, enrolling, onEnrol, on
           </button>
         </div>
         <p className="font-mono text-xs text-secondary mb-3">
-          {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ')}
+          {course.provider &&
+            (course.providerSlug ? (
+              <Link to={`/providers/${course.providerSlug}`} className="hover:text-moss hover:underline">
+                {course.provider}
+              </Link>
+            ) : (
+              course.provider
+            ))}
+          {course.provider && (course.course_type || course.duration) && ' · '}
+          {[course.course_type, course.duration].filter(Boolean).join(' · ')}
         </p>
         {course.synopsis && <p className="text-sm text-ink mb-4">{course.synopsis}</p>}
         {(course.skillEntries.length > 0 || course.tags.length > 0) && (

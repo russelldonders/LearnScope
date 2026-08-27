@@ -187,7 +187,16 @@ export default function CourseDetail() {
               <div>
                 <h2 className="font-display text-2xl text-ink">{course.name}</h2>
                 <p className="font-mono text-xs text-secondary mt-1">
-                  {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ')}
+                  {course.provider &&
+                    (catalogueCourse?.providerSlug ? (
+                      <Link to={`/providers/${catalogueCourse.providerSlug}`} className="hover:text-moss hover:underline">
+                        {course.provider}
+                      </Link>
+                    ) : (
+                      course.provider
+                    ))}
+                  {course.provider && (course.course_type || course.duration) && ' · '}
+                  {[course.course_type, course.duration].filter(Boolean).join(' · ')}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">

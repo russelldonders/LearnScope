@@ -13,10 +13,20 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
   const [url, setUrl] = useState(organisation.url ?? '')
   const [about, setAbout] = useState(organisation.about ?? '')
   const [logoUrl, setLogoUrl] = useState(organisation.logo_url ?? null)
+  const [publicProfileEnabled, setPublicProfileEnabled] = useState(organisation.public_profile_enabled ?? false)
   const [saving, setSaving] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [error, setError] = useState(null)
+  const [copied, setCopied] = useState(false)
   const fileInputRef = useRef(null)
+
+  const publicProfileUrl = `${window.location.origin}/providers/${organisation.slug}`
+
+  function handleCopyLink() {
+    navigator.clipboard.writeText(publicProfileUrl)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   async function handleLogoChange(e) {
     const file = e.target.files?.[0]
@@ -59,7 +69,7 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
     setSaving(true)
     setError(null)
     try {
-      await updateOrganisation(organisation.id, { url, about })
+      await updateOrganisation(organisation.id, { url, about, publicProfileEnabled })
       onClose()
     } catch (err) {
       setError(err.message)
@@ -151,6 +161,38 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
               placeholder="What your organisation offers, who you work with…"
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
             />
+          </div>
+
+          <div className="border-t border-hairline pt-4">
+            <label className="flex items-start gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={publicProfileEnabled}
+                onChange={(e) => setPublicProfileEnabled(e.target.checked)}
+                className="mt-0.5 rounded border-hairline"
+              />
+              <span>
+                Show a public provider page
+                <span className="block text-xs text-secondary mt-0.5 font-normal">
+                  Lists the skills you offer and your approved training courses -- visible to anyone with the
+                  link, including people who aren't logged in.
+                </span>
+              </span>
+            </label>
+            {publicProfileEnabled && (
+              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                <code className="text-xs bg-paper border border-hairline rounded-md px-2 py-1 text-ink break-all">
+                  {publicProfileUrl}
+                </code>
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="rounded-md border border-hairline text-ink py-1 px-2 text-xs font-medium hover:bg-paper shrink-0"
+                >
+                  {copied ? 'Copied!' : 'Copy link'}
+                </button>
+              </div>
+            )}
           </div>
 
           {error && <p className="text-sm text-red-700">{error}</p>}
