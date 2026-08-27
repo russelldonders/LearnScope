@@ -82,7 +82,7 @@ export default function ProviderCourseEditor() {
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader hideNavLinks />
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
         <Link to="/provider" className="text-sm text-secondary hover:text-ink mb-4 inline-block">
           ← Back to provider console
         </Link>
@@ -161,7 +161,7 @@ function CourseHeader({ course, canEdit, onSaved }) {
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
       <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
-        <h2 className="font-display text-xl text-ink">{course.name}</h2>
+        <h1 className="font-display text-xl text-ink">{course.name}</h1>
         <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
           {STATUS_LABELS[course.status] ?? course.status}
         </span>

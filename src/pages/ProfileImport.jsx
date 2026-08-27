@@ -42,8 +42,8 @@ export default function ProfileImport() {
     <div className="min-h-screen bg-paper">
       <AppHeader />
 
-      <main className="max-w-2xl mx-auto px-4 py-8">
-        <h2 className="font-display text-xl text-ink mb-2">Import skills & experience</h2>
+      <main id="main-content" tabIndex={-1} className="max-w-2xl mx-auto px-4 py-8">
+        <h1 className="font-display text-xl text-ink mb-2">Import skills & experience</h1>
         <p className="text-sm text-secondary mb-6">
           Upload a CV, LinkedIn export, or similar document — or link to one online — and we'll
           pull out skills, courses, and experience for you to review. Nothing is saved until you

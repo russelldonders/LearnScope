@@ -129,8 +129,8 @@ export default function Profile() {
     <div className="min-h-screen bg-paper">
       <AppHeader />
 
-      <main className="max-w-2xl mx-auto px-4 py-8">
-        <h2 className="font-display text-xl text-ink mb-6">Your profile</h2>
+      <main id="main-content" tabIndex={-1} className="max-w-2xl mx-auto px-4 py-8">
+        <h1 className="font-display text-xl text-ink mb-6">Your profile</h1>
 
         {loading ? (
           <p className="text-secondary">Loading…</p>
@@ -270,7 +270,7 @@ export default function Profile() {
                 </select>
               </div>
 
-              {error && <p className="text-sm text-red-700">{error}</p>}
+              {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
               {savedMessage && <p className="text-sm text-moss">{savedMessage}</p>}
 
               <button

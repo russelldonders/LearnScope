@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AdminLayout from './AdminLayout'
 import { listUsers, inviteUser, setUserBlocked, getUserLinkages, deleteUser } from '../../lib/admin/users'
+import AccessibleDialog from '../../components/AccessibleDialog'
 
 export default function AdminUsers() {
   const { user } = useAuth()
@@ -103,8 +104,8 @@ export default function AdminUsers() {
           </button>
         </form>
 
-        {inviteMessage && <p className="text-sm text-moss">{inviteMessage}</p>}
-        {error && <p className="text-sm text-red-700">{error}</p>}
+        {inviteMessage && <p role="status" className="text-sm text-moss">{inviteMessage}</p>}
+        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
         {loading ? (
           <p className="text-secondary">Loading…</p>
@@ -242,10 +243,16 @@ function DeleteUserDialog({ target, onClose, onDeleted }) {
   const blocked = linkages?.isLastPlatformAdmin
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[60]" onClick={onClose}>
-      <div className="w-full max-w-md bg-card border border-hairline rounded-lg p-6" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-display text-lg text-ink mb-1">Delete {target.fullName || target.email}</h3>
-        <p className="text-sm text-secondary mb-4">
+    <AccessibleDialog
+      labelledBy="delete-user-title"
+      describedBy="delete-user-description"
+      onClose={deleting ? undefined : onClose}
+      closeOnBackdrop={!deleting}
+      overlayClassName="z-[60]"
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+        <h2 id="delete-user-title" className="font-display text-lg text-ink mb-1">Delete {target.fullName || target.email}</h2>
+        <p id="delete-user-description" className="text-sm text-secondary mb-4">
           Permanently deletes this account and everything in it. This can't be undone.
         </p>
 
@@ -283,10 +290,11 @@ function DeleteUserDialog({ target, onClose, onDeleted }) {
         ) : (
           !loading && (
             <>
-              <label className="block text-sm text-ink mb-2">
+              <label htmlFor="delete-user-confirmation" className="block text-sm text-ink mb-2">
                 Type <span className="font-mono font-semibold">DELETE</span> to confirm
               </label>
               <input
+                id="delete-user-confirmation"
                 type="text"
                 value={confirmText}
                 disabled={deleting}
@@ -297,7 +305,7 @@ function DeleteUserDialog({ target, onClose, onDeleted }) {
           )
         )}
 
-        {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
+        {error && <p role="alert" className="text-sm text-red-700 mb-3">{error}</p>}
 
         <div className="flex justify-end gap-2">
           <button
@@ -317,7 +325,6 @@ function DeleteUserDialog({ target, onClose, onDeleted }) {
             {deleting ? 'Deleting…' : 'Permanently delete this account'}
           </button>
         </div>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }

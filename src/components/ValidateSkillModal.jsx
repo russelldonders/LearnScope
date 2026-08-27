@@ -4,6 +4,7 @@ import { LEVEL_LABELS } from '../lib/levels'
 import { activityName, verbLabel } from '../lib/xapiStatement'
 import { fetchPeerRaterProgress, buildWeightedPeerRatings } from '../lib/baselineAssessment'
 import { validateSkillAgainstTarget, saveValidationResult } from '../lib/skillValidation'
+import AccessibleDialog from './AccessibleDialog'
 
 export default function ValidateSkillModal({
   skill,
@@ -70,12 +71,12 @@ export default function ValidateSkillModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="font-display text-2xl text-ink mb-1">AI Assessment</h2>
+    <AccessibleDialog
+      labelledBy="ai-assessment-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+        <h2 id="ai-assessment-dialog-title" className="font-display text-2xl text-ink mb-1">AI Assessment</h2>
         <p className="text-sm text-secondary mb-4">
           {skill.name} · Target: {LEVEL_LABELS[target.target_level]}
         </p>
@@ -85,7 +86,7 @@ export default function ValidateSkillModal({
             Weighing self-assessment, peer ratings and recorded activity against your target…
           </p>
         )}
-        {error && <p className="text-sm text-red-700">{error}</p>}
+        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
         {result && !loading && (
           <div>
@@ -167,7 +168,6 @@ export default function ValidateSkillModal({
             )}
           </div>
         )}
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }

@@ -1,15 +1,20 @@
+import AccessibleDialog from './AccessibleDialog'
+
 // A small in-app stand-in for window.confirm() -- same "are you sure, with
 // no other way through" shape, but styled like the rest of the app instead
 // of an OS-level dialog. z-[60] so it always sits above a parent *Modal.jsx
 // (z-50) when a destructive action is confirmed from inside one.
 export default function ConfirmDialog({ message, confirmLabel = 'Delete', onConfirm, onCancel, confirming = false }) {
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[60]" onClick={onCancel}>
-      <div
-        className="w-full max-w-sm bg-card border border-hairline rounded-lg p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <p className="text-sm text-ink mb-5">{message}</p>
+    <AccessibleDialog
+      label="Confirm action"
+      describedBy="confirm-dialog-message"
+      onClose={confirming ? undefined : onCancel}
+      closeOnBackdrop={!confirming}
+      overlayClassName="z-[60]"
+      panelClassName="w-full max-w-sm bg-card border border-hairline rounded-lg p-6"
+    >
+        <p id="confirm-dialog-message" className="text-sm text-ink mb-5">{message}</p>
         <div className="flex justify-end gap-2">
           <button
             type="button"
@@ -28,7 +33,6 @@ export default function ConfirmDialog({ message, confirmLabel = 'Delete', onConf
             {confirming ? 'Working…' : confirmLabel}
           </button>
         </div>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }

@@ -10,6 +10,7 @@ import CurrentRoleSelectModal from './CurrentRoleSelectModal'
 import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
 import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
 import SelfAssessSection from './SelfAssessSection'
+import AccessibleDialog from './AccessibleDialog'
 
 // 'search' / 'settings' create the skill itself; 'knowledge' / 'practical'
 // are the two rating steps that follow, each independently skippable since
@@ -218,12 +219,12 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={handleDismiss}>
-      <div
-        ref={scrollRef}
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <AccessibleDialog
+      label="Add a skill"
+      onClose={handleDismiss}
+      panelRef={scrollRef}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
         {mode === 'search' && (
           <>
             <h2 className="font-display text-2xl text-ink mb-1">Find a skill</h2>
@@ -353,7 +354,7 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
 
               <TrackingReasonPicker value={trackingReason} onChange={setTrackingReason} required />
 
-              {error && <p className="text-sm text-red-700">{error}</p>}
+              {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
               <div className="flex items-center gap-2 pt-2">
                 <button
@@ -418,7 +419,6 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
             />
           </>
         )}
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }

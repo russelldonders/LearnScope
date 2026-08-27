@@ -11,9 +11,13 @@
   --color-paper: #eef0e7;
   --color-card: #f7f8f2;
   --color-moss: #4a6741;
-  --color-gold: #b8912a;
+  /* Both meaningful gold text and the global focus indicator must clear
+     WCAG AA against the two light surfaces. */
+  --color-gold: #80651d;
   --color-slate: #3d5a73;
-  --color-hairline: #d7dac9;
+  /* Used as the only visible boundary on many controls, so this is held to
+     the 3:1 non-text contrast threshold rather than treated as decoration. */
+  --color-hairline: #858d7b;
   /* Darkened from #7c8873 -- the lighter shade fell to 3.2-3.5:1 against
      --color-paper/--color-card, under the 4.5:1 WCAG AA floor for text. */
   --color-secondary: #5a6752;
@@ -55,7 +59,8 @@
   --color-card: #212b20;
   --color-moss: #86ba78;
   --color-slate: #7fa3c2;
-  --color-hairline: #33402e;
+  --color-hairline: #697962;
+  --color-gold: #d2aa42;
   --color-secondary: #9aa892;
   --color-red-700: #f87171;
 }

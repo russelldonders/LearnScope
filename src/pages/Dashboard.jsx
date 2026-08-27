@@ -338,7 +338,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-paper">
       <AppHeader />
 
-      <main id="main-content" className="max-w-4xl mx-auto px-4 py-8 space-y-12">
+      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8 space-y-12">
         <section aria-labelledby="dashboard-heading">
           <div className="max-w-2xl mb-7">
             <h1 id="dashboard-heading" className="font-display text-3xl sm:text-4xl text-ink text-balance">

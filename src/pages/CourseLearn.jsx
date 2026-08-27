@@ -131,7 +131,7 @@ export default function CourseLearn() {
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
-      <main className="max-w-5xl mx-auto px-4 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 py-8">
         <Link to={`/courses/${id}`} className="text-sm text-secondary hover:text-ink mb-4 inline-block">
           ← Back to course
         </Link>
@@ -151,7 +151,7 @@ export default function CourseLearn() {
         {course && currentItem && (
           <div>
             <div className="flex items-center justify-between gap-4 flex-wrap mb-2">
-              <h2 className="font-display text-2xl text-ink">{course.name}</h2>
+              <h1 className="font-display text-2xl text-ink">{course.name}</h1>
               <p className="font-mono text-xs text-secondary shrink-0">
                 {completedCount} / {orderedItems.length} complete
               </p>

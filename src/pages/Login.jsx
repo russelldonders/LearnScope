@@ -112,7 +112,7 @@ export default function Login() {
             />
           </div>
 
-          {error && <p className="text-sm text-red-700">{error}</p>}
+          {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
           <button
             type="submit"

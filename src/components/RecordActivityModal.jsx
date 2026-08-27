@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { XAPI_VERBS } from '../lib/xapiVerbs'
 import { buildStatement } from '../lib/xapiStatement'
+import AccessibleDialog from './AccessibleDialog'
 
 function todayDate() {
   return new Date().toISOString().slice(0, 10)
@@ -54,12 +55,12 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="font-display text-2xl text-ink mb-1">Record an activity</h2>
+    <AccessibleDialog
+      labelledBy="record-activity-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+        <h2 id="record-activity-dialog-title" className="font-display text-2xl text-ink mb-1">Record an activity</h2>
         <p className="text-sm text-secondary mb-4">
           {relatedCourse
             ? `A quick log of something you did as part of "${relatedCourse.name}".`
@@ -209,7 +210,7 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
             </div>
           )}
 
-          {error && <p className="text-sm text-red-700">{error}</p>}
+          {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
           <div className="flex items-center gap-2 pt-2">
             <button
@@ -228,7 +229,6 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }
