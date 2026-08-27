@@ -5,6 +5,7 @@ import AppHeader from '../components/AppHeader'
 import CourseThumbnail from '../components/CourseThumbnail'
 import { LEVEL_LABELS } from '../lib/levels'
 import { getProviderProfile } from '../lib/providerProfile'
+import { listEnrolledCatalogueIds, enrolInCatalogueCourse } from '../lib/courseCatalogue'
 
 // Public provider profile -- reachable logged out (0090's get_provider_profile
 // RPC is anon-safe), so unlike every other content page this can't assume
@@ -17,6 +18,9 @@ export default function ProviderProfile() {
   const { user, loading: authLoading } = useAuth()
   const [profile, setProfile] = useState(undefined)
   const [error, setError] = useState(null)
+  const [enrolledIds, setEnrolledIds] = useState(new Map())
+  const [enrollingId, setEnrollingId] = useState(null)
+  const [enrolError, setEnrolError] = useState(null)
 
   useEffect(() => {
     setProfile(undefined)
@@ -26,7 +30,34 @@ export default function ProviderProfile() {
       .catch((err) => setError(err.message))
   }, [slug])
 
+  // Independent of the profile fetch (works for any logged-in visitor,
+  // whether or not they've been here before) -- lets an already-enrolled
+  // learner see that on this page rather than only discovering it back on
+  // /training.
+  useEffect(() => {
+    if (user) listEnrolledCatalogueIds(user.id).then(setEnrolledIds)
+  }, [user])
+
   const loading = profile === undefined && !error
+
+  async function handleEnrol(course) {
+    setEnrolError(null)
+    setEnrollingId(course.id)
+    try {
+      const enrolled = await enrolInCatalogueCourse(user.id, {
+        id: course.id,
+        name: course.name,
+        provider: profile.organisation.name,
+        course_type: course.courseType,
+        duration: course.duration,
+      })
+      setEnrolledIds((prev) => new Map(prev).set(course.id, { id: enrolled.id, completedDate: enrolled.completed_date }))
+    } catch (err) {
+      setEnrolError({ id: course.id, message: err.message })
+    } finally {
+      setEnrollingId(null)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-paper">
@@ -96,7 +127,11 @@ export default function ProviderProfile() {
                 <p className="text-sm text-secondary">No training listed yet.</p>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {profile.courses.map((course) => (
+                  {profile.courses.map((course) => {
+                    const enrollment = enrolledIds.get(course.id)
+                    const enrolled = Boolean(enrollment)
+                    const completed = Boolean(enrollment?.completedDate)
+                    return (
                     <div key={course.id} className="bg-card border border-hairline rounded-lg overflow-hidden flex flex-col">
                       <CourseThumbnail
                         name={course.name}
@@ -130,9 +165,36 @@ export default function ProviderProfile() {
                             ))}
                           </div>
                         )}
+                        {enrolError?.id === course.id && (
+                          <p className="text-xs text-red-700 mt-2">{enrolError.message}</p>
+                        )}
+                        {user ? (
+                          <button
+                            type="button"
+                            onClick={() => handleEnrol(course)}
+                            disabled={enrolled || enrollingId === course.id}
+                            className="mt-3 self-start rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {completed
+                              ? 'Completed ✓'
+                              : enrolled
+                                ? 'Enrolled ✓'
+                                : enrollingId === course.id
+                                  ? 'Enrolling…'
+                                  : 'Enrol'}
+                          </button>
+                        ) : (
+                          <Link
+                            to="/login"
+                            className="mt-3 self-start rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
+                          >
+                            Log in to enrol
+                          </Link>
+                        )}
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </section>
@@ -145,7 +207,7 @@ export default function ProviderProfile() {
 
 function PublicHeader() {
   return (
-    <header className="max-w-3xl mx-auto px-4 py-6 flex items-center justify-between">
+    <header className="max-w-4xl mx-auto px-4 py-6 flex items-center justify-between">
       <Link to="/" className="flex items-center gap-2 font-display text-2xl text-ink">
         <img src="/favicon.svg" alt="" className="w-7 h-7" />
         LearnScope
