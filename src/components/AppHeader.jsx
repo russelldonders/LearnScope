@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePendingActions } from '../context/PendingActionsContext'
+import { useNavVisibility } from '../context/NavVisibilityContext'
 import { supabase } from '../lib/supabaseClient'
-import { getNavVisibility } from '../lib/navVisibility'
 
 const NAV_LINKS = [
   { to: '/dashboard', label: 'Home' },
@@ -14,12 +14,6 @@ const NAV_LINKS = [
   { to: '/connections', label: 'Connections', requires: 'hasConnectionsActivity' },
 ]
 
-// Optimistic true so an established user's nav doesn't flicker
-// tabs-then-hide-then-show while the count queries are in flight -- only a
-// genuinely new user (the case these flags are for) ever sees a tab
-// disappear after this first load, and only once.
-const DEFAULT_NAV_VISIBILITY = { hasSkills: true, hasCourses: true, hasConnectionsActivity: true }
-
 const MENU_ITEMS = [
   { to: '/profile', label: 'Profile' },
   { to: '/profile/privacy', label: 'Privacy Settings' },
@@ -29,11 +23,11 @@ const MENU_ITEMS = [
 export default function AppHeader({ hideNavLinks = false }) {
   const { signOut, user, isPlatformAdmin, organisationMemberships } = useAuth()
   const { pendingActionCount } = usePendingActions()
+  const { navVisibility } = useNavVisibility()
   const location = useLocation()
   const [avatarUrl, setAvatarUrl] = useState(null)
   const [fullName, setFullName] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [navVisibility, setNavVisibility] = useState(DEFAULT_NAV_VISIBILITY)
   const menuRef = useRef(null)
 
   useEffect(() => {
@@ -47,11 +41,6 @@ export default function AppHeader({ hideNavLinks = false }) {
         setAvatarUrl(data?.avatar_url ?? null)
         setFullName(data?.full_name ?? null)
       })
-  }, [user])
-
-  useEffect(() => {
-    if (!user) return
-    getNavVisibility(user.id).then(setNavVisibility)
   }, [user])
 
   const visibleNavLinks = NAV_LINKS.filter((link) => !link.requires || navVisibility[link.requires])

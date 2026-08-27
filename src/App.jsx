@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { PendingActionsProvider } from './context/PendingActionsContext'
+import { NavVisibilityProvider } from './context/NavVisibilityContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import PlatformAdminRoute from './components/PlatformAdminRoute'
 import ProviderAdminRoute from './components/ProviderAdminRoute'
@@ -49,6 +50,7 @@ function App() {
       <AuthProvider>
         <ThemeProvider>
         <PendingActionsProvider>
+        <NavVisibilityProvider>
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
@@ -276,6 +278,7 @@ function App() {
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </NavVisibilityProvider>
         </PendingActionsProvider>
         </ThemeProvider>
       </AuthProvider>

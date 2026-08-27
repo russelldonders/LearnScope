@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useNavVisibility } from '../context/NavVisibilityContext'
 import { supabase } from '../lib/supabaseClient'
 import { listConnections, listConnectionsActivity, listIncomingRateInvites, getProfiles } from '../lib/connections'
 import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
@@ -275,6 +276,7 @@ async function loadUpNextRecommendations(userId) {
 
 export default function Dashboard() {
   const { user } = useAuth()
+  const { refreshNavVisibility } = useNavVisibility()
   const navigate = useNavigate()
   const [addSkillOpen, setAddSkillOpen] = useState(false)
   const [counts, setCounts] = useState(null)
@@ -501,7 +503,13 @@ export default function Dashboard() {
       </main>
 
       {addSkillOpen && (
-        <FindSkillModal onClose={() => setAddSkillOpen(false)} onCreated={() => navigate('/skills')} />
+        <FindSkillModal
+          onClose={() => setAddSkillOpen(false)}
+          onCreated={() => {
+            refreshNavVisibility()
+            navigate('/skills')
+          }}
+        />
       )}
     </div>
   )
