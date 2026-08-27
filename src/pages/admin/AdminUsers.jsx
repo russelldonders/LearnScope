@@ -12,7 +12,6 @@ export default function AdminUsers() {
   const [error, setError] = useState(null)
 
   const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteAsAdmin, setInviteAsAdmin] = useState(false)
   const [inviting, setInviting] = useState(false)
   const [inviteMessage, setInviteMessage] = useState(null)
 
@@ -41,10 +40,9 @@ export default function AdminUsers() {
     setInviteMessage(null)
     setError(null)
     try {
-      await inviteUser(inviteEmail.trim(), inviteAsAdmin)
+      await inviteUser(inviteEmail.trim())
       setInviteMessage(`Invitation sent to ${inviteEmail.trim()}.`)
       setInviteEmail('')
-      setInviteAsAdmin(false)
       await load()
     } catch (err) {
       setError(err.message)
@@ -86,15 +84,6 @@ export default function AdminUsers() {
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
             />
           </div>
-          <label className="flex items-center gap-2 text-sm text-secondary pb-2">
-            <input
-              type="checkbox"
-              checked={inviteAsAdmin}
-              onChange={(e) => setInviteAsAdmin(e.target.checked)}
-              className="rounded border-hairline"
-            />
-            Grant platform admin access
-          </label>
           <button
             type="submit"
             disabled={inviting}

@@ -189,7 +189,12 @@ async function listUsers(admin, caller, res) {
   res.status(200).json({ users: result })
 }
 
-async function inviteUser(admin, caller, { email, grantPlatformAdmin }, res) {
+// Platform admin is deliberately not grantable from here (or anywhere in
+// the app) -- it's the platform's highest-privilege role and is meant to
+// stay limited to a very small, deliberately-chosen group. Granting it is
+// a direct-SQL operation against platform_admins in the Supabase project,
+// not an in-app action.
+async function inviteUser(admin, caller, { email }, res) {
   if (!email || typeof email !== 'string') {
     res.status(400).json({ error: 'Missing email' })
     return
@@ -202,13 +207,6 @@ async function inviteUser(admin, caller, { email, grantPlatformAdmin }, res) {
 
   const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email.trim(), inviteRedirectTo())
   if (inviteError) throw inviteError
-
-  if (grantPlatformAdmin) {
-    const { error: grantError } = await admin
-      .from('platform_admins')
-      .insert({ user_id: invited.user.id, granted_by: caller.id })
-    if (grantError) throw grantError
-  }
 
   res.status(200).json({ ok: true, userId: invited.user.id })
 }
@@ -632,7 +630,7 @@ async function inviteOrgStaff(admin, caller, { organisationId, email, role }, re
   // 'pending' -- is_org_admin/is_org_member (0070) don't grant access for a
   // pending row, so nothing changes for this org until the invited user
   // explicitly accepts via decide_org_invite, surfaced to them on
-  // /connections (see PendingActionsContext, listMyPendingOrgInvites).
+  // /actions (see PendingActionsContext, listMyPendingOrgInvites).
   const existingUserId = await findUserIdByEmail(admin, email.trim())
   let userId = existingUserId
   if (!userId) {
@@ -664,7 +662,7 @@ async function inviteOrgStaff(admin, caller, { organisationId, email, role }, re
   // signal they get that an org wants to add them as staff. Best-effort: a
   // failed notification shouldn't undo the pending row that already
   // succeeded above -- they can still find and accept/decline it from
-  // /connections without ever seeing this email.
+  // /actions without ever seeing this email.
   if (existingUserId) {
     await notifyOrgInvitePending(admin, email.trim(), organisationId, role)
   }
@@ -724,7 +722,7 @@ async function notifyOrgInvitePending(admin, email, organisationId, role) {
         subject: `${orgName} wants to add you on LearnScope`,
         html: `
           <p><strong>${escapeHtml(orgName)}</strong> wants to add you as ${roleLabel} on LearnScope.</p>
-          <p>Sign in to your existing account and check your Connections page to accept or decline.</p>
+          <p>Sign in to your existing account and check your Actions page to accept or decline.</p>
         `,
       }),
     })

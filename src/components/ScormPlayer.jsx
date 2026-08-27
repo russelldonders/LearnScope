@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { scormLaunchUrl } from '../lib/courseContent'
+import { scormLaunchUrl, fetchShimmedLaunchDoc } from '../lib/courseContent'
 
 async function loadProgress(contentItemId, userId) {
   const { data, error } = await supabase
@@ -54,11 +54,14 @@ async function saveProgress(contentItemId, userId, { status, score, cmiData }) {
 export default function ScormPlayer({ contentItem, userId, onProgress }) {
   const [apiReady, setApiReady] = useState(false)
   const [error, setError] = useState(null)
+  const [shimmedDoc, setShimmedDoc] = useState(null)
   const cmiRef = useRef({})
   const statusRef = useRef('not_attempted')
   const scoreRef = useRef(null)
   const initializedRef = useRef(false)
   const lastErrorRef = useRef('0')
+
+  const launchUrl = scormLaunchUrl(contentItem)
 
   useEffect(() => {
     let cancelled = false
@@ -97,11 +100,26 @@ export default function ScormPlayer({ contentItem, userId, onProgress }) {
     }
   }, [contentItem.id, userId])
 
-  const launchUrl = scormLaunchUrl(contentItem)
+  // Fetched and loaded via srcdoc rather than a plain src navigation, so a
+  // storage shim can be injected before the package's own scripts run -- see
+  // fetchShimmedLaunchDoc's own comment for why (uncaught localStorage/
+  // sessionStorage access inside the sandboxed frame otherwise crashes many
+  // packages before they render anything at all).
+  useEffect(() => {
+    if (!launchUrl) return
+    let cancelled = false
+    setShimmedDoc(null)
+    fetchShimmedLaunchDoc(launchUrl)
+      .then((doc) => !cancelled && setShimmedDoc(doc))
+      .catch((err) => !cancelled && setError(err.message))
+    return () => {
+      cancelled = true
+    }
+  }, [launchUrl])
 
   if (error) return <p className="text-sm text-red-700">{error}</p>
   if (!launchUrl) return <p className="text-sm text-red-700">This SCORM package has no launch page.</p>
-  if (!apiReady) return <p className="text-sm text-secondary">Loading…</p>
+  if (!apiReady || !shimmedDoc) return <p className="text-sm text-secondary">Loading…</p>
 
   return (
     <>
@@ -111,7 +129,7 @@ export default function ScormPlayer({ contentItem, userId, onProgress }) {
       </p>
       <iframe
         title={contentItem.title}
-        src={launchUrl}
+        srcDoc={shimmedDoc}
         className="w-full h-[600px] border border-hairline rounded-md bg-paper"
         // Deliberately NOT allow-same-origin: content is served through
         // /course-content/*, same origin as the app itself (required so

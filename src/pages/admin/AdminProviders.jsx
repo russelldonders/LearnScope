@@ -221,7 +221,7 @@ export default function AdminProviders() {
                     </div>
                   </div>
                 )}
-                {expandedId === org.id && <OrganisationStaffPanel organisation={org} />}
+                {expandedId === org.id && <OrganisationStaffPanel organisation={org} alwaysShowForm />}
               </div>
             ))}
           </div>
@@ -233,7 +233,13 @@ export default function AdminProviders() {
 
 // Exported so the provider-facing console (src/pages/provider/) can reuse
 // the same invite/remove staff UI, scoped to a provider's own organisation.
-export function OrganisationStaffPanel({ organisation }) {
+// alwaysShowForm keeps this panel's original always-open invite form for
+// its home here (already gated behind AdminProviders' own "Manage users"
+// accordion toggle, so a second toggle inside would just be a redundant
+// extra click) -- ProviderConsole's Users tab instead gets the same
+// "+ Invite user" toggle-to-reveal pattern as its Training/Skills/
+// Resources tabs (see default false below).
+export function OrganisationStaffPanel({ organisation, alwaysShowForm = false }) {
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -244,6 +250,7 @@ export function OrganisationStaffPanel({ organisation }) {
   const [message, setMessage] = useState(null)
   const [removeTarget, setRemoveTarget] = useState(null)
   const [removing, setRemoving] = useState(false)
+  const [showInviteForm, setShowInviteForm] = useState(false)
 
   useEffect(() => {
     load()
@@ -274,6 +281,7 @@ export function OrganisationStaffPanel({ organisation }) {
           : `Invitation sent to ${email.trim()}.`
       )
       setEmail('')
+      if (!alwaysShowForm) setShowInviteForm(false)
       await load()
     } catch (err) {
       setError(err.message)
@@ -296,44 +304,72 @@ export function OrganisationStaffPanel({ organisation }) {
     }
   }
 
+  const formVisible = alwaysShowForm || showInviteForm
+
   return (
-    <div className="border-t border-hairline bg-paper p-4 space-y-3">
-      <form onSubmit={handleInvite} className="flex flex-wrap items-end gap-2">
-        <div className="flex-1 min-w-[180px]">
-          <label className="block text-xs text-secondary mb-1" htmlFor={`staffEmail-${organisation.id}`}>
-            Invite users by email
-          </label>
-          <input
-            id={`staffEmail-${organisation.id}`}
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-md border border-hairline bg-card px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-          />
-        </div>
-        <div>
-          <label className="block text-xs text-secondary mb-1" htmlFor={`staffRole-${organisation.id}`}>
-            Role
-          </label>
-          <select
-            id={`staffRole-${organisation.id}`}
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            className="rounded-md border border-hairline bg-card px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+    <div className={alwaysShowForm ? 'border-t border-hairline bg-paper p-4 space-y-3' : 'space-y-3'}>
+      {!alwaysShowForm && (
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h3 className="font-display text-lg text-ink">Users</h3>
+          <button
+            type="button"
+            onClick={() => setShowInviteForm((v) => !v)}
+            className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
           >
-            <option value="admin">Admin</option>
-            <option value="trainer">Trainer</option>
-          </select>
+            {showInviteForm ? 'Cancel' : '+ Invite user'}
+          </button>
         </div>
-        <button
-          type="submit"
-          disabled={inviting}
-          className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+      )}
+
+      {formVisible && (
+        <form
+          onSubmit={handleInvite}
+          className={
+            alwaysShowForm
+              ? 'flex flex-wrap items-end gap-2'
+              : 'bg-card border border-hairline rounded-lg p-4 flex flex-wrap items-end gap-2 mb-4'
+          }
         >
-          {inviting ? 'Sending…' : 'Invite'}
-        </button>
-      </form>
+          <div className="flex-1 min-w-[180px]">
+            <label className="block text-xs text-secondary mb-1" htmlFor={`staffEmail-${organisation.id}`}>
+              Invite users by email
+            </label>
+            <input
+              id={`staffEmail-${organisation.id}`}
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={`w-full rounded-md border border-hairline px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss ${
+                alwaysShowForm ? 'bg-card' : 'bg-paper'
+              }`}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-secondary mb-1" htmlFor={`staffRole-${organisation.id}`}>
+              Role
+            </label>
+            <select
+              id={`staffRole-${organisation.id}`}
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className={`rounded-md border border-hairline px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss ${
+                alwaysShowForm ? 'bg-card' : 'bg-paper'
+              }`}
+            >
+              <option value="admin">Admin</option>
+              <option value="trainer">Trainer</option>
+            </select>
+          </div>
+          <button
+            type="submit"
+            disabled={inviting}
+            className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+          >
+            {inviting ? 'Sending…' : 'Invite'}
+          </button>
+        </form>
+      )}
 
       {message && <p className="text-xs text-moss">{message}</p>}
       {error && <p className="text-xs text-red-700">{error}</p>}
@@ -341,11 +377,24 @@ export function OrganisationStaffPanel({ organisation }) {
       {loading ? (
         <p className="text-xs text-secondary">Loading users…</p>
       ) : members.length === 0 ? (
-        <p className="text-xs text-secondary">No users yet.</p>
+        alwaysShowForm ? (
+          <p className="text-xs text-secondary">No users yet.</p>
+        ) : (
+          <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
+            <p className="text-secondary">No users yet.</p>
+          </div>
+        )
       ) : (
-        <ul className="divide-y divide-hairline">
+        <ul
+          className={
+            alwaysShowForm ? 'divide-y divide-hairline' : 'divide-y divide-hairline border border-hairline rounded-md'
+          }
+        >
           {members.map((m) => (
-            <li key={m.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+            <li
+              key={m.id}
+              className={`flex items-center justify-between gap-2 text-sm ${alwaysShowForm ? 'py-2' : 'p-3'}`}
+            >
               <span className="text-ink text-xs truncate">{m.email || m.user_id}</span>
               <span className="text-secondary text-xs shrink-0">
                 {m.role}

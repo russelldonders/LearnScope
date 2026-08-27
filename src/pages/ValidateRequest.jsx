@@ -113,12 +113,12 @@ export default function ValidateRequest() {
     <div className="min-h-screen bg-paper">
       <AppHeader />
       <main id="main-content" tabIndex={-1} className="max-w-2xl mx-auto px-4 py-8">
-        <Link to="/connections" className="text-sm text-secondary hover:text-ink mb-6 inline-block">
-          ← Back to connections
+        <Link to="/actions" className="text-sm text-secondary hover:text-ink mb-6 inline-block">
+          ← Back to actions
         </Link>
 
         {loading && <p className="text-secondary">Loading…</p>}
-        {error && <p className="text-sm text-red-700">{error}</p>}
+        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
         {request && !loading && (
           <div className="bg-card border border-hairline rounded-lg p-6">

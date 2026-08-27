@@ -104,8 +104,8 @@ async function loadUpcomingTargets(userId) {
 // "Reviews of others" -- tasks waiting on this learner to look at someone
 // else's skill, not their own: an invite to rate a connection's skill, or a
 // validation request naming them as the validator. Reuses the exact same
-// lib functions the Connections page's own "Invitations to rate" / "Requests
-// to validate" sections already fetch (see Connections.jsx) rather than a
+// lib functions the Actions page's own "Invitations to rate" / "Requests
+// to validate" sections already fetch (see Actions.jsx) rather than a
 // second implementation of the same query.
 async function loadPendingReviewTasks(userId) {
   const [rateInvites, validationRequests] = await Promise.all([

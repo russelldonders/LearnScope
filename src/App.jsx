@@ -22,7 +22,9 @@ import ProfilePrivacy from './pages/ProfilePrivacy'
 import ProfileImport from './pages/ProfileImport'
 import ProfileExport from './pages/ProfileExport'
 import Rate from './pages/Rate'
+import ProviderProfile from './pages/ProviderProfile'
 import Connections from './pages/Connections'
+import Actions from './pages/Actions'
 import SkillsProfile from './pages/SkillsProfile'
 import CourseCatalogue from './pages/CourseCatalogue'
 import CourseDetail from './pages/CourseDetail'
@@ -55,6 +57,7 @@ function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/rate/:code" element={<Rate />} />
+          <Route path="/providers/:slug" element={<ProviderProfile />} />
           <Route
             path="/onboarding"
             element={
@@ -140,6 +143,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Connections />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/actions"
+            element={
+              <ProtectedRoute>
+                <Actions />
               </ProtectedRoute>
             }
           />
