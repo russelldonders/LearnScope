@@ -99,3 +99,42 @@ export async function enrolInCatalogueCourse(userId, course, skillId = null) {
 
   return data
 }
+
+// Same same-browser-only/cross-device pattern as connections.js's
+// pendingInviteCode: clicking "Log in to enrol" on the public provider page
+// (reachable logged out) stores the catalogue course id here before sending
+// the visitor to auth; resumePendingEnrolment below completes the
+// enrolment once they're actually authenticated, wherever that landing
+// happens (Login.jsx/Signup.jsx for an immediate session, Welcome.jsx for
+// email confirmation or a Google OAuth redirect -- see AuthContext.jsx's
+// signUp for why Welcome.jsx also accepts this as a URL query param rather
+// than relying solely on localStorage).
+const PENDING_ENROL_KEY = 'learnscope_pending_enrol_catalogue_id'
+
+export function setPendingEnrolCourseId(id) {
+  localStorage.setItem(PENDING_ENROL_KEY, id)
+}
+
+export function getPendingEnrolCourseId() {
+  return localStorage.getItem(PENDING_ENROL_KEY)
+}
+
+export function clearPendingEnrolCourseId() {
+  localStorage.removeItem(PENDING_ENROL_KEY)
+}
+
+// explicitCourseId (from a URL query param) takes priority over the stored
+// value, matching Welcome.jsx's existing invite-code handling -- always
+// clears storage regardless of which source was used, so a stale id can
+// never be resumed twice. Refetches the course fresh via getCatalogueCourse
+// rather than trusting anything carried across the auth redirect, since RLS
+// only allows that read now that the caller is authenticated, and the
+// course's own details may have changed since the link was clicked.
+export async function resumePendingEnrolment(userId, explicitCourseId = null) {
+  const pendingId = explicitCourseId || getPendingEnrolCourseId()
+  clearPendingEnrolCourseId()
+  if (!pendingId) return null
+  const course = await getCatalogueCourse(pendingId)
+  if (!course) return null
+  return enrolInCatalogueCourse(userId, course)
+}

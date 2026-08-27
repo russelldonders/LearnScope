@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getPendingInviteCode, clearPendingInviteCode } from '../lib/connections'
+import { getPendingEnrolCourseId, resumePendingEnrolment } from '../lib/courseCatalogue'
 
 export default function Welcome() {
   const { user, loading } = useAuth()
@@ -18,6 +19,13 @@ export default function Welcome() {
     if (pendingCode) {
       clearPendingInviteCode()
       navigate(`/rate/${pendingCode}`)
+      return
+    }
+    const pendingEnrolId = searchParams.get('enrol') || getPendingEnrolCourseId()
+    if (pendingEnrolId) {
+      resumePendingEnrolment(user.id, pendingEnrolId)
+        .then((enrolled) => navigate(enrolled ? `/courses/${enrolled.id}` : '/dashboard'))
+        .catch(() => navigate('/dashboard'))
     }
   }, [user, navigate, searchParams])
 

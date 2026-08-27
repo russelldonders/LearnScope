@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { getPendingInviteCode } from '../lib/connections'
+import { getPendingEnrolCourseId } from '../lib/courseCatalogue'
 
 const AuthContext = createContext(undefined)
 
@@ -119,14 +120,19 @@ export function AuthProvider({ children }) {
     refreshOrganisationMemberships,
     refreshNeedsName,
     markOnboardingComplete,
-    // Carries a pending rate-invite code through as a query param on the
-    // confirmation-email redirect, rather than relying solely on
-    // localStorage -- the confirmation link is often opened on a different
-    // device/browser than the one signup was started on, where localStorage
-    // wouldn't be there either. Welcome.jsx reads it from the URL first.
+    // Carries a pending rate-invite code (and/or a pending course
+    // enrolment) through as a query param on the confirmation-email
+    // redirect, rather than relying solely on localStorage -- the
+    // confirmation link is often opened on a different device/browser than
+    // the one signup was started on, where localStorage wouldn't be there
+    // either. Welcome.jsx reads these from the URL first.
     signUp: (email, password, { firstName, lastName } = {}) => {
       const pendingCode = getPendingInviteCode()
-      const redirectPath = pendingCode ? `/welcome?invite=${pendingCode}` : '/welcome'
+      const pendingEnrolId = getPendingEnrolCourseId()
+      const params = new URLSearchParams()
+      if (pendingCode) params.set('invite', pendingCode)
+      if (pendingEnrolId) params.set('enrol', pendingEnrolId)
+      const redirectPath = params.toString() ? `/welcome?${params.toString()}` : '/welcome'
       return supabase.auth.signUp({
         email,
         password,

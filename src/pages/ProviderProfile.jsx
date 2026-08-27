@@ -5,7 +5,7 @@ import AppHeader from '../components/AppHeader'
 import CourseThumbnail from '../components/CourseThumbnail'
 import { LEVEL_LABELS } from '../lib/levels'
 import { getProviderProfile } from '../lib/providerProfile'
-import { listEnrolledCatalogueIds, enrolInCatalogueCourse } from '../lib/courseCatalogue'
+import { listEnrolledCatalogueIds, enrolInCatalogueCourse, setPendingEnrolCourseId } from '../lib/courseCatalogue'
 
 // Public provider profile -- reachable logged out (0090's get_provider_profile
 // RPC is anon-safe), so unlike every other content page this can't assume
@@ -186,6 +186,7 @@ export default function ProviderProfile() {
                         ) : (
                           <Link
                             to="/login"
+                            onClick={() => setPendingEnrolCourseId(course.id)}
                             className="mt-3 self-start rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
                           >
                             Log in to enrol
