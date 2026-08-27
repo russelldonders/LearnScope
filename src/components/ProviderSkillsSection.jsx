@@ -114,14 +114,8 @@ export default function ProviderSkillsSection({ organisationId, userId }) {
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
-        <div>
-          <h3 className="font-display text-lg text-ink">Skills</h3>
-          <p className="text-sm text-secondary mt-0.5">
-            The skills your organisation offers training in. Add existing skills from the shared library, or create
-            one specific to your organisation.
-          </p>
-        </div>
+      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <h3 className="font-display text-lg text-ink">Skills</h3>
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
@@ -139,6 +133,10 @@ export default function ProviderSkillsSection({ organisationId, userId }) {
           </button>
         </div>
       </div>
+      <p className="text-sm text-secondary mb-4">
+        The skills your organisation offers training in. Add existing skills from the shared library, or create one
+        specific to your organisation.
+      </p>
 
       {showAddGlobal && (
         <div className="bg-card border border-hairline rounded-lg p-4 mb-4">

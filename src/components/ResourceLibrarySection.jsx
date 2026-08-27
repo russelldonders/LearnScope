@@ -136,14 +136,8 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
-        <div>
-          <h3 className="font-display text-lg text-ink">Resources</h3>
-          <p className="text-sm text-secondary mt-0.5">
-            Upload video, files, and SCORM packages here, then attach them to any of your training courses from that
-            course's own edit view.
-          </p>
-        </div>
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h3 className="font-display text-lg text-ink">Resources</h3>
         <button
           type="button"
           onClick={() => setShowUploadForm((v) => !v)}
@@ -152,6 +146,10 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
           {showUploadForm ? 'Cancel' : '+ Upload resource'}
         </button>
       </div>
+      <p className="text-sm text-secondary mb-4">
+        Upload video, files, and SCORM packages here, then attach them to any of your training courses from that
+        course's own edit view.
+      </p>
 
       {showUploadForm && (
         <div className="bg-card border border-hairline rounded-lg p-4 flex flex-wrap items-end gap-2 mb-4">
