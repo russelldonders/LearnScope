@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
+import CourseThumbnail from '../components/CourseThumbnail'
+import { LEVEL_LABELS } from '../lib/levels'
 import { getProviderProfile } from '../lib/providerProfile'
 
 // Public provider profile -- reachable logged out (0090's get_provider_profile
@@ -30,7 +32,7 @@ export default function ProviderProfile() {
     <div className="min-h-screen bg-paper">
       {authLoading ? null : user ? <AppHeader hideNavLinks /> : <PublicHeader />}
 
-      <main className="max-w-3xl mx-auto px-4 py-10">
+      <main className="max-w-4xl mx-auto px-4 py-10">
         {loading && <p className="text-secondary">Loading…</p>}
         {error && <p className="text-sm text-red-700">{error}</p>}
 
@@ -95,12 +97,40 @@ export default function ProviderProfile() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {profile.courses.map((course) => (
-                    <div key={course.id} className="bg-card border border-hairline rounded-lg p-4">
-                      <h3 className="font-display text-lg text-ink">{course.name}</h3>
-                      <p className="font-mono text-xs text-secondary mt-0.5">
-                        {[course.courseType, course.duration].filter(Boolean).join(' · ')}
-                      </p>
-                      {course.synopsis && <p className="text-sm text-secondary mt-2">{course.synopsis}</p>}
+                    <div key={course.id} className="bg-card border border-hairline rounded-lg overflow-hidden flex flex-col">
+                      <CourseThumbnail
+                        name={course.name}
+                        provider={profile.organisation.name}
+                        logoUrl={profile.organisation.logoUrl}
+                        className="h-24 w-full shrink-0"
+                      />
+                      <div className="p-4 flex flex-col flex-1">
+                        <h3 className="font-display text-lg text-ink">{course.name}</h3>
+                        <p className="font-mono text-xs text-secondary mt-0.5">
+                          {[course.courseType, course.duration].filter(Boolean).join(' · ')}
+                        </p>
+                        {course.synopsis && <p className="text-sm text-secondary mt-2 flex-1">{course.synopsis}</p>}
+                        {(course.skillEntries.length > 0 || course.tags.length > 0) && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {course.skillEntries.map((e) => (
+                              <span
+                                key={e.skillId}
+                                className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5"
+                              >
+                                {e.skillName} · {LEVEL_LABELS[e.level]}
+                              </span>
+                            ))}
+                            {course.tags.map((t) => (
+                              <span
+                                key={t.id}
+                                className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
+                              >
+                                {t.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

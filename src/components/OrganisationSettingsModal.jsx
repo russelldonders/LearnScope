@@ -14,6 +14,11 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
   const [about, setAbout] = useState(organisation.about ?? '')
   const [logoUrl, setLogoUrl] = useState(organisation.logo_url ?? null)
   const [publicProfileEnabled, setPublicProfileEnabled] = useState(organisation.public_profile_enabled ?? false)
+  // Tracks what's actually persisted, separately from the checkbox above --
+  // the link/copy/pop-out block reads this, not the live checkbox, so
+  // toggling it on doesn't surface a "working" link before Save has
+  // actually made the public page live.
+  const [savedPublicProfileEnabled, setSavedPublicProfileEnabled] = useState(organisation.public_profile_enabled ?? false)
   const [saving, setSaving] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [error, setError] = useState(null)
@@ -70,7 +75,11 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
     setError(null)
     try {
       await updateOrganisation(organisation.id, { url, about, publicProfileEnabled })
-      onClose()
+      setSavedPublicProfileEnabled(publicProfileEnabled)
+      // Stay open when the public page is (now) enabled, so there's a
+      // moment to actually copy/open the link this save just made live --
+      // otherwise close as before.
+      if (!publicProfileEnabled) onClose()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -179,7 +188,10 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
                 </span>
               </span>
             </label>
-            {publicProfileEnabled && (
+            {publicProfileEnabled && !savedPublicProfileEnabled && (
+              <p className="text-xs text-secondary mt-2">Save to get your public link.</p>
+            )}
+            {savedPublicProfileEnabled && (
               <div className="mt-2 flex items-center gap-2 flex-wrap">
                 <code className="text-xs bg-paper border border-hairline rounded-md px-2 py-1 text-ink break-all">
                   {publicProfileUrl}
