@@ -5,8 +5,8 @@ export async function listUsers() {
   return data.users
 }
 
-export async function inviteUser(email, grantPlatformAdmin = false) {
-  return callAdminApi('inviteUser', { email, grantPlatformAdmin })
+export async function inviteUser(email) {
+  return callAdminApi('inviteUser', { email })
 }
 
 export async function setUserBlocked(userId, blocked) {

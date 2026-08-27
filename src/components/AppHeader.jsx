@@ -66,6 +66,25 @@ export default function AppHeader({ hideNavLinks = false }) {
             LearnScope
           </Link>
           <div className="flex items-center gap-2 shrink-0">
+            <Link
+              to="/actions"
+              aria-label={pendingActionCount > 0 ? `Actions, ${pendingActionCount} pending` : 'Actions'}
+              className={`relative flex items-center justify-center w-9 h-9 rounded-full border shrink-0 ${
+                location.pathname === '/actions'
+                  ? 'border-moss text-ink'
+                  : 'border-hairline text-ink hover:bg-paper'
+              }`}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="5" width="18" height="14" rx="2" />
+                <path d="m3 7 9 6 9-6" />
+              </svg>
+              {pendingActionCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-moss text-paper text-xs font-medium">
+                  {pendingActionCount}
+                </span>
+              )}
+            </Link>
             <div className="relative" ref={menuRef}>
               <button
                 type="button"
@@ -155,11 +174,6 @@ export default function AppHeader({ hideNavLinks = false }) {
                 }`}
               >
                 {link.label}
-                {link.to === '/connections' && pendingActionCount > 0 && (
-                  <span className="flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-moss text-paper text-xs font-medium">
-                    {pendingActionCount}
-                  </span>
-                )}
               </Link>
             ))}
           </nav>

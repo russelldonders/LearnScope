@@ -8,7 +8,7 @@ const PendingActionsContext = createContext(undefined)
 
 // Lives above the router (see App.jsx) rather than inside AppHeader, so the
 // count survives page navigation and can be refreshed immediately by
-// whichever page just resolved an item (e.g. Connections accepting a
+// whichever page just resolved an item (e.g. Actions.jsx accepting a
 // request) instead of only refetching on the next full page/header mount.
 export function PendingActionsProvider({ children }) {
   const { user } = useAuth()

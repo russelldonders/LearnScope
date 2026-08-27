@@ -23,6 +23,7 @@ import ProfileImport from './pages/ProfileImport'
 import ProfileExport from './pages/ProfileExport'
 import Rate from './pages/Rate'
 import Connections from './pages/Connections'
+import Actions from './pages/Actions'
 import SkillsProfile from './pages/SkillsProfile'
 import CourseCatalogue from './pages/CourseCatalogue'
 import CourseDetail from './pages/CourseDetail'
@@ -138,6 +139,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Connections />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/actions"
+            element={
+              <ProtectedRoute>
+                <Actions />
               </ProtectedRoute>
             }
           />
