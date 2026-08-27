@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
 import { listConnections, listConnectionsActivity, listIncomingRateInvites, getProfiles } from '../lib/connections'
 import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
 import AppHeader from '../components/AppHeader'
 import RecordActivitySection from '../components/RecordActivitySection'
+import FindSkillModal from '../components/FindSkillModal'
 import GrowthRing from '../components/GrowthRing'
 import CourseThumbnail from '../components/CourseThumbnail'
 import PersonAvatar from '../components/PersonAvatar'
@@ -274,6 +275,8 @@ async function loadUpNextRecommendations(userId) {
 
 export default function Dashboard() {
   const { user } = useAuth()
+  const navigate = useNavigate()
+  const [addSkillOpen, setAddSkillOpen] = useState(false)
   const [counts, setCounts] = useState(null)
   const [recentGrowth, setRecentGrowth] = useState([])
   const [upNext, setUpNext] = useState([])
@@ -356,12 +359,13 @@ export default function Dashboard() {
               <p className="text-secondary mb-4">
                 Your profile is empty. Start by adding a skill you already have.
               </p>
-              <Link
-                to="/skills"
+              <button
+                type="button"
+                onClick={() => setAddSkillOpen(true)}
                 className="inline-block rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
               >
                 Add your first skill
-              </Link>
+              </button>
             </div>
           ) : (
             <div className="space-y-6">
@@ -493,8 +497,12 @@ export default function Dashboard() {
           </div>
         )}
 
-        <RecordActivitySection />
+        {!loading && counts.skills > 0 && <RecordActivitySection />}
       </main>
+
+      {addSkillOpen && (
+        <FindSkillModal onClose={() => setAddSkillOpen(false)} onCreated={() => navigate('/skills')} />
+      )}
     </div>
   )
 }
