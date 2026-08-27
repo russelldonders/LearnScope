@@ -18,6 +18,7 @@ import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
 import { activityName, verbLabel, formatDuration, isDiagnosticStatement } from '../lib/xapiStatement'
 import { enableCurrentRole, disableCurrentRole, applyCurrentRoleSelection, syncSkillIsCurrentRole } from '../lib/currentRole'
 import CurrentRoleSelectModal from '../components/CurrentRoleSelectModal'
+import AccessibleDialog from '../components/AccessibleDialog'
 import { listTags, listSkillTags, addTagToSkill, removeSkillTagLink } from '../lib/skillTags'
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import InviteRaterModal from '../components/InviteRaterModal'
@@ -381,7 +382,7 @@ export default function SkillDetail() {
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
         <Link
           to={backTo}
           state={{ tab: 'skills' }}
@@ -867,16 +868,14 @@ export default function SkillDetail() {
             )}
 
             {settingsOpen && (
-              <div
-                className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-40"
-                onClick={() => setSettingsOpen(false)}
+              <AccessibleDialog
+                labelledBy="skill-settings-dialog-title"
+                onClose={() => setSettingsOpen(false)}
+                overlayClassName="z-40"
+                panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
               >
-                <div
-                  className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-                  onClick={(e) => e.stopPropagation()}
-                >
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="font-display text-2xl text-ink">Skill settings</h2>
+                    <h2 id="skill-settings-dialog-title" className="font-display text-2xl text-ink">Skill settings</h2>
                     <button
                       type="button"
                       onClick={() => setSettingsOpen(false)}
@@ -903,8 +902,7 @@ export default function SkillDetail() {
                       onDeleted={() => navigate(backTo, { state: { tab: 'skills' } })}
                     />
                   </div>
-                </div>
-              </div>
+              </AccessibleDialog>
             )}
 
             {(skill.next_checkin_date || currentTarget) && (
@@ -986,13 +984,13 @@ function PeopleIcon() {
 // privacy check needed here, the list itself is already scoped correctly.
 function ConnectionsWithSkillModal({ connections, skillName, onClose }) {
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <AccessibleDialog
+      labelledBy="connections-with-skill-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-2xl text-ink">Connections with {skillName}</h2>
+          <h2 id="connections-with-skill-dialog-title" className="font-display text-2xl text-ink">Connections with {skillName}</h2>
           <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
             Close
           </button>
@@ -1008,8 +1006,7 @@ function ConnectionsWithSkillModal({ connections, skillName, onClose }) {
             ))}
           </ul>
         )}
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }
 
@@ -1134,13 +1131,13 @@ function LevelDetailModal({
     : null
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <AccessibleDialog
+      labelledBy="axis-summary-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6"
+    >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-2xl text-ink">{isKnowledge ? 'Knowledge' : 'Application'}</h2>
+          <h2 id="axis-summary-dialog-title" className="font-display text-2xl text-ink">{isKnowledge ? 'Knowledge' : 'Application'}</h2>
           <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
             Close
           </button>
@@ -1229,8 +1226,7 @@ function LevelDetailModal({
             </button>
           )}
         </div>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }
 
@@ -1245,13 +1241,13 @@ function SelfAssessModal({
   onGuideGenerated,
 }) {
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <AccessibleDialog
+      labelledBy="self-assess-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-2xl text-ink">
+          <h2 id="self-assess-dialog-title" className="font-display text-2xl text-ink">
             {axis === 'knowledge' ? 'Self-assess your knowledge' : 'Self-assess'}
           </h2>
           <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
@@ -1297,8 +1293,7 @@ function SelfAssessModal({
             )
           )
         })()}
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }
 
@@ -1918,11 +1913,11 @@ function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assesso
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <AccessibleDialog
+      label={title}
+      onClose={onClose}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
         <div className="flex items-center justify-between mb-4 gap-4">
           <h2 className="font-display text-xl text-ink">{title}</h2>
           <button type="button" onClick={onClose} className="shrink-0 text-secondary hover:text-ink text-sm">
@@ -1930,8 +1925,7 @@ function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assesso
           </button>
         </div>
         {body}
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }
 

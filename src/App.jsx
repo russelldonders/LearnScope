@@ -38,10 +38,12 @@ import AdminSkillDetail from './pages/admin/AdminSkillDetail'
 import AdminTags from './pages/admin/AdminTags'
 import ProviderConsole from './pages/provider/ProviderConsole'
 import ProviderCourseEditor from './pages/provider/ProviderCourseEditor'
+import RouteTitle from './components/RouteTitle'
 
 function App() {
   return (
     <BrowserRouter>
+      <RouteTitle />
       <AuthProvider>
         <ThemeProvider>
         <PendingActionsProvider>

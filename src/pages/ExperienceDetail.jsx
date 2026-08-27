@@ -163,7 +163,7 @@ export default function ExperienceDetail() {
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
         <Link to="/experience" className="text-sm text-secondary hover:text-ink mb-6 inline-block">
           ← Back to experience
         </Link>
@@ -176,7 +176,7 @@ export default function ExperienceDetail() {
             <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
               {EXPERIENCE_TYPE_LABELS[item.type] ?? item.type}
             </span>
-            <h2 className="font-display text-2xl text-ink mt-0.5">{item.title}</h2>
+            <h1 className="font-display text-2xl text-ink mt-0.5">{item.title}</h1>
             {item.organization && (
               <div className="flex items-center gap-2 mt-0.5">
                 {item.organization_url && <OrganizationLogo organizationUrl={item.organization_url} size={24} />}

@@ -338,14 +338,19 @@ export default function Dashboard() {
     <div className="min-h-screen bg-paper">
       <AppHeader />
 
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-16">
-        <div>
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="font-display text-xl text-ink">Your overview</h2>
+      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8 space-y-12">
+        <section aria-labelledby="dashboard-heading">
+          <div className="max-w-2xl mb-7">
+            <h1 id="dashboard-heading" className="font-display text-3xl sm:text-4xl text-ink text-balance">
+              Keep your skills moving
+            </h1>
+            <p className="text-secondary mt-2 text-pretty">
+              Focus on one useful step, then see how the rest of your learning is taking shape.
+            </p>
           </div>
 
           {loading ? (
-            <p className="text-secondary">Loading…</p>
+            <DashboardSkeleton />
           ) : counts.skills + counts.experience + counts.courses + counts.connections === 0 ? (
             <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
               <p className="text-secondary mb-4">
@@ -359,34 +364,12 @@ export default function Dashboard() {
               </Link>
             </div>
           ) : (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <SummaryCard
-                to="/skills"
-                title="Skills"
-                value={counts.skills}
-                unit={counts.skills === 1 ? 'skill tracked' : 'skills tracked'}
-              />
-              <SummaryCard
-                to="/experience"
-                title="Experience"
-                value={counts.experience}
-                unit={counts.experience === 1 ? 'role/study period' : 'roles/study periods'}
-              />
-              <SummaryCard
-                to="/learning"
-                title="Courses"
-                value={counts.courses}
-                unit={counts.courses === 1 ? 'course completed' : 'courses completed'}
-              />
-              <SummaryCard
-                to="/connections"
-                title="Connections"
-                value={counts.connections}
-                unit={counts.connections === 1 ? 'connection' : 'connections'}
-              />
+            <div className="space-y-6">
+              <FocusPanel recommendation={upNext[0]} recentGrowth={recentGrowth[0]} />
+              <OverviewStrip counts={counts} />
             </div>
           )}
-        </div>
+        </section>
 
         {!loading &&
           (upcomingSelfAssessments.length > 0 || upcomingTargets.length > 0 || pendingReviewTasks.length > 0) && (
@@ -430,10 +413,11 @@ export default function Dashboard() {
             </div>
           )}
 
-        {!loading && upNext.length > 0 && (
+        {!loading && upNext.length > 1 && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-6">Up next</h2>
-            <UpNextSlider recommendations={upNext} />
+            <h2 className="font-display text-xl text-ink mb-2">More ways to make progress</h2>
+            <p className="text-sm text-secondary mb-6">Useful next steps across your other skills.</p>
+            <UpNextSlider recommendations={upNext.slice(1)} />
           </div>
         )}
 
@@ -444,11 +428,11 @@ export default function Dashboard() {
           </div>
         )}
 
-        {!loading && recentGrowth.length > 0 && (
+        {!loading && recentGrowth.length > 1 && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-6">Recent growth</h2>
+            <h2 className="font-display text-xl text-ink mb-6">More recent progress</h2>
             <div className="space-y-3">
-              {recentGrowth.map((row) => (
+              {recentGrowth.slice(1).map((row) => (
                 <Link
                   key={row.id}
                   to={`/skills/${row.skill_id}`}
@@ -565,6 +549,97 @@ function ConnectionsActivityFeed({ events }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function DashboardSkeleton() {
+  return (
+    <div role="status" aria-live="polite">
+      <span className="sr-only">Loading your dashboard…</span>
+      <div aria-hidden="true" className="grid gap-4 lg:grid-cols-3 animate-pulse motion-reduce:animate-none">
+        <div className="h-48 rounded-lg bg-card border border-hairline lg:col-span-2" />
+        <div className="h-48 rounded-lg bg-card border border-hairline" />
+        <div className="h-20 rounded-lg bg-card border border-hairline lg:col-span-3" />
+      </div>
+    </div>
+  )
+}
+
+export function FocusPanel({ recommendation, recentGrowth: growth }) {
+  const hasGrowth = Boolean(growth)
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      <div className={`rounded-lg bg-moss text-paper p-6 sm:p-8 ${hasGrowth ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
+        <h2 className="font-display text-2xl sm:text-3xl text-balance">
+          {recommendation ? recommendation.item.label : 'Choose where to grow next'}
+        </h2>
+        <p className="mt-3 max-w-xl text-sm sm:text-base text-paper">
+          {recommendation
+            ? `${recommendation.item.description} Keep ${recommendation.skill.name} moving forward with this next step.`
+            : 'Review your skills and choose the one that matters most right now.'}
+        </p>
+        <Link
+          to={recommendation ? `/skills/${recommendation.skill.id}` : '/skills'}
+          className="inline-flex items-center rounded-md bg-paper text-ink px-4 py-2.5 mt-6 text-sm font-medium hover:opacity-90"
+        >
+          {recommendation ? `Continue with ${recommendation.skill.name}` : 'Review your skills'}
+          <span aria-hidden="true" className="ml-2">→</span>
+        </Link>
+      </div>
+
+      {growth && (
+        <Link
+          to={`/skills/${growth.skill_id}`}
+          className="rounded-lg border border-hairline bg-card p-6 hover:border-moss transition-colors"
+        >
+          <h2 className="font-display text-xl text-ink">Your latest progress</h2>
+          <div className="flex items-center gap-3 mt-5">
+            <GrowthRing level={growth.previousLevel} size={42} color="var(--color-hairline)" />
+            <GrowthArrow />
+            <GrowthRing level={growth.level} size={58} targetLevel={growth.target?.target_level} />
+          </div>
+          <p className="font-medium text-ink mt-4 truncate">{growth.skills?.name ?? 'Skill'}</p>
+          <p className="text-sm text-secondary mt-1">
+            {growth.previousLevel ? LEVEL_LABELS[growth.previousLevel] : 'New'} → {LEVEL_LABELS[growth.level]}
+          </p>
+          <p className="font-mono text-xs text-secondary mt-3" title={formatAbsoluteDate(growth.assessed_at)}>
+            {formatRelativeDate(growth.assessed_at)}
+          </p>
+        </Link>
+      )}
+    </div>
+  )
+}
+
+export function OverviewStrip({ counts }) {
+  const items = [
+    { to: '/skills', label: 'Skills', value: counts.skills, unit: 'tracked' },
+    { to: '/experience', label: 'Experience', value: counts.experience, unit: 'entries' },
+    { to: '/learning', label: 'Courses', value: counts.courses, unit: 'completed' },
+    { to: '/connections', label: 'Connections', value: counts.connections, unit: 'people' },
+  ]
+
+  return (
+    <div className="grid grid-cols-2 border-y border-hairline lg:grid-cols-4">
+      {items.map((item, index) => (
+        <Link
+          key={item.to}
+          to={item.to}
+          className={`group flex items-baseline gap-2 py-4 hover:text-moss ${
+            index % 2 === 0 ? 'pr-4' : 'pl-4'
+          } ${index % 2 === 1 ? 'border-l border-hairline' : ''} ${
+            index > 1 ? 'border-t border-hairline lg:border-t-0' : ''
+          } ${index > 0 ? 'lg:border-l lg:pl-5' : ''}`}
+        >
+          <span className="font-display text-2xl text-ink group-hover:text-moss">{item.value}</span>
+          <span className="min-w-0 text-sm text-secondary">
+            <span className="block text-ink group-hover:text-moss">{item.label}</span>
+            <span className="text-xs">{item.unit}</span>
+          </span>
+        </Link>
+      ))}
     </div>
   )
 }
@@ -746,20 +821,6 @@ function ReminderRow({ to, label, date, overdue = false }) {
       >
         {formatRelativeDate(date)}
       </span>
-    </Link>
-  )
-}
-
-function SummaryCard({ to, title, value, unit }) {
-  return (
-    <Link
-      to={to}
-      className="bg-card border border-hairline rounded-lg p-5 hover:border-moss transition-colors block"
-    >
-      <h3 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">{title}</h3>
-      <p className="font-display text-3xl text-ink">{value}</p>
-      <p className="text-xs text-secondary mt-1">{unit}</p>
-      <p className="text-xs text-moss font-medium mt-3">View {title.toLowerCase()} →</p>
     </Link>
   )
 }

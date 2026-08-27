@@ -95,7 +95,7 @@ export default function Signup() {
         )}
 
         {confirmationSent ? (
-          <p className="text-sm text-ink">
+          <p role="status" className="text-sm text-ink">
             Check your email to confirm your account, then log in.
           </p>
         ) : (
@@ -158,7 +158,7 @@ export default function Signup() {
               />
             </div>
 
-            {error && <p className="text-sm text-red-700">{error}</p>}
+            {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
             <button
               type="submit"

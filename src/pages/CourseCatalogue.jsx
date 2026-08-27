@@ -7,6 +7,7 @@ import { LEVEL_LABELS } from '../lib/levels'
 import AppHeader from '../components/AppHeader'
 import FilterRow from '../components/FilterRow'
 import CourseThumbnail from '../components/CourseThumbnail'
+import AccessibleDialog from '../components/AccessibleDialog'
 
 export default function CourseCatalogue() {
   const { user } = useAuth()
@@ -146,14 +147,14 @@ export default function CourseCatalogue() {
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
         {scope?.backTo && (
           <Link to={scope.backTo} className="text-sm text-secondary hover:text-ink mb-4 inline-block">
             ← Back to {scope.skillName ?? 'skill'}
           </Link>
         )}
 
-        <h2 className="font-display text-xl text-ink mb-2">Find training</h2>
+        <h1 className="font-display text-xl text-ink mb-2">Find training</h1>
         <p className="text-sm text-secondary mb-6">
           Browse the course catalogue and enrol in something new — enrolling adds it to your training record.
         </p>
@@ -171,6 +172,7 @@ export default function CourseCatalogue() {
         )}
 
         <input
+          aria-label="Search training"
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -217,8 +219,8 @@ export default function CourseCatalogue() {
           </div>
         )}
 
-        {error && <p className="text-sm text-red-700 mb-4">{error}</p>}
-        {loading && <p className="text-secondary">Loading…</p>}
+        {error && <p role="alert" className="text-sm text-red-700 mb-4">{error}</p>}
+        {loading && <p role="status" className="text-secondary">Loading…</p>}
 
         {!loading && filtered.length === 0 && (
           <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
@@ -317,13 +319,13 @@ export default function CourseCatalogue() {
 
 function CourseDetailModal({ course, enrolled, completed, enrolling, onEnrol, onClose }) {
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <AccessibleDialog
+      labelledBy="catalogue-course-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
         <div className="flex items-center justify-between mb-2 gap-4">
-          <h2 className="font-display text-xl text-ink">{course.name}</h2>
+          <h2 id="catalogue-course-dialog-title" className="font-display text-xl text-ink">{course.name}</h2>
           <button type="button" onClick={onClose} className="shrink-0 text-secondary hover:text-ink text-sm">
             Close
           </button>
@@ -360,7 +362,6 @@ function CourseDetailModal({ course, enrolled, completed, enrolling, onEnrol, on
         >
           {completed ? 'Completed ✓' : enrolled ? 'Enrolled ✓' : enrolling ? 'Enrolling…' : 'Enrol'}
         </button>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }

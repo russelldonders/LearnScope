@@ -61,9 +61,9 @@ export default function Learning() {
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="font-display text-xl text-ink">Your learning</h2>
+          <h1 className="font-display text-xl text-ink">Your learning</h1>
           <Link
             to="/training"
             className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90"
@@ -73,7 +73,7 @@ export default function Learning() {
         </div>
 
         {loading && <p className="text-secondary">Loading…</p>}
-        {error && <p className="text-red-700 text-sm">{error}</p>}
+        {error && <p role="alert" className="text-red-700 text-sm">{error}</p>}
 
         {!loading && courses.length === 0 && (
           <div className="text-center py-16 border border-dashed border-hairline rounded-lg">

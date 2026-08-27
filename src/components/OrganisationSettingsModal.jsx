@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { updateOrganisation, uploadOrganisationLogo, removeOrganisationLogo } from '../lib/admin/organisations'
+import AccessibleDialog from './AccessibleDialog'
 
 const MAX_LOGO_BYTES = 5 * 1024 * 1024
 
@@ -69,12 +70,13 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[60]" onClick={onClose}>
-      <div
-        className="w-full max-w-lg bg-card border border-hairline rounded-lg p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 className="font-display text-lg text-ink mb-4">Organisation settings</h3>
+    <AccessibleDialog
+      labelledBy="organisation-settings-dialog-title"
+      onClose={onClose}
+      overlayClassName="z-[60]"
+      panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+        <h2 id="organisation-settings-dialog-title" className="font-display text-lg text-ink mb-4">Organisation settings</h2>
 
         <form onSubmit={handleSave} className="space-y-4">
           <div>
@@ -173,7 +175,6 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }

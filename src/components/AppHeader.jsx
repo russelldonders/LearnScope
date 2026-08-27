@@ -59,6 +59,12 @@ export default function AppHeader({ hideNavLinks = false }) {
 
   return (
     <header className="border-b border-hairline bg-card">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-ink focus:px-4 focus:py-2 focus:text-paper"
+      >
+        Skip to main content
+      </a>
       <div className="max-w-4xl mx-auto px-4 py-3">
         <div className="flex items-center justify-between gap-4">
           <Link to="/dashboard" className="flex items-center gap-2 font-display text-2xl text-ink shrink-0">
