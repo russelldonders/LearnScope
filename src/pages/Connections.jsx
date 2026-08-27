@@ -146,12 +146,13 @@ export default function Connections() {
     <div className="min-h-screen bg-paper">
       <AppHeader />
 
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-10">
+      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8 space-y-10">
+        <h1 className="sr-only">Connections</h1>
         <div>
           <h2 className="font-display text-xl text-ink mb-6">Your connections</h2>
 
           {loading && <p className="text-secondary">Loading…</p>}
-          {error && <p className="text-red-700 text-sm">{error}</p>}
+          {error && <p role="alert" className="text-red-700 text-sm">{error}</p>}
 
           {!loading && connections.length === 0 && (
             <div className="text-center py-16 border border-dashed border-hairline rounded-lg">

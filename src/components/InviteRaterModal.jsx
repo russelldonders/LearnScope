@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import AccessibleDialog from './AccessibleDialog'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
 import {
@@ -155,12 +156,12 @@ export default function InviteRaterModal({ skill, afterSelfAssessment = false, o
   const selectedCount = [...selectedConnectionIds].filter((id) => connectionStatus.get(id) !== 'sent').length
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-sm bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="font-display text-2xl text-ink mb-1">
+    <AccessibleDialog
+      labelledBy="invite-rater-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-sm bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+        <h2 id="invite-rater-dialog-title" className="font-display text-2xl text-ink mb-1">
           {afterSelfAssessment ? "Now invite someone to confirm it" : 'Invite someone to rate this'}
         </h2>
         <p className="text-sm text-secondary mb-4">
@@ -331,7 +332,6 @@ export default function InviteRaterModal({ skill, afterSelfAssessment = false, o
         >
           Close
         </button>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }

@@ -84,8 +84,8 @@ export default function ProviderConsole() {
           learner-facing app -- the learner nav (Skills/Experience/etc.)
           isn't relevant here and just adds noise/wrong-context links. */}
       <AppHeader hideNavLinks />
-      <main className="max-w-5xl mx-auto px-4 py-8">
-        <h2 className="font-display text-xl text-ink mb-1">Provider console</h2>
+      <main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 py-8">
+        <h1 className="font-display text-xl text-ink mb-1">Provider console</h1>
         <p className="text-sm text-secondary mb-6">
           Create and build out training, then submit it for approval, manage your organisation's users, and
           maintain a shared library of resources.

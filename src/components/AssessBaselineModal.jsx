@@ -9,6 +9,7 @@ import {
   assessBaseline,
   saveAssessmentResult,
 } from '../lib/baselineAssessment'
+import AccessibleDialog from './AccessibleDialog'
 
 // mode: 'baseline' (identified -> baseline_assessed, one-time) or
 // 'evaluate' (always-available re-assessment). Same synthesis either way --
@@ -85,12 +86,13 @@ export default function AssessBaselineModal({
       : "Confirming will update the skill's current baseline level and add this as a new baseline entry on the timeline -- the previous baseline stays in the history."
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="font-display text-2xl text-ink mb-1">{heading}</h2>
+    <AccessibleDialog
+      labelledBy="assess-baseline-title"
+      onClose={saving ? undefined : onClose}
+      closeOnBackdrop={!saving}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+        <h2 id="assess-baseline-title" className="font-display text-2xl text-ink mb-1">{heading}</h2>
         <p className="text-sm text-secondary mb-4">{skill.name}</p>
 
         {loading && (
@@ -98,7 +100,7 @@ export default function AssessBaselineModal({
             Weighing self-assessment, peer ratings and recorded activity…
           </p>
         )}
-        {error && <p className="text-sm text-red-700">{error}</p>}
+        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
         {result && !loading && (
           <div>
@@ -132,7 +134,6 @@ export default function AssessBaselineModal({
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }

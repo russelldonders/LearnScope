@@ -6,6 +6,7 @@ import { EXPERIENCE_TYPES } from '../lib/experienceTypes'
 import TimelineItem from './TimelineItem'
 import ExperienceModal from './ExperienceModal'
 import AddExperienceButton from './AddExperienceButton'
+import AccessibleDialog from './AccessibleDialog'
 
 const ADD_EXPERIENCE_TYPES = EXPERIENCE_TYPES.filter((t) => t.value !== 'education').map((t) => t.value)
 
@@ -122,7 +123,7 @@ export default function ExperienceSection() {
   return (
     <section>
       <div className="mb-6">
-        <h2 className="font-display text-xl text-ink mb-3">Experience timeline</h2>
+        <h1 className="font-display text-xl text-ink mb-3">Experience timeline</h1>
         <AddExperienceButton types={ADD_EXPERIENCE_TYPES} onSelect={setModalType} />
       </div>
 
@@ -195,12 +196,12 @@ function CurrentJobPrompt({ existingJob, onEndAndContinue, onKeepBoth, onCancel 
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onCancel}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="font-display text-xl text-ink mb-2">You already have a current job</h2>
+    <AccessibleDialog
+      labelledBy="current-job-dialog-title"
+      onClose={onCancel}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6"
+    >
+        <h2 id="current-job-dialog-title" className="font-display text-xl text-ink mb-2">You already have a current job</h2>
         <p className="text-sm text-secondary mb-4">
           {existingJob.title}
           {existingJob.organization ? ` at ${existingJob.organization}` : ''} is marked as your current job. Would
@@ -248,7 +249,6 @@ function CurrentJobPrompt({ existingJob, onEndAndContinue, onKeepBoth, onCancel 
             Cancel
           </button>
         </div>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }

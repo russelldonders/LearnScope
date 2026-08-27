@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { contentFileUrl, updateVideoEdit } from '../lib/courseContent'
+import AccessibleDialog from './AccessibleDialog'
 import {
   OVERLAY_SIZE_PX,
   PLAYBACK_RATES,
@@ -104,12 +105,12 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-3xl bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="font-display text-xl text-ink mb-1">Edit video</h2>
+    <AccessibleDialog
+      labelledBy="video-editor-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-3xl bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+        <h2 id="video-editor-dialog-title" className="font-display text-xl text-ink mb-1">Edit video</h2>
         <p className="text-sm text-secondary mb-4 truncate">{resource.title}</p>
 
         <div
@@ -358,8 +359,7 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
             Cancel
           </button>
         </div>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }
 

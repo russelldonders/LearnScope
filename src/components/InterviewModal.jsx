@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import GrowthRing from './GrowthRing'
 import { KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
 import { fetchOrGenerateInterviewPlan, sendInterviewTurn, saveInterviewAttempt } from '../lib/skillDiagnostics'
+import AccessibleDialog from './AccessibleDialog'
 
 const SpeechRecognitionAPI =
   typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null
@@ -185,14 +186,14 @@ export default function InterviewModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] flex flex-col overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <AccessibleDialog
+      labelledBy="interview-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] flex flex-col overflow-y-auto overscroll-contain"
+    >
         <div className="flex items-start justify-between mb-1">
           <div>
-            <h2 className="font-display text-2xl text-ink">Interview me</h2>
+            <h2 id="interview-dialog-title" className="font-display text-2xl text-ink">Interview me</h2>
             <p className="text-sm text-secondary">
               {skill.name} · {calibrating ? 'finding your level' : `pitched at ${KNOWLEDGE_LEVEL_LABELS[calibratedLevel]}`}
             </p>
@@ -305,7 +306,6 @@ export default function InterviewModal({
             )}
           </>
         )}
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }

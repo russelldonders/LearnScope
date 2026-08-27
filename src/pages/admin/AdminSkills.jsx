@@ -73,6 +73,7 @@ export default function AdminSkills() {
     <AdminLayout>
       <div className="space-y-4">
         <input
+          aria-label="Search skills"
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -80,10 +81,10 @@ export default function AdminSkills() {
           className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
         />
 
-        {error && <p className="text-sm text-red-700">{error}</p>}
+        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
         {loading ? (
-          <p className="text-secondary">Loading…</p>
+          <p role="status" className="text-secondary">Loading…</p>
         ) : (
           <div className="bg-card border border-hairline rounded-lg divide-y divide-hairline">
             {filtered.map((skill) => (

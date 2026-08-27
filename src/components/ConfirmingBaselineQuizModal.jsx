@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import GrowthRing from './GrowthRing'
 import { KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
 import { fetchOrGenerateDiagnosticQuiz, saveDiagnosticAttempt } from '../lib/skillDiagnostics'
+import AccessibleDialog from './AccessibleDialog'
 
 // A learner is judged to genuinely be at the level they self-assessed if
 // they get at least 70% of the calibrated questions right; below that, the
@@ -210,12 +211,12 @@ export default function ConfirmingBaselineQuizModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="font-display text-2xl text-ink mb-1">
+    <AccessibleDialog
+      labelledBy="knowledge-quiz-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+        <h2 id="knowledge-quiz-dialog-title" className="font-display text-2xl text-ink mb-1">
           {calibrating ? 'Find your knowledge level' : 'Confirm your knowledge'}
         </h2>
         <p className="text-sm text-secondary mb-4">
@@ -314,7 +315,6 @@ export default function ConfirmingBaselineQuizModal({
             </button>
           </div>
         )}
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }

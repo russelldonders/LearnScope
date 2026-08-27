@@ -10,6 +10,7 @@ import { COURSE_TYPES } from '../lib/courseTypes'
 import { activityName, verbLabel, relatedSkillFromStatement, formatDuration } from '../lib/xapiStatement'
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import GrowthRing from './GrowthRing'
+import AccessibleDialog from './AccessibleDialog'
 import EvidenceFields from './EvidenceFields'
 import RecordActivityModal from './RecordActivityModal'
 import ConfirmDialog from './ConfirmDialog'
@@ -122,12 +123,12 @@ export default function CourseModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="font-display text-2xl text-ink mb-4">
+    <AccessibleDialog
+      labelledBy="course-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+        <h2 id="course-dialog-title" className="font-display text-2xl text-ink mb-4">
           {isEditing ? course.name : 'Add a course'}
         </h2>
 
@@ -313,7 +314,6 @@ export default function CourseModal({
             user={user}
           />
         )}
-      </div>
 
       {confirmingDelete && (
         <ConfirmDialog
@@ -323,7 +323,7 @@ export default function CourseModal({
           confirming={saving}
         />
       )}
-    </div>
+    </AccessibleDialog>
   )
 }
 

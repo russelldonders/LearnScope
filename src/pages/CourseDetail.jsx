@@ -173,7 +173,7 @@ export default function CourseDetail() {
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
         <Link to={backTo} className="text-sm text-secondary hover:text-ink mb-6 inline-block">
           {backLabel}
         </Link>
@@ -185,7 +185,7 @@ export default function CourseDetail() {
           <div className="bg-card border border-hairline rounded-lg p-6">
             <div className="flex items-start justify-between gap-4 flex-wrap mb-1">
               <div>
-                <h2 className="font-display text-2xl text-ink">{course.name}</h2>
+                <h1 className="font-display text-2xl text-ink">{course.name}</h1>
                 <p className="font-mono text-xs text-secondary mt-1">
                   {course.provider &&
                     (catalogueCourse?.providerSlug ? (

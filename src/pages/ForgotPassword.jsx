@@ -32,7 +32,7 @@ export default function ForgotPassword() {
         <p className="text-secondary text-sm mb-6">Reset your password.</p>
 
         {sent ? (
-          <p className="text-sm text-ink">
+          <p role="status" className="text-sm text-ink">
             If an account exists for that email, we've sent a link to reset your password.
           </p>
         ) : (
@@ -51,7 +51,7 @@ export default function ForgotPassword() {
               />
             </div>
 
-            {error && <p className="text-sm text-red-700">{error}</p>}
+            {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
             <button
               type="submit"

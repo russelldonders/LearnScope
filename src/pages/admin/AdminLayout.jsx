@@ -21,8 +21,8 @@ export default function AdminLayout({ children }) {
           is a distinct workspace from the learner-facing app, with its own
           nav (below) for switching between admin sections. */}
       <AppHeader hideNavLinks />
-      <main className="max-w-5xl mx-auto px-4 py-8">
-        <h2 className="font-display text-xl text-ink mb-1">Platform console</h2>
+      <main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 py-8">
+        <h1 className="font-display text-xl text-ink mb-1">Platform console</h1>
         <p className="text-sm text-secondary mb-6">
           Manage users, provider organisations, and the shared course catalogue, skill library and
           tags.
