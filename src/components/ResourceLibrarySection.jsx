@@ -32,6 +32,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [previewingId, setPreviewingId] = useState(null)
+  const [showUploadForm, setShowUploadForm] = useState(false)
   const [type, setType] = useState('video')
   const [title, setTitle] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -71,6 +72,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
         await addExternalVideoResource(organisationId, userId, videoUrl, title)
         setTitle('')
         setVideoUrl('')
+        setShowUploadForm(false)
         await load()
       } catch (err) {
         setError(err.message)
@@ -95,6 +97,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
       setTitle('')
       if (fileInputRef.current) fileInputRef.current.value = ''
       setFileName('')
+      setShowUploadForm(false)
       await load()
     } catch (err) {
       setError(err.message)
@@ -133,99 +136,25 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
 
   return (
     <div>
-      <div className="mb-4">
-        <h3 className="font-display text-lg text-ink mb-1">Resources</h3>
-        <p className="text-sm text-secondary">
-          Upload video, files, and SCORM packages here, then attach them to any of your training courses from that
-          course's own edit view.
-        </p>
+      <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+        <div>
+          <h3 className="font-display text-lg text-ink">Resources</h3>
+          <p className="text-sm text-secondary mt-0.5">
+            Upload video, files, and SCORM packages here, then attach them to any of your training courses from that
+            course's own edit view.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowUploadForm((v) => !v)}
+          className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 shrink-0"
+        >
+          {showUploadForm ? 'Cancel' : '+ Upload resource'}
+        </button>
       </div>
 
-      {loading ? (
-        <p className="text-secondary">Loading…</p>
-      ) : resources.length === 0 ? (
-        <div className="text-center py-12 border border-dashed border-hairline rounded-lg mb-4">
-          <p className="text-secondary">No resources uploaded yet.</p>
-        </div>
-      ) : (
-        <ul className="divide-y divide-hairline border border-hairline rounded-md mb-4">
-          {resources.map((resource) => (
-            <li key={resource.id} className="p-3 text-sm">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-ink truncate">{resource.title}</p>
-                  <p className="font-mono text-[10px] text-secondary">{TYPE_LABELS[resource.type]}</p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {resource.type === 'file' ? (
-                    // download, not target="_blank" -- an unrestricted-type
-                    // upload served same-origin must never open as a
-                    // navigation (see ScormPlayer.jsx's sandbox comment for
-                    // the full reasoning).
-                    <a
-                      href={contentFileUrl(resource)}
-                      download={resource.file_name || true}
-                      className="text-xs text-moss font-medium"
-                    >
-                      Download
-                    </a>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setPreviewingId((id) => (id === resource.id ? null : resource.id))}
-                      className="text-xs text-moss font-medium"
-                    >
-                      {previewingId === resource.id ? 'Hide preview' : 'Preview'}
-                    </button>
-                  )}
-                  {resource.type === 'video' && (
-                    <button
-                      type="button"
-                      onClick={() => setEditingResource(resource)}
-                      className="text-xs text-moss font-medium"
-                    >
-                      Edit
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setPendingDelete(resource)}
-                    className="text-xs text-red-700 hover:underline"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-              {previewingId === resource.id && resource.type === 'video' && (
-                <EditedVideoPlayer resource={resource} className="w-full mt-2 rounded-md bg-black" />
-              )}
-              {previewingId === resource.id && resource.type === 'scorm' && (
-                <div className="mt-2">
-                  <ScormPlayer contentItem={resource} userId={userId} />
-                </div>
-              )}
-              {previewingId === resource.id && resource.type === 'xapi' && (
-                <div className="mt-2">
-                  <XapiPlayer contentItem={resource} userId={userId} />
-                </div>
-              )}
-              {previewingId === resource.id && resource.type === 'external_video' && (
-                <iframe
-                  src={resource.external_url}
-                  title={resource.title}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  className="w-full aspect-video mt-2 rounded-md"
-                />
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
-
-      <div className="bg-card border border-hairline rounded-lg p-4 flex flex-wrap items-end gap-2">
+      {showUploadForm && (
+        <div className="bg-card border border-hairline rounded-lg p-4 flex flex-wrap items-end gap-2 mb-4">
         <div>
           <label className="block text-xs text-secondary mb-1" htmlFor="resourceType">
             Type
@@ -326,7 +255,92 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
         >
           {uploading ? 'Uploading…' : 'Add'}
         </button>
-      </div>
+        </div>
+      )}
+
+      {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
+
+      {loading ? (
+        <p className="text-secondary">Loading…</p>
+      ) : resources.length === 0 ? (
+        <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
+          <p className="text-secondary">No resources uploaded yet.</p>
+        </div>
+      ) : (
+        <ul className="divide-y divide-hairline border border-hairline rounded-md">
+          {resources.map((resource) => (
+            <li key={resource.id} className="p-3 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-ink truncate">{resource.title}</p>
+                  <p className="font-mono text-[10px] text-secondary">{TYPE_LABELS[resource.type]}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {resource.type === 'file' ? (
+                    // download, not target="_blank" -- an unrestricted-type
+                    // upload served same-origin must never open as a
+                    // navigation (see ScormPlayer.jsx's sandbox comment for
+                    // the full reasoning).
+                    <a
+                      href={contentFileUrl(resource)}
+                      download={resource.file_name || true}
+                      className="text-xs text-moss font-medium"
+                    >
+                      Download
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewingId((id) => (id === resource.id ? null : resource.id))}
+                      className="text-xs text-moss font-medium"
+                    >
+                      {previewingId === resource.id ? 'Hide preview' : 'Preview'}
+                    </button>
+                  )}
+                  {resource.type === 'video' && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingResource(resource)}
+                      className="text-xs text-moss font-medium"
+                    >
+                      Edit
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setPendingDelete(resource)}
+                    className="text-xs text-red-700 hover:underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+              {previewingId === resource.id && resource.type === 'video' && (
+                <EditedVideoPlayer resource={resource} className="w-full mt-2 rounded-md bg-black" />
+              )}
+              {previewingId === resource.id && resource.type === 'scorm' && (
+                <div className="mt-2">
+                  <ScormPlayer contentItem={resource} userId={userId} />
+                </div>
+              )}
+              {previewingId === resource.id && resource.type === 'xapi' && (
+                <div className="mt-2">
+                  <XapiPlayer contentItem={resource} userId={userId} />
+                </div>
+              )}
+              {previewingId === resource.id && resource.type === 'external_video' && (
+                <iframe
+                  src={resource.external_url}
+                  title={resource.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  className="w-full aspect-video mt-2 rounded-md"
+                />
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
 
       {pendingDelete && (
         <ConfirmDialog

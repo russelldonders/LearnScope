@@ -164,9 +164,7 @@ export default function ProviderConsole() {
                   <ProviderSkillsSection key={selectedOrg.id} organisationId={selectedOrg.id} userId={user.id} />
                 )}
                 {currentSection === 'staff' && myRole === 'admin' && (
-                  <div className="bg-card border border-hairline rounded-lg overflow-hidden">
-                    <OrganisationStaffPanel organisation={selectedOrg} />
-                  </div>
+                  <OrganisationStaffPanel key={selectedOrg.id} organisation={selectedOrg} />
                 )}
                 {currentSection === 'resources' && (
                   <ResourceLibrarySection key={selectedOrg.id} organisationId={selectedOrg.id} userId={user.id} />
