@@ -227,13 +227,14 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
     >
         {mode === 'search' && (
           <>
-            <h2 className="font-display text-2xl text-ink mb-1">Find a skill</h2>
+            <h2 data-dialog-initial-focus tabIndex={-1} className="font-display text-2xl text-ink mb-1">
+              Find a skill
+            </h2>
             <p className="text-sm text-secondary mb-4">
               Search the skill library, or create a new one if you can't find it.
             </p>
 
             <input
-              autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search skills…"
