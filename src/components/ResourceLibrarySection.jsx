@@ -301,7 +301,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
                       onClick={() => setEditingResource(resource)}
                       className="text-xs text-moss font-medium"
                     >
-                      Edit
+                      Edit Video
                     </button>
                   )}
                   <button
