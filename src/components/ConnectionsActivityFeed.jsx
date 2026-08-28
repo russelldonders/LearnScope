@@ -2,7 +2,7 @@ import PersonAvatar from './PersonAvatar'
 import { LEVEL_LABELS } from '../lib/levels'
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 
-// Turns one list_connections_activity (0063/0098) row into a plain-language
+// Turns one list_connections_activity (0063/0102) row into a plain-language
 // sentence -- everything needed to say it is already in the row itself
 // (skill_name/level/detail), never a client-side lookup, since each row is
 // independently privacy-checked server-side and shouldn't need extra trust.

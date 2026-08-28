@@ -5438,6 +5438,103 @@ end;
 $$;
 
 grant execute on function decline_invite(text) to authenticated;
+-- 0093's policies accidentally bind `name` to course_catalogue.name instead
+-- of the storage object's path, so every UUID-folder check fails.
+
+drop policy "Course editors can upload their course's image" on storage.objects;
+create policy "Course editors can upload their course's image"
+  on storage.objects for insert to authenticated
+  with check (
+    bucket_id = 'course-catalogue-images' and exists (
+      select 1 from course_catalogue cc
+      where cc.id::text = (storage.foldername(storage.objects.name))[1]
+        and (is_platform_admin((select auth.uid())) or (
+          cc.organisation_id is not null
+          and is_org_member(cc.organisation_id, (select auth.uid()))
+          and cc.status in ('draft', 'rejected')
+        ))
+    )
+  );
+
+drop policy "Course editors can replace their course's image" on storage.objects;
+create policy "Course editors can replace their course's image"
+  on storage.objects for update to authenticated
+  using (
+    bucket_id = 'course-catalogue-images' and exists (
+      select 1 from course_catalogue cc
+      where cc.id::text = (storage.foldername(storage.objects.name))[1]
+        and (is_platform_admin((select auth.uid())) or (
+          cc.organisation_id is not null
+          and is_org_member(cc.organisation_id, (select auth.uid()))
+          and cc.status in ('draft', 'rejected')
+        ))
+    )
+  )
+  with check (
+    bucket_id = 'course-catalogue-images' and exists (
+      select 1 from course_catalogue cc
+      where cc.id::text = (storage.foldername(storage.objects.name))[1]
+        and (is_platform_admin((select auth.uid())) or (
+          cc.organisation_id is not null
+          and is_org_member(cc.organisation_id, (select auth.uid()))
+          and cc.status in ('draft', 'rejected')
+        ))
+    )
+  );
+
+-- Storage upsert also performs a SELECT before UPDATE. Keep that SELECT
+-- path-scoped to editors; the public object endpoint remains unaffected.
+create policy "Course editors can read their course image object for replacement"
+  on storage.objects for select to authenticated
+  using (
+    bucket_id = 'course-catalogue-images' and exists (
+      select 1 from course_catalogue cc
+      where cc.id::text = (storage.foldername(storage.objects.name))[1]
+        and (is_platform_admin((select auth.uid())) or (
+          cc.organisation_id is not null
+          and is_org_member(cc.organisation_id, (select auth.uid()))
+          and cc.status in ('draft', 'rejected')
+        ))
+    )
+  );
+
+drop policy "Course editors can remove their course's image" on storage.objects;
+create policy "Course editors can remove their course's image"
+  on storage.objects for delete to authenticated
+  using (
+    bucket_id = 'course-catalogue-images' and exists (
+      select 1 from course_catalogue cc
+      where cc.id::text = (storage.foldername(storage.objects.name))[1]
+        and (is_platform_admin((select auth.uid())) or (
+          cc.organisation_id is not null
+          and is_org_member(cc.organisation_id, (select auth.uid()))
+          and cc.status in ('draft', 'rejected')
+        ))
+    )
+  );
+-- Screen recordings share the existing secure video storage and playback
+-- pipeline, but remain a distinct resource kind throughout the product.
+alter table content_resources drop constraint content_resources_type_check;
+alter table content_resources add constraint content_resources_type_check
+  check (type in ('video', 'screen_recording', 'file', 'scorm', 'xapi', 'external_video'));
+-- Generic web links are stored resources, distinct from canonicalized
+-- YouTube/Vimeo embeds. Both URL-backed types carry external_url and no
+-- storage path; uploaded resource types retain the inverse invariant.
+alter table content_resources drop constraint content_resources_type_check;
+alter table content_resources add constraint content_resources_type_check
+  check (type in ('video', 'screen_recording', 'file', 'scorm', 'xapi', 'external_video', 'web_url'));
+
+alter table content_resources drop constraint content_resources_storage_or_external_check;
+alter table content_resources add constraint content_resources_storage_or_external_check
+  check (
+    (
+      type in ('external_video', 'web_url')
+      and storage_path is null
+      and external_url is not null
+      and external_url ~ '^https?://'
+    )
+    or (type not in ('external_video', 'web_url') and storage_path is not null and external_url is null)
+  );
 -- Flips skills-profile sharing from opt-in to opt-out, per explicit product
 -- decision: new accounts (and new skills) now start shared with connections
 -- rather than private, and a learner turns sharing off if they don't want
@@ -5634,7 +5731,7 @@ grant execute on function get_member_since(uuid) to authenticated;
 -- skill_assessments/skill_targets are RLS'd to their own owner, so a
 -- connection has no client-side way to read this directly. Gated by the
 -- exact same is_connected + activity_feed_visible check as
--- list_connections_activity (0063/0098): this is the same privacy boundary,
+-- list_connections_activity (0063/0102): this is the same privacy boundary,
 -- just a richer per-skill shape than that feed's flat event rows.
 create or replace function list_connection_recent_growth(p_user_id uuid, p_limit int default 5)
 returns table (
@@ -5689,12 +5786,12 @@ as $$
 $$;
 
 grant execute on function list_connection_recent_growth(uuid, int) to authenticated;
--- Same opt-in-to-opt-out flip as 0097 (skills profile sharing), applied to
+-- Same opt-in-to-opt-out flip as 0101 (skills profile sharing), applied to
 -- the two remaining cross-user visibility defaults: connections seeing your
 -- activity feed, and being discoverable in skill search by anyone tracking
 -- the same skill (not just existing connections). Existing accounts are
 -- included, not just new signups -- every row currently at the old default
--- is flipped. As with 0097, a row already at a non-default value (an
+-- is flipped. As with 0101, a row already at a non-default value (an
 -- explicit past choice, including 'selective' for skill search) is left
 -- alone, since a plain UPDATE can't tell "never touched" apart from
 -- "deliberately set back to the old default" -- both look identical.

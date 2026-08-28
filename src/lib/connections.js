@@ -196,7 +196,7 @@ export async function listMyPeerRatings() {
 
 // The person's true signup date (auth.users.created_at), not duplicated
 // onto profiles -- see get_member_since in
-// 0099_connection_profile_growth_and_member_since.sql.
+// 0103_connection_profile_growth_and_member_since.sql.
 export async function getMemberSince(userId) {
   const { data, error } = await supabase.rpc('get_member_since', { p_user_id: userId })
   if (error) throw error
@@ -206,7 +206,7 @@ export async function getMemberSince(userId) {
 // Recent practical-axis level jumps for one other person, in the same shape
 // as Dashboard.jsx's own "recent growth" panel (previousLevel/level/target
 // per skill) -- see list_connection_recent_growth in
-// 0099_connection_profile_growth_and_member_since.sql for why this needs a
+// 0103_connection_profile_growth_and_member_since.sql for why this needs a
 // SECURITY DEFINER RPC rather than the direct skill_assessments/
 // skill_targets queries Dashboard uses for the signed-in user's own data.
 export async function listConnectionRecentGrowth(userId, limit = 5) {
@@ -312,7 +312,7 @@ export async function getSharedSkillCounts(userId, otherUserIds) {
 // (see ProfilePrivacy.jsx) -- list_connections_activity (0063) re-checks the
 // connection and the opt-in itself per row, so this never needs to filter
 // client-side. Pass userId to scope this to one connection's activity (see
-// 0098_scoped_connection_activity.sql) -- used by SkillsProfile.jsx; omit it
+// 0102_scoped_connection_activity.sql) -- used by SkillsProfile.jsx; omit it
 // for the Dashboard's "across all your connections" feed.
 export async function listConnectionsActivity(limit = 30, userId = null) {
   const { data, error } = await supabase.rpc('list_connections_activity', {

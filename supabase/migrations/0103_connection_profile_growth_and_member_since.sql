@@ -26,7 +26,7 @@ grant execute on function get_member_since(uuid) to authenticated;
 -- skill_assessments/skill_targets are RLS'd to their own owner, so a
 -- connection has no client-side way to read this directly. Gated by the
 -- exact same is_connected + activity_feed_visible check as
--- list_connections_activity (0063/0098): this is the same privacy boundary,
+-- list_connections_activity (0063/0102): this is the same privacy boundary,
 -- just a richer per-skill shape than that feed's flat event rows.
 create or replace function list_connection_recent_growth(p_user_id uuid, p_limit int default 5)
 returns table (

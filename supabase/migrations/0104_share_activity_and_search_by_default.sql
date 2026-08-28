@@ -1,9 +1,9 @@
--- Same opt-in-to-opt-out flip as 0097 (skills profile sharing), applied to
+-- Same opt-in-to-opt-out flip as 0101 (skills profile sharing), applied to
 -- the two remaining cross-user visibility defaults: connections seeing your
 -- activity feed, and being discoverable in skill search by anyone tracking
 -- the same skill (not just existing connections). Existing accounts are
 -- included, not just new signups -- every row currently at the old default
--- is flipped. As with 0097, a row already at a non-default value (an
+-- is flipped. As with 0101, a row already at a non-default value (an
 -- explicit past choice, including 'selective' for skill search) is left
 -- alone, since a plain UPDATE can't tell "never touched" apart from
 -- "deliberately set back to the old default" -- both look identical.
