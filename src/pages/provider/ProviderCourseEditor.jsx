@@ -6,7 +6,14 @@ import ScormPlayer from '../../components/ScormPlayer'
 import XapiPlayer from '../../components/XapiPlayer'
 import EditedVideoPlayer from '../../components/EditedVideoPlayer'
 import ConfirmDialog from '../../components/ConfirmDialog'
-import { getCatalogueCourse, updateProviderCourse, setCatalogueCourseStatus } from '../../lib/admin/catalogue'
+import CourseThumbnail from '../../components/CourseThumbnail'
+import {
+  getCatalogueCourse,
+  updateProviderCourse,
+  setCatalogueCourseStatus,
+  uploadCourseImage,
+  removeCourseImage,
+} from '../../lib/admin/catalogue'
 import {
   listCourseSections,
   createCourseSection,
@@ -39,6 +46,18 @@ const STATUS_LABELS = {
   rejected: 'Rejected',
   inactive: 'Inactive',
 }
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+// Info (name/type/duration/synopsis/image, save/submit/unpublish) and
+// Content (sections/resources) used to sit stacked on one long page --
+// split into tabs since the two are edited at different times (details
+// first, content once the basics are settled) and content on its own can
+// already run long for a course with several sections. Mirrors the
+// Overview/Skills/Activities/Details tab pattern in CourseModal.jsx.
+const TABS = [
+  { id: 'info', label: 'Info' },
+  { id: 'content', label: 'Content' },
+]
 
 // A course's own full-page editor -- structuring content into named,
 // ordered sections (0078) needs more room than the summary card in
@@ -54,6 +73,7 @@ export default function ProviderCourseEditor() {
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [error, setError] = useState(null)
+  const [tab, setTab] = useState('info')
 
   useEffect(() => {
     load()
@@ -93,8 +113,27 @@ export default function ProviderCourseEditor() {
 
         {course && (
           <div className="space-y-6">
-            <CourseHeader course={course} canEdit={canEdit} onSaved={load} />
-            <CourseSections courseId={course.id} organisationId={course.organisation_id} userId={user.id} canEdit={canEdit} />
+            <div className="flex items-center gap-1 border-b border-hairline">
+              {TABS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTab(t.id)}
+                  className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
+                    tab === t.id
+                      ? 'border-moss text-ink'
+                      : 'border-transparent text-secondary hover:text-ink'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {tab === 'info' && <CourseHeader course={course} canEdit={canEdit} onSaved={load} />}
+            {tab === 'content' && (
+              <CourseSections courseId={course.id} organisationId={course.organisation_id} userId={user.id} canEdit={canEdit} />
+            )}
           </div>
         )}
       </main>
@@ -170,6 +209,8 @@ function CourseHeader({ course, canEdit, onSaved }) {
       {course.status === 'rejected' && course.rejection_reason && (
         <p className="text-sm text-red-700 mb-4">Rejected: {course.rejection_reason}</p>
       )}
+
+      <CourseImageUpload course={course} canEdit={canEdit} onUpdated={onSaved} />
 
       {error && <p className="text-sm text-red-700 mb-4">{error}</p>}
 
@@ -269,6 +310,96 @@ function CourseHeader({ course, canEdit, onSaved }) {
           </div>
         </form>
       )}
+    </div>
+  )
+}
+
+// Overtakes CourseThumbnail's generated placeholder once set. Shown (and,
+// while canEdit, editable) regardless of which tab-form state the rest of
+// the card is in -- unlike the name/type/duration/synopsis fields, it isn't
+// part of the plain-object form state above since it uploads and persists
+// immediately on selection, same UX as OrganisationSettingsModal's logo
+// upload (a separate storage operation, not a row-field edit that waits for
+// Save).
+function CourseImageUpload({ course, canEdit, onUpdated }) {
+  const fileInputRef = useRef(null)
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState(null)
+
+  async function handleFileChange(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setError('Please choose an image file.')
+      return
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setError('That image is too large (max 5MB).')
+      return
+    }
+    setError(null)
+    setUploading(true)
+    try {
+      await uploadCourseImage(course.id, file)
+      await onUpdated()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function handleRemove() {
+    setUploading(true)
+    setError(null)
+    try {
+      await removeCourseImage(course.id)
+      await onUpdated()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="mb-4">
+      <span className="block text-sm text-secondary mb-1">Course image</span>
+      <div className="flex items-center gap-4">
+        <CourseThumbnail
+          name={course.name}
+          provider={course.provider}
+          imageUrl={course.image_url}
+          className="w-32 h-20 rounded-md overflow-hidden border border-hairline shrink-0"
+        />
+        {canEdit && (
+          <div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+              >
+                {uploading ? 'Uploading…' : course.image_url ? 'Change image' : 'Upload image'}
+              </button>
+              {course.image_url && (
+                <button
+                  type="button"
+                  onClick={handleRemove}
+                  disabled={uploading}
+                  className="text-sm text-secondary hover:text-red-700 disabled:opacity-60"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+            {error && <p className="text-xs text-red-700 mt-1">{error}</p>}
+          </div>
+        )}
+        <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+      </div>
     </div>
   )
 }
