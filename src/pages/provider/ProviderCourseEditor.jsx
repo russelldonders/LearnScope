@@ -64,7 +64,52 @@ function reorderById(list, draggedId, targetId, idKey) {
   return reordered
 }
 
-function DragHandle({ label, disabled, onDragStart, onDragEnd, onKeyDown }) {
+function dropTargetAt(event, itemAttribute, sectionAttribute) {
+  const element = document.elementFromPoint(event.clientX, event.clientY)
+  return {
+    itemId: itemAttribute ? element?.closest(`[${itemAttribute}]`)?.getAttribute(itemAttribute) : null,
+    sectionId: sectionAttribute ? element?.closest(`[${sectionAttribute}]`)?.getAttribute(sectionAttribute) : null,
+  }
+}
+
+export function DragHandle({
+  label,
+  disabled,
+  onDragStart,
+  onDragEnd,
+  onKeyDown,
+  onPointerDragStart,
+  onPointerDragMove,
+  onPointerDragEnd,
+}) {
+  function handlePointerDown(event) {
+    if (disabled || event.pointerType === 'mouse') return
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    onPointerDragStart?.(event)
+  }
+
+  function handlePointerMove(event) {
+    if (event.pointerType === 'mouse' || !event.currentTarget.hasPointerCapture(event.pointerId)) return
+    event.preventDefault()
+    if (event.clientY < 72) window.scrollBy({ top: -16, behavior: 'auto' })
+    else if (event.clientY > window.innerHeight - 72) window.scrollBy({ top: 16, behavior: 'auto' })
+    onPointerDragMove?.(event)
+  }
+
+  function finishPointerDrag(event) {
+    if (event.pointerType === 'mouse' || !event.currentTarget.hasPointerCapture(event.pointerId)) return
+    event.preventDefault()
+    onPointerDragEnd?.(event)
+    event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+
+  function cancelPointerDrag(event) {
+    if (event.pointerType === 'mouse' || !event.currentTarget.hasPointerCapture(event.pointerId)) return
+    onDragEnd?.()
+    event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+
   return (
     <button
       type="button"
@@ -73,9 +118,13 @@ function DragHandle({ label, disabled, onDragStart, onDragEnd, onKeyDown }) {
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onKeyDown={onKeyDown}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={finishPointerDrag}
+      onPointerCancel={cancelPointerDrag}
       aria-label={`${label}. Drag to reorder, or use the arrow keys.`}
       title="Drag to reorder"
-      className="inline-flex h-7 w-7 shrink-0 cursor-grab items-center justify-center rounded-md text-secondary hover:bg-paper hover:text-ink focus:outline-none focus:ring-2 focus:ring-moss active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
+      className="inline-flex h-11 w-11 md:h-7 md:w-7 shrink-0 touch-none cursor-grab items-center justify-center rounded-md text-secondary hover:bg-paper hover:text-ink focus:outline-none focus:ring-2 focus:ring-moss active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
     >
       <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
         <circle cx="5" cy="3.5" r="1" /><circle cx="11" cy="3.5" r="1" />
@@ -460,6 +509,8 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
   const [selectedSectionId, setSelectedSectionId] = useState(null)
   const [draggedSectionId, setDraggedSectionId] = useState(null)
   const [sectionDropId, setSectionDropId] = useState(null)
+  const [draggedOutlineItem, setDraggedOutlineItem] = useState(null)
+  const [outlineItemDropId, setOutlineItemDropId] = useState(null)
   // One shared lock prevents overlapping section/resource order writes.
   const [reordering, setReordering] = useState(false)
 
@@ -555,6 +606,73 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
     if (target) commitSectionOrder(sectionId, target.id)
   }
 
+  async function commitOutlineItemOrder(draggedId, targetSectionId, targetLinkId = null) {
+    const dragged = items.find((item) => item.linkId === draggedId)
+    if (!dragged) return
+    const sourceSectionId = dragged.sectionId
+    const sourceItems = (itemsBySection.get(sourceSectionId) ?? []).filter((item) => item.linkId !== draggedId)
+    const destinationItems = itemsBySection.get(targetSectionId) ?? []
+
+    let orderedDestination
+    if (sourceSectionId === targetSectionId && targetLinkId) {
+      orderedDestination = reorderById(destinationItems, draggedId, targetLinkId, 'linkId')
+    } else {
+      const withoutDragged = destinationItems.filter((item) => item.linkId !== draggedId)
+      const targetIndex = targetLinkId
+        ? withoutDragged.findIndex((item) => item.linkId === targetLinkId)
+        : withoutDragged.length
+      orderedDestination = [...withoutDragged]
+      orderedDestination.splice(targetIndex < 0 ? orderedDestination.length : targetIndex, 0, dragged)
+    }
+
+    if (orderedDestination === destinationItems) return
+
+    const normalizedDestination = orderedDestination.map((item, position) => ({ ...item, sectionId: targetSectionId, position }))
+    const normalizedSource = sourceSectionId === targetSectionId
+      ? []
+      : sourceItems.map((item, position) => ({ ...item, position }))
+    const previous = items
+    const affectedIds = new Set([...normalizedSource, ...normalizedDestination].map((item) => item.linkId))
+    setItems([
+      ...items.filter((item) => !affectedIds.has(item.linkId)),
+      ...normalizedSource,
+      ...normalizedDestination,
+    ])
+    setSelectedSectionId(targetSectionId ?? 'ungrouped')
+    setReordering(true)
+    setError(null)
+    try {
+      await reorderContentLinks(normalizedDestination, targetSectionId)
+      if (sourceSectionId !== targetSectionId) await reorderContentLinks(normalizedSource, sourceSectionId)
+      await load()
+    } catch (err) {
+      setItems(previous)
+      await load()
+      setError(`Couldn't move the resource. ${err.message}`)
+    } finally {
+      setReordering(false)
+      setDraggedOutlineItem(null)
+      setOutlineItemDropId(null)
+      setSectionDropId(null)
+    }
+  }
+
+  function handleOutlineItemKeyDown(event, item) {
+    const sectionItems = itemsBySection.get(item.sectionId) ?? []
+    if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      event.preventDefault()
+      const index = sectionItems.findIndex((candidate) => candidate.linkId === item.linkId)
+      const target = sectionItems[index + (event.key === 'ArrowUp' ? -1 : 1)]
+      if (target) commitOutlineItemOrder(item.linkId, item.sectionId, target.linkId)
+      return
+    }
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+    event.preventDefault()
+    const sectionIndex = sections.findIndex((section) => section.id === item.sectionId)
+    const targetSection = sections[sectionIndex + (event.key === 'ArrowLeft' ? -1 : 1)]
+    if (targetSection) commitOutlineItemOrder(item.linkId, targetSection.id)
+  }
+
   if (loading) return <p className="text-secondary">Loading content…</p>
 
   const selectedSection = sections.find((section) => section.id === selectedSectionId)
@@ -606,14 +724,16 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                 return (
                   <div
                     key={section.id}
+                    data-outline-section-id={section.id}
                     onDragOver={(event) => {
-                      if (!canEdit || !draggedSectionId || draggedSectionId === section.id) return
+                      if (!canEdit || (!draggedSectionId && !draggedOutlineItem) || draggedSectionId === section.id) return
                       event.preventDefault()
                       setSectionDropId(section.id)
                     }}
                     onDrop={(event) => {
                       event.preventDefault()
-                      if (draggedSectionId) commitSectionOrder(draggedSectionId, section.id)
+                      if (draggedOutlineItem) commitOutlineItemOrder(draggedOutlineItem.linkId, section.id)
+                      else if (draggedSectionId) commitSectionOrder(draggedSectionId, section.id)
                     }}
                     className={`rounded-md transition-[background-color,box-shadow] ${
                       sectionDropId === section.id ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
@@ -634,6 +754,22 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                             setSectionDropId(null)
                           }}
                           onKeyDown={(event) => handleSectionKeyDown(event, section.id)}
+                          onPointerDragStart={() => {
+                            setDraggedSectionId(section.id)
+                            setDraggedOutlineItem(null)
+                          }}
+                          onPointerDragMove={(event) => {
+                            const { sectionId } = dropTargetAt(event, null, 'data-outline-section-id')
+                            if (sectionId && sectionId !== section.id) setSectionDropId(sectionId)
+                          }}
+                          onPointerDragEnd={(event) => {
+                            const { sectionId } = dropTargetAt(event, null, 'data-outline-section-id')
+                            if (sectionId && sectionId !== section.id) commitSectionOrder(section.id, sectionId)
+                            else {
+                              setDraggedSectionId(null)
+                              setSectionDropId(null)
+                            }
+                          }}
                         />
                       )}
                       <button
@@ -654,7 +790,73 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                     {sectionItems.length > 0 && (
                       <ul className="mt-1 ml-7 space-y-0.5" aria-label={`${section.title} resources`}>
                         {sectionItems.map((item) => (
-                          <li key={item.linkId} className="truncate py-1 text-xs text-secondary">{item.title}</li>
+                          <li
+                            key={item.linkId}
+                            data-outline-item-id={item.linkId}
+                            onDragOver={(event) => {
+                              if (!canEdit || !draggedOutlineItem || draggedOutlineItem.linkId === item.linkId) return
+                              event.preventDefault()
+                              event.stopPropagation()
+                              setOutlineItemDropId(item.linkId)
+                              setSectionDropId(null)
+                            }}
+                            onDrop={(event) => {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              if (draggedOutlineItem) commitOutlineItemOrder(draggedOutlineItem.linkId, section.id, item.linkId)
+                            }}
+                            className={`flex min-w-0 items-center gap-1 rounded py-0.5 pr-1 transition-[background-color,box-shadow] ${
+                              outlineItemDropId === item.linkId ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
+                            }`}
+                          >
+                            {canEdit && (
+                              <DragHandle
+                                label={`Move ${item.title}`}
+                                disabled={reordering}
+                                onDragStart={(event) => {
+                                  event.stopPropagation()
+                                  event.dataTransfer.effectAllowed = 'move'
+                                  event.dataTransfer.setData('text/plain', item.linkId)
+                                  setDraggedOutlineItem(item)
+                                  setDraggedSectionId(null)
+                                }}
+                                onDragEnd={() => {
+                                  setDraggedOutlineItem(null)
+                                  setOutlineItemDropId(null)
+                                  setSectionDropId(null)
+                                }}
+                                onKeyDown={(event) => handleOutlineItemKeyDown(event, item)}
+                                onPointerDragStart={() => {
+                                  setDraggedOutlineItem(item)
+                                  setDraggedSectionId(null)
+                                }}
+                                onPointerDragMove={(event) => {
+                                  const target = dropTargetAt(event, 'data-outline-item-id', 'data-outline-section-id')
+                                  if (target.itemId && target.itemId !== item.linkId) {
+                                    setOutlineItemDropId(target.itemId)
+                                    setSectionDropId(null)
+                                  } else if (target.sectionId) {
+                                    setOutlineItemDropId(null)
+                                    setSectionDropId(target.sectionId)
+                                  }
+                                }}
+                                onPointerDragEnd={(event) => {
+                                  const target = dropTargetAt(event, 'data-outline-item-id', 'data-outline-section-id')
+                                  if (target.itemId && target.itemId !== item.linkId) {
+                                    const targetItem = items.find((candidate) => candidate.linkId === target.itemId)
+                                    if (targetItem) commitOutlineItemOrder(item.linkId, targetItem.sectionId, target.itemId)
+                                  } else if (target.sectionId) {
+                                    commitOutlineItemOrder(item.linkId, target.sectionId === 'ungrouped' ? null : target.sectionId)
+                                  } else {
+                                    setDraggedOutlineItem(null)
+                                    setOutlineItemDropId(null)
+                                    setSectionDropId(null)
+                                  }
+                                }}
+                              />
+                            )}
+                            <span className="min-w-0 flex-1 truncate text-xs text-secondary">{item.title}</span>
+                          </li>
                         ))}
                       </ul>
                     )}
@@ -662,20 +864,107 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                 )
               })}
               {ungroupedItems.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedSectionId('ungrouped')}
-                  aria-current={selectedSectionId === 'ungrouped' ? 'true' : undefined}
-                  className={`w-full flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors ${
-                    selectedSectionId === 'ungrouped'
-                      ? 'bg-card border border-moss text-ink'
-                      : 'border border-transparent text-secondary hover:bg-card hover:text-ink'
+                <div
+                  data-outline-section-id="ungrouped"
+                  onDragOver={(event) => {
+                    if (!canEdit || !draggedOutlineItem) return
+                    event.preventDefault()
+                    setSectionDropId('ungrouped')
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    if (draggedOutlineItem) commitOutlineItemOrder(draggedOutlineItem.linkId, null)
+                  }}
+                  className={`rounded-md transition-[background-color,box-shadow] ${
+                    sectionDropId === 'ungrouped' ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
                   }`}
                 >
-                  <span className="w-2 h-2 rounded-full border border-hairline shrink-0" aria-hidden="true" />
-                  <span className="min-w-0 flex-1 truncate font-medium">Ungrouped content</span>
-                  <span className="font-mono text-[10px] tabular-nums text-secondary shrink-0">{ungroupedItems.length}</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSectionId('ungrouped')}
+                    aria-current={selectedSectionId === 'ungrouped' ? 'true' : undefined}
+                    className={`w-full flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors ${
+                      selectedSectionId === 'ungrouped'
+                        ? 'bg-card border border-moss text-ink'
+                        : 'border border-transparent text-secondary hover:bg-card hover:text-ink'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full border border-hairline shrink-0" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 truncate font-medium">Ungrouped content</span>
+                    <span className="font-mono text-[10px] tabular-nums text-secondary shrink-0">{ungroupedItems.length}</span>
+                  </button>
+                  <ul className="mt-1 ml-7 space-y-0.5" aria-label="Ungrouped resources">
+                    {ungroupedItems.map((item) => (
+                      <li
+                        key={item.linkId}
+                        data-outline-item-id={item.linkId}
+                        onDragOver={(event) => {
+                          if (!canEdit || !draggedOutlineItem || draggedOutlineItem.linkId === item.linkId) return
+                          event.preventDefault()
+                          event.stopPropagation()
+                          setOutlineItemDropId(item.linkId)
+                          setSectionDropId(null)
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          if (draggedOutlineItem) commitOutlineItemOrder(draggedOutlineItem.linkId, null, item.linkId)
+                        }}
+                        className={`flex min-w-0 items-center gap-1 rounded py-0.5 pr-1 transition-[background-color,box-shadow] ${
+                          outlineItemDropId === item.linkId ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
+                        }`}
+                      >
+                        {canEdit && (
+                          <DragHandle
+                            label={`Move ${item.title}`}
+                            disabled={reordering}
+                            onDragStart={(event) => {
+                              event.stopPropagation()
+                              event.dataTransfer.effectAllowed = 'move'
+                              event.dataTransfer.setData('text/plain', item.linkId)
+                              setDraggedOutlineItem(item)
+                              setDraggedSectionId(null)
+                            }}
+                            onDragEnd={() => {
+                              setDraggedOutlineItem(null)
+                              setOutlineItemDropId(null)
+                              setSectionDropId(null)
+                            }}
+                            onKeyDown={(event) => handleOutlineItemKeyDown(event, item)}
+                            onPointerDragStart={() => {
+                              setDraggedOutlineItem(item)
+                              setDraggedSectionId(null)
+                            }}
+                            onPointerDragMove={(event) => {
+                              const target = dropTargetAt(event, 'data-outline-item-id', 'data-outline-section-id')
+                              if (target.itemId && target.itemId !== item.linkId) {
+                                setOutlineItemDropId(target.itemId)
+                                setSectionDropId(null)
+                              } else if (target.sectionId) {
+                                setOutlineItemDropId(null)
+                                setSectionDropId(target.sectionId)
+                              }
+                            }}
+                            onPointerDragEnd={(event) => {
+                              const target = dropTargetAt(event, 'data-outline-item-id', 'data-outline-section-id')
+                              if (target.itemId && target.itemId !== item.linkId) {
+                                const targetItem = items.find((candidate) => candidate.linkId === target.itemId)
+                                if (targetItem) commitOutlineItemOrder(item.linkId, targetItem.sectionId, target.itemId)
+                              } else if (target.sectionId) {
+                                commitOutlineItemOrder(item.linkId, target.sectionId === 'ungrouped' ? null : target.sectionId)
+                              } else {
+                                setDraggedOutlineItem(null)
+                                setOutlineItemDropId(null)
+                                setSectionDropId(null)
+                              }
+                            }}
+                          />
+                        )}
+                        <span className="min-w-0 flex-1 truncate text-xs text-secondary">{item.title}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
           </nav>
@@ -778,6 +1067,7 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
         {items.map((item) => (
           <li
             key={item.linkId}
+            data-content-item-id={item.linkId}
             onDragOver={(event) => {
               if (!canEdit || !draggedItemId || draggedItemId === item.linkId) return
               event.preventDefault()
@@ -807,6 +1097,19 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
                       setItemDropId(null)
                     }}
                     onKeyDown={(event) => handleItemKeyDown(event, item.linkId)}
+                    onPointerDragStart={() => setDraggedItemId(item.linkId)}
+                    onPointerDragMove={(event) => {
+                      const { itemId } = dropTargetAt(event, 'data-content-item-id', null)
+                      if (itemId && itemId !== item.linkId) setItemDropId(itemId)
+                    }}
+                    onPointerDragEnd={(event) => {
+                      const { itemId } = dropTargetAt(event, 'data-content-item-id', null)
+                      if (itemId && itemId !== item.linkId) commitItemOrder(item.linkId, itemId)
+                      else {
+                        setDraggedItemId(null)
+                        setItemDropId(null)
+                      }
+                    }}
                   />
                 )}
                 <div className="min-w-0">
@@ -1099,6 +1402,7 @@ function SectionCard({
           {items.map((item) => (
             <li
               key={item.linkId}
+              data-content-item-id={item.linkId}
               onDragOver={(event) => {
                 if (!canEdit || !draggedItemId || draggedItemId === item.linkId) return
                 event.preventDefault()
@@ -1128,6 +1432,19 @@ function SectionCard({
                         setItemDropId(null)
                       }}
                       onKeyDown={(event) => handleItemKeyDown(event, item.linkId)}
+                      onPointerDragStart={() => setDraggedItemId(item.linkId)}
+                      onPointerDragMove={(event) => {
+                        const { itemId } = dropTargetAt(event, 'data-content-item-id', null)
+                        if (itemId && itemId !== item.linkId) setItemDropId(itemId)
+                      }}
+                      onPointerDragEnd={(event) => {
+                        const { itemId } = dropTargetAt(event, 'data-content-item-id', null)
+                        if (itemId && itemId !== item.linkId) commitItemOrder(item.linkId, itemId)
+                        else {
+                          setDraggedItemId(null)
+                          setItemDropId(null)
+                        }
+                      }}
                     />
                   )}
                   <div className="min-w-0">

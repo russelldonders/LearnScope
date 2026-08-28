@@ -123,12 +123,12 @@ export async function linkResourceToCourse(courseId, resourceId, sectionId) {
   if (error) throw error
 }
 
-export async function reorderContentLinks(sectionItems) {
+export async function reorderContentLinks(sectionItems, sectionId = sectionItems[0]?.sectionId ?? null) {
   for (const [position, item] of sectionItems.entries()) {
-    if (item.position === position) continue
+    if (item.position === position && item.sectionId === sectionId) continue
     const { error } = await supabase
       .from('course_content_links')
-      .update({ position })
+      .update({ section_id: sectionId, position })
       .eq('id', item.linkId)
     if (error) throw error
   }
