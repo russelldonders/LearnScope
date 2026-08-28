@@ -423,11 +423,7 @@ export default function Dashboard() {
           <div>
             <h2 className="font-display text-xl text-ink mb-2">More ways to make progress</h2>
             <p className="text-sm text-secondary mb-6">Useful next steps across your other skills.</p>
-            {upNext.length - 1 > 5 ? (
-              <UpNextGrouped recommendations={upNext.slice(1)} />
-            ) : (
-              <UpNextSlider recommendations={upNext.slice(1)} />
-            )}
+            <UpNextSlider recommendations={upNext.slice(1)} />
           </div>
         )}
 
@@ -747,8 +743,42 @@ function SliderArrow({ direction, onClick }) {
   )
 }
 
+// Above 5 cards, skills sharing the same recommended action (e.g. several
+// skills all needing "Self-assess your own level") collapse into a single
+// action-focused card instead of each getting its own near-duplicate card --
+// an action used by only one skill still gets its normal skill-focused card,
+// so the slider ends up with mixed card types rather than all-or-nothing.
+// Below the threshold, one card per skill (unchanged) reads fine on its own.
+const UPNEXT_GROUPING_THRESHOLD = 5
+
+function buildUpNextSlides(recommendations) {
+  if (recommendations.length <= UPNEXT_GROUPING_THRESHOLD) {
+    return recommendations.map((rec) => ({ type: 'skill', skill: rec.skill, item: rec.item }))
+  }
+
+  // Same action (e.g. "Self-assess your own level") can come from different
+  // lifecycle stages with slightly different item.key/description --
+  // grouping by label is what reads as "one action" to the learner, so the
+  // first description seen for a label wins rather than trying to reconcile
+  // them. Insertion order follows upNext's existing stage-priority sort, so
+  // the most-urgent actions still lead.
+  const groups = new Map()
+  for (const rec of recommendations) {
+    const { label, description } = rec.item
+    if (!groups.has(label)) groups.set(label, { label, description, recs: [] })
+    groups.get(label).recs.push(rec)
+  }
+
+  return [...groups.values()].map((group) =>
+    group.recs.length === 1
+      ? { type: 'skill', skill: group.recs[0].skill, item: group.recs[0].item }
+      : { type: 'action', label: group.label, description: group.description, recs: group.recs }
+  )
+}
+
 function UpNextSlider({ recommendations }) {
   const { scrollerRef, canScrollLeft, canScrollRight, scrollByPage } = useHorizontalScroller()
+  const slides = buildUpNextSlides(recommendations)
 
   return (
     <div className="relative">
@@ -757,65 +787,85 @@ function UpNextSlider({ recommendations }) {
         ref={scrollerRef}
         className="scrollbar-hide flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 -mx-4 px-4 sm:mx-0 sm:px-0"
       >
-        {recommendations.map(({ skill, item }) => (
-          <Link
-            key={skill.id}
-            to={`/skills/${skill.id}`}
-            className="snap-start shrink-0 w-64 bg-card border border-hairline rounded-lg p-4 hover:border-moss transition-colors"
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <GrowthRing level={skill.level} size={40} />
-              <h3 className="font-display text-base text-ink truncate min-w-0">{skill.name}</h3>
+        {slides.map((slide) =>
+          slide.type === 'skill' ? (
+            <Link
+              key={slide.skill.id}
+              to={`/skills/${slide.skill.id}`}
+              className="snap-start shrink-0 w-64 bg-card border border-hairline rounded-lg p-4 hover:border-moss transition-colors"
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <GrowthRing level={slide.skill.level} size={40} />
+                <h3 className="font-display text-base text-ink truncate min-w-0">{slide.skill.name}</h3>
+              </div>
+              <p className="text-sm text-ink font-medium">{slide.item.label}</p>
+              <p className="text-xs text-secondary mt-1">{slide.item.description}</p>
+            </Link>
+          ) : (
+            <div
+              key={`action-${slide.label}`}
+              className="snap-start shrink-0 w-64 bg-card border border-hairline rounded-lg p-4"
+            >
+              <h3 className="font-display text-base text-ink">{slide.label}</h3>
+              <p className="text-xs text-secondary mt-1 mb-3">{slide.description}</p>
+              <ActionSkillsButton label={slide.label} recs={slide.recs} />
             </div>
-            <p className="text-sm text-ink font-medium">{item.label}</p>
-            <p className="text-xs text-secondary mt-1">{item.description}</p>
-          </Link>
-        ))}
+          )
+        )}
       </div>
       {canScrollRight && <SliderArrow direction="right" onClick={() => scrollByPage(1)} />}
     </div>
   )
 }
 
-// Same action (e.g. "Self-assess your own level") can come from different
-// lifecycle stages with slightly different item.key/description -- grouping
-// by label is what reads as "one action" to the learner, so the first
-// description seen for a label wins rather than trying to reconcile them.
-// Insertion order follows upNext's existing stage-priority sort, so the
-// group of most-urgent actions still leads.
-function groupUpNextByAction(recommendations) {
-  const groups = new Map()
-  for (const rec of recommendations) {
-    const { label, description } = rec.item
-    if (!groups.has(label)) groups.set(label, { label, description, recs: [] })
-    groups.get(label).recs.push(rec)
-  }
-  return [...groups.values()]
-}
+// Stands in for the skill-focused card's own Link when one action is shared
+// by several skills -- picking a skill from here is what replaces having
+// them all listed out on the card at once.
+function ActionSkillsButton({ label, recs }) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef(null)
 
-function UpNextGrouped({ recommendations }) {
-  const groups = groupUpNextByAction(recommendations)
+  useEffect(() => {
+    if (!open) return
+    function handleOutside(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false)
+    }
+    function handleEscape(e) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', handleOutside)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handleOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [open])
 
   return (
-    <div className="space-y-3">
-      {groups.map((group) => (
-        <div key={group.label} className="bg-card border border-hairline rounded-lg p-4">
-          <p className="text-sm text-ink font-medium">{group.label}</p>
-          <p className="text-xs text-secondary mt-1 mb-3">{group.description}</p>
-          <div className="flex flex-wrap gap-2">
-            {group.recs.map(({ skill }) => (
-              <Link
-                key={skill.id}
-                to={`/skills/${skill.id}`}
-                className="flex items-center gap-2 bg-paper border border-hairline rounded-full pl-1 pr-3 py-1 hover:border-moss transition-colors"
-              >
-                <GrowthRing level={skill.level} size={28} />
-                <span className="text-sm text-ink">{skill.name}</span>
-              </Link>
-            ))}
-          </div>
+    <div ref={containerRef} className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="true"
+        aria-label={`Choose a skill for: ${label}`}
+        className="text-sm font-medium text-moss hover:opacity-80"
+      >
+        {recs.length} skills
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 w-48 bg-card border border-hairline rounded-md shadow-lg z-50 overflow-hidden">
+          {recs.map(({ skill }) => (
+            <Link
+              key={skill.id}
+              to={`/skills/${skill.id}`}
+              className="block px-4 py-2.5 text-sm text-ink hover:bg-paper transition-colors truncate"
+            >
+              {skill.name}
+            </Link>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   )
 }
