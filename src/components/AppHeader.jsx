@@ -76,25 +76,6 @@ export default function AppHeader({ hideNavLinks = false }) {
             LearnScope
           </Link>
           <div className="flex items-center gap-2 shrink-0">
-            <Link
-              to="/actions"
-              aria-label={pendingActionCount > 0 ? `Actions, ${pendingActionCount} pending` : 'Actions'}
-              className={`relative flex items-center justify-center w-9 h-9 rounded-full border shrink-0 ${
-                location.pathname === '/actions'
-                  ? 'border-moss text-ink'
-                  : 'border-hairline text-ink hover:bg-paper'
-              }`}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
-              {pendingActionCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-moss text-paper text-xs font-medium">
-                  {pendingActionCount}
-                </span>
-              )}
-            </Link>
             <div className="relative" ref={menuRef}>
               <button
                 type="button"
@@ -169,6 +150,25 @@ export default function AppHeader({ hideNavLinks = false }) {
                 </div>
               )}
             </div>
+            <Link
+              to="/actions"
+              aria-label={pendingActionCount > 0 ? `Actions, ${pendingActionCount} pending` : 'Actions'}
+              className={`relative flex items-center justify-center w-9 h-9 rounded-full border shrink-0 ${
+                location.pathname === '/actions'
+                  ? 'border-moss text-ink'
+                  : 'border-hairline text-ink hover:bg-paper'
+              }`}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+              {pendingActionCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-moss text-paper text-xs font-medium">
+                  {pendingActionCount}
+                </span>
+              )}
+            </Link>
           </div>
         </div>
         {!hideNavLinks && (
