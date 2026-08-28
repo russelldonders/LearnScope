@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useNavVisibility } from '../context/NavVisibilityContext'
@@ -8,6 +8,7 @@ import { listIncomingPendingValidationRequests } from '../lib/skillValidationReq
 import AppHeader from '../components/AppHeader'
 import RecordActivitySection from '../components/RecordActivitySection'
 import FindSkillModal from '../components/FindSkillModal'
+import AccessibleDialog from '../components/AccessibleDialog'
 import GrowthRing from '../components/GrowthRing'
 import CourseThumbnail from '../components/CourseThumbnail'
 import PersonAvatar from '../components/PersonAvatar'
@@ -821,52 +822,52 @@ function UpNextSlider({ recommendations }) {
 // Stands in for the skill-focused card's own Link when one action is shared
 // by several skills -- picking a skill from here is what replaces having
 // them all listed out on the card at once.
+// A dropdown anchored to the button would get clipped by the slider's own
+// scroll container -- overflow-x-auto forces overflow-y to auto too (they
+// can't be visible/auto independently), so anything taller than the row
+// gets cut off and can even shift the row's scroll position. A dialog
+// avoids that entirely since its fixed overlay isn't part of the row's
+// layout or clipping box.
 function ActionSkillsButton({ label, recs }) {
   const [open, setOpen] = useState(false)
-  const containerRef = useRef(null)
-
-  useEffect(() => {
-    if (!open) return
-    function handleOutside(e) {
-      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false)
-    }
-    function handleEscape(e) {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', handleOutside)
-    document.addEventListener('keydown', handleEscape)
-    return () => {
-      document.removeEventListener('mousedown', handleOutside)
-      document.removeEventListener('keydown', handleEscape)
-    }
-  }, [open])
+  const titleId = useId()
 
   return (
-    <div ref={containerRef} className="relative inline-block">
+    <>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-haspopup="true"
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
         aria-label={`Choose a skill for: ${label}`}
         className="text-sm font-medium text-moss hover:opacity-80"
       >
         {recs.length} skills
       </button>
       {open && (
-        <div className="absolute left-0 top-full mt-1 w-48 bg-card border border-hairline rounded-md shadow-lg z-50 overflow-hidden">
-          {recs.map(({ skill }) => (
-            <Link
-              key={skill.id}
-              to={`/skills/${skill.id}`}
-              className="block px-4 py-2.5 text-sm text-ink hover:bg-paper transition-colors truncate"
-            >
-              {skill.name}
-            </Link>
-          ))}
-        </div>
+        <AccessibleDialog
+          labelledBy={titleId}
+          onClose={() => setOpen(false)}
+          panelClassName="w-full max-w-sm bg-card border border-hairline rounded-lg p-6"
+        >
+          <h2 id={titleId} className="font-display text-lg text-ink mb-1">
+            {label}
+          </h2>
+          <p className="text-sm text-secondary mb-4">Choose which skill to continue with.</p>
+          <div className="space-y-2">
+            {recs.map(({ skill }) => (
+              <Link
+                key={skill.id}
+                to={`/skills/${skill.id}`}
+                className="flex items-center gap-3 border border-hairline rounded-md p-2.5 hover:border-moss transition-colors"
+              >
+                <GrowthRing level={skill.level} size={28} />
+                <span className="text-sm text-ink">{skill.name}</span>
+              </Link>
+            ))}
+          </div>
+        </AccessibleDialog>
       )}
-    </div>
+    </>
   )
 }
 
