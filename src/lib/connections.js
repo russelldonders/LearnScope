@@ -287,9 +287,14 @@ export async function getSharedSkillCounts(userId, otherUserIds) {
 // Recent milestones from connections who've opted into activity_feed_visible
 // (see ProfilePrivacy.jsx) -- list_connections_activity (0063) re-checks the
 // connection and the opt-in itself per row, so this never needs to filter
-// client-side.
-export async function listConnectionsActivity(limit = 30) {
-  const { data, error } = await supabase.rpc('list_connections_activity', { p_limit: limit })
+// client-side. Pass userId to scope this to one connection's activity (see
+// 0098_scoped_connection_activity.sql) -- used by SkillsProfile.jsx; omit it
+// for the Dashboard's "across all your connections" feed.
+export async function listConnectionsActivity(limit = 30, userId = null) {
+  const { data, error } = await supabase.rpc('list_connections_activity', {
+    p_limit: limit,
+    p_user_id: userId,
+  })
   if (error) throw error
   return data ?? []
 }

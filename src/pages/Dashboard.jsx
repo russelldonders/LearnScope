@@ -17,7 +17,7 @@ import FindSkillModal from '../components/FindSkillModal'
 import AccessibleDialog from '../components/AccessibleDialog'
 import GrowthRing from '../components/GrowthRing'
 import CourseThumbnail from '../components/CourseThumbnail'
-import PersonAvatar from '../components/PersonAvatar'
+import ConnectionsActivityFeed from '../components/ConnectionsActivityFeed'
 import { LEVEL_LABELS } from '../lib/levels'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
@@ -526,60 +526,6 @@ export default function Dashboard() {
           }}
         />
       )}
-    </div>
-  )
-}
-
-// Turns one list_connections_activity (0063) row into a plain-language
-// sentence -- everything the RPC needs to say is already in the row itself
-// (skill_name/level/detail), never a client-side lookup, since each row is
-// independently privacy-checked server-side and shouldn't need extra trust.
-function describeActivityEvent(event) {
-  const level = event.level ? LEVEL_LABELS[event.level] : null
-  switch (event.event_type) {
-    case 'skill_confirmed':
-      return `confirmed ${level ?? 'a level'} in ${event.skill_name}`
-    case 'skill_validated':
-      return `had ${event.skill_name} validated at ${level ?? 'their target level'}`
-    case 'skill_added':
-      return `started tracking ${event.skill_name}`
-    case 'experience_added':
-      return `added ${event.detail}`
-    case 'course_started':
-      return `started ${event.detail}`
-    case 'target_set':
-      return `set a target of ${level ?? 'a new level'} for ${event.skill_name}`
-    default:
-      return null
-  }
-}
-
-function ConnectionsActivityFeed({ events }) {
-  return (
-    <div className="space-y-2">
-      {events.map((event, i) => {
-        const description = describeActivityEvent(event)
-        if (!description) return null
-        return (
-          <div
-            key={`${event.event_type}-${event.actor_id}-${event.event_at}-${i}`}
-            className="flex items-start gap-3 bg-card border border-hairline rounded-lg px-4 py-3"
-          >
-            <PersonAvatar name={event.full_name} avatarUrl={event.avatar_url} size={9} />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm text-ink">
-                <span className="font-medium">{event.full_name || 'A connection'}</span> {description}
-              </p>
-              {event.event_type === 'skill_confirmed' && event.detail && (
-                <p className="text-xs text-secondary mt-0.5">{event.detail}</p>
-              )}
-            </div>
-            <p className="font-mono text-xs text-secondary shrink-0" title={formatAbsoluteDate(event.event_at)}>
-              {formatRelativeDate(event.event_at)}
-            </p>
-          </div>
-        )
-      })}
     </div>
   )
 }
