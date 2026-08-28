@@ -10,7 +10,6 @@ const NAV_LINKS = [
   { to: '/skills', label: 'Skills', requires: 'hasSkills' },
   { to: '/experience', label: 'Experience' },
   { to: '/learning', label: 'Learning', requires: 'hasCourses' },
-  { to: '/training', label: 'Find Training' },
 ]
 
 const MENU_ITEMS = [
