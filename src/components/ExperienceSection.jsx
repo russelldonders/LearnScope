@@ -122,9 +122,16 @@ export default function ExperienceSection() {
 
   return (
     <section>
-      <div className="mb-6">
-        <h1 className="font-display text-xl text-ink mb-3">Experience timeline</h1>
-        <AddExperienceButton types={ADD_EXPERIENCE_TYPES} onSelect={setModalType} />
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between mb-8">
+        <div className="max-w-2xl">
+          <h1 className="font-display text-3xl sm:text-4xl text-ink text-balance">Experience timeline</h1>
+          <p className="text-secondary mt-2 text-pretty">
+            Your employment, education, and other milestones, in order.
+          </p>
+        </div>
+        <div className="shrink-0 self-start">
+          <AddExperienceButton types={ADD_EXPERIENCE_TYPES} onSelect={setModalType} />
+        </div>
       </div>
 
       {loading && <p className="text-secondary">Loading…</p>}

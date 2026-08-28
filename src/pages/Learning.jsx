@@ -62,11 +62,16 @@ export default function Learning() {
     <div className="min-h-screen bg-paper">
       <AppHeader />
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="font-display text-xl text-ink">Your learning</h1>
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between mb-8">
+          <div className="max-w-2xl">
+            <h1 className="font-display text-3xl sm:text-4xl text-ink text-balance">Your learning</h1>
+            <p className="text-secondary mt-2 text-pretty">
+              Courses you're taking or have completed, and where to find more.
+            </p>
+          </div>
           <Link
             to="/training"
-            className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90"
+            className="rounded-md bg-moss text-paper py-2.5 px-4 font-medium hover:opacity-90 shrink-0 self-start"
           >
             Find training
           </Link>
