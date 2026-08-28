@@ -11,11 +11,11 @@ const NAV_LINKS = [
   { to: '/experience', label: 'Experience' },
   { to: '/learning', label: 'Learning', requires: 'hasCourses' },
   { to: '/training', label: 'Find Training' },
-  { to: '/connections', label: 'Connections', requires: 'hasConnectionsActivity' },
 ]
 
 const MENU_ITEMS = [
   { to: '/profile', label: 'Profile' },
+  { to: '/connections', label: 'Connections', requires: 'hasConnectionsActivity' },
   { to: '/profile/privacy', label: 'Privacy Settings' },
   { to: '/profile/import', label: 'Import Skills & Experience' },
 ]
@@ -44,6 +44,7 @@ export default function AppHeader({ hideNavLinks = false }) {
   }, [user])
 
   const visibleNavLinks = NAV_LINKS.filter((link) => !link.requires || navVisibility[link.requires])
+  const visibleMenuItems = MENU_ITEMS.filter((item) => !item.requires || navVisibility[item.requires])
 
   useEffect(() => {
     if (!menuOpen) return
@@ -106,7 +107,7 @@ export default function AppHeader({ hideNavLinks = false }) {
               >
                 <span
                   className={`flex items-center justify-center w-9 h-9 rounded-full border shrink-0 overflow-hidden ${
-                    location.pathname.startsWith('/profile')
+                    location.pathname.startsWith('/profile') || location.pathname.startsWith('/connections')
                       ? 'border-moss text-ink'
                       : 'border-hairline text-ink hover:bg-paper'
                   }`}
@@ -129,7 +130,7 @@ export default function AppHeader({ hideNavLinks = false }) {
                       {fullName}
                     </div>
                   )}
-                  {MENU_ITEMS.map((item) => (
+                  {visibleMenuItems.map((item) => (
                     <Link
                       key={item.to}
                       to={item.to}
