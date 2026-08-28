@@ -40,7 +40,6 @@ const TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'courses', label: 'Courses' },
   { id: 'skills', label: 'Skills' },
-  { id: 'details', label: 'Details' },
 ]
 
 export default function ExperienceDetail() {
@@ -59,6 +58,7 @@ export default function ExperienceDetail() {
   const [childExperiences, setChildExperiences] = useState([])
   const [parentExperience, setParentExperience] = useState(null)
   const [childModalType, setChildModalType] = useState(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   useEffect(() => {
     loadItem()
@@ -172,24 +172,42 @@ export default function ExperienceDetail() {
 
         {item && (
           <div className="bg-card border border-hairline rounded-lg p-6">
-            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
-              {EXPERIENCE_TYPE_LABELS[item.type] ?? item.type}
-            </span>
-            <h2 className="font-display text-2xl text-ink mt-0.5">{item.title}</h2>
-            {item.organization && (
-              <div className="flex items-center gap-2 mt-0.5">
-                {item.organization_url && <OrganizationLogo organizationUrl={item.organization_url} size={24} />}
-                <p className="text-sm text-secondary">{item.organization}</p>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
+                  {EXPERIENCE_TYPE_LABELS[item.type] ?? item.type}
+                </span>
+                <h2 className="font-display text-2xl text-ink mt-0.5">{item.title}</h2>
+                {item.organization && (
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {item.organization_url && (
+                      <OrganizationLogo organizationUrl={item.organization_url} size={24} />
+                    )}
+                    <p className="text-sm text-secondary">{item.organization}</p>
+                  </div>
+                )}
+                {parentExperience && (
+                  <p className="text-xs text-secondary mt-1">
+                    Part of{' '}
+                    <Link to={`/experience/${parentExperience.id}`} className="text-moss hover:underline">
+                      {parentExperience.title}
+                    </Link>
+                  </p>
+                )}
               </div>
-            )}
-            {parentExperience && (
-              <p className="text-xs text-secondary mt-1">
-                Part of{' '}
-                <Link to={`/experience/${parentExperience.id}`} className="text-moss hover:underline">
-                  {parentExperience.title}
-                </Link>
-              </p>
-            )}
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                aria-label="Experience settings"
+                title="Experience settings"
+                className="p-2 -m-2 rounded-md text-moss hover:opacity-75 transition-opacity shrink-0"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+              </button>
+            </div>
 
             {NESTABLE_PARENT_TYPES.includes(item.type) && (
               <div className="mt-4">
@@ -247,8 +265,28 @@ export default function ExperienceDetail() {
               <SkillsSubsection item={item} skillLinks={skillLinks} onChange={loadLearning} user={user} />
             )}
 
-            {tab === 'details' && (
-              <DetailsTab item={item} onSave={handleSaveDetails} onDelete={handleDelete} />
+            {settingsOpen && (
+              <div
+                className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-40"
+                onClick={() => setSettingsOpen(false)}
+              >
+                <div
+                  className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="font-display text-2xl text-ink">Experience settings</h2>
+                    <button
+                      type="button"
+                      onClick={() => setSettingsOpen(false)}
+                      className="text-secondary hover:text-ink text-sm"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <DetailsTab item={item} onSave={handleSaveDetails} onDelete={handleDelete} />
+                </div>
+              </div>
             )}
           </div>
         )}
