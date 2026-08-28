@@ -423,7 +423,11 @@ export default function Dashboard() {
           <div>
             <h2 className="font-display text-xl text-ink mb-2">More ways to make progress</h2>
             <p className="text-sm text-secondary mb-6">Useful next steps across your other skills.</p>
-            <UpNextSlider recommendations={upNext.slice(1)} />
+            {upNext.length - 1 > 5 ? (
+              <UpNextGrouped recommendations={upNext.slice(1)} />
+            ) : (
+              <UpNextSlider recommendations={upNext.slice(1)} />
+            )}
           </div>
         )}
 
@@ -769,6 +773,49 @@ function UpNextSlider({ recommendations }) {
         ))}
       </div>
       {canScrollRight && <SliderArrow direction="right" onClick={() => scrollByPage(1)} />}
+    </div>
+  )
+}
+
+// Same action (e.g. "Self-assess your own level") can come from different
+// lifecycle stages with slightly different item.key/description -- grouping
+// by label is what reads as "one action" to the learner, so the first
+// description seen for a label wins rather than trying to reconcile them.
+// Insertion order follows upNext's existing stage-priority sort, so the
+// group of most-urgent actions still leads.
+function groupUpNextByAction(recommendations) {
+  const groups = new Map()
+  for (const rec of recommendations) {
+    const { label, description } = rec.item
+    if (!groups.has(label)) groups.set(label, { label, description, recs: [] })
+    groups.get(label).recs.push(rec)
+  }
+  return [...groups.values()]
+}
+
+function UpNextGrouped({ recommendations }) {
+  const groups = groupUpNextByAction(recommendations)
+
+  return (
+    <div className="space-y-3">
+      {groups.map((group) => (
+        <div key={group.label} className="bg-card border border-hairline rounded-lg p-4">
+          <p className="text-sm text-ink font-medium">{group.label}</p>
+          <p className="text-xs text-secondary mt-1 mb-3">{group.description}</p>
+          <div className="flex flex-wrap gap-2">
+            {group.recs.map(({ skill }) => (
+              <Link
+                key={skill.id}
+                to={`/skills/${skill.id}`}
+                className="flex items-center gap-2 bg-paper border border-hairline rounded-full pl-1 pr-3 py-1 hover:border-moss transition-colors"
+              >
+                <GrowthRing level={skill.level} size={28} />
+                <span className="text-sm text-ink">{skill.name}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
