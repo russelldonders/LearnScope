@@ -2,11 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { listConnectionsActivity } from '../lib/connections'
+import { getMemberSince, listConnectionRecentGrowth } from '../lib/connections'
+import { formatMonthYear, formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
+import { LEVEL_LABELS } from '../lib/levels'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
+import GrowthArrow from '../components/GrowthArrow'
 import PersonAvatar from '../components/PersonAvatar'
-import ConnectionsActivityFeed from '../components/ConnectionsActivityFeed'
+
+const EXPERT_LEVEL = 5
 
 export default function SkillsProfile() {
   const { userId } = useParams()
@@ -16,6 +20,7 @@ export default function SkillsProfile() {
   const [avatarUrl, setAvatarUrl] = useState(null)
   const [location, setLocation] = useState('')
   const [country, setCountry] = useState('')
+  const [memberSince, setMemberSince] = useState(null)
   const [visible, setVisible] = useState(false)
   const [skills, setSkills] = useState([])
   const [tagsBySkill, setTagsBySkill] = useState(new Map())
@@ -25,8 +30,8 @@ export default function SkillsProfile() {
   const [filterMode, setFilterMode] = useState(isOwnProfile ? 'all' : 'common')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [activity, setActivity] = useState([])
-  const [activityError, setActivityError] = useState(null)
+  const [growth, setGrowth] = useState([])
+  const [growthError, setGrowthError] = useState(null)
 
   useEffect(() => {
     load()
@@ -35,11 +40,14 @@ export default function SkillsProfile() {
   async function load() {
     setLoading(true)
     setError(null)
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('full_name, avatar_url, country, location, skills_profile_visible, profile_visible_to_skill_matches')
-      .eq('id', userId)
-      .single()
+    const [{ data: profile, error: profileError }, since] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('full_name, avatar_url, country, location, skills_profile_visible, profile_visible_to_skill_matches')
+        .eq('id', userId)
+        .single(),
+      getMemberSince(userId).catch(() => null),
+    ])
     if (profileError) {
       setError("This person's profile couldn't be found.")
       setLoading(false)
@@ -49,6 +57,7 @@ export default function SkillsProfile() {
     setAvatarUrl(profile.avatar_url ?? null)
     setLocation(profile.location ?? '')
     setCountry(profile.country ?? '')
+    setMemberSince(since)
     // Either opt-in can grant visibility -- skills_profile_visible for an
     // existing connection, profile_visible_to_skill_matches for someone who
     // shares a skill but isn't connected yet. RLS still gates which rows can
@@ -98,11 +107,11 @@ export default function SkillsProfile() {
     }
 
     try {
-      setActivity(await listConnectionsActivity(10, userId))
-      setActivityError(null)
+      setGrowth(await listConnectionRecentGrowth(userId))
+      setGrowthError(null)
     } catch (err) {
-      setActivity([])
-      setActivityError(err.message || 'Something went wrong.')
+      setGrowth([])
+      setGrowthError(err.message || 'Something went wrong.')
     }
 
     setLoading(false)
@@ -113,6 +122,7 @@ export default function SkillsProfile() {
     [skills, ownLibrarySkillIds]
   )
   const filteredSkills = filterMode === 'common' ? commonSkills : skills
+  const expertCount = useMemo(() => skills.filter((s) => s.level === EXPERT_LEVEL).length, [skills])
 
   return (
     <div className="min-h-screen bg-paper">
@@ -136,6 +146,16 @@ export default function SkillsProfile() {
                 {(location || country) && (
                   <p className="text-sm text-secondary truncate">{[location, country].filter(Boolean).join(', ')}</p>
                 )}
+                <p className="text-xs text-secondary mt-1">
+                  {memberSince && <span>Member since {formatMonthYear(memberSince.slice(0, 10))}</span>}
+                  {memberSince && visible && skills.length > 0 && <span> · </span>}
+                  {visible && skills.length > 0 && (
+                    <span>
+                      {skills.length} skill{skills.length === 1 ? '' : 's'} shared
+                      {expertCount > 0 ? ` · Expert in ${expertCount}` : ''}
+                    </span>
+                  )}
+                </p>
               </div>
             </div>
 
@@ -146,13 +166,15 @@ export default function SkillsProfile() {
             ) : (
               <div className="mb-10">
                 {!isOwnProfile && skills.length > 0 && (
-                  <div className="inline-flex rounded-md border border-hairline overflow-hidden mb-4" role="group" aria-label="Filter skills">
+                  <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label="Filter skills">
                     <button
                       type="button"
                       onClick={() => setFilterMode('common')}
                       aria-pressed={filterMode === 'common'}
-                      className={`py-1.5 px-3 text-sm font-medium border-r border-hairline ${
-                        filterMode === 'common' ? 'bg-moss text-paper' : 'text-ink hover:bg-paper'
+                      className={`font-mono text-xs rounded-full px-3 py-1 border transition-colors ${
+                        filterMode === 'common'
+                          ? 'bg-moss text-paper border-moss'
+                          : 'border-hairline text-secondary hover:text-ink'
                       }`}
                     >
                       In common ({commonSkills.length})
@@ -161,8 +183,10 @@ export default function SkillsProfile() {
                       type="button"
                       onClick={() => setFilterMode('all')}
                       aria-pressed={filterMode === 'all'}
-                      className={`py-1.5 px-3 text-sm font-medium ${
-                        filterMode === 'all' ? 'bg-moss text-paper' : 'text-ink hover:bg-paper'
+                      className={`font-mono text-xs rounded-full px-3 py-1 border transition-colors ${
+                        filterMode === 'all'
+                          ? 'bg-moss text-paper border-moss'
+                          : 'border-hairline text-secondary hover:text-ink'
                       }`}
                     >
                       All shared skills ({skills.length})
@@ -206,15 +230,51 @@ export default function SkillsProfile() {
               </div>
             )}
 
-            {(activity.length > 0 || activityError) && (
+            {(growth.length > 0 || growthError) && (
               <div>
-                <h2 className="font-display text-xl text-ink mb-6">Recent activity</h2>
-                {activityError ? (
+                <h2 className="font-display text-xl text-ink mb-6">Recent growth</h2>
+                {growthError ? (
                   <div className="flex items-center justify-between gap-3 bg-card border border-hairline rounded-lg px-4 py-3">
-                    <p className="text-sm text-secondary">Couldn't load recent activity.</p>
+                    <p className="text-sm text-secondary">Couldn't load recent growth.</p>
                   </div>
                 ) : (
-                  <ConnectionsActivityFeed events={activity} />
+                  <div className="space-y-3">
+                    {growth.map((row) => (
+                      <div
+                        key={`${row.skill_id}-${row.assessed_at}`}
+                        className="flex items-center gap-4 bg-card border border-hairline rounded-lg px-4 py-4"
+                      >
+                        <div className="flex items-center gap-2 shrink-0">
+                          <GrowthRing level={row.previous_level} size={38} color="var(--color-hairline)" />
+                          <GrowthArrow />
+                          <GrowthRing level={row.level} size={56} targetLevel={row.target_level} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-ink truncate">{row.skill_name}</p>
+                          <p className="text-sm">
+                            <span className="text-secondary">
+                              {row.previous_level ? LEVEL_LABELS[row.previous_level] : 'New'} →{' '}
+                            </span>
+                            <span className="text-ink font-medium">{LEVEL_LABELS[row.level]}</span>
+                          </p>
+                          {row.target_level && (
+                            <p
+                              className="font-mono text-[11px] uppercase tracking-wide text-secondary mt-1"
+                              title={formatAbsoluteDate(row.target_date)}
+                            >
+                              Target: {LEVEL_LABELS[row.target_level]} · {formatRelativeDate(row.target_date)}
+                            </p>
+                          )}
+                        </div>
+                        <p
+                          className="font-mono text-xs text-secondary shrink-0 self-start"
+                          title={formatAbsoluteDate(row.assessed_at)}
+                        >
+                          {formatRelativeDate(row.assessed_at)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             )}

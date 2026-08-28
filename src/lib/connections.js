@@ -194,6 +194,30 @@ export async function listMyPeerRatings() {
   return data ?? []
 }
 
+// The person's true signup date (auth.users.created_at), not duplicated
+// onto profiles -- see get_member_since in
+// 0099_connection_profile_growth_and_member_since.sql.
+export async function getMemberSince(userId) {
+  const { data, error } = await supabase.rpc('get_member_since', { p_user_id: userId })
+  if (error) throw error
+  return data
+}
+
+// Recent practical-axis level jumps for one other person, in the same shape
+// as Dashboard.jsx's own "recent growth" panel (previousLevel/level/target
+// per skill) -- see list_connection_recent_growth in
+// 0099_connection_profile_growth_and_member_since.sql for why this needs a
+// SECURITY DEFINER RPC rather than the direct skill_assessments/
+// skill_targets queries Dashboard uses for the signed-in user's own data.
+export async function listConnectionRecentGrowth(userId, limit = 5) {
+  const { data, error } = await supabase.rpc('list_connection_recent_growth', {
+    p_user_id: userId,
+    p_limit: limit,
+  })
+  if (error) throw error
+  return data ?? []
+}
+
 export async function getProfileNames(userIds) {
   const ids = [...new Set(userIds)].filter(Boolean)
   if (ids.length === 0) return {}
