@@ -8,6 +8,7 @@ import { formatMonthYear } from '../lib/dates'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import PeopleWithSkillModal from '../components/PeopleWithSkillModal'
+import PersonAvatar from '../components/PersonAvatar'
 import { getSearchPrivacySettings, listSearchableSkillIds, setSkillSearchable } from '../lib/skillDiscovery'
 import KnowledgeLevelBar from '../components/KnowledgeLevelBar'
 import SelfAssessSection from '../components/SelfAssessSection'
@@ -997,6 +998,10 @@ function PeopleIcon() {
 // Only ever populated with connections who both track this skill AND have
 // opted into showing it (see listConnectionsWithSkill) -- no separate
 // privacy check needed here, the list itself is already scoped correctly.
+// Same per-row card treatment as PeopleWithSkillModal (avatar, name linking
+// to their skills profile, GrowthRing for their level) -- these two modals
+// are opened from adjacent lines in the Skill Network section and should
+// read as one visual language, not a plain list next to a rich one.
 function ConnectionsWithSkillModal({ connections, skillName, onClose }) {
   return (
     <AccessibleDialog
@@ -1006,7 +1011,7 @@ function ConnectionsWithSkillModal({ connections, skillName, onClose }) {
     >
         <div className="flex items-center justify-between mb-4">
           <h2 id="connections-with-skill-dialog-title" className="font-display text-2xl text-ink">Connections with {skillName}</h2>
-          <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
+          <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm shrink-0">
             Close
           </button>
         </div>
@@ -1015,8 +1020,19 @@ function ConnectionsWithSkillModal({ connections, skillName, onClose }) {
         ) : (
           <ul className="space-y-2">
             {connections.map((c) => (
-              <li key={c.id} className="text-sm text-ink">
-                {c.name}
+              <li key={c.id} className="rounded-md border border-hairline p-3">
+                <div className="flex items-center gap-3">
+                  <Link to={`/skills-profile/${c.id}`} className="flex items-center gap-3 min-w-0 group flex-1">
+                    <PersonAvatar name={c.name} avatarUrl={c.avatarUrl} />
+                    <span className="text-sm text-ink font-medium truncate group-hover:text-moss group-hover:underline">
+                      {c.name}
+                    </span>
+                  </Link>
+                  <GrowthRing level={c.level} size={24} labels={LEVEL_LABELS} />
+                  <span className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 shrink-0">
+                    Connected
+                  </span>
+                </div>
               </li>
             ))}
           </ul>
