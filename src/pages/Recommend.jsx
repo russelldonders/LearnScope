@@ -158,7 +158,7 @@ export default function Recommend() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => navigate('/dashboard')}
+                  onClick={() => navigate('/actions')}
                   disabled={submitting || declining}
                   className="w-full text-secondary text-sm py-1 hover:text-ink disabled:opacity-60"
                 >
