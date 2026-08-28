@@ -75,13 +75,13 @@ export async function sendInviteEmail({ toEmail, inviterName, skillName, shareUr
   const {
     data: { session },
   } = await supabase.auth.getSession()
-  const res = await fetch('/api/send-invite', {
+  const res = await fetch('/api/send-email', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify({ toEmail, inviterName, skillName, shareUrl }),
+    body: JSON.stringify({ type: 'invite', toEmail, inviterName, skillName, shareUrl }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))

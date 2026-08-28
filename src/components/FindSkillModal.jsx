@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { listLibrarySkills, isDuplicateLibrarySkillError, duplicateLibrarySkillMessage } from '../lib/skillLibrary'
@@ -10,6 +10,7 @@ import CurrentRoleSelectModal from './CurrentRoleSelectModal'
 import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
 import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
 import SelfAssessSection from './SelfAssessSection'
+import AccessibleDialog from './AccessibleDialog'
 
 // 'search' / 'settings' create the skill itself; 'knowledge' / 'practical'
 // are the two rating steps that follow, each independently skippable since
@@ -34,6 +35,16 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
   const [createdSkill, setCreatedSkill] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const scrollRef = useRef(null)
+
+  // The scrollable card is one persistent DOM node across every step (only
+  // its children swap), so it otherwise keeps whatever scrollTop the
+  // previous step left it at -- a long step 2 scrolled down before
+  // advancing left step 3 opening already scrolled partway down instead of
+  // at its own top.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 })
+  }, [mode])
 
   useEffect(() => {
     listLibrarySkills()
@@ -208,20 +219,22 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={handleDismiss}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <AccessibleDialog
+      label="Add a skill"
+      onClose={handleDismiss}
+      panelRef={scrollRef}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
         {mode === 'search' && (
           <>
-            <h2 className="font-display text-2xl text-ink mb-1">Find a skill</h2>
+            <h2 data-dialog-initial-focus tabIndex={-1} className="font-display text-2xl text-ink mb-1">
+              Find a skill
+            </h2>
             <p className="text-sm text-secondary mb-4">
               Search the skill library, or create a new one if you can't find it.
             </p>
 
             <input
-              autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search skills…"
@@ -342,7 +355,7 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
 
               <TrackingReasonPicker value={trackingReason} onChange={setTrackingReason} required />
 
-              {error && <p className="text-sm text-red-700">{error}</p>}
+              {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
               <div className="flex items-center gap-2 pt-2">
                 <button
@@ -380,14 +393,9 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
               onGuideGenerated={(statements) =>
                 setCreatedSkill((s) => (s ? { ...s, knowledge_level_guide: statements } : s))
               }
+              submitLabel="Save & Next"
+              secondaryAction={{ label: 'Skip for now', onClick: () => setMode('practical') }}
             />
-            <button
-              type="button"
-              onClick={() => setMode('practical')}
-              className="w-full rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper mt-3"
-            >
-              Skip for now
-            </button>
           </>
         )}
 
@@ -407,17 +415,11 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
               onGuideGenerated={(statements) =>
                 setCreatedSkill((s) => (s ? { ...s, practical_level_guide: statements } : s))
               }
+              submitLabel="Save & Close"
+              secondaryAction={{ label: 'Skip for now', onClick: onCreated }}
             />
-            <button
-              type="button"
-              onClick={onCreated}
-              className="w-full rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper mt-3"
-            >
-              Skip for now
-            </button>
           </>
         )}
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }

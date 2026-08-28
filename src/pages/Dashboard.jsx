@@ -1,10 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useId, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useNavVisibility } from '../context/NavVisibilityContext'
 import { supabase } from '../lib/supabaseClient'
-import { listConnections, listConnectionsActivity } from '../lib/connections'
+import { listConnections, listConnectionsActivity, listIncomingRateInvites, getProfiles } from '../lib/connections'
+import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
 import AppHeader from '../components/AppHeader'
 import RecordActivitySection from '../components/RecordActivitySection'
+import FindSkillModal from '../components/FindSkillModal'
+import AccessibleDialog from '../components/AccessibleDialog'
 import GrowthRing from '../components/GrowthRing'
 import CourseThumbnail from '../components/CourseThumbnail'
 import PersonAvatar from '../components/PersonAvatar'
@@ -12,6 +16,8 @@ import { LEVEL_LABELS } from '../lib/levels'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
 import { isDiagnosticStatement } from '../lib/xapiStatement'
+import { isSelfAssessmentDue, todayDateString } from '../lib/checkin'
+import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 
 async function countRows(table, userId) {
   const { count } = await supabase
@@ -39,23 +45,93 @@ async function loadCurrentLearning(userId) {
 // Failing this shouldn't take down the rest of the dashboard -- the RPC is
 // brand new and this is the one query on the page reading other people's
 // data, so it's the most likely to surface an unexpected RLS/permission
-// edge case in practice.
+// edge case in practice. The error is still reported back rather than
+// swallowed, though, so a real failure isn't indistinguishable on screen
+// from a connection with no activity to show.
 async function loadConnectionsActivity() {
   try {
-    return await listConnectionsActivity(20)
-  } catch {
-    return []
+    return { data: await listConnectionsActivity(5), error: null }
+  } catch (err) {
+    return { data: [], error: err.message || 'Something went wrong.' }
   }
 }
 
-const RECENT_GROWTH_WINDOW_DAYS = 28
+// How far ahead a due date has to be before it's worth interrupting the
+// dashboard with -- anything already overdue (next_checkin_date/target_date
+// in the past) is always included regardless of this window, since that's
+// even more urgent than "coming up soon".
+const REMINDER_WINDOW_DAYS = 14
 
-function daysAgoLabel(dateStr) {
-  const days = Math.floor((Date.now() - new Date(dateStr).getTime()) / (24 * 60 * 60 * 1000))
-  if (days <= 0) return 'Today'
-  if (days === 1) return 'Yesterday'
-  return `${days} days ago`
+function reminderCutoff() {
+  return new Date(Date.now() + REMINDER_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 }
+
+// Skills with a scheduled self-assessment check-in that's already due or
+// coming up soon -- see isSelfAssessmentDue/next_checkin_date (SkillCard
+// shows the same "due" flag per-card on the skills grid; this surfaces it
+// centrally instead of requiring a learner to notice it card-by-card).
+async function loadUpcomingSelfAssessments(userId) {
+  const { data, error } = await supabase
+    .from('skills')
+    .select('id, name, next_checkin_date')
+    .eq('user_id', userId)
+    .not('next_checkin_date', 'is', null)
+    .lte('next_checkin_date', reminderCutoff())
+    .order('next_checkin_date', { ascending: true })
+  if (error) return []
+  return data ?? []
+}
+
+// Only the most recent target per skill -- a skill can accumulate several
+// targets over time (same "latest wins" pattern as latestTargetLevelBySkillId
+// in SkillsSection.jsx), so an old, already-superseded target_date shouldn't
+// still nag once a newer target has replaced it.
+async function loadUpcomingTargets(userId) {
+  const { data, error } = await supabase
+    .from('skill_targets')
+    .select('id, skill_id, target_level, target_date, created_at, skills(name)')
+    .eq('user_id', userId)
+    .not('target_date', 'is', null)
+    .order('created_at', { ascending: false })
+  if (error) return []
+  const latestBySkill = new Map()
+  for (const t of data ?? []) {
+    if (!latestBySkill.has(t.skill_id)) latestBySkill.set(t.skill_id, t)
+  }
+  const cutoff = reminderCutoff()
+  return [...latestBySkill.values()]
+    .filter((t) => t.target_date <= cutoff)
+    .sort((a, b) => a.target_date.localeCompare(b.target_date))
+}
+
+// "Reviews of others" -- tasks waiting on this learner to look at someone
+// else's skill, not their own: an invite to rate a connection's skill, or a
+// validation request naming them as the validator. Reuses the exact same
+// lib functions the Actions page's own "Invitations to rate" / "Requests
+// to validate" sections already fetch (see Actions.jsx) rather than a
+// second implementation of the same query.
+async function loadPendingReviewTasks(userId) {
+  const [rateInvites, validationRequests] = await Promise.all([
+    listIncomingRateInvites(),
+    listIncomingPendingValidationRequests(userId),
+  ])
+  const profiles = await getProfiles(validationRequests.map((r) => r.requester_id))
+  const rateTasks = rateInvites.map((invite) => ({
+    key: `rate-${invite.id}`,
+    label: `Rate ${invite.inviter_name || 'someone'}'s "${invite.skill_name}"`,
+    date: invite.created_at,
+    to: `/rate/${invite.share_code}`,
+  }))
+  const validationTasks = validationRequests.map((r) => ({
+    key: `validate-${r.id}`,
+    label: `Confirm ${profiles[r.requester_id]?.name || 'someone'} reached ${LEVEL_LABELS[r.target_level]} in "${r.skills?.name}"`,
+    date: r.created_at,
+    to: `/validate-request/${r.id}`,
+  }))
+  return [...rateTasks, ...validationTasks].sort((a, b) => new Date(b.date) - new Date(a.date))
+}
+
+const RECENT_GROWTH_WINDOW_DAYS = 28
 
 async function loadRecentGrowth(userId) {
   const cutoff = new Date(Date.now() - RECENT_GROWTH_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString()
@@ -201,11 +277,18 @@ async function loadUpNextRecommendations(userId) {
 
 export default function Dashboard() {
   const { user } = useAuth()
+  const { refreshNavVisibility } = useNavVisibility()
+  const navigate = useNavigate()
+  const [addSkillOpen, setAddSkillOpen] = useState(false)
   const [counts, setCounts] = useState(null)
   const [recentGrowth, setRecentGrowth] = useState([])
   const [upNext, setUpNext] = useState([])
   const [currentLearning, setCurrentLearning] = useState([])
   const [connectionsActivity, setConnectionsActivity] = useState([])
+  const [connectionsActivityError, setConnectionsActivityError] = useState(null)
+  const [upcomingSelfAssessments, setUpcomingSelfAssessments] = useState([])
+  const [upcomingTargets, setUpcomingTargets] = useState([])
+  const [pendingReviewTasks, setPendingReviewTasks] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -214,98 +297,149 @@ export default function Dashboard() {
 
   async function loadSummary() {
     setLoading(true)
-    const [skills, courses, experience, connections, growth, upNextRecommendations, learning, activity] =
-      await Promise.all([
-        countRows('skills', user.id),
-        countRows('courses', user.id),
-        countRows('experience', user.id),
-        listConnections(user.id).then((c) => c.length),
-        loadRecentGrowth(user.id),
-        loadUpNextRecommendations(user.id),
-        loadCurrentLearning(user.id),
-        loadConnectionsActivity(),
-      ])
+    const [
+      skills,
+      courses,
+      experience,
+      connections,
+      growth,
+      upNextRecommendations,
+      learning,
+      activityResult,
+      selfAssessmentsDue,
+      targetsDue,
+      reviewTasks,
+    ] = await Promise.all([
+      countRows('skills', user.id),
+      countRows('courses', user.id),
+      countRows('experience', user.id),
+      listConnections(user.id).then((c) => c.length),
+      loadRecentGrowth(user.id),
+      loadUpNextRecommendations(user.id),
+      loadCurrentLearning(user.id),
+      loadConnectionsActivity(),
+      loadUpcomingSelfAssessments(user.id),
+      loadUpcomingTargets(user.id),
+      loadPendingReviewTasks(user.id),
+    ])
     setCounts({ skills, courses, experience, connections })
     setRecentGrowth(growth)
     setUpNext(upNextRecommendations)
     setCurrentLearning(learning)
-    setConnectionsActivity(activity)
+    setConnectionsActivity(activityResult.data)
+    setConnectionsActivityError(activityResult.error)
+    setUpcomingSelfAssessments(selfAssessmentsDue)
+    setUpcomingTargets(targetsDue)
+    setPendingReviewTasks(reviewTasks)
     setLoading(false)
+  }
+
+  async function retryConnectionsActivity() {
+    const result = await loadConnectionsActivity()
+    setConnectionsActivity(result.data)
+    setConnectionsActivityError(result.error)
   }
 
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
 
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-16">
-        <div>
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="font-display text-xl text-ink">Your overview</h2>
+      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8 space-y-12">
+        <section aria-labelledby="dashboard-heading">
+          <div className="max-w-2xl mb-7">
+            <h1 id="dashboard-heading" className="font-display text-3xl sm:text-4xl text-ink text-balance">
+              Keep your skills moving
+            </h1>
+            <p className="text-secondary mt-2 text-pretty">
+              Focus on one useful step, then see how the rest of your learning is taking shape.
+            </p>
           </div>
 
           {loading ? (
-            <p className="text-secondary">Loading…</p>
+            <DashboardSkeleton />
           ) : counts.skills + counts.experience + counts.courses + counts.connections === 0 ? (
             <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
               <p className="text-secondary mb-4">
                 Your profile is empty. Start by adding a skill you already have.
               </p>
-              <Link
-                to="/skills"
+              <button
+                type="button"
+                onClick={() => setAddSkillOpen(true)}
                 className="inline-block rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
               >
                 Add your first skill
-              </Link>
+              </button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <SummaryCard
-                to="/skills"
-                title="Skills"
-                value={counts.skills}
-                unit={counts.skills === 1 ? 'skill tracked' : 'skills tracked'}
-              />
-              <SummaryCard
-                to="/experience"
-                title="Experience"
-                value={counts.experience}
-                unit={counts.experience === 1 ? 'role/study period' : 'roles/study periods'}
-              />
-              <SummaryCard
-                to="/learning"
-                title="Courses"
-                value={counts.courses}
-                unit={counts.courses === 1 ? 'course completed' : 'courses completed'}
-              />
-              <SummaryCard
-                to="/connections"
-                title="Connections"
-                value={counts.connections}
-                unit={counts.connections === 1 ? 'connection' : 'connections'}
-              />
+            <div className="space-y-6">
+              <FocusPanel recommendation={upNext[0]} recentGrowth={recentGrowth[0]} />
+              <OverviewStrip counts={counts} />
             </div>
           )}
-        </div>
+        </section>
 
-        {!loading && upNext.length > 0 && (
+        {!loading &&
+          (upcomingSelfAssessments.length > 0 || upcomingTargets.length > 0 || pendingReviewTasks.length > 0) && (
+            <div>
+              <h2 className="font-display text-xl text-ink mb-6">Needs your attention</h2>
+              <div className="space-y-6">
+                {upcomingSelfAssessments.length > 0 && (
+                  <ReminderGroup title="Self-assessments due">
+                    {upcomingSelfAssessments.map((s) => (
+                      <ReminderRow
+                        key={s.id}
+                        to={`/skills/${s.id}`}
+                        label={s.name}
+                        date={s.next_checkin_date}
+                        overdue={isSelfAssessmentDue(s.next_checkin_date)}
+                      />
+                    ))}
+                  </ReminderGroup>
+                )}
+                {upcomingTargets.length > 0 && (
+                  <ReminderGroup title="Target dates">
+                    {upcomingTargets.map((t) => (
+                      <ReminderRow
+                        key={t.id}
+                        to={`/skills/${t.skill_id}`}
+                        label={`${t.skills?.name ?? 'Skill'} → ${LEVEL_LABELS[t.target_level]}`}
+                        date={t.target_date}
+                        overdue={t.target_date <= todayDateString()}
+                      />
+                    ))}
+                  </ReminderGroup>
+                )}
+                {pendingReviewTasks.length > 0 && (
+                  <ReminderGroup title="Waiting on your review">
+                    {pendingReviewTasks.map((task) => (
+                      <ReminderRow key={task.key} to={task.to} label={task.label} date={task.date} />
+                    ))}
+                  </ReminderGroup>
+                )}
+              </div>
+            </div>
+          )}
+
+        {!loading && upNext.length > 1 && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-6">Up next</h2>
-            <UpNextSlider recommendations={upNext} />
+            <h2 className="font-display text-xl text-ink mb-2">More ways to make progress</h2>
+            <p className="text-sm text-secondary mb-6">Useful next steps across your other skills.</p>
+            <UpNextSlider recommendations={upNext.slice(1)} />
           </div>
         )}
 
         {!loading && currentLearning.length > 0 && (
           <div>
             <h2 className="font-display text-xl text-ink mb-6">Current learning</h2>
-            <CurrentLearningSlider courses={currentLearning} />
+            <CurrentLearningPanel courses={currentLearning} />
           </div>
         )}
 
-        {!loading && recentGrowth.length > 0 && (
+        {!loading && recentGrowth.length > 1 && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-6">Recent growth</h2>
+            <h2 className="font-display text-xl text-ink mb-6">More recent progress</h2>
             <div className="space-y-3">
-              {recentGrowth.map((row) => (
+              {recentGrowth.slice(1).map((row) => (
                 <Link
                   key={row.id}
                   to={`/skills/${row.skill_id}`}
@@ -325,14 +459,20 @@ export default function Dashboard() {
                       <span className="text-ink font-medium">{LEVEL_LABELS[row.level]}</span>
                     </p>
                     {row.target && (
-                      <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-1">
-                        Target: {LEVEL_LABELS[row.target.target_level]} by{' '}
-                        {new Date(`${row.target.target_date}T00:00:00`).toLocaleDateString()}
+                      <p
+                        className="font-mono text-[11px] uppercase tracking-wide text-secondary mt-1"
+                        title={formatAbsoluteDate(row.target.target_date)}
+                      >
+                        Target: {LEVEL_LABELS[row.target.target_level]} ·{' '}
+                        {formatRelativeDate(row.target.target_date)}
                       </p>
                     )}
                   </div>
-                  <p className="font-mono text-xs text-secondary shrink-0 self-start">
-                    {daysAgoLabel(row.assessed_at)}
+                  <p
+                    className="font-mono text-xs text-secondary shrink-0 self-start"
+                    title={formatAbsoluteDate(row.assessed_at)}
+                  >
+                    {formatRelativeDate(row.assessed_at)}
                   </p>
                 </Link>
               ))}
@@ -340,15 +480,38 @@ export default function Dashboard() {
           </div>
         )}
 
-        {!loading && connectionsActivity.length > 0 && (
+        {!loading && (connectionsActivity.length > 0 || connectionsActivityError) && (
           <div>
             <h2 className="font-display text-xl text-ink mb-6">What your connections are up to</h2>
-            <ConnectionsActivityFeed events={connectionsActivity} />
+            {connectionsActivityError ? (
+              <div className="flex items-center justify-between gap-3 bg-card border border-hairline rounded-lg px-4 py-3">
+                <p className="text-sm text-secondary">Couldn't load your connections' activity.</p>
+                <button
+                  type="button"
+                  onClick={retryConnectionsActivity}
+                  className="shrink-0 text-sm text-moss font-medium hover:opacity-90"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : (
+              <ConnectionsActivityFeed events={connectionsActivity} />
+            )}
           </div>
         )}
 
-        <RecordActivitySection />
+        {!loading && counts.skills > 0 && <RecordActivitySection />}
       </main>
+
+      {addSkillOpen && (
+        <FindSkillModal
+          onClose={() => setAddSkillOpen(false)}
+          onCreated={() => {
+            refreshNavVisibility()
+            navigate('/skills')
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -397,12 +560,103 @@ function ConnectionsActivityFeed({ events }) {
                 <p className="text-xs text-secondary mt-0.5">{event.detail}</p>
               )}
             </div>
-            <p className="font-mono text-xs text-secondary shrink-0">
-              {new Date(event.event_at).toLocaleDateString()}
+            <p className="font-mono text-xs text-secondary shrink-0" title={formatAbsoluteDate(event.event_at)}>
+              {formatRelativeDate(event.event_at)}
             </p>
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function DashboardSkeleton() {
+  return (
+    <div role="status" aria-live="polite">
+      <span className="sr-only">Loading your dashboard…</span>
+      <div aria-hidden="true" className="grid gap-4 lg:grid-cols-3 animate-pulse motion-reduce:animate-none">
+        <div className="h-48 rounded-lg bg-card border border-hairline lg:col-span-2" />
+        <div className="h-48 rounded-lg bg-card border border-hairline" />
+        <div className="h-20 rounded-lg bg-card border border-hairline lg:col-span-3" />
+      </div>
+    </div>
+  )
+}
+
+export function FocusPanel({ recommendation, recentGrowth: growth }) {
+  const hasGrowth = Boolean(growth)
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      <div className={`rounded-lg bg-moss text-paper p-6 sm:p-8 ${hasGrowth ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
+        <h2 className="font-display text-2xl sm:text-3xl text-balance">
+          {recommendation ? recommendation.item.label : 'Choose where to grow next'}
+        </h2>
+        <p className="mt-3 max-w-xl text-sm sm:text-base text-paper">
+          {recommendation
+            ? `${recommendation.item.description} Keep ${recommendation.skill.name} moving forward with this next step.`
+            : 'Review your skills and choose the one that matters most right now.'}
+        </p>
+        <Link
+          to={recommendation ? `/skills/${recommendation.skill.id}` : '/skills'}
+          className="inline-flex items-center rounded-md bg-paper text-ink px-4 py-2.5 mt-6 text-sm font-medium hover:opacity-90"
+        >
+          {recommendation ? `Continue with ${recommendation.skill.name}` : 'Review your skills'}
+          <span aria-hidden="true" className="ml-2">→</span>
+        </Link>
+      </div>
+
+      {growth && (
+        <Link
+          to={`/skills/${growth.skill_id}`}
+          className="rounded-lg border border-hairline bg-card p-6 hover:border-moss transition-colors"
+        >
+          <h2 className="font-display text-xl text-ink">Your latest progress</h2>
+          <div className="flex items-center gap-3 mt-5">
+            <GrowthRing level={growth.previousLevel} size={42} color="var(--color-hairline)" />
+            <GrowthArrow />
+            <GrowthRing level={growth.level} size={58} targetLevel={growth.target?.target_level} />
+          </div>
+          <p className="font-medium text-ink mt-4 truncate">{growth.skills?.name ?? 'Skill'}</p>
+          <p className="text-sm text-secondary mt-1">
+            {growth.previousLevel ? LEVEL_LABELS[growth.previousLevel] : 'New'} → {LEVEL_LABELS[growth.level]}
+          </p>
+          <p className="font-mono text-xs text-secondary mt-3" title={formatAbsoluteDate(growth.assessed_at)}>
+            {formatRelativeDate(growth.assessed_at)}
+          </p>
+        </Link>
+      )}
+    </div>
+  )
+}
+
+export function OverviewStrip({ counts }) {
+  const items = [
+    { to: '/skills', label: 'Skills', value: counts.skills, unit: 'tracked' },
+    { to: '/experience', label: 'Experience', value: counts.experience, unit: 'entries' },
+    { to: '/learning', label: 'Courses', value: counts.courses, unit: 'completed' },
+    { to: '/connections', label: 'Connections', value: counts.connections, unit: 'people' },
+  ]
+
+  return (
+    <div className="grid grid-cols-2 border-y border-hairline lg:grid-cols-4">
+      {items.map((item, index) => (
+        <Link
+          key={item.to}
+          to={item.to}
+          className={`group flex items-baseline gap-2 py-4 hover:text-moss ${
+            index % 2 === 0 ? 'pr-4' : 'pl-4'
+          } ${index % 2 === 1 ? 'border-l border-hairline' : ''} ${
+            index > 1 ? 'border-t border-hairline lg:border-t-0' : ''
+          } ${index > 0 ? 'lg:border-l lg:pl-5' : ''}`}
+        >
+          <span className="font-display text-2xl text-ink group-hover:text-moss">{item.value}</span>
+          <span className="min-w-0 text-sm text-secondary">
+            <span className="block text-ink group-hover:text-moss">{item.label}</span>
+            <span className="text-xs">{item.unit}</span>
+          </span>
+        </Link>
+      ))}
     </div>
   )
 }
@@ -490,8 +744,42 @@ function SliderArrow({ direction, onClick }) {
   )
 }
 
+// Above 5 cards, skills sharing the same recommended action (e.g. several
+// skills all needing "Self-assess your own level") collapse into a single
+// action-focused card instead of each getting its own near-duplicate card --
+// an action used by only one skill still gets its normal skill-focused card,
+// so the slider ends up with mixed card types rather than all-or-nothing.
+// Below the threshold, one card per skill (unchanged) reads fine on its own.
+const UPNEXT_GROUPING_THRESHOLD = 5
+
+function buildUpNextSlides(recommendations) {
+  if (recommendations.length <= UPNEXT_GROUPING_THRESHOLD) {
+    return recommendations.map((rec) => ({ type: 'skill', skill: rec.skill, item: rec.item }))
+  }
+
+  // Same action (e.g. "Self-assess your own level") can come from different
+  // lifecycle stages with slightly different item.key/description --
+  // grouping by label is what reads as "one action" to the learner, so the
+  // first description seen for a label wins rather than trying to reconcile
+  // them. Insertion order follows upNext's existing stage-priority sort, so
+  // the most-urgent actions still lead.
+  const groups = new Map()
+  for (const rec of recommendations) {
+    const { label, description } = rec.item
+    if (!groups.has(label)) groups.set(label, { label, description, recs: [] })
+    groups.get(label).recs.push(rec)
+  }
+
+  return [...groups.values()].map((group) =>
+    group.recs.length === 1
+      ? { type: 'skill', skill: group.recs[0].skill, item: group.recs[0].item }
+      : { type: 'action', label: group.label, description: group.description, recs: group.recs }
+  )
+}
+
 function UpNextSlider({ recommendations }) {
   const { scrollerRef, canScrollLeft, canScrollRight, scrollByPage } = useHorizontalScroller()
+  const slides = buildUpNextSlides(recommendations)
 
   return (
     <div className="relative">
@@ -500,54 +788,108 @@ function UpNextSlider({ recommendations }) {
         ref={scrollerRef}
         className="scrollbar-hide flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 -mx-4 px-4 sm:mx-0 sm:px-0"
       >
-        {recommendations.map(({ skill, item }) => (
-          <Link
-            key={skill.id}
-            to={`/skills/${skill.id}`}
-            className="snap-start shrink-0 w-64 bg-card border border-hairline rounded-lg p-4 hover:border-moss transition-colors"
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <GrowthRing level={skill.level} size={40} />
-              <h3 className="font-display text-base text-ink truncate min-w-0">{skill.name}</h3>
+        {slides.map((slide) =>
+          slide.type === 'skill' ? (
+            <Link
+              key={slide.skill.id}
+              to={`/skills/${slide.skill.id}`}
+              className="snap-start shrink-0 w-64 bg-card border border-hairline rounded-lg p-4 hover:border-moss transition-colors"
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <GrowthRing level={slide.skill.level} size={40} />
+                <h3 className="font-display text-base text-ink truncate min-w-0">{slide.skill.name}</h3>
+              </div>
+              <p className="text-sm text-ink font-medium">{slide.item.label}</p>
+              <p className="text-xs text-secondary mt-1">{slide.item.description}</p>
+            </Link>
+          ) : (
+            <div
+              key={`action-${slide.label}`}
+              className="snap-start shrink-0 w-64 bg-card border border-hairline rounded-lg p-4"
+            >
+              <h3 className="font-display text-base text-ink">{slide.label}</h3>
+              <p className="text-xs text-secondary mt-1 mb-3">{slide.description}</p>
+              <ActionSkillsButton label={slide.label} recs={slide.recs} />
             </div>
-            <p className="text-sm text-ink font-medium">{item.label}</p>
-            <p className="text-xs text-secondary mt-1">{item.description}</p>
-          </Link>
-        ))}
+          )
+        )}
       </div>
       {canScrollRight && <SliderArrow direction="right" onClick={() => scrollByPage(1)} />}
     </div>
   )
 }
 
-function CurrentLearningSlider({ courses }) {
-  const { scrollerRef, canScrollLeft, canScrollRight, scrollByPage } = useHorizontalScroller()
+// Stands in for the skill-focused card's own Link when one action is shared
+// by several skills -- picking a skill from here is what replaces having
+// them all listed out on the card at once.
+// A dropdown anchored to the button would get clipped by the slider's own
+// scroll container -- overflow-x-auto forces overflow-y to auto too (they
+// can't be visible/auto independently), so anything taller than the row
+// gets cut off and can even shift the row's scroll position. A dialog
+// avoids that entirely since its fixed overlay isn't part of the row's
+// layout or clipping box.
+function ActionSkillsButton({ label, recs }) {
+  const [open, setOpen] = useState(false)
+  const titleId = useId()
 
   return (
-    <div className="relative">
-      {canScrollLeft && <SliderArrow direction="left" onClick={() => scrollByPage(-1)} />}
-      <div
-        ref={scrollerRef}
-        className="scrollbar-hide flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 -mx-4 px-4 sm:mx-0 sm:px-0"
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+        aria-label={`Choose a skill for: ${label}`}
+        className="text-sm font-medium text-moss hover:opacity-80"
       >
-        {courses.map((course) => (
-          <Link
-            key={course.id}
-            to={`/courses/${course.id}`}
-            state={{ backTo: '/dashboard', backLabel: 'Dashboard' }}
-            className="snap-start shrink-0 w-56 bg-card border border-hairline rounded-lg overflow-hidden hover:border-moss transition-colors"
-          >
-            <CourseThumbnail name={course.name} provider={course.provider} className="h-20 w-full" />
-            <div className="p-3">
-              <h3 className="font-display text-base text-ink truncate">{course.name}</h3>
-              <p className="font-mono text-xs text-secondary mt-1 truncate">
-                {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ') || 'In progress'}
-              </p>
-            </div>
-          </Link>
-        ))}
-      </div>
-      {canScrollRight && <SliderArrow direction="right" onClick={() => scrollByPage(1)} />}
+        {recs.length} skills
+      </button>
+      {open && (
+        <AccessibleDialog
+          labelledBy={titleId}
+          onClose={() => setOpen(false)}
+          panelClassName="w-full max-w-sm bg-card border border-hairline rounded-lg p-6"
+        >
+          <h2 id={titleId} className="font-display text-lg text-ink mb-1">
+            {label}
+          </h2>
+          <p className="text-sm text-secondary mb-4">Choose which skill to continue with.</p>
+          <div className="space-y-2">
+            {recs.map(({ skill }) => (
+              <Link
+                key={skill.id}
+                to={`/skills/${skill.id}`}
+                className="flex items-center gap-3 border border-hairline rounded-md p-2.5 hover:border-moss transition-colors"
+              >
+                <GrowthRing level={skill.level} size={28} />
+                <span className="text-sm text-ink">{skill.name}</span>
+              </Link>
+            ))}
+          </div>
+        </AccessibleDialog>
+      )}
+    </>
+  )
+}
+
+function CurrentLearningPanel({ courses }) {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      {courses.map((course) => (
+        <Link
+          key={course.id}
+          to={`/courses/${course.id}`}
+          state={{ backTo: '/dashboard', backLabel: 'Dashboard' }}
+          className="bg-card border border-hairline rounded-lg overflow-hidden hover:border-moss transition-colors"
+        >
+          <CourseThumbnail name={course.name} provider={course.provider} className="h-20 w-full" />
+          <div className="p-3">
+            <h3 className="font-display text-base text-ink truncate">{course.name}</h3>
+            <p className="font-mono text-xs text-secondary mt-1 truncate">
+              {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ') || 'In progress'}
+            </p>
+          </div>
+        </Link>
+      ))}
     </div>
   )
 }
@@ -571,16 +913,28 @@ function GrowthArrow() {
   )
 }
 
-function SummaryCard({ to, title, value, unit }) {
+function ReminderGroup({ title, children }) {
+  return (
+    <div>
+      <h3 className="font-mono text-[11px] uppercase tracking-wide text-secondary mb-2">{title}</h3>
+      <div className="space-y-2">{children}</div>
+    </div>
+  )
+}
+
+function ReminderRow({ to, label, date, overdue = false }) {
   return (
     <Link
       to={to}
-      className="bg-card border border-hairline rounded-lg p-5 hover:border-moss transition-colors block"
+      className="flex items-center justify-between gap-3 bg-card border border-hairline rounded-lg px-4 py-3 hover:border-moss transition-colors"
     >
-      <h3 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">{title}</h3>
-      <p className="font-display text-3xl text-ink">{value}</p>
-      <p className="text-xs text-secondary mt-1">{unit}</p>
-      <p className="text-xs text-moss font-medium mt-3">View {title.toLowerCase()} →</p>
+      <span className="text-sm text-ink truncate min-w-0">{label}</span>
+      <span
+        className={`font-mono text-xs shrink-0 ${overdue ? 'text-gold' : 'text-secondary'}`}
+        title={formatAbsoluteDate(date)}
+      >
+        {formatRelativeDate(date)}
+      </span>
     </Link>
   )
 }

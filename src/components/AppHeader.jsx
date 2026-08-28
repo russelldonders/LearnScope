@@ -2,15 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePendingActions } from '../context/PendingActionsContext'
+import { useNavVisibility } from '../context/NavVisibilityContext'
 import { supabase } from '../lib/supabaseClient'
 
 const NAV_LINKS = [
   { to: '/dashboard', label: 'Home' },
-  { to: '/skills', label: 'Skills' },
+  { to: '/skills', label: 'Skills', requires: 'hasSkills' },
   { to: '/experience', label: 'Experience' },
-  { to: '/learning', label: 'Learning' },
+  { to: '/learning', label: 'Learning', requires: 'hasCourses' },
   { to: '/training', label: 'Find Training' },
-  { to: '/connections', label: 'Connections' },
+  { to: '/connections', label: 'Connections', requires: 'hasConnectionsActivity' },
 ]
 
 const MENU_ITEMS = [
@@ -19,9 +20,10 @@ const MENU_ITEMS = [
   { to: '/profile/import', label: 'Import Skills & Experience' },
 ]
 
-export default function AppHeader() {
-  const { signOut, user } = useAuth()
+export default function AppHeader({ hideNavLinks = false }) {
+  const { signOut, user, isPlatformAdmin, organisationMemberships } = useAuth()
   const { pendingActionCount } = usePendingActions()
+  const { navVisibility } = useNavVisibility()
   const location = useLocation()
   const [avatarUrl, setAvatarUrl] = useState(null)
   const [fullName, setFullName] = useState(null)
@@ -41,6 +43,8 @@ export default function AppHeader() {
       })
   }, [user])
 
+  const visibleNavLinks = NAV_LINKS.filter((link) => !link.requires || navVisibility[link.requires])
+
   useEffect(() => {
     if (!menuOpen) return
     function handleOutside(e) {
@@ -59,6 +63,12 @@ export default function AppHeader() {
 
   return (
     <header className="border-b border-hairline bg-card">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-ink focus:px-4 focus:py-2 focus:text-paper"
+      >
+        Skip to main content
+      </a>
       <div className="max-w-4xl mx-auto px-4 py-3">
         <div className="flex items-center justify-between gap-4">
           <Link to="/dashboard" className="flex items-center gap-2 font-display text-2xl text-ink shrink-0">
@@ -66,6 +76,25 @@ export default function AppHeader() {
             LearnScope
           </Link>
           <div className="flex items-center gap-2 shrink-0">
+            <Link
+              to="/actions"
+              aria-label={pendingActionCount > 0 ? `Actions, ${pendingActionCount} pending` : 'Actions'}
+              className={`relative flex items-center justify-center w-9 h-9 rounded-full border shrink-0 ${
+                location.pathname === '/actions'
+                  ? 'border-moss text-ink'
+                  : 'border-hairline text-ink hover:bg-paper'
+              }`}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+              {pendingActionCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-moss text-paper text-xs font-medium">
+                  {pendingActionCount}
+                </span>
+              )}
+            </Link>
             <div className="relative" ref={menuRef}>
               <button
                 type="button"
@@ -108,6 +137,24 @@ export default function AppHeader() {
                       {item.label}
                     </Link>
                   ))}
+                  {isPlatformAdmin && (
+                    <Link
+                      to={location.pathname.startsWith('/admin') ? '/dashboard' : '/admin'}
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-4 py-2 text-sm text-ink hover:bg-paper"
+                    >
+                      {location.pathname.startsWith('/admin') ? 'Switch to learner mode' : 'Platform console'}
+                    </Link>
+                  )}
+                  {organisationMemberships?.length > 0 && (
+                    <Link
+                      to={location.pathname.startsWith('/provider') ? '/dashboard' : '/provider'}
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-4 py-2 text-sm text-ink hover:bg-paper"
+                    >
+                      {location.pathname.startsWith('/provider') ? 'Switch to learner mode' : 'Provider console'}
+                    </Link>
+                  )}
                   <div className="my-1 border-t border-hairline" />
                   <button
                     type="button"
@@ -124,26 +171,23 @@ export default function AppHeader() {
             </div>
           </div>
         </div>
-        <nav className="flex items-center flex-wrap gap-1 sm:gap-3 mt-3">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className={`flex items-center gap-1.5 text-sm rounded-md px-2.5 py-1.5 whitespace-nowrap ${
-                location.pathname === link.to
-                  ? 'text-ink font-medium bg-paper'
-                  : 'text-secondary hover:text-ink'
-              }`}
-            >
-              {link.label}
-              {link.to === '/connections' && pendingActionCount > 0 && (
-                <span className="flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-moss text-paper text-xs font-medium">
-                  {pendingActionCount}
-                </span>
-              )}
-            </Link>
-          ))}
-        </nav>
+        {!hideNavLinks && (
+          <nav className="flex items-center flex-wrap gap-1 sm:gap-3 mt-3">
+            {visibleNavLinks.map((link) => (
+              <Link
+                key={link.to}
+                to={link.to}
+                className={`flex items-center gap-1.5 text-sm rounded-md px-2.5 py-1.5 whitespace-nowrap ${
+                  location.pathname === link.to
+                    ? 'text-ink font-medium bg-paper'
+                    : 'text-secondary hover:text-ink'
+                }`}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+        )}
       </div>
     </header>
   )

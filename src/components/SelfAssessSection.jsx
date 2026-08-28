@@ -14,7 +14,16 @@ import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
 // picker's default selection and "current" badge match what the learner
 // actually sees before opening this, not the raw skill.level/
 // knowledge_level which stays null until a baseline is formally evaluated.
-export default function SelfAssessSection({ skill, user, axis = 'practical', currentLevel = null, onAssessed, onGuideGenerated }) {
+export default function SelfAssessSection({
+  skill,
+  user,
+  axis = 'practical',
+  currentLevel = null,
+  onAssessed,
+  onGuideGenerated,
+  submitLabel = 'Save self-assessment',
+  secondaryAction = null,
+}) {
   const isKnowledge = axis === 'knowledge'
   const labels = isKnowledge ? KNOWLEDGE_LEVEL_LABELS : LEVEL_LABELS
   // Once a knowledge level has been confirmed via the quiz, a later
@@ -25,6 +34,7 @@ export default function SelfAssessSection({ skill, user, axis = 'practical', cur
   const confirmedFloor = isKnowledge ? skill.knowledge_level : null
   const [level, setLevel] = useState(Math.max(currentLevel ?? 1, confirmedFloor ?? 1))
   const [comments, setComments] = useState('')
+  const [showEvidence, setShowEvidence] = useState(false)
   const [evidenceUrl, setEvidenceUrl] = useState('')
   const [evidenceFiles, setEvidenceFiles] = useState([])
   const [saving, setSaving] = useState(false)
@@ -46,6 +56,13 @@ export default function SelfAssessSection({ skill, user, axis = 'practical', cur
   const [recurring, setRecurring] = useState(!isKnowledge && Boolean(skill.checkin_frequency_unit))
   const [frequencyValue, setFrequencyValue] = useState(skill.checkin_frequency_value ?? 1)
   const [frequencyUnit, setFrequencyUnit] = useState(skill.checkin_frequency_unit ?? 'months')
+  // Starts open only if a schedule already exists to show/edit -- otherwise
+  // this is an opt-in, same as the evidence checkbox above, rather than
+  // showing the date picker (which can misbehave on narrow mobile widths)
+  // unasked-for on every fresh self-assessment.
+  const [scheduleNextReview, setScheduleNextReview] = useState(
+    !isKnowledge && Boolean(skill.next_checkin_date || skill.checkin_frequency_unit)
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -75,7 +92,7 @@ export default function SelfAssessSection({ skill, user, axis = 'practical', cur
   async function handleSubmit(e) {
     e.preventDefault()
     setError(null)
-    if (!isKnowledge && nextCheckinDate && nextCheckinDate < todayDateString()) {
+    if (!isKnowledge && scheduleNextReview && nextCheckinDate && nextCheckinDate < todayDateString()) {
       setError("Next self-assessment date can't be in the past.")
       return
     }
@@ -89,13 +106,13 @@ export default function SelfAssessSection({ skill, user, axis = 'practical', cur
           level,
           axis,
           comments: comments.trim() || null,
-          evidence_url: evidenceUrl.trim() || null,
+          evidence_url: showEvidence ? evidenceUrl.trim() || null : null,
         })
         .select()
         .single()
       if (assessmentError) throw assessmentError
 
-      if (evidenceFiles.length > 0) {
+      if (showEvidence && evidenceFiles.length > 0) {
         const paths = await uploadEvidenceFiles(user.id, skill.id, assessment.id, evidenceFiles)
         const { error: updateError } = await supabase
           .from('skill_assessments')
@@ -116,9 +133,10 @@ export default function SelfAssessSection({ skill, user, axis = 'practical', cur
         const { error: skillError } = await supabase
           .from('skills')
           .update({
-            next_checkin_date: nextCheckinDate || null,
-            checkin_frequency_value: recurring ? Math.max(1, Math.floor(Number(frequencyValue)) || 1) : null,
-            checkin_frequency_unit: recurring ? frequencyUnit : null,
+            next_checkin_date: scheduleNextReview ? nextCheckinDate || null : null,
+            checkin_frequency_value:
+              scheduleNextReview && recurring ? Math.max(1, Math.floor(Number(frequencyValue)) || 1) : null,
+            checkin_frequency_unit: scheduleNextReview && recurring ? frequencyUnit : null,
           })
           .eq('id', skill.id)
         if (skillError) throw skillError
@@ -191,10 +209,18 @@ export default function SelfAssessSection({ skill, user, axis = 'practical', cur
               {level === l && (
                 <div className="px-3 pt-2 pb-4">
                   {(() => {
-                    const levelDescription = guideStatements[l - 1] ?? (!isKnowledge ? LEVEL_DESCRIPTIONS[l] : undefined)
-                    if (guideLoading && levelDescription == null) {
+                    // The practical axis has a static generic fallback
+                    // (LEVEL_DESCRIPTIONS) while knowledge doesn't -- but
+                    // showing it immediately meant practical never displayed
+                    // a loading state at all, just silently swapped the
+                    // generic text for the AI-generated one once it arrived.
+                    // Loading now always wins first, on both axes, so the
+                    // fallback only ever appears once the guide call has
+                    // genuinely finished (and failed to produce anything).
+                    if (guideLoading) {
                       return <p className="text-xs text-secondary leading-relaxed">Loading guidance…</p>
                     }
+                    const levelDescription = guideStatements[l - 1] ?? (!isKnowledge ? LEVEL_DESCRIPTIONS[l] : undefined)
                     return (
                       levelDescription && (
                         <p className="text-xs text-secondary leading-relaxed">{levelDescription}</p>
@@ -227,53 +253,80 @@ export default function SelfAssessSection({ skill, user, axis = 'practical', cur
       </div>
 
       {!isKnowledge && (
-        <EvidenceFields
-          evidenceUrl={evidenceUrl}
-          onEvidenceUrlChange={setEvidenceUrl}
-          files={evidenceFiles}
-          onFilesChange={setEvidenceFiles}
-        />
-      )}
-
-      {!isKnowledge && (
-        <div className="border-t border-hairline pt-3 space-y-2">
-          <span className="block text-sm text-secondary">Next self-assessment</span>
-          <input
-            type="date"
-            value={nextCheckinDate}
-            min={todayDateString()}
-            onChange={(e) => setNextCheckinDate(e.target.value)}
-            className="w-full min-w-0 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-          />
+        <div>
           <label className="flex items-center gap-2 text-sm text-secondary">
             <input
               type="checkbox"
-              checked={recurring}
-              onChange={(e) => setRecurring(e.target.checked)}
+              checked={showEvidence}
+              onChange={(e) => setShowEvidence(e.target.checked)}
               className="rounded border-hairline"
             />
-            Set up regular self-assessments
+            Provide evidence
           </label>
-          {recurring && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-secondary">Every</span>
-              <input
-                type="number"
-                min={1}
-                value={frequencyValue}
-                onChange={(e) => setFrequencyValue(e.target.value)}
-                onBlur={(e) => setFrequencyValue(Math.max(1, Math.floor(Number(e.target.value)) || 1))}
-                className="w-16 min-w-0 rounded-md border border-hairline bg-paper px-2 py-1.5 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-              />
-              <select
-                value={frequencyUnit}
-                onChange={(e) => setFrequencyUnit(e.target.value)}
-                className="rounded-md border border-hairline bg-paper px-2 py-1.5 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-              >
-                <option value="weeks">weeks</option>
-                <option value="months">months</option>
-                <option value="years">years</option>
-              </select>
+          {showEvidence && (
+            <EvidenceFields
+              evidenceUrl={evidenceUrl}
+              onEvidenceUrlChange={setEvidenceUrl}
+              files={evidenceFiles}
+              onFilesChange={setEvidenceFiles}
+            />
+          )}
+        </div>
+      )}
+
+      {!isKnowledge && (
+        <div className="border-t border-hairline pt-3">
+          <label className="flex items-center gap-2 text-sm text-secondary">
+            <input
+              type="checkbox"
+              checked={scheduleNextReview}
+              onChange={(e) => setScheduleNextReview(e.target.checked)}
+              className="rounded border-hairline"
+            />
+            Schedule next self-review
+          </label>
+          {scheduleNextReview && (
+            <div className="mt-2 space-y-2">
+              <div className="w-full min-w-0 max-w-full overflow-x-auto">
+                <input
+                  type="date"
+                  value={nextCheckinDate}
+                  min={todayDateString()}
+                  onChange={(e) => setNextCheckinDate(e.target.value)}
+                  className="w-full min-w-0 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm text-secondary">
+                <input
+                  type="checkbox"
+                  checked={recurring}
+                  onChange={(e) => setRecurring(e.target.checked)}
+                  className="rounded border-hairline"
+                />
+                Set up regular self-assessments
+              </label>
+              {recurring && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-secondary">Every</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={frequencyValue}
+                    onChange={(e) => setFrequencyValue(e.target.value)}
+                    onBlur={(e) => setFrequencyValue(Math.max(1, Math.floor(Number(e.target.value)) || 1))}
+                    className="w-16 min-w-0 rounded-md border border-hairline bg-paper px-2 py-1.5 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+                  />
+                  <select
+                    value={frequencyUnit}
+                    onChange={(e) => setFrequencyUnit(e.target.value)}
+                    className="rounded-md border border-hairline bg-paper px-2 py-1.5 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+                  >
+                    <option value="weeks">weeks</option>
+                    <option value="months">months</option>
+                    <option value="years">years</option>
+                  </select>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -281,13 +334,25 @@ export default function SelfAssessSection({ skill, user, axis = 'practical', cur
 
       {error && <p className="text-sm text-red-700">{error}</p>}
 
-      <button
-        type="submit"
-        disabled={saving}
-        className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-      >
-        {saving ? 'Saving…' : 'Save self-assessment'}
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={saving}
+          className="flex-1 rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+        >
+          {saving ? 'Saving…' : submitLabel}
+        </button>
+        {secondaryAction && (
+          <button
+            type="button"
+            onClick={secondaryAction.onClick}
+            disabled={saving}
+            className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
+          >
+            {secondaryAction.label}
+          </button>
+        )}
+      </div>
     </form>
   )
 }

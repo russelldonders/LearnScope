@@ -20,7 +20,7 @@ function hashString(str) {
   return Math.abs(hash)
 }
 
-export default function CourseThumbnail({ name, provider, className = '' }) {
+export default function CourseThumbnail({ name, provider, logoUrl, className = '' }) {
   const seed = `${name ?? ''}|${provider ?? ''}`
   const [from, to] = GRADIENT_PAIRS[hashString(seed) % GRADIENT_PAIRS.length]
   const initial = name?.trim()?.[0]?.toUpperCase() ?? '?'
@@ -28,10 +28,15 @@ export default function CourseThumbnail({ name, provider, className = '' }) {
   return (
     <div
       aria-hidden="true"
-      className={`flex items-center justify-center ${className}`}
+      className={`relative flex items-center justify-center ${className}`}
       style={{ background: `linear-gradient(135deg, ${from}, ${to})` }}
     >
       <span className="font-display text-3xl text-paper/90">{initial}</span>
+      {logoUrl && (
+        <div className="absolute bottom-1.5 left-1.5 w-7 h-7 rounded-md bg-paper border border-hairline/50 shadow-sm overflow-hidden flex items-center justify-center">
+          <img src={logoUrl} alt="" className="w-full h-full object-contain p-0.5" />
+        </div>
+      )}
     </div>
   )
 }

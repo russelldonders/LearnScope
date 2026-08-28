@@ -29,16 +29,22 @@ const KNOWLEDGE_LEVEL_LABELS = {
   5: 'Deep understanding',
 }
 
-function buildSystemPrompt({ skillName, level, plan, mustConclude }) {
+function buildSystemPrompt({ skillName, level, calibrate, plan, mustConclude }) {
   const levelLabel = KNOWLEDGE_LEVEL_LABELS[level]
-  return `You are conducting a short spoken-style interview to verify whether a learner's theoretical knowledge of "${skillName.trim()}" genuinely reaches the "${levelLabel}" level (level ${level} of 5: 1 Unfamiliar, 2 Aware, 3 Familiar, 4 Knowledgeable, 5 Deep understanding).
+  const intro = calibrate
+    ? `You are conducting a short spoken-style interview to find out, from scratch, what level a learner's theoretical knowledge of "${skillName.trim()}" genuinely reaches on this scale: 1 Unfamiliar, 2 Aware, 3 Familiar, 4 Knowledgeable, 5 Deep understanding. Nothing is known about their level yet, so start with an accessible question and let their answers tell you how far to push -- move to harder ground quickly if they're clearly beyond the basics, or stay foundational if they're not.`
+    : `You are conducting a short spoken-style interview to verify whether a learner's theoretical knowledge of "${skillName.trim()}" genuinely reaches the "${levelLabel}" level (level ${level} of 5: 1 Unfamiliar, 2 Aware, 3 Familiar, 4 Knowledgeable, 5 Deep understanding).`
+  const conclusion = calibrate
+    ? `Once you have enough evidence to place them confidently, conclude the interview: set done to true, give a confirmedLevel 1-5 reflecting what they actually demonstrated, and a 2-4 sentence reasoning explaining your judgement. Base it entirely on what they showed, not what they claimed -- there's no ceiling and no floor to protect, just your honest read of where they land.`
+    : `Once you have enough evidence (this doesn't need to cover every topic), conclude the interview: set done to true, give a confirmedLevel 1-${level} reflecting what they actually demonstrated -- not what they claimed -- and a 2-4 sentence reasoning explaining your judgement. The confirmed level can never exceed ${level}: this interview only checks whether they meet the level they were pitched at, the same standard a passing quiz score would confirm -- it doesn't promote them beyond it even if they seem to know more. Don't inflate the level out of politeness either; if their answers don't support level ${level}, confirm a lower one instead.`
+  return `${intro}
 
 Topics to probe: ${plan.topics.join('; ')}
-Rubric for this level: ${plan.rubric}
+Rubric: ${plan.rubric}
 
 Ask one focused, conversational question at a time -- never a list of questions. Follow up naturally on their previous answer: probe deeper if it's vague, move to a new topic once they've clearly shown (or clearly lack) understanding of the current one. Keep each message to 1-3 sentences of plain spoken language -- it may be read aloud.
 
-Once you have enough evidence (this doesn't need to cover every topic), conclude the interview: set done to true, give a confirmedLevel 1-${level} reflecting what they actually demonstrated -- not what they claimed -- and a 2-4 sentence reasoning explaining your judgement. The confirmed level can never exceed ${level}: this interview only checks whether they meet the level they were pitched at, the same standard a passing quiz score would confirm -- it doesn't promote them beyond it even if they seem to know more. Don't inflate the level out of politeness either; if their answers don't support level ${level}, confirm a lower one instead. While done is false, still fill confirmedLevel with your current best-guess level and reasoning with a short note-to-self -- they won't be shown to the learner until done is true.${
+${conclusion} While done is false, still fill confirmedLevel with your current best-guess level and reasoning with a short note-to-self -- they won't be shown to the learner until done is true.${
     mustConclude
       ? "\n\nThis must be your final turn: set done to true now, regardless of how many topics you've covered. Your message this turn must be a short closing remark (e.g. thanking them, or a one-line summary) -- not a new question, since they won't get to answer one."
       : ''
@@ -63,12 +69,12 @@ export default async function handler(req, res) {
     return
   }
 
-  const { skillName, level, plan, transcript } = req.body ?? {}
+  const { skillName, level, calibrate, plan, transcript } = req.body ?? {}
   if (!skillName || typeof skillName !== 'string' || skillName.length > 200) {
     res.status(400).json({ error: 'Missing or invalid skillName' })
     return
   }
-  if (!level || level < 1 || level > 5) {
+  if (!calibrate && (!level || level < 1 || level > 5)) {
     res.status(400).json({ error: 'Missing or invalid level' })
     return
   }
@@ -113,7 +119,7 @@ export default async function handler(req, res) {
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
-      system: buildSystemPrompt({ skillName, level, plan, mustConclude }),
+      system: buildSystemPrompt({ skillName, level, calibrate, plan, mustConclude }),
       output_config: {
         format: { type: 'json_schema', schema: TURN_SCHEMA },
       },
@@ -128,10 +134,13 @@ export default async function handler(req, res) {
     const textBlock = response.content.find((b) => b.type === 'text')
     const data = JSON.parse(textBlock.text)
     const done = mustConclude ? true : Boolean(data.done)
-    // Clamped to `level` (the pitched/calibrated level), not the global 1-5
-    // range -- same ceiling the quiz enforces (a pass confirms the pitched
-    // level, it never promotes beyond it). See buildSystemPrompt above.
-    const confirmedLevel = Math.min(level, Math.max(1, Math.round(Number(data.confirmedLevel) || level)))
+    // Confirming mode clamps to `level` (the pitched level), not the global
+    // 1-5 range -- same ceiling the quiz enforces (a pass confirms the
+    // pitched level, it never promotes beyond it). Calibrating mode has no
+    // such ceiling: the model is finding the level from scratch, so only the
+    // scale's own 1-5 bounds apply. See buildSystemPrompt above.
+    const ceiling = calibrate ? 5 : level
+    const confirmedLevel = Math.min(ceiling, Math.max(1, Math.round(Number(data.confirmedLevel) || ceiling)))
     res.status(200).json({ message: data.message, done, confirmedLevel, reasoning: data.reasoning })
   } catch (err) {
     console.error('interview-turn error:', err)

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { XAPI_VERBS } from '../lib/xapiVerbs'
 import { buildStatement } from '../lib/xapiStatement'
+import AccessibleDialog from './AccessibleDialog'
 
 function todayDate() {
   return new Date().toISOString().slice(0, 10)
@@ -54,12 +55,12 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
   }
 
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="font-display text-2xl text-ink mb-1">Record an activity</h2>
+    <AccessibleDialog
+      labelledBy="record-activity-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+        <h2 id="record-activity-dialog-title" className="font-display text-2xl text-ink mb-1">Record an activity</h2>
         <p className="text-sm text-secondary mb-4">
           {relatedCourse
             ? `A quick log of something you did as part of "${relatedCourse.name}".`
@@ -71,36 +72,38 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm text-secondary mb-1" htmlFor="activityTitle">
-              What happened?
+              What did you do?
             </label>
-            <div className="flex items-stretch gap-2">
-              <span className="flex items-center text-ink shrink-0">I</span>
-              <select
-                id="verb"
-                value={verbValue}
-                onChange={(e) => setVerbValue(e.target.value)}
-                aria-label="What happened"
-                className="shrink-0 rounded-md border border-hairline bg-paper pl-2 pr-6 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-              >
-                {XAPI_VERBS.map((v) => (
-                  <option key={v.value} value={v.value}>
-                    {v.label.toLowerCase()}
-                  </option>
-                ))}
-              </select>
-              <input
-                id="activityTitle"
-                required
-                value={activityTitle}
-                onChange={(e) => setActivityTitle(e.target.value)}
-                placeholder={
-                  fixedSkill
-                    ? `something related to "${fixedSkill.name}"…`
-                    : 'a retro for the team, a 10k, a production incident…'
-                }
-                className="flex-1 min-w-0 rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-              />
-            </div>
+            <input
+              id="activityTitle"
+              required
+              value={activityTitle}
+              onChange={(e) => setActivityTitle(e.target.value)}
+              placeholder={
+                fixedSkill
+                  ? `something related to "${fixedSkill.name}"…`
+                  : 'a retro for the team, a 10k, a production incident…'
+              }
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-secondary mb-1" htmlFor="verb">
+              How would you describe it?
+            </label>
+            <select
+              id="verb"
+              value={verbValue}
+              onChange={(e) => setVerbValue(e.target.value)}
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+            >
+              {XAPI_VERBS.map((v) => (
+                <option key={v.value} value={v.value}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -207,7 +210,7 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
             </div>
           )}
 
-          {error && <p className="text-sm text-red-700">{error}</p>}
+          {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
           <div className="flex items-center gap-2 pt-2">
             <button
@@ -226,7 +229,6 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }

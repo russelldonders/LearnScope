@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
+import AccessibleDialog from '../components/AccessibleDialog'
 import {
   getSearchPrivacySettings,
   updateSearchPrivacySettings,
@@ -128,8 +129,8 @@ export default function ProfilePrivacy() {
     <div className="min-h-screen bg-paper">
       <AppHeader />
 
-      <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
-        <h2 className="font-display text-xl text-ink mb-2">Privacy settings</h2>
+      <main id="main-content" tabIndex={-1} className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+        <h1 className="font-display text-xl text-ink mb-2">Privacy settings</h1>
 
         {loading ? (
           <p className="text-secondary">Loading…</p>
@@ -300,19 +301,19 @@ function SearchableSkillsModal({ userId, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <AccessibleDialog
+      labelledBy="search-skills-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-2xl text-ink">Skills shown in search</h2>
+          <h2 id="search-skills-dialog-title" className="font-display text-2xl text-ink">Skills shown in search</h2>
           <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
             Close
           </button>
         </div>
         {loading && <p className="text-sm text-secondary">Loading…</p>}
-        {error && <p className="text-sm text-red-700 mb-2">{error}</p>}
+        {error && <p role="alert" className="text-sm text-red-700 mb-2">{error}</p>}
         {!loading && skills.length === 0 && <p className="text-sm text-secondary">You haven't added any skills yet.</p>}
         <ul className="space-y-2">
           {skills.map((s) => (
@@ -330,7 +331,6 @@ function SearchableSkillsModal({ userId, onClose }) {
             </li>
           ))}
         </ul>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }

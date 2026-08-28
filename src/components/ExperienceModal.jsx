@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { EXPERIENCE_TYPE_CONFIG } from '../lib/experienceTypes'
 import OrganizationUrlField from './OrganizationUrlField'
+import AccessibleDialog from './AccessibleDialog'
 
 export default function ExperienceModal({
   type = 'employment',
@@ -45,12 +46,13 @@ export default function ExperienceModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="font-display text-2xl text-ink mb-4">{config.modalTitle}</h2>
+    <AccessibleDialog
+      labelledBy="experience-dialog-title"
+      onClose={saving ? undefined : onClose}
+      closeOnBackdrop={!saving}
+      panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+        <h2 id="experience-dialog-title" className="font-display text-2xl text-ink mb-4">{config.modalTitle}</h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -138,7 +140,7 @@ export default function ExperienceModal({
             />
           </div>
 
-          {error && <p className="text-sm text-red-700">{error}</p>}
+          {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
           <div className="flex items-center gap-2 pt-2">
             <button
@@ -157,7 +159,6 @@ export default function ExperienceModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }

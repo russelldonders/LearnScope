@@ -1,7 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
+import { ThemeProvider } from './context/ThemeContext'
 import { PendingActionsProvider } from './context/PendingActionsContext'
+import { NavVisibilityProvider } from './context/NavVisibilityContext'
 import ProtectedRoute from './components/ProtectedRoute'
+import PlatformAdminRoute from './components/PlatformAdminRoute'
+import ProviderAdminRoute from './components/ProviderAdminRoute'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
@@ -19,19 +23,34 @@ import ProfilePrivacy from './pages/ProfilePrivacy'
 import ProfileImport from './pages/ProfileImport'
 import ProfileExport from './pages/ProfileExport'
 import Rate from './pages/Rate'
+import ProviderProfile from './pages/ProviderProfile'
 import Connections from './pages/Connections'
+import Actions from './pages/Actions'
 import SkillsProfile from './pages/SkillsProfile'
 import CourseCatalogue from './pages/CourseCatalogue'
 import CourseDetail from './pages/CourseDetail'
 import CourseLearn from './pages/CourseLearn'
 import Learning from './pages/Learning'
 import ValidateRequest from './pages/ValidateRequest'
+import AdminUsers from './pages/admin/AdminUsers'
+import AdminUserDetail from './pages/admin/AdminUserDetail'
+import AdminProviders from './pages/admin/AdminProviders'
+import AdminCatalogue from './pages/admin/AdminCatalogue'
+import AdminSkills from './pages/admin/AdminSkills'
+import AdminSkillDetail from './pages/admin/AdminSkillDetail'
+import AdminTags from './pages/admin/AdminTags'
+import ProviderConsole from './pages/provider/ProviderConsole'
+import ProviderCourseEditor from './pages/provider/ProviderCourseEditor'
+import RouteTitle from './components/RouteTitle'
 
 function App() {
   return (
     <BrowserRouter>
+      <RouteTitle />
       <AuthProvider>
+        <ThemeProvider>
         <PendingActionsProvider>
+        <NavVisibilityProvider>
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
@@ -40,6 +59,7 @@ function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/rate/:code" element={<Rate />} />
+          <Route path="/providers/:slug" element={<ProviderProfile />} />
           <Route
             path="/onboarding"
             element={
@@ -129,6 +149,14 @@ function App() {
             }
           />
           <Route
+            path="/actions"
+            element={
+              <ProtectedRoute>
+                <Actions />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/training"
             element={
               <ProtectedRoute>
@@ -176,9 +204,83 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/provider"
+            element={
+              <ProviderAdminRoute>
+                <ProviderConsole />
+              </ProviderAdminRoute>
+            }
+          />
+          <Route
+            path="/provider/training/:courseId"
+            element={
+              <ProviderAdminRoute>
+                <ProviderCourseEditor />
+              </ProviderAdminRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <PlatformAdminRoute>
+                <AdminUsers />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/users/:userId"
+            element={
+              <PlatformAdminRoute>
+                <AdminUserDetail />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/providers"
+            element={
+              <PlatformAdminRoute>
+                <AdminProviders />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/catalogue"
+            element={
+              <PlatformAdminRoute>
+                <AdminCatalogue />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/skills"
+            element={
+              <PlatformAdminRoute>
+                <AdminSkills />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/skills/:skillId"
+            element={
+              <PlatformAdminRoute>
+                <AdminSkillDetail />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/tags"
+            element={
+              <PlatformAdminRoute>
+                <AdminTags />
+              </PlatformAdminRoute>
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </NavVisibilityProvider>
         </PendingActionsProvider>
+        </ThemeProvider>
       </AuthProvider>
     </BrowserRouter>
   )

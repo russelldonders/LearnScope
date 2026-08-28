@@ -2,6 +2,21 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Applies the .dark class before first paint, straight from
+      // localStorage -- ThemeContext.jsx sets the same class post-mount,
+      // but waiting for React would show a flash of the wrong theme on
+      // every load. Keep the 'learnscope-theme' key in sync with that file.
+      ;(function () {
+        try {
+          var pref = localStorage.getItem('learnscope-theme')
+          var isDark =
+            pref === 'dark' ||
+            (pref !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          if (isDark) document.documentElement.classList.add('dark')
+        } catch (e) {}
+      })()
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />

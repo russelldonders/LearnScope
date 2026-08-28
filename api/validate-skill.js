@@ -24,7 +24,7 @@ function buildPrompt({ skillName, targetLevel, selfLevel, selfComments, activiti
   lines.push(`Target level the learner is trying to reach: "${targetLevel}".`)
   lines.push('')
   lines.push(
-    'Practical proficiency scale (low to high): Watching and learning, Trying it with support, Doing it independently, Handling the tricky stuff, Raising the standard.'
+    'Practical proficiency scale (low to high): Beginner, Developing, Capable, Skilled, Expert.'
   )
   lines.push('')
   lines.push(
@@ -60,7 +60,7 @@ function buildPrompt({ skillName, targetLevel, selfLevel, selfComments, activiti
 
 ${lines.join('\n')}
 
-Weigh all the available evidence -- self-assessment, recorded activity, and peer ratings (using the given weights) -- to propose a single overall current level from this scale: 1=Watching and learning, 2=Trying it with support, 3=Doing it independently, 4=Handling the tricky stuff, 5=Raising the standard. A single demonstration is weaker evidence than repeated or varied application -- weigh repetition and variety of context accordingly. If little or no evidence is available, default toward a conservative (lower) estimate rather than guessing high.
+Weigh all the available evidence -- self-assessment, recorded activity, and peer ratings (using the given weights) -- to propose a single overall current level from this scale: 1=Beginner, 2=Developing, 3=Capable, 4=Skilled, 5=Expert. A single demonstration is weaker evidence than repeated or varied application -- weigh repetition and variety of context accordingly. If little or no evidence is available, default toward a conservative (lower) estimate rather than guessing high.
 
 Decide "passed" as true only if the evidence clearly supports the learner having reached the target level ("${targetLevel}") or higher; otherwise false.
 

@@ -1,13 +1,19 @@
 // Practical/demonstrated-capability scale -- the primary proficiency
 // measure. Deliberately describes what a learner can reliably *do*, not
 // what they understand (see KNOWLEDGE_LEVEL_LABELS) -- knowledge alone
-// never implies a practical level.
+// never implies a practical level. Five plain adjectives naming the rung,
+// not describing it, mirroring KNOWLEDGE_LEVEL_LABELS' economy -- and
+// deliberately skill-agnostic (no "edge cases" or "the tricky stuff"
+// language that assumes a troubleshooting-style skill), so it reads the same
+// for a musical skill, a technical one, or a soft skill. The AI-generated
+// per-skill guide is what actually carries skill-specific nuance (see
+// ensurePracticalLevelGuide / SelfAssessSection).
 export const LEVEL_LABELS = {
-  1: 'Watching and learning',
-  2: 'Trying it with support',
-  3: 'Doing it independently',
-  4: 'Handling the tricky stuff',
-  5: 'Raising the standard',
+  1: 'Beginner',
+  2: 'Developing',
+  3: 'Capable',
+  4: 'Skilled',
+  5: 'Expert',
 }
 
 // Longer, skill-agnostic explanations of each practical level, shown when a
@@ -19,7 +25,7 @@ export const LEVEL_DESCRIPTIONS = {
   1: "You've observed this being done, but haven't tried it yourself yet.",
   2: "You can attempt this with guidance, supervision, or a reference to follow.",
   3: "You can complete this on your own, without needing help.",
-  4: 'You can handle edge cases, complications, and unusual situations with confidence.',
+  4: "You can handle harder or less familiar situations with confidence, not just the routine ones.",
   5: "Others turn to you on this -- you're pushing quality or improving how it's done.",
 }
 

@@ -14,6 +14,8 @@ dist-ssr
 .env
 .env.*
 !.env.example
+env.test
+!env.test.example
 
 .claude/settings.local.json
 
@@ -41,3 +43,8 @@ dist-ssr
 # Supabase CLI local state
 supabase/.temp/
 supabase/.branches/
+
+# Installed Claude Code skill contents -- regenerated from skills-lock.json
+.agents/
+.claude/skills/
+.impeccable/

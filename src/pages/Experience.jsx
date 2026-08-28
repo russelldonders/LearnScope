@@ -5,7 +5,7 @@ export default function Experience() {
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-16">
+      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8 space-y-16">
         <ExperienceSection />
       </main>
     </div>

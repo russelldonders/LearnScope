@@ -2,5 +2,72 @@
   "functions": {
     "api/parse-cv.js": { "maxDuration": 60 }
   },
+  "routes": [
+    {
+      "src": "/course-content/(.*\\.(?:html|htm))$",
+      "dest": "${VITE_SUPABASE_URL}/storage/v1/object/public/course-content/$1",
+      "env": ["VITE_SUPABASE_URL"],
+      "transforms": [
+        { "type": "response.headers", "op": "set", "target": { "key": "content-type" }, "args": "text/html; charset=utf-8" },
+        { "type": "response.headers", "op": "delete", "target": { "key": "content-disposition" } },
+        { "type": "response.headers", "op": "delete", "target": { "key": "content-security-policy" } }
+      ]
+    },
+    {
+      "src": "/course-content/(.*\\.(?:js|mjs))$",
+      "dest": "${VITE_SUPABASE_URL}/storage/v1/object/public/course-content/$1",
+      "env": ["VITE_SUPABASE_URL"],
+      "transforms": [
+        { "type": "response.headers", "op": "set", "target": { "key": "content-type" }, "args": "application/javascript; charset=utf-8" },
+        { "type": "response.headers", "op": "delete", "target": { "key": "content-disposition" } },
+        { "type": "response.headers", "op": "delete", "target": { "key": "content-security-policy" } }
+      ]
+    },
+    {
+      "src": "/course-content/(.*\\.css)$",
+      "dest": "${VITE_SUPABASE_URL}/storage/v1/object/public/course-content/$1",
+      "env": ["VITE_SUPABASE_URL"],
+      "transforms": [
+        { "type": "response.headers", "op": "set", "target": { "key": "content-type" }, "args": "text/css; charset=utf-8" },
+        { "type": "response.headers", "op": "delete", "target": { "key": "content-disposition" } },
+        { "type": "response.headers", "op": "delete", "target": { "key": "content-security-policy" } }
+      ]
+    },
+    {
+      "src": "/course-content/(.*\\.json)$",
+      "dest": "${VITE_SUPABASE_URL}/storage/v1/object/public/course-content/$1",
+      "env": ["VITE_SUPABASE_URL"],
+      "transforms": [
+        { "type": "response.headers", "op": "set", "target": { "key": "content-type" }, "args": "application/json; charset=utf-8" },
+        { "type": "response.headers", "op": "delete", "target": { "key": "content-disposition" } },
+        { "type": "response.headers", "op": "delete", "target": { "key": "content-security-policy" } }
+      ]
+    },
+    {
+      "src": "/course-content/(.*\\.xml)$",
+      "dest": "${VITE_SUPABASE_URL}/storage/v1/object/public/course-content/$1",
+      "env": ["VITE_SUPABASE_URL"],
+      "transforms": [
+        { "type": "response.headers", "op": "set", "target": { "key": "content-type" }, "args": "application/xml; charset=utf-8" },
+        { "type": "response.headers", "op": "delete", "target": { "key": "content-disposition" } },
+        { "type": "response.headers", "op": "delete", "target": { "key": "content-security-policy" } }
+      ]
+    },
+    {
+      "src": "/course-content/(.*\\.svg)$",
+      "dest": "${VITE_SUPABASE_URL}/storage/v1/object/public/course-content/$1",
+      "env": ["VITE_SUPABASE_URL"],
+      "transforms": [
+        { "type": "response.headers", "op": "set", "target": { "key": "content-type" }, "args": "image/svg+xml" },
+        { "type": "response.headers", "op": "delete", "target": { "key": "content-disposition" } },
+        { "type": "response.headers", "op": "delete", "target": { "key": "content-security-policy" } }
+      ]
+    },
+    {
+      "src": "/course-content/(.*)",
+      "dest": "${VITE_SUPABASE_URL}/storage/v1/object/public/course-content/$1",
+      "env": ["VITE_SUPABASE_URL"]
+    }
+  ],
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }

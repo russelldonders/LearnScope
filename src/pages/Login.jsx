@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getPendingInviteCode, clearPendingInviteCode } from '../lib/connections'
+import { getPendingEnrolCourseId, clearPendingEnrolCourseId, resumePendingEnrolment } from '../lib/courseCatalogue'
 import GoogleSignInButton from '../components/GoogleSignInButton'
 
 export default function Login() {
@@ -29,7 +30,7 @@ export default function Login() {
     e.preventDefault()
     setError(null)
     setSubmitting(true)
-    const { error } = await signIn(email, password)
+    const { data, error } = await signIn(email, password)
     setSubmitting(false)
     if (error) {
       setError(error.message)
@@ -39,19 +40,30 @@ export default function Login() {
     if (pendingCode) {
       clearPendingInviteCode()
       navigate(`/rate/${pendingCode}`)
-    } else {
-      navigate('/dashboard')
+      return
     }
+    const enrolled = await resumePendingEnrolment(data.user.id).catch(() => null)
+    navigate(enrolled ? `/courses/${enrolled.id}` : '/dashboard')
   }
 
   async function handleGoogleSignIn() {
     setError(null)
     setGoogleSubmitting(true)
     const pendingCode = getPendingInviteCode()
-    const redirectTo = pendingCode
-      ? `${window.location.origin}/rate/${pendingCode}`
-      : `${window.location.origin}/dashboard`
-    if (pendingCode) clearPendingInviteCode()
+    const pendingEnrolId = getPendingEnrolCourseId()
+    // A full-page redirect can't resume anything inline here (there's no
+    // authenticated session yet), so it lands on a page that does the
+    // resuming itself once Supabase's redirect completes: /rate/:code
+    // handles its own accept flow, /welcome?enrol= drives
+    // resumePendingEnrolment the same way it does for email confirmation.
+    let redirectTo = `${window.location.origin}/dashboard`
+    if (pendingCode) {
+      redirectTo = `${window.location.origin}/rate/${pendingCode}`
+      clearPendingInviteCode()
+    } else if (pendingEnrolId) {
+      redirectTo = `${window.location.origin}/welcome?enrol=${pendingEnrolId}`
+      clearPendingEnrolCourseId()
+    }
     const { error } = await signInWithGoogle(redirectTo)
     if (error) {
       setError(error.message)
@@ -112,7 +124,7 @@ export default function Login() {
             />
           </div>
 
-          {error && <p className="text-sm text-red-700">{error}</p>}
+          {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
           <button
             type="submit"

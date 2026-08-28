@@ -4,6 +4,7 @@ import GrowthRing from './GrowthRing'
 import PersonAvatar from './PersonAvatar'
 import { LEVEL_LABELS } from '../lib/levels'
 import { listSkillMatches, sendConnectionRequest, isDuplicatePendingRequestError } from '../lib/skillDiscovery'
+import AccessibleDialog from './AccessibleDialog'
 
 const SEARCH_THRESHOLD = 10
 
@@ -34,13 +35,13 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
   }
 
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <AccessibleDialog
+      labelledBy="people-with-skill-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
         <div className="flex items-center justify-between mb-1">
-          <h2 className="font-display text-2xl text-ink">People with {skillName}</h2>
+          <h2 id="people-with-skill-dialog-title" className="font-display text-2xl text-ink">People with {skillName}</h2>
           <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm shrink-0">
             Close
           </button>
@@ -60,7 +61,7 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
         )}
 
         {loading && <p className="text-sm text-secondary">Loading…</p>}
-        {error && <p className="text-sm text-red-700">{error}</p>}
+        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
         {!loading && !error && visible.length === 0 && (
           <p className="text-sm text-secondary">
@@ -119,8 +120,7 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
             </li>
           ))}
         </ul>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }
 
@@ -155,7 +155,7 @@ function ConnectRequestForm({ recipientId, recipientName, skillId, onSent, onCan
         placeholder={`Why do you want to connect with ${recipientName}? (optional)`}
         className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-xs focus:outline-none focus:ring-2 focus:ring-moss"
       />
-      {error && <p className="text-xs text-red-700 mt-1">{error}</p>}
+      {error && <p role="alert" className="text-xs text-red-700 mt-1">{error}</p>}
       <div className="flex items-center gap-2 mt-2">
         <button
           type="button"

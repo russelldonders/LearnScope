@@ -73,7 +73,7 @@ export default function SkillsProfile() {
     <div className="min-h-screen bg-paper">
       <AppHeader />
 
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
         <Link to="/connections" className="text-sm text-secondary hover:text-ink mb-6 inline-block">
           ← Back to connections
         </Link>
@@ -88,7 +88,7 @@ export default function SkillsProfile() {
           </div>
         ) : (
           <>
-            <h2 className="font-display text-xl text-ink mb-6">{name}'s skills</h2>
+            <h1 className="font-display text-xl text-ink mb-6">{name}'s skills</h1>
 
             {skills.length === 0 ? (
               <div className="text-center py-16 border border-dashed border-hairline rounded-lg">

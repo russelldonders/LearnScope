@@ -44,7 +44,7 @@ export default function GrowthRing({
         )}
         <circle cx="50" cy="50" r="3" fill={clampedLevel > 0 ? color : 'var(--color-hairline)'} />
       </svg>
-      {showLabel && <span className="font-mono text-xs text-secondary">{label}</span>}
+      {showLabel && level && <span className="font-mono text-xs text-secondary">{label}</span>}
     </div>
   )
 }

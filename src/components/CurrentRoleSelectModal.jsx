@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import AccessibleDialog from './AccessibleDialog'
 
 // Shown when a skill is marked "part of my current role" but the learner
 // has more than one ongoing job -- rather than silently linking to all of
@@ -40,12 +41,13 @@ export default function CurrentRoleSelectModal({ roles, onConfirm, onCancel }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={handleCancel}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="font-display text-xl text-ink mb-2">Which current role is this part of?</h2>
+    <AccessibleDialog
+      labelledBy="current-role-dialog-title"
+      onClose={saving ? undefined : handleCancel}
+      closeOnBackdrop={!saving}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6"
+    >
+        <h2 id="current-role-dialog-title" className="font-display text-xl text-ink mb-2">Which current role is this part of?</h2>
         <p className="text-sm text-secondary mb-4">
           You have more than one ongoing role on your Experience timeline — pick which one(s)
           this skill applies to.
@@ -71,7 +73,7 @@ export default function CurrentRoleSelectModal({ roles, onConfirm, onCancel }) {
           ))}
         </div>
 
-        {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
+        {error && <p role="alert" className="text-sm text-red-700 mb-3">{error}</p>}
 
         <div className="flex items-center gap-2">
           <button
@@ -91,7 +93,6 @@ export default function CurrentRoleSelectModal({ roles, onConfirm, onCancel }) {
             Cancel
           </button>
         </div>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }

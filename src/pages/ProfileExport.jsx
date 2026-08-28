@@ -133,9 +133,9 @@ export default function ProfileExport() {
         <AppHeader />
       </div>
 
-      <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+      <main id="main-content" tabIndex={-1} className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         <div className="flex items-center justify-between print:hidden">
-          <h2 className="font-display text-xl text-ink">Your data</h2>
+          <h1 className="font-display text-xl text-ink">Your data</h1>
           {!loading && !error && (
             <button
               type="button"
@@ -148,7 +148,7 @@ export default function ProfileExport() {
         </div>
 
         {loading && <p className="text-secondary">Loading…</p>}
-        {error && <p className="text-sm text-red-700">{error}</p>}
+        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
         {!loading && !error && data && (
           <>

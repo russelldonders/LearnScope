@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import GrowthRing from './GrowthRing'
 import { LEVELS, LEVEL_LABELS, LEVEL_DESCRIPTIONS } from '../lib/levels'
 import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
+import AccessibleDialog from './AccessibleDialog'
 
 // currentLevel is the panel's already-displayed practical level (falls back
 // through self-assessment history the same way the Can Do panel does -- see
@@ -70,12 +71,12 @@ export default function SetTargetModal({ skill, user, targets = [], currentLevel
   }
 
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="font-display text-2xl text-ink mb-1">{isEdit ? 'Edit target' : 'Set a target'}</h2>
+    <AccessibleDialog
+      labelledBy="target-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+        <h2 id="target-dialog-title" className="font-display text-2xl text-ink mb-1">{isEdit ? 'Edit target' : 'Set a target'}</h2>
         <p className="text-sm text-secondary mb-4">{skill.name}</p>
 
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -142,7 +143,7 @@ export default function SetTargetModal({ skill, user, targets = [], currentLevel
             className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
           />
 
-          {error && <p className="text-sm text-red-700">{error}</p>}
+          {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
           <div className="flex items-center gap-2">
             <button
@@ -184,7 +185,6 @@ export default function SetTargetModal({ skill, user, targets = [], currentLevel
             </ul>
           </div>
         )}
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }

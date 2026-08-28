@@ -10,8 +10,10 @@ import { COURSE_TYPES } from '../lib/courseTypes'
 import { activityName, verbLabel, relatedSkillFromStatement, formatDuration } from '../lib/xapiStatement'
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import GrowthRing from './GrowthRing'
+import AccessibleDialog from './AccessibleDialog'
 import EvidenceFields from './EvidenceFields'
 import RecordActivityModal from './RecordActivityModal'
+import ConfirmDialog from './ConfirmDialog'
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -41,6 +43,7 @@ export default function CourseModal({
   const [notes, setNotes] = useState(course?.notes ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const [linkedExperiences, setLinkedExperiences] = useState([])
   const [skillLinks, setSkillLinks] = useState([])
@@ -108,23 +111,24 @@ export default function CourseModal({
   }
 
   async function handleDelete() {
-    if (!confirm(`Delete "${course.name}"? This can't be undone.`)) return
     setSaving(true)
     try {
       await onDelete(course.id)
     } catch (err) {
       setError(err.message)
       setSaving(false)
+    } finally {
+      setConfirmingDelete(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="font-display text-2xl text-ink mb-4">
+    <AccessibleDialog
+      labelledBy="course-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+        <h2 id="course-dialog-title" className="font-display text-2xl text-ink mb-4">
           {isEditing ? course.name : 'Add a course'}
         </h2>
 
@@ -255,7 +259,7 @@ export default function CourseModal({
               {isEditing && (
                 <button
                   type="button"
-                  onClick={handleDelete}
+                  onClick={() => setConfirmingDelete(true)}
                   disabled={saving}
                   className="rounded-md border border-hairline text-red-700 py-2 px-4 hover:bg-paper disabled:opacity-60"
                 >
@@ -310,8 +314,16 @@ export default function CourseModal({
             user={user}
           />
         )}
-      </div>
-    </div>
+
+      {confirmingDelete && (
+        <ConfirmDialog
+          message={`Delete "${course.name}"? This can't be undone.`}
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmingDelete(false)}
+          confirming={saving}
+        />
+      )}
+    </AccessibleDialog>
   )
 }
 
@@ -919,6 +931,8 @@ function ActivitiesSubsection({ course, skills, statements, onChange, user }) {
   const [actorName, setActorName] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [error, setError] = useState(null)
+  const [pendingDeleteId, setPendingDeleteId] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     supabase
@@ -941,11 +955,13 @@ function ActivitiesSubsection({ course, skills, statements, onChange, user }) {
     await onChange()
   }
 
-  async function handleDelete(id) {
-    if (!confirm("Delete this recorded activity? This can't be undone.")) return
-    const { error } = await supabase.from('xapi_statements').delete().eq('id', id)
+  async function confirmDelete() {
+    setDeleting(true)
+    const { error } = await supabase.from('xapi_statements').delete().eq('id', pendingDeleteId)
     if (error) setError(error.message)
     else await onChange()
+    setDeleting(false)
+    setPendingDeleteId(null)
   }
 
   return (
@@ -990,7 +1006,7 @@ function ActivitiesSubsection({ course, skills, statements, onChange, user }) {
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleDelete(s.id)}
+                    onClick={() => setPendingDeleteId(s.id)}
                     className="shrink-0 text-xs text-red-700 font-medium"
                   >
                     Remove
@@ -1010,6 +1026,15 @@ function ActivitiesSubsection({ course, skills, statements, onChange, user }) {
           relatedCourse={{ id: course.id, name: course.name }}
           onSave={handleSave}
           onClose={() => setModalOpen(false)}
+        />
+      )}
+
+      {pendingDeleteId && (
+        <ConfirmDialog
+          message="Delete this recorded activity? This can't be undone."
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDeleteId(null)}
+          confirming={deleting}
         />
       )}
     </div>

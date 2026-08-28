@@ -2,13 +2,16 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
+import { listCourseProgressByCatalogueId } from '../lib/courseContent'
 import AppHeader from '../components/AppHeader'
 import CourseThumbnail from '../components/CourseThumbnail'
+import ProgressBar from '../components/ProgressBar'
 
 export default function Learning() {
   const { user } = useAuth()
   const [courses, setCourses] = useState([])
   const [skillsByCourse, setSkillsByCourse] = useState(new Map())
+  const [progressByCatalogueId, setProgressByCatalogueId] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -46,6 +49,9 @@ export default function Learning() {
     } else {
       setSkillsByCourse(new Map())
     }
+
+    const catalogueIds = (data ?? []).map((c) => c.catalogue_course_id)
+    setProgressByCatalogueId(await listCourseProgressByCatalogueId(catalogueIds, user.id))
     setLoading(false)
   }
 
@@ -55,9 +61,9 @@ export default function Learning() {
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="font-display text-xl text-ink">Your learning</h2>
+          <h1 className="font-display text-xl text-ink">Your learning</h1>
           <Link
             to="/training"
             className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90"
@@ -67,7 +73,7 @@ export default function Learning() {
         </div>
 
         {loading && <p className="text-secondary">Loading…</p>}
-        {error && <p className="text-red-700 text-sm">{error}</p>}
+        {error && <p role="alert" className="text-red-700 text-sm">{error}</p>}
 
         {!loading && courses.length === 0 && (
           <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
@@ -78,14 +84,14 @@ export default function Learning() {
         {inProgress.length > 0 && (
           <div className="mb-8">
             <h3 className="font-display text-base text-ink mb-4">In progress</h3>
-            <CourseGrid courses={inProgress} skillsByCourse={skillsByCourse} />
+            <CourseGrid courses={inProgress} skillsByCourse={skillsByCourse} progressByCatalogueId={progressByCatalogueId} />
           </div>
         )}
 
         {completed.length > 0 && (
           <div>
             <h3 className="font-display text-base text-ink mb-4">Completed</h3>
-            <CourseGrid courses={completed} skillsByCourse={skillsByCourse} />
+            <CourseGrid courses={completed} skillsByCourse={skillsByCourse} progressByCatalogueId={progressByCatalogueId} />
           </div>
         )}
       </main>
@@ -93,11 +99,13 @@ export default function Learning() {
   )
 }
 
-function CourseGrid({ courses, skillsByCourse }) {
+function CourseGrid({ courses, skillsByCourse, progressByCatalogueId }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       {courses.map((course) => {
         const skills = skillsByCourse.get(course.id) ?? []
+        const progress = progressByCatalogueId[course.catalogue_course_id]
+        const percent = progress?.total ? Math.round((progress.completed / progress.total) * 100) : null
         return (
           <Link
             key={course.id}
@@ -120,6 +128,19 @@ function CourseGrid({ courses, skillsByCourse }) {
                   <span className="text-secondary">In progress</span>
                 )}
               </p>
+              {percent != null && (
+                <div className="mt-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
+                      {percent}% complete
+                    </span>
+                    <span className="font-mono text-[10px] text-secondary">
+                      {progress.completed}/{progress.total}
+                    </span>
+                  </div>
+                  <ProgressBar percent={percent} />
+                </div>
+              )}
               {skills.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
                   {skills.map((s) => (

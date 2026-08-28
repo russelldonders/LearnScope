@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { uploadAvatar, removeAvatar } from '../lib/avatar'
+import ConfirmDialog from './ConfirmDialog'
 
 const MAX_BYTES = 5 * 1024 * 1024
 
@@ -9,6 +10,7 @@ export default function ProfilePhoto({ avatarUrl, onUploaded }) {
   const inputRef = useRef(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState(null)
+  const [confirmingRemove, setConfirmingRemove] = useState(false)
 
   async function handleFileChange(e) {
     const file = e.target.files?.[0]
@@ -35,7 +37,6 @@ export default function ProfilePhoto({ avatarUrl, onUploaded }) {
   }
 
   async function handleRemove() {
-    if (!confirm('Remove your profile photo?')) return
     setUploading(true)
     setError(null)
     try {
@@ -45,6 +46,7 @@ export default function ProfilePhoto({ avatarUrl, onUploaded }) {
       setError(err.message)
     } finally {
       setUploading(false)
+      setConfirmingRemove(false)
     }
   }
 
@@ -81,7 +83,7 @@ export default function ProfilePhoto({ avatarUrl, onUploaded }) {
           {avatarUrl && (
             <button
               type="button"
-              onClick={handleRemove}
+              onClick={() => setConfirmingRemove(true)}
               disabled={uploading}
               className="text-sm text-secondary hover:text-red-700 disabled:opacity-60"
             >
@@ -98,6 +100,15 @@ export default function ProfilePhoto({ avatarUrl, onUploaded }) {
         onChange={handleFileChange}
         className="hidden"
       />
+
+      {confirmingRemove && (
+        <ConfirmDialog
+          message="Remove your profile photo?"
+          onConfirm={handleRemove}
+          onCancel={() => setConfirmingRemove(false)}
+          confirming={uploading}
+        />
+      )}
     </div>
   )
 }

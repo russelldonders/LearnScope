@@ -6,6 +6,7 @@ import { findOrCreateLibrarySkill, listLibrarySkills } from '../lib/skillLibrary
 import { addTagToSkill } from '../lib/skillTags'
 import { formatMonthYear } from '../lib/dates'
 import { TRACKING_REASONS } from '../lib/trackingReasons'
+import AccessibleDialog from './AccessibleDialog'
 import {
   enableCurrentRole,
   applyCurrentRoleSelection,
@@ -286,12 +287,12 @@ export default function ResumeImportReviewModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-2xl bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="font-display text-2xl text-ink mb-1">Review before import</h2>
+    <AccessibleDialog
+      labelledBy="resume-import-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-2xl bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+        <h2 id="resume-import-dialog-title" className="font-display text-2xl text-ink mb-1">Review before import</h2>
         <p className="text-sm text-secondary mb-6">
           Uncheck anything you don't want, tweak the name/title if needed, then import.
         </p>
@@ -414,8 +415,7 @@ export default function ResumeImportReviewModal({
             Cancel
           </button>
         </div>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }
 

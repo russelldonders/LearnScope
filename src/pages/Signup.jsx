@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getPendingInviteCode, clearPendingInviteCode } from '../lib/connections'
+import { getPendingEnrolCourseId, clearPendingEnrolCourseId, resumePendingEnrolment } from '../lib/courseCatalogue'
 import GoogleSignInButton from '../components/GoogleSignInButton'
 
 export default function Signup() {
@@ -47,9 +48,10 @@ export default function Signup() {
       if (pendingCode) {
         clearPendingInviteCode()
         navigate(`/rate/${pendingCode}`)
-      } else {
-        navigate('/dashboard')
+        return
       }
+      const enrolled = await resumePendingEnrolment(data.user.id).catch(() => null)
+      navigate(enrolled ? `/courses/${enrolled.id}` : '/dashboard')
     } else {
       setConfirmationSent(true)
     }
@@ -59,10 +61,15 @@ export default function Signup() {
     setError(null)
     setGoogleSubmitting(true)
     const pendingCode = getPendingInviteCode()
-    const redirectTo = pendingCode
-      ? `${window.location.origin}/rate/${pendingCode}`
-      : `${window.location.origin}/dashboard`
-    if (pendingCode) clearPendingInviteCode()
+    const pendingEnrolId = getPendingEnrolCourseId()
+    let redirectTo = `${window.location.origin}/dashboard`
+    if (pendingCode) {
+      redirectTo = `${window.location.origin}/rate/${pendingCode}`
+      clearPendingInviteCode()
+    } else if (pendingEnrolId) {
+      redirectTo = `${window.location.origin}/welcome?enrol=${pendingEnrolId}`
+      clearPendingEnrolCourseId()
+    }
     const { error } = await signInWithGoogle(redirectTo)
     if (error) {
       setError(error.message)
@@ -95,7 +102,7 @@ export default function Signup() {
         )}
 
         {confirmationSent ? (
-          <p className="text-sm text-ink">
+          <p role="status" className="text-sm text-ink">
             Check your email to confirm your account, then log in.
           </p>
         ) : (
@@ -158,7 +165,7 @@ export default function Signup() {
               />
             </div>
 
-            {error && <p className="text-sm text-red-700">{error}</p>}
+            {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
             <button
               type="submit"

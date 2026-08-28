@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { LEVEL_LABELS } from '../lib/levels'
+import AccessibleDialog from './AccessibleDialog'
 import {
   listValidatorCandidates,
   createValidationRequest,
@@ -57,12 +58,12 @@ export default function RequestValidationModal({ skill, user, targetLevel, onClo
   }
 
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="font-display text-2xl text-ink mb-1">Request Validation</h2>
+    <AccessibleDialog
+      labelledBy="request-validation-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+        <h2 id="request-validation-dialog-title" className="font-display text-2xl text-ink mb-1">Request Validation</h2>
         <p className="text-sm text-secondary mb-4">
           {skill.name} · Target: {LEVEL_LABELS[targetLevel]}
         </p>
@@ -138,7 +139,7 @@ export default function RequestValidationModal({ skill, user, targetLevel, onClo
               </p>
             )}
 
-            {error && <p className="text-sm text-red-700 mb-4">{error}</p>}
+            {error && <p role="alert" className="text-sm text-red-700 mb-4">{error}</p>}
 
             <div className="flex items-center gap-2">
               <button
@@ -160,8 +161,7 @@ export default function RequestValidationModal({ skill, user, targetLevel, onClo
             </div>
           </>
         )}
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }
 

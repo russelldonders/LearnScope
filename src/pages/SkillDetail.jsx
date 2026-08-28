@@ -18,6 +18,7 @@ import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
 import { activityName, verbLabel, formatDuration, isDiagnosticStatement } from '../lib/xapiStatement'
 import { enableCurrentRole, disableCurrentRole, applyCurrentRoleSelection, syncSkillIsCurrentRole } from '../lib/currentRole'
 import CurrentRoleSelectModal from '../components/CurrentRoleSelectModal'
+import AccessibleDialog from '../components/AccessibleDialog'
 import { listTags, listSkillTags, addTagToSkill, removeSkillTagLink } from '../lib/skillTags'
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import InviteRaterModal from '../components/InviteRaterModal'
@@ -30,6 +31,7 @@ import ConfirmingBaselineQuizModal from '../components/ConfirmingBaselineQuizMod
 import InterviewModal from '../components/InterviewModal'
 import LifecycleStageIcon from '../components/LifecycleStageIcon'
 import TagsField from '../components/TagsField'
+import ConfirmDialog from '../components/ConfirmDialog'
 import { listOutgoingValidationRequests } from '../lib/skillValidationRequests'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
@@ -60,6 +62,7 @@ export default function SkillDetail() {
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [assessorName, setAssessorName] = useState(null)
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [inviteAfterSelfAssess, setInviteAfterSelfAssess] = useState(false)
   const [selfAssessOpen, setSelfAssessOpen] = useState(false)
   const [selfAssessKnowledgeOpen, setSelfAssessKnowledgeOpen] = useState(false)
   const [confirmingBaselineOpen, setConfirmingBaselineOpen] = useState(false)
@@ -103,14 +106,23 @@ export default function SkillDetail() {
     setNotFound(false)
     const { data, error } = await supabase
       .from('skills')
-      .select('*, skill_library(is_private)')
+      .select('*, skill_library(is_private, knowledge_level_guide, practical_level_guide)')
       .eq('id', id)
       .eq('user_id', user.id)
       .maybeSingle()
     if (error || !data) {
       setNotFound(true)
     } else {
-      setSkill(data)
+      // The per-instance columns stay authoritative for a fully custom skill
+      // (no library_skill_id); for a library-linked one they're only ever
+      // populated pre-0089, so fall back to the shared library cache -- same
+      // guide text either way, just resolved without an extra round trip if
+      // it's already sitting in the join above.
+      setSkill({
+        ...data,
+        knowledge_level_guide: data.knowledge_level_guide ?? data.skill_library?.knowledge_level_guide ?? null,
+        practical_level_guide: data.practical_level_guide ?? data.skill_library?.practical_level_guide ?? null,
+      })
     }
     setLoadingSkill(false)
   }
@@ -265,6 +277,13 @@ export default function SkillDetail() {
   // shown in the level bar's colour gradient between "confirmed" and
   // "self-assessed since" (see the milestoneLevel prop below).
   const confirmedKnowledgeLevel = skill?.knowledge_level ?? null
+  // Neither tool has anything to pitch a level at yet -- no self-assessment,
+  // no prior confirmation. Rather than silently defaulting to "Unfamiliar"
+  // (which would test someone who's actually advanced as a total beginner),
+  // the quiz/interview switch into calibration mode: find the level from
+  // scratch instead of confirming an assumed one. See ConfirmingBaselineQuizModal
+  // and InterviewModal.
+  const knowledgeCalibrating = latestKnowledgeAssessment == null && confirmedKnowledgeLevel == null
   const knowledgeMilestone =
     confirmedKnowledgeLevel && displayedKnowledgeLevel && confirmedKnowledgeLevel < displayedKnowledgeLevel
       ? confirmedKnowledgeLevel
@@ -363,7 +382,7 @@ export default function SkillDetail() {
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
         <Link
           to={backTo}
           state={{ tab: 'skills' }}
@@ -657,7 +676,16 @@ export default function SkillDetail() {
               />
             )}
 
-            {inviteOpen && <InviteRaterModal skill={skill} onClose={() => setInviteOpen(false)} />}
+            {inviteOpen && (
+              <InviteRaterModal
+                skill={skill}
+                afterSelfAssessment={inviteAfterSelfAssess}
+                onClose={() => {
+                  setInviteOpen(false)
+                  setInviteAfterSelfAssess(false)
+                }}
+              />
+            )}
 
             {selfAssessOpen && (
               <SelfAssessModal
@@ -670,6 +698,8 @@ export default function SkillDetail() {
                   loadHistory()
                   loadSkill()
                   setSelfAssessOpen(false)
+                  setInviteAfterSelfAssess(true)
+                  setInviteOpen(true)
                 }}
                 onGuideGenerated={(statements) =>
                   setSkill((s) => (s ? { ...s, practical_level_guide: statements } : s))
@@ -733,6 +763,7 @@ export default function SkillDetail() {
                 user={user}
                 actor={{ name: assessorName, email: user.email }}
                 latestKnowledgeAssessment={latestKnowledgeAssessment}
+                calibrating={knowledgeCalibrating}
                 onClose={() => setConfirmingBaselineOpen(false)}
                 onConfirmed={() => {
                   loadHistory()
@@ -748,6 +779,7 @@ export default function SkillDetail() {
                 user={user}
                 actor={{ name: assessorName, email: user.email }}
                 latestKnowledgeAssessment={latestKnowledgeAssessment}
+                calibrating={knowledgeCalibrating}
                 onClose={() => setInterviewOpen(false)}
                 onConfirmed={() => {
                   loadHistory()
@@ -836,16 +868,14 @@ export default function SkillDetail() {
             )}
 
             {settingsOpen && (
-              <div
-                className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-40"
-                onClick={() => setSettingsOpen(false)}
+              <AccessibleDialog
+                labelledBy="skill-settings-dialog-title"
+                onClose={() => setSettingsOpen(false)}
+                overlayClassName="z-40"
+                panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
               >
-                <div
-                  className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-                  onClick={(e) => e.stopPropagation()}
-                >
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="font-display text-2xl text-ink">Skill settings</h2>
+                    <h2 id="skill-settings-dialog-title" className="font-display text-2xl text-ink">Skill settings</h2>
                     <button
                       type="button"
                       onClick={() => setSettingsOpen(false)}
@@ -872,8 +902,7 @@ export default function SkillDetail() {
                       onDeleted={() => navigate(backTo, { state: { tab: 'skills' } })}
                     />
                   </div>
-                </div>
-              </div>
+              </AccessibleDialog>
             )}
 
             {(skill.next_checkin_date || currentTarget) && (
@@ -955,13 +984,13 @@ function PeopleIcon() {
 // privacy check needed here, the list itself is already scoped correctly.
 function ConnectionsWithSkillModal({ connections, skillName, onClose }) {
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <AccessibleDialog
+      labelledBy="connections-with-skill-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-2xl text-ink">Connections with {skillName}</h2>
+          <h2 id="connections-with-skill-dialog-title" className="font-display text-2xl text-ink">Connections with {skillName}</h2>
           <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
             Close
           </button>
@@ -977,8 +1006,7 @@ function ConnectionsWithSkillModal({ connections, skillName, onClose }) {
             ))}
           </ul>
         )}
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }
 
@@ -1103,13 +1131,13 @@ function LevelDetailModal({
     : null
 
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <AccessibleDialog
+      labelledBy="axis-summary-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6"
+    >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-2xl text-ink">{isKnowledge ? 'Knowledge' : 'Application'}</h2>
+          <h2 id="axis-summary-dialog-title" className="font-display text-2xl text-ink">{isKnowledge ? 'Knowledge' : 'Application'}</h2>
           <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
             Close
           </button>
@@ -1198,8 +1226,7 @@ function LevelDetailModal({
             </button>
           )}
         </div>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }
 
@@ -1214,13 +1241,13 @@ function SelfAssessModal({
   onGuideGenerated,
 }) {
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <AccessibleDialog
+      labelledBy="self-assess-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-2xl text-ink">
+          <h2 id="self-assess-dialog-title" className="font-display text-2xl text-ink">
             {axis === 'knowledge' ? 'Self-assess your knowledge' : 'Self-assess'}
           </h2>
           <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
@@ -1266,8 +1293,7 @@ function SelfAssessModal({
             )
           )
         })()}
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }
 
@@ -1359,7 +1385,7 @@ function HistorySection({
         // specifically -- self-assessments and peer ratings are additional
         // input toward an evaluation, not a baseline in their own right.
         const mostRecentBaselineIndex = events.findIndex(
-          (e) => e.type === 'assessment' && e.entry.source === 'ai_baseline'
+          (e) => e.type === 'assessment' && e.entry.source === 'ai_baseline' && e.entry.axis === 'practical'
         )
 
         return (
@@ -1518,15 +1544,17 @@ function TimelineEntry({
           {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
         </div>
         <div
-          className="min-w-0 flex-1 mb-3 flex items-center gap-2 text-xs text-secondary cursor-pointer hover:text-ink transition-colors"
+          className={`min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3 ${onSelect ? 'cursor-pointer hover:border-moss/60 transition-colors' : ''}`}
           {...clickableProps}
         >
-          <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">{verbLabel(s.statement)}</span>
-          <span className="truncate min-w-0">{activityName(s.statement)}</span>
-          <span className="font-mono text-[10px] text-secondary/70 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">{verbLabel(s.statement)}</span>
+            <p className="text-sm font-medium text-ink truncate min-w-0">{activityName(s.statement)}</p>
+          </div>
+          <p className="font-mono text-xs text-secondary mt-0.5">
             {new Date(s.recorded_at).toLocaleDateString()}
             {formatDuration(s.statement) ? ` · ${formatDuration(s.statement)}` : ''}
-          </span>
+          </p>
         </div>
       </div>
     )
@@ -1541,14 +1569,17 @@ function TimelineEntry({
           {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
         </div>
         <div
-          className="min-w-0 flex-1 mb-3 flex items-center gap-2 text-xs text-secondary cursor-pointer hover:text-ink transition-colors"
+          className={`min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3 ${onSelect ? 'cursor-pointer hover:border-moss/60 transition-colors' : ''}`}
           {...clickableProps}
         >
-          <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">Training</span>
-          <span className="truncate min-w-0">{course.name}</span>
-          <span className="font-mono text-[10px] text-secondary/70 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">Training</span>
+            <p className="text-sm font-medium text-ink truncate min-w-0">{course.name}</p>
+          </div>
+          <p className="font-mono text-xs text-secondary mt-0.5">
             {new Date(course.completed_date).toLocaleDateString()}
-          </span>
+          </p>
+          {onSelect && <p className="font-mono text-[10px] text-moss mt-1">View course →</p>}
         </div>
       </div>
     )
@@ -1561,14 +1592,14 @@ function TimelineEntry({
           <LifecycleStageIcon stage="identified" size={14} className="text-secondary/70 mt-1" />
           {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
         </div>
-        <div className="min-w-0 flex-1 mb-3 flex items-center gap-2 text-xs text-secondary">
-          <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">Skill added</span>
+        <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3">
+          <p className="text-sm font-medium text-ink">Skill added</p>
           {event.source && (
-            <span className="truncate min-w-0">{SKILL_SOURCE_LABELS[event.source] ?? event.source}</span>
+            <p className="font-mono text-[10px] text-secondary mt-0.5">{SKILL_SOURCE_LABELS[event.source] ?? event.source}</p>
           )}
-          <span className="font-mono text-[10px] text-secondary/70 shrink-0 ml-auto">
+          <p className="font-mono text-xs text-secondary mt-0.5">
             {new Date(event.date).toLocaleDateString()}
-          </span>
+          </p>
         </div>
       </div>
     )
@@ -1592,7 +1623,7 @@ function TimelineEntry({
           <p className="font-mono text-xs text-secondary mt-0.5">
             {new Date(rating.rated_at).toLocaleDateString()}
           </p>
-          <p className="font-mono text-[10px] text-secondary/80 mt-0.5 flex items-center gap-1.5">
+          <p className="font-mono text-[10px] text-secondary mt-0.5 flex items-center gap-1.5">
             <RaterAvatar url={raterAvatars?.[rating.rater_id]} />
             Rated by {rating.rater_name || rating.rater_email || 'a connection'}
           </p>
@@ -1625,7 +1656,7 @@ function TimelineEntry({
           <p className="font-mono text-xs text-secondary mt-0.5">
             {formatMonthYear(exp.start_date)} – {exp.end_date ? formatMonthYear(exp.end_date) : 'present'}
           </p>
-          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+          <p className="font-mono text-[10px] text-secondary mt-0.5">
             {exp.type === 'education' ? 'Used during study' : 'Used during employment'} · {exp.organization}
           </p>
         </div>
@@ -1705,26 +1736,26 @@ function TimelineEntry({
           {new Date(entry.assessed_at).toLocaleDateString()}
         </p>
         {entry.source === 'course' && entry.courses?.name ? (
-          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+          <p className="font-mono text-[10px] text-secondary mt-0.5">
             Earned by completing {entry.courses.name}
           </p>
         ) : entry.source === 'ai_baseline' ? (
-          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+          <p className="font-mono text-[10px] text-secondary mt-0.5">
             AI-assessed baseline, from self-assessment, peer ratings and activity
           </p>
         ) : entry.source === 'ai_evaluation' ? (
-          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+          <p className="font-mono text-[10px] text-secondary mt-0.5">
             AI assessment, evaluated against your target level
           </p>
         ) : entry.source === 'diagnostic_confirmed' ? (
-          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">Confirmed via knowledge check</p>
+          <p className="font-mono text-[10px] text-secondary mt-0.5">Confirmed via knowledge check</p>
         ) : (
-          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+          <p className="font-mono text-[10px] text-secondary mt-0.5">
             Self-assessed by {assessorName || 'you'}
           </p>
         )}
         {entry.experience?.title && (
-          <p className="font-mono text-[10px] text-secondary/80 mt-0.5">
+          <p className="font-mono text-[10px] text-secondary mt-0.5">
             During {entry.experience.title} · {entry.experience.organization}
           </p>
         )}
@@ -1882,11 +1913,11 @@ function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assesso
   }
 
   return (
-    <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <AccessibleDialog
+      label={title}
+      onClose={onClose}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
         <div className="flex items-center justify-between mb-4 gap-4">
           <h2 className="font-display text-xl text-ink">{title}</h2>
           <button type="button" onClick={onClose} className="shrink-0 text-secondary hover:text-ink text-sm">
@@ -1894,8 +1925,7 @@ function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assesso
           </button>
         </div>
         {body}
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }
 
@@ -1928,6 +1958,7 @@ function RaterAvatar({ url, size = 16 }) {
 function EvidenceAttachmentLink({ path, index }) {
   const [signedUrl, setSignedUrl] = useState(null)
   const [loadingUrl, setLoadingUrl] = useState(false)
+  const [error, setError] = useState(null)
 
   async function handleViewEvidence() {
     if (signedUrl) {
@@ -1935,24 +1966,30 @@ function EvidenceAttachmentLink({ path, index }) {
       return
     }
     setLoadingUrl(true)
+    setError(null)
     try {
       const url = await getEvidenceSignedUrl(path)
       setSignedUrl(url)
       window.open(url, '_blank', 'noopener')
+    } catch {
+      setError("Couldn't load — try again")
     } finally {
       setLoadingUrl(false)
     }
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleViewEvidence}
-      disabled={loadingUrl}
-      className="text-xs text-moss font-medium"
-    >
-      {loadingUrl ? 'Loading…' : `Attachment ${index + 1}`}
-    </button>
+    <span className="inline-flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={handleViewEvidence}
+        disabled={loadingUrl}
+        className="text-xs text-moss font-medium"
+      >
+        {loadingUrl ? 'Loading…' : `Attachment ${index + 1}`}
+      </button>
+      {error && <span className="text-xs text-red-700">{error}</span>}
+    </span>
   )
 }
 
@@ -2225,11 +2262,10 @@ function DeleteSection({ skill, onUpdated, onDeleted }) {
   const isArchived = skill.lifecycle_stage === 'archived'
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [confirmingDrop, setConfirmingDrop] = useState(false)
 
   async function handleDelete() {
-    if (!confirm(`Delete "${skill.name}" and all of its self-assessment history? This can't be undone.`)) {
-      return
-    }
     setSaving(true)
     try {
       const { error } = await supabase.from('skills').delete().eq('id', skill.id)
@@ -2238,6 +2274,8 @@ function DeleteSection({ skill, onUpdated, onDeleted }) {
     } catch (err) {
       setError(err.message)
       setSaving(false)
+    } finally {
+      setConfirmingDelete(false)
     }
   }
 
@@ -2247,13 +2285,6 @@ function DeleteSection({ skill, onUpdated, onDeleted }) {
   // history (assessments, evidence, tags, peer ratings) stays intact and
   // the skill can be restored later.
   async function handleDrop() {
-    if (
-      !confirm(
-        `Drop "${skill.name}"? It'll be archived and removed from your active skills list. Your history stays intact and you can restore it anytime.`
-      )
-    ) {
-      return
-    }
     setSaving(true)
     try {
       const { error } = await supabase
@@ -2265,6 +2296,8 @@ function DeleteSection({ skill, onUpdated, onDeleted }) {
     } catch (err) {
       setError(err.message)
       setSaving(false)
+    } finally {
+      setConfirmingDrop(false)
     }
   }
 
@@ -2300,7 +2333,7 @@ function DeleteSection({ skill, onUpdated, onDeleted }) {
       {isCustom ? (
         <button
           type="button"
-          onClick={handleDelete}
+          onClick={() => setConfirmingDelete(true)}
           disabled={saving}
           className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
         >
@@ -2318,12 +2351,31 @@ function DeleteSection({ skill, onUpdated, onDeleted }) {
       ) : (
         <button
           type="button"
-          onClick={handleDrop}
+          onClick={() => setConfirmingDrop(true)}
           disabled={saving}
           className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
         >
           Drop skill
         </button>
+      )}
+
+      {confirmingDelete && (
+        <ConfirmDialog
+          message={`Delete "${skill.name}" and all of its self-assessment history? This can't be undone.`}
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmingDelete(false)}
+          confirming={saving}
+        />
+      )}
+
+      {confirmingDrop && (
+        <ConfirmDialog
+          message={`Drop "${skill.name}"? It'll be archived and removed from your active skills list. Your history stays intact and you can restore it anytime.`}
+          confirmLabel="Drop"
+          onConfirm={handleDrop}
+          onCancel={() => setConfirmingDrop(false)}
+          confirming={saving}
+        />
       )}
     </div>
   )

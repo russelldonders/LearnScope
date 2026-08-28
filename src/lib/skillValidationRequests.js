@@ -41,13 +41,13 @@ export async function sendValidationRequestEmail({ toEmail, requesterName, skill
   const {
     data: { session },
   } = await supabase.auth.getSession()
-  const res = await fetch('/api/send-validation-request', {
+  const res = await fetch('/api/send-email', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify({ toEmail, requesterName, skillName, reviewUrl }),
+    body: JSON.stringify({ type: 'validation_request', toEmail, requesterName, skillName, reviewUrl }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))

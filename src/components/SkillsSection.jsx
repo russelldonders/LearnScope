@@ -10,6 +10,14 @@ import OrganizationLogo from './OrganizationLogo'
 import GrowthRing from './GrowthRing'
 import { TRACKING_REASONS } from '../lib/trackingReasons'
 import { LEVEL_LABELS } from '../lib/levels'
+import { isSelfAssessmentDue } from '../lib/checkin'
+
+const SKILL_VIEWS = [
+  { value: 'all', label: 'All' },
+  { value: 'current', label: 'Current role' },
+  { value: 'developing', label: 'Developing' },
+  { value: 'review', label: 'Needs review' },
+]
 
 export default function SkillsSection() {
   const { user } = useAuth()
@@ -23,6 +31,9 @@ export default function SkillsSection() {
   const [tagFilter, setTagFilter] = useState(null)
   const [trackingReasonFilter, setTrackingReasonFilter] = useState(null)
   const [showFilters, setShowFilters] = useState(false)
+  const [query, setQuery] = useState('')
+  const [sortBy, setSortBy] = useState('attention')
+  const [view, setView] = useState('all')
 
   useEffect(() => {
     loadSkills()
@@ -127,15 +138,33 @@ export default function SkillsSection() {
     [activeSkills]
   )
 
-  const filteredSkills = useMemo(
-    () =>
-      activeSkills.filter(
-        (s) =>
-          (!tagFilter || (tagsBySkill.get(s.id) ?? []).includes(tagFilter)) &&
-          (!trackingReasonFilter || s.tracking_reason === trackingReasonFilter)
-      ),
-    [activeSkills, tagFilter, tagsBySkill, trackingReasonFilter]
-  )
+  const filteredSkills = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase()
+    const attentionScore = (skill) => {
+      if (isSelfAssessmentDue(skill.next_checkin_date)) return 4
+      if (skill.displayedLevel == null) return 3
+      if (skill.targetLevel != null && skill.displayedLevel < skill.targetLevel) return 2
+      return skill.is_current_role ? 1 : 0
+    }
+    return activeSkills
+      .filter((skill) => {
+        const matchesView =
+          view === 'all' ||
+          (view === 'current' && skill.is_current_role) ||
+          (view === 'developing' && skill.targetLevel != null && (skill.displayedLevel ?? 0) < skill.targetLevel) ||
+          (view === 'review' && (isSelfAssessmentDue(skill.next_checkin_date) || skill.displayedLevel == null))
+        return matchesView &&
+          (!normalizedQuery || skill.name.toLocaleLowerCase().includes(normalizedQuery)) &&
+          (!tagFilter || (tagsBySkill.get(skill.id) ?? []).includes(tagFilter)) &&
+          (!trackingReasonFilter || skill.tracking_reason === trackingReasonFilter)
+      })
+      .sort((a, b) => {
+        if (sortBy === 'name') return a.name.localeCompare(b.name)
+        if (sortBy === 'level') return (b.displayedLevel ?? 0) - (a.displayedLevel ?? 0)
+        if (sortBy === 'recent') return new Date(b.date_added ?? 0) - new Date(a.date_added ?? 0)
+        return attentionScore(b) - attentionScore(a)
+      })
+  }, [activeSkills, query, sortBy, tagFilter, tagsBySkill, trackingReasonFilter, view])
   const currentRoleSkills = useMemo(
     () => filteredSkills.filter((s) => s.is_current_role),
     [filteredSkills]
@@ -150,15 +179,135 @@ export default function SkillsSection() {
     () => [...new Set([...tagsBySkill.values()].flat())].sort(),
     [tagsBySkill]
   )
-  const activeMoreFilterCount = [tagFilter].filter((v) => v !== null).length
+  const activeMoreFilterCount = [tagFilter, trackingReasonFilter].filter((v) => v !== null).length
+  const clearFilters = () => {
+    setQuery('')
+    setTagFilter(null)
+    setTrackingReasonFilter(null)
+    setView('all')
+  }
 
   return (
     <section>
-      {!loading && skillGaps.length > 0 && (
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between mb-8">
+        <div className="max-w-2xl">
+          <h1 className="font-display text-3xl sm:text-4xl text-ink text-balance">Your skills</h1>
+          <p className="text-secondary mt-2 text-pretty">
+            Track what you know, where you are growing, and what needs attention next.
+          </p>
+        </div>
+        <button
+          onClick={() => setAddOpen(true)}
+          className="rounded-md bg-moss text-paper py-2.5 px-4 font-medium hover:opacity-90 shrink-0 self-start"
+        >
+          Add skill
+        </button>
+      </div>
+
+      {loading && <SkillsSkeleton />}
+      {error && (
+        <div role="alert" className="rounded-lg border border-red-700 p-4 text-sm text-red-700">
+          We could not load your skills. Refresh the page to try again.
+        </div>
+      )}
+
+      {!loading && !error && activeSkills.length === 0 && archivedSkills.length === 0 && (
+        <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
+          <h2 className="font-display text-xl text-ink">Start with a skill that matters now</h2>
+          <p className="text-secondary mt-2 mb-5">Add your first skill to assess it, set a target, and track progress.</p>
+          <button
+            type="button"
+            onClick={() => setAddOpen(true)}
+            className="rounded-md bg-moss text-paper py-2.5 px-4 font-medium hover:opacity-90"
+          >
+            Add your first skill
+          </button>
+        </div>
+      )}
+
+      {!loading && !error && activeSkills.length > 0 && (
+        <div className="border-y border-hairline py-4 mb-8 space-y-4">
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+            <label className="min-w-0">
+              <span className="sr-only">Search skills</span>
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search your skills"
+                className="w-full rounded-md border border-hairline bg-card px-3 py-2.5 text-ink placeholder:text-secondary"
+              />
+            </label>
+            <label>
+              <span className="sr-only">Sort skills</span>
+              <select
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value)}
+                className="w-full rounded-md border border-hairline bg-card px-3 py-2.5 text-ink sm:w-auto"
+              >
+                <option value="attention">Needs attention</option>
+                <option value="recent">Recently added</option>
+                <option value="name">Name</option>
+                <option value="level">Highest level</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => setShowFilters((value) => !value)}
+              aria-expanded={showFilters}
+              className="rounded-md border border-hairline bg-card px-3 py-2.5 text-sm font-medium text-ink hover:border-moss"
+            >
+              Filters{activeMoreFilterCount > 0 ? ` (${activeMoreFilterCount})` : ''}
+            </button>
+          </div>
+
+          <div className="flex gap-1 overflow-x-auto scrollbar-hide" aria-label="Skill views">
+            {SKILL_VIEWS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setView(option.value)}
+                aria-pressed={view === option.value}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                  view === option.value ? 'bg-moss text-paper' : 'text-secondary hover:bg-card hover:text-ink'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          {showFilters && (
+            <div className="space-y-4 rounded-lg bg-card p-4">
+              <FilterRow
+                label="Reason"
+                value={trackingReasonFilter}
+                onChange={setTrackingReasonFilter}
+                options={TRACKING_REASONS.map((reason) => ({
+                  value: reason.value,
+                  label: reason.label,
+                  icon: <TrackingReasonIcon reason={reason.value} size={14} />,
+                }))}
+              />
+              {availableTags.length > 0 && (
+                  <FilterRow
+                    label="Tag"
+                    value={tagFilter}
+                    onChange={setTagFilter}
+                    options={availableTags.map((t) => ({ value: t, label: t }))}
+                  />
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {!loading && !error && view === 'all' && !query && !tagFilter && !trackingReasonFilter && skillGaps.length > 0 && (
         <div className="mb-10">
-          <h2 className="font-display text-xl text-ink mb-4">Your skill gaps</h2>
+          <h2 className="font-display text-xl text-ink">Skills to develop</h2>
+          <p className="text-sm text-secondary mt-1 mb-4">The clearest opportunities to move toward your targets.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {skillGaps.map((skill) => (
+            {skillGaps.slice(0, 3).map((skill) => (
               <button
                 key={skill.id}
                 type="button"
@@ -173,6 +322,11 @@ export default function SkillsSection() {
                     {' → target '}
                     {LEVEL_LABELS[skill.targetLevel]}
                   </p>
+                  <p className="text-sm font-medium text-moss mt-2">
+                    {skill.displayedLevel == null
+                      ? 'Assess your current level'
+                      : `Work toward ${LEVEL_LABELS[skill.targetLevel]}`}
+                  </p>
                 </div>
               </button>
             ))}
@@ -180,86 +334,13 @@ export default function SkillsSection() {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="font-display text-xl text-ink">Your skills</h2>
-        <button
-          onClick={() => setAddOpen(true)}
-          className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90"
-        >
-          Find a skill to add to your profile
-        </button>
-      </div>
-
-      {loading && <p className="text-secondary">Loading…</p>}
-      {error && <p className="text-red-700 text-sm">{error}</p>}
-
-      {!loading && activeSkills.length === 0 && archivedSkills.length === 0 && (
+      {!loading && !error && activeSkills.length > 0 && filteredSkills.length === 0 && (
         <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
-          <p className="text-secondary">No skills logged yet. Add your first one.</p>
-        </div>
-      )}
-
-      {!loading && activeSkills.length > 0 && (
-        <>
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            <button
-              type="button"
-              onClick={() => setTrackingReasonFilter(null)}
-              className={`font-mono text-xs uppercase tracking-wide rounded-full px-3 py-1 border transition-colors ${
-                trackingReasonFilter === null
-                  ? 'bg-moss text-paper border-moss'
-                  : 'border-hairline text-secondary hover:text-ink'
-              }`}
-            >
-              Any
-            </button>
-            {TRACKING_REASONS.map((r) => (
-              <button
-                key={r.value}
-                type="button"
-                onClick={() => setTrackingReasonFilter(trackingReasonFilter === r.value ? null : r.value)}
-                className={`flex items-center gap-1.5 font-mono text-xs uppercase tracking-wide rounded-full px-3 py-1 border transition-colors ${
-                  trackingReasonFilter === r.value
-                    ? 'bg-moss text-paper border-moss'
-                    : 'border-hairline text-secondary hover:text-ink'
-                }`}
-              >
-                <TrackingReasonIcon reason={r.value} size={14} />
-                {r.label}
-              </button>
-            ))}
-          </div>
-
-          {availableTags.length > 0 && (
-            <>
-              <button
-                type="button"
-                onClick={() => setShowFilters((v) => !v)}
-                className="text-sm text-moss font-medium mb-4"
-              >
-                {showFilters
-                  ? 'Hide More Filters'
-                  : `Show More Filters${activeMoreFilterCount > 0 ? ` (${activeMoreFilterCount})` : ''}`}
-              </button>
-
-              {showFilters && (
-                <div className="space-y-3 mb-6 bg-card border border-hairline rounded-lg p-4">
-                  <FilterRow
-                    label="Tag"
-                    value={tagFilter}
-                    onChange={setTagFilter}
-                    options={availableTags.map((t) => ({ value: t, label: t }))}
-                  />
-                </div>
-              )}
-            </>
-          )}
-        </>
-      )}
-
-      {!loading && activeSkills.length > 0 && filteredSkills.length === 0 && (
-        <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
-          <p className="text-secondary">No skills match this filter.</p>
+          <h2 className="font-display text-xl text-ink">No skills match this view</h2>
+          <p className="text-secondary mt-2 mb-5">Try another search or remove the active filters.</p>
+          <button type="button" onClick={clearFilters} className="text-sm font-medium text-moss hover:underline">
+            Clear filters
+          </button>
         </div>
       )}
 
@@ -329,8 +410,21 @@ function SkillGrid({ skills, onEdit }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       {skills.map((skill) => (
-        <SkillCard key={skill.id} skill={skill} onEdit={onEdit} />
+        <SkillCard key={skill.id} skill={skill} onEdit={onEdit} compact />
       ))}
+    </div>
+  )
+}
+
+function SkillsSkeleton() {
+  return (
+    <div role="status" aria-live="polite">
+      <span className="sr-only">Loading your skills…</span>
+      <div aria-hidden="true" className="grid grid-cols-1 gap-3 sm:grid-cols-2 animate-pulse motion-reduce:animate-none">
+        {[0, 1, 2, 3].map((item) => (
+          <div key={item} className="h-28 rounded-lg border border-hairline bg-card" />
+        ))}
+      </div>
     </div>
   )
 }

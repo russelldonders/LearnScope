@@ -1,36 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { usePendingActions } from '../context/PendingActionsContext'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
+import ConfirmDialog from '../components/ConfirmDialog'
 import { LEVEL_LABELS } from '../lib/levels'
 import {
   listMyPeerRatings,
   listConnections,
   listSentInvites,
-  listIncomingRateInvites,
   getProfiles,
   getSharedSkillCounts,
   sendInviteEmail,
   revokeInvite,
 } from '../lib/connections'
-import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
-import { listIncomingConnectionRequests, respondToConnectionRequest } from '../lib/skillDiscovery'
 
 export default function Connections() {
   const { user } = useAuth()
-  const { refreshPendingActionCount } = usePendingActions()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [ratings, setRatings] = useState([])
   const [allConnectionIds, setAllConnectionIds] = useState([])
   const [invites, setInvites] = useState([])
-  const [incomingRateInvites, setIncomingRateInvites] = useState([])
-  const [validationRequests, setValidationRequests] = useState([])
-  const [incomingRequests, setIncomingRequests] = useState([])
-  const [respondingId, setRespondingId] = useState(null)
-  const [respondError, setRespondError] = useState(null)
   const [profiles, setProfiles] = useState({})
   const [sharedSkillCounts, setSharedSkillCounts] = useState({})
   const [copiedId, setCopiedId] = useState(null)
@@ -39,6 +30,7 @@ export default function Connections() {
   const [resendError, setResendError] = useState(null)
   const [revokingId, setRevokingId] = useState(null)
   const [revokeError, setRevokeError] = useState(null)
+  const [pendingRevoke, setPendingRevoke] = useState(null)
 
   useEffect(() => {
     load()
@@ -48,33 +40,18 @@ export default function Connections() {
     setLoading(true)
     setError(null)
     try {
-      const [
-        ratingsData,
-        connectionsData,
-        invitesData,
-        incomingRateInvitesData,
-        validationRequestsData,
-        incomingRequestsData,
-      ] = await Promise.all([
+      const [ratingsData, connectionsData, invitesData] = await Promise.all([
         listMyPeerRatings(),
         listConnections(user.id),
         listSentInvites(),
-        listIncomingRateInvites(),
-        listIncomingPendingValidationRequests(user.id),
-        listIncomingConnectionRequests(user.id),
       ])
       setRatings(ratingsData)
       setAllConnectionIds(connectionsData.map((c) => c.id))
       setInvites(invitesData)
-      setIncomingRateInvites(incomingRateInvitesData)
-      setValidationRequests(validationRequestsData)
-      setIncomingRequests(incomingRequestsData)
       const otherIds = ratingsData.map((r) => (r.rater_id === user.id ? r.skill_owner_id : r.rater_id))
-      const requesterIds = validationRequestsData.map((r) => r.requester_id)
-      const requestSenderIds = incomingRequestsData.map((r) => r.requester_id)
       const connectionIds = [...new Set([...connectionsData.map((c) => c.id), ...otherIds])]
       const [profilesData, sharedSkillCountsData] = await Promise.all([
-        getProfiles([...otherIds, ...connectionsData.map((c) => c.id), ...requesterIds, ...requestSenderIds, user.id]),
+        getProfiles([...otherIds, ...connectionsData.map((c) => c.id), user.id]),
         getSharedSkillCounts(user.id, connectionIds),
       ])
       setProfiles(profilesData)
@@ -83,21 +60,6 @@ export default function Connections() {
       setError(err.message)
     } finally {
       setLoading(false)
-    }
-  }
-
-  async function handleRequestResponse(requestId, accept) {
-    setRespondError(null)
-    setRespondingId(requestId)
-    try {
-      await respondToConnectionRequest(requestId, accept)
-      setIncomingRequests((prev) => prev.filter((r) => r.id !== requestId))
-      refreshPendingActionCount()
-      if (accept) await load()
-    } catch (err) {
-      setRespondError({ id: requestId, message: err.message })
-    } finally {
-      setRespondingId(null)
     }
   }
 
@@ -167,9 +129,6 @@ export default function Connections() {
   }
 
   async function handleRevoke(invite) {
-    if (!confirm(`Revoke the invite to ${invite.invitee_email}? They'll no longer be able to use this link.`)) {
-      return
-    }
     setRevokeError(null)
     setRevokingId(invite.id)
     try {
@@ -179,6 +138,7 @@ export default function Connections() {
       setRevokeError({ id: invite.id, message: err.message })
     } finally {
       setRevokingId(null)
+      setPendingRevoke(null)
     }
   }
 
@@ -186,83 +146,13 @@ export default function Connections() {
     <div className="min-h-screen bg-paper">
       <AppHeader />
 
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-10">
-        {incomingRateInvites.length > 0 && (
-          <div>
-            <h2 className="font-display text-xl text-ink mb-6">Invitations to rate</h2>
-            <div className="space-y-3">
-              {incomingRateInvites.map((invite) => (
-                <Link
-                  key={invite.id}
-                  to={`/rate/${invite.share_code}`}
-                  className="block bg-card border border-hairline rounded-lg p-4 hover:border-moss/60 transition-colors"
-                >
-                  <p className="text-sm text-ink">
-                    <strong>{invite.inviter_name || 'Someone'}</strong> wants your rating on their skill:{' '}
-                    <strong>{invite.skill_name}</strong>
-                    {invite.skill_category ? ` (${invite.skill_category})` : ''}
-                  </p>
-                  <p className="font-mono text-xs text-secondary mt-0.5">
-                    {new Date(invite.created_at).toLocaleDateString()}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {incomingRequests.length > 0 && (
-          <div>
-            <h2 className="font-display text-xl text-ink mb-6">Connection requests</h2>
-            <div className="space-y-3">
-              {incomingRequests.map((request) => (
-                <div key={request.id} className="bg-card border border-hairline rounded-lg p-4">
-                  <p className="text-sm text-ink">
-                    <strong>{profiles[request.requester_id]?.name || 'Someone'}</strong>
-                    {request.skills?.name ? (
-                      <>
-                        {' '}wants to connect over <strong>{request.skills.name}</strong>
-                      </>
-                    ) : (
-                      ' wants to connect'
-                    )}
-                  </p>
-                  {request.message && <p className="text-sm text-secondary mt-1">{request.message}</p>}
-                  <p className="font-mono text-xs text-secondary mt-1">
-                    {new Date(request.created_at).toLocaleDateString()}
-                  </p>
-                  {respondError?.id === request.id && (
-                    <p className="text-xs text-red-700 mt-1">{respondError.message}</p>
-                  )}
-                  <div className="flex items-center gap-2 mt-3">
-                    <button
-                      type="button"
-                      onClick={() => handleRequestResponse(request.id, true)}
-                      disabled={respondingId === request.id}
-                      className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-                    >
-                      Accept
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleRequestResponse(request.id, false)}
-                      disabled={respondingId === request.id}
-                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-                    >
-                      Decline
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
+      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8 space-y-10">
+        <h1 className="sr-only">Connections</h1>
         <div>
           <h2 className="font-display text-xl text-ink mb-6">Your connections</h2>
 
           {loading && <p className="text-secondary">Loading…</p>}
-          {error && <p className="text-red-700 text-sm">{error}</p>}
+          {error && <p role="alert" className="text-red-700 text-sm">{error}</p>}
 
           {!loading && connections.length === 0 && (
             <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
@@ -320,30 +210,6 @@ export default function Connections() {
           </div>
         </div>
 
-        {validationRequests.length > 0 && (
-          <div>
-            <h2 className="font-display text-xl text-ink mb-6">Requests to validate</h2>
-            <div className="space-y-3">
-              {validationRequests.map((request) => (
-                <Link
-                  key={request.id}
-                  to={`/validate-request/${request.id}`}
-                  className="block bg-card border border-hairline rounded-lg p-4 hover:border-moss/60 transition-colors"
-                >
-                  <p className="text-sm text-ink">
-                    <strong>{profiles[request.requester_id]?.name || 'Someone'}</strong> asked you to confirm{' '}
-                    they've reached <strong>{LEVEL_LABELS[request.target_level]}</strong> on{' '}
-                    <strong>{request.skills?.name}</strong>
-                  </p>
-                  <p className="font-mono text-xs text-secondary mt-0.5">
-                    {new Date(request.created_at).toLocaleDateString()}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-
         {pendingInvites.length > 0 && (
           <div>
             <h2 className="font-display text-xl text-ink mb-6">Pending invites</h2>
@@ -389,7 +255,7 @@ export default function Connections() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleRevoke(invite)}
+                      onClick={() => setPendingRevoke(invite)}
                       disabled={revokingId === invite.id}
                       className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
                     >
@@ -402,6 +268,15 @@ export default function Connections() {
           </div>
         )}
       </main>
+
+      {pendingRevoke && (
+        <ConfirmDialog
+          message={`Revoke the invite to ${pendingRevoke.invitee_email}? They'll no longer be able to use this link.`}
+          onConfirm={() => handleRevoke(pendingRevoke)}
+          onCancel={() => setPendingRevoke(null)}
+          confirming={revokingId === pendingRevoke.id}
+        />
+      )}
     </div>
   )
 }

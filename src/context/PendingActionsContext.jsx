@@ -2,27 +2,28 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { useAuth } from './AuthContext'
 import { supabase } from '../lib/supabaseClient'
 import { listIncomingRateInvites } from '../lib/connections'
+import { listMyPendingOrgInvites } from '../lib/organisationInvites'
 
 const PendingActionsContext = createContext(undefined)
 
 // Lives above the router (see App.jsx) rather than inside AppHeader, so the
 // count survives page navigation and can be refreshed immediately by
-// whichever page just resolved an item (e.g. Connections accepting a
+// whichever page just resolved an item (e.g. Actions.jsx accepting a
 // request) instead of only refetching on the next full page/header mount.
 export function PendingActionsProvider({ children }) {
   const { user } = useAuth()
   const [pendingActionCount, setPendingActionCount] = useState(0)
 
   // Everything actually waiting on this learner to do something -- pending
-  // connection requests, validation requests, and rate invites addressed to
-  // them -- not invites/requests they sent themselves, which are waiting on
-  // someone else instead.
+  // connection requests, validation requests, organisation staff invites,
+  // and rate invites addressed to them -- not invites/requests they sent
+  // themselves, which are waiting on someone else instead.
   const refreshPendingActionCount = useCallback(async () => {
     if (!user) {
       setPendingActionCount(0)
       return
     }
-    const [{ count: requestCount }, { count: validationCount }, rateInvites] = await Promise.all([
+    const [{ count: requestCount }, { count: validationCount }, rateInvites, orgInvites] = await Promise.all([
       supabase
         .from('connection_requests')
         .select('id', { count: 'exact', head: true })
@@ -34,8 +35,9 @@ export function PendingActionsProvider({ children }) {
         .eq('validator_id', user.id)
         .eq('status', 'pending'),
       listIncomingRateInvites(),
+      listMyPendingOrgInvites(user.id),
     ])
-    setPendingActionCount((requestCount ?? 0) + (validationCount ?? 0) + rateInvites.length)
+    setPendingActionCount((requestCount ?? 0) + (validationCount ?? 0) + rateInvites.length + orgInvites.length)
   }, [user])
 
   useEffect(() => {
