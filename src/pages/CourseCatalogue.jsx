@@ -251,6 +251,7 @@ export default function CourseCatalogue() {
                   name={course.name}
                   provider={course.provider}
                   logoUrl={course.logoUrl}
+                  imageUrl={course.image_url}
                   className="h-24 w-full shrink-0"
                 />
                 <div className="p-4 flex flex-col flex-1">

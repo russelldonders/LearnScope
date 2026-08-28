@@ -4982,3 +4982,169 @@ as $$
 $$;
 
 grant execute on function skill_knowledge_level_source_stats(uuid) to authenticated;
+-- Course cover image, overtaking CourseThumbnail's generated gradient
+-- placeholder once set. Distinct from organisations.logo_url (0081), which
+-- is a small provider badge, not the course's own image.
+alter table course_catalogue add column image_url text;
+
+insert into storage.buckets (id, name, public)
+values ('course-catalogue-images', 'course-catalogue-images', true)
+on conflict (id) do nothing;
+
+-- No SELECT policy, matching the course-content bucket (0072) rather than
+-- org-logos (0081): the bucket's public=true flag already serves images via
+-- an unauthenticated GET that bypasses storage.objects RLS entirely, so a
+-- SELECT policy here would only ever grant *listing* the bucket's contents
+-- -- a capability nothing in this feature needs.
+--
+-- Write access mirrors 0072's course-content bucket exactly: an
+-- organisation member may upload/replace/remove their own course's image
+-- while it's draft/rejected (the same window course_catalogue's own update
+-- policy allows them to edit the rest of the course in), or a platform
+-- admin at any status. Authorization is derived from the literal object
+-- path's course-id folder segment, not from course_catalogue.image_url --
+-- a row's own claimed URL can't be trusted to prove which folder it's
+-- actually allowed to touch.
+create policy "Course editors can upload their course's image"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'course-catalogue-images'
+    and exists (
+      select 1 from course_catalogue cc
+      where cc.id::text = (storage.foldername(name))[1]
+        and (
+          is_platform_admin(auth.uid())
+          or (
+            cc.organisation_id is not null
+            and is_org_member(cc.organisation_id, auth.uid())
+            and cc.status in ('draft', 'rejected')
+          )
+        )
+    )
+  );
+
+create policy "Course editors can replace their course's image"
+  on storage.objects for update
+  to authenticated
+  using (
+    bucket_id = 'course-catalogue-images'
+    and exists (
+      select 1 from course_catalogue cc
+      where cc.id::text = (storage.foldername(name))[1]
+        and (
+          is_platform_admin(auth.uid())
+          or (
+            cc.organisation_id is not null
+            and is_org_member(cc.organisation_id, auth.uid())
+            and cc.status in ('draft', 'rejected')
+          )
+        )
+    )
+  )
+  with check (
+    bucket_id = 'course-catalogue-images'
+    and exists (
+      select 1 from course_catalogue cc
+      where cc.id::text = (storage.foldername(name))[1]
+        and (
+          is_platform_admin(auth.uid())
+          or (
+            cc.organisation_id is not null
+            and is_org_member(cc.organisation_id, auth.uid())
+            and cc.status in ('draft', 'rejected')
+          )
+        )
+    )
+  );
+
+create policy "Course editors can remove their course's image"
+  on storage.objects for delete
+  to authenticated
+  using (
+    bucket_id = 'course-catalogue-images'
+    and exists (
+      select 1 from course_catalogue cc
+      where cc.id::text = (storage.foldername(name))[1]
+        and (
+          is_platform_admin(auth.uid())
+          or (
+            cc.organisation_id is not null
+            and is_org_member(cc.organisation_id, auth.uid())
+            and cc.status in ('draft', 'rejected')
+          )
+        )
+    )
+  );
+-- The public provider page (0091) built its course tiles before 0093 added
+-- course_catalogue.image_url -- surface it here too, the same way 0091
+-- added skill/tag chips, so an uploaded course image replaces
+-- CourseThumbnail's placeholder on the public page exactly as it already
+-- does on the learner-facing catalogue (src/lib/courseCatalogue.js, a plain
+-- `select *` that already carries the new column with no query change
+-- needed there).
+create or replace function get_provider_profile(p_slug text)
+returns json
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select json_build_object(
+    'organisation', (
+      select json_build_object(
+        'id', o.id,
+        'name', o.name,
+        'about', o.about,
+        'logoUrl', o.logo_url,
+        'url', o.url
+      )
+      from organisations o
+      where o.slug = p_slug and o.status = 'active' and o.public_profile_enabled = true
+    ),
+    'skills', (
+      select coalesce(json_agg(json_build_object(
+        'id', sl.id,
+        'name', sl.name,
+        'category', sl.category,
+        'description', sl.description
+      ) order by sl.name), '[]'::json)
+      from organisation_offered_skills oos
+      join skill_library sl on sl.id = oos.skill_library_id
+      join organisations o on o.id = oos.organisation_id
+      where o.slug = p_slug and o.status = 'active' and o.public_profile_enabled = true
+    ),
+    'courses', (
+      select coalesce(json_agg(json_build_object(
+        'id', cc.id,
+        'name', cc.name,
+        'synopsis', cc.synopsis,
+        'courseType', cc.course_type,
+        'duration', cc.duration,
+        'imageUrl', cc.image_url,
+        'skillEntries', (
+          select coalesce(json_agg(json_build_object(
+            'skillId', ccs.skill_library_id,
+            'skillName', sl2.name,
+            'level', ccs.level
+          )), '[]'::json)
+          from course_catalogue_skills ccs
+          join skill_library sl2 on sl2.id = ccs.skill_library_id
+          where ccs.course_catalogue_id = cc.id
+        ),
+        'tags', (
+          select coalesce(json_agg(json_build_object('id', t.id, 'name', t.name)), '[]'::json)
+          from course_catalogue_tags cct
+          join tags t on t.id = cct.tag_id
+          where cct.course_catalogue_id = cc.id
+        )
+      ) order by cc.name), '[]'::json)
+      from course_catalogue cc
+      join organisations o on o.id = cc.organisation_id
+      where o.slug = p_slug and o.status = 'active' and o.public_profile_enabled = true
+        and cc.status = 'approved'
+    )
+  )
+$$;
+
+grant execute on function get_provider_profile(text) to anon, authenticated;

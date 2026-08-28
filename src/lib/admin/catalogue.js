@@ -126,3 +126,29 @@ export async function setCatalogueCourseStatus(id, status) {
   const { error } = await supabase.from('course_catalogue').update({ status }).eq('id', id)
   if (error) throw error
 }
+
+// Same public-bucket, path-scoped-by-owner pattern as uploadOrganisationLogo
+// (organisations.js) -- upsert-in-place at a fixed path per course, so
+// re-uploading just replaces the file rather than accumulating old ones.
+export async function uploadCourseImage(courseId, fileOrBlob) {
+  const ext = fileOrBlob.type?.split('/')[1] || 'jpg'
+  const path = `${courseId}/image.${ext}`
+
+  const { error: uploadError } = await supabase.storage
+    .from('course-catalogue-images')
+    .upload(path, fileOrBlob, { upsert: true, contentType: fileOrBlob.type })
+  if (uploadError) throw uploadError
+
+  const { data } = supabase.storage.from('course-catalogue-images').getPublicUrl(path)
+  const url = `${data.publicUrl}?t=${Date.now()}`
+
+  const { error: courseError } = await supabase.from('course_catalogue').update({ image_url: url }).eq('id', courseId)
+  if (courseError) throw courseError
+
+  return url
+}
+
+export async function removeCourseImage(courseId) {
+  const { error } = await supabase.from('course_catalogue').update({ image_url: null }).eq('id', courseId)
+  if (error) throw error
+}
