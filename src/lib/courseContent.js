@@ -334,6 +334,10 @@ export async function uploadVideoResource(organisationId, userId, file, title) {
   return uploadSingleFileResource(organisationId, userId, file, title, 'video')
 }
 
+export async function uploadScreenRecordingResource(organisationId, userId, file, title) {
+  return uploadSingleFileResource(organisationId, userId, file, title, 'screen_recording')
+}
+
 // Rebuilds a bare embed URL from a YouTube/Vimeo watch link ourselves,
 // rather than storing (and later using as an iframe src) whatever the
 // provider actually pasted -- an allowlisted host plus an id we extracted
@@ -377,6 +381,35 @@ export async function addExternalVideoResource(organisationId, userId, url, titl
       type: 'external_video',
       title: title?.trim() || url.trim(),
       external_url: embedUrl,
+      created_by: userId,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+function normalizedWebUrl(value) {
+  const input = value.trim()
+  let parsed
+  try {
+    parsed = new URL(/^https?:\/\//i.test(input) ? input : `https://${input}`)
+  } catch {
+    throw new Error('Enter a valid web address.')
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Enter an HTTP or HTTPS web address.')
+  return parsed.href
+}
+
+export async function addWebResource(organisationId, userId, url, title) {
+  const normalizedUrl = normalizedWebUrl(url)
+  const { data, error } = await supabase
+    .from('content_resources')
+    .insert({
+      organisation_id: organisationId,
+      type: 'web_url',
+      title: title?.trim() || new URL(normalizedUrl).hostname,
+      external_url: normalizedUrl,
       created_by: userId,
     })
     .select()
@@ -653,7 +686,7 @@ async function removeStorageFolder(prefix) {
 // the DB level (0073), so it disappears from every course it was attached
 // to, not just the one you were looking at when you deleted it.
 export async function deleteResource(resource) {
-  if (resource.type !== 'external_video') await removeStorageFolder(resource.storage_path)
+  if (!['external_video', 'web_url'].includes(resource.type)) await removeStorageFolder(resource.storage_path)
   const { error } = await supabase.from('content_resources').delete().eq('id', resource.id)
   if (error) throw error
 }

@@ -7,6 +7,7 @@ import XapiPlayer from '../../components/XapiPlayer'
 import EditedVideoPlayer from '../../components/EditedVideoPlayer'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import CourseThumbnail from '../../components/CourseThumbnail'
+import ScreenRecorderModal from '../../components/ScreenRecorderModal'
 import {
   getCatalogueCourse,
   updateProviderCourse,
@@ -26,18 +27,23 @@ import {
   unlinkResourceFromCourse,
   moveContentLink,
   uploadVideoResource,
+  uploadScreenRecordingResource,
   uploadFileResource,
   uploadScormResource,
   uploadXapiResource,
+  addWebResource,
   contentFileUrl,
 } from '../../lib/courseContent'
+import { optimizeCourseImage, COURSE_IMAGE_MAX_INPUT_BYTES } from '../../lib/optimizeImage'
 
 const TYPE_LABELS = {
   video: 'Video',
+  screen_recording: 'Screen recording',
   file: 'File',
   scorm: 'SCORM package',
   xapi: 'xAPI package',
   external_video: 'External video',
+  web_url: 'Web link',
 }
 const STATUS_LABELS = {
   draft: 'Draft',
@@ -46,7 +52,7 @@ const STATUS_LABELS = {
   rejected: 'Rejected',
   inactive: 'Inactive',
 }
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+const MAX_IMAGE_BYTES = COURSE_IMAGE_MAX_INPUT_BYTES
 
 // Info (name/type/duration/synopsis/image, save/submit/unpublish) and
 // Content (sections/resources) used to sit stacked on one long page --
@@ -330,18 +336,19 @@ function CourseImageUpload({ course, canEdit, onUpdated }) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    if (!file.type.startsWith('image/')) {
-      setError('Please choose an image file.')
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Choose a JPEG, PNG, or WebP image.')
       return
     }
     if (file.size > MAX_IMAGE_BYTES) {
-      setError('That image is too large (max 5MB).')
+      setError('That image is too large (max 10MB).')
       return
     }
     setError(null)
     setUploading(true)
     try {
-      await uploadCourseImage(course.id, file)
+      const optimizedImage = await optimizeCourseImage(file)
+      await uploadCourseImage(course.id, optimizedImage)
       await onUpdated()
     } catch (err) {
       setError(err.message)
@@ -398,7 +405,13 @@ function CourseImageUpload({ course, canEdit, onUpdated }) {
             {error && <p className="text-xs text-red-700 mt-1">{error}</p>}
           </div>
         )}
-        <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          onChange={handleFileChange}
+          className="hidden"
+        />
       </div>
     </div>
   )
@@ -487,10 +500,34 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
 
       {error && <p className="text-sm text-red-700">{error}</p>}
 
+      {canEdit && (
+        <form onSubmit={handleAddSection} className="bg-card border border-hairline rounded-lg p-4 flex flex-wrap items-end gap-2">
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-xs text-secondary mb-1" htmlFor="newSectionTitle">
+              Section title
+            </label>
+            <input
+              id="newSectionTitle"
+              value={newSectionTitle}
+              onChange={(e) => setNewSectionTitle(e.target.value)}
+              placeholder="e.g. Getting started"
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={creatingSection || !newSectionTitle.trim()}
+            className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+          >
+            {creatingSection ? 'Adding…' : '+ Add section'}
+          </button>
+        </form>
+      )}
+
       {sections.length === 0 && ungroupedItems.length === 0 ? (
         <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
           <p className="text-secondary">
-            {canEdit ? 'No sections yet — add one below to start structuring this course.' : 'No content added yet.'}
+            {canEdit ? 'No sections yet — add one above to start structuring this course.' : 'No content added yet.'}
           </p>
         </div>
       ) : (
@@ -526,29 +563,6 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
         </div>
       )}
 
-      {canEdit && (
-        <form onSubmit={handleAddSection} className="bg-card border border-hairline rounded-lg p-4 flex flex-wrap items-end gap-2">
-          <div className="flex-1 min-w-[200px]">
-            <label className="block text-xs text-secondary mb-1" htmlFor="newSectionTitle">
-              Section title
-            </label>
-            <input
-              id="newSectionTitle"
-              value={newSectionTitle}
-              onChange={(e) => setNewSectionTitle(e.target.value)}
-              placeholder="e.g. Getting started"
-              className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={creatingSection || !newSectionTitle.trim()}
-            className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-          >
-            {creatingSection ? 'Adding…' : '+ Add section'}
-          </button>
-        </form>
-      )}
     </div>
   )
 }
@@ -612,6 +626,10 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
                   <a href={contentFileUrl(item)} download={item.file_name || true} className="text-xs text-moss font-medium">
                     Download
                   </a>
+                ) : item.type === 'web_url' ? (
+                  <a href={item.external_url} target="_blank" rel="noopener noreferrer" className="text-xs text-moss font-medium">
+                    Open link
+                  </a>
                 ) : (
                   <button
                     type="button"
@@ -653,7 +671,7 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
                 )}
               </div>
             </div>
-            {previewingId === item.id && item.type === 'video' && (
+            {previewingId === item.id && (item.type === 'video' || item.type === 'screen_recording') && (
               <EditedVideoPlayer resource={item} className="w-full mt-2 rounded-md bg-black" />
             )}
             {previewingId === item.id && item.type === 'scorm' && (
@@ -708,7 +726,19 @@ function SectionCard({
   const [uploadType, setUploadType] = useState('video')
   const [uploadTitle, setUploadTitle] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [showScreenRecorder, setShowScreenRecorder] = useState(false)
+  const [recordedFileName, setRecordedFileName] = useState('')
+  const [webUrl, setWebUrl] = useState('')
   const fileInputRef = useRef(null)
+
+  function setRecordedFile(file) {
+    if (!fileInputRef.current) return
+    const transfer = new DataTransfer()
+    transfer.items.add(file)
+    fileInputRef.current.files = transfer.files
+    setRecordedFileName(file.name)
+    if (!uploadTitle.trim()) setUploadTitle('Screen recording')
+  }
 
   async function handleRenameSave() {
     if (!titleDraft.trim() || titleDraft === section.title) {
@@ -798,9 +828,31 @@ function SectionCard({
   }
 
   async function handleUpload() {
+    if (uploadType === 'web_url') {
+      if (!webUrl.trim()) {
+        setError('Enter a web address first.')
+        return
+      }
+      setUploading(true)
+      setError(null)
+      try {
+        const resource = await addWebResource(organisationId, userId, webUrl, uploadTitle)
+        await linkResourceToCourse(courseId, resource.id, section.id)
+        setUploadTitle('')
+        setWebUrl('')
+        setShowUpload(false)
+        await onChanged()
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setUploading(false)
+      }
+      return
+    }
+
     const file = fileInputRef.current?.files[0]
     if (!file) {
-      setError('Choose a file first.')
+      setError(uploadType === 'screen_recording' ? 'Record your screen first.' : 'Choose a file first.')
       return
     }
     setUploading(true)
@@ -809,6 +861,8 @@ function SectionCard({
       const resource =
         uploadType === 'video'
           ? await uploadVideoResource(organisationId, userId, file, uploadTitle)
+          : uploadType === 'screen_recording'
+            ? await uploadScreenRecordingResource(organisationId, userId, file, uploadTitle)
           : uploadType === 'file'
             ? await uploadFileResource(organisationId, userId, file, uploadTitle)
             : uploadType === 'scorm'
@@ -817,6 +871,7 @@ function SectionCard({
       await linkResourceToCourse(courseId, resource.id, section.id)
       setUploadTitle('')
       if (fileInputRef.current) fileInputRef.current.value = ''
+      setRecordedFileName('')
       setShowUpload(false)
       await onChanged()
     } catch (err) {
@@ -900,6 +955,10 @@ function SectionCard({
                     <a href={contentFileUrl(item)} download={item.file_name || true} className="text-xs text-moss font-medium">
                       Download
                     </a>
+                  ) : item.type === 'web_url' ? (
+                    <a href={item.external_url} target="_blank" rel="noopener noreferrer" className="text-xs text-moss font-medium">
+                      Open link
+                    </a>
                   ) : (
                     <button
                       type="button"
@@ -941,7 +1000,7 @@ function SectionCard({
                   )}
                 </div>
               </div>
-              {previewingId === item.id && item.type === 'video' && (
+              {previewingId === item.id && (item.type === 'video' || item.type === 'screen_recording') && (
                 <EditedVideoPlayer resource={item} className="w-full mt-2 rounded-md bg-black" />
               )}
               {previewingId === item.id && item.type === 'scorm' && (
@@ -1007,7 +1066,7 @@ function SectionCard({
               onClick={() => setShowUpload((v) => !v)}
               className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
             >
-              {showUpload ? 'Cancel upload' : '+ Upload new content'}
+              {showUpload ? 'Cancel' : '+ Add new content'}
             </button>
           </div>
 
@@ -1020,13 +1079,20 @@ function SectionCard({
                 <select
                   id={`uploadType-${section.id}`}
                   value={uploadType}
-                  onChange={(e) => setUploadType(e.target.value)}
+                  onChange={(e) => {
+                    setUploadType(e.target.value)
+                    if (fileInputRef.current) fileInputRef.current.value = ''
+                    setRecordedFileName('')
+                    setWebUrl('')
+                  }}
                   className="rounded-md border border-hairline bg-card px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
                 >
                   <option value="video">Video</option>
+                  <option value="screen_recording">Screen recording</option>
                   <option value="file">File</option>
                   <option value="scorm">SCORM package (.zip)</option>
                   <option value="xapi">xAPI package (.zip)</option>
+                  <option value="web_url">Web link</option>
                 </select>
               </div>
               <div className="flex-1 min-w-[140px]">
@@ -1040,8 +1106,38 @@ function SectionCard({
                   className="w-full rounded-md border border-hairline bg-card px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
                 />
               </div>
-              <div>
-                <input
+              {uploadType === 'web_url' ? (
+                <div className="flex-1 min-w-[220px]">
+                  <label className="block text-xs text-secondary mb-1" htmlFor={`webUrl-${section.id}`}>Web address</label>
+                  <input
+                    id={`webUrl-${section.id}`}
+                    type="url"
+                    value={webUrl}
+                    onChange={(e) => setWebUrl(e.target.value)}
+                    placeholder="https://example.com/resource"
+                    className="w-full rounded-md border border-hairline bg-card px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                  />
+                </div>
+              ) : uploadType === 'screen_recording' ? (
+                <div className="min-w-[180px]">
+                  <span className="block text-xs text-secondary mb-1">Recording</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowScreenRecorder(true)}
+                    className="inline-flex items-center gap-2 rounded-md border border-moss text-moss px-3 py-1.5 text-sm font-medium hover:bg-moss/5"
+                  >
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <rect x="3" y="4" width="18" height="13" rx="2" />
+                      <path d="M8 21h8M12 17v4" />
+                    </svg>
+                    {recordedFileName ? 'Record again' : 'Record screen'}
+                  </button>
+                  {recordedFileName && <p className="text-xs text-secondary mt-1 max-w-[220px] truncate">Ready: {recordedFileName}</p>}
+                  <input ref={fileInputRef} type="file" accept="video/*" className="sr-only" tabIndex={-1} />
+                </div>
+              ) : (
+                <div>
+                  <input
                   ref={fileInputRef}
                   type="file"
                   accept={
@@ -1052,17 +1148,28 @@ function SectionCard({
                         : undefined
                   }
                   className="text-xs text-secondary"
-                />
-              </div>
+                  />
+                </div>
+              )}
               <button
                 type="button"
                 onClick={handleUpload}
                 disabled={uploading}
                 className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
               >
-                {uploading ? 'Uploading…' : 'Upload & add'}
+                {uploading
+                  ? 'Adding…'
+                  : uploadType === 'screen_recording'
+                    ? 'Add recording'
+                    : uploadType === 'web_url'
+                      ? 'Add link'
+                      : 'Upload & add'}
               </button>
             </div>
+          )}
+
+          {showScreenRecorder && (
+            <ScreenRecorderModal onClose={() => setShowScreenRecorder(false)} onRecorded={setRecordedFile} />
           )}
         </div>
       )}

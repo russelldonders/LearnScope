@@ -131,8 +131,7 @@ export async function setCatalogueCourseStatus(id, status) {
 // (organisations.js) -- upsert-in-place at a fixed path per course, so
 // re-uploading just replaces the file rather than accumulating old ones.
 export async function uploadCourseImage(courseId, fileOrBlob) {
-  const ext = fileOrBlob.type?.split('/')[1] || 'jpg'
-  const path = `${courseId}/image.${ext}`
+  const path = `${courseId}/image.webp`
 
   const { error: uploadError } = await supabase.storage
     .from('course-catalogue-images')
@@ -149,6 +148,10 @@ export async function uploadCourseImage(courseId, fileOrBlob) {
 }
 
 export async function removeCourseImage(courseId) {
+  const paths = ['webp', 'jpeg', 'jpg', 'png'].map((extension) => `${courseId}/image.${extension}`)
+  const { error: storageError } = await supabase.storage.from('course-catalogue-images').remove(paths)
+  if (storageError) throw storageError
+
   const { error } = await supabase.from('course_catalogue').update({ image_url: null }).eq('id', courseId)
   if (error) throw error
 }

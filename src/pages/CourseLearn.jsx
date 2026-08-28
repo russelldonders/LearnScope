@@ -17,10 +17,12 @@ import ProgressBar from '../components/ProgressBar'
 
 const TYPE_LABELS = {
   video: 'Video',
+  screen_recording: 'Screen recording',
   file: 'File',
   scorm: 'SCORM package',
   xapi: 'xAPI package',
   external_video: 'External video',
+  web_url: 'Web link',
 }
 
 // Items come back ordered by their own `position`, which only resets to 0
@@ -206,7 +208,7 @@ export default function CourseLearn() {
                 </span>
                 <h3 className="font-display text-xl text-ink mb-4">{currentItem.title}</h3>
 
-                {currentItem.type === 'video' && (
+                {(currentItem.type === 'video' || currentItem.type === 'screen_recording') && (
                   <EditedVideoPlayer
                     key={currentItem.id}
                     resource={currentItem}
@@ -258,6 +260,18 @@ export default function CourseLearn() {
                     allowFullScreen
                     className="w-full aspect-video rounded-md"
                   />
+                )}
+
+                {currentItem.type === 'web_url' && (
+                  <a
+                    href={currentItem.external_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between gap-3 rounded-md border border-hairline bg-paper px-4 py-3 text-sm text-ink hover:border-moss"
+                  >
+                    <span className="min-w-0 truncate">{currentItem.external_url}</span>
+                    <span className="font-medium text-moss shrink-0">Open link ↗</span>
+                  </a>
                 )}
 
                 <div className="flex items-center gap-2 mt-6 pt-4 border-t border-hairline">
