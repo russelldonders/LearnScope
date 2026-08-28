@@ -37,41 +37,49 @@ export function duplicatePendingInviteMessage(email) {
   return `You already have a pending invite out to ${email} for this skill.`
 }
 
-export async function createInvite(skillId, email, inviterId) {
+function inviteUrl(shareCode, inviteType) {
+  return `${window.location.origin}/${inviteType === 'recommend' ? 'recommend' : 'rate'}/${shareCode}`
+}
+
+export async function createInvite(skillId, email, inviterId, inviteType = 'rate') {
   const { data, error } = await supabase
     .from('connection_invites')
-    .insert({ skill_id: skillId, invitee_email: email || null, inviter_id: inviterId })
-    .select('id, share_code')
+    .insert({ skill_id: skillId, invitee_email: email || null, inviter_id: inviterId, invite_type: inviteType })
+    .select('id, share_code, invite_type')
     .single()
   if (error) throw error
-  return { ...data, url: `${window.location.origin}/rate/${data.share_code}` }
+  return { ...data, url: inviteUrl(data.share_code, data.invite_type) }
 }
 
 // The general-purpose "share this however you like" link shown as soon as
-// the invite modal opens (see InviteRaterModal), as opposed to createInvite,
-// which always mints a new row -- reused here so repeatedly opening/closing
-// the modal doesn't leave a trail of unused pending invites behind. There's
-// no unique index to lean on for this (connection_invites_unique_pending_idx
-// only applies once an email is attached), so the dedup happens here.
-export async function getOrCreateShareLink(skillId, inviterId) {
+// the invite modal opens (see InviteRaterModal / RecommendSkillModal), as
+// opposed to createInvite, which always mints a new row -- reused here so
+// repeatedly opening/closing the modal doesn't leave a trail of unused
+// pending invites behind. There's no unique index to lean on for this
+// (connection_invites_unique_pending_idx only applies once an email is
+// attached), so the dedup happens here.
+export async function getOrCreateShareLink(skillId, inviterId, inviteType = 'rate') {
   const { data: existing, error: selectError } = await supabase
     .from('connection_invites')
-    .select('id, share_code')
+    .select('id, share_code, invite_type')
     .eq('skill_id', skillId)
     .eq('inviter_id', inviterId)
     .eq('status', 'pending')
+    .eq('invite_type', inviteType)
     .is('invitee_email', null)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
   if (selectError) throw selectError
-  if (existing) return { ...existing, url: `${window.location.origin}/rate/${existing.share_code}` }
-  return createInvite(skillId, null, inviterId)
+  if (existing) return { ...existing, url: inviteUrl(existing.share_code, existing.invite_type) }
+  return createInvite(skillId, null, inviterId, inviteType)
 }
 
-// Shared by the first-send flow (InviteRaterModal) and the resend action on
-// the Connections page so both go through the same Resend-backed endpoint.
-export async function sendInviteEmail({ toEmail, inviterName, skillName, shareUrl }) {
+// Shared by the first-send flow (InviteRaterModal / RecommendSkillModal) and
+// the resend action on the Connections page so both go through the same
+// Resend-backed endpoint. emailType selects which of the two invite emails
+// the API sends -- 'invite' (rate) or 'recommend'.
+export async function sendInviteEmail({ toEmail, inviterName, skillName, shareUrl, emailType = 'invite' }) {
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -81,7 +89,7 @@ export async function sendInviteEmail({ toEmail, inviterName, skillName, shareUr
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify({ type: 'invite', toEmail, inviterName, skillName, shareUrl }),
+    body: JSON.stringify({ type: emailType, toEmail, inviterName, skillName, shareUrl }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
@@ -105,6 +113,29 @@ export async function acceptInviteAndRate(code, level, comments) {
   return data
 }
 
+// Accepting a recommendation creates a new skill on the invitee's own
+// profile (linked to the same shared library entry as the inviter's) rather
+// than a rating -- see accept_invite_and_recommend in
+// 0095_recommend_skill_invites.sql. Returns the new skill's id.
+export async function acceptInviteAndRecommend(code, trackingReason) {
+  const { data, error } = await supabase.rpc('accept_invite_and_recommend', {
+    p_code: code,
+    p_tracking_reason: trackingReason,
+  })
+  if (error) throw error
+  return data
+}
+
+// Lets the invitee dismiss a pending invite addressed to their own email --
+// see decline_invite in 0096_decline_invite.sql. Needed most for recommend
+// invites, which (unlike rating) can fail permanently for a given invitee
+// (e.g. a same-named skill already exists), otherwise leaving no way to
+// clear it from their pending actions.
+export async function declineInvite(code) {
+  const { error } = await supabase.rpc('decline_invite', { p_code: code })
+  if (error) throw error
+}
+
 // Invites addressed to the current user's own email that they haven't
 // clicked through yet -- see list_incoming_rate_invites in
 // 0061_incoming_rate_invites.sql for why this needs a SECURITY DEFINER RPC
@@ -115,17 +146,28 @@ export async function listIncomingRateInvites() {
   return (data ?? []).map((invite) => ({ ...invite, url: `${window.location.origin}/rate/${invite.share_code}` }))
 }
 
+// Same as listIncomingRateInvites but for pending skill recommendations --
+// see list_incoming_recommend_invites in 0095_recommend_skill_invites.sql.
+export async function listIncomingRecommendInvites() {
+  const { data, error } = await supabase.rpc('list_incoming_recommend_invites')
+  if (error) throw error
+  return (data ?? []).map((invite) => ({
+    ...invite,
+    url: `${window.location.origin}/recommend/${invite.share_code}`,
+  }))
+}
+
 export async function listSentInvites() {
   const { data, error } = await supabase
     .from('connection_invites')
     .select(
-      'id, skill_id, invitee_email, share_code, status, created_at, accepted_at, accepted_by, skills(name, category)'
+      'id, skill_id, invitee_email, share_code, status, invite_type, created_at, accepted_at, accepted_by, skills(name, category)'
     )
     .order('created_at', { ascending: false })
   if (error) throw error
   return (data ?? []).map((invite) => ({
     ...invite,
-    url: `${window.location.origin}/rate/${invite.share_code}`,
+    url: inviteUrl(invite.share_code, invite.invite_type),
   }))
 }
 

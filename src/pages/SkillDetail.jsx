@@ -22,6 +22,7 @@ import AccessibleDialog from '../components/AccessibleDialog'
 import { listTags, listSkillTags, addTagToSkill, removeSkillTagLink } from '../lib/skillTags'
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import InviteRaterModal from '../components/InviteRaterModal'
+import RecommendSkillModal from '../components/RecommendSkillModal'
 import RecordActivityModal from '../components/RecordActivityModal'
 import AssessBaselineModal from '../components/AssessBaselineModal'
 import SetTargetModal from '../components/SetTargetModal'
@@ -63,6 +64,7 @@ export default function SkillDetail() {
   const [assessorName, setAssessorName] = useState(null)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [inviteAfterSelfAssess, setInviteAfterSelfAssess] = useState(false)
+  const [recommendOpen, setRecommendOpen] = useState(false)
   const [selfAssessOpen, setSelfAssessOpen] = useState(false)
   const [selfAssessKnowledgeOpen, setSelfAssessKnowledgeOpen] = useState(false)
   const [confirmingBaselineOpen, setConfirmingBaselineOpen] = useState(false)
@@ -150,7 +152,11 @@ export default function SkillDetail() {
           .select('*')
           .eq('skill_id', skill.id)
           .order('rated_at', { ascending: false }),
-        supabase.from('connection_invites').select('id, status').eq('skill_id', skill.id),
+        // invite_type='rate' only -- a "Recommend this skill" invite (see
+        // RecommendSkillModal) tracks a different action entirely and
+        // shouldn't count toward the "Invite others to assess" milestone
+        // below (invitesSentCount).
+        supabase.from('connection_invites').select('id, status').eq('skill_id', skill.id).eq('invite_type', 'rate'),
         supabase
           .from('skill_experience_links')
           .select('id, created_at, experience(id, title, organization, type, start_date, end_date)')
@@ -654,6 +660,13 @@ export default function SkillDetail() {
                     <PeopleIcon />
                     {totalTrackersCount} {totalTrackersCount === 1 ? 'person' : 'people'} in total have this skill
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setRecommendOpen(true)}
+                    className="rounded-full border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:border-moss hover:text-moss transition-colors"
+                  >
+                    Recommend this skill
+                  </button>
                 </div>
               </div>
             )}
@@ -686,6 +699,8 @@ export default function SkillDetail() {
                 }}
               />
             )}
+
+            {recommendOpen && <RecommendSkillModal skill={skill} onClose={() => setRecommendOpen(false)} />}
 
             {selfAssessOpen && (
               <SelfAssessModal

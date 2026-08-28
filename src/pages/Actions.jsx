@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { usePendingActions } from '../context/PendingActionsContext'
 import AppHeader from '../components/AppHeader'
 import { LEVEL_LABELS } from '../lib/levels'
-import { listIncomingRateInvites, getProfiles } from '../lib/connections'
+import { listIncomingRateInvites, listIncomingRecommendInvites, getProfiles } from '../lib/connections'
 import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
 import { listIncomingConnectionRequests, respondToConnectionRequest } from '../lib/skillDiscovery'
 import { listMyPendingOrgInvites, decideOrgInvite } from '../lib/organisationInvites'
@@ -20,6 +20,7 @@ export default function Actions() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [incomingRateInvites, setIncomingRateInvites] = useState([])
+  const [incomingRecommendInvites, setIncomingRecommendInvites] = useState([])
   const [validationRequests, setValidationRequests] = useState([])
   const [incomingRequests, setIncomingRequests] = useState([])
   const [orgInvites, setOrgInvites] = useState([])
@@ -37,14 +38,21 @@ export default function Actions() {
     setLoading(true)
     setError(null)
     try {
-      const [incomingRateInvitesData, validationRequestsData, incomingRequestsData, orgInvitesData] =
-        await Promise.all([
-          listIncomingRateInvites(),
-          listIncomingPendingValidationRequests(user.id),
-          listIncomingConnectionRequests(user.id),
-          listMyPendingOrgInvites(user.id),
-        ])
+      const [
+        incomingRateInvitesData,
+        incomingRecommendInvitesData,
+        validationRequestsData,
+        incomingRequestsData,
+        orgInvitesData,
+      ] = await Promise.all([
+        listIncomingRateInvites(),
+        listIncomingRecommendInvites(),
+        listIncomingPendingValidationRequests(user.id),
+        listIncomingConnectionRequests(user.id),
+        listMyPendingOrgInvites(user.id),
+      ])
       setIncomingRateInvites(incomingRateInvitesData)
+      setIncomingRecommendInvites(incomingRecommendInvitesData)
       setValidationRequests(validationRequestsData)
       setIncomingRequests(incomingRequestsData)
       setOrgInvites(orgInvitesData)
@@ -90,6 +98,7 @@ export default function Actions() {
   const hasNothingPending =
     !loading &&
     incomingRateInvites.length === 0 &&
+    incomingRecommendInvites.length === 0 &&
     incomingRequests.length === 0 &&
     orgInvites.length === 0 &&
     validationRequests.length === 0
@@ -122,6 +131,30 @@ export default function Actions() {
                 >
                   <p className="text-sm text-ink">
                     <strong>{invite.inviter_name || 'Someone'}</strong> wants your rating on their skill:{' '}
+                    <strong>{invite.skill_name}</strong>
+                    {invite.skill_category ? ` (${invite.skill_category})` : ''}
+                  </p>
+                  <p className="font-mono text-xs text-secondary mt-0.5">
+                    {new Date(invite.created_at).toLocaleDateString()}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {incomingRecommendInvites.length > 0 && (
+          <div>
+            <h2 className="font-display text-xl text-ink mb-6">Skill recommendations</h2>
+            <div className="space-y-3">
+              {incomingRecommendInvites.map((invite) => (
+                <Link
+                  key={invite.id}
+                  to={`/recommend/${invite.share_code}`}
+                  className="block bg-card border border-hairline rounded-lg p-4 hover:border-moss/60 transition-colors"
+                >
+                  <p className="text-sm text-ink">
+                    <strong>{invite.inviter_name || 'Someone'}</strong> recommends you start tracking:{' '}
                     <strong>{invite.skill_name}</strong>
                     {invite.skill_category ? ` (${invite.skill_category})` : ''}
                   </p>

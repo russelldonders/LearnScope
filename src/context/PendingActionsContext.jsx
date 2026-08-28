@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { useAuth } from './AuthContext'
 import { supabase } from '../lib/supabaseClient'
-import { listIncomingRateInvites } from '../lib/connections'
+import { listIncomingRateInvites, listIncomingRecommendInvites } from '../lib/connections'
 import { listMyPendingOrgInvites } from '../lib/organisationInvites'
 
 const PendingActionsContext = createContext(undefined)
@@ -23,21 +23,25 @@ export function PendingActionsProvider({ children }) {
       setPendingActionCount(0)
       return
     }
-    const [{ count: requestCount }, { count: validationCount }, rateInvites, orgInvites] = await Promise.all([
-      supabase
-        .from('connection_requests')
-        .select('id', { count: 'exact', head: true })
-        .eq('recipient_id', user.id)
-        .eq('status', 'pending'),
-      supabase
-        .from('skill_validation_requests')
-        .select('id', { count: 'exact', head: true })
-        .eq('validator_id', user.id)
-        .eq('status', 'pending'),
-      listIncomingRateInvites(),
-      listMyPendingOrgInvites(user.id),
-    ])
-    setPendingActionCount((requestCount ?? 0) + (validationCount ?? 0) + rateInvites.length + orgInvites.length)
+    const [{ count: requestCount }, { count: validationCount }, rateInvites, recommendInvites, orgInvites] =
+      await Promise.all([
+        supabase
+          .from('connection_requests')
+          .select('id', { count: 'exact', head: true })
+          .eq('recipient_id', user.id)
+          .eq('status', 'pending'),
+        supabase
+          .from('skill_validation_requests')
+          .select('id', { count: 'exact', head: true })
+          .eq('validator_id', user.id)
+          .eq('status', 'pending'),
+        listIncomingRateInvites(),
+        listIncomingRecommendInvites(),
+        listMyPendingOrgInvites(user.id),
+      ])
+    setPendingActionCount(
+      (requestCount ?? 0) + (validationCount ?? 0) + rateInvites.length + recommendInvites.length + orgInvites.length
+    )
   }, [user])
 
   useEffect(() => {

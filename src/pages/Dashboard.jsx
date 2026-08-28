@@ -3,7 +3,13 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useNavVisibility } from '../context/NavVisibilityContext'
 import { supabase } from '../lib/supabaseClient'
-import { listConnections, listConnectionsActivity, listIncomingRateInvites, getProfiles } from '../lib/connections'
+import {
+  listConnections,
+  listConnectionsActivity,
+  listIncomingRateInvites,
+  listIncomingRecommendInvites,
+  getProfiles,
+} from '../lib/connections'
 import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
 import AppHeader from '../components/AppHeader'
 import RecordActivitySection from '../components/RecordActivitySection'
@@ -111,8 +117,9 @@ async function loadUpcomingTargets(userId) {
 // to validate" sections already fetch (see Actions.jsx) rather than a
 // second implementation of the same query.
 async function loadPendingReviewTasks(userId) {
-  const [rateInvites, validationRequests] = await Promise.all([
+  const [rateInvites, recommendInvites, validationRequests] = await Promise.all([
     listIncomingRateInvites(),
+    listIncomingRecommendInvites(),
     listIncomingPendingValidationRequests(userId),
   ])
   const profiles = await getProfiles(validationRequests.map((r) => r.requester_id))
@@ -122,13 +129,19 @@ async function loadPendingReviewTasks(userId) {
     date: invite.created_at,
     to: `/rate/${invite.share_code}`,
   }))
+  const recommendTasks = recommendInvites.map((invite) => ({
+    key: `recommend-${invite.id}`,
+    label: `${invite.inviter_name || 'Someone'} recommends you track "${invite.skill_name}"`,
+    date: invite.created_at,
+    to: `/recommend/${invite.share_code}`,
+  }))
   const validationTasks = validationRequests.map((r) => ({
     key: `validate-${r.id}`,
     label: `Confirm ${profiles[r.requester_id]?.name || 'someone'} reached ${LEVEL_LABELS[r.target_level]} in "${r.skills?.name}"`,
     date: r.created_at,
     to: `/validate-request/${r.id}`,
   }))
-  return [...rateTasks, ...validationTasks].sort((a, b) => new Date(b.date) - new Date(a.date))
+  return [...rateTasks, ...recommendTasks, ...validationTasks].sort((a, b) => new Date(b.date) - new Date(a.date))
 }
 
 const RECENT_GROWTH_WINDOW_DAYS = 28
@@ -211,7 +224,8 @@ async function loadUpNextRecommendations(userId) {
   ] = await Promise.all([
     supabase.from('skill_assessments').select('skill_id, source, axis').in('skill_id', ids),
     supabase.from('skill_peer_ratings').select('skill_id').in('skill_id', ids),
-    supabase.from('connection_invites').select('skill_id').in('skill_id', ids),
+    // invite_type='rate' only -- see the matching filter in SkillDetail.jsx.
+    supabase.from('connection_invites').select('skill_id').in('skill_id', ids).eq('invite_type', 'rate'),
     supabase.from('xapi_statements').select('skill_id, statement').eq('user_id', userId).in('skill_id', ids),
     supabase.from('skill_course_links').select('skill_id, courses(completed_date)').in('skill_id', ids),
     supabase.from('skill_targets').select('skill_id').in('skill_id', ids),

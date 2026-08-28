@@ -2,27 +2,30 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePendingActions } from '../context/PendingActionsContext'
-import GrowthRing from '../components/GrowthRing'
-import { LEVELS, LEVEL_LABELS } from '../lib/levels'
+import TrackingReasonPicker from '../components/TrackingReasonPicker'
 import {
   getInvitePreview,
-  acceptInviteAndRate,
+  acceptInviteAndRecommend,
   declineInvite,
   setPendingInviteCode,
   clearPendingInviteCode,
 } from '../lib/connections'
+import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 
-export default function Rate() {
+// Mirrors Rate.jsx (accepting an invite-to-rate) but for accepting a skill
+// recommendation -- same share_code/preview mechanism, different outcome on
+// accept: this creates a new skill on the invitee's own profile instead of
+// a rating on the inviter's.
+export default function Recommend() {
   const { code } = useParams()
   const { user, loading: authLoading } = useAuth()
   const { refreshPendingActionCount } = usePendingActions()
   const navigate = useNavigate()
   const [preview, setPreview] = useState(undefined)
-  const [level, setLevel] = useState(3)
-  const [comments, setComments] = useState('')
+  const [trackingReason, setTrackingReason] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
-  const [done, setDone] = useState(false)
+  const [newSkillId, setNewSkillId] = useState(null)
   const [declining, setDeclining] = useState(false)
   const [declined, setDeclined] = useState(false)
 
@@ -38,14 +41,18 @@ export default function Rate() {
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (!trackingReason) {
+      setError('Please choose why you\'d be tracking this.')
+      return
+    }
     setError(null)
     setSubmitting(true)
     try {
-      await acceptInviteAndRate(code, level, comments)
+      const skillId = await acceptInviteAndRecommend(code, trackingReason)
       refreshPendingActionCount()
-      setDone(true)
+      setNewSkillId(skillId)
     } catch (err) {
-      setError(err.message)
+      setError(isDuplicateSkillNameError(err) ? duplicateSkillMessage(preview.skill_name) : err.message)
     } finally {
       setSubmitting(false)
     }
@@ -56,6 +63,10 @@ export default function Rate() {
     navigate(path)
   }
 
+  // Mainly matters when accepting isn't possible for this invitee (e.g. the
+  // duplicate-skill-name error above) -- without this, an invite that can
+  // never be accepted would otherwise sit in their pending actions forever
+  // with no way to clear it (only the inviter could revoke it before).
   async function handleDecline() {
     setError(null)
     setDeclining(true)
@@ -81,28 +92,28 @@ export default function Rate() {
           <p className="text-sm text-secondary mt-4">Loading…</p>
         ) : preview === null ? (
           <p className="text-sm text-ink mt-4">This invite link doesn't exist.</p>
-        ) : done ? (
+        ) : preview.invite_type !== 'recommend' ? (
+          <p className="text-sm text-ink mt-4">This link isn't a skill recommendation.</p>
+        ) : newSkillId ? (
           <>
             <p className="text-ink mt-4">
-              Thanks! Your rating on "{preview.skill_name}" has been recorded.
+              "{preview.skill_name}" has been added to your profile. Time to start your own journey with it.
             </p>
             <Link
-              to="/dashboard"
+              to={`/skills/${newSkillId}`}
               className="inline-block mt-6 rounded-md bg-moss text-paper py-2 px-6 font-medium hover:opacity-90"
             >
-              Go to your dashboard
+              Go to your skill
             </Link>
           </>
-        ) : preview.invite_type !== 'rate' ? (
-          <p className="text-sm text-ink mt-4">This link isn't a rating invite.</p>
         ) : declined ? (
-          <p className="text-ink mt-4">You've dismissed this invite.</p>
+          <p className="text-ink mt-4">You've dismissed this recommendation.</p>
         ) : preview.status !== 'pending' ? (
           <p className="text-sm text-ink mt-4">This invite has already been used.</p>
         ) : (
           <>
             <p className="text-ink mt-4 mb-6">
-              {preview.inviter_name || 'Someone'} wants your rating on their skill:{' '}
+              {preview.inviter_name || 'Someone'} recommends you start tracking:{' '}
               <strong>{preview.skill_name}</strong>
               {preview.skill_category ? ` (${preview.skill_category})` : ''}.
             </p>
@@ -114,44 +125,19 @@ export default function Rate() {
                   onClick={() => goToAuth('/login')}
                   className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90"
                 >
-                  Log in to rate
+                  Log in to add it
                 </button>
                 <button
                   type="button"
                   onClick={() => goToAuth('/signup')}
                   className="w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper"
                 >
-                  Sign up to rate
+                  Sign up to add it
                 </button>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <span className="block text-sm text-secondary mb-2">Your rating</span>
-                  <div className="flex items-center justify-between">
-                    {LEVELS.map((l) => (
-                      <button
-                        type="button"
-                        key={l}
-                        onClick={() => setLevel(l)}
-                        className={`flex flex-col items-center gap-1 rounded-md px-1 py-1 ${
-                          level === l ? 'bg-moss/10' : ''
-                        }`}
-                      >
-                        <GrowthRing level={l} size={36} />
-                        <span className="font-mono text-[10px] text-secondary">{LEVEL_LABELS[l]}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <textarea
-                  rows={3}
-                  value={comments}
-                  onChange={(e) => setComments(e.target.value)}
-                  placeholder="Why this level? (optional)"
-                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-                />
+                <TrackingReasonPicker value={trackingReason} onChange={setTrackingReason} required />
 
                 {error && <p className="text-sm text-red-700">{error}</p>}
 
@@ -160,7 +146,7 @@ export default function Rate() {
                   disabled={submitting || declining}
                   className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
                 >
-                  {submitting ? 'Submitting…' : 'Submit rating'}
+                  {submitting ? 'Adding…' : 'Add to my profile'}
                 </button>
                 <button
                   type="button"
