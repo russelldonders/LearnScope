@@ -19,7 +19,6 @@ or just delete it.
 
 - Platform Admin Skills
 1. add a filter to the skills list
-2. on the skill detail view when you click the name move statistic above the level definitions
 
 - platform admin users
 1. add filters to the user list
