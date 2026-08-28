@@ -425,6 +425,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
   const [error, setError] = useState(null)
   const [newSectionTitle, setNewSectionTitle] = useState('')
   const [creatingSection, setCreatingSection] = useState(false)
+  const [selectedSectionId, setSelectedSectionId] = useState(null)
   // Shared across every section/ungrouped-content row (not just one row's
   // own local `busy`) -- moveCourseSection/moveContentLink swap two rows'
   // positions from a snapshot passed in by the caller, so two reorders
@@ -450,6 +451,11 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
       setSections(sectionRows)
       setItems(itemRows)
       setOrgResources(resourceRows)
+      setSelectedSectionId((current) => {
+        if (sectionRows.some((section) => section.id === current)) return current
+        if (current === 'ungrouped' && itemRows.some((item) => item.sectionId === null)) return current
+        return sectionRows[0]?.id ?? (itemRows.some((item) => item.sectionId === null) ? 'ungrouped' : null)
+      })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -482,8 +488,9 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
     setCreatingSection(true)
     setError(null)
     try {
-      await createCourseSection(courseId, newSectionTitle)
+      const section = await createCourseSection(courseId, newSectionTitle)
       setNewSectionTitle('')
+      setSelectedSectionId(section.id)
       await load()
     } catch (err) {
       setError(err.message)
@@ -493,6 +500,9 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
   }
 
   if (loading) return <p className="text-secondary">Loading content…</p>
+
+  const selectedSectionIndex = sections.findIndex((section) => section.id === selectedSectionId)
+  const selectedSection = sections[selectedSectionIndex]
 
   return (
     <div className="space-y-4">
@@ -531,35 +541,88 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {sections.map((section, index) => (
-            <SectionCard
-              key={section.id}
-              section={section}
-              isFirst={index === 0}
-              isLast={index === sections.length - 1}
-              items={itemsBySection.get(section.id) ?? []}
-              availableResources={orgResources.filter((r) => !linkedResourceIds.has(r.id))}
-              courseId={courseId}
-              organisationId={organisationId}
-              userId={userId}
-              canEdit={canEdit}
-              allSections={sections}
-              onChanged={load}
-              reordering={reordering}
-              setReordering={setReordering}
-            />
-          ))}
-          {ungroupedItems.length > 0 && (
-            <UngroupedContent
-              items={ungroupedItems}
-              userId={userId}
-              canEdit={canEdit}
-              onChanged={load}
-              reordering={reordering}
-              setReordering={setReordering}
-            />
-          )}
+        <div className="grid md:grid-cols-[280px_minmax(0,1fr)] gap-6 items-start">
+          <nav aria-label="Course content outline" className="md:sticky md:top-6">
+            <p className="font-mono text-[10px] uppercase tracking-wide text-secondary px-2.5 mb-2">Course outline</p>
+            <div className="space-y-4">
+              {sections.map((section) => {
+                const sectionItems = itemsBySection.get(section.id) ?? []
+                const isSelected = selectedSectionId === section.id
+                return (
+                  <div key={section.id}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSectionId(section.id)}
+                      aria-current={isSelected ? 'true' : undefined}
+                      className={`w-full flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors ${
+                        isSelected
+                          ? 'bg-card border border-moss text-ink'
+                          : 'border border-transparent text-secondary hover:bg-card hover:text-ink'
+                      }`}
+                    >
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${isSelected ? 'bg-moss' : 'border border-hairline'}`} aria-hidden="true" />
+                      <span className="min-w-0 flex-1 truncate font-medium">{section.title}</span>
+                      <span className="font-mono text-[10px] tabular-nums text-secondary shrink-0">{sectionItems.length}</span>
+                    </button>
+                    {sectionItems.length > 0 && (
+                      <ul className="mt-1 ml-7 space-y-0.5" aria-label={`${section.title} resources`}>
+                        {sectionItems.map((item) => (
+                          <li key={item.linkId} className="truncate py-1 text-xs text-secondary">{item.title}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )
+              })}
+              {ungroupedItems.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedSectionId('ungrouped')}
+                  aria-current={selectedSectionId === 'ungrouped' ? 'true' : undefined}
+                  className={`w-full flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors ${
+                    selectedSectionId === 'ungrouped'
+                      ? 'bg-card border border-moss text-ink'
+                      : 'border border-transparent text-secondary hover:bg-card hover:text-ink'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full border border-hairline shrink-0" aria-hidden="true" />
+                  <span className="min-w-0 flex-1 truncate font-medium">Ungrouped content</span>
+                  <span className="font-mono text-[10px] tabular-nums text-secondary shrink-0">{ungroupedItems.length}</span>
+                </button>
+              )}
+            </div>
+          </nav>
+
+          <div className="min-w-0">
+            {selectedSection && (
+              <SectionCard
+                key={selectedSection.id}
+                section={selectedSection}
+                isFirst={selectedSectionIndex === 0}
+                isLast={selectedSectionIndex === sections.length - 1}
+                items={itemsBySection.get(selectedSection.id) ?? []}
+                availableResources={orgResources.filter((r) => !linkedResourceIds.has(r.id))}
+                courseId={courseId}
+                organisationId={organisationId}
+                userId={userId}
+                canEdit={canEdit}
+                allSections={sections}
+                onChanged={load}
+                reordering={reordering}
+                setReordering={setReordering}
+              />
+            )}
+            {selectedSectionId === 'ungrouped' && ungroupedItems.length > 0 && (
+              <UngroupedContent
+                items={ungroupedItems}
+                userId={userId}
+                canEdit={canEdit}
+                onChanged={load}
+                reordering={reordering}
+                setReordering={setReordering}
+              />
+            )}
+          </div>
         </div>
       )}
 
@@ -604,7 +667,7 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
   }
 
   return (
-    <div className="bg-card border border-dashed border-hairline rounded-lg p-4">
+    <div className="bg-card border border-dashed border-hairline rounded-lg p-6">
       <h4 className="font-display text-base text-ink mb-1">Ungrouped content</h4>
       <p className="text-xs text-secondary mb-3">
         This content's section was deleted. It's still part of the course — add a section and re-attach it to
@@ -882,7 +945,7 @@ function SectionCard({
   }
 
   return (
-    <div className="bg-card border border-hairline rounded-lg p-4">
+    <div className="bg-card border border-hairline rounded-lg p-6">
       <div className="flex items-center justify-between gap-2 mb-3">
         {editingTitle ? (
           <div className="flex items-center gap-2 flex-1">
