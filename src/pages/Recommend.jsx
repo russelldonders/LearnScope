@@ -156,6 +156,14 @@ export default function Recommend() {
                 >
                   {declining ? 'Dismissing…' : 'Not for me'}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/dashboard')}
+                  disabled={submitting || declining}
+                  className="w-full text-secondary text-sm py-1 hover:text-ink disabled:opacity-60"
+                >
+                  Cancel
+                </button>
               </form>
             )}
           </>
