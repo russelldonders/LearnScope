@@ -20,12 +20,12 @@ import {
   createCourseSection,
   renameCourseSection,
   deleteCourseSection,
-  moveCourseSection,
+  reorderCourseSections,
   listCourseResources,
   listOrganisationResources,
   linkResourceToCourse,
   unlinkResourceFromCourse,
-  moveContentLink,
+  reorderContentLinks,
   uploadVideoResource,
   uploadScreenRecordingResource,
   uploadFileResource,
@@ -54,6 +54,38 @@ const STATUS_LABELS = {
 }
 const MAX_IMAGE_BYTES = COURSE_IMAGE_MAX_INPUT_BYTES
 
+function reorderById(list, draggedId, targetId, idKey) {
+  const fromIndex = list.findIndex((item) => item[idKey] === draggedId)
+  const toIndex = list.findIndex((item) => item[idKey] === targetId)
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return list
+  const reordered = [...list]
+  const [dragged] = reordered.splice(fromIndex, 1)
+  reordered.splice(toIndex, 0, dragged)
+  return reordered
+}
+
+function DragHandle({ label, disabled, onDragStart, onDragEnd, onKeyDown }) {
+  return (
+    <button
+      type="button"
+      draggable={!disabled}
+      disabled={disabled}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onKeyDown={onKeyDown}
+      aria-label={`${label}. Drag to reorder, or use the arrow keys.`}
+      title="Drag to reorder"
+      className="inline-flex h-7 w-7 shrink-0 cursor-grab items-center justify-center rounded-md text-secondary hover:bg-paper hover:text-ink focus:outline-none focus:ring-2 focus:ring-moss active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+        <circle cx="5" cy="3.5" r="1" /><circle cx="11" cy="3.5" r="1" />
+        <circle cx="5" cy="8" r="1" /><circle cx="11" cy="8" r="1" />
+        <circle cx="5" cy="12.5" r="1" /><circle cx="11" cy="12.5" r="1" />
+      </svg>
+    </button>
+  )
+}
+
 // Info (name/type/duration/synopsis/image, save/submit/unpublish) and
 // Content (sections/resources) used to sit stacked on one long page --
 // split into tabs since the two are edited at different times (details
@@ -79,7 +111,7 @@ export default function ProviderCourseEditor() {
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [error, setError] = useState(null)
-  const [tab, setTab] = useState('info')
+  const [tab, setTab] = useState('content')
 
   useEffect(() => {
     load()
@@ -426,13 +458,9 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
   const [newSectionTitle, setNewSectionTitle] = useState('')
   const [creatingSection, setCreatingSection] = useState(false)
   const [selectedSectionId, setSelectedSectionId] = useState(null)
-  // Shared across every section/ungrouped-content row (not just one row's
-  // own local `busy`) -- moveCourseSection/moveContentLink swap two rows'
-  // positions from a snapshot passed in by the caller, so two reorders
-  // in flight at once (different rows, each individually enabled) could
-  // race and stomp each other's write. Locking reorder globally while any
-  // one move is in flight is simpler than optimistic locking at the DB
-  // layer for what's a rare, low-stakes edge case.
+  const [draggedSectionId, setDraggedSectionId] = useState(null)
+  const [sectionDropId, setSectionDropId] = useState(null)
+  // One shared lock prevents overlapping section/resource order writes.
   const [reordering, setReordering] = useState(false)
 
   useEffect(() => {
@@ -499,10 +527,37 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
     }
   }
 
+  async function commitSectionOrder(draggedId, targetId) {
+    const reordered = reorderById(sections, draggedId, targetId, 'id')
+    if (reordered === sections) return
+    const previous = sections
+    setSections(reordered.map((section, position) => ({ ...section, position })))
+    setReordering(true)
+    setError(null)
+    try {
+      await reorderCourseSections(reordered)
+      await load()
+    } catch (err) {
+      setSections(previous)
+      setError(`Couldn't reorder sections. ${err.message}`)
+    } finally {
+      setReordering(false)
+      setDraggedSectionId(null)
+      setSectionDropId(null)
+    }
+  }
+
+  function handleSectionKeyDown(event, sectionId) {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+    event.preventDefault()
+    const index = sections.findIndex((section) => section.id === sectionId)
+    const target = sections[index + (event.key === 'ArrowUp' ? -1 : 1)]
+    if (target) commitSectionOrder(sectionId, target.id)
+  }
+
   if (loading) return <p className="text-secondary">Loading content…</p>
 
-  const selectedSectionIndex = sections.findIndex((section) => section.id === selectedSectionId)
-  const selectedSection = sections[selectedSectionIndex]
+  const selectedSection = sections.find((section) => section.id === selectedSectionId)
 
   return (
     <div className="space-y-4">
@@ -549,21 +604,53 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                 const sectionItems = itemsBySection.get(section.id) ?? []
                 const isSelected = selectedSectionId === section.id
                 return (
-                  <div key={section.id}>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedSectionId(section.id)}
-                      aria-current={isSelected ? 'true' : undefined}
-                      className={`w-full flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors ${
-                        isSelected
-                          ? 'bg-card border border-moss text-ink'
-                          : 'border border-transparent text-secondary hover:bg-card hover:text-ink'
-                      }`}
-                    >
-                      <span className={`w-2 h-2 rounded-full shrink-0 ${isSelected ? 'bg-moss' : 'border border-hairline'}`} aria-hidden="true" />
-                      <span className="min-w-0 flex-1 truncate font-medium">{section.title}</span>
-                      <span className="font-mono text-[10px] tabular-nums text-secondary shrink-0">{sectionItems.length}</span>
-                    </button>
+                  <div
+                    key={section.id}
+                    onDragOver={(event) => {
+                      if (!canEdit || !draggedSectionId || draggedSectionId === section.id) return
+                      event.preventDefault()
+                      setSectionDropId(section.id)
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault()
+                      if (draggedSectionId) commitSectionOrder(draggedSectionId, section.id)
+                    }}
+                    className={`rounded-md transition-[background-color,box-shadow] ${
+                      sectionDropId === section.id ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-1">
+                      {canEdit && (
+                        <DragHandle
+                          label={`Reorder ${section.title}`}
+                          disabled={reordering}
+                          onDragStart={(event) => {
+                            event.dataTransfer.effectAllowed = 'move'
+                            event.dataTransfer.setData('text/plain', section.id)
+                            setDraggedSectionId(section.id)
+                          }}
+                          onDragEnd={() => {
+                            setDraggedSectionId(null)
+                            setSectionDropId(null)
+                          }}
+                          onKeyDown={(event) => handleSectionKeyDown(event, section.id)}
+                        />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSectionId(section.id)}
+                        aria-current={isSelected ? 'true' : undefined}
+                        className={`min-w-0 flex-1 flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors ${
+                          isSelected
+                            ? 'bg-card border border-moss text-ink'
+                            : 'border border-transparent text-secondary hover:bg-card hover:text-ink'
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${isSelected ? 'bg-moss' : 'border border-hairline'}`} aria-hidden="true" />
+                        <span className="min-w-0 flex-1 truncate font-medium">{section.title}</span>
+                        <span className="font-mono text-[10px] tabular-nums text-secondary shrink-0">{sectionItems.length}</span>
+                      </button>
+                    </div>
                     {sectionItems.length > 0 && (
                       <ul className="mt-1 ml-7 space-y-0.5" aria-label={`${section.title} resources`}>
                         {sectionItems.map((item) => (
@@ -598,15 +685,12 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
               <SectionCard
                 key={selectedSection.id}
                 section={selectedSection}
-                isFirst={selectedSectionIndex === 0}
-                isLast={selectedSectionIndex === sections.length - 1}
                 items={itemsBySection.get(selectedSection.id) ?? []}
                 availableResources={orgResources.filter((r) => !linkedResourceIds.has(r.id))}
                 courseId={courseId}
                 organisationId={organisationId}
                 userId={userId}
                 canEdit={canEdit}
-                allSections={sections}
                 onChanged={load}
                 reordering={reordering}
                 setReordering={setReordering}
@@ -639,6 +723,8 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
   const [previewingId, setPreviewingId] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const [draggedItemId, setDraggedItemId] = useState(null)
+  const [itemDropId, setItemDropId] = useState(null)
 
   async function handleDetach(item) {
     setBusy(true)
@@ -653,17 +739,29 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
     }
   }
 
-  async function handleMoveItem(item, direction) {
+  async function commitItemOrder(draggedId, targetId) {
+    const reordered = reorderById(items, draggedId, targetId, 'linkId')
+    if (reordered === items) return
     setReordering(true)
     setError(null)
     try {
-      await moveContentLink(items, item.linkId, direction)
+      await reorderContentLinks(reordered)
       await onChanged()
     } catch (err) {
-      setError(err.message)
+      setError(`Couldn't reorder content. ${err.message}`)
     } finally {
       setReordering(false)
+      setDraggedItemId(null)
+      setItemDropId(null)
     }
+  }
+
+  function handleItemKeyDown(event, itemId) {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+    event.preventDefault()
+    const index = items.findIndex((item) => item.linkId === itemId)
+    const target = items[index + (event.key === 'ArrowUp' ? -1 : 1)]
+    if (target) commitItemOrder(itemId, target.linkId)
   }
 
   return (
@@ -677,12 +775,44 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
       {error && <p className="text-xs text-red-700 mb-2">{error}</p>}
 
       <ul className="divide-y divide-hairline border border-hairline rounded-md">
-        {items.map((item, index) => (
-          <li key={item.linkId} className="p-2 text-sm">
+        {items.map((item) => (
+          <li
+            key={item.linkId}
+            onDragOver={(event) => {
+              if (!canEdit || !draggedItemId || draggedItemId === item.linkId) return
+              event.preventDefault()
+              setItemDropId(item.linkId)
+            }}
+            onDrop={(event) => {
+              event.preventDefault()
+              if (draggedItemId) commitItemOrder(draggedItemId, item.linkId)
+            }}
+            className={`p-2 text-sm transition-[background-color,box-shadow] ${
+              itemDropId === item.linkId ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
+            }`}
+          >
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-1">
+                {canEdit && (
+                  <DragHandle
+                    label={`Reorder ${item.title}`}
+                    disabled={busy || reordering}
+                    onDragStart={(event) => {
+                      event.dataTransfer.effectAllowed = 'move'
+                      event.dataTransfer.setData('text/plain', item.linkId)
+                      setDraggedItemId(item.linkId)
+                    }}
+                    onDragEnd={() => {
+                      setDraggedItemId(null)
+                      setItemDropId(null)
+                    }}
+                    onKeyDown={(event) => handleItemKeyDown(event, item.linkId)}
+                  />
+                )}
+                <div className="min-w-0">
                 <p className="text-ink truncate">{item.title}</p>
                 <p className="font-mono text-[10px] text-secondary">{TYPE_LABELS[item.type]}</p>
+                </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {item.type === 'file' ? (
@@ -703,25 +833,6 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
                   </button>
                 )}
                 {canEdit && (
-                  <>
-                    <button
-                      type="button"
-                      disabled={index === 0 || busy || reordering}
-                      onClick={() => handleMoveItem(item, 'up')}
-                      title="Move up"
-                      className="rounded-md border border-hairline text-ink w-6 h-6 text-xs hover:bg-paper disabled:opacity-30"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      disabled={index === items.length - 1 || busy || reordering}
-                      onClick={() => handleMoveItem(item, 'down')}
-                      title="Move down"
-                      className="rounded-md border border-hairline text-ink w-6 h-6 text-xs hover:bg-paper disabled:opacity-30"
-                    >
-                      ↓
-                    </button>
                     <button
                       type="button"
                       onClick={() => handleDetach(item)}
@@ -730,7 +841,6 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
                     >
                       Detach
                     </button>
-                  </>
                 )}
               </div>
             </div>
@@ -765,15 +875,12 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
 
 function SectionCard({
   section,
-  isFirst,
-  isLast,
   items,
   availableResources,
   courseId,
   organisationId,
   userId,
   canEdit,
-  allSections,
   onChanged,
   reordering,
   setReordering,
@@ -792,6 +899,8 @@ function SectionCard({
   const [showScreenRecorder, setShowScreenRecorder] = useState(false)
   const [recordedFileName, setRecordedFileName] = useState('')
   const [webUrl, setWebUrl] = useState('')
+  const [draggedItemId, setDraggedItemId] = useState(null)
+  const [itemDropId, setItemDropId] = useState(null)
   const fileInputRef = useRef(null)
 
   function setRecordedFile(file) {
@@ -819,19 +928,6 @@ function SectionCard({
       setError(err.message)
     } finally {
       setBusy(false)
-    }
-  }
-
-  async function handleMoveSection(direction) {
-    setReordering(true)
-    setError(null)
-    try {
-      await moveCourseSection(allSections, section.id, direction)
-      await onChanged()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setReordering(false)
     }
   }
 
@@ -877,17 +973,29 @@ function SectionCard({
     }
   }
 
-  async function handleMoveItem(item, direction) {
+  async function commitItemOrder(draggedId, targetId) {
+    const reordered = reorderById(items, draggedId, targetId, 'linkId')
+    if (reordered === items) return
     setReordering(true)
     setError(null)
     try {
-      await moveContentLink(items, item.linkId, direction)
+      await reorderContentLinks(reordered)
       await onChanged()
     } catch (err) {
-      setError(err.message)
+      setError(`Couldn't reorder content. ${err.message}`)
     } finally {
       setReordering(false)
+      setDraggedItemId(null)
+      setItemDropId(null)
     }
+  }
+
+  function handleItemKeyDown(event, itemId) {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+    event.preventDefault()
+    const index = items.findIndex((item) => item.linkId === itemId)
+    const target = items[index + (event.key === 'ArrowUp' ? -1 : 1)]
+    if (target) commitItemOrder(itemId, target.linkId)
   }
 
   async function handleUpload() {
@@ -968,24 +1076,6 @@ function SectionCard({
           <div className="flex items-center gap-1 shrink-0">
             <button
               type="button"
-              disabled={isFirst || busy || reordering}
-              onClick={() => handleMoveSection('up')}
-              title="Move up"
-              className="rounded-md border border-hairline text-ink w-7 h-7 text-xs hover:bg-paper disabled:opacity-30"
-            >
-              ↑
-            </button>
-            <button
-              type="button"
-              disabled={isLast || busy || reordering}
-              onClick={() => handleMoveSection('down')}
-              title="Move down"
-              className="rounded-md border border-hairline text-ink w-7 h-7 text-xs hover:bg-paper disabled:opacity-30"
-            >
-              ↓
-            </button>
-            <button
-              type="button"
               onClick={() => setEditingTitle(true)}
               className="rounded-md border border-hairline text-ink py-1 px-2 text-xs font-medium hover:bg-paper"
             >
@@ -1006,12 +1096,44 @@ function SectionCard({
         <p className="text-xs text-secondary">No content in this section yet.</p>
       ) : (
         <ul className="divide-y divide-hairline border border-hairline rounded-md mb-3">
-          {items.map((item, index) => (
-            <li key={item.linkId} className="p-2 text-sm">
+          {items.map((item) => (
+            <li
+              key={item.linkId}
+              onDragOver={(event) => {
+                if (!canEdit || !draggedItemId || draggedItemId === item.linkId) return
+                event.preventDefault()
+                setItemDropId(item.linkId)
+              }}
+              onDrop={(event) => {
+                event.preventDefault()
+                if (draggedItemId) commitItemOrder(draggedItemId, item.linkId)
+              }}
+              className={`p-2 text-sm transition-[background-color,box-shadow] ${
+                itemDropId === item.linkId ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
+              }`}
+            >
               <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-ink truncate">{item.title}</p>
-                  <p className="font-mono text-[10px] text-secondary">{TYPE_LABELS[item.type]}</p>
+                <div className="flex min-w-0 items-center gap-1">
+                  {canEdit && (
+                    <DragHandle
+                      label={`Reorder ${item.title}`}
+                      disabled={busy || reordering}
+                      onDragStart={(event) => {
+                        event.dataTransfer.effectAllowed = 'move'
+                        event.dataTransfer.setData('text/plain', item.linkId)
+                        setDraggedItemId(item.linkId)
+                      }}
+                      onDragEnd={() => {
+                        setDraggedItemId(null)
+                        setItemDropId(null)
+                      }}
+                      onKeyDown={(event) => handleItemKeyDown(event, item.linkId)}
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-ink truncate">{item.title}</p>
+                    <p className="font-mono text-[10px] text-secondary">{TYPE_LABELS[item.type]}</p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {item.type === 'file' ? (
@@ -1032,25 +1154,6 @@ function SectionCard({
                     </button>
                   )}
                   {canEdit && (
-                    <>
-                      <button
-                        type="button"
-                        disabled={index === 0 || busy || reordering}
-                        onClick={() => handleMoveItem(item, 'up')}
-                        title="Move up"
-                        className="rounded-md border border-hairline text-ink w-6 h-6 text-xs hover:bg-paper disabled:opacity-30"
-                      >
-                        ↑
-                      </button>
-                      <button
-                        type="button"
-                        disabled={index === items.length - 1 || busy || reordering}
-                        onClick={() => handleMoveItem(item, 'down')}
-                        title="Move down"
-                        className="rounded-md border border-hairline text-ink w-6 h-6 text-xs hover:bg-paper disabled:opacity-30"
-                      >
-                        ↓
-                      </button>
                       <button
                         type="button"
                         onClick={() => handleDetach(item)}
@@ -1059,7 +1162,6 @@ function SectionCard({
                       >
                         Detach
                       </button>
-                    </>
                   )}
                 </div>
               </div>

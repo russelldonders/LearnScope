@@ -96,19 +96,14 @@ export async function deleteCourseSection(sectionId) {
   if (error) throw error
 }
 
-// Swaps this section with its immediate neighbour -- the simplest reorder
-// primitive that needs no drag-and-drop dependency; `sections` is the
-// caller's already-loaded, position-ordered list.
-export async function moveCourseSection(sections, sectionId, direction) {
-  const index = sections.findIndex((s) => s.id === sectionId)
-  const swapIndex = direction === 'up' ? index - 1 : index + 1
-  if (index === -1 || swapIndex < 0 || swapIndex >= sections.length) return
-  const a = sections[index]
-  const b = sections[swapIndex]
-  const { error: errorA } = await supabase.from('course_sections').update({ position: b.position }).eq('id', a.id)
-  if (errorA) throw errorA
-  const { error: errorB } = await supabase.from('course_sections').update({ position: a.position }).eq('id', b.id)
-  if (errorB) throw errorB
+// Persists a complete drag-and-drop order. Positions are normalized to a
+// contiguous sequence so repeated reorders cannot leave gaps behind.
+export async function reorderCourseSections(sections) {
+  for (const [position, section] of sections.entries()) {
+    if (section.position === position) continue
+    const { error } = await supabase.from('course_sections').update({ position }).eq('id', section.id)
+    if (error) throw error
+  }
 }
 
 async function nextLinkPosition(sectionId) {
@@ -128,26 +123,15 @@ export async function linkResourceToCourse(courseId, resourceId, sectionId) {
   if (error) throw error
 }
 
-// Swaps this item with its immediate neighbour within the same section --
-// `sectionItems` is the caller's already-loaded, position-ordered list for
-// just that one section (moving an item between sections isn't supported
-// here; detach and re-add to the other section instead).
-export async function moveContentLink(sectionItems, linkId, direction) {
-  const index = sectionItems.findIndex((r) => r.linkId === linkId)
-  const swapIndex = direction === 'up' ? index - 1 : index + 1
-  if (index === -1 || swapIndex < 0 || swapIndex >= sectionItems.length) return
-  const a = sectionItems[index]
-  const b = sectionItems[swapIndex]
-  const { error: errorA } = await supabase
-    .from('course_content_links')
-    .update({ position: b.position })
-    .eq('id', a.linkId)
-  if (errorA) throw errorA
-  const { error: errorB } = await supabase
-    .from('course_content_links')
-    .update({ position: a.position })
-    .eq('id', b.linkId)
-  if (errorB) throw errorB
+export async function reorderContentLinks(sectionItems) {
+  for (const [position, item] of sectionItems.entries()) {
+    if (item.position === position) continue
+    const { error } = await supabase
+      .from('course_content_links')
+      .update({ position })
+      .eq('id', item.linkId)
+    if (error) throw error
+  }
 }
 
 // Detaches a resource from this course -- the resource itself (and any
