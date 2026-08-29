@@ -148,9 +148,7 @@ function CourseItemPlayer({
   )
 }
 
-// Below md only -- see the nav's own inline accordion (rendered per-item,
-// gated by useIsDesktop) for the below-md equivalent.
-function ItemPreviewChevron({ open }) {
+function Chevron({ open, className = '' }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -162,7 +160,7 @@ function ItemPreviewChevron({ open }) {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
-      className={`md:hidden shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+      className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''} ${className}`}
     >
       <polyline points="6 9 12 15 18 9" />
     </svg>
@@ -188,6 +186,13 @@ export default function CourseLearn() {
   // highlighting, and must stay set for the page to render at all) so
   // collapsing the accordion on mobile can't blank the whole page.
   const [expandedItemId, setExpandedItemId] = useState(null)
+  // Sections start closed -- only the one containing whatever's current is
+  // open, like an accordion (opening one closes any other). Below md, an
+  // open item goes further into "focus mode": everything else in the nav
+  // (other sections, other items) hides so only that item's row and its
+  // player are visible, scrolled to the top of the screen; collapsing it
+  // brings the outline back.
+  const [openSectionKey, setOpenSectionKey] = useState(null)
   const isDesktop = useIsDesktop()
 
   useEffect(() => {
@@ -220,6 +225,7 @@ export default function CourseLearn() {
       setProgressByItemId(await listContentProgress(user.id, contentItems.map((i) => i.id)))
       const firstItem = sortBySection(contentItems, sectionRows)[0]
       setCurrentItemId((prev) => prev ?? firstItem?.id ?? null)
+      setOpenSectionKey((prev) => prev ?? (firstItem ? (firstItem.sectionId ?? 'ungrouped') : null))
     }
     setLoading(false)
   }
@@ -260,13 +266,16 @@ export default function CourseLearn() {
   }
 
   // Sets the "current" item (Next/Previous, completion tracking, nav
-  // highlighting) and, if the mobile accordion is already open, keeps it
-  // open on whatever item is now current -- so "Mark complete & continue"
-  // and Previous carry the open accordion along instead of leaving it
-  // open on the item you just left.
+  // highlighting), keeps the mobile accordion open on whatever item is now
+  // current if it was already open (so "Mark complete & continue" and
+  // Previous carry it along instead of leaving it open on the item you
+  // just left), and opens that item's section if a "continue" jumped into
+  // a different one.
   function selectItem(itemId) {
     setCurrentItemId(itemId)
     setExpandedItemId((current) => (current === null ? null : itemId))
+    const item = orderedItems.find((i) => i.id === itemId)
+    if (item) setOpenSectionKey(item.sectionId ?? 'ungrouped')
   }
 
   function handleNavClick(item) {
@@ -275,12 +284,74 @@ export default function CourseLearn() {
     setExpandedItemId((current) => (current === item.id ? null : item.id))
   }
 
+  function toggleSection(key) {
+    setOpenSectionKey((current) => (current === key ? null : key))
+  }
+
   const currentIndex = orderedItems.findIndex((i) => i.id === currentItemId)
   const currentItem = orderedItems[currentIndex]
   const completedCount = orderedItems.filter(
     (i) => progressByItemId[i.id]?.status && progressByItemId[i.id].status !== 'not_attempted'
   ).length
   const progress = orderedItems.length ? Math.round((completedCount / orderedItems.length) * 100) : 0
+  const isFocused = !isDesktop && expandedItemId !== null
+
+  useEffect(() => {
+    if (!expandedItemId) return
+    document.getElementById(`nav-item-${expandedItemId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [expandedItemId])
+
+  function renderItemRow(item) {
+    const isCurrent = item.id === currentItem.id
+    const status = progressByItemId[item.id]?.status
+    const isDone = Boolean(status) && status !== 'not_attempted'
+    const isExpanded = !isDesktop && expandedItemId === item.id
+    const itemIndex = orderedItems.findIndex((i) => i.id === item.id)
+    return (
+      <li key={item.id} id={`nav-item-${item.id}`}>
+        <button
+          type="button"
+          onClick={() => handleNavClick(item)}
+          aria-expanded={isExpanded}
+          className={`w-full flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors ${
+            isCurrent
+              ? 'bg-card border border-moss text-ink'
+              : 'border border-transparent text-secondary hover:bg-card hover:text-ink'
+          }`}
+        >
+          <span
+            className={`shrink-0 flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold ${
+              isDone ? 'bg-moss border-moss text-paper' : 'border-hairline text-secondary'
+            }`}
+          >
+            {isDone ? '✓' : ''}
+          </span>
+          <span className="min-w-0 flex-1 truncate">{item.title}</span>
+          <Chevron open={isExpanded} className="md:hidden" />
+        </button>
+        {isExpanded && (
+          <div className="mt-1 mb-1 bg-card border border-hairline rounded-lg p-4">
+            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1 block">
+              {TYPE_LABELS[item.type]}
+            </span>
+            <CourseItemPlayer
+              item={item}
+              userId={user.id}
+              courseId={course.id}
+              hasNext={itemIndex + 1 < orderedItems.length}
+              hasPrevious={itemIndex > 0}
+              isComplete={Boolean(status)}
+              progress={progress}
+              onMarkComplete={() => handleMarkComplete(item)}
+              onPrevious={() => selectItem(orderedItems[itemIndex - 1].id)}
+              onProgress={refreshProgress}
+              onGoToCourse={() => navigate(`/courses/${id}`)}
+            />
+          </div>
+        )}
+      </li>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-paper">
@@ -314,68 +385,31 @@ export default function CourseLearn() {
 
             <div className="grid md:grid-cols-[280px_1fr] gap-6">
               <nav>
-                {groupedNav.map((group) => (
-                  <div key={group.key} className="mb-4 last:mb-0">
-                    {group.title && (
-                      <p className="font-mono text-[10px] uppercase tracking-wide text-secondary px-2.5 mb-1">
-                        {group.title}
-                      </p>
-                    )}
-                    <ul className="space-y-1">
-                      {group.items.map((item) => {
-                        const isCurrent = item.id === currentItem.id
-                        const status = progressByItemId[item.id]?.status
-                        const isDone = Boolean(status) && status !== 'not_attempted'
-                        const isExpanded = !isDesktop && expandedItemId === item.id
-                        const itemIndex = orderedItems.findIndex((i) => i.id === item.id)
-                        return (
-                          <li key={item.id}>
-                            <button
-                              type="button"
-                              onClick={() => handleNavClick(item)}
-                              aria-expanded={isExpanded}
-                              className={`w-full flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors ${
-                                isCurrent
-                                  ? 'bg-card border border-moss text-ink'
-                                  : 'border border-transparent text-secondary hover:bg-card hover:text-ink'
-                              }`}
-                            >
-                              <span
-                                className={`shrink-0 flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold ${
-                                  isDone ? 'bg-moss border-moss text-paper' : 'border-hairline text-secondary'
-                                }`}
-                              >
-                                {isDone ? '✓' : ''}
-                              </span>
-                              <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                              <ItemPreviewChevron open={isExpanded} />
-                            </button>
-                            {isExpanded && (
-                              <div className="mt-1 mb-1 bg-card border border-hairline rounded-lg p-4">
-                                <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1 block">
-                                  {TYPE_LABELS[item.type]}
-                                </span>
-                                <CourseItemPlayer
-                                  item={item}
-                                  userId={user.id}
-                                  courseId={course.id}
-                                  hasNext={itemIndex + 1 < orderedItems.length}
-                                  hasPrevious={itemIndex > 0}
-                                  isComplete={Boolean(status)}
-                                  progress={progress}
-                                  onMarkComplete={() => handleMarkComplete(item)}
-                                  onPrevious={() => selectItem(orderedItems[itemIndex - 1].id)}
-                                  onProgress={refreshProgress}
-                                  onGoToCourse={() => navigate(`/courses/${id}`)}
-                                />
-                              </div>
-                            )}
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  </div>
-                ))}
+                {isFocused ? (
+                  <ul className="space-y-1">{renderItemRow(currentItem)}</ul>
+                ) : (
+                  groupedNav.map((group) => {
+                    const isOpen = openSectionKey === group.key
+                    return (
+                      <div key={group.key} className="mb-4 last:mb-0">
+                        {group.title && (
+                          <button
+                            type="button"
+                            onClick={() => toggleSection(group.key)}
+                            aria-expanded={isOpen}
+                            className="w-full flex items-center justify-between gap-2 rounded-md px-2.5 py-1 mb-1 font-mono text-[10px] uppercase tracking-wide text-secondary hover:text-ink"
+                          >
+                            <span className="truncate">{group.title}</span>
+                            <Chevron open={isOpen} />
+                          </button>
+                        )}
+                        {(isOpen || !group.title) && (
+                          <ul className="space-y-1">{group.items.map((item) => renderItemRow(item))}</ul>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
               </nav>
 
               {isDesktop && (

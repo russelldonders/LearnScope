@@ -123,10 +123,7 @@ function DropLine({ side }) {
   )
 }
 
-// Below md only -- indicates/toggles the inline preview accordion on an
-// outline item row. Not shown at md+, where the same click instead swaps
-// what's showing in the side pane (see useIsDesktop).
-function ItemPreviewChevron({ open }) {
+function Chevron({ open, className = '' }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -138,7 +135,7 @@ function ItemPreviewChevron({ open }) {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
-      className={`md:hidden shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+      className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''} ${className}`}
     >
       <polyline points="6 9 12 15 18 9" />
     </svg>
@@ -678,7 +675,19 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
   const [previewingItem, setPreviewingItem] = useState(null)
   const isDesktop = useIsDesktop()
   function toggleItemPreview(item) {
-    setPreviewingItem((current) => (current?.linkId === item.linkId ? null : item))
+    setPreviewingItem((current) => {
+      if (current?.linkId === item.linkId) return null
+      setOpenSectionId(item.sectionId ?? 'ungrouped')
+      return item
+    })
+  }
+  // Sections start closed -- only one open at a time (an accordion; opening
+  // one closes any other), like the learner course player's own nav. Below
+  // md, an open item goes further into "focus mode": everything else in
+  // the outline hides so only that item's row and its preview are visible.
+  const [openSectionId, setOpenSectionId] = useState(null)
+  function toggleSection(id) {
+    setOpenSectionId((current) => (current === id ? null : id))
   }
   const [draggedSectionId, setDraggedSectionId] = useState(null)
   const [sectionDropTarget, setSectionDropTarget] = useState(null)
@@ -717,6 +726,11 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
   useEffect(() => {
     load()
   }, [courseId])
+
+  useEffect(() => {
+    if (!previewingItem) return
+    document.getElementById(`outline-item-${previewingItem.linkId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [previewingItem])
 
   async function load() {
     setLoading(true)
@@ -880,6 +894,8 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
   if (loading) return <p className="text-secondary">Loading content…</p>
 
   const availableResources = orgResources.filter((r) => !linkedResourceIds.has(r.id))
+  const isFocused = !isDesktop && previewingItem !== null
+  const focusedSectionId = previewingItem ? (previewingItem.sectionId ?? 'ungrouped') : null
 
   return (
     <div className="space-y-4">
@@ -889,6 +905,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
 
       <div className="grid md:grid-cols-[280px_minmax(0,1fr)] gap-6 items-start">
       <nav aria-label="Course content outline" className="md:sticky md:top-6">
+        {!isFocused && (
         <div className="flex items-center justify-between gap-2 px-2.5 mb-2">
           <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Course outline</p>
           {canEdit && (
@@ -901,6 +918,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
             </button>
           )}
         </div>
+        )}
 
         {sections.length === 0 && ungroupedItems.length === 0 ? (
             <div className="text-center py-8 px-3 border border-dashed border-hairline rounded-lg">
@@ -912,6 +930,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
             <div className="space-y-4">
               {sections.map((section) => {
                 const sectionItems = itemsBySection.get(section.id) ?? []
+                if (isFocused && section.id !== focusedSectionId) return null
                 return (
                   <div
                     key={section.id}
@@ -924,6 +943,10 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                         id: section.id,
                         side: draggedSectionId ? sideOf(event.currentTarget, event.clientY) : null,
                       })
+                      // Dragging an item over a collapsed section: open it so
+                      // its items are visible/droppable at a specific
+                      // position, not just appendable to the end.
+                      if (draggedOutlineItem) setOpenSectionId((current) => (current === section.id ? current : section.id))
                     }}
                     onDrop={(event) => {
                       event.preventDefault()
@@ -935,6 +958,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                     } ${draggedSectionId === section.id ? 'opacity-40' : ''}`}
                   >
                     {sectionDropTarget?.id === section.id && <DropLine side={sectionDropTarget.side} />}
+                    {!isFocused && (
                     <div className="flex items-center gap-1">
                       {canEdit && (
                         <DragHandle
@@ -982,6 +1006,15 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                       )}
                       <button
                         type="button"
+                        onClick={() => toggleSection(section.id)}
+                        aria-expanded={openSectionId === section.id}
+                        aria-label={`${openSectionId === section.id ? 'Collapse' : 'Expand'} ${section.title}`}
+                        className="inline-flex h-11 w-11 md:h-7 md:w-7 shrink-0 items-center justify-center rounded-md text-secondary hover:bg-paper hover:text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                      >
+                        <Chevron open={openSectionId === section.id} />
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setEditingSection(section)}
                         className="min-w-0 flex-1 flex items-center gap-2 rounded-md border border-transparent px-2.5 py-2 text-left text-sm text-secondary transition-colors hover:bg-card hover:text-ink"
                       >
@@ -1002,11 +1035,15 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                         </button>
                       )}
                     </div>
-                    {sectionItems.length > 0 && (
-                      <ul className="mt-1 ml-7 space-y-0.5" aria-label={`${section.title} resources`}>
-                        {sectionItems.map((item) => (
+                    )}
+                    {openSectionId === section.id && sectionItems.length > 0 && (
+                      <ul className={`space-y-0.5 ${isFocused ? '' : 'mt-1 ml-7'}`} aria-label={`${section.title} resources`}>
+                        {sectionItems
+                          .filter((item) => !isFocused || item.linkId === previewingItem.linkId)
+                          .map((item) => (
                           <li
                             key={item.linkId}
+                            id={`outline-item-${item.linkId}`}
                             ref={registerOutlineItemNode(item.linkId)}
                             data-outline-item-id={item.linkId}
                             onDragOver={(event) => {
@@ -1059,6 +1096,10 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                                     } else if (hit?.type === 'section') {
                                       setOutlineItemDropTarget(null)
                                       setSectionDropTarget({ id: hit.id, side: null })
+                                      // Hovering a collapsed section while dragging: open
+                                      // it so its items are visible/droppable at a
+                                      // specific position, not just appendable to the end.
+                                      setOpenSectionId((current) => (current === hit.id ? current : hit.id))
                                     }
                                   }}
                                   onPointerDragEnd={(event) => {
@@ -1096,7 +1137,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                                 className="min-w-0 flex-1 flex items-center gap-1 text-left text-xs text-secondary hover:text-ink hover:underline"
                               >
                                 <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                                <ItemPreviewChevron open={previewingItem?.linkId === item.linkId} />
+                                <Chevron open={previewingItem?.linkId === item.linkId} className="md:hidden" />
                               </button>
                             </div>
                             {!isDesktop && previewingItem?.linkId === item.linkId && (
@@ -1122,7 +1163,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                   </div>
                 )
               })}
-              {ungroupedItems.length > 0 && (
+              {ungroupedItems.length > 0 && (!isFocused || focusedSectionId === 'ungrouped') && (
                 <div
                   ref={registerSectionNode('ungrouped')}
                   data-outline-section-id="ungrouped"
@@ -1130,6 +1171,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                     if (!canEdit || !draggedOutlineItem) return
                     event.preventDefault()
                     setSectionDropTarget({ id: 'ungrouped', side: null })
+                    setOpenSectionId((current) => (current === 'ungrouped' ? current : 'ungrouped'))
                   }}
                   onDrop={(event) => {
                     event.preventDefault()
@@ -1139,14 +1181,26 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                     sectionDropTarget?.id === 'ungrouped' && !sectionDropTarget.side ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
                   }`}
                 >
-                  <div className="flex items-center gap-2 px-2.5 py-2 text-sm text-secondary">
+                  {!isFocused && (
+                  <button
+                    type="button"
+                    onClick={() => toggleSection('ungrouped')}
+                    aria-expanded={openSectionId === 'ungrouped'}
+                    className="w-full flex items-center gap-2 px-2.5 py-2 text-left text-sm text-secondary hover:text-ink"
+                  >
                     <span className="min-w-0 flex-1 truncate font-medium">Ungrouped content</span>
                     <span className="font-mono text-[10px] tabular-nums text-secondary shrink-0">{ungroupedItems.length}</span>
-                  </div>
-                  <ul className="mt-1 ml-7 space-y-0.5" aria-label="Ungrouped resources">
-                    {ungroupedItems.map((item) => (
+                    <Chevron open={openSectionId === 'ungrouped'} />
+                  </button>
+                  )}
+                  {openSectionId === 'ungrouped' && (
+                  <ul className={`space-y-0.5 ${isFocused ? '' : 'mt-1 ml-7'}`} aria-label="Ungrouped resources">
+                    {ungroupedItems
+                      .filter((item) => !isFocused || item.linkId === previewingItem.linkId)
+                      .map((item) => (
                       <li
                         key={item.linkId}
+                        id={`outline-item-${item.linkId}`}
                         ref={registerOutlineItemNode(item.linkId)}
                         data-outline-item-id={item.linkId}
                         onDragOver={(event) => {
@@ -1199,6 +1253,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                                 } else if (hit?.type === 'section') {
                                   setOutlineItemDropTarget(null)
                                   setSectionDropTarget({ id: hit.id, side: null })
+                                  setOpenSectionId((current) => (current === hit.id ? current : hit.id))
                                 }
                               }}
                               onPointerDragEnd={(event) => {
@@ -1231,7 +1286,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                             className="min-w-0 flex-1 flex items-center gap-1 text-left text-xs text-secondary hover:text-ink hover:underline"
                           >
                             <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                            <ItemPreviewChevron open={previewingItem?.linkId === item.linkId} />
+                            <Chevron open={previewingItem?.linkId === item.linkId} className="md:hidden" />
                           </button>
                         </div>
                         {!isDesktop && previewingItem?.linkId === item.linkId && (
@@ -1253,6 +1308,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                       </li>
                     ))}
                   </ul>
+                  )}
                 </div>
               )}
             </div>
