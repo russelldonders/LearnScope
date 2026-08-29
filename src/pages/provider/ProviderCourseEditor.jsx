@@ -109,36 +109,6 @@ function findDropTarget(refsMap, clientX, clientY) {
   return nearest
 }
 
-// Clicking an item in the course outline selects its section (so it renders
-// in SectionCard/UngroupedContent) and needs to then jump the reader's eye
-// to that specific item in what can be a long content list. `token` (not
-// just itemId) makes the effect below re-fire even when the same item is
-// clicked twice in a row. The same node registry doubles as the drop-target
-// registry for reordering (see findDropTarget above).
-function useItemFocusHighlight(focusRequest) {
-  const [highlightedItemId, setHighlightedItemId] = useState(null)
-  const itemRefs = useRef(new Map())
-
-  useEffect(() => {
-    if (!focusRequest) return
-    const node = itemRefs.current.get(focusRequest.itemId)
-    if (!node) return
-    node.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    setHighlightedItemId(focusRequest.itemId)
-    const timeout = setTimeout(() => setHighlightedItemId(null), 1600)
-    return () => clearTimeout(timeout)
-  }, [focusRequest])
-
-  function registerItemRef(itemId) {
-    return (node) => {
-      if (node) itemRefs.current.set(itemId, node)
-      else itemRefs.current.delete(itemId)
-    }
-  }
-
-  return { highlightedItemId, registerItemRef, itemRefs }
-}
-
 // A thin insertion-point indicator instead of a box around the whole
 // target row, so a reorder-in-progress shows exactly whether the dragged
 // item will land above or below the row it's hovering.
@@ -184,8 +154,7 @@ export function DragHandle({
   const [ghost, setGhost] = useState(null)
   // The outline nav holds its dragged-item/drop-target state on the parent
   // CourseSections component itself, so every touchmove-driven setState
-  // re-renders its whole section/item tree (unlike the smaller, self-
-  // contained SectionCard in the main pane) and hands this component fresh
+  // re-renders its whole section/item tree and hands this component fresh
   // onPointerDrag* closures on every one of those renders. Keeping those in
   // a ref -- instead of the effect's dependency array -- means the touch
   // listeners are attached once and read the latest callback rather than
@@ -657,8 +626,9 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
   const [newSectionTitle, setNewSectionTitle] = useState('')
   const [creatingSection, setCreatingSection] = useState(false)
   const [addingSection, setAddingSection] = useState(false)
-  const [selectedSectionId, setSelectedSectionId] = useState(null)
-  const [focusRequest, setFocusRequest] = useState(null)
+  const [editingSection, setEditingSection] = useState(null)
+  const [addingResourceToSection, setAddingResourceToSection] = useState(null)
+  const [previewingItem, setPreviewingItem] = useState(null)
   const [draggedSectionId, setDraggedSectionId] = useState(null)
   const [sectionDropTarget, setSectionDropTarget] = useState(null)
   const [draggedOutlineItem, setDraggedOutlineItem] = useState(null)
@@ -709,11 +679,6 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
       setSections(sectionRows)
       setItems(itemRows)
       setOrgResources(resourceRows)
-      setSelectedSectionId((current) => {
-        if (sectionRows.some((section) => section.id === current)) return current
-        if (current === 'ungrouped' && itemRows.some((item) => item.sectionId === null)) return current
-        return sectionRows[0]?.id ?? (itemRows.some((item) => item.sectionId === null) ? 'ungrouped' : null)
-      })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -746,21 +711,15 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
     setCreatingSection(true)
     setError(null)
     try {
-      const section = await createCourseSection(courseId, newSectionTitle)
+      await createCourseSection(courseId, newSectionTitle)
       setNewSectionTitle('')
       setAddingSection(false)
-      setSelectedSectionId(section.id)
       await load()
     } catch (err) {
       setError(err.message)
     } finally {
       setCreatingSection(false)
     }
-  }
-
-  function handleFocusItem(item) {
-    setSelectedSectionId(item.sectionId ?? 'ungrouped')
-    setFocusRequest({ itemId: item.linkId, token: Date.now() })
   }
 
   async function commitSectionOrder(draggedId, targetId, side = 'before') {
@@ -825,7 +784,6 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
       ...normalizedSource,
       ...normalizedDestination,
     ])
-    setSelectedSectionId(targetSectionId ?? 'ungrouped')
     setReordering(true)
     setError(null)
     try {
@@ -862,7 +820,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
 
   if (loading) return <p className="text-secondary">Loading content…</p>
 
-  const selectedSection = sections.find((section) => section.id === selectedSectionId)
+  const availableResources = orgResources.filter((r) => !linkedResourceIds.has(r.id))
 
   return (
     <div className="space-y-4">
@@ -870,22 +828,21 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
 
       {error && <p className="text-sm text-red-700">{error}</p>}
 
-      <div className="grid md:grid-cols-[280px_minmax(0,1fr)] gap-6 items-start">
-        <nav aria-label="Course content outline" className="md:sticky md:top-6">
-          <div className="flex items-center justify-between gap-2 px-2.5 mb-2">
-            <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Course outline</p>
-            {canEdit && (
-              <button
-                type="button"
-                onClick={() => setAddingSection(true)}
-                className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-moss hover:opacity-80"
-              >
-                + Add section
-              </button>
-            )}
-          </div>
+      <nav aria-label="Course content outline">
+        <div className="flex items-center justify-between gap-2 px-2.5 mb-2">
+          <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Course outline</p>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => setAddingSection(true)}
+              className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-moss hover:opacity-80"
+            >
+              + Add section
+            </button>
+          )}
+        </div>
 
-          {sections.length === 0 && ungroupedItems.length === 0 ? (
+        {sections.length === 0 && ungroupedItems.length === 0 ? (
             <div className="text-center py-8 px-3 border border-dashed border-hairline rounded-lg">
               <p className="text-xs text-secondary">
                 {canEdit ? 'No sections yet — use "+ Add section" above to start structuring this course.' : 'No content added yet.'}
@@ -895,7 +852,6 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
             <div className="space-y-4">
               {sections.map((section) => {
                 const sectionItems = itemsBySection.get(section.id) ?? []
-                const isSelected = selectedSectionId === section.id
                 return (
                   <div
                     key={section.id}
@@ -966,18 +922,25 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                       )}
                       <button
                         type="button"
-                        onClick={() => setSelectedSectionId(section.id)}
-                        aria-current={isSelected ? 'true' : undefined}
-                        className={`min-w-0 flex-1 flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors ${
-                          isSelected
-                            ? 'bg-card border border-moss text-ink'
-                            : 'border border-transparent text-secondary hover:bg-card hover:text-ink'
-                        }`}
+                        onClick={() => setEditingSection(section)}
+                        className="min-w-0 flex-1 flex items-center gap-2 rounded-md border border-transparent px-2.5 py-2 text-left text-sm text-secondary transition-colors hover:bg-card hover:text-ink"
                       >
-                        <span className={`w-2 h-2 rounded-full shrink-0 ${isSelected ? 'bg-moss' : 'border border-hairline'}`} aria-hidden="true" />
                         <span className="min-w-0 flex-1 truncate font-medium">{section.title}</span>
                         <span className="font-mono text-[10px] tabular-nums text-secondary shrink-0">{sectionItems.length}</span>
                       </button>
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => setAddingResourceToSection(section)}
+                          aria-label={`Add content to ${section.title}`}
+                          title="Add content"
+                          className="inline-flex h-11 w-11 md:h-7 md:w-7 shrink-0 items-center justify-center rounded-md text-secondary hover:bg-paper hover:text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                        >
+                          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+                            <path d="M8 3v10M3 8h10" strokeLinecap="round" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
                     {sectionItems.length > 0 && (
                       <ul className="mt-1 ml-7 space-y-0.5" aria-label={`${section.title} resources`}>
@@ -1067,7 +1030,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                             )}
                             <button
                               type="button"
-                              onClick={() => handleFocusItem(item)}
+                              onClick={() => setPreviewingItem(item)}
                               className="min-w-0 flex-1 truncate text-left text-xs text-secondary hover:text-ink hover:underline"
                             >
                               {item.title}
@@ -1096,20 +1059,10 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                     sectionDropTarget?.id === 'ungrouped' && !sectionDropTarget.side ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
                   }`}
                 >
-                  <button
-                    type="button"
-                    onClick={() => setSelectedSectionId('ungrouped')}
-                    aria-current={selectedSectionId === 'ungrouped' ? 'true' : undefined}
-                    className={`w-full flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors ${
-                      selectedSectionId === 'ungrouped'
-                        ? 'bg-card border border-moss text-ink'
-                        : 'border border-transparent text-secondary hover:bg-card hover:text-ink'
-                    }`}
-                  >
-                    <span className="w-2 h-2 rounded-full border border-hairline shrink-0" aria-hidden="true" />
+                  <div className="flex items-center gap-2 px-2.5 py-2 text-sm text-secondary">
                     <span className="min-w-0 flex-1 truncate font-medium">Ungrouped content</span>
                     <span className="font-mono text-[10px] tabular-nums text-secondary shrink-0">{ungroupedItems.length}</span>
-                  </button>
+                  </div>
                   <ul className="mt-1 ml-7 space-y-0.5" aria-label="Ungrouped resources">
                     {ungroupedItems.map((item) => (
                       <li
@@ -1192,7 +1145,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                         )}
                         <button
                           type="button"
-                          onClick={() => handleFocusItem(item)}
+                          onClick={() => setPreviewingItem(item)}
                           className="min-w-0 flex-1 truncate text-left text-xs text-secondary hover:text-ink hover:underline"
                         >
                           {item.title}
@@ -1206,37 +1159,6 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
           )}
         </nav>
 
-        <div className="min-w-0">
-          {selectedSection && (
-            <SectionCard
-              key={selectedSection.id}
-              section={selectedSection}
-              items={itemsBySection.get(selectedSection.id) ?? []}
-              availableResources={orgResources.filter((r) => !linkedResourceIds.has(r.id))}
-              courseId={courseId}
-              organisationId={organisationId}
-              userId={userId}
-              canEdit={canEdit}
-              onChanged={load}
-              reordering={reordering}
-              setReordering={setReordering}
-              focusRequest={focusRequest}
-            />
-          )}
-          {selectedSectionId === 'ungrouped' && ungroupedItems.length > 0 && (
-            <UngroupedContent
-              items={ungroupedItems}
-              userId={userId}
-              canEdit={canEdit}
-              onChanged={load}
-              reordering={reordering}
-              setReordering={setReordering}
-              focusRequest={focusRequest}
-            />
-          )}
-        </div>
-      </div>
-
       {addingSection && (
         <AddSectionModal
           value={newSectionTitle}
@@ -1247,6 +1169,39 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
             setAddingSection(false)
             setNewSectionTitle('')
           }}
+        />
+      )}
+
+      {editingSection && (
+        <SectionEditModal
+          section={editingSection}
+          onChanged={load}
+          onClose={() => setEditingSection(null)}
+        />
+      )}
+
+      {addingResourceToSection && (
+        <AddResourceModal
+          section={addingResourceToSection}
+          courseId={courseId}
+          organisationId={organisationId}
+          userId={userId}
+          availableResources={availableResources}
+          onChanged={load}
+          onClose={() => setAddingResourceToSection(null)}
+        />
+      )}
+
+      {previewingItem && (
+        <ItemPreviewModal
+          item={previewingItem}
+          userId={userId}
+          canEdit={canEdit}
+          onChanged={() => {
+            load()
+            setPreviewingItem(null)
+          }}
+          onClose={() => setPreviewingItem(null)}
         />
       )}
     </div>
@@ -1296,204 +1251,119 @@ function AddSectionModal({ value, onChange, busy, onSubmit, onClose }) {
   )
 }
 
-// Content left over from a deleted section (0078: course_content_links.
-// section_id "on delete set null") -- reorderable and detachable like any
-// section's items, but can't accept new attachments/uploads directly since
-// it isn't a real section; a provider who wants to keep this content
-// organized should create a section and re-attach it there instead.
-function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setReordering, focusRequest }) {
-  const [previewingId, setPreviewingId] = useState(null)
+
+// Rename/delete used to live inline in the now-removed right-hand detail
+// panel; clicking a section's title in the outline opens this instead of
+// selecting it into that panel, since the outline is the single content
+// view now. ConfirmDialog renders alongside this modal (not instead of
+// it) by design -- see its own comment about stacking above a parent
+// *Modal.jsx.
+function SectionEditModal({ section, onChanged, onClose }) {
+  const [titleDraft, setTitleDraft] = useState(section.title)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
-  const [draggedItemId, setDraggedItemId] = useState(null)
-  const [itemDropTarget, setItemDropTarget] = useState(null)
-  const { highlightedItemId, registerItemRef, itemRefs } = useItemFocusHighlight(focusRequest)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
-  async function handleDetach(item) {
+  async function handleRenameSave(e) {
+    e.preventDefault()
+    if (!titleDraft.trim() || titleDraft === section.title) {
+      onClose()
+      return
+    }
     setBusy(true)
     setError(null)
     try {
-      await unlinkResourceFromCourse(item.linkId)
+      await renameCourseSection(section.id, titleDraft)
       await onChanged()
+      onClose()
     } catch (err) {
       setError(err.message)
-    } finally {
       setBusy(false)
     }
   }
 
-  async function commitItemOrder(draggedId, targetId, side = 'before') {
-    const reordered = reorderById(items, draggedId, targetId, 'linkId', side)
-    if (reordered === items) return
-    setReordering(true)
+  async function handleDeleteSection() {
+    setBusy(true)
     setError(null)
     try {
-      await reorderContentLinks(reordered)
+      await deleteCourseSection(section.id)
       await onChanged()
+      onClose()
     } catch (err) {
-      setError(`Couldn't reorder content. ${err.message}`)
-    } finally {
-      setReordering(false)
-      setDraggedItemId(null)
-      setItemDropTarget(null)
+      setError(err.message)
+      setBusy(false)
     }
   }
 
-  function handleItemKeyDown(event, itemId) {
-    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
-    event.preventDefault()
-    const index = items.findIndex((item) => item.linkId === itemId)
-    const target = items[index + (event.key === 'ArrowUp' ? -1 : 1)]
-    if (target) commitItemOrder(itemId, target.linkId)
-  }
-
   return (
-    <div className="bg-card border border-dashed border-hairline rounded-lg p-6">
-      <h4 className="font-display text-base text-ink mb-1">Ungrouped content</h4>
-      <p className="text-xs text-secondary mb-3">
-        This content's section was deleted. It's still part of the course — add a section and re-attach it to
-        organize it again.
-      </p>
-
-      {error && <p className="text-xs text-red-700 mb-2">{error}</p>}
-
-      <ul className="divide-y divide-hairline border border-hairline rounded-md">
-        {items.map((item) => (
-          <li
-            key={item.linkId}
-            ref={registerItemRef(item.linkId)}
-            data-content-item-id={item.linkId}
-            onDragOver={(event) => {
-              if (!canEdit || !draggedItemId || draggedItemId === item.linkId) return
-              event.preventDefault()
-              setItemDropTarget({ id: item.linkId, side: sideOf(event.currentTarget, event.clientY) })
-            }}
-            onDrop={(event) => {
-              event.preventDefault()
-              if (draggedItemId) commitItemOrder(draggedItemId, item.linkId, sideOf(event.currentTarget, event.clientY))
-            }}
-            className={`relative p-2 text-sm transition-[background-color,box-shadow,opacity] ${
-              highlightedItemId === item.linkId ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
-            } ${draggedItemId === item.linkId ? 'opacity-40' : ''}`}
-          >
-            {itemDropTarget?.id === item.linkId && <DropLine side={itemDropTarget.side} />}
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-1">
-                {canEdit && (
-                  <DragHandle
-                    label={`Reorder ${item.title}`}
-                    dragLabel={item.title}
-                    disabled={busy || reordering}
-                    onDragStart={(event) => {
-                      event.dataTransfer.effectAllowed = 'move'
-                      event.dataTransfer.setData('text/plain', item.linkId)
-                      setDraggedItemId(item.linkId)
-                    }}
-                    onDragEnd={() => {
-                      setDraggedItemId(null)
-                      setItemDropTarget(null)
-                    }}
-                    onKeyDown={(event) => handleItemKeyDown(event, item.linkId)}
-                    onPointerDragStart={() => setDraggedItemId(item.linkId)}
-                    onPointerDragMove={(event) => {
-                      const hit = findDropTarget(itemRefs.current, event.clientX, event.clientY)
-                      if (hit && hit.id !== item.linkId) setItemDropTarget(hit)
-                    }}
-                    onPointerDragEnd={(event) => {
-                      const hit = findDropTarget(itemRefs.current, event.clientX, event.clientY)
-                      if (hit && hit.id !== item.linkId) {
-                        commitItemOrder(item.linkId, hit.id, hit.side)
-                      } else {
-                        setDraggedItemId(null)
-                        setItemDropTarget(null)
-                      }
-                    }}
-                  />
-                )}
-                <div className="min-w-0">
-                <p className="text-ink truncate">{item.title}</p>
-                <p className="font-mono text-[10px] text-secondary">{TYPE_LABELS[item.type]}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {item.type === 'file' ? (
-                  <a href={contentFileUrl(item)} download={item.file_name || true} className="text-xs text-moss font-medium">
-                    Download
-                  </a>
-                ) : item.type === 'web_url' ? (
-                  <a href={item.external_url} target="_blank" rel="noopener noreferrer" className="text-xs text-moss font-medium">
-                    Open link
-                  </a>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setPreviewingId((id) => (id === item.id ? null : item.id))}
-                    className="text-xs text-moss font-medium"
-                  >
-                    {previewingId === item.id ? 'Hide preview' : 'Preview'}
-                  </button>
-                )}
-                {canEdit && (
-                    <button
-                      type="button"
-                      onClick={() => handleDetach(item)}
-                      disabled={busy}
-                      className="text-xs text-red-700 hover:underline disabled:opacity-60"
-                    >
-                      Detach
-                    </button>
-                )}
-              </div>
-            </div>
-            {previewingId === item.id && (item.type === 'video' || item.type === 'screen_recording') && (
-              <EditedVideoPlayer resource={item} className="w-full mt-2 rounded-md bg-black" />
-            )}
-            {previewingId === item.id && item.type === 'scorm' && (
-              <div className="mt-2">
-                <ScormPlayer contentItem={item} userId={userId} />
-              </div>
-            )}
-            {previewingId === item.id && item.type === 'xapi' && (
-              <div className="mt-2">
-                <XapiPlayer contentItem={item} userId={userId} />
-              </div>
-            )}
-            {previewingId === item.id && item.type === 'external_video' && (
-              <iframe
-                src={item.external_url}
-                title={item.title}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                className="w-full aspect-video mt-2 rounded-md"
-              />
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
+    <>
+      <AccessibleDialog
+        labelledBy="section-edit-dialog-title"
+        onClose={onClose}
+        panelClassName="w-full max-w-sm bg-card border border-hairline rounded-lg p-6"
+      >
+        <h2 id="section-edit-dialog-title" className="font-display text-xl text-ink mb-4">
+          Edit section
+        </h2>
+        {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
+        <form onSubmit={handleRenameSave}>
+          <label className="block text-xs text-secondary mb-1" htmlFor="sectionTitle">
+            Section title
+          </label>
+          <input
+            id="sectionTitle"
+            data-dialog-initial-focus
+            value={titleDraft}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+          />
+          <div className="flex items-center gap-2 mt-4">
+            <button
+              type="submit"
+              disabled={busy || !titleDraft.trim()}
+              className="flex-1 rounded-md bg-moss text-paper py-2 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+            >
+              {busy ? 'Saving…' : 'Save'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={busy}
+              className="rounded-md border border-hairline text-ink py-2 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+        <button
+          type="button"
+          onClick={() => setConfirmingDelete(true)}
+          disabled={busy}
+          className="w-full mt-2 rounded-md border border-hairline text-red-700 py-2 text-sm font-medium hover:bg-paper disabled:opacity-60"
+        >
+          Delete section
+        </button>
+      </AccessibleDialog>
+      {confirmingDelete && (
+        <ConfirmDialog
+          message={`Delete the "${section.title}" section? Its content stays attached to the course, just ungrouped.`}
+          confirmLabel="Delete section"
+          confirming={busy}
+          onConfirm={handleDeleteSection}
+          onCancel={() => setConfirmingDelete(false)}
+        />
+      )}
+    </>
   )
 }
 
-function SectionCard({
-  section,
-  items,
-  availableResources,
-  courseId,
-  organisationId,
-  userId,
-  canEdit,
-  onChanged,
-  reordering,
-  setReordering,
-  focusRequest,
-}) {
-  const [editingTitle, setEditingTitle] = useState(false)
-  const [titleDraft, setTitleDraft] = useState(section.title)
-  const [previewingId, setPreviewingId] = useState(null)
+// Attach-existing / upload-new / record-screen / web-link, moved from the
+// now-removed right-hand detail panel into a popup scoped to whichever
+// section's "+" button opened it.
+function AddResourceModal({ section, courseId, organisationId, userId, availableResources, onChanged, onClose }) {
   const [selectedResourceId, setSelectedResourceId] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
-  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
   const [uploadType, setUploadType] = useState('video')
   const [uploadTitle, setUploadTitle] = useState('')
@@ -1501,9 +1371,6 @@ function SectionCard({
   const [showScreenRecorder, setShowScreenRecorder] = useState(false)
   const [recordedFileName, setRecordedFileName] = useState('')
   const [webUrl, setWebUrl] = useState('')
-  const [draggedItemId, setDraggedItemId] = useState(null)
-  const [itemDropTarget, setItemDropTarget] = useState(null)
-  const { highlightedItemId, registerItemRef, itemRefs } = useItemFocusHighlight(focusRequest)
   const fileInputRef = useRef(null)
 
   function setRecordedFile(file) {
@@ -1515,90 +1382,18 @@ function SectionCard({
     if (!uploadTitle.trim()) setUploadTitle('Screen recording')
   }
 
-  async function handleRenameSave() {
-    if (!titleDraft.trim() || titleDraft === section.title) {
-      setEditingTitle(false)
-      setTitleDraft(section.title)
-      return
-    }
-    setBusy(true)
-    setError(null)
-    try {
-      await renameCourseSection(section.id, titleDraft)
-      setEditingTitle(false)
-      await onChanged()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function handleDeleteSection() {
-    setBusy(true)
-    setError(null)
-    try {
-      await deleteCourseSection(section.id)
-      setConfirmingDelete(false)
-      await onChanged()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
   async function handleAttach() {
     if (!selectedResourceId) return
     setBusy(true)
     setError(null)
     try {
       await linkResourceToCourse(courseId, selectedResourceId, section.id)
-      setSelectedResourceId('')
       await onChanged()
+      onClose()
     } catch (err) {
       setError(err.message)
-    } finally {
       setBusy(false)
     }
-  }
-
-  async function handleDetach(item) {
-    setBusy(true)
-    setError(null)
-    try {
-      await unlinkResourceFromCourse(item.linkId)
-      await onChanged()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function commitItemOrder(draggedId, targetId, side = 'before') {
-    const reordered = reorderById(items, draggedId, targetId, 'linkId', side)
-    if (reordered === items) return
-    setReordering(true)
-    setError(null)
-    try {
-      await reorderContentLinks(reordered)
-      await onChanged()
-    } catch (err) {
-      setError(`Couldn't reorder content. ${err.message}`)
-    } finally {
-      setReordering(false)
-      setDraggedItemId(null)
-      setItemDropTarget(null)
-    }
-  }
-
-  function handleItemKeyDown(event, itemId) {
-    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
-    event.preventDefault()
-    const index = items.findIndex((item) => item.linkId === itemId)
-    const target = items[index + (event.key === 'ArrowUp' ? -1 : 1)]
-    if (target) commitItemOrder(itemId, target.linkId)
   }
 
   async function handleUpload() {
@@ -1612,13 +1407,10 @@ function SectionCard({
       try {
         const resource = await addWebResource(organisationId, userId, webUrl, uploadTitle)
         await linkResourceToCourse(courseId, resource.id, section.id)
-        setUploadTitle('')
-        setWebUrl('')
-        setShowUpload(false)
         await onChanged()
+        onClose()
       } catch (err) {
         setError(err.message)
-      } finally {
         setUploading(false)
       }
       return
@@ -1643,287 +1435,136 @@ function SectionCard({
               ? await uploadScormResource(organisationId, userId, file, uploadTitle)
               : await uploadXapiResource(organisationId, userId, file, uploadTitle)
       await linkResourceToCourse(courseId, resource.id, section.id)
-      setUploadTitle('')
-      if (fileInputRef.current) fileInputRef.current.value = ''
-      setRecordedFileName('')
-      setShowUpload(false)
       await onChanged()
+      onClose()
     } catch (err) {
       setError(err.message)
-    } finally {
       setUploading(false)
     }
   }
 
   return (
-    <div className="bg-card border border-hairline rounded-lg p-6">
-      <div className="flex items-center justify-between gap-2 mb-3">
-        {editingTitle ? (
-          <div className="flex items-center gap-2 flex-1">
-            <input
-              autoFocus
-              value={titleDraft}
-              onChange={(e) => setTitleDraft(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleRenameSave()}
-              className="flex-1 rounded-md border border-hairline bg-paper px-2 py-1 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-            />
-            <button type="button" onClick={handleRenameSave} disabled={busy} className="text-xs text-moss font-medium">
-              Save
-            </button>
+    <AccessibleDialog
+      labelledBy="add-resource-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+      <h2 id="add-resource-dialog-title" className="font-display text-xl text-ink mb-1">
+        Add content to {section.title}
+      </h2>
+      <p className="text-sm text-secondary mb-4">Attach something already in your library, or add something new.</p>
+
+      {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
+
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-xs text-secondary mb-1" htmlFor={`attachResource-${section.id}`}>
+              Add existing resource
+            </label>
+            <select
+              id={`attachResource-${section.id}`}
+              data-dialog-initial-focus
+              value={selectedResourceId}
+              onChange={(e) => setSelectedResourceId(e.target.value)}
+              disabled={availableResources.length === 0}
+              className="w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss disabled:opacity-60"
+            >
+              <option value="">
+                {availableResources.length === 0 ? 'Nothing left to add' : 'Choose a resource…'}
+              </option>
+              {availableResources.map((resource) => (
+                <option key={resource.id} value={resource.id}>
+                  {resource.title} ({TYPE_LABELS[resource.type]})
+                </option>
+              ))}
+            </select>
           </div>
-        ) : (
-          <h4 className="font-display text-base text-ink">{section.title}</h4>
-        )}
+          <button
+            type="button"
+            onClick={handleAttach}
+            disabled={busy || !selectedResourceId}
+            className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+          >
+            Add
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowUpload((v) => !v)}
+            className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+          >
+            {showUpload ? 'Cancel' : '+ Add new content'}
+          </button>
+        </div>
 
-        {canEdit && !editingTitle && (
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={() => setEditingTitle(true)}
-              className="rounded-md border border-hairline text-ink py-1 px-2 text-xs font-medium hover:bg-paper"
-            >
-              Rename
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmingDelete(true)}
-              className="rounded-md border border-hairline text-red-700 py-1 px-2 text-xs font-medium hover:bg-paper"
-            >
-              Delete
-            </button>
-          </div>
-        )}
-      </div>
-
-      {items.length === 0 ? (
-        <p className="text-xs text-secondary">No content in this section yet.</p>
-      ) : (
-        <ul className="divide-y divide-hairline border border-hairline rounded-md mb-3">
-          {items.map((item) => (
-            <li
-              key={item.linkId}
-              ref={registerItemRef(item.linkId)}
-              data-content-item-id={item.linkId}
-              onDragOver={(event) => {
-                if (!canEdit || !draggedItemId || draggedItemId === item.linkId) return
-                event.preventDefault()
-                setItemDropTarget({ id: item.linkId, side: sideOf(event.currentTarget, event.clientY) })
-              }}
-              onDrop={(event) => {
-                event.preventDefault()
-                if (draggedItemId) commitItemOrder(draggedItemId, item.linkId, sideOf(event.currentTarget, event.clientY))
-              }}
-              className={`relative p-2 text-sm transition-[background-color,box-shadow,opacity] ${
-                highlightedItemId === item.linkId ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
-              } ${draggedItemId === item.linkId ? 'opacity-40' : ''}`}
-            >
-              {itemDropTarget?.id === item.linkId && <DropLine side={itemDropTarget.side} />}
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-1">
-                  {canEdit && (
-                    <DragHandle
-                      label={`Reorder ${item.title}`}
-                      dragLabel={item.title}
-                      disabled={busy || reordering}
-                      onDragStart={(event) => {
-                        event.dataTransfer.effectAllowed = 'move'
-                        event.dataTransfer.setData('text/plain', item.linkId)
-                        setDraggedItemId(item.linkId)
-                      }}
-                      onDragEnd={() => {
-                        setDraggedItemId(null)
-                        setItemDropTarget(null)
-                      }}
-                      onKeyDown={(event) => handleItemKeyDown(event, item.linkId)}
-                      onPointerDragStart={() => setDraggedItemId(item.linkId)}
-                      onPointerDragMove={(event) => {
-                        const hit = findDropTarget(itemRefs.current, event.clientX, event.clientY)
-                        if (hit && hit.id !== item.linkId) setItemDropTarget(hit)
-                      }}
-                      onPointerDragEnd={(event) => {
-                        const hit = findDropTarget(itemRefs.current, event.clientX, event.clientY)
-                        if (hit && hit.id !== item.linkId) {
-                          commitItemOrder(item.linkId, hit.id, hit.side)
-                        } else {
-                          setDraggedItemId(null)
-                          setItemDropTarget(null)
-                        }
-                      }}
-                    />
-                  )}
-                  <div className="min-w-0">
-                    <p className="text-ink truncate">{item.title}</p>
-                    <p className="font-mono text-[10px] text-secondary">{TYPE_LABELS[item.type]}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {item.type === 'file' ? (
-                    <a href={contentFileUrl(item)} download={item.file_name || true} className="text-xs text-moss font-medium">
-                      Download
-                    </a>
-                  ) : item.type === 'web_url' ? (
-                    <a href={item.external_url} target="_blank" rel="noopener noreferrer" className="text-xs text-moss font-medium">
-                      Open link
-                    </a>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setPreviewingId((id) => (id === item.id ? null : item.id))}
-                      className="text-xs text-moss font-medium"
-                    >
-                      {previewingId === item.id ? 'Hide preview' : 'Preview'}
-                    </button>
-                  )}
-                  {canEdit && (
-                      <button
-                        type="button"
-                        onClick={() => handleDetach(item)}
-                        disabled={busy}
-                        className="text-xs text-red-700 hover:underline disabled:opacity-60"
-                      >
-                        Detach
-                      </button>
-                  )}
-                </div>
-              </div>
-              {previewingId === item.id && (item.type === 'video' || item.type === 'screen_recording') && (
-                <EditedVideoPlayer resource={item} className="w-full mt-2 rounded-md bg-black" />
-              )}
-              {previewingId === item.id && item.type === 'scorm' && (
-                <div className="mt-2">
-                  <ScormPlayer contentItem={item} userId={userId} />
-                </div>
-              )}
-              {previewingId === item.id && item.type === 'xapi' && (
-                <div className="mt-2">
-                  <XapiPlayer contentItem={item} userId={userId} />
-                </div>
-              )}
-              {previewingId === item.id && item.type === 'external_video' && (
-                <iframe
-                  src={item.external_url}
-                  title={item.title}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  className="w-full aspect-video mt-2 rounded-md"
-                />
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {error && <p className="text-xs text-red-700 mb-2">{error}</p>}
-
-      {canEdit && (
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="flex-1 min-w-[200px]">
-              <label className="block text-xs text-secondary mb-1" htmlFor={`attachResource-${section.id}`}>
-                Add existing resource
+        {showUpload && (
+          <div className="bg-paper border border-hairline rounded-md p-3 flex flex-wrap items-end gap-2">
+            <div>
+              <label className="block text-xs text-secondary mb-1" htmlFor={`uploadType-${section.id}`}>
+                Type
               </label>
               <select
-                id={`attachResource-${section.id}`}
-                value={selectedResourceId}
-                onChange={(e) => setSelectedResourceId(e.target.value)}
-                disabled={availableResources.length === 0}
-                className="w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss disabled:opacity-60"
+                id={`uploadType-${section.id}`}
+                value={uploadType}
+                onChange={(e) => {
+                  setUploadType(e.target.value)
+                  if (fileInputRef.current) fileInputRef.current.value = ''
+                  setRecordedFileName('')
+                  setWebUrl('')
+                }}
+                className="rounded-md border border-hairline bg-card px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
               >
-                <option value="">
-                  {availableResources.length === 0 ? 'Nothing left to add' : 'Choose a resource…'}
-                </option>
-                {availableResources.map((resource) => (
-                  <option key={resource.id} value={resource.id}>
-                    {resource.title} ({TYPE_LABELS[resource.type]})
-                  </option>
-                ))}
+                <option value="video">Video</option>
+                <option value="screen_recording">Screen recording</option>
+                <option value="file">File</option>
+                <option value="scorm">SCORM package (.zip)</option>
+                <option value="xapi">xAPI package (.zip)</option>
+                <option value="web_url">Web link</option>
               </select>
             </div>
-            <button
-              type="button"
-              onClick={handleAttach}
-              disabled={busy || !selectedResourceId}
-              className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-            >
-              Add
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowUpload((v) => !v)}
-              className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
-            >
-              {showUpload ? 'Cancel' : '+ Add new content'}
-            </button>
-          </div>
-
-          {showUpload && (
-            <div className="bg-paper border border-hairline rounded-md p-3 flex flex-wrap items-end gap-2">
-              <div>
-                <label className="block text-xs text-secondary mb-1" htmlFor={`uploadType-${section.id}`}>
-                  Type
-                </label>
-                <select
-                  id={`uploadType-${section.id}`}
-                  value={uploadType}
-                  onChange={(e) => {
-                    setUploadType(e.target.value)
-                    if (fileInputRef.current) fileInputRef.current.value = ''
-                    setRecordedFileName('')
-                    setWebUrl('')
-                  }}
-                  className="rounded-md border border-hairline bg-card px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                >
-                  <option value="video">Video</option>
-                  <option value="screen_recording">Screen recording</option>
-                  <option value="file">File</option>
-                  <option value="scorm">SCORM package (.zip)</option>
-                  <option value="xapi">xAPI package (.zip)</option>
-                  <option value="web_url">Web link</option>
-                </select>
-              </div>
-              <div className="flex-1 min-w-[140px]">
-                <label className="block text-xs text-secondary mb-1" htmlFor={`uploadTitle-${section.id}`}>
-                  Title (optional)
-                </label>
+            <div className="flex-1 min-w-[140px]">
+              <label className="block text-xs text-secondary mb-1" htmlFor={`uploadTitle-${section.id}`}>
+                Title (optional)
+              </label>
+              <input
+                id={`uploadTitle-${section.id}`}
+                value={uploadTitle}
+                onChange={(e) => setUploadTitle(e.target.value)}
+                className="w-full rounded-md border border-hairline bg-card px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+            </div>
+            {uploadType === 'web_url' ? (
+              <div className="flex-1 min-w-[220px]">
+                <label className="block text-xs text-secondary mb-1" htmlFor={`webUrl-${section.id}`}>Web address</label>
                 <input
-                  id={`uploadTitle-${section.id}`}
-                  value={uploadTitle}
-                  onChange={(e) => setUploadTitle(e.target.value)}
+                  id={`webUrl-${section.id}`}
+                  type="url"
+                  value={webUrl}
+                  onChange={(e) => setWebUrl(e.target.value)}
+                  placeholder="https://example.com/resource"
                   className="w-full rounded-md border border-hairline bg-card px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
                 />
               </div>
-              {uploadType === 'web_url' ? (
-                <div className="flex-1 min-w-[220px]">
-                  <label className="block text-xs text-secondary mb-1" htmlFor={`webUrl-${section.id}`}>Web address</label>
-                  <input
-                    id={`webUrl-${section.id}`}
-                    type="url"
-                    value={webUrl}
-                    onChange={(e) => setWebUrl(e.target.value)}
-                    placeholder="https://example.com/resource"
-                    className="w-full rounded-md border border-hairline bg-card px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                  />
-                </div>
-              ) : uploadType === 'screen_recording' ? (
-                <div className="min-w-[180px]">
-                  <span className="block text-xs text-secondary mb-1">Recording</span>
-                  <button
-                    type="button"
-                    onClick={() => setShowScreenRecorder(true)}
-                    className="inline-flex items-center gap-2 rounded-md border border-moss text-moss px-3 py-1.5 text-sm font-medium hover:bg-moss/5"
-                  >
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                      <rect x="3" y="4" width="18" height="13" rx="2" />
-                      <path d="M8 21h8M12 17v4" />
-                    </svg>
-                    {recordedFileName ? 'Record again' : 'Record screen'}
-                  </button>
-                  {recordedFileName && <p className="text-xs text-secondary mt-1 max-w-[220px] truncate">Ready: {recordedFileName}</p>}
-                  <input ref={fileInputRef} type="file" accept="video/*" className="sr-only" tabIndex={-1} />
-                </div>
-              ) : (
-                <div>
-                  <input
+            ) : uploadType === 'screen_recording' ? (
+              <div className="min-w-[180px]">
+                <span className="block text-xs text-secondary mb-1">Recording</span>
+                <button
+                  type="button"
+                  onClick={() => setShowScreenRecorder(true)}
+                  className="inline-flex items-center gap-2 rounded-md border border-moss text-moss px-3 py-1.5 text-sm font-medium hover:bg-moss/5"
+                >
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="13" rx="2" />
+                    <path d="M8 21h8M12 17v4" />
+                  </svg>
+                  {recordedFileName ? 'Record again' : 'Record screen'}
+                </button>
+                {recordedFileName && <p className="text-xs text-secondary mt-1 max-w-[220px] truncate">Ready: {recordedFileName}</p>}
+                <input ref={fileInputRef} type="file" accept="video/*" className="sr-only" tabIndex={-1} />
+              </div>
+            ) : (
+              <div>
+                <input
                   ref={fileInputRef}
                   type="file"
                   accept={
@@ -1934,41 +1575,114 @@ function SectionCard({
                         : undefined
                   }
                   className="text-xs text-secondary"
-                  />
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={handleUpload}
-                disabled={uploading}
-                className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-              >
-                {uploading
-                  ? 'Adding…'
-                  : uploadType === 'screen_recording'
-                    ? 'Add recording'
-                    : uploadType === 'web_url'
-                      ? 'Add link'
-                      : 'Upload & add'}
-              </button>
-            </div>
-          )}
+                />
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={handleUpload}
+              disabled={uploading}
+              className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+            >
+              {uploading
+                ? 'Adding…'
+                : uploadType === 'screen_recording'
+                  ? 'Add recording'
+                  : uploadType === 'web_url'
+                    ? 'Add link'
+                    : 'Upload & add'}
+            </button>
+          </div>
+        )}
 
-          {showScreenRecorder && (
-            <ScreenRecorderModal onClose={() => setShowScreenRecorder(false)} onRecorded={setRecordedFile} />
-          )}
-        </div>
-      )}
+        {showScreenRecorder && (
+          <ScreenRecorderModal onClose={() => setShowScreenRecorder(false)} onRecorded={setRecordedFile} />
+        )}
+      </div>
+    </AccessibleDialog>
+  )
+}
 
-      {confirmingDelete && (
-        <ConfirmDialog
-          message={`Delete the "${section.title}" section? Its content stays attached to the course, just ungrouped.`}
-          confirmLabel="Delete section"
-          confirming={busy}
-          onConfirm={handleDeleteSection}
-          onCancel={() => setConfirmingDelete(false)}
-        />
-      )}
-    </div>
+// Preview/download + detach, moved from the now-removed right-hand detail
+// panel into a popup opened by clicking an item's title in the outline.
+function ItemPreviewModal({ item, userId, canEdit, onChanged, onClose }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  async function handleDetach() {
+    setBusy(true)
+    setError(null)
+    try {
+      await unlinkResourceFromCourse(item.linkId)
+      onChanged()
+    } catch (err) {
+      setError(err.message)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <AccessibleDialog
+      labelledBy="item-preview-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <h2 id="item-preview-dialog-title" className="font-display text-xl text-ink">
+          {item.title}
+        </h2>
+        <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0 mt-1">
+          {TYPE_LABELS[item.type]}
+        </span>
+      </div>
+
+      {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
+
+      <div className="mt-3">
+        {item.type === 'video' || item.type === 'screen_recording' ? (
+          <EditedVideoPlayer resource={item} className="w-full rounded-md bg-black" />
+        ) : item.type === 'scorm' ? (
+          <ScormPlayer contentItem={item} userId={userId} />
+        ) : item.type === 'xapi' ? (
+          <XapiPlayer contentItem={item} userId={userId} />
+        ) : item.type === 'external_video' ? (
+          <iframe
+            src={item.external_url}
+            title={item.title}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="w-full aspect-video rounded-md"
+          />
+        ) : item.type === 'file' ? (
+          <a href={contentFileUrl(item)} download={item.file_name || true} className="text-sm text-moss font-medium">
+            Download file
+          </a>
+        ) : item.type === 'web_url' ? (
+          <a href={item.external_url} target="_blank" rel="noopener noreferrer" className="text-sm text-moss font-medium">
+            Open link
+          </a>
+        ) : null}
+      </div>
+
+      <div className="flex items-center gap-2 mt-5">
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex-1 rounded-md border border-hairline text-ink py-2 text-sm font-medium hover:bg-paper"
+        >
+          Close
+        </button>
+        {canEdit && (
+          <button
+            type="button"
+            onClick={handleDetach}
+            disabled={busy}
+            className="rounded-md border border-hairline text-red-700 py-2 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+          >
+            {busy ? 'Removing…' : 'Detach from course'}
+          </button>
+        )}
+      </div>
+    </AccessibleDialog>
   )
 }
