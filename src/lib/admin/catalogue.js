@@ -82,6 +82,57 @@ export async function updateProviderCourse(id, { name, provider, courseType, dur
   if (error) throw error
 }
 
+export async function listCourseParticipants(courseId) {
+  const [{ data: enrolments, error: enrolmentError }, { data: items, error: itemError }] = await Promise.all([
+    supabase
+      .from('courses')
+      .select('id, user_id, created_at, completed_date')
+      .eq('catalogue_course_id', courseId)
+      .order('created_at'),
+    supabase.from('course_content_links').select('resource_id').eq('course_id', courseId),
+  ])
+  if (enrolmentError) throw enrolmentError
+  if (itemError) throw itemError
+  if (!enrolments?.length) return []
+
+  const userIds = enrolments.map((row) => row.user_id)
+  const itemIds = [...new Set((items ?? []).map((row) => row.resource_id))]
+  const [{ data: profiles, error: profileError }, progressResult] = await Promise.all([
+    supabase.from('profiles').select('id, full_name, avatar_url').in('id', userIds),
+    itemIds.length
+      ? supabase
+          .from('course_content_progress')
+          .select('content_item_id, user_id, status, updated_at')
+          .in('content_item_id', itemIds)
+          .in('user_id', userIds)
+      : Promise.resolve({ data: [], error: null }),
+  ])
+  if (profileError) throw profileError
+  if (progressResult.error) throw progressResult.error
+
+  const profileById = new Map((profiles ?? []).map((profile) => [profile.id, profile]))
+  const progressByUser = new Map()
+  for (const row of progressResult.data ?? []) {
+    if (row.status === 'not_attempted') continue
+    const current = progressByUser.get(row.user_id) ?? { completed: 0, startedAt: null }
+    if (['completed', 'passed'].includes(row.status)) current.completed += 1
+    if (!current.startedAt || row.updated_at < current.startedAt) current.startedAt = row.updated_at
+    progressByUser.set(row.user_id, current)
+  }
+
+  return enrolments.map((enrolment) => {
+    const progress = progressByUser.get(enrolment.user_id)
+    const status = enrolment.completed_date ? 'complete' : progress ? 'started' : 'enrolled'
+    return {
+      ...enrolment,
+      profile: profileById.get(enrolment.user_id) ?? null,
+      status,
+      percent: itemIds.length ? Math.round(((progress?.completed ?? 0) / itemIds.length) * 100) : 0,
+      startedAt: progress?.startedAt ?? null,
+    }
+  })
+}
+
 // Providers can only list their own organisation's catalogue entries (RLS
 // restricts organisation members to status='approved' rows plus their own
 // org's rows of any status -- filtering by organisation_id here just avoids
