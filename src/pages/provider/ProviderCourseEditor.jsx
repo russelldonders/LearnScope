@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
@@ -55,29 +56,65 @@ const STATUS_LABELS = {
 }
 const MAX_IMAGE_BYTES = COURSE_IMAGE_MAX_INPUT_BYTES
 
-function reorderById(list, draggedId, targetId, idKey) {
+// `side` picks the insertion point relative to a target: 'before' the
+// target's midpoint or 'after' it. Reordering always removes the dragged
+// item first, so an insertion index computed against the *original* list
+// has to shift left by one once the removal point is above it.
+export function reorderById(list, draggedId, targetId, idKey, side = 'before') {
+  if (!targetId || targetId === draggedId) return list
   const fromIndex = list.findIndex((item) => item[idKey] === draggedId)
-  const toIndex = list.findIndex((item) => item[idKey] === targetId)
-  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return list
+  const targetIndex = list.findIndex((item) => item[idKey] === targetId)
+  if (fromIndex < 0 || targetIndex < 0) return list
+  let toIndex = side === 'after' ? targetIndex + 1 : targetIndex
+  if (fromIndex < toIndex) toIndex -= 1
+  if (fromIndex === toIndex) return list
   const reordered = [...list]
   const [dragged] = reordered.splice(fromIndex, 1)
   reordered.splice(toIndex, 0, dragged)
   return reordered
 }
 
-function dropTargetAt(event, itemAttribute, sectionAttribute) {
-  const element = document.elementFromPoint(event.clientX, event.clientY)
-  return {
-    itemId: itemAttribute ? element?.closest(`[${itemAttribute}]`)?.getAttribute(itemAttribute) : null,
-    sectionId: sectionAttribute ? element?.closest(`[${sectionAttribute}]`)?.getAttribute(sectionAttribute) : null,
+function sideOf(element, clientY) {
+  const rect = element.getBoundingClientRect()
+  return clientY < rect.top + rect.height / 2 ? 'before' : 'after'
+}
+
+// Touch dragging previously resolved its drop target with
+// document.elementFromPoint, which on iOS Safari was unreliable for the
+// densely-packed outline rows specifically (it kept resolving back to
+// something that didn't match any tracked row, so the drop-target state
+// never updated and nothing committed on release). Comparing the touch
+// point against each candidate row's own getBoundingClientRect from a ref
+// registry sidesteps elementFromPoint's hit-testing entirely -- the same
+// approach real drag-and-drop libraries use. Falls back to the row whose
+// vertical center is nearest the touch point if it isn't exactly inside
+// any row's box (e.g. a fast drag between rows, or the gap between them).
+function findDropTarget(refsMap, clientX, clientY) {
+  let nearest = null
+  let nearestDistance = Infinity
+  for (const [id, node] of refsMap) {
+    if (!node || !node.isConnected) continue
+    const rect = node.getBoundingClientRect()
+    if (clientX < rect.left || clientX > rect.right) continue
+    if (clientY >= rect.top && clientY <= rect.bottom) {
+      return { id, side: clientY < rect.top + rect.height / 2 ? 'before' : 'after' }
+    }
+    const center = rect.top + rect.height / 2
+    const distance = Math.abs(clientY - center)
+    if (distance < nearestDistance) {
+      nearestDistance = distance
+      nearest = { id, side: clientY < center ? 'before' : 'after' }
+    }
   }
+  return nearest
 }
 
 // Clicking an item in the course outline selects its section (so it renders
 // in SectionCard/UngroupedContent) and needs to then jump the reader's eye
 // to that specific item in what can be a long content list. `token` (not
 // just itemId) makes the effect below re-fire even when the same item is
-// clicked twice in a row.
+// clicked twice in a row. The same node registry doubles as the drop-target
+// registry for reordering (see findDropTarget above).
 function useItemFocusHighlight(focusRequest) {
   const [highlightedItemId, setHighlightedItemId] = useState(null)
   const itemRefs = useRef(new Map())
@@ -99,7 +136,20 @@ function useItemFocusHighlight(focusRequest) {
     }
   }
 
-  return { highlightedItemId, registerItemRef }
+  return { highlightedItemId, registerItemRef, itemRefs }
+}
+
+// A thin insertion-point indicator instead of a box around the whole
+// target row, so a reorder-in-progress shows exactly whether the dragged
+// item will land above or below the row it's hovering.
+function DropLine({ side }) {
+  if (!side) return null
+  return (
+    <div
+      aria-hidden="true"
+      className={`pointer-events-none absolute inset-x-1 h-0.5 rounded-full bg-moss ${side === 'before' ? '-top-px' : '-bottom-px'}`}
+    />
+  )
 }
 
 // Touch dragging is wired through raw touchstart/touchmove/touchend
@@ -213,15 +263,24 @@ export function DragHandle({
           <circle cx="5" cy="12.5" r="1" /><circle cx="11" cy="12.5" r="1" />
         </svg>
       </button>
-      {ghost && dragLabel && (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-[calc(100%+14px)] whitespace-nowrap rounded-md bg-ink text-paper text-xs font-medium px-2.5 py-1.5 shadow-lg"
-          style={{ left: ghost.x, top: ghost.y }}
-        >
-          {dragLabel}
-        </div>
-      )}
+      {ghost &&
+        dragLabel &&
+        createPortal(
+          // Portalled to <body> rather than rendered inline: this used to sit
+          // in the DOM as a descendant of the dragged row itself, so when it
+          // visually overlapped a *different* row under the finger, some drop-
+          // target lookups could resolve back to the dragged row's own
+          // ancestors instead of whatever was actually underneath. Detaching
+          // it removes that possibility entirely.
+          <div
+            aria-hidden="true"
+            className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-[calc(100%+14px)] whitespace-nowrap rounded-md bg-ink text-paper text-xs font-medium px-2.5 py-1.5 shadow-lg"
+            style={{ left: ghost.x, top: ghost.y }}
+          >
+            {dragLabel}
+          </div>,
+          document.body
+        )}
     </>
   )
 }
@@ -601,11 +660,38 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
   const [selectedSectionId, setSelectedSectionId] = useState(null)
   const [focusRequest, setFocusRequest] = useState(null)
   const [draggedSectionId, setDraggedSectionId] = useState(null)
-  const [sectionDropId, setSectionDropId] = useState(null)
+  const [sectionDropTarget, setSectionDropTarget] = useState(null)
   const [draggedOutlineItem, setDraggedOutlineItem] = useState(null)
-  const [outlineItemDropId, setOutlineItemDropId] = useState(null)
+  const [outlineItemDropTarget, setOutlineItemDropTarget] = useState(null)
   // One shared lock prevents overlapping section/resource order writes.
   const [reordering, setReordering] = useState(false)
+  // Registries of rendered row nodes, used to resolve a touch drag's drop
+  // target by comparing the touch point against each row's own
+  // getBoundingClientRect (see findDropTarget) instead of
+  // document.elementFromPoint, which was unreliable here.
+  const sectionNodeRefs = useRef(new Map())
+  const outlineItemNodeRefs = useRef(new Map())
+  function registerSectionNode(id) {
+    return (node) => {
+      if (node) sectionNodeRefs.current.set(id, node)
+      else sectionNodeRefs.current.delete(id)
+    }
+  }
+  function registerOutlineItemNode(id) {
+    return (node) => {
+      if (node) outlineItemNodeRefs.current.set(id, node)
+      else outlineItemNodeRefs.current.delete(id)
+    }
+  }
+  // Items are the finer-grained target -- prefer a hit on a specific item
+  // row over the coarser section row it sits inside.
+  function findOutlineDropTarget(clientX, clientY) {
+    const item = findDropTarget(outlineItemNodeRefs.current, clientX, clientY)
+    if (item) return { type: 'item', ...item }
+    const section = findDropTarget(sectionNodeRefs.current, clientX, clientY)
+    if (section) return { type: 'section', ...section }
+    return null
+  }
 
   useEffect(() => {
     load()
@@ -677,8 +763,8 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
     setFocusRequest({ itemId: item.linkId, token: Date.now() })
   }
 
-  async function commitSectionOrder(draggedId, targetId) {
-    const reordered = reorderById(sections, draggedId, targetId, 'id')
+  async function commitSectionOrder(draggedId, targetId, side = 'before') {
+    const reordered = reorderById(sections, draggedId, targetId, 'id', side)
     if (reordered === sections) return
     const previous = sections
     setSections(reordered.map((section, position) => ({ ...section, position })))
@@ -693,7 +779,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
     } finally {
       setReordering(false)
       setDraggedSectionId(null)
-      setSectionDropId(null)
+      setSectionDropTarget(null)
     }
   }
 
@@ -705,7 +791,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
     if (target) commitSectionOrder(sectionId, target.id)
   }
 
-  async function commitOutlineItemOrder(draggedId, targetSectionId, targetLinkId = null) {
+  async function commitOutlineItemOrder(draggedId, targetSectionId, targetLinkId = null, side = 'before') {
     const dragged = items.find((item) => item.linkId === draggedId)
     if (!dragged) return
     const sourceSectionId = dragged.sectionId
@@ -714,14 +800,16 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
 
     let orderedDestination
     if (sourceSectionId === targetSectionId && targetLinkId) {
-      orderedDestination = reorderById(destinationItems, draggedId, targetLinkId, 'linkId')
+      orderedDestination = reorderById(destinationItems, draggedId, targetLinkId, 'linkId', side)
     } else {
       const withoutDragged = destinationItems.filter((item) => item.linkId !== draggedId)
-      const targetIndex = targetLinkId
+      let targetIndex = targetLinkId
         ? withoutDragged.findIndex((item) => item.linkId === targetLinkId)
         : withoutDragged.length
+      if (targetIndex < 0) targetIndex = withoutDragged.length
+      else if (side === 'after') targetIndex += 1
       orderedDestination = [...withoutDragged]
-      orderedDestination.splice(targetIndex < 0 ? orderedDestination.length : targetIndex, 0, dragged)
+      orderedDestination.splice(targetIndex, 0, dragged)
     }
 
     if (orderedDestination === destinationItems) return
@@ -751,8 +839,8 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
     } finally {
       setReordering(false)
       setDraggedOutlineItem(null)
-      setOutlineItemDropId(null)
-      setSectionDropId(null)
+      setOutlineItemDropTarget(null)
+      setSectionDropTarget(null)
     }
   }
 
@@ -811,21 +899,26 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                 return (
                   <div
                     key={section.id}
+                    ref={registerSectionNode(section.id)}
                     data-outline-section-id={section.id}
                     onDragOver={(event) => {
                       if (!canEdit || (!draggedSectionId && !draggedOutlineItem) || draggedSectionId === section.id) return
                       event.preventDefault()
-                      setSectionDropId(section.id)
+                      setSectionDropTarget({
+                        id: section.id,
+                        side: draggedSectionId ? sideOf(event.currentTarget, event.clientY) : null,
+                      })
                     }}
                     onDrop={(event) => {
                       event.preventDefault()
                       if (draggedOutlineItem) commitOutlineItemOrder(draggedOutlineItem.linkId, section.id)
-                      else if (draggedSectionId) commitSectionOrder(draggedSectionId, section.id)
+                      else if (draggedSectionId) commitSectionOrder(draggedSectionId, section.id, sideOf(event.currentTarget, event.clientY))
                     }}
-                    className={`rounded-md transition-[background-color,box-shadow,opacity] ${
-                      sectionDropId === section.id ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
+                    className={`relative rounded-md transition-[background-color,box-shadow,opacity] ${
+                      sectionDropTarget?.id === section.id && !sectionDropTarget.side ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
                     } ${draggedSectionId === section.id ? 'opacity-40' : ''}`}
                   >
+                    {sectionDropTarget?.id === section.id && <DropLine side={sectionDropTarget.side} />}
                     <div className="flex items-center gap-1">
                       {canEdit && (
                         <DragHandle
@@ -839,7 +932,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                           }}
                           onDragEnd={() => {
                             setDraggedSectionId(null)
-                            setSectionDropId(null)
+                            setSectionDropTarget(null)
                           }}
                           onKeyDown={(event) => handleSectionKeyDown(event, section.id)}
                           onPointerDragStart={() => {
@@ -847,19 +940,21 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                             setDraggedOutlineItem(null)
                           }}
                           onPointerDragMove={(event) => {
-                            const { sectionId } = dropTargetAt(event, null, 'data-outline-section-id')
-                            if (sectionId && sectionId !== section.id) setSectionDropId(sectionId)
+                            const hit = findOutlineDropTarget(event.clientX, event.clientY)
+                            if (hit?.type === 'section' && hit.id !== section.id) {
+                              setSectionDropTarget({ id: hit.id, side: hit.side })
+                            }
                           }}
                           onPointerDragEnd={() => {
-                            // Re-deriving the drop target from the touch-end coordinate
-                            // (a second document.elementFromPoint call, at a slightly
-                            // different moment/position than the one that painted the
-                            // highlight during the drag) was unreliable on iOS -- trust
-                            // the already-tracked, already-visible highlight instead.
-                            if (sectionDropId && sectionDropId !== section.id) commitSectionOrder(section.id, sectionDropId)
-                            else {
+                            // Trust the drop-target state the drag already
+                            // highlighted (from findOutlineDropTarget, resolved via
+                            // each row's own getBoundingClientRect) rather than
+                            // re-deriving it a second time at touch-end.
+                            if (sectionDropTarget && sectionDropTarget.id !== section.id) {
+                              commitSectionOrder(section.id, sectionDropTarget.id, sectionDropTarget.side ?? 'before')
+                            } else {
                               setDraggedSectionId(null)
-                              setSectionDropId(null)
+                              setSectionDropTarget(null)
                             }
                           }}
                         />
@@ -884,23 +979,27 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                         {sectionItems.map((item) => (
                           <li
                             key={item.linkId}
+                            ref={registerOutlineItemNode(item.linkId)}
                             data-outline-item-id={item.linkId}
                             onDragOver={(event) => {
                               if (!canEdit || !draggedOutlineItem || draggedOutlineItem.linkId === item.linkId) return
                               event.preventDefault()
                               event.stopPropagation()
-                              setOutlineItemDropId(item.linkId)
-                              setSectionDropId(null)
+                              setOutlineItemDropTarget({ id: item.linkId, side: sideOf(event.currentTarget, event.clientY) })
+                              setSectionDropTarget(null)
                             }}
                             onDrop={(event) => {
                               event.preventDefault()
                               event.stopPropagation()
-                              if (draggedOutlineItem) commitOutlineItemOrder(draggedOutlineItem.linkId, section.id, item.linkId)
+                              if (draggedOutlineItem) {
+                                commitOutlineItemOrder(draggedOutlineItem.linkId, section.id, item.linkId, sideOf(event.currentTarget, event.clientY))
+                              }
                             }}
-                            className={`flex min-w-0 items-center gap-1 rounded py-0.5 pr-1 transition-[background-color,box-shadow,opacity] ${
-                              outlineItemDropId === item.linkId ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
-                            } ${draggedOutlineItem?.linkId === item.linkId ? 'opacity-40' : ''}`}
+                            className={`relative flex min-w-0 items-center gap-1 rounded py-0.5 pr-1 transition-[background-color,opacity] ${
+                              draggedOutlineItem?.linkId === item.linkId ? 'opacity-40' : ''
+                            }`}
                           >
+                            {outlineItemDropTarget?.id === item.linkId && <DropLine side={outlineItemDropTarget.side} />}
                             {canEdit && (
                               <DragHandle
                                 label={`Move ${item.title}`}
@@ -915,8 +1014,8 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                                 }}
                                 onDragEnd={() => {
                                   setDraggedOutlineItem(null)
-                                  setOutlineItemDropId(null)
-                                  setSectionDropId(null)
+                                  setOutlineItemDropTarget(null)
+                                  setSectionDropTarget(null)
                                 }}
                                 onKeyDown={(event) => handleOutlineItemKeyDown(event, item)}
                                 onPointerDragStart={() => {
@@ -924,35 +1023,34 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                                   setDraggedSectionId(null)
                                 }}
                                 onPointerDragMove={(event) => {
-                                  const target = dropTargetAt(event, 'data-outline-item-id', 'data-outline-section-id')
-                                  if (target.itemId && target.itemId !== item.linkId) {
-                                    setOutlineItemDropId(target.itemId)
-                                    setSectionDropId(null)
-                                  } else if (target.sectionId) {
-                                    setOutlineItemDropId(null)
-                                    setSectionDropId(target.sectionId)
+                                  const hit = findOutlineDropTarget(event.clientX, event.clientY)
+                                  if (hit?.type === 'item' && hit.id !== item.linkId) {
+                                    setOutlineItemDropTarget({ id: hit.id, side: hit.side })
+                                    setSectionDropTarget(null)
+                                  } else if (hit?.type === 'section') {
+                                    setOutlineItemDropTarget(null)
+                                    setSectionDropTarget({ id: hit.id, side: null })
                                   }
                                 }}
                                 onPointerDragEnd={() => {
                                   // Trust the drop-target state the drag already
                                   // highlighted, rather than a second
-                                  // document.elementFromPoint call at the touch-end
-                                  // coordinate (unreliable on iOS -- see the section
-                                  // handle's onPointerDragEnd above).
-                                  if (outlineItemDropId && outlineItemDropId !== item.linkId) {
-                                    const targetItem = items.find((candidate) => candidate.linkId === outlineItemDropId)
-                                    if (targetItem) commitOutlineItemOrder(item.linkId, targetItem.sectionId, outlineItemDropId)
-                                    else {
+                                  // findDropTarget call at touch-end.
+                                  if (outlineItemDropTarget && outlineItemDropTarget.id !== item.linkId) {
+                                    const targetItem = items.find((candidate) => candidate.linkId === outlineItemDropTarget.id)
+                                    if (targetItem) {
+                                      commitOutlineItemOrder(item.linkId, targetItem.sectionId, outlineItemDropTarget.id, outlineItemDropTarget.side)
+                                    } else {
                                       setDraggedOutlineItem(null)
-                                      setOutlineItemDropId(null)
-                                      setSectionDropId(null)
+                                      setOutlineItemDropTarget(null)
+                                      setSectionDropTarget(null)
                                     }
-                                  } else if (sectionDropId) {
-                                    commitOutlineItemOrder(item.linkId, sectionDropId === 'ungrouped' ? null : sectionDropId)
+                                  } else if (sectionDropTarget) {
+                                    commitOutlineItemOrder(item.linkId, sectionDropTarget.id === 'ungrouped' ? null : sectionDropTarget.id)
                                   } else {
                                     setDraggedOutlineItem(null)
-                                    setOutlineItemDropId(null)
-                                    setSectionDropId(null)
+                                    setOutlineItemDropTarget(null)
+                                    setSectionDropTarget(null)
                                   }
                                 }}
                               />
@@ -973,18 +1071,19 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
               })}
               {ungroupedItems.length > 0 && (
                 <div
+                  ref={registerSectionNode('ungrouped')}
                   data-outline-section-id="ungrouped"
                   onDragOver={(event) => {
                     if (!canEdit || !draggedOutlineItem) return
                     event.preventDefault()
-                    setSectionDropId('ungrouped')
+                    setSectionDropTarget({ id: 'ungrouped', side: null })
                   }}
                   onDrop={(event) => {
                     event.preventDefault()
                     if (draggedOutlineItem) commitOutlineItemOrder(draggedOutlineItem.linkId, null)
                   }}
-                  className={`rounded-md transition-[background-color,box-shadow] ${
-                    sectionDropId === 'ungrouped' ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
+                  className={`relative rounded-md transition-[background-color,box-shadow] ${
+                    sectionDropTarget?.id === 'ungrouped' && !sectionDropTarget.side ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
                   }`}
                 >
                   <button
@@ -1005,23 +1104,27 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                     {ungroupedItems.map((item) => (
                       <li
                         key={item.linkId}
+                        ref={registerOutlineItemNode(item.linkId)}
                         data-outline-item-id={item.linkId}
                         onDragOver={(event) => {
                           if (!canEdit || !draggedOutlineItem || draggedOutlineItem.linkId === item.linkId) return
                           event.preventDefault()
                           event.stopPropagation()
-                          setOutlineItemDropId(item.linkId)
-                          setSectionDropId(null)
+                          setOutlineItemDropTarget({ id: item.linkId, side: sideOf(event.currentTarget, event.clientY) })
+                          setSectionDropTarget(null)
                         }}
                         onDrop={(event) => {
                           event.preventDefault()
                           event.stopPropagation()
-                          if (draggedOutlineItem) commitOutlineItemOrder(draggedOutlineItem.linkId, null, item.linkId)
+                          if (draggedOutlineItem) {
+                            commitOutlineItemOrder(draggedOutlineItem.linkId, null, item.linkId, sideOf(event.currentTarget, event.clientY))
+                          }
                         }}
-                        className={`flex min-w-0 items-center gap-1 rounded py-0.5 pr-1 transition-[background-color,box-shadow,opacity] ${
-                          outlineItemDropId === item.linkId ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
-                        } ${draggedOutlineItem?.linkId === item.linkId ? 'opacity-40' : ''}`}
+                        className={`relative flex min-w-0 items-center gap-1 rounded py-0.5 pr-1 transition-[background-color,opacity] ${
+                          draggedOutlineItem?.linkId === item.linkId ? 'opacity-40' : ''
+                        }`}
                       >
+                        {outlineItemDropTarget?.id === item.linkId && <DropLine side={outlineItemDropTarget.side} />}
                         {canEdit && (
                           <DragHandle
                             label={`Move ${item.title}`}
@@ -1036,8 +1139,8 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                             }}
                             onDragEnd={() => {
                               setDraggedOutlineItem(null)
-                              setOutlineItemDropId(null)
-                              setSectionDropId(null)
+                              setOutlineItemDropTarget(null)
+                              setSectionDropTarget(null)
                             }}
                             onKeyDown={(event) => handleOutlineItemKeyDown(event, item)}
                             onPointerDragStart={() => {
@@ -1045,30 +1148,31 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                               setDraggedSectionId(null)
                             }}
                             onPointerDragMove={(event) => {
-                              const target = dropTargetAt(event, 'data-outline-item-id', 'data-outline-section-id')
-                              if (target.itemId && target.itemId !== item.linkId) {
-                                setOutlineItemDropId(target.itemId)
-                                setSectionDropId(null)
-                              } else if (target.sectionId) {
-                                setOutlineItemDropId(null)
-                                setSectionDropId(target.sectionId)
+                              const hit = findOutlineDropTarget(event.clientX, event.clientY)
+                              if (hit?.type === 'item' && hit.id !== item.linkId) {
+                                setOutlineItemDropTarget({ id: hit.id, side: hit.side })
+                                setSectionDropTarget(null)
+                              } else if (hit?.type === 'section') {
+                                setOutlineItemDropTarget(null)
+                                setSectionDropTarget({ id: hit.id, side: null })
                               }
                             }}
                             onPointerDragEnd={() => {
-                              if (outlineItemDropId && outlineItemDropId !== item.linkId) {
-                                const targetItem = items.find((candidate) => candidate.linkId === outlineItemDropId)
-                                if (targetItem) commitOutlineItemOrder(item.linkId, targetItem.sectionId, outlineItemDropId)
-                                else {
+                              if (outlineItemDropTarget && outlineItemDropTarget.id !== item.linkId) {
+                                const targetItem = items.find((candidate) => candidate.linkId === outlineItemDropTarget.id)
+                                if (targetItem) {
+                                  commitOutlineItemOrder(item.linkId, targetItem.sectionId, outlineItemDropTarget.id, outlineItemDropTarget.side)
+                                } else {
                                   setDraggedOutlineItem(null)
-                                  setOutlineItemDropId(null)
-                                  setSectionDropId(null)
+                                  setOutlineItemDropTarget(null)
+                                  setSectionDropTarget(null)
                                 }
-                              } else if (sectionDropId) {
-                                commitOutlineItemOrder(item.linkId, sectionDropId === 'ungrouped' ? null : sectionDropId)
+                              } else if (sectionDropTarget) {
+                                commitOutlineItemOrder(item.linkId, sectionDropTarget.id === 'ungrouped' ? null : sectionDropTarget.id)
                               } else {
                                 setDraggedOutlineItem(null)
-                                setOutlineItemDropId(null)
-                                setSectionDropId(null)
+                                setOutlineItemDropTarget(null)
+                                setSectionDropTarget(null)
                               }
                             }}
                           />
@@ -1189,8 +1293,8 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [draggedItemId, setDraggedItemId] = useState(null)
-  const [itemDropId, setItemDropId] = useState(null)
-  const { highlightedItemId, registerItemRef } = useItemFocusHighlight(focusRequest)
+  const [itemDropTarget, setItemDropTarget] = useState(null)
+  const { highlightedItemId, registerItemRef, itemRefs } = useItemFocusHighlight(focusRequest)
 
   async function handleDetach(item) {
     setBusy(true)
@@ -1205,8 +1309,8 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
     }
   }
 
-  async function commitItemOrder(draggedId, targetId) {
-    const reordered = reorderById(items, draggedId, targetId, 'linkId')
+  async function commitItemOrder(draggedId, targetId, side = 'before') {
+    const reordered = reorderById(items, draggedId, targetId, 'linkId', side)
     if (reordered === items) return
     setReordering(true)
     setError(null)
@@ -1218,7 +1322,7 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
     } finally {
       setReordering(false)
       setDraggedItemId(null)
-      setItemDropId(null)
+      setItemDropTarget(null)
     }
   }
 
@@ -1249,16 +1353,17 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
             onDragOver={(event) => {
               if (!canEdit || !draggedItemId || draggedItemId === item.linkId) return
               event.preventDefault()
-              setItemDropId(item.linkId)
+              setItemDropTarget({ id: item.linkId, side: sideOf(event.currentTarget, event.clientY) })
             }}
             onDrop={(event) => {
               event.preventDefault()
-              if (draggedItemId) commitItemOrder(draggedItemId, item.linkId)
+              if (draggedItemId) commitItemOrder(draggedItemId, item.linkId, sideOf(event.currentTarget, event.clientY))
             }}
-            className={`p-2 text-sm transition-[background-color,box-shadow,opacity] ${
-              itemDropId === item.linkId || highlightedItemId === item.linkId ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
+            className={`relative p-2 text-sm transition-[background-color,box-shadow,opacity] ${
+              highlightedItemId === item.linkId ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
             } ${draggedItemId === item.linkId ? 'opacity-40' : ''}`}
           >
+            {itemDropTarget?.id === item.linkId && <DropLine side={itemDropTarget.side} />}
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-1">
                 {canEdit && (
@@ -1273,19 +1378,20 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
                     }}
                     onDragEnd={() => {
                       setDraggedItemId(null)
-                      setItemDropId(null)
+                      setItemDropTarget(null)
                     }}
                     onKeyDown={(event) => handleItemKeyDown(event, item.linkId)}
                     onPointerDragStart={() => setDraggedItemId(item.linkId)}
                     onPointerDragMove={(event) => {
-                      const { itemId } = dropTargetAt(event, 'data-content-item-id', null)
-                      if (itemId && itemId !== item.linkId) setItemDropId(itemId)
+                      const hit = findDropTarget(itemRefs.current, event.clientX, event.clientY)
+                      if (hit && hit.id !== item.linkId) setItemDropTarget(hit)
                     }}
                     onPointerDragEnd={() => {
-                      if (itemDropId && itemDropId !== item.linkId) commitItemOrder(item.linkId, itemDropId)
-                      else {
+                      if (itemDropTarget && itemDropTarget.id !== item.linkId) {
+                        commitItemOrder(item.linkId, itemDropTarget.id, itemDropTarget.side)
+                      } else {
                         setDraggedItemId(null)
-                        setItemDropId(null)
+                        setItemDropTarget(null)
                       }
                     }}
                   />
@@ -1382,8 +1488,8 @@ function SectionCard({
   const [recordedFileName, setRecordedFileName] = useState('')
   const [webUrl, setWebUrl] = useState('')
   const [draggedItemId, setDraggedItemId] = useState(null)
-  const [itemDropId, setItemDropId] = useState(null)
-  const { highlightedItemId, registerItemRef } = useItemFocusHighlight(focusRequest)
+  const [itemDropTarget, setItemDropTarget] = useState(null)
+  const { highlightedItemId, registerItemRef, itemRefs } = useItemFocusHighlight(focusRequest)
   const fileInputRef = useRef(null)
 
   function setRecordedFile(file) {
@@ -1456,8 +1562,8 @@ function SectionCard({
     }
   }
 
-  async function commitItemOrder(draggedId, targetId) {
-    const reordered = reorderById(items, draggedId, targetId, 'linkId')
+  async function commitItemOrder(draggedId, targetId, side = 'before') {
+    const reordered = reorderById(items, draggedId, targetId, 'linkId', side)
     if (reordered === items) return
     setReordering(true)
     setError(null)
@@ -1469,7 +1575,7 @@ function SectionCard({
     } finally {
       setReordering(false)
       setDraggedItemId(null)
-      setItemDropId(null)
+      setItemDropTarget(null)
     }
   }
 
@@ -1587,16 +1693,17 @@ function SectionCard({
               onDragOver={(event) => {
                 if (!canEdit || !draggedItemId || draggedItemId === item.linkId) return
                 event.preventDefault()
-                setItemDropId(item.linkId)
+                setItemDropTarget({ id: item.linkId, side: sideOf(event.currentTarget, event.clientY) })
               }}
               onDrop={(event) => {
                 event.preventDefault()
-                if (draggedItemId) commitItemOrder(draggedItemId, item.linkId)
+                if (draggedItemId) commitItemOrder(draggedItemId, item.linkId, sideOf(event.currentTarget, event.clientY))
               }}
-              className={`p-2 text-sm transition-[background-color,box-shadow,opacity] ${
-                itemDropId === item.linkId || highlightedItemId === item.linkId ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
+              className={`relative p-2 text-sm transition-[background-color,box-shadow,opacity] ${
+                highlightedItemId === item.linkId ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
               } ${draggedItemId === item.linkId ? 'opacity-40' : ''}`}
             >
+              {itemDropTarget?.id === item.linkId && <DropLine side={itemDropTarget.side} />}
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-1">
                   {canEdit && (
@@ -1611,19 +1718,20 @@ function SectionCard({
                       }}
                       onDragEnd={() => {
                         setDraggedItemId(null)
-                        setItemDropId(null)
+                        setItemDropTarget(null)
                       }}
                       onKeyDown={(event) => handleItemKeyDown(event, item.linkId)}
                       onPointerDragStart={() => setDraggedItemId(item.linkId)}
                       onPointerDragMove={(event) => {
-                        const { itemId } = dropTargetAt(event, 'data-content-item-id', null)
-                        if (itemId && itemId !== item.linkId) setItemDropId(itemId)
+                        const hit = findDropTarget(itemRefs.current, event.clientX, event.clientY)
+                        if (hit && hit.id !== item.linkId) setItemDropTarget(hit)
                       }}
                       onPointerDragEnd={() => {
-                        if (itemDropId && itemDropId !== item.linkId) commitItemOrder(item.linkId, itemDropId)
-                        else {
+                        if (itemDropTarget && itemDropTarget.id !== item.linkId) {
+                          commitItemOrder(item.linkId, itemDropTarget.id, itemDropTarget.side)
+                        } else {
                           setDraggedItemId(null)
-                          setItemDropId(null)
+                          setItemDropTarget(null)
                         }
                       }}
                     />
