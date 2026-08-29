@@ -95,15 +95,25 @@ export function DragHandle({
 }) {
   const buttonRef = useRef(null)
   const draggingRef = useRef(false)
+  // The outline nav holds its dragged-item/drop-target state on the parent
+  // CourseSections component itself, so every touchmove-driven setState
+  // re-renders its whole section/item tree (unlike the smaller, self-
+  // contained SectionCard in the main pane) and hands this component fresh
+  // onPointerDrag* closures on every one of those renders. Keeping those in
+  // a ref -- instead of the effect's dependency array -- means the touch
+  // listeners are attached once and read the latest callback rather than
+  // being torn down and re-attached mid-gesture, which on iOS Safari was
+  // dropping the in-flight touch and making outline items never pick up.
+  const callbacksRef = useRef({})
+  callbacksRef.current = { onPointerDragStart, onPointerDragMove, onPointerDragEnd, onDragEnd }
 
   useEffect(() => {
     const button = buttonRef.current
-    if (!button) return
+    if (!button || disabled) return
 
     function handleTouchStart(event) {
-      if (disabled) return
       draggingRef.current = true
-      onPointerDragStart?.(event)
+      callbacksRef.current.onPointerDragStart?.(event)
     }
 
     function handleTouchMove(event) {
@@ -113,20 +123,20 @@ export function DragHandle({
       if (!touch) return
       if (touch.clientY < 72) window.scrollBy({ top: -16, behavior: 'auto' })
       else if (touch.clientY > window.innerHeight - 72) window.scrollBy({ top: 16, behavior: 'auto' })
-      onPointerDragMove?.({ clientX: touch.clientX, clientY: touch.clientY })
+      callbacksRef.current.onPointerDragMove?.({ clientX: touch.clientX, clientY: touch.clientY })
     }
 
     function handleTouchEnd(event) {
       if (!draggingRef.current) return
       draggingRef.current = false
       const touch = event.changedTouches[0]
-      onPointerDragEnd?.(touch ? { clientX: touch.clientX, clientY: touch.clientY } : { clientX: -1, clientY: -1 })
+      callbacksRef.current.onPointerDragEnd?.(touch ? { clientX: touch.clientX, clientY: touch.clientY } : { clientX: -1, clientY: -1 })
     }
 
     function handleTouchCancel() {
       if (!draggingRef.current) return
       draggingRef.current = false
-      onDragEnd?.()
+      callbacksRef.current.onDragEnd?.()
     }
 
     button.addEventListener('touchstart', handleTouchStart, { passive: true })
@@ -139,7 +149,7 @@ export function DragHandle({
       button.removeEventListener('touchend', handleTouchEnd)
       button.removeEventListener('touchcancel', handleTouchCancel)
     }
-  }, [disabled, onPointerDragStart, onPointerDragMove, onPointerDragEnd, onDragEnd])
+  }, [disabled])
 
   return (
     <button
