@@ -57,7 +57,9 @@ async function loadCurrentLearning(userId) {
 // from a connection with no activity to show.
 async function loadConnectionsActivity() {
   try {
-    return { data: await listConnectionsActivity(5), error: null }
+    // Fetch beyond the five visible rows so several related skill events can
+    // collapse without leaving the feed unexpectedly sparse.
+    return { data: await listConnectionsActivity(30), error: null }
   } catch (err) {
     return { data: [], error: err.message || 'Something went wrong.' }
   }

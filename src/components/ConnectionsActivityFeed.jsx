@@ -8,31 +8,62 @@ import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 // independently privacy-checked server-side and shouldn't need extra trust.
 export function describeActivityEvent(event) {
   const level = event.level ? LEVEL_LABELS[event.level] : null
+  const additionalSkills = (event.skills?.length ?? 1) - 1
+  const skillLabel = additionalSkills > 0
+    ? `${event.skill_name} and ${additionalSkills} other ${additionalSkills === 1 ? 'skill' : 'skills'}`
+    : event.skill_name
   switch (event.event_type) {
     case 'skill_confirmed':
-      return `confirmed ${level ?? 'a level'} in ${event.skill_name}`
+      return `confirmed ${level ?? 'a level'} in ${skillLabel}`
     case 'skill_validated':
-      return `had ${event.skill_name} validated at ${level ?? 'their target level'}`
+      return `had ${skillLabel} validated at ${level ?? 'their target level'}`
     case 'skill_added':
-      return `started tracking ${event.skill_name}`
+      return `started tracking ${skillLabel}`
     case 'experience_added':
       return `added ${event.detail}`
     case 'course_started':
       return `started ${event.detail}`
     case 'target_set':
-      return `set a target of ${level ?? 'a new level'} for ${event.skill_name}`
+      return `set a target of ${level ?? 'a new level'} for ${skillLabel}`
     default:
       return null
   }
+}
+
+function groupConnectionsActivity(events) {
+  const groups = []
+  const groupByKey = new Map()
+
+  for (const event of events) {
+    if (!event.skill_name) {
+      groups.push({ ...event, skills: [] })
+      continue
+    }
+
+    const key = JSON.stringify([event.actor_id, event.event_type, event.level ?? null, event.detail ?? null])
+    const existing = groupByKey.get(key)
+    if (existing && !existing.skills.includes(event.skill_name)) {
+      existing.skills.push(event.skill_name)
+      continue
+    }
+
+    const group = { ...event, skills: [event.skill_name] }
+    groups.push(group)
+    if (!existing) groupByKey.set(key, group)
+  }
+
+  return groups
 }
 
 // Shared by Dashboard.jsx ("What your connections are up to", aggregated
 // across every connection) and SkillsProfile.jsx (scoped to just the one
 // person being viewed) -- same event shape either way, so one rendering.
 export default function ConnectionsActivityFeed({ events }) {
+  const groupedEvents = groupConnectionsActivity(events).slice(0, 5)
+
   return (
     <div className="space-y-2">
-      {events.map((event, i) => {
+      {groupedEvents.map((event, i) => {
         const description = describeActivityEvent(event)
         if (!description) return null
         return (
