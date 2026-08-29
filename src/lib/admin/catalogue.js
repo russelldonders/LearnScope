@@ -1,6 +1,7 @@
 import { supabase } from '../supabaseClient'
 
-const ADMIN_CATALOGUE_SELECT = '*, organisations(id, name)'
+const ADMIN_CATALOGUE_SELECT = `*, organisations(id, name),
+  course_catalogue_publications(catalogue_id, published_at, catalogues(id, name, is_global))`
 
 // Unlike src/lib/courseCatalogue.js's listCatalogueCourses (learner-facing,
 // approved-only), this surfaces every status -- RLS still applies (a
@@ -222,6 +223,14 @@ export async function getCatalogueCourse(id) {
 
 export async function approveCatalogueCourse(id) {
   const { error } = await supabase.rpc('publish_course_version', { p_course_id: id })
+  if (error) throw error
+}
+
+export async function submitCatalogueCourseForApproval(id, catalogueIds) {
+  const { error } = await supabase.rpc('submit_course_for_publication', {
+    p_course_id: id,
+    p_catalogue_ids: catalogueIds,
+  })
   if (error) throw error
 }
 

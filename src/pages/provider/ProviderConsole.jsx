@@ -8,12 +8,19 @@ import ProviderSkillsSection from '../../components/ProviderSkillsSection'
 import OrganisationSettingsModal from '../../components/OrganisationSettingsModal'
 import AccessibleDialog from '../../components/AccessibleDialog'
 import ProgressBar from '../../components/ProgressBar'
+import {
+  createProviderCatalogue,
+  deleteProviderCatalogue,
+  listProviderCatalogues,
+  updateProviderCatalogue,
+} from '../../lib/catalogues'
 import { listOrganisations } from '../../lib/admin/organisations'
 import {
   listOrganisationCatalogueCourses,
   createProviderCourse,
   listCourseParticipants,
   listCourseVersionHistory,
+  createDraftCourseVersion,
 } from '../../lib/admin/catalogue'
 
 const STATUS_LABELS = {
@@ -26,6 +33,7 @@ const STATUS_LABELS = {
 
 const SECTIONS = [
   { key: 'training', label: 'Training' },
+  { key: 'catalogues', label: 'Catalogues', adminOnly: true },
   { key: 'skills', label: 'Skills' },
   { key: 'staff', label: 'Users', adminOnly: true },
   { key: 'resources', label: 'Resources' },
@@ -65,7 +73,7 @@ export default function ProviderConsole() {
   // Guards against a stale 'staff' tab surviving a switch to an org where
   // the current user isn't an admin (staff isn't in that org's own tab
   // bar, but activeSection state persists across the org switch).
-  const currentSection = activeSection === 'staff' && myRole !== 'admin' ? 'training' : activeSection
+  const currentSection = (activeSection === 'staff' || activeSection === 'catalogues') && myRole !== 'admin' ? 'training' : activeSection
 
   useEffect(() => {
     reloadOrganisations().finally(() => setLoading(false))
@@ -175,6 +183,9 @@ export default function ProviderConsole() {
                 {currentSection === 'skills' && (
                   <ProviderSkillsSection key={selectedOrg.id} organisationId={selectedOrg.id} userId={user.id} />
                 )}
+                {currentSection === 'catalogues' && myRole === 'admin' && (
+                  <ProviderCataloguesSection key={selectedOrg.id} organisation={selectedOrg} userId={user.id} />
+                )}
                 {currentSection === 'staff' && myRole === 'admin' && (
                   <OrganisationStaffPanel key={selectedOrg.id} organisation={selectedOrg} />
                 )}
@@ -200,6 +211,118 @@ export default function ProviderConsole() {
   )
 }
 
+function ProviderCataloguesSection({ organisation, userId }) {
+  const [catalogues, setCatalogues] = useState([])
+  const [form, setForm] = useState({ name: '', description: '' })
+  const [editingId, setEditingId] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    load()
+  }, [organisation.id])
+
+  async function load() {
+    setLoading(true)
+    setError(null)
+    try {
+      setCatalogues(await listProviderCatalogues(organisation.id))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+    if (!form.name.trim()) return
+    setSaving(true)
+    setError(null)
+    try {
+      if (editingId) await updateProviderCatalogue(editingId, form)
+      else await createProviderCatalogue(userId, organisation.id, form)
+      setForm({ name: '', description: '' })
+      setEditingId(null)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete(catalogue) {
+    if (!window.confirm(`Delete “${catalogue.name}”? Courses will no longer be published through this catalogue.`)) return
+    setError(null)
+    try {
+      await deleteProviderCatalogue(catalogue.id)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  return (
+    <section aria-labelledby="provider-catalogues-heading">
+      <div className="mb-5">
+        <h2 id="provider-catalogues-heading" className="font-display text-lg text-ink">Provider catalogues</h2>
+        <p className="text-sm text-secondary mt-1 max-w-2xl">
+          Organise published training into named collections. Your catalogues and the platform-managed Global catalogue are available whenever a course is submitted.
+        </p>
+      </div>
+
+      {error && <p role="alert" className="text-sm text-red-700 mb-4">{error}</p>}
+
+      <form onSubmit={handleSubmit} className="bg-card border border-hairline rounded-lg p-4 mb-6">
+        <h3 className="text-sm font-medium text-ink mb-3">{editingId ? 'Edit catalogue' : 'Create a catalogue'}</h3>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <label className="text-xs text-secondary">
+            Name
+            <input required value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} className="mt-1 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
+          </label>
+          <label className="text-xs text-secondary">
+            Description (optional)
+            <input value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} className="mt-1 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
+          </label>
+        </div>
+        <div className="flex gap-2 mt-3">
+          <button disabled={saving || !form.name.trim()} className="rounded-md bg-moss px-3 py-1.5 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-50">
+            {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create catalogue'}
+          </button>
+          {editingId && (
+            <button type="button" onClick={() => { setEditingId(null); setForm({ name: '', description: '' }) }} className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink hover:bg-paper">Cancel</button>
+          )}
+        </div>
+      </form>
+
+      {loading ? (
+        <p role="status" className="text-sm text-secondary">Loading catalogues…</p>
+      ) : catalogues.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-hairline py-10 text-center">
+          <p className="text-sm text-secondary">No provider catalogues yet.</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-hairline border-y border-hairline">
+          {catalogues.map((catalogue) => (
+            <div key={catalogue.id} className="flex items-start justify-between gap-4 py-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-ink">{catalogue.name}</p>
+                {catalogue.description && <p className="text-xs text-secondary mt-1">{catalogue.description}</p>}
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <button type="button" onClick={() => { setEditingId(catalogue.id); setForm({ name: catalogue.name, description: catalogue.description ?? '' }) }} className="text-xs font-medium text-moss hover:underline">Edit</button>
+                <button type="button" onClick={() => handleDelete(catalogue)} className="text-xs font-medium text-red-700 hover:underline">Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
 function ProviderTrainingSection({ organisation, userId, canViewParticipants }) {
   const navigate = useNavigate()
   const [courses, setCourses] = useState([])
@@ -210,6 +333,7 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
   const [creating, setCreating] = useState(false)
   const [participantCourse, setParticipantCourse] = useState(null)
   const [historyCourse, setHistoryCourse] = useState(null)
+  const [creatingDraftCourseId, setCreatingDraftCourseId] = useState(null)
 
   useEffect(() => {
     load()
@@ -242,6 +366,23 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
       setError(err.message)
     } finally {
       setCreating(false)
+    }
+  }
+
+  async function handleEditCourse(course) {
+    if (course.status !== 'approved') {
+      navigate(`/provider/training/${course.id}`)
+      return
+    }
+
+    setCreatingDraftCourseId(course.id)
+    setError(null)
+    try {
+      const draftId = await createDraftCourseVersion(course.id)
+      navigate(`/provider/training/${draftId}`)
+    } catch (err) {
+      setError(`Couldn’t create a new course version. ${err.message}`)
+      setCreatingDraftCourseId(null)
     }
   }
 
@@ -352,6 +493,8 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
               canViewParticipants={canViewParticipants}
               onViewParticipants={() => setParticipantCourse(course)}
               onViewHistory={() => setHistoryCourse(course)}
+              onEdit={() => handleEditCourse(course)}
+              creatingDraft={creatingDraftCourseId === course.id}
             />
           ))}
         </div>
@@ -371,8 +514,9 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
 // course's own page (ProviderCourseEditor), the same way AdminUserDetail/
 // AdminSkillDetail moved their consoles' inline expansions onto dedicated
 // pages once there was more than a form's worth of detail to show.
-function CourseCard({ course, canViewParticipants, onViewParticipants, onViewHistory }) {
+function CourseCard({ course, canViewParticipants, onViewParticipants, onViewHistory, onEdit, creatingDraft }) {
   const editable = course.status === 'draft' || course.status === 'rejected'
+  const canStartEditing = editable || course.status === 'approved'
   return (
     <article className="bg-card border border-hairline rounded-lg p-3 hover:border-moss/60 transition-colors">
       <div className="flex items-center justify-between gap-3">
@@ -389,9 +533,20 @@ function CourseCard({ course, canViewParticipants, onViewParticipants, onViewHis
         <p className="text-xs text-red-700 mt-1">Rejected: {course.rejection_reason}</p>
       )}
       <div className="mt-2 flex items-center gap-3">
-        <Link to={`/provider/training/${course.id}`} className="text-xs font-medium text-moss hover:underline">
-          {editable ? 'Edit course' : 'View course'}
-        </Link>
+        {canStartEditing ? (
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={creatingDraft}
+            className="text-xs font-medium text-moss hover:underline disabled:cursor-wait disabled:opacity-60"
+          >
+            {creatingDraft ? 'Creating new version…' : 'Edit course'}
+          </button>
+        ) : (
+          <Link to={`/provider/training/${course.id}`} className="text-xs font-medium text-moss hover:underline">
+            View course
+          </Link>
+        )}
         <button type="button" onClick={onViewHistory} className="text-xs font-medium text-moss hover:underline">
           Version history
         </button>
