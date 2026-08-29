@@ -85,6 +85,7 @@ function dropTargetAt(event, itemAttribute, sectionAttribute) {
 // below, untouched.
 export function DragHandle({
   label,
+  dragLabel,
   disabled,
   onDragStart,
   onDragEnd,
@@ -95,6 +96,12 @@ export function DragHandle({
 }) {
   const buttonRef = useRef(null)
   const draggingRef = useRef(false)
+  // Touch dragging had no visual feedback at all -- the only cue was the
+  // drop target lighting up once you were already over it, so a drag in
+  // progress was easy to miss. This floating label follows the finger the
+  // same way a native HTML5 drag image would for mouse (which gets one for
+  // free from the browser); touch never did, since we drive it ourselves.
+  const [ghost, setGhost] = useState(null)
   // The outline nav holds its dragged-item/drop-target state on the parent
   // CourseSections component itself, so every touchmove-driven setState
   // re-renders its whole section/item tree (unlike the smaller, self-
@@ -113,6 +120,8 @@ export function DragHandle({
 
     function handleTouchStart(event) {
       draggingRef.current = true
+      const touch = event.touches[0]
+      if (touch) setGhost({ x: touch.clientX, y: touch.clientY })
       callbacksRef.current.onPointerDragStart?.(event)
     }
 
@@ -123,12 +132,14 @@ export function DragHandle({
       if (!touch) return
       if (touch.clientY < 72) window.scrollBy({ top: -16, behavior: 'auto' })
       else if (touch.clientY > window.innerHeight - 72) window.scrollBy({ top: 16, behavior: 'auto' })
+      setGhost({ x: touch.clientX, y: touch.clientY })
       callbacksRef.current.onPointerDragMove?.({ clientX: touch.clientX, clientY: touch.clientY })
     }
 
     function handleTouchEnd(event) {
       if (!draggingRef.current) return
       draggingRef.current = false
+      setGhost(null)
       const touch = event.changedTouches[0]
       callbacksRef.current.onPointerDragEnd?.(touch ? { clientX: touch.clientX, clientY: touch.clientY } : { clientX: -1, clientY: -1 })
     }
@@ -136,6 +147,7 @@ export function DragHandle({
     function handleTouchCancel() {
       if (!draggingRef.current) return
       draggingRef.current = false
+      setGhost(null)
       callbacksRef.current.onDragEnd?.()
     }
 
@@ -152,24 +164,35 @@ export function DragHandle({
   }, [disabled])
 
   return (
-    <button
-      ref={buttonRef}
-      type="button"
-      draggable={!disabled}
-      disabled={disabled}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      onKeyDown={onKeyDown}
-      aria-label={`${label}. Drag to reorder, or use the arrow keys.`}
-      title="Drag to reorder"
-      className="inline-flex h-11 w-11 md:h-7 md:w-7 shrink-0 touch-none cursor-grab items-center justify-center rounded-md text-secondary hover:bg-paper hover:text-ink focus:outline-none focus:ring-2 focus:ring-moss active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
-    >
-      <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
-        <circle cx="5" cy="3.5" r="1" /><circle cx="11" cy="3.5" r="1" />
-        <circle cx="5" cy="8" r="1" /><circle cx="11" cy="8" r="1" />
-        <circle cx="5" cy="12.5" r="1" /><circle cx="11" cy="12.5" r="1" />
-      </svg>
-    </button>
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        draggable={!disabled}
+        disabled={disabled}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onKeyDown={onKeyDown}
+        aria-label={`${label}. Drag to reorder, or use the arrow keys.`}
+        title="Drag to reorder"
+        className="inline-flex h-11 w-11 md:h-7 md:w-7 shrink-0 touch-none cursor-grab items-center justify-center rounded-md text-secondary hover:bg-paper hover:text-ink focus:outline-none focus:ring-2 focus:ring-moss active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+          <circle cx="5" cy="3.5" r="1" /><circle cx="11" cy="3.5" r="1" />
+          <circle cx="5" cy="8" r="1" /><circle cx="11" cy="8" r="1" />
+          <circle cx="5" cy="12.5" r="1" /><circle cx="11" cy="12.5" r="1" />
+        </svg>
+      </button>
+      {ghost && dragLabel && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-[calc(100%+14px)] whitespace-nowrap rounded-md bg-ink text-paper text-xs font-medium px-2.5 py-1.5 shadow-lg"
+          style={{ left: ghost.x, top: ghost.y }}
+        >
+          {dragLabel}
+        </div>
+      )}
+    </>
   )
 }
 
@@ -773,14 +796,15 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                       if (draggedOutlineItem) commitOutlineItemOrder(draggedOutlineItem.linkId, section.id)
                       else if (draggedSectionId) commitSectionOrder(draggedSectionId, section.id)
                     }}
-                    className={`rounded-md transition-[background-color,box-shadow] ${
+                    className={`rounded-md transition-[background-color,box-shadow,opacity] ${
                       sectionDropId === section.id ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
-                    }`}
+                    } ${draggedSectionId === section.id ? 'opacity-40' : ''}`}
                   >
                     <div className="flex items-center gap-1">
                       {canEdit && (
                         <DragHandle
                           label={`Reorder ${section.title}`}
+                          dragLabel={section.title}
                           disabled={reordering}
                           onDragStart={(event) => {
                             event.dataTransfer.effectAllowed = 'move'
@@ -843,13 +867,14 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                               event.stopPropagation()
                               if (draggedOutlineItem) commitOutlineItemOrder(draggedOutlineItem.linkId, section.id, item.linkId)
                             }}
-                            className={`flex min-w-0 items-center gap-1 rounded py-0.5 pr-1 transition-[background-color,box-shadow] ${
+                            className={`flex min-w-0 items-center gap-1 rounded py-0.5 pr-1 transition-[background-color,box-shadow,opacity] ${
                               outlineItemDropId === item.linkId ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
-                            }`}
+                            } ${draggedOutlineItem?.linkId === item.linkId ? 'opacity-40' : ''}`}
                           >
                             {canEdit && (
                               <DragHandle
                                 label={`Move ${item.title}`}
+                                dragLabel={item.title}
                                 disabled={reordering}
                                 onDragStart={(event) => {
                                   event.stopPropagation()
@@ -948,13 +973,14 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                           event.stopPropagation()
                           if (draggedOutlineItem) commitOutlineItemOrder(draggedOutlineItem.linkId, null, item.linkId)
                         }}
-                        className={`flex min-w-0 items-center gap-1 rounded py-0.5 pr-1 transition-[background-color,box-shadow] ${
+                        className={`flex min-w-0 items-center gap-1 rounded py-0.5 pr-1 transition-[background-color,box-shadow,opacity] ${
                           outlineItemDropId === item.linkId ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
-                        }`}
+                        } ${draggedOutlineItem?.linkId === item.linkId ? 'opacity-40' : ''}`}
                       >
                         {canEdit && (
                           <DragHandle
                             label={`Move ${item.title}`}
+                            dragLabel={item.title}
                             disabled={reordering}
                             onDragStart={(event) => {
                               event.stopPropagation()
@@ -1115,15 +1141,16 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
               event.preventDefault()
               if (draggedItemId) commitItemOrder(draggedItemId, item.linkId)
             }}
-            className={`p-2 text-sm transition-[background-color,box-shadow] ${
+            className={`p-2 text-sm transition-[background-color,box-shadow,opacity] ${
               itemDropId === item.linkId ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
-            }`}
+            } ${draggedItemId === item.linkId ? 'opacity-40' : ''}`}
           >
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-1">
                 {canEdit && (
                   <DragHandle
                     label={`Reorder ${item.title}`}
+                    dragLabel={item.title}
                     disabled={busy || reordering}
                     onDragStart={(event) => {
                       event.dataTransfer.effectAllowed = 'move'
@@ -1450,15 +1477,16 @@ function SectionCard({
                 event.preventDefault()
                 if (draggedItemId) commitItemOrder(draggedItemId, item.linkId)
               }}
-              className={`p-2 text-sm transition-[background-color,box-shadow] ${
+              className={`p-2 text-sm transition-[background-color,box-shadow,opacity] ${
                 itemDropId === item.linkId ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
-              }`}
+              } ${draggedItemId === item.linkId ? 'opacity-40' : ''}`}
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-1">
                   {canEdit && (
                     <DragHandle
                       label={`Reorder ${item.title}`}
+                      dragLabel={item.title}
                       disabled={busy || reordering}
                       onDragStart={(event) => {
                         event.dataTransfer.effectAllowed = 'move'
