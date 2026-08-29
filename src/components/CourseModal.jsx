@@ -7,18 +7,15 @@ import { formatMonthYear } from '../lib/dates'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { SKILL_RELATIONSHIPS, SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
 import { COURSE_TYPES } from '../lib/courseTypes'
-import { activityName, verbLabel, relatedSkillFromStatement, formatDuration } from '../lib/xapiStatement'
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import GrowthRing from './GrowthRing'
 import AccessibleDialog from './AccessibleDialog'
 import EvidenceFields from './EvidenceFields'
-import RecordActivityModal from './RecordActivityModal'
 import ConfirmDialog from './ConfirmDialog'
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'skills', label: 'Skills' },
-  { id: 'activities', label: 'Activities' },
   { id: 'details', label: 'Details' },
 ]
 
@@ -48,7 +45,6 @@ export default function CourseModal({
   const [linkedExperiences, setLinkedExperiences] = useState([])
   const [skillLinks, setSkillLinks] = useState([])
   const [achievements, setAchievements] = useState([])
-  const [statements, setStatements] = useState([])
   const [learningLoaded, setLearningLoaded] = useState(false)
 
   useEffect(() => {
@@ -57,7 +53,7 @@ export default function CourseModal({
   }, [])
 
   async function loadLearning() {
-    const [{ data: el }, { data: sl }, { data: ach }, { data: st }] = await Promise.all([
+    const [{ data: el }, { data: sl }, { data: ach }] = await Promise.all([
       supabase
         .from('course_experience_links')
         .select('id, experience_id, experience(id, title, organization, type)')
@@ -72,17 +68,10 @@ export default function CourseModal({
         .select('*, skills(name)')
         .eq('course_id', course.id)
         .order('assessed_at', { ascending: false }),
-      supabase
-        .from('xapi_statements')
-        .select('*')
-        .eq('course_id', course.id)
-        .eq('user_id', user.id)
-        .order('recorded_at', { ascending: false }),
     ])
     setLinkedExperiences(el ?? [])
     setSkillLinks(sl ?? [])
     setAchievements(ach ?? [])
-    setStatements(st ?? [])
     setLearningLoaded(true)
   }
 
@@ -276,7 +265,6 @@ export default function CourseModal({
             linkedExperiences={linkedExperiences}
             skillLinks={skillLinks}
             achievements={achievements}
-            statements={statements}
             loaded={learningLoaded}
           />
         )}
@@ -305,16 +293,6 @@ export default function CourseModal({
           </div>
         )}
 
-        {isEditing && tab === 'activities' && (
-          <ActivitiesSubsection
-            course={course}
-            skills={skills}
-            statements={statements}
-            onChange={loadLearning}
-            user={user}
-          />
-        )}
-
       {confirmingDelete && (
         <ConfirmDialog
           message={`Delete "${course.name}"? This can't be undone.`}
@@ -327,7 +305,7 @@ export default function CourseModal({
   )
 }
 
-function OverviewTab({ course, linkedExperiences, skillLinks, achievements, statements, loaded }) {
+function OverviewTab({ course, linkedExperiences, skillLinks, achievements, loaded }) {
   if (!loaded) return <p className="text-sm text-secondary">Loading…</p>
 
   const grouped = []
@@ -401,28 +379,6 @@ function OverviewTab({ course, linkedExperiences, skillLinks, achievements, stat
                   ({new Date(a.assessed_at).toLocaleDateString()})
                 </span>
                 {a.comments && <p className="text-xs text-secondary mt-0.5">{a.comments}</p>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <div>
-        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">Activities</h4>
-        {statements.length === 0 ? (
-          <p className="text-sm text-secondary">Nothing recorded yet.</p>
-        ) : (
-          <ul className="space-y-1">
-            {statements.map((s) => (
-              <li key={s.id} className="text-sm text-ink">
-                <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
-                  {verbLabel(s.statement)}
-                </span>{' '}
-                {activityName(s.statement)}{' '}
-                <span className="font-mono text-xs text-secondary">
-                  ({new Date(s.recorded_at).toLocaleDateString()}
-                  {formatDuration(s.statement) ? ` · ${formatDuration(s.statement)}` : ''})
-                </span>
               </li>
             ))}
           </ul>
@@ -927,116 +883,3 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
   )
 }
 
-function ActivitiesSubsection({ course, skills, statements, onChange, user }) {
-  const [actorName, setActorName] = useState('')
-  const [modalOpen, setModalOpen] = useState(false)
-  const [error, setError] = useState(null)
-  const [pendingDeleteId, setPendingDeleteId] = useState(null)
-  const [deleting, setDeleting] = useState(false)
-
-  useEffect(() => {
-    supabase
-      .from('profiles')
-      .select('full_name')
-      .eq('id', user.id)
-      .single()
-      .then(({ data }) => setActorName(data?.full_name ?? ''))
-  }, [])
-
-  async function handleSave(statement) {
-    const { error } = await supabase.from('xapi_statements').insert({
-      user_id: user.id,
-      statement,
-      recorded_at: statement.timestamp,
-      course_id: course.id,
-    })
-    if (error) throw error
-    setModalOpen(false)
-    await onChange()
-  }
-
-  async function confirmDelete() {
-    setDeleting(true)
-    const { error } = await supabase.from('xapi_statements').delete().eq('id', pendingDeleteId)
-    if (error) setError(error.message)
-    else await onChange()
-    setDeleting(false)
-    setPendingDeleteId(null)
-  }
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary">Activities</h4>
-        <button
-          type="button"
-          onClick={() => setModalOpen(true)}
-          className="text-xs text-moss font-medium"
-        >
-          + Record activity
-        </button>
-      </div>
-
-      {statements.length === 0 ? (
-        <p className="text-sm text-secondary">Nothing recorded yet for this course.</p>
-      ) : (
-        <ul className="space-y-2">
-          {statements.map((s) => {
-            const relatedSkill = relatedSkillFromStatement(s.statement)
-            return (
-              <li key={s.id} className="bg-paper border border-hairline rounded-md px-3 py-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-sm text-ink">
-                      <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
-                        {verbLabel(s.statement)}
-                      </span>{' '}
-                      {activityName(s.statement)}
-                    </p>
-                    <p className="font-mono text-xs text-secondary mt-0.5">
-                      {new Date(s.recorded_at).toLocaleDateString()}
-                      {formatDuration(s.statement) ? ` · ${formatDuration(s.statement)}` : ''}
-                      {relatedSkill ? ` · ${relatedSkill.name}` : ''}
-                    </p>
-                    {s.statement.object?.definition?.description?.['en-US'] && (
-                      <p className="text-sm text-ink mt-1">
-                        {s.statement.object.definition.description['en-US']}
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setPendingDeleteId(s.id)}
-                    className="shrink-0 text-xs text-red-700 font-medium"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-      {error && <p className="text-sm text-red-700 mt-2">{error}</p>}
-
-      {modalOpen && (
-        <RecordActivityModal
-          actor={{ name: actorName, email: user.email }}
-          skills={skills}
-          relatedCourse={{ id: course.id, name: course.name }}
-          onSave={handleSave}
-          onClose={() => setModalOpen(false)}
-        />
-      )}
-
-      {pendingDeleteId && (
-        <ConfirmDialog
-          message="Delete this recorded activity? This can't be undone."
-          onConfirm={confirmDelete}
-          onCancel={() => setPendingDeleteId(null)}
-          confirming={deleting}
-        />
-      )}
-    </div>
-  )
-}

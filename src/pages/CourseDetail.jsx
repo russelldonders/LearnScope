@@ -6,13 +6,11 @@ import { getCatalogueCourse } from '../lib/courseCatalogue'
 import { listLibrarySkills } from '../lib/skillLibrary'
 import { LEVEL_LABELS } from '../lib/levels'
 import { SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
-import { activityName, verbLabel, formatDuration } from '../lib/xapiStatement'
 import { computeCourseUpNextItems } from '../lib/courseNextAction'
 import { listCourseProgressByCatalogueId } from '../lib/courseContent'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import CourseModal from '../components/CourseModal'
-import RecordActivityModal from '../components/RecordActivityModal'
 import ProgressBar from '../components/ProgressBar'
 
 export default function CourseDetail() {
@@ -27,11 +25,9 @@ export default function CourseDetail() {
   const [catalogueCourse, setCatalogueCourse] = useState(null)
   const [skillLinks, setSkillLinks] = useState([])
   const [achievements, setAchievements] = useState([])
-  const [statements, setStatements] = useState([])
   const [linkedExperiences, setLinkedExperiences] = useState([])
   const [allSkills, setAllSkills] = useState([])
   const [librarySkills, setLibrarySkills] = useState([])
-  const [assessorName, setAssessorName] = useState('')
   const [contentProgress, setContentProgress] = useState(null)
 
   const [loading, setLoading] = useState(true)
@@ -41,7 +37,6 @@ export default function CourseDetail() {
 
   const [editOpen, setEditOpen] = useState(false)
   const [editTab, setEditTab] = useState('overview')
-  const [recordActivityOpen, setRecordActivityOpen] = useState(false)
 
   useEffect(() => {
     load()
@@ -66,11 +61,9 @@ export default function CourseDetail() {
     const [
       { data: links },
       { data: ach },
-      { data: st },
       { data: el },
       { data: mySkills },
       library,
-      { data: profile },
       catalogue,
       progressByCatalogueId,
     ] = await Promise.all([
@@ -84,29 +77,20 @@ export default function CourseDetail() {
         .eq('course_id', id)
         .order('assessed_at', { ascending: false }),
       supabase
-        .from('xapi_statements')
-        .select('*')
-        .eq('course_id', id)
-        .eq('user_id', user.id)
-        .order('recorded_at', { ascending: false }),
-      supabase
         .from('course_experience_links')
         .select('id, experience(id, title, organization, type)')
         .eq('course_id', id),
       supabase.from('skills').select('id, name').eq('user_id', user.id).order('name'),
       listLibrarySkills(),
-      supabase.from('profiles').select('full_name').eq('id', user.id).single(),
       data.catalogue_course_id ? getCatalogueCourse(data.catalogue_course_id) : Promise.resolve(null),
       listCourseProgressByCatalogueId([data.catalogue_course_id], user.id),
     ])
 
     setSkillLinks((links ?? []).filter((l) => l.skills))
     setAchievements(ach ?? [])
-    setStatements(st ?? [])
     setLinkedExperiences((el ?? []).filter((l) => l.experience))
     setAllSkills(mySkills ?? [])
     setLibrarySkills(library)
-    setAssessorName(profile?.full_name || user.email)
     setCatalogueCourse(catalogue)
     setContentProgress(progressByCatalogueId[data.catalogue_course_id] ?? null)
     setLoading(false)
@@ -139,34 +123,20 @@ export default function CourseDetail() {
     navigate(backTo, { state: { tab: 'learning' } })
   }
 
-  async function handleRecordActivity(statement) {
-    const { error } = await supabase.from('xapi_statements').insert({
-      user_id: user.id,
-      statement,
-      recorded_at: statement.timestamp,
-      course_id: id,
-    })
-    if (error) throw error
-    setRecordActivityOpen(false)
-    await load()
-  }
-
   function openEdit(tab) {
     setEditTab(tab)
     setEditOpen(true)
   }
 
-  const events = [
-    ...achievements.map((a) => ({ type: 'achievement', date: a.assessed_at, achievement: a })),
-    ...statements.map((s) => ({ type: 'activity', date: s.recorded_at, statement: s })),
-  ].sort((a, b) => new Date(b.date) - new Date(a.date))
+  const events = [...achievements]
+    .map((a) => ({ date: a.assessed_at, achievement: a }))
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
 
   const upNextItems = course
     ? computeCourseUpNextItems({
         course,
         skillLinksCount: skillLinks.length,
         achievementsCount: achievements.length,
-        statementsCount: statements.length,
       })
     : []
 
@@ -239,7 +209,7 @@ export default function CourseDetail() {
               to={`/courses/${id}/learn`}
               className="inline-block mt-4 rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
             >
-              {statements.length > 0 || achievements.length > 0 ? 'Continue learning' : 'Start learning'} →
+              {contentProgress?.completed > 0 || achievements.length > 0 ? 'Continue learning' : 'Start learning'} →
             </Link>
 
             {catalogueCourse?.synopsis && <p className="text-sm text-ink mt-4">{catalogueCourse.synopsis}</p>}
@@ -272,17 +242,15 @@ export default function CourseDetail() {
               </div>
             )}
 
-            <div className="grid grid-cols-3 gap-3 mt-6">
+            <div className="grid grid-cols-2 gap-3 mt-6">
               <StatTile label="Skills linked" value={skillLinks.length} />
               <StatTile label="Achievements" value={achievements.length} />
-              <StatTile label="Activities logged" value={statements.length} />
             </div>
 
             <CourseUpNextSection
               items={upNextItems}
               onLinkSkills={() => openEdit('skills')}
               onRecordAchievement={() => openEdit('skills')}
-              onLogActivity={() => setRecordActivityOpen(true)}
               onFinish={handleFinish}
               finishing={finishing}
             />
@@ -313,17 +281,13 @@ export default function CourseDetail() {
             )}
 
             <div className="mt-8">
-              <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Activity</h4>
+              <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Achievements</h4>
               {events.length === 0 ? (
                 <p className="text-sm text-secondary">Nothing recorded yet.</p>
               ) : (
                 <div>
                   {events.map((event, i) => (
-                    <CourseTimelineEntry
-                      key={event.achievement?.id ?? event.statement?.id}
-                      event={event}
-                      isLast={i === events.length - 1}
-                    />
+                    <CourseTimelineEntry key={event.achievement.id} event={event} isLast={i === events.length - 1} />
                   ))}
                 </div>
               )}
@@ -353,16 +317,6 @@ export default function CourseDetail() {
             }}
           />
         )}
-
-        {recordActivityOpen && course && (
-          <RecordActivityModal
-            actor={{ name: assessorName, email: user.email }}
-            skills={allSkills}
-            relatedCourse={{ id: course.id, name: course.name }}
-            onSave={handleRecordActivity}
-            onClose={() => setRecordActivityOpen(false)}
-          />
-        )}
       </main>
     </div>
   )
@@ -380,13 +334,12 @@ function StatTile({ label, value }) {
 // Same "Up Next" checklist box shell as SkillDetail.jsx's UpNextSection --
 // a course's lifecycle is much simpler (in progress vs. completed) so there's
 // no locking between items, just what's still worth doing.
-function CourseUpNextSection({ items, onLinkSkills, onRecordAchievement, onLogActivity, onFinish, finishing }) {
+function CourseUpNextSection({ items, onLinkSkills, onRecordAchievement, onFinish, finishing }) {
   if (items.length === 0) return null
 
   const handlers = {
     'link-skills': onLinkSkills,
     'record-achievement': onRecordAchievement,
-    'log-activity': onLogActivity,
     finish: onFinish,
   }
 
@@ -467,39 +420,19 @@ function SkillsDevelopedList({ skillLinks }) {
 }
 
 function CourseTimelineEntry({ event, isLast }) {
-  if (event.type === 'achievement') {
-    const a = event.achievement
-    return (
-      <div className="flex gap-3">
-        <div className="flex flex-col items-center w-12 shrink-0">
-          <GrowthRing level={a.level} size={32} />
-          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
-        </div>
-        <div className="min-w-0 flex-1 mb-4 rounded-md border border-hairline bg-paper p-3">
-          <p className="text-sm font-medium text-ink">
-            {a.skills?.name} <span className="text-secondary font-normal">· {LEVEL_LABELS[a.level]}</span>
-          </p>
-          <p className="font-mono text-xs text-secondary mt-0.5">{new Date(a.assessed_at).toLocaleDateString()}</p>
-          {a.comments && <p className="text-sm text-ink mt-1">{a.comments}</p>}
-        </div>
-      </div>
-    )
-  }
-
-  const s = event.statement
+  const a = event.achievement
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center w-12 shrink-0">
-        <span className="w-1.5 h-1.5 rounded-full bg-secondary/40 shrink-0 mt-1.5" />
+        <GrowthRing level={a.level} size={32} />
         {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
       </div>
-      <div className="min-w-0 flex-1 mb-4 flex items-center gap-2 text-xs text-secondary">
-        <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">{verbLabel(s.statement)}</span>
-        <span className="truncate min-w-0">{activityName(s.statement)}</span>
-        <span className="font-mono text-[10px] text-secondary/70 shrink-0">
-          {new Date(s.recorded_at).toLocaleDateString()}
-          {formatDuration(s.statement) ? ` · ${formatDuration(s.statement)}` : ''}
-        </span>
+      <div className="min-w-0 flex-1 mb-4 rounded-md border border-hairline bg-paper p-3">
+        <p className="text-sm font-medium text-ink">
+          {a.skills?.name} <span className="text-secondary font-normal">· {LEVEL_LABELS[a.level]}</span>
+        </p>
+        <p className="font-mono text-xs text-secondary mt-0.5">{new Date(a.assessed_at).toLocaleDateString()}</p>
+        {a.comments && <p className="text-sm text-ink mt-1">{a.comments}</p>}
       </div>
     </div>
   )
