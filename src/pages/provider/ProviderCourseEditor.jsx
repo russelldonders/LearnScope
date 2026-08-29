@@ -37,6 +37,7 @@ import {
   contentFileUrl,
 } from '../../lib/courseContent'
 import { optimizeCourseImage, COURSE_IMAGE_MAX_INPUT_BYTES } from '../../lib/optimizeImage'
+import { useIsDesktop } from '../../lib/device'
 
 const TYPE_LABELS = {
   video: 'Video',
@@ -142,25 +143,6 @@ function ItemPreviewChevron({ open }) {
       <polyline points="6 9 12 15 18 9" />
     </svg>
   )
-}
-
-// Below md, an item's preview opens inline in the outline (an accordion
-// under its own row) instead of the side pane that's still used at md+ --
-// this needs to be a real JS breakpoint check, not just CSS visibility,
-// because whichever one *isn't* showing must not mount at all: an SCORM/
-// xAPI player can fire its own launch/tracking calls just from mounting,
-// so a display:none copy sitting in the DOM would double those up.
-function useIsDesktop() {
-  const [isDesktop, setIsDesktop] = useState(
-    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches
-  )
-  useEffect(() => {
-    const mql = window.matchMedia('(min-width: 768px)')
-    const handleChange = (event) => setIsDesktop(event.matches)
-    mql.addEventListener('change', handleChange)
-    return () => mql.removeEventListener('change', handleChange)
-  }, [])
-  return isDesktop
 }
 
 // Touch dragging is wired through raw touchstart/touchmove/touchend
