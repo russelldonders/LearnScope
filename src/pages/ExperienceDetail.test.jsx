@@ -24,7 +24,12 @@ vi.mock('../lib/experienceSkillRecommendations', () => ({
   addRecommendedSkills,
 }))
 
-import { ExperienceActionButtons, getExperienceTabs, SkillsSubsection } from './ExperienceDetail'
+import {
+  buildExperienceSkillProgress,
+  ExperienceActionButtons,
+  getExperienceTabs,
+  SkillsSubsection,
+} from './ExperienceDetail'
 
 const item = {
   id: 'experience-1',
@@ -143,5 +148,55 @@ describe('experience tabs', () => {
         (tab) => tab.id,
       ),
     ).toEqual(['overview', 'skills'])
+  })
+})
+
+describe('experience skill progress', () => {
+  const skillLink = {
+    skill_id: 'skill-1',
+    skills: { id: 'skill-1', name: 'Product Strategy', level: 5 },
+  }
+  const assessments = [
+    { id: 'before', skill_id: 'skill-1', level: 1, assessed_at: '2019-11-01T09:00:00Z' },
+    { id: 'start', skill_id: 'skill-1', level: 2, assessed_at: '2020-01-01T09:00:00Z' },
+    { id: 'growth', skill_id: 'skill-1', level: 3, assessed_at: '2021-06-15T09:00:00Z' },
+    { id: 'exit', skill_id: 'skill-1', level: 4, assessed_at: '2022-12-01T09:00:00Z' },
+    { id: 'later', skill_id: 'skill-1', level: 5, assessed_at: '2024-02-01T09:00:00Z' },
+  ]
+
+  it('uses the level at role start and the current level for an open role', () => {
+    const progress = buildExperienceSkillProgress(
+      skillLink,
+      assessments,
+      { start_date: '2020-01-01', end_date: null },
+      new Date('2021-12-31T12:00:00Z'),
+    )
+
+    expect(progress.entryLevel).toBe(2)
+    expect(progress.endLevel).toBe(5)
+    expect(progress.endLabel).toBe('Current level')
+    expect(progress.duringRole.map((entry) => entry.id)).toEqual(['start', 'growth'])
+  })
+
+  it('uses the last assessment before an ended role finished and excludes later history', () => {
+    const progress = buildExperienceSkillProgress(skillLink, assessments, {
+      start_date: '2020-01-01',
+      end_date: '2022-12-31',
+    })
+
+    expect(progress.entryLevel).toBe(2)
+    expect(progress.endLevel).toBe(4)
+    expect(progress.endLabel).toBe('When role ended')
+    expect(progress.duringRole.map((entry) => entry.id)).toEqual(['start', 'growth', 'exit'])
+  })
+
+  it('does not invent an entry level when no assessment existed at role start', () => {
+    const progress = buildExperienceSkillProgress(skillLink, assessments.slice(2), {
+      start_date: '2020-01-01',
+      end_date: '2022-12-31',
+    })
+
+    expect(progress.entryLevel).toBeNull()
+    expect(progress.endLevel).toBe(4)
   })
 })
