@@ -40,7 +40,7 @@ async function countRows(table, userId) {
 async function loadCurrentLearning(userId) {
   const { data, error } = await supabase
     .from('courses')
-    .select('id, name, provider, course_type, duration')
+    .select('id, name, provider, course_type, duration, course_catalogue(image_url, organisations(logo_url))')
     .eq('user_id', userId)
     .is('completed_date', null)
     .order('created_at', { ascending: false })
@@ -840,11 +840,17 @@ function CurrentLearningPanel({ courses }) {
       {courses.map((course) => (
         <Link
           key={course.id}
-          to={`/courses/${course.id}`}
+          to={`/courses/${course.id}/learn`}
           state={{ backTo: '/dashboard', backLabel: 'Dashboard' }}
           className="bg-card border border-hairline rounded-lg overflow-hidden hover:border-moss transition-colors"
         >
-          <CourseThumbnail name={course.name} provider={course.provider} className="h-20 w-full" />
+          <CourseThumbnail
+            name={course.name}
+            provider={course.provider}
+            imageUrl={course.course_catalogue?.image_url}
+            logoUrl={course.course_catalogue?.organisations?.logo_url}
+            className="h-20 w-full"
+          />
           <div className="p-3">
             <h3 className="font-display text-base text-ink truncate">{course.name}</h3>
             <p className="font-mono text-xs text-secondary mt-1 truncate">

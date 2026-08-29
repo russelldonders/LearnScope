@@ -24,6 +24,11 @@ export default function CourseModal({
   skills,
   librarySkills,
   initialTab = 'overview',
+  // True for a learner managing their own freeform (non-catalogue) course:
+  // only the plain details fields + delete, none of the provider/creator-
+  // only skill-linking or achievement-recording (see CourseDetail.jsx and
+  // CourseLearn.jsx's canManage checks).
+  restricted = false,
   onRefreshPickerData,
   onSave,
   onDelete,
@@ -48,7 +53,7 @@ export default function CourseModal({
   const [learningLoaded, setLearningLoaded] = useState(false)
 
   useEffect(() => {
-    if (!isEditing) return
+    if (!isEditing || restricted) return
     loadLearning()
   }, [])
 
@@ -121,7 +126,7 @@ export default function CourseModal({
           {isEditing ? course.name : 'Add a course'}
         </h2>
 
-        {isEditing && (
+        {isEditing && !restricted && (
           <div className="flex items-center gap-1 border-b border-hairline mb-4">
             {TABS.map((t) => (
               <button
@@ -140,7 +145,7 @@ export default function CourseModal({
           </div>
         )}
 
-        {(!isEditing || tab === 'details') && (
+        {(!isEditing || restricted || tab === 'details') && (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="courseName">
@@ -259,7 +264,7 @@ export default function CourseModal({
           </form>
         )}
 
-        {isEditing && tab === 'overview' && (
+        {isEditing && !restricted && tab === 'overview' && (
           <OverviewTab
             course={course}
             linkedExperiences={linkedExperiences}
@@ -269,7 +274,7 @@ export default function CourseModal({
           />
         )}
 
-        {isEditing && tab === 'skills' && (
+        {isEditing && !restricted && tab === 'skills' && (
           <div className="space-y-8">
             <SkillsDevelopedSubsection
               course={course}
