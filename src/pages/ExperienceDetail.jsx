@@ -47,6 +47,12 @@ const TABS = [
   { id: 'skills', label: 'Skills' },
 ]
 
+export function getExperienceTabs(item, linkedCourses) {
+  return TABS.filter(
+    (tab) => tab.id !== 'courses' || (!item.parent_experience_id && linkedCourses.length > 0)
+  )
+}
+
 export default function ExperienceDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -59,6 +65,7 @@ export default function ExperienceDetail() {
   const [linkedCourses, setLinkedCourses] = useState([])
   const [skillLinks, setSkillLinks] = useState([])
   const [achievements, setAchievements] = useState([])
+  const [skillHistory, setSkillHistory] = useState([])
   const [learningLoaded, setLearningLoaded] = useState(false)
   const [childExperiences, setChildExperiences] = useState([])
   const [parentExperience, setParentExperience] = useState(null)
@@ -82,6 +89,10 @@ export default function ExperienceDetail() {
       loadRelated()
     }
   }, [item?.id])
+
+  useEffect(() => {
+    if (learningLoaded && tab === 'courses' && linkedCourses.length === 0) setTab('overview')
+  }, [learningLoaded, linkedCourses.length, tab])
 
   async function loadItem() {
     setLoadingItem(true)
@@ -108,7 +119,7 @@ export default function ExperienceDetail() {
         .eq('experience_id', item.id),
       supabase
         .from('skill_experience_links')
-        .select('id, skill_id, skills(id, name)')
+        .select('id, skill_id, skills(id, name, level)')
         .eq('experience_id', item.id)
         .order('created_at'),
       supabase
@@ -117,9 +128,19 @@ export default function ExperienceDetail() {
         .eq('experience_id', item.id)
         .order('assessed_at', { ascending: false }),
     ])
+    const skillIds = (sl ?? []).map((link) => link.skill_id)
+    const { data: history } = skillIds.length
+      ? await supabase
+          .from('skill_assessments')
+          .select('id, skill_id, level, axis, source, comments, assessed_at')
+          .in('skill_id', skillIds)
+          .eq('axis', 'practical')
+          .order('assessed_at', { ascending: true })
+      : { data: [] }
     setLinkedCourses(cl ?? [])
     setSkillLinks(sl ?? [])
     setAchievements(ach ?? [])
+    setSkillHistory(history ?? [])
     setLearningLoaded(true)
   }
 
@@ -299,7 +320,7 @@ export default function ExperienceDetail() {
             )}
 
             <div className="flex items-center gap-1 border-b border-hairline mt-4 mb-4 overflow-x-auto">
-              {TABS.filter((t) => t.id !== 'courses' || !item.parent_experience_id).map((t) => (
+              {getExperienceTabs(item, linkedCourses).map((t) => (
                 <button
                   key={t.id}
                   type="button"
@@ -320,6 +341,7 @@ export default function ExperienceDetail() {
                 item={item}
                 linkedCourses={linkedCourses}
                 skillLinks={skillLinks}
+                skillHistory={skillHistory}
                 achievements={achievements}
                 childExperiences={childExperiences}
                 loaded={learningLoaded}
@@ -578,7 +600,7 @@ function DetailsTab({ item, onSave, onDelete }) {
   )
 }
 
-function OverviewTab({ item, linkedCourses, skillLinks, achievements, childExperiences, loaded }) {
+function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievements, childExperiences, loaded }) {
   const navigate = useNavigate()
   if (!loaded) return <p className="text-sm text-secondary">Loading…</p>
 
@@ -630,15 +652,129 @@ function OverviewTab({ item, linkedCourses, skillLinks, achievements, childExper
         {skillLinks.length === 0 ? (
           <p className="text-sm text-secondary">No skills linked yet.</p>
         ) : (
-          <ul className="space-y-1">
-            {skillLinks.map((l) => (
-              <li key={l.skill_id} className="text-sm text-ink">
-                {l.skills?.name}
-              </li>
-            ))}
-          </ul>
+          <SkillDevelopmentList item={item} skillLinks={skillLinks} assessments={skillHistory} />
         )}
       </div>
+    </div>
+  )
+}
+
+function dateKey(value) {
+  return value ? new Date(value).toISOString().slice(0, 10) : null
+}
+
+export function buildExperienceSkillProgress(skillLink, assessments, item, today = new Date()) {
+  const startDate = dateKey(item.start_date)
+  const endDate = dateKey(item.end_date ?? today)
+  const rows = assessments
+    .filter((entry) => entry.skill_id === skillLink.skill_id && entry.level)
+    .sort((a, b) => dateKey(a.assessed_at).localeCompare(dateKey(b.assessed_at)))
+  const entryAssessment = [...rows].reverse().find((entry) => dateKey(entry.assessed_at) <= startDate)
+  const duringRole = rows.filter((entry) => {
+    const assessedDate = dateKey(entry.assessed_at)
+    return assessedDate >= startDate && assessedDate <= endDate
+  })
+  const exitAssessment = item.end_date
+    ? [...rows].reverse().find((entry) => dateKey(entry.assessed_at) <= endDate)
+    : null
+
+  return {
+    entryLevel: entryAssessment?.level ?? null,
+    endLevel: item.end_date ? (exitAssessment?.level ?? null) : (skillLink.skills?.level ?? null),
+    endLabel: item.end_date ? 'When role ended' : 'Current level',
+    duringRole,
+  }
+}
+
+export function getDevelopedSkills(skillLinks, assessments, item, today = new Date()) {
+  return skillLinks
+    .map((link) => ({ link, progress: buildExperienceSkillProgress(link, assessments, item, today) }))
+    .filter(({ progress }) => progress.entryLevel && progress.endLevel > progress.entryLevel)
+}
+
+function SkillDevelopmentList({ item, skillLinks, assessments }) {
+  const [expandedSkillId, setExpandedSkillId] = useState(null)
+  const developedSkills = getDevelopedSkills(skillLinks, assessments, item)
+
+  if (developedSkills.length === 0) {
+    return <p className="text-sm text-secondary">No measured skill growth during this experience yet.</p>
+  }
+
+  return (
+    <ul className="overflow-hidden rounded-md border border-hairline divide-y divide-hairline">
+      {developedSkills.map(({ link, progress }) => {
+        const expanded = expandedSkillId === link.skill_id
+        return (
+          <li key={link.skill_id} className="bg-paper/40">
+            <button
+              type="button"
+              aria-expanded={expanded}
+              onClick={() => setExpandedSkillId(expanded ? null : link.skill_id)}
+              className="w-full p-3 text-left hover:bg-paper transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moss focus-visible:ring-inset"
+            >
+              <span className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-ink">{link.skills?.name}</span>
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  className={`h-4 w-4 shrink-0 text-secondary transition-transform ${expanded ? 'rotate-180' : ''}`}
+                >
+                  <path d="m5.5 7.5 4.5 4 4.5-4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              <span className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                <SkillLevelPoint label="At role start" level={progress.entryLevel} />
+                <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="h-4 w-4 text-secondary">
+                  <path d="M3.5 10h13m-4-4 4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <SkillLevelPoint label={progress.endLabel} level={progress.endLevel} align="right" />
+              </span>
+            </button>
+            {expanded && <SkillProgressHistory progress={progress} />}
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+function SkillLevelPoint({ label, level, align = 'left' }) {
+  return (
+    <span className={`flex min-w-0 items-center gap-2 ${align === 'right' ? 'flex-row-reverse text-right' : ''}`}>
+      <GrowthRing level={level} size={36} />
+      <span className="min-w-0">
+        <span className="block font-mono text-[10px] uppercase tracking-wide text-secondary">{label}</span>
+        <span className="mt-0.5 block text-sm text-ink">Level {level} · {LEVEL_LABELS[level]}</span>
+      </span>
+    </span>
+  )
+}
+
+function SkillProgressHistory({ progress }) {
+  return (
+    <div className="border-t border-hairline bg-card px-3 py-3">
+      <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">History during this role</p>
+      {progress.duringRole.length === 0 ? (
+        <p className="text-sm text-secondary">No assessments were recorded during this role.</p>
+      ) : (
+        <ol className="space-y-2">
+          {progress.duringRole.map((entry) => (
+            <li key={entry.id} className="grid grid-cols-[auto_1fr] gap-x-3 text-sm">
+              <GrowthRing level={entry.level} size={28} />
+              <div className="min-w-0">
+                <p className="text-ink">Level {entry.level} · {LEVEL_LABELS[entry.level]}</p>
+                <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">
+                  {formatFullDate(entry.assessed_at)}
+                </p>
+                {entry.comments && <p className="mt-1 text-secondary">{entry.comments}</p>}
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   )
 }

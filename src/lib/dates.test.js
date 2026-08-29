@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { formatDateRange, formatRelativeDate, formatAbsoluteDate } from './dates'
+import { formatDateRange, formatRelativeDate, formatAbsoluteDate, formatFullDate } from './dates'
+
+describe('formatFullDate', () => {
+  it('formats a full assessment timestamp without producing Invalid Date', () => {
+    const timestamp = '2026-08-29T09:41:27Z'
+    expect(formatFullDate(timestamp)).toBe(new Date(timestamp).toLocaleDateString())
+  })
+})
 
 describe('formatDateRange', () => {
   it('collapses a range that starts and ends in the same month to one label', () => {

@@ -9,7 +9,7 @@ export function formatMonthYear(dateStr) {
 
 export function formatFullDate(dateStr) {
   if (!dateStr) return ''
-  return new Date(`${dateStr}T00:00:00`).toLocaleDateString()
+  return toDate(dateStr).toLocaleDateString()
 }
 
 function toDate(dateStr) {
