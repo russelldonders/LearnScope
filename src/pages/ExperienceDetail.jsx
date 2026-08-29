@@ -64,6 +64,13 @@ export default function ExperienceDetail() {
   const [parentExperience, setParentExperience] = useState(null)
   const [childModalType, setChildModalType] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [addSkillOpen, setAddSkillOpen] = useState(false)
+  const [recommendations, setRecommendations] = useState([])
+  const [selectedRecommendations, setSelectedRecommendations] = useState(new Set())
+  const [recommending, setRecommending] = useState(false)
+  const [addingRecommendations, setAddingRecommendations] = useState(false)
+  const [recommendationError, setRecommendationError] = useState(null)
+  const [recommendationNotice, setRecommendationNotice] = useState(null)
 
   useEffect(() => {
     loadItem()
@@ -164,6 +171,60 @@ export default function ExperienceDetail() {
     navigate('/experience')
   }
 
+  async function handleRecommend() {
+    setTab('skills')
+    setRecommending(true)
+    setRecommendationError(null)
+    setRecommendationNotice(null)
+    try {
+      const result = await recommendExperienceSkills(
+        item,
+        skillLinks.map((link) => link.skills?.name).filter(Boolean)
+      )
+      setRecommendations(result)
+      setSelectedRecommendations(new Set(result.map((recommendation) => recommendation.name)))
+      if (result.length === 0) setRecommendationNotice('No additional skills were identified from these details.')
+    } catch (err) {
+      setRecommendationError(err.message)
+    } finally {
+      setRecommending(false)
+    }
+  }
+
+  function toggleRecommendation(name) {
+    setSelectedRecommendations((current) => {
+      const next = new Set(current)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+
+  async function handleAddRecommendations() {
+    const names = recommendations
+      .map((recommendation) => recommendation.name)
+      .filter((name) => selectedRecommendations.has(name))
+    if (names.length === 0) return
+
+    setAddingRecommendations(true)
+    setRecommendationError(null)
+    setRecommendationNotice(null)
+    try {
+      const added = await addRecommendedSkills({ userId: user.id, experienceId: item.id, names })
+      setRecommendations([])
+      setSelectedRecommendations(new Set())
+      setRecommendationNotice(
+        `${added.length} skill${added.length === 1 ? '' : 's'} added to this experience and your profile.`
+      )
+      await loadLearning()
+    } catch (err) {
+      setRecommendationError(`${err.message} Any skills added before the error are still saved.`)
+      await loadLearning()
+    } finally {
+      setAddingRecommendations(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
@@ -214,15 +275,18 @@ export default function ExperienceDetail() {
               </button>
             </div>
 
-            {NESTABLE_PARENT_TYPES.includes(item.type) && (
-              <div className="mt-4">
-                <AddExperienceButton
-                  types={NESTED_EXPERIENCE_TYPES}
-                  onSelect={setChildModalType}
-                  label="+ Add Experience"
-                />
-              </div>
-            )}
+            <ExperienceActionButtons
+              itemType={item.type}
+              onAddExperience={setChildModalType}
+              onRecommend={handleRecommend}
+              onAddSkill={() => {
+                setTab('skills')
+                setAddSkillOpen(true)
+              }}
+              recommending={recommending}
+              addingRecommendations={addingRecommendations}
+              hasRecommendations={recommendations.length > 0}
+            />
 
             {childModalType && (
               <ExperienceModal
@@ -267,7 +331,25 @@ export default function ExperienceDetail() {
             )}
 
             {tab === 'skills' && (
-              <SkillsSubsection item={item} skillLinks={skillLinks} onChange={loadLearning} user={user} />
+              <SkillsSubsection
+                item={item}
+                skillLinks={skillLinks}
+                onChange={loadLearning}
+                user={user}
+                addOpen={addSkillOpen}
+                onAddOpenChange={setAddSkillOpen}
+                recommendations={recommendations}
+                selectedRecommendations={selectedRecommendations}
+                onToggleRecommendation={toggleRecommendation}
+                onAddRecommendations={handleAddRecommendations}
+                onDismissRecommendations={() => {
+                  setRecommendations([])
+                  setSelectedRecommendations(new Set())
+                }}
+                addingRecommendations={addingRecommendations}
+                recommendationError={recommendationError}
+                recommendationNotice={recommendationNotice}
+              />
             )}
 
             {settingsOpen && (
@@ -746,18 +828,26 @@ function CoursesSubsection({ item, linkedCourses, onChange }) {
   )
 }
 
-export function SkillsSubsection({ item, skillLinks, onChange, user }) {
+export function SkillsSubsection({
+  item,
+  skillLinks,
+  onChange,
+  user,
+  addOpen = false,
+  onAddOpenChange = () => {},
+  recommendations = [],
+  selectedRecommendations = new Set(),
+  onToggleRecommendation = () => {},
+  onAddRecommendations = () => {},
+  onDismissRecommendations = () => {},
+  addingRecommendations = false,
+  recommendationError = null,
+  recommendationNotice = null,
+}) {
   const navigate = useNavigate()
   const [skills, setSkills] = useState([])
   const [tagsBySkill, setTagsBySkill] = useState(new Map())
   const [loading, setLoading] = useState(true)
-  const [addOpen, setAddOpen] = useState(false)
-  const [recommendations, setRecommendations] = useState([])
-  const [selectedRecommendations, setSelectedRecommendations] = useState(new Set())
-  const [recommending, setRecommending] = useState(false)
-  const [addingRecommendations, setAddingRecommendations] = useState(false)
-  const [recommendationError, setRecommendationError] = useState(null)
-  const [recommendationNotice, setRecommendationNotice] = useState(null)
 
   const skillIds = [...new Set(skillLinks.map((l) => l.skill_id))]
 
@@ -788,82 +878,9 @@ export function SkillsSubsection({ item, skillLinks, onChange, user }) {
     setLoading(false)
   }
 
-  async function handleRecommend() {
-    setRecommending(true)
-    setRecommendationError(null)
-    setRecommendationNotice(null)
-    try {
-      const result = await recommendExperienceSkills(
-        item,
-        skillLinks.map((link) => link.skills?.name).filter(Boolean)
-      )
-      setRecommendations(result)
-      setSelectedRecommendations(new Set(result.map((recommendation) => recommendation.name)))
-      if (result.length === 0) setRecommendationNotice('No additional skills were identified from these details.')
-    } catch (err) {
-      setRecommendationError(err.message)
-    } finally {
-      setRecommending(false)
-    }
-  }
-
-  function toggleRecommendation(name) {
-    setSelectedRecommendations((current) => {
-      const next = new Set(current)
-      if (next.has(name)) next.delete(name)
-      else next.add(name)
-      return next
-    })
-  }
-
-  async function handleAddRecommendations() {
-    const names = recommendations
-      .map((recommendation) => recommendation.name)
-      .filter((name) => selectedRecommendations.has(name))
-    if (names.length === 0) return
-
-    setAddingRecommendations(true)
-    setRecommendationError(null)
-    setRecommendationNotice(null)
-    try {
-      const added = await addRecommendedSkills({ userId: user.id, experienceId: item.id, names })
-      setRecommendations([])
-      setSelectedRecommendations(new Set())
-      setRecommendationNotice(
-        `${added.length} skill${added.length === 1 ? '' : 's'} added to this experience and your profile.`
-      )
-      await onChange()
-    } catch (err) {
-      setRecommendationError(`${err.message} Any skills added before the error are still saved.`)
-      await onChange()
-    } finally {
-      setAddingRecommendations(false)
-    }
-  }
-
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary">Skills</h4>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={handleRecommend}
-            disabled={recommending || addingRecommendations}
-            className="inline-flex items-center gap-2 rounded-md border border-moss text-moss px-3 py-2 text-sm font-medium hover:bg-moss/10 disabled:opacity-60"
-          >
-            <SparkIcon />
-            {recommending ? 'Finding skills…' : recommendations.length ? 'Recommend again' : 'Recommend skills'}
-          </button>
-          <button
-            type="button"
-            onClick={() => setAddOpen(true)}
-            className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
-          >
-            + Find skill
-          </button>
-        </div>
-      </div>
+      <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Skills linked</h4>
 
       {recommendationError && (
         <p role="alert" className="text-sm text-red-700 mb-3">
@@ -895,7 +912,7 @@ export function SkillsSubsection({ item, skillLinks, onChange, user }) {
                 <input
                   type="checkbox"
                   checked={selectedRecommendations.has(recommendation.name)}
-                  onChange={() => toggleRecommendation(recommendation.name)}
+                  onChange={() => onToggleRecommendation(recommendation.name)}
                   className="mt-1 size-4 accent-moss"
                 />
                 <span className="min-w-0 flex-1">
@@ -911,7 +928,7 @@ export function SkillsSubsection({ item, skillLinks, onChange, user }) {
           <div className="flex flex-wrap items-center gap-2 mt-3">
             <button
               type="button"
-              onClick={handleAddRecommendations}
+              onClick={onAddRecommendations}
               disabled={selectedRecommendations.size === 0 || addingRecommendations}
               className="rounded-md bg-moss text-paper px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-60"
             >
@@ -921,10 +938,7 @@ export function SkillsSubsection({ item, skillLinks, onChange, user }) {
             </button>
             <button
               type="button"
-              onClick={() => {
-                setRecommendations([])
-                setSelectedRecommendations(new Set())
-              }}
+              onClick={onDismissRecommendations}
               disabled={addingRecommendations}
               className="rounded-md px-3 py-2 text-sm text-secondary hover:text-ink disabled:opacity-60"
             >
@@ -958,9 +972,9 @@ export function SkillsSubsection({ item, skillLinks, onChange, user }) {
       {addOpen && (
         <FindSkillModal
           experienceId={item.id}
-          onClose={() => setAddOpen(false)}
+          onClose={() => onAddOpenChange(false)}
           onCreated={() => {
-            setAddOpen(false)
+            onAddOpenChange(false)
             onChange()
           }}
         />
@@ -974,5 +988,43 @@ function SparkIcon() {
     <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 3l1.3 4.2a5 5 0 0 0 3.3 3.3L21 12l-4.4 1.5a5 5 0 0 0-3.3 3.3L12 21l-1.3-4.2a5 5 0 0 0-3.3-3.3L3 12l4.4-1.5a5 5 0 0 0 3.3-3.3L12 3Z" />
     </svg>
+  )
+}
+
+export function ExperienceActionButtons({
+  itemType,
+  onAddExperience,
+  onRecommend,
+  onAddSkill,
+  recommending = false,
+  addingRecommendations = false,
+  hasRecommendations = false,
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 mt-4">
+      {NESTABLE_PARENT_TYPES.includes(itemType) && (
+        <AddExperienceButton
+          types={NESTED_EXPERIENCE_TYPES}
+          onSelect={onAddExperience}
+          label="+ Add Experience"
+        />
+      )}
+      <button
+        type="button"
+        onClick={onRecommend}
+        disabled={recommending || addingRecommendations}
+        className="inline-flex items-center gap-2 rounded-md border border-moss text-moss px-3 py-2 text-sm font-medium hover:bg-moss/10 disabled:opacity-60"
+      >
+        <SparkIcon />
+        {recommending ? 'Finding skills…' : hasRecommendations ? 'Recommend again' : 'Recommend skills'}
+      </button>
+      <button
+        type="button"
+        onClick={onAddSkill}
+        className="rounded-md bg-moss text-paper px-4 py-2 text-sm font-medium hover:opacity-90"
+      >
+        + Add skill
+      </button>
+    </div>
   )
 }

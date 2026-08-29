@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { useState } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -23,7 +24,7 @@ vi.mock('../lib/experienceSkillRecommendations', () => ({
   addRecommendedSkills,
 }))
 
-import { SkillsSubsection } from './ExperienceDetail'
+import { ExperienceActionButtons, SkillsSubsection } from './ExperienceDetail'
 
 const item = {
   id: 'experience-1',
@@ -49,17 +50,45 @@ describe('experience skill recommendations', () => {
     ])
   })
 
-  it('shows no more than three ranked recommendations and lets the learner choose', async () => {
-    const onChange = vi.fn()
+  it('shows no more than three ranked recommendations and lets the learner choose', () => {
+    const recommendations = [
+      { name: 'Product Strategy', reason: 'It helps set a clear direction for the product.' },
+      { name: 'Stakeholder Management', reason: 'It aligns people around priorities and trade-offs.' },
+      { name: 'Data Analysis', reason: 'It supports evidence-based product decisions.' },
+    ]
+    const onAddRecommendations = vi.fn()
+
+    function RecommendationHarness() {
+      const [selected, setSelected] = useState(new Set(recommendations.map((item) => item.name)))
+      function toggle(name) {
+        setSelected((current) => {
+          const next = new Set(current)
+          if (next.has(name)) next.delete(name)
+          else next.add(name)
+          return next
+        })
+      }
+      return (
+        <SkillsSubsection
+          item={item}
+          skillLinks={[]}
+          onChange={vi.fn()}
+          user={{ id: 'user-1' }}
+          recommendations={recommendations}
+          selectedRecommendations={selected}
+          onToggleRecommendation={toggle}
+          onAddRecommendations={onAddRecommendations}
+        />
+      )
+    }
+
     render(
       <MemoryRouter>
-        <SkillsSubsection item={item} skillLinks={[]} onChange={onChange} user={{ id: 'user-1' }} />
+        <RecommendationHarness />
       </MemoryRouter>,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Recommend skills' }))
-
-    expect(await screen.findByText('Product Strategy')).toBeInTheDocument()
+    expect(screen.getByText('Product Strategy')).toBeInTheDocument()
     expect(screen.getByText('Priority 1')).toBeInTheDocument()
     expect(screen.getByText('Priority 3')).toBeInTheDocument()
     expect(screen.getByText('3 selected')).toBeInTheDocument()
@@ -67,31 +96,25 @@ describe('experience skill recommendations', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /Stakeholder Management/ }))
     expect(screen.getByText('2 selected')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Add 2 selected skills' }))
-
-    await waitFor(() =>
-      expect(addRecommendedSkills).toHaveBeenCalledWith({
-        userId: 'user-1',
-        experienceId: 'experience-1',
-        names: ['Product Strategy', 'Data Analysis'],
-      }),
-    )
-    expect(await screen.findByText('2 skills added to this experience and your profile.')).toBeInTheDocument()
-    expect(onChange).toHaveBeenCalled()
+    expect(onAddRecommendations).toHaveBeenCalled()
   })
 
-  it('passes already-linked skills to the recommendation service', async () => {
+  it('places experience, recommendation, and add-skill actions together above the tabs', () => {
+    const onRecommend = vi.fn()
+    const onAddSkill = vi.fn()
     render(
-      <MemoryRouter>
-        <SkillsSubsection
-          item={item}
-          skillLinks={[{ skill_id: 'existing-1', skills: { name: 'Roadmapping' } }]}
-          onChange={vi.fn()}
-          user={{ id: 'user-1' }}
-        />
-      </MemoryRouter>,
+      <ExperienceActionButtons
+        itemType="employment"
+        onAddExperience={vi.fn()}
+        onRecommend={onRecommend}
+        onAddSkill={onAddSkill}
+      />,
     )
 
+    expect(screen.getByRole('button', { name: '+ Add Experience' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Recommend skills' }))
-    await waitFor(() => expect(recommendExperienceSkills).toHaveBeenCalledWith(item, ['Roadmapping']))
+    fireEvent.click(screen.getByRole('button', { name: '+ Add skill' }))
+    expect(onRecommend).toHaveBeenCalled()
+    expect(onAddSkill).toHaveBeenCalled()
   })
 })
