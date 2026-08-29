@@ -787,8 +787,16 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
     setReordering(true)
     setError(null)
     try {
-      await reorderContentLinks(normalizedDestination, targetSectionId)
-      if (sourceSectionId !== targetSectionId) await reorderContentLinks(normalizedSource, sourceSectionId)
+      // reorderContentLinks only writes a row when its stored position/
+      // section differs from the target it's given -- it needs each item's
+      // *current* (pre-move) position/sectionId to compare against, not the
+      // already-target-normalized versions above (which was comparing the
+      // target against itself, always "unchanged", so the drop never
+      // actually persisted; this is why sections reordered fine and items
+      // never did -- commitSectionOrder already passes reorderCourseSections
+      // the un-normalized array for the same reason).
+      await reorderContentLinks(orderedDestination, targetSectionId)
+      if (sourceSectionId !== targetSectionId) await reorderContentLinks(sourceItems, sourceSectionId)
       await load()
     } catch (err) {
       setItems(previous)
@@ -828,7 +836,8 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
 
       {error && <p className="text-sm text-red-700">{error}</p>}
 
-      <nav aria-label="Course content outline">
+      <div className="grid md:grid-cols-[280px_minmax(0,1fr)] gap-6 items-start">
+      <nav aria-label="Course content outline" className="md:sticky md:top-6">
         <div className="flex items-center justify-between gap-2 px-2.5 mb-2">
           <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Course outline</p>
           {canEdit && (
@@ -1159,6 +1168,17 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
           )}
         </nav>
 
+        <ItemPreviewPane
+          item={previewingItem}
+          userId={userId}
+          canEdit={canEdit}
+          onChanged={() => {
+            load()
+            setPreviewingItem(null)
+          }}
+        />
+      </div>
+
       {addingSection && (
         <AddSectionModal
           value={newSectionTitle}
@@ -1189,19 +1209,6 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
           availableResources={availableResources}
           onChanged={load}
           onClose={() => setAddingResourceToSection(null)}
-        />
-      )}
-
-      {previewingItem && (
-        <ItemPreviewModal
-          item={previewingItem}
-          userId={userId}
-          canEdit={canEdit}
-          onChanged={() => {
-            load()
-            setPreviewingItem(null)
-          }}
-          onClose={() => setPreviewingItem(null)}
         />
       )}
     </div>
@@ -1603,9 +1610,11 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
   )
 }
 
-// Preview/download + detach, moved from the now-removed right-hand detail
-// panel into a popup opened by clicking an item's title in the outline.
-function ItemPreviewModal({ item, userId, canEdit, onChanged, onClose }) {
+// Preview/download + detach, shown inline on the right the same way
+// CourseLearn.jsx shows a learner the content they've selected from its own
+// left-hand nav -- a popup here would be a different experience for the
+// provider curating content than for the learner consuming it.
+function ItemPreviewPane({ item, userId, canEdit, onChanged }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
@@ -1621,68 +1630,81 @@ function ItemPreviewModal({ item, userId, canEdit, onChanged, onClose }) {
     }
   }
 
-  return (
-    <AccessibleDialog
-      labelledBy="item-preview-dialog-title"
-      onClose={onClose}
-      panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
-    >
-      <div className="flex items-start justify-between gap-2 mb-1">
-        <h2 id="item-preview-dialog-title" className="font-display text-xl text-ink">
-          {item.title}
-        </h2>
-        <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0 mt-1">
-          {TYPE_LABELS[item.type]}
-        </span>
+  if (!item) {
+    return (
+      <div className="bg-card border border-hairline rounded-lg p-6">
+        <p className="text-sm text-secondary">Select an item from the outline to preview it here.</p>
       </div>
+    )
+  }
+
+  return (
+    <div className="bg-card border border-hairline rounded-lg p-6">
+      <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1 block">
+        {TYPE_LABELS[item.type]}
+      </span>
+      <h3 className="font-display text-xl text-ink mb-4">{item.title}</h3>
 
       {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
 
-      <div className="mt-3">
-        {item.type === 'video' || item.type === 'screen_recording' ? (
-          <EditedVideoPlayer resource={item} className="w-full rounded-md bg-black" />
-        ) : item.type === 'scorm' ? (
-          <ScormPlayer contentItem={item} userId={userId} />
-        ) : item.type === 'xapi' ? (
-          <XapiPlayer contentItem={item} userId={userId} />
-        ) : item.type === 'external_video' ? (
-          <iframe
-            src={item.external_url}
-            title={item.title}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            className="w-full aspect-video rounded-md"
-          />
-        ) : item.type === 'file' ? (
-          <a href={contentFileUrl(item)} download={item.file_name || true} className="text-sm text-moss font-medium">
-            Download file
-          </a>
-        ) : item.type === 'web_url' ? (
-          <a href={item.external_url} target="_blank" rel="noopener noreferrer" className="text-sm text-moss font-medium">
-            Open link
-          </a>
-        ) : null}
-      </div>
+      {(item.type === 'video' || item.type === 'screen_recording') && (
+        <EditedVideoPlayer key={item.id} resource={item} className="w-full rounded-md bg-black" />
+      )}
 
-      <div className="flex items-center gap-2 mt-5">
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex-1 rounded-md border border-hairline text-ink py-2 text-sm font-medium hover:bg-paper"
+      {item.type === 'file' && (
+        <a
+          href={contentFileUrl(item)}
+          download={item.file_name || true}
+          className="flex items-center gap-3 rounded-md border border-hairline bg-paper px-3 py-2.5"
         >
-          Close
-        </button>
-        {canEdit && (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-secondary shrink-0">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+          </svg>
+          <span className="text-sm text-ink flex-1 truncate">{item.file_name}</span>
+          <span className="font-mono text-[10px] uppercase tracking-wide text-moss shrink-0">Download</span>
+        </a>
+      )}
+
+      {item.type === 'scorm' && <ScormPlayer key={item.id} contentItem={item} userId={userId} />}
+
+      {item.type === 'xapi' && <XapiPlayer key={item.id} contentItem={item} userId={userId} />}
+
+      {item.type === 'external_video' && (
+        <iframe
+          key={item.id}
+          src={item.external_url}
+          title={item.title}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          className="w-full aspect-video rounded-md"
+        />
+      )}
+
+      {item.type === 'web_url' && (
+        <a
+          href={item.external_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-between gap-3 rounded-md border border-hairline bg-paper px-4 py-3 text-sm text-ink hover:border-moss"
+        >
+          <span className="min-w-0 truncate">{item.external_url}</span>
+          <span className="font-medium text-moss shrink-0">Open link ↗</span>
+        </a>
+      )}
+
+      {canEdit && (
+        <div className="flex items-center gap-2 mt-6 pt-4 border-t border-hairline">
           <button
             type="button"
             onClick={handleDetach}
             disabled={busy}
-            className="rounded-md border border-hairline text-red-700 py-2 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+            className="rounded-md border border-hairline text-red-700 py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
           >
             {busy ? 'Removing…' : 'Detach from course'}
           </button>
-        )}
-      </div>
-    </AccessibleDialog>
+        </div>
+      )}
+    </div>
   )
 }
