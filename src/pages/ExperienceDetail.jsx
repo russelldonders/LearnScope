@@ -605,7 +605,7 @@ function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievemen
   if (!loaded) return <p className="text-sm text-secondary">Loading…</p>
 
   function goToCourse(courseId) {
-    navigate(`/courses/${courseId}`, { state: { backTo: `/experience/${item.id}`, backLabel: item.title } })
+    navigate(`/courses/${courseId}/learn`, { state: { backTo: `/experience/${item.id}`, backLabel: item.title } })
   }
 
   const pendingCourseLinks = linkedCourses.filter((l) => l.courses && !l.courses.completed_date)
@@ -936,7 +936,7 @@ function CoursesSubsection({ item, linkedCourses, onChange }) {
                 className="flex items-center justify-between gap-2 bg-paper border border-hairline rounded-md px-3 py-2"
               >
                 <Link
-                  to={`/courses/${l.courses.id}`}
+                  to={`/courses/${l.courses.id}/learn`}
                   state={{ backTo: `/experience/${item.id}`, backLabel: item.title }}
                   className="min-w-0"
                 >

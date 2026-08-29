@@ -114,7 +114,7 @@ function CourseGrid({ courses, skillsByCourse, progressByCatalogueId }) {
         return (
           <Link
             key={course.id}
-            to={`/courses/${course.id}`}
+            to={`/courses/${course.id}/learn`}
             state={{ backTo: '/learning', backLabel: 'Learning' }}
             className="bg-card border border-hairline rounded-lg overflow-hidden flex flex-col hover:border-moss transition-colors"
           >

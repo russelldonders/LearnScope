@@ -55,25 +55,6 @@ export async function getCatalogueCourse(id) {
   return data ? mapCatalogueCourse(data) : null
 }
 
-// Whether the signed-in viewer may manage the *shared* catalogue course
-// definition behind a personal course row -- skill-linking and achievement-
-// recording (see CourseDetail.jsx/CourseLearn.jsx), not the learner's own
-// basic record fields. True for a platform admin, the org member who
-// submitted the catalogue entry (created_by), or any other member of the
-// owning organisation. A freeform course (catalogueCourse null, no
-// catalogue_course_id) has no provider/creator at all, so this is always
-// false for one -- callers fall back to the learner's own basic edit/delete
-// ability for those instead.
-export function canManageCatalogueCourse(catalogueCourse, { userId, isPlatformAdmin, organisationMemberships }) {
-  if (isPlatformAdmin) return true
-  if (!catalogueCourse) return false
-  if (catalogueCourse.created_by === userId) return true
-  if (catalogueCourse.organisation_id) {
-    return (organisationMemberships ?? []).some((m) => m.organisation_id === catalogueCourse.organisation_id)
-  }
-  return false
-}
-
 // Maps catalogue_course_id -> { id, completed_date } for the learner's own
 // courses row, so an already-enrolled catalogue card can link straight to
 // that personal record and show whether it's actually been completed.

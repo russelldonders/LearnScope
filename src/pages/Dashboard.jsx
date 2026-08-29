@@ -840,7 +840,7 @@ function CurrentLearningPanel({ courses }) {
       {courses.map((course) => (
         <Link
           key={course.id}
-          to={`/courses/${course.id}`}
+          to={`/courses/${course.id}/learn`}
           state={{ backTo: '/dashboard', backLabel: 'Dashboard' }}
           className="bg-card border border-hairline rounded-lg overflow-hidden hover:border-moss transition-colors"
         >

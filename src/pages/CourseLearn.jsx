@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useIsDesktop } from '../lib/device'
-import { getCatalogueCourse, canManageCatalogueCourse } from '../lib/courseCatalogue'
 import {
   listCourseSections,
   listCourseResources,
@@ -59,7 +58,6 @@ function CourseItemPlayer({
   onMarkComplete,
   onPrevious,
   onProgress,
-  onGoToCourse,
 }) {
   return (
     <>
@@ -137,19 +135,7 @@ function CourseItemPlayer({
 
       {progress === 100 && (
         <div className="mt-4 rounded-md border border-moss bg-moss/5 px-3 py-2">
-          <p className="text-sm text-ink">
-            {onGoToCourse ? (
-              <>
-                All content complete —{' '}
-                <button type="button" onClick={onGoToCourse} className="text-moss font-medium hover:underline">
-                  head back to record what you achieved
-                </button>
-                .
-              </>
-            ) : (
-              'All content complete.'
-            )}
-          </p>
+          <p className="text-sm text-ink">All content complete.</p>
         </div>
       )}
     </>
@@ -177,11 +163,13 @@ function Chevron({ open, className = '' }) {
 
 export default function CourseLearn() {
   const { id } = useParams()
-  const { user, isPlatformAdmin, organisationMemberships } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const backTo = location.state?.backTo ?? '/learning'
+  const backLabel = location.state?.backLabel ? `← Back to ${location.state.backLabel}` : '← Back to Learning'
 
   const [course, setCourse] = useState(null)
-  const [catalogueCourse, setCatalogueCourse] = useState(null)
   const [editOpen, setEditOpen] = useState(false)
   const [sections, setSections] = useState([])
   const [items, setItems] = useState([])
@@ -226,14 +214,12 @@ export default function CourseLearn() {
     setCourse(data)
 
     if (data.catalogue_course_id) {
-      const [sectionRows, contentItems, catalogue] = await Promise.all([
+      const [sectionRows, contentItems] = await Promise.all([
         listCourseSections(data.catalogue_course_id),
         listCourseResources(data.catalogue_course_id),
-        getCatalogueCourse(data.catalogue_course_id),
       ])
       setSections(sectionRows)
       setItems(contentItems)
-      setCatalogueCourse(catalogue)
       setProgressByItemId(await listContentProgress(user.id, contentItems.map((i) => i.id)))
       const firstItem = sortBySection(contentItems, sectionRows)[0]
       setCurrentItemId((prev) => prev ?? firstItem?.id ?? null)
@@ -242,16 +228,8 @@ export default function CourseLearn() {
     setLoading(false)
   }
 
-  // Only the course's provider/creator (or a platform admin) can manage
-  // skill-linking/achievement-recording -- see CourseDetail.jsx, which is
-  // now that management view, reached from here via the cog. A freeform
-  // course (no catalogue link) has no such party, so its owner keeps basic
-  // record control (rename/notes/delete) directly from here instead.
-  const canManage = canManageCatalogueCourse(catalogueCourse, {
-    userId: user.id,
-    isPlatformAdmin,
-    organisationMemberships,
-  })
+  // A freeform course (no catalogue link) has no provider/creator, so its
+  // owner keeps basic record control (rename/notes/delete) from here.
   const canEditBasics = !course?.catalogue_course_id
 
   async function handleSaveCourse({ id: _id, ...fields }) {
@@ -382,7 +360,6 @@ export default function CourseLearn() {
               onMarkComplete={() => handleMarkComplete(item)}
               onPrevious={() => selectItem(orderedItems[itemIndex - 1].id)}
               onProgress={refreshProgress}
-              onGoToCourse={canManage ? () => navigate(`/courses/${id}`) : undefined}
             />
           </div>
         )}
@@ -394,15 +371,9 @@ export default function CourseLearn() {
     <div className="min-h-screen bg-paper">
       <AppHeader />
       <main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 py-8">
-        {canManage ? (
-          <Link to={`/courses/${id}`} className="text-sm text-secondary hover:text-ink mb-4 inline-block">
-            ← Back to course
-          </Link>
-        ) : (
-          <Link to="/learning" className="text-sm text-secondary hover:text-ink mb-4 inline-block">
-            ← Back to Learning
-          </Link>
-        )}
+        <Link to={backTo} className="text-sm text-secondary hover:text-ink mb-4 inline-block">
+          {backLabel}
+        </Link>
 
         {loading && <p className="text-secondary">Loading…</p>}
         {notFound && <p className="text-secondary">Course not found.</p>}
@@ -416,21 +387,7 @@ export default function CourseLearn() {
                   {completedCount} / {orderedItems.length} complete
                 </p>
               )}
-              {canManage && (
-                <button
-                  type="button"
-                  onClick={() => navigate(`/courses/${id}`)}
-                  title="Manage course"
-                  aria-label="Manage course"
-                  className="w-8 h-8 rounded-md border border-hairline text-secondary hover:text-ink hover:bg-paper flex items-center justify-center"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="3" />
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                  </svg>
-                </button>
-              )}
-              {!canManage && canEditBasics && (
+              {canEditBasics && (
                 <button
                   type="button"
                   onClick={() => setEditOpen(true)}
@@ -508,7 +465,6 @@ export default function CourseLearn() {
                     onMarkComplete={() => handleMarkComplete(currentItem)}
                     onPrevious={() => selectItem(orderedItems[currentIndex - 1].id)}
                     onProgress={refreshProgress}
-                    onGoToCourse={canManage ? () => navigate(`/courses/${id}`) : undefined}
                   />
                 </div>
               )}

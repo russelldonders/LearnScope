@@ -523,7 +523,7 @@ export default function SkillDetail() {
                                   <button
                                     type="button"
                                     onClick={() =>
-                                      navigate(`/courses/${link.courses.id}`, {
+                                      navigate(`/courses/${link.courses.id}/learn`, {
                                         state: { backTo: `/skills/${skill.id}`, backLabel: skill.name },
                                       })
                                     }
@@ -1353,7 +1353,7 @@ function HistorySection({
   const [selectedEvent, setSelectedEvent] = useState(null)
 
   function goToCourse(courseId) {
-    navigate(`/courses/${courseId}`, { state: { backTo: `/skills/${skill.id}`, backLabel: skill.name } })
+    navigate(`/courses/${courseId}/learn`, { state: { backTo: `/skills/${skill.id}`, backLabel: skill.name } })
   }
 
   return (

@@ -43,7 +43,7 @@ export default function Login() {
       return
     }
     const enrolled = await resumePendingEnrolment(data.user.id).catch(() => null)
-    navigate(enrolled ? `/courses/${enrolled.id}` : '/dashboard')
+    navigate(enrolled ? `/courses/${enrolled.id}/learn` : '/dashboard')
   }
 
   async function handleGoogleSignIn() {
