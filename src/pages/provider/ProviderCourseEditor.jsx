@@ -945,13 +945,18 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                               setSectionDropTarget({ id: hit.id, side: hit.side })
                             }
                           }}
-                          onPointerDragEnd={() => {
-                            // Trust the drop-target state the drag already
-                            // highlighted (from findOutlineDropTarget, resolved via
-                            // each row's own getBoundingClientRect) rather than
-                            // re-deriving it a second time at touch-end.
-                            if (sectionDropTarget && sectionDropTarget.id !== section.id) {
-                              commitSectionOrder(section.id, sectionDropTarget.id, sectionDropTarget.side ?? 'before')
+                          onPointerDragEnd={(event) => {
+                            // Recompute fresh rather than trusting the
+                            // sectionDropTarget state written by the last
+                            // touchmove: a fast flick can fire touchend before
+                            // React has re-rendered from that state update, so
+                            // reading state here could read one step behind.
+                            // findOutlineDropTarget is a plain synchronous
+                            // getBoundingClientRect lookup, not React state, so
+                            // it's always exactly current.
+                            const hit = findOutlineDropTarget(event.clientX, event.clientY)
+                            if (hit?.type === 'section' && hit.id !== section.id) {
+                              commitSectionOrder(section.id, hit.id, hit.side ?? 'before')
                             } else {
                               setDraggedSectionId(null)
                               setSectionDropTarget(null)
@@ -1032,21 +1037,26 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                                     setSectionDropTarget({ id: hit.id, side: null })
                                   }
                                 }}
-                                onPointerDragEnd={() => {
-                                  // Trust the drop-target state the drag already
-                                  // highlighted, rather than a second
-                                  // findDropTarget call at touch-end.
-                                  if (outlineItemDropTarget && outlineItemDropTarget.id !== item.linkId) {
-                                    const targetItem = items.find((candidate) => candidate.linkId === outlineItemDropTarget.id)
+                                onPointerDragEnd={(event) => {
+                                  // Recompute fresh instead of trusting
+                                  // outlineItemDropTarget/sectionDropTarget state: a
+                                  // fast flick can fire touchend before React has
+                                  // re-rendered from the last touchmove's setState,
+                                  // so reading state here could read one step
+                                  // behind. findOutlineDropTarget is a plain
+                                  // synchronous rect lookup, always exactly current.
+                                  const hit = findOutlineDropTarget(event.clientX, event.clientY)
+                                  if (hit?.type === 'item' && hit.id !== item.linkId) {
+                                    const targetItem = items.find((candidate) => candidate.linkId === hit.id)
                                     if (targetItem) {
-                                      commitOutlineItemOrder(item.linkId, targetItem.sectionId, outlineItemDropTarget.id, outlineItemDropTarget.side)
+                                      commitOutlineItemOrder(item.linkId, targetItem.sectionId, hit.id, hit.side)
                                     } else {
                                       setDraggedOutlineItem(null)
                                       setOutlineItemDropTarget(null)
                                       setSectionDropTarget(null)
                                     }
-                                  } else if (sectionDropTarget) {
-                                    commitOutlineItemOrder(item.linkId, sectionDropTarget.id === 'ungrouped' ? null : sectionDropTarget.id)
+                                  } else if (hit?.type === 'section') {
+                                    commitOutlineItemOrder(item.linkId, hit.id === 'ungrouped' ? null : hit.id)
                                   } else {
                                     setDraggedOutlineItem(null)
                                     setOutlineItemDropTarget(null)
@@ -1157,18 +1167,21 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                                 setSectionDropTarget({ id: hit.id, side: null })
                               }
                             }}
-                            onPointerDragEnd={() => {
-                              if (outlineItemDropTarget && outlineItemDropTarget.id !== item.linkId) {
-                                const targetItem = items.find((candidate) => candidate.linkId === outlineItemDropTarget.id)
+                            onPointerDragEnd={(event) => {
+                              // See the grouped items' onPointerDragEnd above --
+                              // recomputed fresh rather than trusted from state.
+                              const hit = findOutlineDropTarget(event.clientX, event.clientY)
+                              if (hit?.type === 'item' && hit.id !== item.linkId) {
+                                const targetItem = items.find((candidate) => candidate.linkId === hit.id)
                                 if (targetItem) {
-                                  commitOutlineItemOrder(item.linkId, targetItem.sectionId, outlineItemDropTarget.id, outlineItemDropTarget.side)
+                                  commitOutlineItemOrder(item.linkId, targetItem.sectionId, hit.id, hit.side)
                                 } else {
                                   setDraggedOutlineItem(null)
                                   setOutlineItemDropTarget(null)
                                   setSectionDropTarget(null)
                                 }
-                              } else if (sectionDropTarget) {
-                                commitOutlineItemOrder(item.linkId, sectionDropTarget.id === 'ungrouped' ? null : sectionDropTarget.id)
+                              } else if (hit?.type === 'section') {
+                                commitOutlineItemOrder(item.linkId, hit.id === 'ungrouped' ? null : hit.id)
                               } else {
                                 setDraggedOutlineItem(null)
                                 setOutlineItemDropTarget(null)
@@ -1386,9 +1399,10 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
                       const hit = findDropTarget(itemRefs.current, event.clientX, event.clientY)
                       if (hit && hit.id !== item.linkId) setItemDropTarget(hit)
                     }}
-                    onPointerDragEnd={() => {
-                      if (itemDropTarget && itemDropTarget.id !== item.linkId) {
-                        commitItemOrder(item.linkId, itemDropTarget.id, itemDropTarget.side)
+                    onPointerDragEnd={(event) => {
+                      const hit = findDropTarget(itemRefs.current, event.clientX, event.clientY)
+                      if (hit && hit.id !== item.linkId) {
+                        commitItemOrder(item.linkId, hit.id, hit.side)
                       } else {
                         setDraggedItemId(null)
                         setItemDropTarget(null)
@@ -1726,9 +1740,10 @@ function SectionCard({
                         const hit = findDropTarget(itemRefs.current, event.clientX, event.clientY)
                         if (hit && hit.id !== item.linkId) setItemDropTarget(hit)
                       }}
-                      onPointerDragEnd={() => {
-                        if (itemDropTarget && itemDropTarget.id !== item.linkId) {
-                          commitItemOrder(item.linkId, itemDropTarget.id, itemDropTarget.side)
+                      onPointerDragEnd={(event) => {
+                        const hit = findDropTarget(itemRefs.current, event.clientX, event.clientY)
+                        if (hit && hit.id !== item.linkId) {
+                          commitItemOrder(item.linkId, hit.id, hit.side)
                         } else {
                           setDraggedItemId(null)
                           setItemDropTarget(null)
