@@ -112,7 +112,18 @@ function CourseItemPlayer({
         </a>
       )}
 
-      <div className="flex items-center gap-2 mt-6 pt-4 border-t border-hairline">
+      <div className="flex items-center justify-between gap-2 mt-6 pt-4 border-t border-hairline">
+        {hasPrevious ? (
+          <button
+            type="button"
+            onClick={onPrevious}
+            className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper"
+          >
+            Previous
+          </button>
+        ) : (
+          <span />
+        )}
         {item.type !== 'scorm' && (
           <button
             type="button"
@@ -120,15 +131,6 @@ function CourseItemPlayer({
             className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
           >
             {isComplete ? (hasNext ? 'Next' : 'Done') : hasNext ? 'Mark complete & continue' : 'Mark complete'}
-          </button>
-        )}
-        {hasPrevious && (
-          <button
-            type="button"
-            onClick={onPrevious}
-            className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper"
-          >
-            Previous
           </button>
         )}
       </div>
@@ -184,13 +186,12 @@ export default function CourseLearn() {
   // highlighting, and must stay set for the page to render at all) so
   // collapsing the accordion on mobile can't blank the whole page.
   const [expandedItemId, setExpandedItemId] = useState(null)
-  // Sections start closed -- only the one containing whatever's current is
-  // open, like an accordion (opening one closes any other). Below md, an
-  // open item goes further into "focus mode": everything else in the nav
-  // (other sections, other items) hides so only that item's row and its
-  // player are visible, scrolled to the top of the screen; collapsing it
-  // brings the outline back.
-  const [openSectionKey, setOpenSectionKey] = useState(null)
+  // All sections start open, and any number can stay open at once -- not an
+  // accordion. Below md, an open item goes further into "focus mode":
+  // everything else in the nav (other sections, other items) hides so only
+  // that item's row and its player are visible, scrolled to the top of the
+  // screen; collapsing it brings the outline back.
+  const [openSectionKeys, setOpenSectionKeys] = useState(() => new Set())
   const isDesktop = useIsDesktop()
 
   useEffect(() => {
@@ -223,7 +224,7 @@ export default function CourseLearn() {
       setProgressByItemId(await listContentProgress(user.id, contentItems.map((i) => i.id)))
       const firstItem = sortBySection(contentItems, sectionRows)[0]
       setCurrentItemId((prev) => prev ?? firstItem?.id ?? null)
-      setOpenSectionKey((prev) => prev ?? (firstItem ? (firstItem.sectionId ?? 'ungrouped') : null))
+      setOpenSectionKeys((prev) => (prev.size > 0 ? prev : new Set([...sectionRows.map((s) => s.id), 'ungrouped'])))
     }
     setLoading(false)
   }
@@ -292,7 +293,10 @@ export default function CourseLearn() {
     setCurrentItemId(itemId)
     setExpandedItemId((current) => (current === null ? null : itemId))
     const item = orderedItems.find((i) => i.id === itemId)
-    if (item) setOpenSectionKey(item.sectionId ?? 'ungrouped')
+    if (item) {
+      const key = item.sectionId ?? 'ungrouped'
+      setOpenSectionKeys((current) => (current.has(key) ? current : new Set(current).add(key)))
+    }
   }
 
   function handleNavClick(item) {
@@ -302,7 +306,12 @@ export default function CourseLearn() {
   }
 
   function toggleSection(key) {
-    setOpenSectionKey((current) => (current === key ? null : key))
+    setOpenSectionKeys((current) => {
+      const next = new Set(current)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
   }
 
   const currentIndex = orderedItems.findIndex((i) => i.id === currentItemId)
@@ -431,7 +440,7 @@ export default function CourseLearn() {
                   <ul className="space-y-1">{renderItemRow(currentItem)}</ul>
                 ) : (
                   groupedNav.map((group) => {
-                    const isOpen = openSectionKey === group.key
+                    const isOpen = openSectionKeys.has(group.key)
                     return (
                       <div key={group.key} className="mb-4 last:mb-0">
                         {group.title && (
