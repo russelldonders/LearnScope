@@ -122,6 +122,47 @@ function DropLine({ side }) {
   )
 }
 
+// Below md only -- indicates/toggles the inline preview accordion on an
+// outline item row. Not shown at md+, where the same click instead swaps
+// what's showing in the side pane (see useIsDesktop).
+function ItemPreviewChevron({ open }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="12"
+      height="12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={`md:hidden shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+    >
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  )
+}
+
+// Below md, an item's preview opens inline in the outline (an accordion
+// under its own row) instead of the side pane that's still used at md+ --
+// this needs to be a real JS breakpoint check, not just CSS visibility,
+// because whichever one *isn't* showing must not mount at all: an SCORM/
+// xAPI player can fire its own launch/tracking calls just from mounting,
+// so a display:none copy sitting in the DOM would double those up.
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches
+  )
+  useEffect(() => {
+    const mql = window.matchMedia('(min-width: 768px)')
+    const handleChange = (event) => setIsDesktop(event.matches)
+    mql.addEventListener('change', handleChange)
+    return () => mql.removeEventListener('change', handleChange)
+  }, [])
+  return isDesktop
+}
+
 // Touch dragging is wired through raw touchstart/touchmove/touchend
 // listeners rather than the Pointer Events API. Pointer Events looked
 // right in every browser we could test (including Chromium under touch
@@ -653,6 +694,10 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
   const [editingSection, setEditingSection] = useState(null)
   const [addingResourceToSection, setAddingResourceToSection] = useState(null)
   const [previewingItem, setPreviewingItem] = useState(null)
+  const isDesktop = useIsDesktop()
+  function toggleItemPreview(item) {
+    setPreviewingItem((current) => (current?.linkId === item.linkId ? null : item))
+  }
   const [draggedSectionId, setDraggedSectionId] = useState(null)
   const [sectionDropTarget, setSectionDropTarget] = useState(null)
   const [draggedOutlineItem, setDraggedOutlineItem] = useState(null)
@@ -996,78 +1041,98 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                                 commitOutlineItemOrder(draggedOutlineItem.linkId, section.id, item.linkId, sideOf(event.currentTarget, event.clientY))
                               }
                             }}
-                            className={`relative flex min-w-0 items-center gap-1 rounded py-0.5 pr-1 transition-[background-color,opacity] ${
+                            className={`relative rounded py-0.5 pr-1 transition-[background-color,opacity] ${
                               draggedOutlineItem?.linkId === item.linkId ? 'opacity-40' : ''
                             }`}
                           >
                             {outlineItemDropTarget?.id === item.linkId && <DropLine side={outlineItemDropTarget.side} />}
-                            {canEdit && (
-                              <DragHandle
-                                label={`Move ${item.title}`}
-                                dragLabel={item.title}
-                                disabled={reordering}
-                                onDragStart={(event) => {
-                                  event.stopPropagation()
-                                  event.dataTransfer.effectAllowed = 'move'
-                                  event.dataTransfer.setData('text/plain', item.linkId)
-                                  setDraggedOutlineItem(item)
-                                  setDraggedSectionId(null)
-                                }}
-                                onDragEnd={() => {
-                                  setDraggedOutlineItem(null)
-                                  setOutlineItemDropTarget(null)
-                                  setSectionDropTarget(null)
-                                }}
-                                onKeyDown={(event) => handleOutlineItemKeyDown(event, item)}
-                                onPointerDragStart={() => {
-                                  setDraggedOutlineItem(item)
-                                  setDraggedSectionId(null)
-                                }}
-                                onPointerDragMove={(event) => {
-                                  const hit = findOutlineDropTarget(event.clientX, event.clientY)
-                                  if (hit?.type === 'item' && hit.id !== item.linkId) {
-                                    setOutlineItemDropTarget({ id: hit.id, side: hit.side })
-                                    setSectionDropTarget(null)
-                                  } else if (hit?.type === 'section') {
+                            <div className="flex min-w-0 items-center gap-1">
+                              {canEdit && (
+                                <DragHandle
+                                  label={`Move ${item.title}`}
+                                  dragLabel={item.title}
+                                  disabled={reordering}
+                                  onDragStart={(event) => {
+                                    event.stopPropagation()
+                                    event.dataTransfer.effectAllowed = 'move'
+                                    event.dataTransfer.setData('text/plain', item.linkId)
+                                    setDraggedOutlineItem(item)
+                                    setDraggedSectionId(null)
+                                  }}
+                                  onDragEnd={() => {
+                                    setDraggedOutlineItem(null)
                                     setOutlineItemDropTarget(null)
-                                    setSectionDropTarget({ id: hit.id, side: null })
-                                  }
-                                }}
-                                onPointerDragEnd={(event) => {
-                                  // Recompute fresh instead of trusting
-                                  // outlineItemDropTarget/sectionDropTarget state: a
-                                  // fast flick can fire touchend before React has
-                                  // re-rendered from the last touchmove's setState,
-                                  // so reading state here could read one step
-                                  // behind. findOutlineDropTarget is a plain
-                                  // synchronous rect lookup, always exactly current.
-                                  const hit = findOutlineDropTarget(event.clientX, event.clientY)
-                                  if (hit?.type === 'item' && hit.id !== item.linkId) {
-                                    const targetItem = items.find((candidate) => candidate.linkId === hit.id)
-                                    if (targetItem) {
-                                      commitOutlineItemOrder(item.linkId, targetItem.sectionId, hit.id, hit.side)
+                                    setSectionDropTarget(null)
+                                  }}
+                                  onKeyDown={(event) => handleOutlineItemKeyDown(event, item)}
+                                  onPointerDragStart={() => {
+                                    setDraggedOutlineItem(item)
+                                    setDraggedSectionId(null)
+                                  }}
+                                  onPointerDragMove={(event) => {
+                                    const hit = findOutlineDropTarget(event.clientX, event.clientY)
+                                    if (hit?.type === 'item' && hit.id !== item.linkId) {
+                                      setOutlineItemDropTarget({ id: hit.id, side: hit.side })
+                                      setSectionDropTarget(null)
+                                    } else if (hit?.type === 'section') {
+                                      setOutlineItemDropTarget(null)
+                                      setSectionDropTarget({ id: hit.id, side: null })
+                                    }
+                                  }}
+                                  onPointerDragEnd={(event) => {
+                                    // Recompute fresh instead of trusting
+                                    // outlineItemDropTarget/sectionDropTarget state: a
+                                    // fast flick can fire touchend before React has
+                                    // re-rendered from the last touchmove's setState,
+                                    // so reading state here could read one step
+                                    // behind. findOutlineDropTarget is a plain
+                                    // synchronous rect lookup, always exactly current.
+                                    const hit = findOutlineDropTarget(event.clientX, event.clientY)
+                                    if (hit?.type === 'item' && hit.id !== item.linkId) {
+                                      const targetItem = items.find((candidate) => candidate.linkId === hit.id)
+                                      if (targetItem) {
+                                        commitOutlineItemOrder(item.linkId, targetItem.sectionId, hit.id, hit.side)
+                                      } else {
+                                        setDraggedOutlineItem(null)
+                                        setOutlineItemDropTarget(null)
+                                        setSectionDropTarget(null)
+                                      }
+                                    } else if (hit?.type === 'section') {
+                                      commitOutlineItemOrder(item.linkId, hit.id === 'ungrouped' ? null : hit.id)
                                     } else {
                                       setDraggedOutlineItem(null)
                                       setOutlineItemDropTarget(null)
                                       setSectionDropTarget(null)
                                     }
-                                  } else if (hit?.type === 'section') {
-                                    commitOutlineItemOrder(item.linkId, hit.id === 'ungrouped' ? null : hit.id)
-                                  } else {
-                                    setDraggedOutlineItem(null)
-                                    setOutlineItemDropTarget(null)
-                                    setSectionDropTarget(null)
-                                  }
-                                }}
-                              />
+                                  }}
+                                />
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => toggleItemPreview(item)}
+                                aria-expanded={!isDesktop && previewingItem?.linkId === item.linkId}
+                                className="min-w-0 flex-1 flex items-center gap-1 text-left text-xs text-secondary hover:text-ink hover:underline"
+                              >
+                                <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                                <ItemPreviewChevron open={previewingItem?.linkId === item.linkId} />
+                              </button>
+                            </div>
+                            {!isDesktop && previewingItem?.linkId === item.linkId && (
+                              <div className="mt-1 mb-1 bg-card border border-hairline rounded-lg p-4">
+                                <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1 block">
+                                  {TYPE_LABELS[item.type]}
+                                </span>
+                                <ItemPreviewBody
+                                  item={item}
+                                  userId={userId}
+                                  canEdit={canEdit}
+                                  onChanged={() => {
+                                    load()
+                                    setPreviewingItem(null)
+                                  }}
+                                />
+                              </div>
                             )}
-                            <button
-                              type="button"
-                              onClick={() => setPreviewingItem(item)}
-                              className="min-w-0 flex-1 truncate text-left text-xs text-secondary hover:text-ink hover:underline"
-                            >
-                              {item.title}
-                            </button>
                           </li>
                         ))}
                       </ul>
@@ -1116,73 +1181,93 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                             commitOutlineItemOrder(draggedOutlineItem.linkId, null, item.linkId, sideOf(event.currentTarget, event.clientY))
                           }
                         }}
-                        className={`relative flex min-w-0 items-center gap-1 rounded py-0.5 pr-1 transition-[background-color,opacity] ${
+                        className={`relative rounded py-0.5 pr-1 transition-[background-color,opacity] ${
                           draggedOutlineItem?.linkId === item.linkId ? 'opacity-40' : ''
                         }`}
                       >
                         {outlineItemDropTarget?.id === item.linkId && <DropLine side={outlineItemDropTarget.side} />}
-                        {canEdit && (
-                          <DragHandle
-                            label={`Move ${item.title}`}
-                            dragLabel={item.title}
-                            disabled={reordering}
-                            onDragStart={(event) => {
-                              event.stopPropagation()
-                              event.dataTransfer.effectAllowed = 'move'
-                              event.dataTransfer.setData('text/plain', item.linkId)
-                              setDraggedOutlineItem(item)
-                              setDraggedSectionId(null)
-                            }}
-                            onDragEnd={() => {
-                              setDraggedOutlineItem(null)
-                              setOutlineItemDropTarget(null)
-                              setSectionDropTarget(null)
-                            }}
-                            onKeyDown={(event) => handleOutlineItemKeyDown(event, item)}
-                            onPointerDragStart={() => {
-                              setDraggedOutlineItem(item)
-                              setDraggedSectionId(null)
-                            }}
-                            onPointerDragMove={(event) => {
-                              const hit = findOutlineDropTarget(event.clientX, event.clientY)
-                              if (hit?.type === 'item' && hit.id !== item.linkId) {
-                                setOutlineItemDropTarget({ id: hit.id, side: hit.side })
-                                setSectionDropTarget(null)
-                              } else if (hit?.type === 'section') {
+                        <div className="flex min-w-0 items-center gap-1">
+                          {canEdit && (
+                            <DragHandle
+                              label={`Move ${item.title}`}
+                              dragLabel={item.title}
+                              disabled={reordering}
+                              onDragStart={(event) => {
+                                event.stopPropagation()
+                                event.dataTransfer.effectAllowed = 'move'
+                                event.dataTransfer.setData('text/plain', item.linkId)
+                                setDraggedOutlineItem(item)
+                                setDraggedSectionId(null)
+                              }}
+                              onDragEnd={() => {
+                                setDraggedOutlineItem(null)
                                 setOutlineItemDropTarget(null)
-                                setSectionDropTarget({ id: hit.id, side: null })
-                              }
-                            }}
-                            onPointerDragEnd={(event) => {
-                              // See the grouped items' onPointerDragEnd above --
-                              // recomputed fresh rather than trusted from state.
-                              const hit = findOutlineDropTarget(event.clientX, event.clientY)
-                              if (hit?.type === 'item' && hit.id !== item.linkId) {
-                                const targetItem = items.find((candidate) => candidate.linkId === hit.id)
-                                if (targetItem) {
-                                  commitOutlineItemOrder(item.linkId, targetItem.sectionId, hit.id, hit.side)
+                                setSectionDropTarget(null)
+                              }}
+                              onKeyDown={(event) => handleOutlineItemKeyDown(event, item)}
+                              onPointerDragStart={() => {
+                                setDraggedOutlineItem(item)
+                                setDraggedSectionId(null)
+                              }}
+                              onPointerDragMove={(event) => {
+                                const hit = findOutlineDropTarget(event.clientX, event.clientY)
+                                if (hit?.type === 'item' && hit.id !== item.linkId) {
+                                  setOutlineItemDropTarget({ id: hit.id, side: hit.side })
+                                  setSectionDropTarget(null)
+                                } else if (hit?.type === 'section') {
+                                  setOutlineItemDropTarget(null)
+                                  setSectionDropTarget({ id: hit.id, side: null })
+                                }
+                              }}
+                              onPointerDragEnd={(event) => {
+                                // See the grouped items' onPointerDragEnd above --
+                                // recomputed fresh rather than trusted from state.
+                                const hit = findOutlineDropTarget(event.clientX, event.clientY)
+                                if (hit?.type === 'item' && hit.id !== item.linkId) {
+                                  const targetItem = items.find((candidate) => candidate.linkId === hit.id)
+                                  if (targetItem) {
+                                    commitOutlineItemOrder(item.linkId, targetItem.sectionId, hit.id, hit.side)
+                                  } else {
+                                    setDraggedOutlineItem(null)
+                                    setOutlineItemDropTarget(null)
+                                    setSectionDropTarget(null)
+                                  }
+                                } else if (hit?.type === 'section') {
+                                  commitOutlineItemOrder(item.linkId, hit.id === 'ungrouped' ? null : hit.id)
                                 } else {
                                   setDraggedOutlineItem(null)
                                   setOutlineItemDropTarget(null)
                                   setSectionDropTarget(null)
                                 }
-                              } else if (hit?.type === 'section') {
-                                commitOutlineItemOrder(item.linkId, hit.id === 'ungrouped' ? null : hit.id)
-                              } else {
-                                setDraggedOutlineItem(null)
-                                setOutlineItemDropTarget(null)
-                                setSectionDropTarget(null)
-                              }
-                            }}
-                          />
+                              }}
+                            />
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => toggleItemPreview(item)}
+                            aria-expanded={!isDesktop && previewingItem?.linkId === item.linkId}
+                            className="min-w-0 flex-1 flex items-center gap-1 text-left text-xs text-secondary hover:text-ink hover:underline"
+                          >
+                            <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                            <ItemPreviewChevron open={previewingItem?.linkId === item.linkId} />
+                          </button>
+                        </div>
+                        {!isDesktop && previewingItem?.linkId === item.linkId && (
+                          <div className="mt-1 mb-1 bg-card border border-hairline rounded-lg p-4">
+                            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1 block">
+                              {TYPE_LABELS[item.type]}
+                            </span>
+                            <ItemPreviewBody
+                              item={item}
+                              userId={userId}
+                              canEdit={canEdit}
+                              onChanged={() => {
+                                load()
+                                setPreviewingItem(null)
+                              }}
+                            />
+                          </div>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => setPreviewingItem(item)}
-                          className="min-w-0 flex-1 truncate text-left text-xs text-secondary hover:text-ink hover:underline"
-                        >
-                          {item.title}
-                        </button>
                       </li>
                     ))}
                   </ul>
@@ -1192,15 +1277,17 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
           )}
         </nav>
 
-        <ItemPreviewPane
-          item={previewingItem}
-          userId={userId}
-          canEdit={canEdit}
-          onChanged={() => {
-            load()
-            setPreviewingItem(null)
-          }}
-        />
+        {isDesktop && (
+          <ItemPreviewPane
+            item={previewingItem}
+            userId={userId}
+            canEdit={canEdit}
+            onChanged={() => {
+              load()
+              setPreviewingItem(null)
+            }}
+          />
+        )}
       </div>
 
       {addingSection && (
@@ -1638,7 +1725,12 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
 // CourseLearn.jsx shows a learner the content they've selected from its own
 // left-hand nav -- a popup here would be a different experience for the
 // provider curating content than for the learner consuming it.
-function ItemPreviewPane({ item, userId, canEdit, onChanged }) {
+// Player/download/detach -- shared by the md+ side pane (ItemPreviewPane,
+// which wraps this with a card + type label + title) and the below-md
+// inline accordion in the outline (which already shows the title as the
+// row it's expanding under, so it renders this directly without repeating
+// it).
+function ItemPreviewBody({ item, userId, canEdit, onChanged }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
@@ -1654,21 +1746,8 @@ function ItemPreviewPane({ item, userId, canEdit, onChanged }) {
     }
   }
 
-  if (!item) {
-    return (
-      <div className="bg-card border border-hairline rounded-lg p-6">
-        <p className="text-sm text-secondary">Select an item from the outline to preview it here.</p>
-      </div>
-    )
-  }
-
   return (
-    <div className="bg-card border border-hairline rounded-lg p-6">
-      <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1 block">
-        {TYPE_LABELS[item.type]}
-      </span>
-      <h3 className="font-display text-xl text-ink mb-4">{item.title}</h3>
-
+    <>
       {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
 
       {(item.type === 'video' || item.type === 'screen_recording') && (
@@ -1718,7 +1797,7 @@ function ItemPreviewPane({ item, userId, canEdit, onChanged }) {
       )}
 
       {canEdit && (
-        <div className="flex items-center gap-2 mt-6 pt-4 border-t border-hairline">
+        <div className="flex items-center gap-2 mt-4 pt-4 border-t border-hairline">
           <button
             type="button"
             onClick={handleDetach}
@@ -1729,6 +1808,28 @@ function ItemPreviewPane({ item, userId, canEdit, onChanged }) {
           </button>
         </div>
       )}
+    </>
+  )
+}
+
+// md+ only -- see the outline's own inline accordion (rendered per-item,
+// gated by useIsDesktop) for the below-md equivalent.
+function ItemPreviewPane({ item, userId, canEdit, onChanged }) {
+  if (!item) {
+    return (
+      <div className="bg-card border border-hairline rounded-lg p-6">
+        <p className="text-sm text-secondary">Select an item from the outline to preview it here.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-card border border-hairline rounded-lg p-6">
+      <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1 block">
+        {TYPE_LABELS[item.type]}
+      </span>
+      <h3 className="font-display text-xl text-ink mb-4">{item.title}</h3>
+      <ItemPreviewBody item={item} userId={userId} canEdit={canEdit} onChanged={onChanged} />
     </div>
   )
 }
