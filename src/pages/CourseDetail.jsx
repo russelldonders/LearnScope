@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { getCatalogueCourse } from '../lib/courseCatalogue'
+import { getCatalogueCourse, canManageCatalogueCourse } from '../lib/courseCatalogue'
 import { listLibrarySkills } from '../lib/skillLibrary'
 import { LEVEL_LABELS } from '../lib/levels'
 import { SKILL_RELATIONSHIP_LABELS } from '../lib/skillRelationships'
@@ -15,7 +15,7 @@ import ProgressBar from '../components/ProgressBar'
 
 export default function CourseDetail() {
   const { id } = useParams()
-  const { user } = useAuth()
+  const { user, isPlatformAdmin, organisationMemberships } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const backTo = location.state?.backTo ?? '/learning'
@@ -41,6 +41,21 @@ export default function CourseDetail() {
   useEffect(() => {
     load()
   }, [id])
+
+  // This page is now the admin/management view -- skill-linking and
+  // achievement-recording belong to the course's provider/creator, not a
+  // plain learner (see courseCatalogue.js's canManageCatalogueCourse). A
+  // viewer who isn't one gets bounced straight to the actual learning
+  // content instead. roleKnown guards against redirecting an eligible
+  // viewer away before their admin/org-membership status has resolved.
+  const roleKnown = isPlatformAdmin !== null && organisationMemberships !== null
+  const canManage =
+    roleKnown && canManageCatalogueCourse(catalogueCourse, { userId: user.id, isPlatformAdmin, organisationMemberships })
+
+  useEffect(() => {
+    if (loading || notFound || !roleKnown) return
+    if (!canManage) navigate(`/courses/${id}/learn`, { replace: true })
+  }, [loading, notFound, roleKnown, canManage, id])
 
   async function load() {
     setLoading(true)
@@ -148,10 +163,10 @@ export default function CourseDetail() {
           {backLabel}
         </Link>
 
-        {loading && <p className="text-secondary">Loading…</p>}
+        {!notFound && !(course && canManage) && <p className="text-secondary">Loading…</p>}
         {notFound && <p className="text-secondary">Course not found.</p>}
 
-        {course && (
+        {course && canManage && (
           <div className="bg-card border border-hairline rounded-lg p-6">
             <div className="flex items-start justify-between gap-4 flex-wrap mb-1">
               <div>
@@ -184,9 +199,14 @@ export default function CourseDetail() {
                 <button
                   type="button"
                   onClick={() => openEdit('overview')}
-                  className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+                  title="Manage course"
+                  aria-label="Manage course"
+                  className="shrink-0 w-8 h-8 rounded-md border border-hairline text-secondary hover:text-ink hover:bg-paper flex items-center justify-center"
                 >
-                  Edit
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  </svg>
                 </button>
               </div>
             </div>

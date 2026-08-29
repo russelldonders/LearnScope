@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useIsDesktop } from '../lib/device'
+import { getCatalogueCourse, canManageCatalogueCourse } from '../lib/courseCatalogue'
 import {
   listCourseSections,
   listCourseResources,
@@ -15,6 +16,7 @@ import XapiPlayer from '../components/XapiPlayer'
 import EditedVideoPlayer from '../components/EditedVideoPlayer'
 import AppHeader from '../components/AppHeader'
 import ProgressBar from '../components/ProgressBar'
+import CourseModal from '../components/CourseModal'
 
 const TYPE_LABELS = {
   video: 'Video',
@@ -136,11 +138,17 @@ function CourseItemPlayer({
       {progress === 100 && (
         <div className="mt-4 rounded-md border border-moss bg-moss/5 px-3 py-2">
           <p className="text-sm text-ink">
-            All content complete —{' '}
-            <button type="button" onClick={onGoToCourse} className="text-moss font-medium hover:underline">
-              head back to record what you achieved
-            </button>
-            .
+            {onGoToCourse ? (
+              <>
+                All content complete —{' '}
+                <button type="button" onClick={onGoToCourse} className="text-moss font-medium hover:underline">
+                  head back to record what you achieved
+                </button>
+                .
+              </>
+            ) : (
+              'All content complete.'
+            )}
           </p>
         </div>
       )}
@@ -169,10 +177,12 @@ function Chevron({ open, className = '' }) {
 
 export default function CourseLearn() {
   const { id } = useParams()
-  const { user } = useAuth()
+  const { user, isPlatformAdmin, organisationMemberships } = useAuth()
   const navigate = useNavigate()
 
   const [course, setCourse] = useState(null)
+  const [catalogueCourse, setCatalogueCourse] = useState(null)
+  const [editOpen, setEditOpen] = useState(false)
   const [sections, setSections] = useState([])
   const [items, setItems] = useState([])
   const [progressByItemId, setProgressByItemId] = useState({})
@@ -204,7 +214,7 @@ export default function CourseLearn() {
     setNotFound(false)
     const { data, error } = await supabase
       .from('courses')
-      .select('id, name, provider, catalogue_course_id')
+      .select('*')
       .eq('id', id)
       .eq('user_id', user.id)
       .maybeSingle()
@@ -216,18 +226,45 @@ export default function CourseLearn() {
     setCourse(data)
 
     if (data.catalogue_course_id) {
-      const [sectionRows, contentItems] = await Promise.all([
+      const [sectionRows, contentItems, catalogue] = await Promise.all([
         listCourseSections(data.catalogue_course_id),
         listCourseResources(data.catalogue_course_id),
+        getCatalogueCourse(data.catalogue_course_id),
       ])
       setSections(sectionRows)
       setItems(contentItems)
+      setCatalogueCourse(catalogue)
       setProgressByItemId(await listContentProgress(user.id, contentItems.map((i) => i.id)))
       const firstItem = sortBySection(contentItems, sectionRows)[0]
       setCurrentItemId((prev) => prev ?? firstItem?.id ?? null)
       setOpenSectionKey((prev) => prev ?? (firstItem ? (firstItem.sectionId ?? 'ungrouped') : null))
     }
     setLoading(false)
+  }
+
+  // Only the course's provider/creator (or a platform admin) can manage
+  // skill-linking/achievement-recording -- see CourseDetail.jsx, which is
+  // now that management view, reached from here via the cog. A freeform
+  // course (no catalogue link) has no such party, so its owner keeps basic
+  // record control (rename/notes/delete) directly from here instead.
+  const canManage = canManageCatalogueCourse(catalogueCourse, {
+    userId: user.id,
+    isPlatformAdmin,
+    organisationMemberships,
+  })
+  const canEditBasics = !course?.catalogue_course_id
+
+  async function handleSaveCourse({ id: _id, ...fields }) {
+    const { error } = await supabase.from('courses').update(fields).eq('id', id)
+    if (error) throw error
+    await load()
+    setEditOpen(false)
+  }
+
+  async function handleDeleteCourse() {
+    const { error } = await supabase.from('courses').delete().eq('id', id)
+    if (error) throw error
+    navigate('/learning')
   }
 
   async function refreshProgress() {
@@ -345,7 +382,7 @@ export default function CourseLearn() {
               onMarkComplete={() => handleMarkComplete(item)}
               onPrevious={() => selectItem(orderedItems[itemIndex - 1].id)}
               onProgress={refreshProgress}
-              onGoToCourse={() => navigate(`/courses/${id}`)}
+              onGoToCourse={canManage ? () => navigate(`/courses/${id}`) : undefined}
             />
           </div>
         )}
@@ -357,30 +394,72 @@ export default function CourseLearn() {
     <div className="min-h-screen bg-paper">
       <AppHeader />
       <main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 py-8">
-        <Link to={`/courses/${id}`} className="text-sm text-secondary hover:text-ink mb-4 inline-block">
-          ← Back to course
-        </Link>
+        {canManage ? (
+          <Link to={`/courses/${id}`} className="text-sm text-secondary hover:text-ink mb-4 inline-block">
+            ← Back to course
+          </Link>
+        ) : (
+          <Link to="/learning" className="text-sm text-secondary hover:text-ink mb-4 inline-block">
+            ← Back to Learning
+          </Link>
+        )}
 
         {loading && <p className="text-secondary">Loading…</p>}
         {notFound && <p className="text-secondary">Course not found.</p>}
 
+        {course && (
+          <div className="flex items-center justify-between gap-4 flex-wrap mb-2">
+            <h1 className="font-display text-2xl text-ink">{course.name}</h1>
+            <div className="flex items-center gap-3 shrink-0">
+              {currentItem && (
+                <p className="font-mono text-xs text-secondary">
+                  {completedCount} / {orderedItems.length} complete
+                </p>
+              )}
+              {canManage && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/courses/${id}`)}
+                  title="Manage course"
+                  aria-label="Manage course"
+                  className="w-8 h-8 rounded-md border border-hairline text-secondary hover:text-ink hover:bg-paper flex items-center justify-center"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  </svg>
+                </button>
+              )}
+              {!canManage && canEditBasics && (
+                <button
+                  type="button"
+                  onClick={() => setEditOpen(true)}
+                  title="Edit course"
+                  aria-label="Edit course"
+                  className="w-8 h-8 rounded-md border border-hairline text-secondary hover:text-ink hover:bg-paper flex items-center justify-center"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {course && orderedItems.length === 0 && !loading && (
           <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
             <p className="text-secondary">
-              {course.provider ? `${course.provider} hasn't` : "The provider hasn't"} added any content to this
-              course yet.
+              {course.catalogue_course_id
+                ? `${course.provider ? `${course.provider} hasn't` : "The provider hasn't"} added any content to this course yet.`
+                : "This is a personal record — there's no course content to work through here."}
             </p>
           </div>
         )}
 
         {course && currentItem && (
           <div>
-            <div className="flex items-center justify-between gap-4 flex-wrap mb-2">
-              <h1 className="font-display text-2xl text-ink">{course.name}</h1>
-              <p className="font-mono text-xs text-secondary shrink-0">
-                {completedCount} / {orderedItems.length} complete
-              </p>
-            </div>
             <ProgressBar percent={progress} className="mb-8" />
 
             <div className="grid md:grid-cols-[280px_1fr] gap-6">
@@ -429,12 +508,24 @@ export default function CourseLearn() {
                     onMarkComplete={() => handleMarkComplete(currentItem)}
                     onPrevious={() => selectItem(orderedItems[currentIndex - 1].id)}
                     onProgress={refreshProgress}
-                    onGoToCourse={() => navigate(`/courses/${id}`)}
+                    onGoToCourse={canManage ? () => navigate(`/courses/${id}`) : undefined}
                   />
                 </div>
               )}
             </div>
           </div>
+        )}
+
+        {editOpen && course && (
+          <CourseModal
+            restricted
+            course={course}
+            skills={[]}
+            librarySkills={[]}
+            onSave={handleSaveCourse}
+            onDelete={handleDeleteCourse}
+            onClose={() => setEditOpen(false)}
+          />
         )}
       </main>
     </div>
