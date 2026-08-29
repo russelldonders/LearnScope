@@ -21,7 +21,7 @@ import {
 import {
   listCourseSections,
   createCourseSection,
-  renameCourseSection,
+  updateCourseSection,
   deleteCourseSection,
   reorderCourseSections,
   listCourseResources,
@@ -1042,7 +1042,8 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setEditingSection(section)}
+                        onClick={() => (canEdit ? setEditingSection(section) : toggleSection(section.id))}
+                        aria-expanded={editingSection?.id === section.id}
                         className="min-w-0 flex-1 flex items-center gap-2 rounded-md border border-transparent px-2.5 py-2 text-left text-sm text-secondary transition-colors hover:bg-card hover:text-ink"
                       >
                         <span className="min-w-0 flex-1 truncate font-medium">{section.title}</span>
@@ -1062,6 +1063,18 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                         </button>
                       )}
                     </div>
+                    )}
+                    {editingSection?.id === section.id && (
+                      <InlineSectionEditor
+                        section={section}
+                        onChanged={load}
+                        onClose={() => setEditingSection(null)}
+                      />
+                    )}
+                    {editingSection?.id !== section.id && section.instructions && (
+                      <p className="ml-9 max-w-2xl px-2.5 pb-2 text-xs leading-relaxed text-secondary whitespace-pre-wrap">
+                        {section.instructions}
+                      </p>
                     )}
                     {openSectionIds.has(section.id) && sectionItems.length > 0 && (
                       <ul className={`space-y-0.5 ${isFocused ? '' : 'mt-1 ml-7'}`} aria-label={`${section.title} resources`}>
@@ -1368,14 +1381,6 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
         />
       )}
 
-      {editingSection && (
-        <SectionEditModal
-          section={editingSection}
-          onChanged={load}
-          onClose={() => setEditingSection(null)}
-        />
-      )}
-
       {addingResourceToSection && (
         <AddResourceModal
           section={addingResourceToSection}
@@ -1435,28 +1440,20 @@ function AddSectionModal({ value, onChange, busy, onSubmit, onClose }) {
 }
 
 
-// Rename/delete used to live inline in the now-removed right-hand detail
-// panel; clicking a section's title in the outline opens this instead of
-// selecting it into that panel, since the outline is the single content
-// view now. ConfirmDialog renders alongside this modal (not instead of
-// it) by design -- see its own comment about stacking above a parent
-// *Modal.jsx.
-function SectionEditModal({ section, onChanged, onClose }) {
+function InlineSectionEditor({ section, onChanged, onClose }) {
   const [titleDraft, setTitleDraft] = useState(section.title)
+  const [instructionsDraft, setInstructionsDraft] = useState(section.instructions ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
-  async function handleRenameSave(e) {
+  async function handleSave(e) {
     e.preventDefault()
-    if (!titleDraft.trim() || titleDraft === section.title) {
-      onClose()
-      return
-    }
+    if (!titleDraft.trim()) return
     setBusy(true)
     setError(null)
     try {
-      await renameCourseSection(section.id, titleDraft)
+      await updateCourseSection(section.id, { title: titleDraft, instructions: instructionsDraft })
       await onChanged()
       onClose()
     } catch (err) {
@@ -1480,25 +1477,29 @@ function SectionEditModal({ section, onChanged, onClose }) {
 
   return (
     <>
-      <AccessibleDialog
-        labelledBy="section-edit-dialog-title"
-        onClose={onClose}
-        panelClassName="w-full max-w-sm bg-card border border-hairline rounded-lg p-6"
-      >
-        <h2 id="section-edit-dialog-title" className="font-display text-xl text-ink mb-4">
-          Edit section
-        </h2>
+      <div className="ml-9 mt-1 mb-3 max-w-2xl rounded-lg border border-hairline bg-card p-4">
         {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
-        <form onSubmit={handleRenameSave}>
-          <label className="block text-xs text-secondary mb-1" htmlFor="sectionTitle">
+        <form onSubmit={handleSave}>
+          <label className="block text-xs text-secondary mb-1" htmlFor={`section-title-${section.id}`}>
             Section title
           </label>
           <input
-            id="sectionTitle"
-            data-dialog-initial-focus
+            id={`section-title-${section.id}`}
+            autoFocus
             value={titleDraft}
             onChange={(e) => setTitleDraft(e.target.value)}
             className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+          />
+          <label className="block text-xs text-secondary mt-3 mb-1" htmlFor={`section-instructions-${section.id}`}>
+            Instructions for learners
+          </label>
+          <textarea
+            id={`section-instructions-${section.id}`}
+            value={instructionsDraft}
+            onChange={(e) => setInstructionsDraft(e.target.value)}
+            rows={4}
+            placeholder="Explain what learners should do or know before starting this section."
+            className="w-full resize-y rounded-md border border-hairline bg-paper px-3 py-2 text-sm leading-relaxed text-ink placeholder:text-secondary focus:outline-none focus:ring-2 focus:ring-moss"
           />
           <div className="flex items-center gap-2 mt-4">
             <button
@@ -1516,17 +1517,17 @@ function SectionEditModal({ section, onChanged, onClose }) {
             >
               Cancel
             </button>
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(true)}
+              disabled={busy}
+              className="rounded-md border border-hairline text-red-700 py-2 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+            >
+              Delete
+            </button>
           </div>
         </form>
-        <button
-          type="button"
-          onClick={() => setConfirmingDelete(true)}
-          disabled={busy}
-          className="w-full mt-2 rounded-md border border-hairline text-red-700 py-2 text-sm font-medium hover:bg-paper disabled:opacity-60"
-        >
-          Delete section
-        </button>
-      </AccessibleDialog>
+      </div>
       {confirmingDelete && (
         <ConfirmDialog
           message={`Delete the "${section.title}" section? Its content stays attached to the course, just ungrouped.`}

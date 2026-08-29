@@ -56,7 +56,7 @@ export async function listCourseResources(courseId) {
 export async function listCourseSections(courseId) {
   const { data, error } = await supabase
     .from('course_sections')
-    .select('id, title, position')
+    .select('id, title, instructions, position')
     .eq('course_id', courseId)
     .order('position')
   if (error) throw error
@@ -83,8 +83,11 @@ export async function createCourseSection(courseId, title) {
   return data
 }
 
-export async function renameCourseSection(sectionId, title) {
-  const { error } = await supabase.from('course_sections').update({ title: title.trim() }).eq('id', sectionId)
+export async function updateCourseSection(sectionId, { title, instructions }) {
+  const { error } = await supabase
+    .from('course_sections')
+    .update({ title: title.trim(), instructions: instructions.trim() || null })
+    .eq('id', sectionId)
   if (error) throw error
 }
 

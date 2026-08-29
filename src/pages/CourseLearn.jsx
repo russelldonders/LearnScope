@@ -250,7 +250,9 @@ export default function CourseLearn() {
     }
     const groups = []
     for (const section of sections) {
-      if (bySection.has(section.id)) groups.push({ key: section.id, title: section.title, items: bySection.get(section.id) })
+      if (bySection.has(section.id)) {
+        groups.push({ key: section.id, title: section.title, instructions: section.instructions, items: bySection.get(section.id) })
+      }
     }
     if (bySection.has('ungrouped')) {
       groups.push({ key: 'ungrouped', title: sections.length > 0 ? 'Other' : null, items: bySection.get('ungrouped') })
@@ -290,6 +292,7 @@ export default function CourseLearn() {
 
   const currentIndex = orderedItems.findIndex((i) => i.id === currentItemId)
   const currentItem = orderedItems[currentIndex]
+  const currentSection = sections.find((section) => section.id === currentItem?.sectionId)
   const completedCount = orderedItems.filter(
     (i) => progressByItemId[i.id]?.status && progressByItemId[i.id].status !== 'not_attempted'
   ).length
@@ -331,6 +334,9 @@ export default function CourseLearn() {
         </button>
         {isExpanded && (
           <div className="mt-1 mb-1 bg-card border border-hairline rounded-lg p-4">
+            {currentSection?.instructions && (
+              <p className="mb-4 whitespace-pre-wrap text-sm leading-relaxed text-secondary">{currentSection.instructions}</p>
+            )}
             <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1 block">
               {TYPE_LABELS[item.type]}
             </span>
@@ -393,15 +399,22 @@ export default function CourseLearn() {
                     return (
                       <div key={group.key} className="mb-4 last:mb-0">
                         {group.title && (
-                          <button
-                            type="button"
-                            onClick={() => toggleSection(group.key)}
-                            aria-expanded={isOpen}
-                            className="w-full flex items-center justify-between gap-2 rounded-md px-2.5 py-1 mb-1 font-mono text-[10px] uppercase tracking-wide text-secondary hover:text-ink"
-                          >
-                            <span className="truncate">{group.title}</span>
-                            <Chevron open={isOpen} />
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => toggleSection(group.key)}
+                              aria-expanded={isOpen}
+                              className="w-full flex items-center justify-between gap-2 rounded-md px-2.5 py-1 mb-1 font-mono text-[10px] uppercase tracking-wide text-secondary hover:text-ink"
+                            >
+                              <span className="truncate">{group.title}</span>
+                              <Chevron open={isOpen} />
+                            </button>
+                            {isOpen && group.instructions && (
+                              <p className="px-2.5 pb-2 whitespace-pre-wrap text-xs leading-relaxed text-secondary">
+                                {group.instructions}
+                              </p>
+                            )}
+                          </>
                         )}
                         {(isOpen || !group.title) && (
                           <ul className="space-y-1">{group.items.map((item) => renderItemRow(item))}</ul>
@@ -414,6 +427,11 @@ export default function CourseLearn() {
 
               {isDesktop && (
                 <div className="bg-card border border-hairline rounded-lg p-6">
+                  {currentSection?.instructions && (
+                    <p className="mb-5 whitespace-pre-wrap text-sm leading-relaxed text-secondary">
+                      {currentSection.instructions}
+                    </p>
+                  )}
                   <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1 block">
                     {TYPE_LABELS[currentItem.type]}
                   </span>
