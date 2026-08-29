@@ -40,6 +40,7 @@ import AdminCatalogue from './pages/admin/AdminCatalogue'
 import AdminSkills from './pages/admin/AdminSkills'
 import AdminSkillDetail from './pages/admin/AdminSkillDetail'
 import AdminTags from './pages/admin/AdminTags'
+import AdminOnboarding from './pages/admin/AdminOnboarding'
 import ProviderConsole from './pages/provider/ProviderConsole'
 import ProviderCourseEditor from './pages/provider/ProviderCourseEditor'
 import RouteTitle from './components/RouteTitle'
@@ -275,6 +276,14 @@ function App() {
             element={
               <PlatformAdminRoute>
                 <AdminTags />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/onboarding"
+            element={
+              <PlatformAdminRoute>
+                <AdminOnboarding />
               </PlatformAdminRoute>
             }
           />

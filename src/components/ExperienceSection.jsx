@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { EXPERIENCE_TYPES } from '../lib/experienceTypes'
@@ -13,11 +13,17 @@ const ADD_EXPERIENCE_TYPES = EXPERIENCE_TYPES.filter((t) => t.value !== 'educati
 export default function ExperienceSection() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [items, setItems] = useState([])
   const [learningSummaries, setLearningSummaries] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [modalType, setModalType] = useState(null)
+  // Lets a caller (e.g. the dashboard's "record your current role" prompt)
+  // land here with the right "Add" modal already open, instead of making
+  // the learner pick the type themselves right after choosing to act on it.
+  const [modalType, setModalType] = useState(
+    ADD_EXPERIENCE_TYPES.includes(location.state?.autoOpenType) ? location.state.autoOpenType : null
+  )
   const [pendingJob, setPendingJob] = useState(null)
   const [existingCurrentJob, setExistingCurrentJob] = useState(null)
 

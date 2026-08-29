@@ -26,6 +26,19 @@ import { isDiagnosticStatement } from '../lib/xapiStatement'
 import { isSelfAssessmentDue, todayDateString } from '../lib/checkin'
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 
+// Drives the dashboard's "import your CV/history" banner -- shown until
+// the learner has actually run an import once (cv_imported_at, set by
+// ResumeImportReviewModal on first successful import from either the
+// onboarding wizard or /profile/import) or explicitly dismissed it.
+async function loadImportBannerState(userId) {
+  const { data } = await supabase
+    .from('profiles')
+    .select('cv_imported_at, cv_import_banner_dismissed_at')
+    .eq('id', userId)
+    .single()
+  return data ?? { cv_imported_at: null, cv_import_banner_dismissed_at: null }
+}
+
 async function countRows(table, userId) {
   const { count } = await supabase
     .from(table)
@@ -306,6 +319,7 @@ export default function Dashboard() {
   const [upcomingSelfAssessments, setUpcomingSelfAssessments] = useState([])
   const [upcomingTargets, setUpcomingTargets] = useState([])
   const [pendingReviewTasks, setPendingReviewTasks] = useState([])
+  const [importBanner, setImportBanner] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -326,6 +340,7 @@ export default function Dashboard() {
       selfAssessmentsDue,
       targetsDue,
       reviewTasks,
+      importBannerState,
     ] = await Promise.all([
       countRows('skills', user.id),
       countRows('courses', user.id),
@@ -338,6 +353,7 @@ export default function Dashboard() {
       loadUpcomingSelfAssessments(user.id),
       loadUpcomingTargets(user.id),
       loadPendingReviewTasks(user.id),
+      loadImportBannerState(user.id),
     ])
     setCounts({ skills, courses, experience, connections })
     setRecentGrowth(growth)
@@ -348,6 +364,7 @@ export default function Dashboard() {
     setUpcomingSelfAssessments(selfAssessmentsDue)
     setUpcomingTargets(targetsDue)
     setPendingReviewTasks(reviewTasks)
+    setImportBanner(importBannerState)
     setLoading(false)
   }
 
@@ -357,11 +374,25 @@ export default function Dashboard() {
     setConnectionsActivityError(result.error)
   }
 
+  // Best-effort, same as persistProfileFields elsewhere -- if it fails, the
+  // banner just reappears next visit rather than blocking anything.
+  async function dismissImportBanner() {
+    setImportBanner((prev) => ({ ...prev, cv_import_banner_dismissed_at: new Date().toISOString() }))
+    await supabase
+      .from('profiles')
+      .update({ cv_import_banner_dismissed_at: new Date().toISOString() })
+      .eq('id', user.id)
+  }
+
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
 
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8 space-y-12">
+        {!loading && importBanner && !importBanner.cv_imported_at && !importBanner.cv_import_banner_dismissed_at && (
+          <ImportCvBanner onDismiss={dismissImportBanner} />
+        )}
+
         <section aria-labelledby="dashboard-heading">
           <div className="max-w-2xl mb-7">
             <h1 id="dashboard-heading" className="font-display text-3xl sm:text-4xl text-ink text-balance">
@@ -394,6 +425,23 @@ export default function Dashboard() {
             </div>
           )}
         </section>
+
+        {!loading && counts.experience === 0 && counts.skills + counts.courses + counts.connections > 0 && (
+          <div className="rounded-lg border border-dashed border-hairline bg-card p-6 text-center">
+            <h2 className="font-display text-xl text-ink mb-1">Add your current role</h2>
+            <p className="text-sm text-secondary mb-4 max-w-md mx-auto text-pretty">
+              Your Experience timeline is empty. Record the job you're in now so LearnScope can
+              start linking your skills, courses and achievements to it.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/experience', { state: { autoOpenType: 'employment' } })}
+              className="inline-block rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
+            >
+              Record your current role
+            </button>
+          </div>
+        )}
 
         {!loading &&
           (upcomingSelfAssessments.length > 0 || upcomingTargets.length > 0 || pendingReviewTasks.length > 0) && (
@@ -859,6 +907,35 @@ function CurrentLearningPanel({ courses }) {
           </div>
         </Link>
       ))}
+    </div>
+  )
+}
+
+function ImportCvBanner({ onDismiss }) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-lg border border-hairline bg-card px-5 py-4">
+      <div>
+        <p className="text-sm font-medium text-ink">Have a CV or LinkedIn export handy?</p>
+        <p className="text-sm text-secondary mt-0.5">
+          Import it to pull in your skills, courses and experience automatically — you'll choose
+          exactly what to keep before anything is saved.
+        </p>
+      </div>
+      <div className="flex items-center gap-3 shrink-0">
+        <Link
+          to="/profile/import"
+          className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 whitespace-nowrap"
+        >
+          Import now
+        </Link>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="text-sm text-secondary hover:text-ink whitespace-nowrap"
+        >
+          Don't show this again
+        </button>
+      </div>
     </div>
   )
 }

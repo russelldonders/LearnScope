@@ -6,6 +6,7 @@ import { findOrCreateLibrarySkill, listLibrarySkills } from '../lib/skillLibrary
 import { addTagToSkill } from '../lib/skillTags'
 import { formatMonthYear } from '../lib/dates'
 import { TRACKING_REASONS } from '../lib/trackingReasons'
+import { markCvImported } from '../lib/profileImport'
 import AccessibleDialog from './AccessibleDialog'
 import {
   enableCurrentRole,
@@ -228,6 +229,12 @@ export default function ResumeImportReviewModal({
         const { error } = await supabase.from('experience').insert(experienceRows)
         if (error) throw error
       }
+      // Reaching here means the import itself succeeded -- drives the
+      // dashboard's "import your CV/history" banner (hidden once this is
+      // set), regardless of the current-role picker that might still
+      // follow below.
+      await markCvImported(user.id)
+
       if (applyProfile && hasProfileFields) {
         onProfileFieldsFilled?.(profileFields)
       }
