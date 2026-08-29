@@ -15,6 +15,10 @@ import OrganizationUrlField from '../components/OrganizationUrlField'
 import ExperienceModal from '../components/ExperienceModal'
 import AddExperienceButton from '../components/AddExperienceButton'
 import ConfirmDialog from '../components/ConfirmDialog'
+import {
+  addRecommendedSkills,
+  recommendExperienceSkills,
+} from '../lib/experienceSkillRecommendations'
 
 const NESTABLE_PARENT_TYPES = ['employment', 'volunteer']
 
@@ -60,6 +64,13 @@ export default function ExperienceDetail() {
   const [parentExperience, setParentExperience] = useState(null)
   const [childModalType, setChildModalType] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [addSkillOpen, setAddSkillOpen] = useState(false)
+  const [recommendations, setRecommendations] = useState([])
+  const [selectedRecommendations, setSelectedRecommendations] = useState(new Set())
+  const [recommending, setRecommending] = useState(false)
+  const [addingRecommendations, setAddingRecommendations] = useState(false)
+  const [recommendationError, setRecommendationError] = useState(null)
+  const [recommendationNotice, setRecommendationNotice] = useState(null)
 
   useEffect(() => {
     loadItem()
@@ -160,6 +171,60 @@ export default function ExperienceDetail() {
     navigate('/experience')
   }
 
+  async function handleRecommend() {
+    setTab('skills')
+    setRecommending(true)
+    setRecommendationError(null)
+    setRecommendationNotice(null)
+    try {
+      const result = await recommendExperienceSkills(
+        item,
+        skillLinks.map((link) => link.skills?.name).filter(Boolean)
+      )
+      setRecommendations(result)
+      setSelectedRecommendations(new Set(result.map((recommendation) => recommendation.name)))
+      if (result.length === 0) setRecommendationNotice('No additional skills were identified from these details.')
+    } catch (err) {
+      setRecommendationError(err.message)
+    } finally {
+      setRecommending(false)
+    }
+  }
+
+  function toggleRecommendation(name) {
+    setSelectedRecommendations((current) => {
+      const next = new Set(current)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+
+  async function handleAddRecommendations() {
+    const names = recommendations
+      .map((recommendation) => recommendation.name)
+      .filter((name) => selectedRecommendations.has(name))
+    if (names.length === 0) return
+
+    setAddingRecommendations(true)
+    setRecommendationError(null)
+    setRecommendationNotice(null)
+    try {
+      const added = await addRecommendedSkills({ userId: user.id, experienceId: item.id, names })
+      setRecommendations([])
+      setSelectedRecommendations(new Set())
+      setRecommendationNotice(
+        `${added.length} skill${added.length === 1 ? '' : 's'} added to this experience and your profile.`
+      )
+      await loadLearning()
+    } catch (err) {
+      setRecommendationError(`${err.message} Any skills added before the error are still saved.`)
+      await loadLearning()
+    } finally {
+      setAddingRecommendations(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
@@ -210,15 +275,18 @@ export default function ExperienceDetail() {
               </button>
             </div>
 
-            {NESTABLE_PARENT_TYPES.includes(item.type) && (
-              <div className="mt-4">
-                <AddExperienceButton
-                  types={NESTED_EXPERIENCE_TYPES}
-                  onSelect={setChildModalType}
-                  label="+ Add Experience"
-                />
-              </div>
-            )}
+            <ExperienceActionButtons
+              itemType={item.type}
+              onAddExperience={setChildModalType}
+              onRecommend={handleRecommend}
+              onAddSkill={() => {
+                setTab('skills')
+                setAddSkillOpen(true)
+              }}
+              recommending={recommending}
+              addingRecommendations={addingRecommendations}
+              hasRecommendations={recommendations.length > 0}
+            />
 
             {childModalType && (
               <ExperienceModal
@@ -263,7 +331,25 @@ export default function ExperienceDetail() {
             )}
 
             {tab === 'skills' && (
-              <SkillsSubsection item={item} skillLinks={skillLinks} onChange={loadLearning} user={user} />
+              <SkillsSubsection
+                item={item}
+                skillLinks={skillLinks}
+                onChange={loadLearning}
+                user={user}
+                addOpen={addSkillOpen}
+                onAddOpenChange={setAddSkillOpen}
+                recommendations={recommendations}
+                selectedRecommendations={selectedRecommendations}
+                onToggleRecommendation={toggleRecommendation}
+                onAddRecommendations={handleAddRecommendations}
+                onDismissRecommendations={() => {
+                  setRecommendations([])
+                  setSelectedRecommendations(new Set())
+                }}
+                addingRecommendations={addingRecommendations}
+                recommendationError={recommendationError}
+                recommendationNotice={recommendationNotice}
+              />
             )}
 
             {settingsOpen && (
@@ -742,12 +828,26 @@ function CoursesSubsection({ item, linkedCourses, onChange }) {
   )
 }
 
-function SkillsSubsection({ item, skillLinks, onChange, user }) {
+export function SkillsSubsection({
+  item,
+  skillLinks,
+  onChange,
+  user,
+  addOpen = false,
+  onAddOpenChange = () => {},
+  recommendations = [],
+  selectedRecommendations = new Set(),
+  onToggleRecommendation = () => {},
+  onAddRecommendations = () => {},
+  onDismissRecommendations = () => {},
+  addingRecommendations = false,
+  recommendationError = null,
+  recommendationNotice = null,
+}) {
   const navigate = useNavigate()
   const [skills, setSkills] = useState([])
   const [tagsBySkill, setTagsBySkill] = useState(new Map())
   const [loading, setLoading] = useState(true)
-  const [addOpen, setAddOpen] = useState(false)
 
   const skillIds = [...new Set(skillLinks.map((l) => l.skill_id))]
 
@@ -780,16 +880,73 @@ function SkillsSubsection({ item, skillLinks, onChange, user }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary">Skills</h4>
-        <button
-          type="button"
-          onClick={() => setAddOpen(true)}
-          className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90"
-        >
-          + Find skill
-        </button>
-      </div>
+      <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Skills linked</h4>
+
+      {recommendationError && (
+        <p role="alert" className="text-sm text-red-700 mb-3">
+          {recommendationError}
+        </p>
+      )}
+      {recommendationNotice && (
+        <p role="status" className="text-sm text-secondary mb-3">
+          {recommendationNotice}
+        </p>
+      )}
+
+      {recommendations.length > 0 && (
+        <section aria-labelledby="skill-recommendations-heading" className="bg-paper rounded-lg p-4 mb-5">
+          <div className="flex items-start justify-between gap-4 mb-3">
+            <div>
+              <h5 id="skill-recommendations-heading" className="font-display text-lg text-ink">
+                Recommended for this experience
+              </h5>
+              <p className="text-sm text-secondary mt-1">Choose up to three skills to add.</p>
+            </div>
+            <span className="text-xs text-secondary tabular-nums shrink-0">
+              {selectedRecommendations.size} selected
+            </span>
+          </div>
+          <div className="divide-y divide-hairline">
+            {recommendations.map((recommendation, index) => (
+              <label key={recommendation.name} className="flex items-start gap-3 py-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedRecommendations.has(recommendation.name)}
+                  onChange={() => onToggleRecommendation(recommendation.name)}
+                  className="mt-1 size-4 accent-moss"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="text-sm font-semibold text-ink">{recommendation.name}</span>
+                    <span className="text-xs text-secondary">Priority {index + 1}</span>
+                  </span>
+                  <span className="block text-sm text-secondary mt-0.5">{recommendation.reason}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            <button
+              type="button"
+              onClick={onAddRecommendations}
+              disabled={selectedRecommendations.size === 0 || addingRecommendations}
+              className="rounded-md bg-moss text-paper px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+            >
+              {addingRecommendations
+                ? 'Adding skills…'
+                : `Add ${selectedRecommendations.size || ''} selected skill${selectedRecommendations.size === 1 ? '' : 's'}`}
+            </button>
+            <button
+              type="button"
+              onClick={onDismissRecommendations}
+              disabled={addingRecommendations}
+              className="rounded-md px-3 py-2 text-sm text-secondary hover:text-ink disabled:opacity-60"
+            >
+              Dismiss
+            </button>
+          </div>
+        </section>
+      )}
 
       {loading ? (
         <p className="text-sm text-secondary">Loading…</p>
@@ -815,13 +972,51 @@ function SkillsSubsection({ item, skillLinks, onChange, user }) {
       {addOpen && (
         <FindSkillModal
           experienceId={item.id}
-          onClose={() => setAddOpen(false)}
+          onClose={() => onAddOpenChange(false)}
           onCreated={() => {
-            setAddOpen(false)
+            onAddOpenChange(false)
             onChange()
           }}
         />
       )}
+    </div>
+  )
+}
+
+function SparkIcon() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3l1.3 4.2a5 5 0 0 0 3.3 3.3L21 12l-4.4 1.5a5 5 0 0 0-3.3 3.3L12 21l-1.3-4.2a5 5 0 0 0-3.3-3.3L3 12l4.4-1.5a5 5 0 0 0 3.3-3.3L12 3Z" />
+    </svg>
+  )
+}
+
+export function ExperienceActionButtons({
+  itemType,
+  onAddExperience,
+  onRecommend,
+  onAddSkill,
+  recommending = false,
+  addingRecommendations = false,
+  hasRecommendations = false,
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 mt-4">
+      <AddExperienceButton
+        types={NESTABLE_PARENT_TYPES.includes(itemType) ? NESTED_EXPERIENCE_TYPES : []}
+        onSelect={onAddExperience}
+        label="+ Add"
+        leadingOptions={[{ value: 'skill', label: 'Skill', onSelect: onAddSkill }]}
+      />
+      <button
+        type="button"
+        onClick={onRecommend}
+        disabled={recommending || addingRecommendations}
+        className="inline-flex items-center gap-2 rounded-md border border-moss text-moss px-3 py-2 text-sm font-medium hover:bg-moss/10 disabled:opacity-60"
+      >
+        <SparkIcon />
+        {recommending ? 'Finding skills…' : hasRecommendations ? 'Recommend again' : 'Recommend skills'}
+      </button>
     </div>
   )
 }
