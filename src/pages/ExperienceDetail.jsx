@@ -47,6 +47,12 @@ const TABS = [
   { id: 'skills', label: 'Skills' },
 ]
 
+export function getExperienceTabs(item, linkedCourses) {
+  return TABS.filter(
+    (tab) => tab.id !== 'courses' || (!item.parent_experience_id && linkedCourses.length > 0)
+  )
+}
+
 export default function ExperienceDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -82,6 +88,10 @@ export default function ExperienceDetail() {
       loadRelated()
     }
   }, [item?.id])
+
+  useEffect(() => {
+    if (learningLoaded && tab === 'courses' && linkedCourses.length === 0) setTab('overview')
+  }, [learningLoaded, linkedCourses.length, tab])
 
   async function loadItem() {
     setLoadingItem(true)
@@ -299,7 +309,7 @@ export default function ExperienceDetail() {
             )}
 
             <div className="flex items-center gap-1 border-b border-hairline mt-4 mb-4 overflow-x-auto">
-              {TABS.filter((t) => t.id !== 'courses' || !item.parent_experience_id).map((t) => (
+              {getExperienceTabs(item, linkedCourses).map((t) => (
                 <button
                   key={t.id}
                   type="button"

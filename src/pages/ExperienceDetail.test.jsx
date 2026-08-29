@@ -24,7 +24,7 @@ vi.mock('../lib/experienceSkillRecommendations', () => ({
   addRecommendedSkills,
 }))
 
-import { ExperienceActionButtons, SkillsSubsection } from './ExperienceDetail'
+import { ExperienceActionButtons, getExperienceTabs, SkillsSubsection } from './ExperienceDetail'
 
 const item = {
   id: 'experience-1',
@@ -124,5 +124,24 @@ describe('experience skill recommendations', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Recommend skills' }))
     expect(onRecommend).toHaveBeenCalled()
+  })
+})
+
+describe('experience tabs', () => {
+  it('hides Courses until the first course is linked', () => {
+    expect(getExperienceTabs(item, []).map((tab) => tab.id)).toEqual(['overview', 'skills'])
+    expect(getExperienceTabs(item, [{ id: 'course-link-1' }]).map((tab) => tab.id)).toEqual([
+      'overview',
+      'courses',
+      'skills',
+    ])
+  })
+
+  it('keeps Courses hidden for nested experiences', () => {
+    expect(
+      getExperienceTabs({ ...item, parent_experience_id: 'parent-1' }, [{ id: 'course-link-1' }]).map(
+        (tab) => tab.id,
+      ),
+    ).toEqual(['overview', 'skills'])
   })
 })
