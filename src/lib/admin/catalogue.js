@@ -182,6 +182,34 @@ export async function listOrganisationCatalogueCourses(organisationId) {
   return [...byGroup.values()]
 }
 
+export async function listCourseVersionHistory(courseId) {
+  const { data: selectedCourse, error: selectedCourseError } = await supabase
+    .from('course_catalogue')
+    .select('version_group_id')
+    .eq('id', courseId)
+    .single()
+  if (selectedCourseError) throw selectedCourseError
+
+  const { data: versions, error: versionError } = await supabase
+    .from('course_catalogue')
+    .select('id, version_number, status, is_current_published, created_at, created_by, approved_at')
+    .eq('version_group_id', selectedCourse.version_group_id)
+    .order('version_number', { ascending: false })
+  if (versionError) throw versionError
+
+  const creatorIds = [...new Set((versions ?? []).map((version) => version.created_by).filter(Boolean))]
+  const { data: profiles, error: profileError } = creatorIds.length
+    ? await supabase.from('profiles').select('id, full_name').in('id', creatorIds)
+    : { data: [], error: null }
+  if (profileError) throw profileError
+
+  const profileById = new Map((profiles ?? []).map((profile) => [profile.id, profile]))
+  return (versions ?? []).map((version) => ({
+    ...version,
+    creator: profileById.get(version.created_by) ?? null,
+  }))
+}
+
 // Single-course fetch for the provider course editor page -- RLS (course_
 // catalogue's own select policy) already scopes this to approved courses,
 // the caller's own organisation's courses, or a platform admin, so a `null`

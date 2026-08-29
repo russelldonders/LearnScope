@@ -9,7 +9,12 @@ import OrganisationSettingsModal from '../../components/OrganisationSettingsModa
 import AccessibleDialog from '../../components/AccessibleDialog'
 import ProgressBar from '../../components/ProgressBar'
 import { listOrganisations } from '../../lib/admin/organisations'
-import { listOrganisationCatalogueCourses, createProviderCourse, listCourseParticipants } from '../../lib/admin/catalogue'
+import {
+  listOrganisationCatalogueCourses,
+  createProviderCourse,
+  listCourseParticipants,
+  listCourseVersionHistory,
+} from '../../lib/admin/catalogue'
 
 const STATUS_LABELS = {
   draft: 'Draft',
@@ -204,6 +209,7 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
   const [form, setForm] = useState(EMPTY_FORM)
   const [creating, setCreating] = useState(false)
   const [participantCourse, setParticipantCourse] = useState(null)
+  const [historyCourse, setHistoryCourse] = useState(null)
 
   useEffect(() => {
     load()
@@ -345,6 +351,7 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
               course={course}
               canViewParticipants={canViewParticipants}
               onViewParticipants={() => setParticipantCourse(course)}
+              onViewHistory={() => setHistoryCourse(course)}
             />
           ))}
         </div>
@@ -352,6 +359,9 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
 
       {participantCourse && (
         <CourseParticipantsDialog course={participantCourse} onClose={() => setParticipantCourse(null)} />
+      )}
+      {historyCourse && (
+        <CourseVersionHistoryDialog course={historyCourse} onClose={() => setHistoryCourse(null)} />
       )}
     </div>
   )
@@ -361,7 +371,7 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
 // course's own page (ProviderCourseEditor), the same way AdminUserDetail/
 // AdminSkillDetail moved their consoles' inline expansions onto dedicated
 // pages once there was more than a form's worth of detail to show.
-function CourseCard({ course, canViewParticipants, onViewParticipants }) {
+function CourseCard({ course, canViewParticipants, onViewParticipants, onViewHistory }) {
   const editable = course.status === 'draft' || course.status === 'rejected'
   return (
     <article className="bg-card border border-hairline rounded-lg p-3 hover:border-moss/60 transition-colors">
@@ -370,10 +380,10 @@ function CourseCard({ course, canViewParticipants, onViewParticipants }) {
           {course.name}
         </Link>
         <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
-          v{course.version_number} · {STATUS_LABELS[course.status] ?? course.status}
+          Version {course.version_number} · {STATUS_LABELS[course.status] ?? course.status}
         </span>
       </div>
-      {course.course_code && <p className="font-mono text-xs text-secondary mt-1">{course.course_code}</p>}
+      <p className="font-mono text-xs text-secondary mt-1">Course code: {course.course_code || 'Not set'}</p>
       {course.synopsis && <p className="text-sm text-secondary mt-1">{course.synopsis}</p>}
       {course.status === 'rejected' && course.rejection_reason && (
         <p className="text-xs text-red-700 mt-1">Rejected: {course.rejection_reason}</p>
@@ -382,6 +392,9 @@ function CourseCard({ course, canViewParticipants, onViewParticipants }) {
         <Link to={`/provider/training/${course.id}`} className="text-xs font-medium text-moss hover:underline">
           {editable ? 'Edit course' : 'View course'}
         </Link>
+        <button type="button" onClick={onViewHistory} className="text-xs font-medium text-moss hover:underline">
+          Version history
+        </button>
         {canViewParticipants && (
           <button type="button" onClick={onViewParticipants} className="text-xs font-medium text-moss hover:underline">
             View participants
@@ -389,6 +402,65 @@ function CourseCard({ course, canViewParticipants, onViewParticipants }) {
         )}
       </div>
     </article>
+  )
+}
+
+function CourseVersionHistoryDialog({ course, onClose }) {
+  const [versions, setVersions] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    listCourseVersionHistory(course.id)
+      .then(setVersions)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false))
+  }, [course.id])
+
+  return (
+    <AccessibleDialog
+      labelledBy="course-version-history-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-2xl max-h-[90vh] overflow-y-auto overscroll-contain rounded-lg border border-hairline bg-card p-5 sm:p-6"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 id="course-version-history-title" className="font-display text-xl text-ink">{course.name} version history</h2>
+          <p className="mt-1 font-mono text-xs text-secondary">Course code: {course.course_code || 'Not set'}</p>
+        </div>
+        <button type="button" onClick={onClose} className="shrink-0 text-sm text-secondary hover:text-ink">Close</button>
+      </div>
+
+      {loading && <p role="status" className="mt-6 text-sm text-secondary">Loading version history…</p>}
+      {error && <p role="alert" className="mt-6 text-sm text-red-700">Couldn’t load version history: {error}</p>}
+      {!loading && !error && versions.length === 0 && (
+        <p className="mt-6 rounded-md border border-dashed border-hairline px-4 py-8 text-center text-sm text-secondary">
+          No versions found for this course.
+        </p>
+      )}
+      {!loading && !error && versions.length > 0 && (
+        <ol className="mt-5 divide-y divide-hairline border-y border-hairline">
+          {versions.map((version) => (
+            <li key={version.id} className="grid gap-3 py-4 sm:grid-cols-[90px_1fr_1fr] sm:items-center">
+              <div>
+                <p className="font-medium text-ink">Version {version.version_number}</p>
+                <p className="mt-0.5 text-xs text-secondary">{STATUS_LABELS[version.status] ?? version.status}</p>
+              </div>
+              <div>
+                <p className="text-xs text-secondary">Published</p>
+                <p className="mt-0.5 text-sm text-ink">
+                  {version.approved_at ? formatParticipantDate(version.approved_at) : 'Not published'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-secondary">Created by</p>
+                <p className="mt-0.5 text-sm text-ink">{version.creator?.full_name || 'Unknown user'}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </AccessibleDialog>
   )
 }
 
