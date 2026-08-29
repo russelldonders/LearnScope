@@ -17,7 +17,7 @@ import { LEVEL_LABELS, LEVEL_DESCRIPTIONS, KNOWLEDGE_LEVEL_LABELS } from '../lib
 import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
 import { activityName, verbLabel, formatDuration, isDiagnosticStatement } from '../lib/xapiStatement'
-import { enableCurrentRole, disableCurrentRole, applyCurrentRoleSelection, syncSkillIsCurrentRole } from '../lib/currentRole'
+import { applyCurrentRoleSelection, getCurrentRoleTrackingStatus, trackUnderCurrentRole } from '../lib/currentRole'
 import CurrentRoleSelectModal from '../components/CurrentRoleSelectModal'
 import AccessibleDialog from '../components/AccessibleDialog'
 import { listTags, listSkillTags, addTagToSkill, removeSkillTagLink } from '../lib/skillTags'
@@ -2145,11 +2145,9 @@ function ScheduleSection({ skill, onUpdated }) {
 function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user, onUpdated }) {
   const isCustom = !skill.library_skill_id || skill.skill_library?.is_private
   const [name, setName] = useState(skill.name)
-  const [isCurrentRole, setIsCurrentRole] = useState(skill.is_current_role)
   const [trackingReason, setTrackingReason] = useState(skill.tracking_reason ?? null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
-  const [currentRolePrompt, setCurrentRolePrompt] = useState(null)
 
   async function handleSave(e) {
     e.preventDefault()
@@ -2172,26 +2170,6 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
         throw error
       }
 
-      // is_current_role itself is never written directly here -- it's set
-      // by enableCurrentRole/disableCurrentRole/syncSkillIsCurrentRole
-      // below, which only ever mark it true once actually linked to a
-      // current-role experience, so it can't end up stuck true with
-      // nothing behind it (e.g. if the multi-role picker gets abandoned).
-      // Only re-resolve when the checkbox actually changed -- otherwise
-      // every unrelated edit (renaming, tags) would re-prompt a learner
-      // with multiple current roles all over again.
-      if (isCurrentRole !== skill.is_current_role) {
-        if (isCurrentRole) {
-          const result = await enableCurrentRole(user.id, skill.id)
-          if (result.needsSelection) {
-            setCurrentRolePrompt({ roles: result.roles })
-            return
-          }
-        } else {
-          await disableCurrentRole(user.id, skill.id)
-        }
-      }
-
       onUpdated()
     } catch (err) {
       setError(err.message)
@@ -2200,28 +2178,8 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
     }
   }
 
-  async function handleCurrentRoleConfirm(experienceIds) {
-    await applyCurrentRoleSelection(user.id, skill.id, experienceIds)
-    setCurrentRolePrompt(null)
-    onUpdated()
-  }
-
-  async function handleCurrentRoleCancel() {
-    await syncSkillIsCurrentRole(user.id, skill.id)
-    setCurrentRolePrompt(null)
-    onUpdated()
-  }
-
   return (
-    <>
-      {currentRolePrompt && (
-        <CurrentRoleSelectModal
-          roles={currentRolePrompt.roles}
-          onConfirm={handleCurrentRoleConfirm}
-          onCancel={handleCurrentRoleCancel}
-        />
-      )}
-      <form onSubmit={handleSave} className="space-y-3">
+    <form onSubmit={handleSave} className="space-y-3">
       <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">
         {isCustom ? 'Custom skill — private to you' : 'From the shared skill library'}
       </p>
@@ -2252,22 +2210,7 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
 
       <TrackingReasonPicker value={trackingReason} onChange={setTrackingReason} />
 
-      <label className="flex items-start gap-2 text-sm text-secondary">
-        <input
-          type="checkbox"
-          checked={isCurrentRole}
-          onChange={(e) => setIsCurrentRole(e.target.checked)}
-          className="mt-0.5 rounded border-hairline"
-        />
-        <span>
-          Part of my current role
-          <span className="block text-xs text-secondary/80 mt-0.5">
-            Links this skill to your current job on the Experience timeline — creates one called
-            "Current role" if you don't have one yet, or asks which one if you have more than
-            one.
-          </span>
-        </span>
-      </label>
+      <TrackUnderCurrentRoleButton skill={skill} user={user} onUpdated={onUpdated} />
 
       {error && <p className="text-sm text-red-700">{error}</p>}
 
@@ -2280,8 +2223,87 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
           {saving ? 'Saving…' : 'Save details'}
         </button>
       </div>
-      </form>
-    </>
+    </form>
+  )
+}
+
+// Additive-only: adds this skill to one or more of the learner's current
+// (ongoing) roles on the Experience timeline. Hides itself once the skill
+// is already linked to every current role -- there's nothing left to add,
+// so a disabled/checked control would just be clutter. With zero current
+// roles it still shows (clicking creates one); with exactly one untracked
+// current role it links straight to it; with more than one it opens
+// CurrentRoleSelectModal scoped to just the untracked ones.
+function TrackUnderCurrentRoleButton({ skill, user, onUpdated }) {
+  const [status, setStatus] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+  const [pickerRoles, setPickerRoles] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    refreshStatus(cancelled)
+    return () => {
+      cancelled = true
+    }
+  }, [user.id, skill.id])
+
+  async function refreshStatus(cancelled = false) {
+    const s = await getCurrentRoleTrackingStatus(user.id, skill.id)
+    if (!cancelled) setStatus(s)
+    return s
+  }
+
+  async function handleClick() {
+    setError(null)
+    setSaving(true)
+    try {
+      const result = await trackUnderCurrentRole(user.id, skill.id, status)
+      if (result.needsSelection) {
+        setPickerRoles(result.roles)
+      } else {
+        await refreshStatus()
+        onUpdated()
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handlePickerConfirm(experienceIds) {
+    await applyCurrentRoleSelection(user.id, skill.id, experienceIds)
+    setPickerRoles(null)
+    await refreshStatus()
+    onUpdated()
+  }
+
+  if (status && status.roles.length > 0 && status.untracked.length === 0) return null
+
+  return (
+    <div>
+      {pickerRoles && (
+        <CurrentRoleSelectModal
+          roles={pickerRoles}
+          onConfirm={handlePickerConfirm}
+          onCancel={() => setPickerRoles(null)}
+        />
+      )}
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={!status || saving}
+        className="rounded-full border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:border-moss hover:text-moss transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {saving ? 'Adding…' : 'Track under current role'}
+      </button>
+      <p className="text-xs text-secondary/80 mt-1">
+        Links this skill to your current job on the Experience timeline — creates one called
+        "Current role" if you don't have one yet, or asks which one if you have more than one.
+      </p>
+      {error && <p className="text-sm text-red-700 mt-1">{error}</p>}
+    </div>
   )
 }
 
