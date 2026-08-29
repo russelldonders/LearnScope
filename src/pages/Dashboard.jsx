@@ -49,7 +49,9 @@ async function loadCurrentLearning(userId) {
 // from a connection with no activity to show.
 async function loadConnectionsActivity() {
   try {
-    return { data: await listConnectionsActivity(5), error: null }
+    // Fetch beyond the five visible rows so several related skill events can
+    // collapse without leaving the feed unexpectedly sparse.
+    return { data: await listConnectionsActivity(30), error: null }
   } catch (err) {
     return { data: [], error: err.message || 'Something went wrong.' }
   }
@@ -519,30 +521,73 @@ export default function Dashboard() {
 // sentence -- everything the RPC needs to say is already in the row itself
 // (skill_name/level/detail), never a client-side lookup, since each row is
 // independently privacy-checked server-side and shouldn't need extra trust.
+function activitySkillLabel(event) {
+  const additionalSkills = (event.skills?.length ?? 1) - 1
+  if (additionalSkills <= 0) return event.skill_name
+  return `${event.skill_name} and ${additionalSkills} other ${additionalSkills === 1 ? 'skill' : 'skills'}`
+}
+
 function describeActivityEvent(event) {
   const level = event.level ? LEVEL_LABELS[event.level] : null
+  const skillLabel = activitySkillLabel(event)
   switch (event.event_type) {
     case 'skill_confirmed':
-      return `confirmed ${level ?? 'a level'} in ${event.skill_name}`
+      return `confirmed ${level ?? 'a level'} in ${skillLabel}`
     case 'skill_validated':
-      return `had ${event.skill_name} validated at ${level ?? 'their target level'}`
+      return `had ${skillLabel} validated at ${level ?? 'their target level'}`
     case 'skill_added':
-      return `started tracking ${event.skill_name}`
+      return `started tracking ${skillLabel}`
     case 'experience_added':
       return `added ${event.detail}`
     case 'course_started':
       return `started ${event.detail}`
     case 'target_set':
-      return `set a target of ${level ?? 'a new level'} for ${event.skill_name}`
+      return `set a target of ${level ?? 'a new level'} for ${skillLabel}`
     default:
       return null
   }
 }
 
-function ConnectionsActivityFeed({ events }) {
+// Group skill milestones when the actor, action and milestone details match.
+// The RPC returns newest-first, so the first event (and its skill) always
+// remains the visible representative of the group.
+function groupConnectionsActivity(events) {
+  const groups = []
+  const groupByKey = new Map()
+
+  for (const event of events) {
+    if (!event.skill_name) {
+      groups.push({ ...event, skills: [] })
+      continue
+    }
+
+    const key = JSON.stringify([
+      event.actor_id,
+      event.event_type,
+      event.level ?? null,
+      event.detail ?? null,
+    ])
+    const existing = groupByKey.get(key)
+
+    if (existing && !existing.skills.includes(event.skill_name)) {
+      existing.skills.push(event.skill_name)
+      continue
+    }
+
+    const group = { ...event, skills: [event.skill_name] }
+    groups.push(group)
+    if (!existing) groupByKey.set(key, group)
+  }
+
+  return groups
+}
+
+export function ConnectionsActivityFeed({ events }) {
+  const groupedEvents = groupConnectionsActivity(events).slice(0, 5)
+
   return (
     <div className="space-y-2">
-      {events.map((event, i) => {
+      {groupedEvents.map((event, i) => {
         const description = describeActivityEvent(event)
         if (!description) return null
         return (
