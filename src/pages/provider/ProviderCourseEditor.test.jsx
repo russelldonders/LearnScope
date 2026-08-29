@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../lib/supabaseClient', () => ({ supabase: {} }))
 
@@ -8,13 +8,7 @@ import { DragHandle } from './ProviderCourseEditor'
 describe('DragHandle touch support', () => {
   afterEach(cleanup)
 
-  beforeEach(() => {
-    HTMLElement.prototype.setPointerCapture = vi.fn()
-    HTMLElement.prototype.hasPointerCapture = vi.fn(() => true)
-    HTMLElement.prototype.releasePointerCapture = vi.fn()
-  })
-
-  it('runs the pointer drag lifecycle for touch input', () => {
+  it('runs the touch drag lifecycle via raw touch events, not Pointer Events', () => {
     const onPointerDragStart = vi.fn()
     const onPointerDragMove = vi.fn()
     const onPointerDragEnd = vi.fn()
@@ -29,21 +23,30 @@ describe('DragHandle touch support', () => {
     )
 
     const handle = screen.getByRole('button', { name: /move lesson/i })
-    fireEvent.pointerDown(handle, { pointerId: 4, pointerType: 'touch', clientX: 20, clientY: 200 })
-    fireEvent.pointerMove(handle, { pointerId: 4, pointerType: 'touch', clientX: 20, clientY: 240 })
-    fireEvent.pointerUp(handle, { pointerId: 4, pointerType: 'touch', clientX: 20, clientY: 240 })
+    fireEvent.touchStart(handle, { touches: [{ clientX: 20, clientY: 200 }] })
+    fireEvent.touchMove(handle, { touches: [{ clientX: 20, clientY: 240 }] })
+    fireEvent.touchEnd(handle, { changedTouches: [{ clientX: 20, clientY: 240 }] })
 
     expect(onPointerDragStart).toHaveBeenCalledOnce()
     expect(onPointerDragMove).toHaveBeenCalledOnce()
     expect(onPointerDragEnd).toHaveBeenCalledOnce()
   })
 
-  it('leaves mouse input to native HTML drag events', () => {
+  it('ignores touch handling while disabled', () => {
     const onPointerDragStart = vi.fn()
-    render(<DragHandle label="Move lesson" onPointerDragStart={onPointerDragStart} />)
+    render(<DragHandle label="Move lesson" disabled onPointerDragStart={onPointerDragStart} />)
 
-    fireEvent.pointerDown(screen.getByRole('button'), { pointerId: 1, pointerType: 'mouse' })
+    fireEvent.touchStart(screen.getByRole('button'), { touches: [{ clientX: 20, clientY: 200 }] })
 
     expect(onPointerDragStart).not.toHaveBeenCalled()
+  })
+
+  it('leaves mouse input to native HTML drag events', () => {
+    const onDragStart = vi.fn()
+    render(<DragHandle label="Move lesson" onDragStart={onDragStart} />)
+
+    fireEvent.dragStart(screen.getByRole('button'))
+
+    expect(onDragStart).toHaveBeenCalledOnce()
   })
 })
