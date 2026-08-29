@@ -27,6 +27,7 @@ vi.mock('../lib/experienceSkillRecommendations', () => ({
 import {
   buildExperienceSkillProgress,
   ExperienceActionButtons,
+  getDevelopedSkills,
   getExperienceTabs,
   SkillsSubsection,
 } from './ExperienceDetail'
@@ -198,5 +199,34 @@ describe('experience skill progress', () => {
 
     expect(progress.entryLevel).toBeNull()
     expect(progress.endLevel).toBe(4)
+  })
+
+  it('only includes skills whose measured level increased during the role', () => {
+    const unchangedLink = {
+      skill_id: 'skill-2',
+      skills: { id: 'skill-2', name: 'Data Analysis', level: 3 },
+    }
+    const unchangedAssessments = [
+      { id: 'unchanged-start', skill_id: 'skill-2', level: 3, assessed_at: '2020-01-01T09:00:00Z' },
+      { id: 'unchanged-end', skill_id: 'skill-2', level: 3, assessed_at: '2022-12-01T09:00:00Z' },
+    ]
+
+    const developed = getDevelopedSkills(
+      [skillLink, unchangedLink],
+      [...assessments, ...unchangedAssessments],
+      { start_date: '2020-01-01', end_date: '2022-12-31' },
+    )
+
+    expect(developed.map(({ link }) => link.skill_id)).toEqual(['skill-1'])
+  })
+
+  it('excludes skills without a measured entry level because growth cannot be established', () => {
+    const developed = getDevelopedSkills(
+      [skillLink],
+      assessments.slice(2),
+      { start_date: '2020-01-01', end_date: '2022-12-31' },
+    )
+
+    expect(developed).toEqual([])
   })
 })

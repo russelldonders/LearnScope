@@ -686,13 +686,23 @@ export function buildExperienceSkillProgress(skillLink, assessments, item, today
   }
 }
 
+export function getDevelopedSkills(skillLinks, assessments, item, today = new Date()) {
+  return skillLinks
+    .map((link) => ({ link, progress: buildExperienceSkillProgress(link, assessments, item, today) }))
+    .filter(({ progress }) => progress.entryLevel && progress.endLevel > progress.entryLevel)
+}
+
 function SkillDevelopmentList({ item, skillLinks, assessments }) {
   const [expandedSkillId, setExpandedSkillId] = useState(null)
+  const developedSkills = getDevelopedSkills(skillLinks, assessments, item)
+
+  if (developedSkills.length === 0) {
+    return <p className="text-sm text-secondary">No measured skill growth during this experience yet.</p>
+  }
 
   return (
     <ul className="overflow-hidden rounded-md border border-hairline divide-y divide-hairline">
-      {skillLinks.map((link) => {
-        const progress = buildExperienceSkillProgress(link, assessments, item)
+      {developedSkills.map(({ link, progress }) => {
         const expanded = expandedSkillId === link.skill_id
         return (
           <li key={link.skill_id} className="bg-paper/40">
@@ -717,7 +727,9 @@ function SkillDevelopmentList({ item, skillLinks, assessments }) {
               </span>
               <span className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                 <SkillLevelPoint label="At role start" level={progress.entryLevel} />
-                <span aria-hidden="true" className="text-secondary">→</span>
+                <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="h-4 w-4 text-secondary">
+                  <path d="M3.5 10h13m-4-4 4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
                 <SkillLevelPoint label={progress.endLabel} level={progress.endLevel} align="right" />
               </span>
             </button>
@@ -731,9 +743,12 @@ function SkillDevelopmentList({ item, skillLinks, assessments }) {
 
 function SkillLevelPoint({ label, level, align = 'left' }) {
   return (
-    <span className={`min-w-0 ${align === 'right' ? 'text-right' : ''}`}>
-      <span className="block font-mono text-[10px] uppercase tracking-wide text-secondary">{label}</span>
-      <span className="mt-0.5 block text-sm text-ink">{level ? `Level ${level} · ${LEVEL_LABELS[level]}` : 'Not assessed'}</span>
+    <span className={`flex min-w-0 items-center gap-2 ${align === 'right' ? 'flex-row-reverse text-right' : ''}`}>
+      <GrowthRing level={level} size={36} />
+      <span className="min-w-0">
+        <span className="block font-mono text-[10px] uppercase tracking-wide text-secondary">{label}</span>
+        <span className="mt-0.5 block text-sm text-ink">Level {level} · {LEVEL_LABELS[level]}</span>
+      </span>
     </span>
   )
 }
