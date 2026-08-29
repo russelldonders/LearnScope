@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
+import { useIsDesktop } from '../lib/device'
 import {
   listCourseSections,
   listCourseResources,
@@ -41,6 +42,133 @@ function sortBySection(contentItems, sectionRows) {
   })
 }
 
+// Player + complete/previous controls + the all-complete banner, shared by
+// the md+ side pane (which wraps this with a card, type label and title)
+// and the below-md inline accordion in the nav (already under the row
+// showing the title, so it skips repeating it).
+function CourseItemPlayer({
+  item,
+  userId,
+  courseId,
+  hasNext,
+  hasPrevious,
+  isComplete,
+  progress,
+  onMarkComplete,
+  onPrevious,
+  onProgress,
+  onGoToCourse,
+}) {
+  return (
+    <>
+      {(item.type === 'video' || item.type === 'screen_recording') && (
+        <EditedVideoPlayer key={item.id} resource={item} onEnded={onMarkComplete} className="w-full rounded-md bg-black" />
+      )}
+
+      {item.type === 'file' && (
+        // download, not target="_blank" -- an unrestricted-type upload
+        // served same-origin must never be opened as a navigation (same
+        // reasoning as the provider editor's matching file-download link).
+        <a
+          href={contentFileUrl(item)}
+          download={item.file_name || true}
+          className="flex items-center gap-3 rounded-md border border-hairline bg-paper px-3 py-2.5"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-secondary shrink-0">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+          </svg>
+          <span className="text-sm text-ink flex-1 truncate">{item.file_name}</span>
+          <span className="font-mono text-[10px] uppercase tracking-wide text-moss shrink-0">Download</span>
+        </a>
+      )}
+
+      {item.type === 'scorm' && (
+        <ScormPlayer key={item.id} contentItem={item} userId={userId} onProgress={onProgress} />
+      )}
+
+      {item.type === 'xapi' && <XapiPlayer key={item.id} contentItem={item} userId={userId} courseId={courseId} />}
+
+      {item.type === 'external_video' && (
+        <iframe
+          key={item.id}
+          src={item.external_url}
+          title={item.title}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          className="w-full aspect-video rounded-md"
+        />
+      )}
+
+      {item.type === 'web_url' && (
+        <a
+          href={item.external_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-between gap-3 rounded-md border border-hairline bg-paper px-4 py-3 text-sm text-ink hover:border-moss"
+        >
+          <span className="min-w-0 truncate">{item.external_url}</span>
+          <span className="font-medium text-moss shrink-0">Open link ↗</span>
+        </a>
+      )}
+
+      <div className="flex items-center gap-2 mt-6 pt-4 border-t border-hairline">
+        {item.type !== 'scorm' && (
+          <button
+            type="button"
+            onClick={onMarkComplete}
+            className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
+          >
+            {isComplete ? (hasNext ? 'Next' : 'Done') : hasNext ? 'Mark complete & continue' : 'Mark complete'}
+          </button>
+        )}
+        {hasPrevious && (
+          <button
+            type="button"
+            onClick={onPrevious}
+            className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper"
+          >
+            Previous
+          </button>
+        )}
+      </div>
+
+      {progress === 100 && (
+        <div className="mt-4 rounded-md border border-moss bg-moss/5 px-3 py-2">
+          <p className="text-sm text-ink">
+            All content complete —{' '}
+            <button type="button" onClick={onGoToCourse} className="text-moss font-medium hover:underline">
+              head back to record what you achieved
+            </button>
+            .
+          </p>
+        </div>
+      )}
+    </>
+  )
+}
+
+// Below md only -- see the nav's own inline accordion (rendered per-item,
+// gated by useIsDesktop) for the below-md equivalent.
+function ItemPreviewChevron({ open }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="12"
+      height="12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={`md:hidden shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+    >
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  )
+}
+
 export default function CourseLearn() {
   const { id } = useParams()
   const { user } = useAuth()
@@ -53,6 +181,14 @@ export default function CourseLearn() {
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [currentItemId, setCurrentItemId] = useState(null)
+  // Below md the content opens inline in the nav (an accordion under the
+  // clicked item) instead of the side pane used at md+ -- see the provider
+  // course editor's own outline for the same pattern. Kept separate from
+  // currentItemId (which drives Next/Previous, completion tracking and nav
+  // highlighting, and must stay set for the page to render at all) so
+  // collapsing the accordion on mobile can't blank the whole page.
+  const [expandedItemId, setExpandedItemId] = useState(null)
+  const isDesktop = useIsDesktop()
 
   useEffect(() => {
     load()
@@ -120,7 +256,23 @@ export default function CourseLearn() {
     await markContentComplete(item.id, user.id)
     await refreshProgress()
     const next = orderedItems[currentIndex + 1]
-    if (next) setCurrentItemId(next.id)
+    if (next) selectItem(next.id)
+  }
+
+  // Sets the "current" item (Next/Previous, completion tracking, nav
+  // highlighting) and, if the mobile accordion is already open, keeps it
+  // open on whatever item is now current -- so "Mark complete & continue"
+  // and Previous carry the open accordion along instead of leaving it
+  // open on the item you just left.
+  function selectItem(itemId) {
+    setCurrentItemId(itemId)
+    setExpandedItemId((current) => (current === null ? null : itemId))
+  }
+
+  function handleNavClick(item) {
+    setCurrentItemId(item.id)
+    if (isDesktop) return
+    setExpandedItemId((current) => (current === item.id ? null : item.id))
   }
 
   const currentIndex = orderedItems.findIndex((i) => i.id === currentItemId)
@@ -174,11 +326,14 @@ export default function CourseLearn() {
                         const isCurrent = item.id === currentItem.id
                         const status = progressByItemId[item.id]?.status
                         const isDone = Boolean(status) && status !== 'not_attempted'
+                        const isExpanded = !isDesktop && expandedItemId === item.id
+                        const itemIndex = orderedItems.findIndex((i) => i.id === item.id)
                         return (
                           <li key={item.id}>
                             <button
                               type="button"
-                              onClick={() => setCurrentItemId(item.id)}
+                              onClick={() => handleNavClick(item)}
+                              aria-expanded={isExpanded}
                               className={`w-full flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors ${
                                 isCurrent
                                   ? 'bg-card border border-moss text-ink'
@@ -193,7 +348,28 @@ export default function CourseLearn() {
                                 {isDone ? '✓' : ''}
                               </span>
                               <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                              <ItemPreviewChevron open={isExpanded} />
                             </button>
+                            {isExpanded && (
+                              <div className="mt-1 mb-1 bg-card border border-hairline rounded-lg p-4">
+                                <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1 block">
+                                  {TYPE_LABELS[item.type]}
+                                </span>
+                                <CourseItemPlayer
+                                  item={item}
+                                  userId={user.id}
+                                  courseId={course.id}
+                                  hasNext={itemIndex + 1 < orderedItems.length}
+                                  hasPrevious={itemIndex > 0}
+                                  isComplete={Boolean(status)}
+                                  progress={progress}
+                                  onMarkComplete={() => handleMarkComplete(item)}
+                                  onPrevious={() => selectItem(orderedItems[itemIndex - 1].id)}
+                                  onProgress={refreshProgress}
+                                  onGoToCourse={() => navigate(`/courses/${id}`)}
+                                />
+                              </div>
+                            )}
                           </li>
                         )
                       })}
@@ -202,121 +378,27 @@ export default function CourseLearn() {
                 ))}
               </nav>
 
-              <div className="bg-card border border-hairline rounded-lg p-6">
-                <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1 block">
-                  {TYPE_LABELS[currentItem.type]}
-                </span>
-                <h3 className="font-display text-xl text-ink mb-4">{currentItem.title}</h3>
-
-                {(currentItem.type === 'video' || currentItem.type === 'screen_recording') && (
-                  <EditedVideoPlayer
-                    key={currentItem.id}
-                    resource={currentItem}
-                    onEnded={() => handleMarkComplete(currentItem)}
-                    className="w-full rounded-md bg-black"
-                  />
-                )}
-
-                {currentItem.type === 'file' && (
-                  // download, not target="_blank" -- an unrestricted-type
-                  // upload served same-origin must never be opened as a
-                  // navigation (same reasoning as the provider editor's
-                  // matching file-download link).
-                  <a
-                    href={contentFileUrl(currentItem)}
-                    download={currentItem.file_name || true}
-                    className="flex items-center gap-3 rounded-md border border-hairline bg-paper px-3 py-2.5"
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-secondary shrink-0">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                    </svg>
-                    <span className="text-sm text-ink flex-1 truncate">{currentItem.file_name}</span>
-                    <span className="font-mono text-[10px] uppercase tracking-wide text-moss shrink-0">
-                      Download
-                    </span>
-                  </a>
-                )}
-
-                {currentItem.type === 'scorm' && (
-                  <ScormPlayer
-                    key={currentItem.id}
-                    contentItem={currentItem}
+              {isDesktop && (
+                <div className="bg-card border border-hairline rounded-lg p-6">
+                  <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1 block">
+                    {TYPE_LABELS[currentItem.type]}
+                  </span>
+                  <h3 className="font-display text-xl text-ink mb-4">{currentItem.title}</h3>
+                  <CourseItemPlayer
+                    item={currentItem}
                     userId={user.id}
+                    courseId={course.id}
+                    hasNext={currentIndex + 1 < orderedItems.length}
+                    hasPrevious={currentIndex > 0}
+                    isComplete={Boolean(progressByItemId[currentItem.id]?.status)}
+                    progress={progress}
+                    onMarkComplete={() => handleMarkComplete(currentItem)}
+                    onPrevious={() => selectItem(orderedItems[currentIndex - 1].id)}
                     onProgress={refreshProgress}
+                    onGoToCourse={() => navigate(`/courses/${id}`)}
                   />
-                )}
-
-                {currentItem.type === 'xapi' && (
-                  <XapiPlayer key={currentItem.id} contentItem={currentItem} userId={user.id} courseId={course.id} />
-                )}
-
-                {currentItem.type === 'external_video' && (
-                  <iframe
-                    key={currentItem.id}
-                    src={currentItem.external_url}
-                    title={currentItem.title}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    className="w-full aspect-video rounded-md"
-                  />
-                )}
-
-                {currentItem.type === 'web_url' && (
-                  <a
-                    href={currentItem.external_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-between gap-3 rounded-md border border-hairline bg-paper px-4 py-3 text-sm text-ink hover:border-moss"
-                  >
-                    <span className="min-w-0 truncate">{currentItem.external_url}</span>
-                    <span className="font-medium text-moss shrink-0">Open link ↗</span>
-                  </a>
-                )}
-
-                <div className="flex items-center gap-2 mt-6 pt-4 border-t border-hairline">
-                  {currentItem.type !== 'scorm' && (
-                    <button
-                      type="button"
-                      onClick={() => handleMarkComplete(currentItem)}
-                      className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
-                    >
-                      {progressByItemId[currentItem.id]?.status
-                        ? currentIndex + 1 < orderedItems.length
-                          ? 'Next'
-                          : 'Done'
-                        : currentIndex + 1 < orderedItems.length
-                          ? 'Mark complete & continue'
-                          : 'Mark complete'}
-                    </button>
-                  )}
-                  {currentIndex > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setCurrentItemId(orderedItems[currentIndex - 1].id)}
-                      className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper"
-                    >
-                      Previous
-                    </button>
-                  )}
                 </div>
-
-                {progress === 100 && (
-                  <div className="mt-4 rounded-md border border-moss bg-moss/5 px-3 py-2">
-                    <p className="text-sm text-ink">
-                      All content complete —{' '}
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/courses/${id}`)}
-                        className="text-moss font-medium hover:underline"
-                      >
-                        head back to record what you achieved
-                      </button>
-                      .
-                    </p>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
           </div>
         )}
