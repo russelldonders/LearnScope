@@ -20,7 +20,6 @@ const RECOMMENDATIONS_SCHEMA = {
   properties: {
     recommendations: {
       type: 'array',
-      maxItems: 3,
       items: {
         type: 'object',
         properties: {
