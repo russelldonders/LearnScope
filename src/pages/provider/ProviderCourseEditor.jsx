@@ -226,10 +226,10 @@ export function DragHandle({
         title="Drag to reorder"
         className="inline-flex h-11 w-11 md:h-7 md:w-7 shrink-0 touch-none cursor-grab items-center justify-center rounded-md text-secondary hover:bg-paper hover:text-ink focus:outline-none focus:ring-2 focus:ring-moss active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
       >
-        <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
-          <circle cx="5" cy="3.5" r="1" /><circle cx="11" cy="3.5" r="1" />
-          <circle cx="5" cy="8" r="1" /><circle cx="11" cy="8" r="1" />
-          <circle cx="5" cy="12.5" r="1" /><circle cx="11" cy="12.5" r="1" />
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+          <circle cx="9" cy="5" r="1.6" /><circle cx="15" cy="5" r="1.6" />
+          <circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" />
+          <circle cx="9" cy="19" r="1.6" /><circle cx="15" cy="19" r="1.6" />
         </svg>
       </button>
       {ghost &&
