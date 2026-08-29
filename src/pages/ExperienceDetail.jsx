@@ -1002,13 +1002,12 @@ export function ExperienceActionButtons({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2 mt-4">
-      {NESTABLE_PARENT_TYPES.includes(itemType) && (
-        <AddExperienceButton
-          types={NESTED_EXPERIENCE_TYPES}
-          onSelect={onAddExperience}
-          label="+ Add Experience"
-        />
-      )}
+      <AddExperienceButton
+        types={NESTABLE_PARENT_TYPES.includes(itemType) ? NESTED_EXPERIENCE_TYPES : []}
+        onSelect={onAddExperience}
+        label="+ Add"
+        leadingOptions={[{ value: 'skill', label: 'Skill', onSelect: onAddSkill }]}
+      />
       <button
         type="button"
         onClick={onRecommend}
@@ -1017,13 +1016,6 @@ export function ExperienceActionButtons({
       >
         <SparkIcon />
         {recommending ? 'Finding skills…' : hasRecommendations ? 'Recommend again' : 'Recommend skills'}
-      </button>
-      <button
-        type="button"
-        onClick={onAddSkill}
-        className="rounded-md bg-moss text-paper px-4 py-2 text-sm font-medium hover:opacity-90"
-      >
-        + Add skill
       </button>
     </div>
   )

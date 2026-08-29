@@ -99,22 +99,30 @@ describe('experience skill recommendations', () => {
     expect(onAddRecommendations).toHaveBeenCalled()
   })
 
-  it('places experience, recommendation, and add-skill actions together above the tabs', () => {
+  it('combines skill and experience creation into one add menu with skill first', () => {
+    const onAddExperience = vi.fn()
     const onRecommend = vi.fn()
     const onAddSkill = vi.fn()
     render(
       <ExperienceActionButtons
         itemType="employment"
-        onAddExperience={vi.fn()}
+        onAddExperience={onAddExperience}
         onRecommend={onRecommend}
         onAddSkill={onAddSkill}
       />,
     )
 
-    expect(screen.getByRole('button', { name: '+ Add Experience' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Recommend skills' }))
-    fireEvent.click(screen.getByRole('button', { name: '+ Add skill' }))
-    expect(onRecommend).toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '+ Add' }))
+    const menuOptions = screen.getAllByRole('button').map((button) => button.textContent)
+    expect(menuOptions.indexOf('Skill')).toBeLessThan(menuOptions.indexOf('Project'))
+    fireEvent.click(screen.getByRole('button', { name: 'Skill' }))
     expect(onAddSkill).toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Add' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Project' }))
+    expect(onAddExperience).toHaveBeenCalledWith('project')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Recommend skills' }))
+    expect(onRecommend).toHaveBeenCalled()
   })
 })
