@@ -6,6 +6,7 @@ import ScormPlayer from '../../components/ScormPlayer'
 import XapiPlayer from '../../components/XapiPlayer'
 import EditedVideoPlayer from '../../components/EditedVideoPlayer'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import AccessibleDialog from '../../components/AccessibleDialog'
 import CourseThumbnail from '../../components/CourseThumbnail'
 import ScreenRecorderModal from '../../components/ScreenRecorderModal'
 import {
@@ -70,6 +71,35 @@ function dropTargetAt(event, itemAttribute, sectionAttribute) {
     itemId: itemAttribute ? element?.closest(`[${itemAttribute}]`)?.getAttribute(itemAttribute) : null,
     sectionId: sectionAttribute ? element?.closest(`[${sectionAttribute}]`)?.getAttribute(sectionAttribute) : null,
   }
+}
+
+// Clicking an item in the course outline selects its section (so it renders
+// in SectionCard/UngroupedContent) and needs to then jump the reader's eye
+// to that specific item in what can be a long content list. `token` (not
+// just itemId) makes the effect below re-fire even when the same item is
+// clicked twice in a row.
+function useItemFocusHighlight(focusRequest) {
+  const [highlightedItemId, setHighlightedItemId] = useState(null)
+  const itemRefs = useRef(new Map())
+
+  useEffect(() => {
+    if (!focusRequest) return
+    const node = itemRefs.current.get(focusRequest.itemId)
+    if (!node) return
+    node.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setHighlightedItemId(focusRequest.itemId)
+    const timeout = setTimeout(() => setHighlightedItemId(null), 1600)
+    return () => clearTimeout(timeout)
+  }, [focusRequest])
+
+  function registerItemRef(itemId) {
+    return (node) => {
+      if (node) itemRefs.current.set(itemId, node)
+      else itemRefs.current.delete(itemId)
+    }
+  }
+
+  return { highlightedItemId, registerItemRef }
 }
 
 // Touch dragging is wired through raw touchstart/touchmove/touchend
@@ -567,7 +597,9 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
   const [error, setError] = useState(null)
   const [newSectionTitle, setNewSectionTitle] = useState('')
   const [creatingSection, setCreatingSection] = useState(false)
+  const [addingSection, setAddingSection] = useState(false)
   const [selectedSectionId, setSelectedSectionId] = useState(null)
+  const [focusRequest, setFocusRequest] = useState(null)
   const [draggedSectionId, setDraggedSectionId] = useState(null)
   const [sectionDropId, setSectionDropId] = useState(null)
   const [draggedOutlineItem, setDraggedOutlineItem] = useState(null)
@@ -630,6 +662,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
     try {
       const section = await createCourseSection(courseId, newSectionTitle)
       setNewSectionTitle('')
+      setAddingSection(false)
       setSelectedSectionId(section.id)
       await load()
     } catch (err) {
@@ -637,6 +670,11 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
     } finally {
       setCreatingSection(false)
     }
+  }
+
+  function handleFocusItem(item) {
+    setSelectedSectionId(item.sectionId ?? 'ungrouped')
+    setFocusRequest({ itemId: item.linkId, token: Date.now() })
   }
 
   async function commitSectionOrder(draggedId, targetId) {
@@ -744,40 +782,28 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
 
       {error && <p className="text-sm text-red-700">{error}</p>}
 
-      {canEdit && (
-        <form onSubmit={handleAddSection} className="bg-card border border-hairline rounded-lg p-4 flex flex-wrap items-end gap-2">
-          <div className="flex-1 min-w-[200px]">
-            <label className="block text-xs text-secondary mb-1" htmlFor="newSectionTitle">
-              Section title
-            </label>
-            <input
-              id="newSectionTitle"
-              value={newSectionTitle}
-              onChange={(e) => setNewSectionTitle(e.target.value)}
-              placeholder="e.g. Getting started"
-              className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-            />
+      <div className="grid md:grid-cols-[280px_minmax(0,1fr)] gap-6 items-start">
+        <nav aria-label="Course content outline" className="md:sticky md:top-6">
+          <div className="flex items-center justify-between gap-2 px-2.5 mb-2">
+            <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Course outline</p>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => setAddingSection(true)}
+                className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-moss hover:opacity-80"
+              >
+                + Add section
+              </button>
+            )}
           </div>
-          <button
-            type="submit"
-            disabled={creatingSection || !newSectionTitle.trim()}
-            className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-          >
-            {creatingSection ? 'Adding…' : '+ Add section'}
-          </button>
-        </form>
-      )}
 
-      {sections.length === 0 && ungroupedItems.length === 0 ? (
-        <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
-          <p className="text-secondary">
-            {canEdit ? 'No sections yet — add one above to start structuring this course.' : 'No content added yet.'}
-          </p>
-        </div>
-      ) : (
-        <div className="grid md:grid-cols-[280px_minmax(0,1fr)] gap-6 items-start">
-          <nav aria-label="Course content outline" className="md:sticky md:top-6">
-            <p className="font-mono text-[10px] uppercase tracking-wide text-secondary px-2.5 mb-2">Course outline</p>
+          {sections.length === 0 && ungroupedItems.length === 0 ? (
+            <div className="text-center py-8 px-3 border border-dashed border-hairline rounded-lg">
+              <p className="text-xs text-secondary">
+                {canEdit ? 'No sections yet — use "+ Add section" above to start structuring this course.' : 'No content added yet.'}
+              </p>
+            </div>
+          ) : (
             <div className="space-y-4">
               {sections.map((section) => {
                 const sectionItems = itemsBySection.get(section.id) ?? []
@@ -931,7 +957,13 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                                 }}
                               />
                             )}
-                            <span className="min-w-0 flex-1 truncate text-xs text-secondary">{item.title}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleFocusItem(item)}
+                              className="min-w-0 flex-1 truncate text-left text-xs text-secondary hover:text-ink hover:underline"
+                            >
+                              {item.title}
+                            </button>
                           </li>
                         ))}
                       </ul>
@@ -1041,46 +1073,109 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                             }}
                           />
                         )}
-                        <span className="min-w-0 flex-1 truncate text-xs text-secondary">{item.title}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleFocusItem(item)}
+                          className="min-w-0 flex-1 truncate text-left text-xs text-secondary hover:text-ink hover:underline"
+                        >
+                          {item.title}
+                        </button>
                       </li>
                     ))}
                   </ul>
                 </div>
               )}
             </div>
-          </nav>
+          )}
+        </nav>
 
-          <div className="min-w-0">
-            {selectedSection && (
-              <SectionCard
-                key={selectedSection.id}
-                section={selectedSection}
-                items={itemsBySection.get(selectedSection.id) ?? []}
-                availableResources={orgResources.filter((r) => !linkedResourceIds.has(r.id))}
-                courseId={courseId}
-                organisationId={organisationId}
-                userId={userId}
-                canEdit={canEdit}
-                onChanged={load}
-                reordering={reordering}
-                setReordering={setReordering}
-              />
-            )}
-            {selectedSectionId === 'ungrouped' && ungroupedItems.length > 0 && (
-              <UngroupedContent
-                items={ungroupedItems}
-                userId={userId}
-                canEdit={canEdit}
-                onChanged={load}
-                reordering={reordering}
-                setReordering={setReordering}
-              />
-            )}
-          </div>
+        <div className="min-w-0">
+          {selectedSection && (
+            <SectionCard
+              key={selectedSection.id}
+              section={selectedSection}
+              items={itemsBySection.get(selectedSection.id) ?? []}
+              availableResources={orgResources.filter((r) => !linkedResourceIds.has(r.id))}
+              courseId={courseId}
+              organisationId={organisationId}
+              userId={userId}
+              canEdit={canEdit}
+              onChanged={load}
+              reordering={reordering}
+              setReordering={setReordering}
+              focusRequest={focusRequest}
+            />
+          )}
+          {selectedSectionId === 'ungrouped' && ungroupedItems.length > 0 && (
+            <UngroupedContent
+              items={ungroupedItems}
+              userId={userId}
+              canEdit={canEdit}
+              onChanged={load}
+              reordering={reordering}
+              setReordering={setReordering}
+              focusRequest={focusRequest}
+            />
+          )}
         </div>
-      )}
+      </div>
 
+      {addingSection && (
+        <AddSectionModal
+          value={newSectionTitle}
+          onChange={setNewSectionTitle}
+          busy={creatingSection}
+          onSubmit={handleAddSection}
+          onClose={() => {
+            setAddingSection(false)
+            setNewSectionTitle('')
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+function AddSectionModal({ value, onChange, busy, onSubmit, onClose }) {
+  return (
+    <AccessibleDialog
+      labelledBy="add-section-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-sm bg-card border border-hairline rounded-lg p-6"
+    >
+      <h2 id="add-section-dialog-title" className="font-display text-xl text-ink mb-4">
+        Add section
+      </h2>
+      <form onSubmit={onSubmit}>
+        <label className="block text-xs text-secondary mb-1" htmlFor="newSectionTitle">
+          Section title
+        </label>
+        <input
+          id="newSectionTitle"
+          data-dialog-initial-focus
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="e.g. Getting started"
+          className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+        />
+        <div className="flex items-center gap-2 mt-4">
+          <button
+            type="submit"
+            disabled={busy || !value.trim()}
+            className="flex-1 rounded-md bg-moss text-paper py-2 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+          >
+            {busy ? 'Adding…' : 'Add section'}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-hairline text-ink py-2 px-3 text-sm font-medium hover:bg-paper"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </AccessibleDialog>
   )
 }
 
@@ -1089,12 +1184,13 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
 // section's items, but can't accept new attachments/uploads directly since
 // it isn't a real section; a provider who wants to keep this content
 // organized should create a section and re-attach it there instead.
-function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setReordering }) {
+function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setReordering, focusRequest }) {
   const [previewingId, setPreviewingId] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [draggedItemId, setDraggedItemId] = useState(null)
   const [itemDropId, setItemDropId] = useState(null)
+  const { highlightedItemId, registerItemRef } = useItemFocusHighlight(focusRequest)
 
   async function handleDetach(item) {
     setBusy(true)
@@ -1148,6 +1244,7 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
         {items.map((item) => (
           <li
             key={item.linkId}
+            ref={registerItemRef(item.linkId)}
             data-content-item-id={item.linkId}
             onDragOver={(event) => {
               if (!canEdit || !draggedItemId || draggedItemId === item.linkId) return
@@ -1159,7 +1256,7 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
               if (draggedItemId) commitItemOrder(draggedItemId, item.linkId)
             }}
             className={`p-2 text-sm transition-[background-color,box-shadow,opacity] ${
-              itemDropId === item.linkId ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
+              itemDropId === item.linkId || highlightedItemId === item.linkId ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
             } ${draggedItemId === item.linkId ? 'opacity-40' : ''}`}
           >
             <div className="flex items-center justify-between gap-2">
@@ -1268,6 +1365,7 @@ function SectionCard({
   onChanged,
   reordering,
   setReordering,
+  focusRequest,
 }) {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(section.title)
@@ -1285,6 +1383,7 @@ function SectionCard({
   const [webUrl, setWebUrl] = useState('')
   const [draggedItemId, setDraggedItemId] = useState(null)
   const [itemDropId, setItemDropId] = useState(null)
+  const { highlightedItemId, registerItemRef } = useItemFocusHighlight(focusRequest)
   const fileInputRef = useRef(null)
 
   function setRecordedFile(file) {
@@ -1483,6 +1582,7 @@ function SectionCard({
           {items.map((item) => (
             <li
               key={item.linkId}
+              ref={registerItemRef(item.linkId)}
               data-content-item-id={item.linkId}
               onDragOver={(event) => {
                 if (!canEdit || !draggedItemId || draggedItemId === item.linkId) return
@@ -1494,7 +1594,7 @@ function SectionCard({
                 if (draggedItemId) commitItemOrder(draggedItemId, item.linkId)
               }}
               className={`p-2 text-sm transition-[background-color,box-shadow,opacity] ${
-                itemDropId === item.linkId ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
+                itemDropId === item.linkId || highlightedItemId === item.linkId ? 'bg-moss/10 ring-2 ring-moss ring-inset' : ''
               } ${draggedItemId === item.linkId ? 'opacity-40' : ''}`}
             >
               <div className="flex items-center justify-between gap-2">
