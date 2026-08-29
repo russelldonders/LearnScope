@@ -8,13 +8,14 @@ export async function recommendExperienceSkills(experience, linkedSkillNames) {
 
   if (!session?.access_token) throw new Error('Your session has expired. Sign in and try again.')
 
-  const res = await fetch('/api/recommend-experience-skills', {
+  const res = await fetch('/api/suggest-tags', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`,
     },
     body: JSON.stringify({
+      operation: 'experience-skills',
       experience: {
         type: experience.type,
         title: experience.title,
