@@ -72,6 +72,17 @@ function dropTargetAt(event, itemAttribute, sectionAttribute) {
   }
 }
 
+// Touch dragging is wired through raw touchstart/touchmove/touchend
+// listeners rather than the Pointer Events API. Pointer Events looked
+// right in every browser we could test (including Chromium under touch
+// emulation) but iOS Safari's setPointerCapture/hasPointerCapture is a
+// known-unreliable combo for nested touch targets -- it can silently
+// no-op, so handlePointerMove/finishPointerDrag's hasPointerCapture guard
+// never passes and the drag never "picks up". Touch events plus a
+// manually attached non-passive listener (JSX touch handlers are passive
+// by default in React and can't preventDefault) is the standard
+// workaround. Mouse still goes through native HTML5 draggable/onDragStart
+// below, untouched.
 export function DragHandle({
   label,
   disabled,
@@ -82,46 +93,63 @@ export function DragHandle({
   onPointerDragMove,
   onPointerDragEnd,
 }) {
-  function handlePointerDown(event) {
-    if (disabled || event.pointerType === 'mouse') return
-    event.preventDefault()
-    event.currentTarget.setPointerCapture(event.pointerId)
-    onPointerDragStart?.(event)
-  }
+  const buttonRef = useRef(null)
+  const draggingRef = useRef(false)
 
-  function handlePointerMove(event) {
-    if (event.pointerType === 'mouse' || !event.currentTarget.hasPointerCapture(event.pointerId)) return
-    event.preventDefault()
-    if (event.clientY < 72) window.scrollBy({ top: -16, behavior: 'auto' })
-    else if (event.clientY > window.innerHeight - 72) window.scrollBy({ top: 16, behavior: 'auto' })
-    onPointerDragMove?.(event)
-  }
+  useEffect(() => {
+    const button = buttonRef.current
+    if (!button) return
 
-  function finishPointerDrag(event) {
-    if (event.pointerType === 'mouse' || !event.currentTarget.hasPointerCapture(event.pointerId)) return
-    event.preventDefault()
-    onPointerDragEnd?.(event)
-    event.currentTarget.releasePointerCapture(event.pointerId)
-  }
+    function handleTouchStart(event) {
+      if (disabled) return
+      draggingRef.current = true
+      onPointerDragStart?.(event)
+    }
 
-  function cancelPointerDrag(event) {
-    if (event.pointerType === 'mouse' || !event.currentTarget.hasPointerCapture(event.pointerId)) return
-    onDragEnd?.()
-    event.currentTarget.releasePointerCapture(event.pointerId)
-  }
+    function handleTouchMove(event) {
+      if (!draggingRef.current) return
+      event.preventDefault()
+      const touch = event.touches[0]
+      if (!touch) return
+      if (touch.clientY < 72) window.scrollBy({ top: -16, behavior: 'auto' })
+      else if (touch.clientY > window.innerHeight - 72) window.scrollBy({ top: 16, behavior: 'auto' })
+      onPointerDragMove?.({ clientX: touch.clientX, clientY: touch.clientY })
+    }
+
+    function handleTouchEnd(event) {
+      if (!draggingRef.current) return
+      draggingRef.current = false
+      const touch = event.changedTouches[0]
+      onPointerDragEnd?.(touch ? { clientX: touch.clientX, clientY: touch.clientY } : { clientX: -1, clientY: -1 })
+    }
+
+    function handleTouchCancel() {
+      if (!draggingRef.current) return
+      draggingRef.current = false
+      onDragEnd?.()
+    }
+
+    button.addEventListener('touchstart', handleTouchStart, { passive: true })
+    button.addEventListener('touchmove', handleTouchMove, { passive: false })
+    button.addEventListener('touchend', handleTouchEnd, { passive: true })
+    button.addEventListener('touchcancel', handleTouchCancel, { passive: true })
+    return () => {
+      button.removeEventListener('touchstart', handleTouchStart)
+      button.removeEventListener('touchmove', handleTouchMove)
+      button.removeEventListener('touchend', handleTouchEnd)
+      button.removeEventListener('touchcancel', handleTouchCancel)
+    }
+  }, [disabled, onPointerDragStart, onPointerDragMove, onPointerDragEnd, onDragEnd])
 
   return (
     <button
+      ref={buttonRef}
       type="button"
       draggable={!disabled}
       disabled={disabled}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onKeyDown={onKeyDown}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={finishPointerDrag}
-      onPointerCancel={cancelPointerDrag}
       aria-label={`${label}. Drag to reorder, or use the arrow keys.`}
       title="Drag to reorder"
       className="inline-flex h-11 w-11 md:h-7 md:w-7 shrink-0 touch-none cursor-grab items-center justify-center rounded-md text-secondary hover:bg-paper hover:text-ink focus:outline-none focus:ring-2 focus:ring-moss active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
