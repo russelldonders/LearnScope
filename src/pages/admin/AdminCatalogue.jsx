@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useAuth } from '../../context/AuthContext'
 import AdminLayout from './AdminLayout'
 import {
   listAllCatalogueCourses,
@@ -11,7 +10,6 @@ import {
 const STATUS_FILTERS = ['all', 'draft', 'pending_approval', 'approved', 'rejected', 'inactive']
 
 export default function AdminCatalogue() {
-  const { user } = useAuth()
   const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -45,7 +43,7 @@ export default function AdminCatalogue() {
     setActioningId(course.id)
     setError(null)
     try {
-      await approveCatalogueCourse(course.id, user.id)
+      await approveCatalogueCourse(course.id)
       await load()
     } catch (err) {
       setError(err.message)
@@ -118,7 +116,7 @@ export default function AdminCatalogue() {
                   <div>
                     <p className="text-ink font-medium">{course.name}</p>
                     <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mt-0.5">
-                      {[course.provider, course.organisations?.name, course.status.replace('_', ' ')]
+                      {[course.course_code, `v${course.version_number}`, course.provider, course.organisations?.name, course.status.replace('_', ' ')]
                         .filter(Boolean)
                         .join(' · ')}
                     </p>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
 import ScormPlayer from '../../components/ScormPlayer'
@@ -14,6 +14,7 @@ import {
   getCatalogueCourse,
   updateProviderCourse,
   setCatalogueCourseStatus,
+  createDraftCourseVersion,
   uploadCourseImage,
   removeCourseImage,
 } from '../../lib/admin/catalogue'
@@ -274,7 +275,7 @@ export function DragHandle({
   )
 }
 
-// Info (name/type/duration/synopsis/image, save/submit/unpublish) and
+// Info (name/code/type/duration/synopsis/image and save/publish) and
 // Content (sections/resources) used to sit stacked on one long page --
 // split into tabs since the two are edited at different times (details
 // first, content once the basics are settled) and content on its own can
@@ -294,6 +295,7 @@ const TABS = [
 // structure, just for building it rather than taking it.
 export default function ProviderCourseEditor() {
   const { courseId } = useParams()
+  const navigate = useNavigate()
   const { user, organisationMemberships } = useAuth()
   const [course, setCourse] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -306,6 +308,7 @@ export default function ProviderCourseEditor() {
   // a nice side effect is that unsaved edits now survive switching to the
   // Content tab and back, instead of being lost when CourseHeader unmounted.
   const [form, setForm] = useState(null)
+  const loadedCourseIdRef = useRef(null)
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [saveError, setSaveError] = useState(null)
@@ -323,15 +326,17 @@ export default function ProviderCourseEditor() {
         setNotFound(true)
       } else {
         setCourse(data)
-        setForm((current) =>
-          current ?? {
+        if (loadedCourseIdRef.current !== data.id) {
+          loadedCourseIdRef.current = data.id
+          setForm({
             name: data.name,
+            courseCode: data.course_code ?? '',
             provider: data.provider ?? '',
             courseType: data.course_type ?? '',
             duration: data.duration ?? '',
             synopsis: data.synopsis ?? '',
-          }
-        )
+          })
+        }
       }
     } catch (err) {
       setError(err.message)
@@ -342,6 +347,10 @@ export default function ProviderCourseEditor() {
 
   async function handleSave(e) {
     e?.preventDefault()
+    if (!form.courseCode.trim()) {
+      setSaveError('Course code / ID is required.')
+      return
+    }
     setSaving(true)
     setSaveError(null)
     try {
@@ -355,6 +364,10 @@ export default function ProviderCourseEditor() {
   }
 
   async function handleSubmitForApproval() {
+    if (!form.courseCode.trim()) {
+      setSaveError('Course code / ID is required.')
+      return
+    }
     setSubmitting(true)
     setSaveError(null)
     try {
@@ -370,6 +383,19 @@ export default function ProviderCourseEditor() {
 
   const myRole = (organisationMemberships ?? []).find((m) => m.organisation_id === course?.organisation_id)?.role
   const canEdit = Boolean(myRole) && (course?.status === 'draft' || course?.status === 'rejected')
+
+  async function handleCreateDraftVersion() {
+    setSaveError(null)
+    setSaving(true)
+    try {
+      const draftId = await createDraftCourseVersion(course.id)
+      navigate(`/provider/training/${draftId}`)
+    } catch (err) {
+      setSaveError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-paper">
@@ -434,6 +460,8 @@ export default function ProviderCourseEditor() {
                 form={form}
                 setForm={setForm}
                 onSubmit={handleSave}
+                onCreateDraftVersion={handleCreateDraftVersion}
+                creatingDraft={saving}
               />
             )}
             {tab === 'content' && (
@@ -446,31 +474,13 @@ export default function ProviderCourseEditor() {
   )
 }
 
-function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit }) {
-  const [unpublishing, setUnpublishing] = useState(false)
-  const [confirmingUnpublish, setConfirmingUnpublish] = useState(false)
-  const [error, setError] = useState(null)
-
-  async function handleUnpublish() {
-    setUnpublishing(true)
-    setError(null)
-    try {
-      await setCatalogueCourseStatus(course.id, 'draft')
-      setConfirmingUnpublish(false)
-      await onSaved()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setUnpublishing(false)
-    }
-  }
-
+function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCreateDraftVersion, creatingDraft }) {
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
       <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
         <h1 className="font-display text-xl text-ink">{course.name}</h1>
         <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
-          {STATUS_LABELS[course.status] ?? course.status}
+          Version {course.version_number} · {STATUS_LABELS[course.status] ?? course.status}
         </span>
       </div>
 
@@ -480,29 +490,19 @@ function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit }) {
 
       <CourseImageUpload course={course} canEdit={canEdit} onUpdated={onSaved} />
 
-      {error && <p className="text-sm text-red-700 mb-4">{error}</p>}
-
       {course.status === 'approved' && (
-        <div className="mb-4">
+        <div className="mb-4 rounded-md border border-hairline bg-paper p-3">
           {course.synopsis && <p className="text-sm text-secondary mb-3">{course.synopsis}</p>}
+          <p className="text-sm text-ink mb-2">This published version remains live while you work on the next version.</p>
           <button
             type="button"
-            onClick={() => setConfirmingUnpublish(true)}
+            onClick={onCreateDraftVersion}
+            disabled={creatingDraft}
             className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
           >
-            Unpublish to edit
+            {creatingDraft ? 'Creating draft…' : 'Create next version'}
           </button>
         </div>
-      )}
-
-      {confirmingUnpublish && (
-        <ConfirmDialog
-          message="This removes the course from the public training catalogue until you resubmit it for approval. Learners already partway through it keep their access and progress in the meantime."
-          confirmLabel="Unpublish"
-          confirming={unpublishing}
-          onConfirm={handleUnpublish}
-          onCancel={() => setConfirmingUnpublish(false)}
-        />
       )}
 
       {!canEdit ? (
@@ -531,6 +531,19 @@ function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit }) {
                 value={form.courseType}
                 onChange={(e) => setForm((f) => ({ ...f, courseType: e.target.value }))}
                 placeholder="Online, In-person, Workshop…"
+                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-secondary mb-1" htmlFor="courseCode">
+                Course code / ID
+              </label>
+              <input
+                id="courseCode"
+                required
+                value={form.courseCode}
+                onChange={(e) => setForm((f) => ({ ...f, courseCode: e.target.value }))}
+                placeholder="e.g. LS-101"
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
               />
             </div>
@@ -677,17 +690,25 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
   function toggleItemPreview(item) {
     setPreviewingItem((current) => {
       if (current?.linkId === item.linkId) return null
-      setOpenSectionId(item.sectionId ?? 'ungrouped')
+      openSection(item.sectionId ?? 'ungrouped')
       return item
     })
   }
-  // Sections start closed -- only one open at a time (an accordion; opening
-  // one closes any other), like the learner course player's own nav. Below
+  // All sections start open so the full course structure is visible as soon
+  // as the editor loads. Each section can still be collapsed independently. Below
   // md, an open item goes further into "focus mode": everything else in
   // the outline hides so only that item's row and its preview are visible.
-  const [openSectionId, setOpenSectionId] = useState(null)
+  const [openSectionIds, setOpenSectionIds] = useState(() => new Set())
+  function openSection(id) {
+    setOpenSectionIds((current) => new Set(current).add(id))
+  }
   function toggleSection(id) {
-    setOpenSectionId((current) => (current === id ? null : id))
+    setOpenSectionIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
   const [draggedSectionId, setDraggedSectionId] = useState(null)
   const [sectionDropTarget, setSectionDropTarget] = useState(null)
@@ -744,6 +765,12 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
       setSections(sectionRows)
       setItems(itemRows)
       setOrgResources(resourceRows)
+      setOpenSectionIds(
+        new Set([
+          ...sectionRows.map((section) => section.id),
+          ...(itemRows.some((item) => item.sectionId == null) ? ['ungrouped'] : []),
+        ])
+      )
     } catch (err) {
       setError(err.message)
     } finally {
@@ -946,7 +973,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                       // Dragging an item over a collapsed section: open it so
                       // its items are visible/droppable at a specific
                       // position, not just appendable to the end.
-                      if (draggedOutlineItem) setOpenSectionId((current) => (current === section.id ? current : section.id))
+                      if (draggedOutlineItem) openSection(section.id)
                     }}
                     onDrop={(event) => {
                       event.preventDefault()
@@ -1007,11 +1034,11 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                       <button
                         type="button"
                         onClick={() => toggleSection(section.id)}
-                        aria-expanded={openSectionId === section.id}
-                        aria-label={`${openSectionId === section.id ? 'Collapse' : 'Expand'} ${section.title}`}
+                        aria-expanded={openSectionIds.has(section.id)}
+                        aria-label={`${openSectionIds.has(section.id) ? 'Collapse' : 'Expand'} ${section.title}`}
                         className="inline-flex h-11 w-11 md:h-7 md:w-7 shrink-0 items-center justify-center rounded-md text-secondary hover:bg-paper hover:text-ink focus:outline-none focus:ring-2 focus:ring-moss"
                       >
-                        <Chevron open={openSectionId === section.id} />
+                        <Chevron open={openSectionIds.has(section.id)} />
                       </button>
                       <button
                         type="button"
@@ -1036,7 +1063,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                       )}
                     </div>
                     )}
-                    {openSectionId === section.id && sectionItems.length > 0 && (
+                    {openSectionIds.has(section.id) && sectionItems.length > 0 && (
                       <ul className={`space-y-0.5 ${isFocused ? '' : 'mt-1 ml-7'}`} aria-label={`${section.title} resources`}>
                         {sectionItems
                           .filter((item) => !isFocused || item.linkId === previewingItem.linkId)
@@ -1099,7 +1126,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                                       // Hovering a collapsed section while dragging: open
                                       // it so its items are visible/droppable at a
                                       // specific position, not just appendable to the end.
-                                      setOpenSectionId((current) => (current === hit.id ? current : hit.id))
+                                      openSection(hit.id)
                                     }
                                   }}
                                   onPointerDragEnd={(event) => {
@@ -1171,7 +1198,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                     if (!canEdit || !draggedOutlineItem) return
                     event.preventDefault()
                     setSectionDropTarget({ id: 'ungrouped', side: null })
-                    setOpenSectionId((current) => (current === 'ungrouped' ? current : 'ungrouped'))
+                    openSection('ungrouped')
                   }}
                   onDrop={(event) => {
                     event.preventDefault()
@@ -1185,15 +1212,15 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                   <button
                     type="button"
                     onClick={() => toggleSection('ungrouped')}
-                    aria-expanded={openSectionId === 'ungrouped'}
+                    aria-expanded={openSectionIds.has('ungrouped')}
                     className="w-full flex items-center gap-2 px-2.5 py-2 text-left text-sm text-secondary hover:text-ink"
                   >
                     <span className="min-w-0 flex-1 truncate font-medium">Ungrouped content</span>
                     <span className="font-mono text-[10px] tabular-nums text-secondary shrink-0">{ungroupedItems.length}</span>
-                    <Chevron open={openSectionId === 'ungrouped'} />
+                    <Chevron open={openSectionIds.has('ungrouped')} />
                   </button>
                   )}
-                  {openSectionId === 'ungrouped' && (
+                  {openSectionIds.has('ungrouped') && (
                   <ul className={`space-y-0.5 ${isFocused ? '' : 'mt-1 ml-7'}`} aria-label="Ungrouped resources">
                     {ungroupedItems
                       .filter((item) => !isFocused || item.linkId === previewingItem.linkId)
@@ -1253,7 +1280,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                                 } else if (hit?.type === 'section') {
                                   setOutlineItemDropTarget(null)
                                   setSectionDropTarget({ id: hit.id, side: null })
-                                  setOpenSectionId((current) => (current === hit.id ? current : hit.id))
+                                  openSection(hit.id)
                                 }
                               }}
                               onPointerDragEnd={(event) => {

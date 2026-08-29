@@ -35,6 +35,7 @@ export async function listCatalogueCourses() {
     .from('course_catalogue')
     .select(CATALOGUE_SELECT)
     .eq('status', 'approved')
+    .eq('is_current_published', true)
     .order('name')
   if (error) throw error
   return (data ?? []).map(mapCatalogueCourse)
@@ -44,13 +45,13 @@ export async function listCatalogueCourses() {
 // defence-in-depth reason: RLS (0066) already restricts a non-admin/
 // non-org-member caller to approved rows, but filtering explicitly here
 // keeps this learner-facing detail lookup from depending solely on RLS.
-export async function getCatalogueCourse(id) {
-  const { data, error } = await supabase
+export async function getCatalogueCourse(id, { currentOnly = true } = {}) {
+  let query = supabase
     .from('course_catalogue')
     .select(CATALOGUE_SELECT)
     .eq('id', id)
-    .eq('status', 'approved')
-    .maybeSingle()
+  if (currentOnly) query = query.eq('status', 'approved').eq('is_current_published', true)
+  const { data, error } = await query.maybeSingle()
   if (error) throw error
   return data ? mapCatalogueCourse(data) : null
 }

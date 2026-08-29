@@ -26,7 +26,7 @@ const SECTIONS = [
   { key: 'resources', label: 'Resources' },
 ]
 
-const EMPTY_FORM = { name: '', provider: '', courseType: '', duration: '', synopsis: '' }
+const EMPTY_FORM = { name: '', courseCode: '', provider: '', courseType: '', duration: '', synopsis: '' }
 
 // Console for a provider's own staff (organisation_members rows) -- built on
 // top of the RLS/role model 0065/0066 already shipped: any org member
@@ -283,6 +283,19 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
               />
             </div>
             <div>
+              <label className="block text-sm text-secondary mb-1" htmlFor="providerCourseCode">
+                Course code / ID
+              </label>
+              <input
+                id="providerCourseCode"
+                required
+                value={form.courseCode}
+                onChange={(e) => setForm((f) => ({ ...f, courseCode: e.target.value }))}
+                placeholder="e.g. LS-101"
+                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+            </div>
+            <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="providerCourseDuration">
                 Duration
               </label>
@@ -357,9 +370,10 @@ function CourseCard({ course, canViewParticipants, onViewParticipants }) {
           {course.name}
         </Link>
         <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
-          {STATUS_LABELS[course.status] ?? course.status}
+          v{course.version_number} · {STATUS_LABELS[course.status] ?? course.status}
         </span>
       </div>
+      {course.course_code && <p className="font-mono text-xs text-secondary mt-1">{course.course_code}</p>}
       {course.synopsis && <p className="text-sm text-secondary mt-1">{course.synopsis}</p>}
       {course.status === 'rejected' && course.rejection_reason && (
         <p className="text-xs text-red-700 mt-1">Rejected: {course.rejection_reason}</p>

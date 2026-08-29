@@ -82,7 +82,7 @@ export default function CourseDetail() {
         .eq('course_id', id),
       supabase.from('skills').select('id, name').eq('user_id', user.id).order('name'),
       listLibrarySkills(),
-      data.catalogue_course_id ? getCatalogueCourse(data.catalogue_course_id) : Promise.resolve(null),
+      data.catalogue_course_id ? getCatalogueCourse(data.catalogue_course_id, { currentOnly: false }) : Promise.resolve(null),
       listCourseProgressByCatalogueId([data.catalogue_course_id], user.id),
     ])
 
