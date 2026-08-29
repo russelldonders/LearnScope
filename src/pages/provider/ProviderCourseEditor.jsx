@@ -824,9 +824,13 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                             const { sectionId } = dropTargetAt(event, null, 'data-outline-section-id')
                             if (sectionId && sectionId !== section.id) setSectionDropId(sectionId)
                           }}
-                          onPointerDragEnd={(event) => {
-                            const { sectionId } = dropTargetAt(event, null, 'data-outline-section-id')
-                            if (sectionId && sectionId !== section.id) commitSectionOrder(section.id, sectionId)
+                          onPointerDragEnd={() => {
+                            // Re-deriving the drop target from the touch-end coordinate
+                            // (a second document.elementFromPoint call, at a slightly
+                            // different moment/position than the one that painted the
+                            // highlight during the drag) was unreliable on iOS -- trust
+                            // the already-tracked, already-visible highlight instead.
+                            if (sectionDropId && sectionDropId !== section.id) commitSectionOrder(section.id, sectionDropId)
                             else {
                               setDraggedSectionId(null)
                               setSectionDropId(null)
@@ -903,13 +907,22 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                                     setSectionDropId(target.sectionId)
                                   }
                                 }}
-                                onPointerDragEnd={(event) => {
-                                  const target = dropTargetAt(event, 'data-outline-item-id', 'data-outline-section-id')
-                                  if (target.itemId && target.itemId !== item.linkId) {
-                                    const targetItem = items.find((candidate) => candidate.linkId === target.itemId)
-                                    if (targetItem) commitOutlineItemOrder(item.linkId, targetItem.sectionId, target.itemId)
-                                  } else if (target.sectionId) {
-                                    commitOutlineItemOrder(item.linkId, target.sectionId === 'ungrouped' ? null : target.sectionId)
+                                onPointerDragEnd={() => {
+                                  // Trust the drop-target state the drag already
+                                  // highlighted, rather than a second
+                                  // document.elementFromPoint call at the touch-end
+                                  // coordinate (unreliable on iOS -- see the section
+                                  // handle's onPointerDragEnd above).
+                                  if (outlineItemDropId && outlineItemDropId !== item.linkId) {
+                                    const targetItem = items.find((candidate) => candidate.linkId === outlineItemDropId)
+                                    if (targetItem) commitOutlineItemOrder(item.linkId, targetItem.sectionId, outlineItemDropId)
+                                    else {
+                                      setDraggedOutlineItem(null)
+                                      setOutlineItemDropId(null)
+                                      setSectionDropId(null)
+                                    }
+                                  } else if (sectionDropId) {
+                                    commitOutlineItemOrder(item.linkId, sectionDropId === 'ungrouped' ? null : sectionDropId)
                                   } else {
                                     setDraggedOutlineItem(null)
                                     setOutlineItemDropId(null)
@@ -1009,13 +1022,17 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                                 setSectionDropId(target.sectionId)
                               }
                             }}
-                            onPointerDragEnd={(event) => {
-                              const target = dropTargetAt(event, 'data-outline-item-id', 'data-outline-section-id')
-                              if (target.itemId && target.itemId !== item.linkId) {
-                                const targetItem = items.find((candidate) => candidate.linkId === target.itemId)
-                                if (targetItem) commitOutlineItemOrder(item.linkId, targetItem.sectionId, target.itemId)
-                              } else if (target.sectionId) {
-                                commitOutlineItemOrder(item.linkId, target.sectionId === 'ungrouped' ? null : target.sectionId)
+                            onPointerDragEnd={() => {
+                              if (outlineItemDropId && outlineItemDropId !== item.linkId) {
+                                const targetItem = items.find((candidate) => candidate.linkId === outlineItemDropId)
+                                if (targetItem) commitOutlineItemOrder(item.linkId, targetItem.sectionId, outlineItemDropId)
+                                else {
+                                  setDraggedOutlineItem(null)
+                                  setOutlineItemDropId(null)
+                                  setSectionDropId(null)
+                                }
+                              } else if (sectionDropId) {
+                                commitOutlineItemOrder(item.linkId, sectionDropId === 'ungrouped' ? null : sectionDropId)
                               } else {
                                 setDraggedOutlineItem(null)
                                 setOutlineItemDropId(null)
@@ -1167,9 +1184,8 @@ function UngroupedContent({ items, userId, canEdit, onChanged, reordering, setRe
                       const { itemId } = dropTargetAt(event, 'data-content-item-id', null)
                       if (itemId && itemId !== item.linkId) setItemDropId(itemId)
                     }}
-                    onPointerDragEnd={(event) => {
-                      const { itemId } = dropTargetAt(event, 'data-content-item-id', null)
-                      if (itemId && itemId !== item.linkId) commitItemOrder(item.linkId, itemId)
+                    onPointerDragEnd={() => {
+                      if (itemDropId && itemDropId !== item.linkId) commitItemOrder(item.linkId, itemDropId)
                       else {
                         setDraggedItemId(null)
                         setItemDropId(null)
@@ -1503,9 +1519,8 @@ function SectionCard({
                         const { itemId } = dropTargetAt(event, 'data-content-item-id', null)
                         if (itemId && itemId !== item.linkId) setItemDropId(itemId)
                       }}
-                      onPointerDragEnd={(event) => {
-                        const { itemId } = dropTargetAt(event, 'data-content-item-id', null)
-                        if (itemId && itemId !== item.linkId) commitItemOrder(item.linkId, itemId)
+                      onPointerDragEnd={() => {
+                        if (itemDropId && itemDropId !== item.linkId) commitItemOrder(item.linkId, itemDropId)
                         else {
                           setDraggedItemId(null)
                           setItemDropId(null)
