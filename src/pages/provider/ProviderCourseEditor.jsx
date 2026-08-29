@@ -280,6 +280,15 @@ export default function ProviderCourseEditor() {
   const [notFound, setNotFound] = useState(false)
   const [error, setError] = useState(null)
   const [tab, setTab] = useState('content')
+  // Name/type/duration/synopsis form state used to live inside CourseHeader
+  // (only mounted on the Info tab), with its own Save/Submit buttons. Lifted
+  // here so Save/Publish can sit above the tabs and work from either one --
+  // a nice side effect is that unsaved edits now survive switching to the
+  // Content tab and back, instead of being lost when CourseHeader unmounted.
+  const [form, setForm] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [saveError, setSaveError] = useState(null)
 
   useEffect(() => {
     load()
@@ -294,11 +303,48 @@ export default function ProviderCourseEditor() {
         setNotFound(true)
       } else {
         setCourse(data)
+        setForm((current) =>
+          current ?? {
+            name: data.name,
+            provider: data.provider ?? '',
+            courseType: data.course_type ?? '',
+            duration: data.duration ?? '',
+            synopsis: data.synopsis ?? '',
+          }
+        )
       }
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleSave(e) {
+    e?.preventDefault()
+    setSaving(true)
+    setSaveError(null)
+    try {
+      await updateProviderCourse(course.id, form)
+      await load()
+    } catch (err) {
+      setSaveError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleSubmitForApproval() {
+    setSubmitting(true)
+    setSaveError(null)
+    try {
+      await updateProviderCourse(course.id, form)
+      await setCatalogueCourseStatus(course.id, 'pending_approval')
+      await load()
+    } catch (err) {
+      setSaveError(err.message)
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -317,8 +363,32 @@ export default function ProviderCourseEditor() {
         {notFound && <p className="text-secondary">Course not found.</p>}
         {error && <p className="text-sm text-red-700">{error}</p>}
 
-        {course && (
+        {course && form && (
           <div className="space-y-6">
+            {canEdit && (
+              <div className="space-y-2">
+                {saveError && <p className="text-sm text-red-700">{saveError}</p>}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={saving || submitting}
+                    className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+                  >
+                    {saving ? 'Saving…' : 'Save'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSubmitForApproval}
+                    disabled={saving || submitting}
+                    className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+                  >
+                    {submitting ? 'Publishing…' : 'Publish'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center gap-1 border-b border-hairline">
               {TABS.map((t) => (
                 <button
@@ -336,7 +406,16 @@ export default function ProviderCourseEditor() {
               ))}
             </div>
 
-            {tab === 'info' && <CourseHeader course={course} canEdit={canEdit} onSaved={load} />}
+            {tab === 'info' && (
+              <CourseHeader
+                course={course}
+                canEdit={canEdit}
+                onSaved={load}
+                form={form}
+                setForm={setForm}
+                onSubmit={handleSave}
+              />
+            )}
             {tab === 'content' && (
               <CourseSections courseId={course.id} organisationId={course.organisation_id} userId={user.id} canEdit={canEdit} />
             )}
@@ -347,47 +426,10 @@ export default function ProviderCourseEditor() {
   )
 }
 
-function CourseHeader({ course, canEdit, onSaved }) {
-  const [form, setForm] = useState({
-    name: course.name,
-    provider: course.provider ?? '',
-    courseType: course.course_type ?? '',
-    duration: course.duration ?? '',
-    synopsis: course.synopsis ?? '',
-  })
-  const [saving, setSaving] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
+function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit }) {
   const [unpublishing, setUnpublishing] = useState(false)
   const [confirmingUnpublish, setConfirmingUnpublish] = useState(false)
   const [error, setError] = useState(null)
-
-  async function handleSave(e) {
-    e.preventDefault()
-    setSaving(true)
-    setError(null)
-    try {
-      await updateProviderCourse(course.id, form)
-      await onSaved()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function handleSubmitForApproval() {
-    setSubmitting(true)
-    setError(null)
-    try {
-      await updateProviderCourse(course.id, form)
-      await setCatalogueCourseStatus(course.id, 'pending_approval')
-      await onSaved()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setSubmitting(false)
-    }
-  }
 
   async function handleUnpublish() {
     setUnpublishing(true)
@@ -446,7 +488,7 @@ function CourseHeader({ course, canEdit, onSaved }) {
       {!canEdit ? (
         course.status !== 'approved' && course.synopsis && <p className="text-sm text-secondary">{course.synopsis}</p>
       ) : (
-        <form onSubmit={handleSave} className="space-y-3">
+        <form onSubmit={onSubmit} className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="courseName">
@@ -495,24 +537,6 @@ function CourseHeader({ course, canEdit, onSaved }) {
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
               />
             </div>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="submit"
-              disabled={saving || submitting}
-              className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-            >
-              {saving ? 'Saving…' : 'Save changes'}
-            </button>
-            <button
-              type="button"
-              onClick={handleSubmitForApproval}
-              disabled={saving || submitting}
-              className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-            >
-              {submitting ? 'Submitting…' : 'Submit for approval'}
-            </button>
           </div>
         </form>
       )}
