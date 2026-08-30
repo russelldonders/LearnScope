@@ -155,7 +155,7 @@ export default function ProfilePrivacy() {
                   <span className="block text-xs text-secondary mt-0.5">
                     Shows only skill names, categories, and levels — not notes, evidence, or why
                     you're tracking them. Only visible to people you've already exchanged a skill
-                    rating with, and off by default.
+                    rating with. On by default — turn it off here if you'd rather keep it private.
                   </span>
                 </span>
               </label>
@@ -196,8 +196,8 @@ export default function ProfilePrivacy() {
                   Let your connections see your activity
                   <span className="block text-xs text-secondary mt-0.5">
                     Shows things like skills confirmed, new skills or experience added, and
-                    courses started — only to people you're already connected with, and off by
-                    default.
+                    courses started — only to people you're already connected with. On by
+                    default — turn it off here if you'd rather keep it private.
                   </span>
                 </span>
               </label>

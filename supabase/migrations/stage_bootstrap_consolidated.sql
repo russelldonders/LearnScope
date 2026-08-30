@@ -5148,6 +5148,1135 @@ as $$
 $$;
 
 grant execute on function get_provider_profile(text) to anon, authenticated;
+-- "Recommend this skill" reuses the exact same connection_invites/share_code
+-- mechanism as the existing invite-to-rate flow, rather than a parallel
+-- table -- the two are the same underlying concept (an invite, addressed to
+-- an email or shared as a link, redeemed once via share_code) with a
+-- different outcome on accept. invite_type distinguishes the two so each
+-- accept path only ever consumes its own kind of invite.
+alter table connection_invites add column invite_type text not null default 'rate'
+  check (invite_type in ('rate', 'recommend'));
+
+-- Replaces the pending-dedup index from 0032 -- a learner may reasonably
+-- want to both ask someone to rate a skill AND recommend they pick it up
+-- themselves, so the two invite types shouldn't collide on uniqueness.
+drop index connection_invites_unique_pending_idx;
+create unique index connection_invites_unique_pending_idx
+  on connection_invites (skill_id, lower(invitee_email), invite_type)
+  where status = 'pending' and invitee_email is not null;
+
+-- Recommending a skill only makes sense for one that's tied to the shared
+-- library catalog (see 0013) -- that's what lets the invitee's new skill
+-- reference the same library_skill_id instead of a same-named duplicate.
+-- Recorded here too, not just in the UI gate, so a stale/tampered share
+-- link can't be used to invite a recommendation for a purely private skill.
+-- Return shape gained a column (invite_type), which Postgres won't let a
+-- plain create-or-replace apply to an existing function -- has to be
+-- dropped and recreated instead.
+drop function get_invite_preview(text);
+
+create function get_invite_preview(p_code text)
+returns table (
+  skill_name text,
+  skill_category text,
+  inviter_name text,
+  status text,
+  invite_type text
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select s.name, s.category, coalesce(p.full_name, ''), ci.status, ci.invite_type
+  from connection_invites ci
+  join skills s on s.id = ci.skill_id
+  left join profiles p on p.id = ci.inviter_id
+  where ci.share_code = p_code
+$$;
+
+grant execute on function get_invite_preview(text) to anon, authenticated;
+
+-- Unchanged except for the added invite_type guard, so a recommend invite's
+-- share_code can never be redeemed as a rating (or vice versa) even if
+-- someone hand-edits the URL.
+create or replace function accept_invite_and_rate(p_code text, p_level int, p_comments text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_invite connection_invites%rowtype;
+  v_skill skills%rowtype;
+  v_rater_name text;
+  v_rater_email text;
+  v_rating_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select * into v_invite from connection_invites where share_code = p_code for update;
+  if not found then
+    raise exception 'Invite not found';
+  end if;
+  if v_invite.invite_type != 'rate' then
+    raise exception 'This invite is not a rating invite.';
+  end if;
+  if v_invite.status != 'pending' then
+    raise exception 'This invite has already been used.';
+  end if;
+  if v_invite.inviter_id = auth.uid() then
+    raise exception 'You can''t rate your own skill.';
+  end if;
+  if p_level < 1 or p_level > 5 then
+    raise exception 'Invalid level';
+  end if;
+
+  select * into v_skill from skills where id = v_invite.skill_id;
+  select full_name into v_rater_name from profiles where id = auth.uid();
+  select email into v_rater_email from auth.users where id = auth.uid();
+
+  insert into skill_peer_ratings (
+    skill_id, skill_name, skill_category, skill_owner_id,
+    invite_id, rater_id, rater_name, rater_email, level, comments
+  )
+  values (
+    v_invite.skill_id, v_skill.name, v_skill.category, v_skill.user_id,
+    v_invite.id, auth.uid(), v_rater_name, v_rater_email, p_level, nullif(p_comments, '')
+  )
+  returning id into v_rating_id;
+
+  update connection_invites
+  set status = 'accepted', accepted_by = auth.uid(), accepted_at = now()
+  where id = v_invite.id;
+
+  update skills s
+  set level = latest.level
+  from (
+    select level, ts from (
+      select level, assessed_at as ts from skill_assessments where skill_id = v_invite.skill_id
+      union all
+      select level, rated_at as ts from skill_peer_ratings where skill_id = v_invite.skill_id
+    ) combined
+    order by ts desc
+    limit 1
+  ) latest
+  where s.id = v_invite.skill_id;
+
+  return v_rating_id;
+end;
+$$;
+
+grant execute on function accept_invite_and_rate(text, int, text) to authenticated;
+
+-- Recommending a skill hands the invitee their own skills row, not a rating
+-- on the inviter's -- library_skill_id is carried across so it's the same
+-- reusable catalog entry, not a same-named duplicate (see 0013). Mirrors the
+-- "pick an existing library skill" path in FindSkillModal, just server-side
+-- since the invitee otherwise has no way to read an invite addressed to
+-- them (connection_invites' only SELECT policy is "inviter can view their
+-- own", same reasoning as accept_invite_and_rate above).
+create or replace function accept_invite_and_recommend(p_code text, p_tracking_reason text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_invite connection_invites%rowtype;
+  v_skill skills%rowtype;
+  v_new_skill_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select * into v_invite from connection_invites where share_code = p_code for update;
+  if not found then
+    raise exception 'Invite not found';
+  end if;
+  if v_invite.invite_type != 'recommend' then
+    raise exception 'This invite is not a skill recommendation.';
+  end if;
+  if v_invite.status != 'pending' then
+    raise exception 'This invite has already been used.';
+  end if;
+  if v_invite.inviter_id = auth.uid() then
+    raise exception 'You can''t recommend a skill to yourself.';
+  end if;
+
+  select * into v_skill from skills where id = v_invite.skill_id;
+  if v_skill.library_skill_id is null then
+    raise exception 'This skill can no longer be recommended.';
+  end if;
+
+  insert into skills (
+    user_id, name, library_skill_id, tracking_reason, lifecycle_stage, source, is_current_role
+  )
+  values (
+    auth.uid(), v_skill.name, v_skill.library_skill_id, p_tracking_reason, 'identified', 'recommend', false
+  )
+  returning id into v_new_skill_id;
+
+  update connection_invites
+  set status = 'accepted', accepted_by = auth.uid(), accepted_at = now()
+  where id = v_invite.id;
+
+  return v_new_skill_id;
+end;
+$$;
+
+grant execute on function accept_invite_and_recommend(text, text) to authenticated;
+
+alter table skills drop constraint skills_source_check;
+alter table skills add constraint skills_source_check
+  check (source in ('manual', 'cv_import', 'recommend'));
+
+-- Mirrors list_incoming_rate_invites (0061) exactly, scoped to the other
+-- invite_type -- see there for why this needs SECURITY DEFINER rather than a
+-- plain table select.
+create or replace function list_incoming_recommend_invites()
+returns table (
+  id uuid,
+  inviter_id uuid,
+  inviter_name text,
+  skill_id uuid,
+  skill_name text,
+  skill_category text,
+  share_code text,
+  created_at timestamptz
+)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select ci.id, ci.inviter_id, p.full_name, ci.skill_id, s.name, s.category, ci.share_code, ci.created_at
+  from connection_invites ci
+  join skills s on s.id = ci.skill_id
+  left join profiles p on p.id = ci.inviter_id
+  where ci.status = 'pending'
+    and ci.invite_type = 'recommend'
+    and ci.invitee_email is not null
+    and lower(ci.invitee_email) = lower((select email from auth.users where id = auth.uid()))
+  order by ci.created_at desc
+$$;
+
+grant execute on function list_incoming_recommend_invites() to authenticated;
+
+-- Scope the existing rate-invite listing to its own type, now that
+-- connection_invites carries both kinds -- otherwise a pending recommend
+-- invite would incorrectly show up as "wants your rating".
+create or replace function list_incoming_rate_invites()
+returns table (
+  id uuid,
+  inviter_id uuid,
+  inviter_name text,
+  skill_id uuid,
+  skill_name text,
+  skill_category text,
+  share_code text,
+  created_at timestamptz
+)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select ci.id, ci.inviter_id, p.full_name, ci.skill_id, s.name, s.category, ci.share_code, ci.created_at
+  from connection_invites ci
+  join skills s on s.id = ci.skill_id
+  left join profiles p on p.id = ci.inviter_id
+  where ci.status = 'pending'
+    and ci.invite_type = 'rate'
+    and ci.invitee_email is not null
+    and lower(ci.invitee_email) = lower((select email from auth.users where id = auth.uid()))
+  order by ci.created_at desc
+$$;
+
+grant execute on function list_incoming_rate_invites() to authenticated;
+-- Lets an invitee dismiss a pending invite addressed to their own verified
+-- email, for either invite_type. Needed most for 'recommend' invites: unlike
+-- a rating (which always succeeds), accept_invite_and_recommend can fail
+-- permanently for a given invitee (e.g. they already track a same-named
+-- skill -- see skills_user_id_name_lower_idx), and until now there was no
+-- way for that invitee to get the invite out of their own pending-actions
+-- list/badge count (only the inviter could revoke it, via the policy added
+-- in 0032). Reuses the existing 'revoked' status rather than adding a new
+-- one -- from the data model's perspective a declined invite and a
+-- withdrawn one are the same "no longer active, never acted on" state.
+create or replace function decline_invite(p_code text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_invite connection_invites%rowtype;
+  v_own_email text;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select * into v_invite from connection_invites where share_code = p_code for update;
+  if not found then
+    raise exception 'Invite not found';
+  end if;
+  if v_invite.status != 'pending' then
+    raise exception 'This invite has already been used.';
+  end if;
+
+  select email into v_own_email from auth.users where id = auth.uid();
+  if v_invite.invitee_email is null or lower(v_invite.invitee_email) != lower(v_own_email) then
+    raise exception 'You can''t decline this invite.';
+  end if;
+
+  update connection_invites set status = 'revoked' where id = v_invite.id;
+end;
+$$;
+
+grant execute on function decline_invite(text) to authenticated;
+-- 0093's policies accidentally bind `name` to course_catalogue.name instead
+-- of the storage object's path, so every UUID-folder check fails.
+
+drop policy "Course editors can upload their course's image" on storage.objects;
+create policy "Course editors can upload their course's image"
+  on storage.objects for insert to authenticated
+  with check (
+    bucket_id = 'course-catalogue-images' and exists (
+      select 1 from course_catalogue cc
+      where cc.id::text = (storage.foldername(storage.objects.name))[1]
+        and (is_platform_admin((select auth.uid())) or (
+          cc.organisation_id is not null
+          and is_org_member(cc.organisation_id, (select auth.uid()))
+          and cc.status in ('draft', 'rejected')
+        ))
+    )
+  );
+
+drop policy "Course editors can replace their course's image" on storage.objects;
+create policy "Course editors can replace their course's image"
+  on storage.objects for update to authenticated
+  using (
+    bucket_id = 'course-catalogue-images' and exists (
+      select 1 from course_catalogue cc
+      where cc.id::text = (storage.foldername(storage.objects.name))[1]
+        and (is_platform_admin((select auth.uid())) or (
+          cc.organisation_id is not null
+          and is_org_member(cc.organisation_id, (select auth.uid()))
+          and cc.status in ('draft', 'rejected')
+        ))
+    )
+  )
+  with check (
+    bucket_id = 'course-catalogue-images' and exists (
+      select 1 from course_catalogue cc
+      where cc.id::text = (storage.foldername(storage.objects.name))[1]
+        and (is_platform_admin((select auth.uid())) or (
+          cc.organisation_id is not null
+          and is_org_member(cc.organisation_id, (select auth.uid()))
+          and cc.status in ('draft', 'rejected')
+        ))
+    )
+  );
+
+-- Storage upsert also performs a SELECT before UPDATE. Keep that SELECT
+-- path-scoped to editors; the public object endpoint remains unaffected.
+create policy "Course editors can read their course image object for replacement"
+  on storage.objects for select to authenticated
+  using (
+    bucket_id = 'course-catalogue-images' and exists (
+      select 1 from course_catalogue cc
+      where cc.id::text = (storage.foldername(storage.objects.name))[1]
+        and (is_platform_admin((select auth.uid())) or (
+          cc.organisation_id is not null
+          and is_org_member(cc.organisation_id, (select auth.uid()))
+          and cc.status in ('draft', 'rejected')
+        ))
+    )
+  );
+
+drop policy "Course editors can remove their course's image" on storage.objects;
+create policy "Course editors can remove their course's image"
+  on storage.objects for delete to authenticated
+  using (
+    bucket_id = 'course-catalogue-images' and exists (
+      select 1 from course_catalogue cc
+      where cc.id::text = (storage.foldername(storage.objects.name))[1]
+        and (is_platform_admin((select auth.uid())) or (
+          cc.organisation_id is not null
+          and is_org_member(cc.organisation_id, (select auth.uid()))
+          and cc.status in ('draft', 'rejected')
+        ))
+    )
+  );
+-- Screen recordings share the existing secure video storage and playback
+-- pipeline, but remain a distinct resource kind throughout the product.
+alter table content_resources drop constraint content_resources_type_check;
+alter table content_resources add constraint content_resources_type_check
+  check (type in ('video', 'screen_recording', 'file', 'scorm', 'xapi', 'external_video'));
+-- Generic web links are stored resources, distinct from canonicalized
+-- YouTube/Vimeo embeds. Both URL-backed types carry external_url and no
+-- storage path; uploaded resource types retain the inverse invariant.
+alter table content_resources drop constraint content_resources_type_check;
+alter table content_resources add constraint content_resources_type_check
+  check (type in ('video', 'screen_recording', 'file', 'scorm', 'xapi', 'external_video', 'web_url'));
+
+alter table content_resources drop constraint content_resources_storage_or_external_check;
+alter table content_resources add constraint content_resources_storage_or_external_check
+  check (
+    (
+      type in ('external_video', 'web_url')
+      and storage_path is null
+      and external_url is not null
+      and external_url ~ '^https?://'
+    )
+    or (type not in ('external_video', 'web_url') and storage_path is not null and external_url is null)
+  );
+-- Flips skills-profile sharing from opt-in to opt-out, per explicit product
+-- decision: new accounts (and new skills) now start shared with connections
+-- rather than private, and a learner turns sharing off if they don't want
+-- it, instead of turning it on. This only touches the "share with
+-- connections" surface (profiles.skills_profile_visible / per-skill
+-- visible_on_profile) -- skill_search_visibility (discoverability to people
+-- you're NOT yet connected with) is untouched and still defaults to
+-- 'hidden'; that's a materially bigger exposure (search vs. existing
+-- connections only) and wasn't part of this change.
+--
+-- Existing accounts are included, not just new signups -- every row
+-- currently at the old default (false) is flipped to true. There is no way
+-- to distinguish "never touched, still at the old default" from "a learner
+-- explicitly turned it back off" (both look like `false`), so this is a
+-- one-time blanket flip for anyone not already sharing. Any row already
+-- `true` (an explicit past opt-in) is untouched, and is excluded from the
+-- WHERE clause below rather than reassigned, since it's already correct.
+alter table profiles alter column skills_profile_visible set default true;
+update profiles set skills_profile_visible = true where skills_profile_visible = false;
+
+alter table skills alter column visible_on_profile set default true;
+update skills set visible_on_profile = true where visible_on_profile = false;
+-- Lets list_connections_activity (0063) be scoped to a single connection
+-- instead of always aggregating across all of them -- needed so
+-- SkillsProfile.jsx can show "what this person's been up to" on their own
+-- profile page, reusing the exact same query/privacy checks (is_connected +
+-- the actor's own activity_feed_visible opt-in) rather than a second
+-- function. p_user_id defaults to null, which preserves the existing
+-- "across every connection" behavior Dashboard.jsx already relies on.
+create or replace function list_connections_activity(p_limit int default 30, p_user_id uuid default null)
+returns table (
+  event_type text,
+  actor_id uuid,
+  full_name text,
+  avatar_url text,
+  event_at timestamptz,
+  skill_name text,
+  level int,
+  detail text
+)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select * from (
+    select
+      'skill_confirmed' as event_type,
+      sa.user_id as actor_id,
+      p.full_name,
+      p.avatar_url,
+      sa.created_at as event_at,
+      s.name as skill_name,
+      sa.level,
+      (case sa.source
+        when 'diagnostic_confirmed' then 'Confirmed via knowledge check'
+        when 'ai_baseline' then 'AI-assessed baseline'
+        when 'ai_evaluation' then 'AI assessment'
+        else null
+      end)::text as detail
+    from skill_assessments sa
+    join skills s on s.id = sa.skill_id
+    join profiles p on p.id = sa.user_id
+    where sa.source in ('diagnostic_confirmed', 'ai_baseline', 'ai_evaluation')
+      and sa.user_id <> auth.uid()
+      and (p_user_id is null or sa.user_id = p_user_id)
+      and is_connected(auth.uid(), sa.user_id)
+      and p.activity_feed_visible = true
+
+    union all
+
+    select
+      'skill_validated',
+      svr.requester_id,
+      p.full_name,
+      p.avatar_url,
+      svr.decided_at,
+      s.name,
+      svr.target_level,
+      'Validated by a connection'::text
+    from skill_validation_requests svr
+    join skills s on s.id = svr.skill_id
+    join profiles p on p.id = svr.requester_id
+    where svr.status = 'confirmed'
+      and svr.requester_id <> auth.uid()
+      and (p_user_id is null or svr.requester_id = p_user_id)
+      and is_connected(auth.uid(), svr.requester_id)
+      and p.activity_feed_visible = true
+
+    union all
+
+    select
+      'skill_added',
+      s.user_id,
+      p.full_name,
+      p.avatar_url,
+      s.date_added,
+      s.name,
+      null::int,
+      null::text
+    from skills s
+    join profiles p on p.id = s.user_id
+    where s.user_id <> auth.uid()
+      and (p_user_id is null or s.user_id = p_user_id)
+      and is_connected(auth.uid(), s.user_id)
+      and p.activity_feed_visible = true
+
+    union all
+
+    select
+      'experience_added',
+      e.user_id,
+      p.full_name,
+      p.avatar_url,
+      e.created_at,
+      null::text,
+      null::int,
+      (e.type || ' at ' || e.organization || ': ' || e.title)::text
+    from experience e
+    join profiles p on p.id = e.user_id
+    where e.user_id <> auth.uid()
+      and (p_user_id is null or e.user_id = p_user_id)
+      and is_connected(auth.uid(), e.user_id)
+      and p.activity_feed_visible = true
+
+    union all
+
+    select
+      'course_started',
+      c.user_id,
+      p.full_name,
+      p.avatar_url,
+      c.created_at,
+      null::text,
+      null::int,
+      (c.name || coalesce(' · ' || c.provider, ''))::text
+    from courses c
+    join profiles p on p.id = c.user_id
+    where c.completed_date is null
+      and c.user_id <> auth.uid()
+      and (p_user_id is null or c.user_id = p_user_id)
+      and is_connected(auth.uid(), c.user_id)
+      and p.activity_feed_visible = true
+
+    union all
+
+    select
+      'target_set',
+      st.user_id,
+      p.full_name,
+      p.avatar_url,
+      st.created_at,
+      s.name,
+      st.target_level,
+      null::text
+    from skill_targets st
+    join skills s on s.id = st.skill_id
+    join profiles p on p.id = st.user_id
+    where st.user_id <> auth.uid()
+      and (p_user_id is null or st.user_id = p_user_id)
+      and is_connected(auth.uid(), st.user_id)
+      and p.activity_feed_visible = true
+  ) events
+  order by event_at desc
+  limit p_limit
+$$;
+
+grant execute on function list_connections_activity(int, uuid) to authenticated;
+-- Backs two additions to SkillsProfile.jsx: a "member since" date in the
+-- header, and a "recent growth" panel replacing the plain activity feed.
+
+-- auth.users.created_at is the true signup date -- deliberately not
+-- duplicated onto profiles (would be a second representation of the same
+-- fact, out of sync the moment either drifted). profiles.full_name/
+-- avatar_url are already visible to any authenticated user (see 0061's
+-- "Authenticated users can view profile names" policy), so signup date
+-- sits at the same visibility level -- identity-ish metadata, not the
+-- skill/activity data that's actually access-gated.
+create or replace function get_member_since(p_user_id uuid)
+returns timestamptz
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select created_at from auth.users where id = p_user_id
+$$;
+
+grant execute on function get_member_since(uuid) to authenticated;
+
+-- Same shape as Dashboard.jsx's own loadRecentGrowth (recent practical-axis
+-- level jumps, each paired with the level just before it and any current
+-- target), just scoped to one other person and re-derived server-side --
+-- skill_assessments/skill_targets are RLS'd to their own owner, so a
+-- connection has no client-side way to read this directly. Gated by the
+-- exact same is_connected + activity_feed_visible check as
+-- list_connections_activity (0063/0102): this is the same privacy boundary,
+-- just a richer per-skill shape than that feed's flat event rows.
+create or replace function list_connection_recent_growth(p_user_id uuid, p_limit int default 5)
+returns table (
+  skill_id uuid,
+  skill_name text,
+  level int,
+  previous_level int,
+  assessed_at timestamptz,
+  target_level int,
+  target_date date
+)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select
+    sa.skill_id,
+    s.name,
+    sa.level,
+    (
+      select sa2.level
+      from skill_assessments sa2
+      where sa2.skill_id = sa.skill_id
+        and sa2.axis = 'practical'
+        and sa2.assessed_at < sa.assessed_at
+      order by sa2.assessed_at desc
+      limit 1
+    ) as previous_level,
+    sa.assessed_at,
+    t.target_level,
+    t.target_date
+  from skill_assessments sa
+  join skills s on s.id = sa.skill_id
+  left join lateral (
+    select target_level, target_date
+    from skill_targets
+    where skill_id = sa.skill_id and user_id = p_user_id
+    order by created_at desc
+    limit 1
+  ) t on true
+  where sa.axis = 'practical'
+    and sa.user_id = p_user_id
+    and sa.assessed_at >= now() - interval '28 days'
+    and sa.user_id <> auth.uid()
+    and is_connected(auth.uid(), sa.user_id)
+    and exists (
+      select 1 from profiles p where p.id = p_user_id and p.activity_feed_visible = true
+    )
+  order by sa.assessed_at desc
+  limit p_limit
+$$;
+
+grant execute on function list_connection_recent_growth(uuid, int) to authenticated;
+-- Same opt-in-to-opt-out flip as 0101 (skills profile sharing), applied to
+-- the two remaining cross-user visibility defaults: connections seeing your
+-- activity feed, and being discoverable in skill search by anyone tracking
+-- the same skill (not just existing connections). Existing accounts are
+-- included, not just new signups -- every row currently at the old default
+-- is flipped. As with 0101, a row already at a non-default value (an
+-- explicit past choice, including 'selective' for skill search) is left
+-- alone, since a plain UPDATE can't tell "never touched" apart from
+-- "deliberately set back to the old default" -- both look identical.
+alter table profiles alter column activity_feed_visible set default true;
+update profiles set activity_feed_visible = true where activity_feed_visible = false;
+
+alter table profiles alter column skill_search_visibility set default 'all';
+update profiles set skill_search_visibility = 'all' where skill_search_visibility = 'hidden';
+-- Provider-admin participant reporting for catalogue courses.
+
+create index if not exists courses_catalogue_course_created_at_idx
+  on courses (catalogue_course_id, created_at)
+  where catalogue_course_id is not null;
+
+create index if not exists course_content_progress_content_item_user_idx
+  on course_content_progress (content_item_id, user_id);
+
+-- Keep course/progress policies out of course_catalogue's own RLS graph:
+-- its learner visibility policy refers back to courses, so a direct lookup
+-- here would recurse. This bounded helper only answers an authorization
+-- question and follows the project's existing is_org_admin helper pattern.
+create or replace function is_course_provider_admin(check_course_id uuid, check_user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from course_catalogue cc
+    where cc.id = check_course_id
+      and cc.organisation_id is not null
+      and is_org_admin(cc.organisation_id, check_user_id)
+  )
+$$;
+
+revoke all on function is_course_provider_admin(uuid, uuid) from public;
+grant execute on function is_course_provider_admin(uuid, uuid) to authenticated;
+
+drop policy if exists "Provider admins can view their course participants" on courses;
+create policy "Provider admins can view their course participants"
+  on courses for select
+  to authenticated
+  using (
+    catalogue_course_id is not null
+    and is_course_provider_admin(catalogue_course_id, (select auth.uid()))
+  );
+
+drop policy if exists "Provider admins can view participant progress" on course_content_progress;
+create policy "Provider admins can view participant progress"
+  on course_content_progress for select
+  to authenticated
+  using (
+    exists (
+      select 1
+      from course_content_links ccl
+      where ccl.resource_id = course_content_progress.content_item_id
+        and is_course_provider_admin(ccl.course_id, (select auth.uid()))
+    )
+  );
+-- 0097 still bound the path expression inside its course_catalogue
+-- subquery to course_catalogue.name. Pass the storage object path into a
+-- bounded helper instead, so PostgreSQL cannot rebind the outer name.
+
+create or replace function can_manage_course_catalogue_image(object_path text)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from course_catalogue cc
+    where cc.id::text = (storage.foldername(object_path))[1]
+      and (
+        is_platform_admin((select auth.uid()))
+        or (
+          cc.organisation_id is not null
+          and is_org_member(cc.organisation_id, (select auth.uid()))
+          and cc.status in ('draft', 'rejected')
+        )
+      )
+  )
+$$;
+
+revoke all on function can_manage_course_catalogue_image(text) from public;
+grant execute on function can_manage_course_catalogue_image(text) to authenticated;
+
+drop policy if exists "Course editors can upload their course's image" on storage.objects;
+create policy "Course editors can upload their course's image"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'course-catalogue-images'
+    and can_manage_course_catalogue_image(name)
+  );
+
+drop policy if exists "Course editors can replace their course's image" on storage.objects;
+create policy "Course editors can replace their course's image"
+  on storage.objects for update
+  to authenticated
+  using (
+    bucket_id = 'course-catalogue-images'
+    and can_manage_course_catalogue_image(name)
+  )
+  with check (
+    bucket_id = 'course-catalogue-images'
+    and can_manage_course_catalogue_image(name)
+  );
+
+drop policy if exists "Course editors can read their course image object for replacement" on storage.objects;
+create policy "Course editors can read their course image object for replacement"
+  on storage.objects for select
+  to authenticated
+  using (
+    bucket_id = 'course-catalogue-images'
+    and can_manage_course_catalogue_image(name)
+  );
+
+drop policy if exists "Course editors can remove their course's image" on storage.objects;
+create policy "Course editors can remove their course's image"
+  on storage.objects for delete
+  to authenticated
+  using (
+    bucket_id = 'course-catalogue-images'
+    and can_manage_course_catalogue_image(name)
+  );
+-- Immutable published course versions. Providers edit a cloned draft while
+-- the currently approved version remains live for learners.
+
+alter table course_catalogue
+  add column course_code text,
+  add column version_group_id uuid,
+  add column version_number integer not null default 1 check (version_number > 0),
+  add column is_current_published boolean not null default false;
+
+update course_catalogue
+set version_group_id = id,
+    is_current_published = (status = 'approved');
+
+alter table course_catalogue alter column version_group_id set not null;
+
+create unique index course_catalogue_group_version_idx
+  on course_catalogue (version_group_id, version_number);
+
+create unique index course_catalogue_one_current_published_idx
+  on course_catalogue (version_group_id)
+  where is_current_published;
+
+create index course_catalogue_org_group_version_idx
+  on course_catalogue (organisation_id, version_group_id, version_number desc);
+
+drop policy if exists "Organisation members can unpublish their own approved course" on course_catalogue;
+
+create or replace function create_course_draft_version(p_course_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_source course_catalogue%rowtype;
+  v_existing_id uuid;
+  v_new_id uuid := gen_random_uuid();
+  v_new_version integer;
+  v_section record;
+  v_new_section_id uuid;
+begin
+  select * into v_source
+  from course_catalogue
+  where id = p_course_id and status = 'approved';
+
+  if not found then
+    raise exception 'Only an approved course can be versioned';
+  end if;
+
+  if not (
+    is_platform_admin((select auth.uid()))
+    or (
+      v_source.organisation_id is not null
+      and is_org_member(v_source.organisation_id, (select auth.uid()))
+    )
+  ) then
+    raise exception 'Not authorized';
+  end if;
+
+  select id into v_existing_id
+  from course_catalogue
+  where version_group_id = v_source.version_group_id
+    and status in ('draft', 'pending_approval', 'rejected')
+  order by version_number desc
+  limit 1;
+
+  if v_existing_id is not null then
+    return v_existing_id;
+  end if;
+
+  select coalesce(max(version_number), 0) + 1 into v_new_version
+  from course_catalogue
+  where version_group_id = v_source.version_group_id;
+
+  insert into course_catalogue (
+    id, name, provider, course_type, duration, synopsis, organisation_id,
+    status, created_by, image_url, course_code, version_group_id,
+    version_number, is_current_published
+  ) values (
+    v_new_id, v_source.name, v_source.provider, v_source.course_type,
+    v_source.duration, v_source.synopsis, v_source.organisation_id,
+    'draft', (select auth.uid()), v_source.image_url, v_source.course_code,
+    v_source.version_group_id, v_new_version, false
+  );
+
+  insert into course_catalogue_skills (course_catalogue_id, skill_library_id, level)
+  select v_new_id, skill_library_id, level
+  from course_catalogue_skills
+  where course_catalogue_id = p_course_id;
+
+  insert into course_catalogue_tags (course_catalogue_id, tag_id)
+  select v_new_id, tag_id
+  from course_catalogue_tags
+  where course_catalogue_id = p_course_id;
+
+  for v_section in
+    select id, title, position
+    from course_sections
+    where course_id = p_course_id
+    order by position, created_at
+  loop
+    v_new_section_id := gen_random_uuid();
+    insert into course_sections (id, course_id, title, position)
+    values (v_new_section_id, v_new_id, v_section.title, v_section.position);
+
+    insert into course_content_links (course_id, resource_id, position, section_id)
+    select v_new_id, resource_id, position, v_new_section_id
+    from course_content_links
+    where course_id = p_course_id and section_id = v_section.id;
+  end loop;
+
+  insert into course_content_links (course_id, resource_id, position, section_id)
+  select v_new_id, resource_id, position, null
+  from course_content_links
+  where course_id = p_course_id and section_id is null;
+
+  return v_new_id;
+end;
+$$;
+
+revoke all on function create_course_draft_version(uuid) from public;
+grant execute on function create_course_draft_version(uuid) to authenticated;
+
+create or replace function publish_course_version(p_course_id uuid)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_group_id uuid;
+begin
+  if not is_platform_admin((select auth.uid())) then
+    raise exception 'Not authorized';
+  end if;
+
+  select version_group_id into v_group_id
+  from course_catalogue
+  where id = p_course_id
+  for update;
+
+  if v_group_id is null then
+    raise exception 'Course not found';
+  end if;
+
+  update course_catalogue
+  set status = 'inactive', is_current_published = false
+  where version_group_id = v_group_id
+    and is_current_published
+    and id <> p_course_id;
+
+  update course_catalogue
+  set status = 'approved',
+      is_current_published = true,
+      approved_by = (select auth.uid()),
+      approved_at = now(),
+      rejection_reason = null
+  where id = p_course_id;
+end;
+$$;
+
+revoke all on function publish_course_version(uuid) from public;
+grant execute on function publish_course_version(uuid) to authenticated;
+
+create or replace function get_provider_profile(p_slug text)
+returns json
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select json_build_object(
+    'organisation', (
+      select json_build_object('id', o.id, 'name', o.name, 'about', o.about, 'logoUrl', o.logo_url, 'url', o.url)
+      from organisations o
+      where o.slug = p_slug and o.status = 'active' and o.public_profile_enabled = true
+    ),
+    'skills', (
+      select coalesce(json_agg(json_build_object(
+        'id', sl.id, 'name', sl.name, 'category', sl.category, 'description', sl.description
+      ) order by sl.name), '[]'::json)
+      from organisation_offered_skills oos
+      join skill_library sl on sl.id = oos.skill_library_id
+      join organisations o on o.id = oos.organisation_id
+      where o.slug = p_slug and o.status = 'active' and o.public_profile_enabled = true
+    ),
+    'courses', (
+      select coalesce(json_agg(json_build_object(
+        'id', cc.id, 'name', cc.name, 'synopsis', cc.synopsis,
+        'courseType', cc.course_type, 'duration', cc.duration,
+        'imageUrl', cc.image_url, 'courseCode', cc.course_code,
+        'versionNumber', cc.version_number,
+        'skillEntries', (
+          select coalesce(json_agg(json_build_object(
+            'skillId', ccs.skill_library_id, 'skillName', sl2.name, 'level', ccs.level
+          )), '[]'::json)
+          from course_catalogue_skills ccs
+          join skill_library sl2 on sl2.id = ccs.skill_library_id
+          where ccs.course_catalogue_id = cc.id
+        ),
+        'tags', (
+          select coalesce(json_agg(json_build_object('id', t.id, 'name', t.name)), '[]'::json)
+          from course_catalogue_tags cct
+          join tags t on t.id = cct.tag_id
+          where cct.course_catalogue_id = cc.id
+        )
+      ) order by cc.name), '[]'::json)
+      from course_catalogue cc
+      join organisations o on o.id = cc.organisation_id
+      where o.slug = p_slug and o.status = 'active' and o.public_profile_enabled = true
+        and cc.status = 'approved' and cc.is_current_published
+    )
+  )
+$$;
+
+grant execute on function get_provider_profile(text) to anon, authenticated;
+-- Optional learner-facing guidance for each course section. Keep version
+-- cloning in sync so a provider's instructions carry into the next draft.
+
+alter table course_sections
+  add column instructions text;
+
+create or replace function create_course_draft_version(p_course_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_source course_catalogue%rowtype;
+  v_existing_id uuid;
+  v_new_id uuid := gen_random_uuid();
+  v_new_version integer;
+  v_section record;
+  v_new_section_id uuid;
+begin
+  select * into v_source
+  from course_catalogue
+  where id = p_course_id and status = 'approved';
+
+  if not found then
+    raise exception 'Only an approved course can be versioned';
+  end if;
+
+  if not (
+    is_platform_admin((select auth.uid()))
+    or (
+      v_source.organisation_id is not null
+      and is_org_member(v_source.organisation_id, (select auth.uid()))
+    )
+  ) then
+    raise exception 'Not authorized';
+  end if;
+
+  select id into v_existing_id
+  from course_catalogue
+  where version_group_id = v_source.version_group_id
+    and status in ('draft', 'pending_approval', 'rejected')
+  order by version_number desc
+  limit 1;
+
+  if v_existing_id is not null then
+    return v_existing_id;
+  end if;
+
+  select coalesce(max(version_number), 0) + 1 into v_new_version
+  from course_catalogue
+  where version_group_id = v_source.version_group_id;
+
+  insert into course_catalogue (
+    id, name, provider, course_type, duration, synopsis, organisation_id,
+    status, created_by, image_url, course_code, version_group_id,
+    version_number, is_current_published
+  ) values (
+    v_new_id, v_source.name, v_source.provider, v_source.course_type,
+    v_source.duration, v_source.synopsis, v_source.organisation_id,
+    'draft', (select auth.uid()), v_source.image_url, v_source.course_code,
+    v_source.version_group_id, v_new_version, false
+  );
+
+  insert into course_catalogue_skills (course_catalogue_id, skill_library_id, level)
+  select v_new_id, skill_library_id, level
+  from course_catalogue_skills
+  where course_catalogue_id = p_course_id;
+
+  insert into course_catalogue_tags (course_catalogue_id, tag_id)
+  select v_new_id, tag_id
+  from course_catalogue_tags
+  where course_catalogue_id = p_course_id;
+
+  for v_section in
+    select id, title, instructions, position
+    from course_sections
+    where course_id = p_course_id
+    order by position, created_at
+  loop
+    v_new_section_id := gen_random_uuid();
+    insert into course_sections (id, course_id, title, instructions, position)
+    values (v_new_section_id, v_new_id, v_section.title, v_section.instructions, v_section.position);
+
+    insert into course_content_links (course_id, resource_id, position, section_id)
+    select v_new_id, resource_id, position, v_new_section_id
+    from course_content_links
+    where course_id = p_course_id and section_id = v_section.id;
+  end loop;
+
+  insert into course_content_links (course_id, resource_id, position, section_id)
+  select v_new_id, resource_id, position, null
+  from course_content_links
+  where course_id = p_course_id and section_id is null;
+
+  return v_new_id;
+end;
+$$;
+
+revoke all on function create_course_draft_version(uuid) from public;
+grant execute on function create_course_draft_version(uuid) to authenticated;
+-- Platform-admin-configurable first-login wizard: each row is one of the
+-- steps Onboarding.jsx already knows how to render (CV/history import,
+-- skills to learn), toggleable on/off from /admin/onboarding. `key` stays
+-- fixed and matches the step identifiers in Onboarding.jsx -- this table
+-- only controls which known steps show and in what order, not what a step
+-- does, so no dynamic step-creation UI is needed.
+create table onboarding_steps (
+  key text primary key,
+  label text not null,
+  enabled boolean not null default true,
+  order_index integer not null,
+  updated_at timestamptz not null default now()
+);
+
+insert into onboarding_steps (key, label, order_index) values
+  ('import', 'Import your CV or LinkedIn history', 0),
+  ('skills', 'Choose skills you want to learn', 1);
+
+alter table onboarding_steps enable row level security;
+
+-- Every signed-in user needs to read this to render their own onboarding
+-- wizard -- it's shared platform configuration, not private data.
+create policy "Authenticated users can view onboarding steps"
+  on onboarding_steps for select
+  to authenticated
+  using (true);
+
+create policy "Platform admins can update onboarding steps"
+  on onboarding_steps for update
+  to authenticated
+  using (is_platform_admin(auth.uid()))
+  with check (is_platform_admin(auth.uid()));
+-- Drives the "import your CV/history" banner on the dashboard: shown until
+-- the learner has actually run an import once, or explicitly dismissed it.
+-- Kept as its own flag rather than inferring from skills.source='cv_import'
+-- (0008) -- an import can add only courses/experience with no skills at
+-- all, which that column alone wouldn't catch.
+alter table profiles add column cv_imported_at timestamptz;
+alter table profiles add column cv_import_banner_dismissed_at timestamptz;
 -- Lets an organisation admin designate specific members of their own
 -- provider organisation as "catalogue approvers" -- able to approve/reject/
 -- deactivate their own org's course_catalogue submissions without needing

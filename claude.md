@@ -57,7 +57,7 @@ React 19 + Vite 8, client-rendered SPA (`react-router-dom`). JavaScript/JSX — 
 * Unit/component tests: colocated as `*.test.js` next to the code they test (e.g. `src/lib/dates.test.js`)
 * E2e tests: `e2e/`
 
-Routes: `/`, `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/welcome`, `/rate/:code`, `/providers/:slug`, `/dashboard`, `/profile`, `/connections`, `/actions`.
+Routes: `/`, `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/welcome`, `/rate/:code`, `/recommend/:code`, `/providers/:slug`, `/dashboard`, `/profile`, `/connections`, `/actions`.
 
 No generated database types. Update this map only when implementation changes make it materially inaccurate.
 

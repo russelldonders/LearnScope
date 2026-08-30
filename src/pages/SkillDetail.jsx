@@ -8,6 +8,7 @@ import { formatMonthYear } from '../lib/dates'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import PeopleWithSkillModal from '../components/PeopleWithSkillModal'
+import PersonAvatar from '../components/PersonAvatar'
 import { getSearchPrivacySettings, listSearchableSkillIds, setSkillSearchable } from '../lib/skillDiscovery'
 import KnowledgeLevelBar from '../components/KnowledgeLevelBar'
 import SelfAssessSection from '../components/SelfAssessSection'
@@ -16,12 +17,13 @@ import { LEVEL_LABELS, LEVEL_DESCRIPTIONS, KNOWLEDGE_LEVEL_LABELS } from '../lib
 import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
 import { activityName, verbLabel, formatDuration, isDiagnosticStatement } from '../lib/xapiStatement'
-import { enableCurrentRole, disableCurrentRole, applyCurrentRoleSelection, syncSkillIsCurrentRole } from '../lib/currentRole'
+import { applyCurrentRoleSelection, getCurrentRoleTrackingStatus, trackUnderCurrentRole } from '../lib/currentRole'
 import CurrentRoleSelectModal from '../components/CurrentRoleSelectModal'
 import AccessibleDialog from '../components/AccessibleDialog'
 import { listTags, listSkillTags, addTagToSkill, removeSkillTagLink } from '../lib/skillTags'
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import InviteRaterModal from '../components/InviteRaterModal'
+import RecommendSkillModal from '../components/RecommendSkillModal'
 import RecordActivityModal from '../components/RecordActivityModal'
 import AssessBaselineModal from '../components/AssessBaselineModal'
 import SetTargetModal from '../components/SetTargetModal'
@@ -63,6 +65,7 @@ export default function SkillDetail() {
   const [assessorName, setAssessorName] = useState(null)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [inviteAfterSelfAssess, setInviteAfterSelfAssess] = useState(false)
+  const [recommendOpen, setRecommendOpen] = useState(false)
   const [selfAssessOpen, setSelfAssessOpen] = useState(false)
   const [selfAssessKnowledgeOpen, setSelfAssessKnowledgeOpen] = useState(false)
   const [confirmingBaselineOpen, setConfirmingBaselineOpen] = useState(false)
@@ -150,7 +153,11 @@ export default function SkillDetail() {
           .select('*')
           .eq('skill_id', skill.id)
           .order('rated_at', { ascending: false }),
-        supabase.from('connection_invites').select('id, status').eq('skill_id', skill.id),
+        // invite_type='rate' only -- a "Recommend this skill" invite (see
+        // RecommendSkillModal) tracks a different action entirely and
+        // shouldn't count toward the "Invite others to assess" milestone
+        // below (invitesSentCount).
+        supabase.from('connection_invites').select('id, status').eq('skill_id', skill.id).eq('invite_type', 'rate'),
         supabase
           .from('skill_experience_links')
           .select('id, created_at, experience(id, title, organization, type, start_date, end_date)')
@@ -516,7 +523,7 @@ export default function SkillDetail() {
                                   <button
                                     type="button"
                                     onClick={() =>
-                                      navigate(`/courses/${link.courses.id}`, {
+                                      navigate(`/courses/${link.courses.id}/learn`, {
                                         state: { backTo: `/skills/${skill.id}`, backLabel: skill.name },
                                       })
                                     }
@@ -654,6 +661,13 @@ export default function SkillDetail() {
                     <PeopleIcon />
                     {totalTrackersCount} {totalTrackersCount === 1 ? 'person' : 'people'} in total have this skill
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setRecommendOpen(true)}
+                    className="rounded-full border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:border-moss hover:text-moss transition-colors"
+                  >
+                    Recommend this skill
+                  </button>
                 </div>
               </div>
             )}
@@ -686,6 +700,8 @@ export default function SkillDetail() {
                 }}
               />
             )}
+
+            {recommendOpen && <RecommendSkillModal skill={skill} onClose={() => setRecommendOpen(false)} />}
 
             {selfAssessOpen && (
               <SelfAssessModal
@@ -982,6 +998,10 @@ function PeopleIcon() {
 // Only ever populated with connections who both track this skill AND have
 // opted into showing it (see listConnectionsWithSkill) -- no separate
 // privacy check needed here, the list itself is already scoped correctly.
+// Same per-row card treatment as PeopleWithSkillModal (avatar, name linking
+// to their skills profile, GrowthRing for their level) -- these two modals
+// are opened from adjacent lines in the Skill Network section and should
+// read as one visual language, not a plain list next to a rich one.
 function ConnectionsWithSkillModal({ connections, skillName, onClose }) {
   return (
     <AccessibleDialog
@@ -991,7 +1011,7 @@ function ConnectionsWithSkillModal({ connections, skillName, onClose }) {
     >
         <div className="flex items-center justify-between mb-4">
           <h2 id="connections-with-skill-dialog-title" className="font-display text-2xl text-ink">Connections with {skillName}</h2>
-          <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
+          <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm shrink-0">
             Close
           </button>
         </div>
@@ -1000,8 +1020,19 @@ function ConnectionsWithSkillModal({ connections, skillName, onClose }) {
         ) : (
           <ul className="space-y-2">
             {connections.map((c) => (
-              <li key={c.id} className="text-sm text-ink">
-                {c.name}
+              <li key={c.id} className="rounded-md border border-hairline p-3">
+                <div className="flex items-center gap-3">
+                  <Link to={`/skills-profile/${c.id}`} className="flex items-center gap-3 min-w-0 group flex-1">
+                    <PersonAvatar name={c.name} avatarUrl={c.avatarUrl} />
+                    <span className="text-sm text-ink font-medium truncate group-hover:text-moss group-hover:underline">
+                      {c.name}
+                    </span>
+                  </Link>
+                  <GrowthRing level={c.level} size={24} labels={LEVEL_LABELS} />
+                  <span className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 shrink-0">
+                    Connected
+                  </span>
+                </div>
               </li>
             ))}
           </ul>
@@ -1322,7 +1353,7 @@ function HistorySection({
   const [selectedEvent, setSelectedEvent] = useState(null)
 
   function goToCourse(courseId) {
-    navigate(`/courses/${courseId}`, { state: { backTo: `/skills/${skill.id}`, backLabel: skill.name } })
+    navigate(`/courses/${courseId}/learn`, { state: { backTo: `/skills/${skill.id}`, backLabel: skill.name } })
   }
 
   return (
@@ -2114,11 +2145,9 @@ function ScheduleSection({ skill, onUpdated }) {
 function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user, onUpdated }) {
   const isCustom = !skill.library_skill_id || skill.skill_library?.is_private
   const [name, setName] = useState(skill.name)
-  const [isCurrentRole, setIsCurrentRole] = useState(skill.is_current_role)
   const [trackingReason, setTrackingReason] = useState(skill.tracking_reason ?? null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
-  const [currentRolePrompt, setCurrentRolePrompt] = useState(null)
 
   async function handleSave(e) {
     e.preventDefault()
@@ -2141,26 +2170,6 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
         throw error
       }
 
-      // is_current_role itself is never written directly here -- it's set
-      // by enableCurrentRole/disableCurrentRole/syncSkillIsCurrentRole
-      // below, which only ever mark it true once actually linked to a
-      // current-role experience, so it can't end up stuck true with
-      // nothing behind it (e.g. if the multi-role picker gets abandoned).
-      // Only re-resolve when the checkbox actually changed -- otherwise
-      // every unrelated edit (renaming, tags) would re-prompt a learner
-      // with multiple current roles all over again.
-      if (isCurrentRole !== skill.is_current_role) {
-        if (isCurrentRole) {
-          const result = await enableCurrentRole(user.id, skill.id)
-          if (result.needsSelection) {
-            setCurrentRolePrompt({ roles: result.roles })
-            return
-          }
-        } else {
-          await disableCurrentRole(user.id, skill.id)
-        }
-      }
-
       onUpdated()
     } catch (err) {
       setError(err.message)
@@ -2169,28 +2178,8 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
     }
   }
 
-  async function handleCurrentRoleConfirm(experienceIds) {
-    await applyCurrentRoleSelection(user.id, skill.id, experienceIds)
-    setCurrentRolePrompt(null)
-    onUpdated()
-  }
-
-  async function handleCurrentRoleCancel() {
-    await syncSkillIsCurrentRole(user.id, skill.id)
-    setCurrentRolePrompt(null)
-    onUpdated()
-  }
-
   return (
-    <>
-      {currentRolePrompt && (
-        <CurrentRoleSelectModal
-          roles={currentRolePrompt.roles}
-          onConfirm={handleCurrentRoleConfirm}
-          onCancel={handleCurrentRoleCancel}
-        />
-      )}
-      <form onSubmit={handleSave} className="space-y-3">
+    <form onSubmit={handleSave} className="space-y-3">
       <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">
         {isCustom ? 'Custom skill — private to you' : 'From the shared skill library'}
       </p>
@@ -2221,22 +2210,7 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
 
       <TrackingReasonPicker value={trackingReason} onChange={setTrackingReason} />
 
-      <label className="flex items-start gap-2 text-sm text-secondary">
-        <input
-          type="checkbox"
-          checked={isCurrentRole}
-          onChange={(e) => setIsCurrentRole(e.target.checked)}
-          className="mt-0.5 rounded border-hairline"
-        />
-        <span>
-          Part of my current role
-          <span className="block text-xs text-secondary/80 mt-0.5">
-            Links this skill to your current job on the Experience timeline — creates one called
-            "Current role" if you don't have one yet, or asks which one if you have more than
-            one.
-          </span>
-        </span>
-      </label>
+      <TrackUnderCurrentRoleButton skill={skill} user={user} onUpdated={onUpdated} />
 
       {error && <p className="text-sm text-red-700">{error}</p>}
 
@@ -2249,8 +2223,87 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
           {saving ? 'Saving…' : 'Save details'}
         </button>
       </div>
-      </form>
-    </>
+    </form>
+  )
+}
+
+// Additive-only: adds this skill to one or more of the learner's current
+// (ongoing) roles on the Experience timeline. Hides itself once the skill
+// is already linked to every current role -- there's nothing left to add,
+// so a disabled/checked control would just be clutter. With zero current
+// roles it still shows (clicking creates one); with exactly one untracked
+// current role it links straight to it; with more than one it opens
+// CurrentRoleSelectModal scoped to just the untracked ones.
+function TrackUnderCurrentRoleButton({ skill, user, onUpdated }) {
+  const [status, setStatus] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+  const [pickerRoles, setPickerRoles] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    refreshStatus(cancelled)
+    return () => {
+      cancelled = true
+    }
+  }, [user.id, skill.id])
+
+  async function refreshStatus(cancelled = false) {
+    const s = await getCurrentRoleTrackingStatus(user.id, skill.id)
+    if (!cancelled) setStatus(s)
+    return s
+  }
+
+  async function handleClick() {
+    setError(null)
+    setSaving(true)
+    try {
+      const result = await trackUnderCurrentRole(user.id, skill.id, status)
+      if (result.needsSelection) {
+        setPickerRoles(result.roles)
+      } else {
+        await refreshStatus()
+        onUpdated()
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handlePickerConfirm(experienceIds) {
+    await applyCurrentRoleSelection(user.id, skill.id, experienceIds)
+    setPickerRoles(null)
+    await refreshStatus()
+    onUpdated()
+  }
+
+  if (status && status.roles.length > 0 && status.untracked.length === 0) return null
+
+  return (
+    <div>
+      {pickerRoles && (
+        <CurrentRoleSelectModal
+          roles={pickerRoles}
+          onConfirm={handlePickerConfirm}
+          onCancel={() => setPickerRoles(null)}
+        />
+      )}
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={!status || saving}
+        className="rounded-full border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:border-moss hover:text-moss transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {saving ? 'Adding…' : 'Track under current role'}
+      </button>
+      <p className="text-xs text-secondary/80 mt-1">
+        Links this skill to your current job on the Experience timeline — creates one called
+        "Current role" if you don't have one yet, or asks which one if you have more than one.
+      </p>
+      {error && <p className="text-sm text-red-700 mt-1">{error}</p>}
+    </div>
   )
 }
 

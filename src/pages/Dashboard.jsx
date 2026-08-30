@@ -3,7 +3,13 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useNavVisibility } from '../context/NavVisibilityContext'
 import { supabase } from '../lib/supabaseClient'
-import { listConnections, listConnectionsActivity, listIncomingRateInvites, getProfiles } from '../lib/connections'
+import {
+  listConnections,
+  listConnectionsActivity,
+  listIncomingRateInvites,
+  listIncomingRecommendInvites,
+  getProfiles,
+} from '../lib/connections'
 import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
 import AppHeader from '../components/AppHeader'
 import RecordActivitySection from '../components/RecordActivitySection'
@@ -11,13 +17,27 @@ import FindSkillModal from '../components/FindSkillModal'
 import AccessibleDialog from '../components/AccessibleDialog'
 import GrowthRing from '../components/GrowthRing'
 import CourseThumbnail from '../components/CourseThumbnail'
-import PersonAvatar from '../components/PersonAvatar'
+import ConnectionsActivityFeed from '../components/ConnectionsActivityFeed'
+import GrowthArrow from '../components/GrowthArrow'
 import { LEVEL_LABELS } from '../lib/levels'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
 import { isDiagnosticStatement } from '../lib/xapiStatement'
 import { isSelfAssessmentDue, todayDateString } from '../lib/checkin'
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
+
+// Drives the dashboard's "import your CV/history" banner -- shown until
+// the learner has actually run an import once (cv_imported_at, set by
+// ResumeImportReviewModal on first successful import from either the
+// onboarding wizard or /profile/import) or explicitly dismissed it.
+async function loadImportBannerState(userId) {
+  const { data } = await supabase
+    .from('profiles')
+    .select('cv_imported_at, cv_import_banner_dismissed_at')
+    .eq('id', userId)
+    .single()
+  return data ?? { cv_imported_at: null, cv_import_banner_dismissed_at: null }
+}
 
 async function countRows(table, userId) {
   const { count } = await supabase
@@ -33,7 +53,7 @@ async function countRows(table, userId) {
 async function loadCurrentLearning(userId) {
   const { data, error } = await supabase
     .from('courses')
-    .select('id, name, provider, course_type, duration')
+    .select('id, name, provider, course_type, duration, course_catalogue(image_url, organisations(logo_url))')
     .eq('user_id', userId)
     .is('completed_date', null)
     .order('created_at', { ascending: false })
@@ -50,7 +70,9 @@ async function loadCurrentLearning(userId) {
 // from a connection with no activity to show.
 async function loadConnectionsActivity() {
   try {
-    return { data: await listConnectionsActivity(5), error: null }
+    // Fetch beyond the five visible rows so several related skill events can
+    // collapse without leaving the feed unexpectedly sparse.
+    return { data: await listConnectionsActivity(30), error: null }
   } catch (err) {
     return { data: [], error: err.message || 'Something went wrong.' }
   }
@@ -111,8 +133,9 @@ async function loadUpcomingTargets(userId) {
 // to validate" sections already fetch (see Actions.jsx) rather than a
 // second implementation of the same query.
 async function loadPendingReviewTasks(userId) {
-  const [rateInvites, validationRequests] = await Promise.all([
+  const [rateInvites, recommendInvites, validationRequests] = await Promise.all([
     listIncomingRateInvites(),
+    listIncomingRecommendInvites(),
     listIncomingPendingValidationRequests(userId),
   ])
   const profiles = await getProfiles(validationRequests.map((r) => r.requester_id))
@@ -122,13 +145,19 @@ async function loadPendingReviewTasks(userId) {
     date: invite.created_at,
     to: `/rate/${invite.share_code}`,
   }))
+  const recommendTasks = recommendInvites.map((invite) => ({
+    key: `recommend-${invite.id}`,
+    label: `${invite.inviter_name || 'Someone'} recommends you track "${invite.skill_name}"`,
+    date: invite.created_at,
+    to: `/recommend/${invite.share_code}`,
+  }))
   const validationTasks = validationRequests.map((r) => ({
     key: `validate-${r.id}`,
     label: `Confirm ${profiles[r.requester_id]?.name || 'someone'} reached ${LEVEL_LABELS[r.target_level]} in "${r.skills?.name}"`,
     date: r.created_at,
     to: `/validate-request/${r.id}`,
   }))
-  return [...rateTasks, ...validationTasks].sort((a, b) => new Date(b.date) - new Date(a.date))
+  return [...rateTasks, ...recommendTasks, ...validationTasks].sort((a, b) => new Date(b.date) - new Date(a.date))
 }
 
 const RECENT_GROWTH_WINDOW_DAYS = 28
@@ -211,7 +240,8 @@ async function loadUpNextRecommendations(userId) {
   ] = await Promise.all([
     supabase.from('skill_assessments').select('skill_id, source, axis').in('skill_id', ids),
     supabase.from('skill_peer_ratings').select('skill_id').in('skill_id', ids),
-    supabase.from('connection_invites').select('skill_id').in('skill_id', ids),
+    // invite_type='rate' only -- see the matching filter in SkillDetail.jsx.
+    supabase.from('connection_invites').select('skill_id').in('skill_id', ids).eq('invite_type', 'rate'),
     supabase.from('xapi_statements').select('skill_id, statement').eq('user_id', userId).in('skill_id', ids),
     supabase.from('skill_course_links').select('skill_id, courses(completed_date)').in('skill_id', ids),
     supabase.from('skill_targets').select('skill_id').in('skill_id', ids),
@@ -289,6 +319,7 @@ export default function Dashboard() {
   const [upcomingSelfAssessments, setUpcomingSelfAssessments] = useState([])
   const [upcomingTargets, setUpcomingTargets] = useState([])
   const [pendingReviewTasks, setPendingReviewTasks] = useState([])
+  const [importBanner, setImportBanner] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -309,6 +340,7 @@ export default function Dashboard() {
       selfAssessmentsDue,
       targetsDue,
       reviewTasks,
+      importBannerState,
     ] = await Promise.all([
       countRows('skills', user.id),
       countRows('courses', user.id),
@@ -321,6 +353,7 @@ export default function Dashboard() {
       loadUpcomingSelfAssessments(user.id),
       loadUpcomingTargets(user.id),
       loadPendingReviewTasks(user.id),
+      loadImportBannerState(user.id),
     ])
     setCounts({ skills, courses, experience, connections })
     setRecentGrowth(growth)
@@ -331,6 +364,7 @@ export default function Dashboard() {
     setUpcomingSelfAssessments(selfAssessmentsDue)
     setUpcomingTargets(targetsDue)
     setPendingReviewTasks(reviewTasks)
+    setImportBanner(importBannerState)
     setLoading(false)
   }
 
@@ -340,11 +374,25 @@ export default function Dashboard() {
     setConnectionsActivityError(result.error)
   }
 
+  // Best-effort, same as persistProfileFields elsewhere -- if it fails, the
+  // banner just reappears next visit rather than blocking anything.
+  async function dismissImportBanner() {
+    setImportBanner((prev) => ({ ...prev, cv_import_banner_dismissed_at: new Date().toISOString() }))
+    await supabase
+      .from('profiles')
+      .update({ cv_import_banner_dismissed_at: new Date().toISOString() })
+      .eq('id', user.id)
+  }
+
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
 
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8 space-y-12">
+        {!loading && importBanner && !importBanner.cv_imported_at && !importBanner.cv_import_banner_dismissed_at && (
+          <ImportCvBanner onDismiss={dismissImportBanner} />
+        )}
+
         <section aria-labelledby="dashboard-heading">
           <div className="max-w-2xl mb-7">
             <h1 id="dashboard-heading" className="font-display text-3xl sm:text-4xl text-ink text-balance">
@@ -377,6 +425,23 @@ export default function Dashboard() {
             </div>
           )}
         </section>
+
+        {!loading && counts.experience === 0 && counts.skills + counts.courses + counts.connections > 0 && (
+          <div className="rounded-lg border border-dashed border-hairline bg-card p-6 text-center">
+            <h2 className="font-display text-xl text-ink mb-1">Add your current role</h2>
+            <p className="text-sm text-secondary mb-4 max-w-md mx-auto text-pretty">
+              Your Experience timeline is empty. Record the job you're in now so LearnScope can
+              start linking your skills, courses and achievements to it.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/experience', { state: { autoOpenType: 'employment' } })}
+              className="inline-block rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
+            >
+              Record your current role
+            </button>
+          </div>
+        )}
 
         {!loading &&
           (upcomingSelfAssessments.length > 0 || upcomingTargets.length > 0 || pendingReviewTasks.length > 0) && (
@@ -512,60 +577,6 @@ export default function Dashboard() {
           }}
         />
       )}
-    </div>
-  )
-}
-
-// Turns one list_connections_activity (0063) row into a plain-language
-// sentence -- everything the RPC needs to say is already in the row itself
-// (skill_name/level/detail), never a client-side lookup, since each row is
-// independently privacy-checked server-side and shouldn't need extra trust.
-function describeActivityEvent(event) {
-  const level = event.level ? LEVEL_LABELS[event.level] : null
-  switch (event.event_type) {
-    case 'skill_confirmed':
-      return `confirmed ${level ?? 'a level'} in ${event.skill_name}`
-    case 'skill_validated':
-      return `had ${event.skill_name} validated at ${level ?? 'their target level'}`
-    case 'skill_added':
-      return `started tracking ${event.skill_name}`
-    case 'experience_added':
-      return `added ${event.detail}`
-    case 'course_started':
-      return `started ${event.detail}`
-    case 'target_set':
-      return `set a target of ${level ?? 'a new level'} for ${event.skill_name}`
-    default:
-      return null
-  }
-}
-
-function ConnectionsActivityFeed({ events }) {
-  return (
-    <div className="space-y-2">
-      {events.map((event, i) => {
-        const description = describeActivityEvent(event)
-        if (!description) return null
-        return (
-          <div
-            key={`${event.event_type}-${event.actor_id}-${event.event_at}-${i}`}
-            className="flex items-start gap-3 bg-card border border-hairline rounded-lg px-4 py-3"
-          >
-            <PersonAvatar name={event.full_name} avatarUrl={event.avatar_url} size={9} />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm text-ink">
-                <span className="font-medium">{event.full_name || 'A connection'}</span> {description}
-              </p>
-              {event.event_type === 'skill_confirmed' && event.detail && (
-                <p className="text-xs text-secondary mt-0.5">{event.detail}</p>
-              )}
-            </div>
-            <p className="font-mono text-xs text-secondary shrink-0" title={formatAbsoluteDate(event.event_at)}>
-              {formatRelativeDate(event.event_at)}
-            </p>
-          </div>
-        )
-      })}
     </div>
   )
 }
@@ -877,11 +888,17 @@ function CurrentLearningPanel({ courses }) {
       {courses.map((course) => (
         <Link
           key={course.id}
-          to={`/courses/${course.id}`}
+          to={`/courses/${course.id}/learn`}
           state={{ backTo: '/dashboard', backLabel: 'Dashboard' }}
           className="bg-card border border-hairline rounded-lg overflow-hidden hover:border-moss transition-colors"
         >
-          <CourseThumbnail name={course.name} provider={course.provider} className="h-20 w-full" />
+          <CourseThumbnail
+            name={course.name}
+            provider={course.provider}
+            imageUrl={course.course_catalogue?.image_url}
+            logoUrl={course.course_catalogue?.organisations?.logo_url}
+            className="h-20 w-full"
+          />
           <div className="p-3">
             <h3 className="font-display text-base text-ink truncate">{course.name}</h3>
             <p className="font-mono text-xs text-secondary mt-1 truncate">
@@ -894,22 +911,32 @@ function CurrentLearningPanel({ courses }) {
   )
 }
 
-function GrowthArrow() {
+function ImportCvBanner({ onDismiss }) {
   return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="var(--color-secondary)"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="shrink-0"
-    >
-      <path d="M5 12h14" />
-      <path d="M13 6l6 6-6 6" />
-    </svg>
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-lg border border-hairline bg-card px-5 py-4">
+      <div>
+        <p className="text-sm font-medium text-ink">Have a CV or LinkedIn export handy?</p>
+        <p className="text-sm text-secondary mt-0.5">
+          Import it to pull in your skills, courses and experience automatically — you'll choose
+          exactly what to keep before anything is saved.
+        </p>
+      </div>
+      <div className="flex items-center gap-3 shrink-0">
+        <Link
+          to="/profile/import"
+          className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 whitespace-nowrap"
+        >
+          Import now
+        </Link>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="text-sm text-secondary hover:text-ink whitespace-nowrap"
+        >
+          Don't show this again
+        </button>
+      </div>
+    </div>
   )
 }
 

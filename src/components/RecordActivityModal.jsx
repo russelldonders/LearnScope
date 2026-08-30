@@ -7,7 +7,7 @@ function todayDate() {
   return new Date().toISOString().slice(0, 10)
 }
 
-export default function RecordActivityModal({ actor, skills, relatedCourse, relatedSkill: fixedSkill, onSave, onClose }) {
+export default function RecordActivityModal({ actor, skills, relatedSkill: fixedSkill, onSave, onClose }) {
   const [verbValue, setVerbValue] = useState('experienced')
   const [activityTitle, setActivityTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -36,7 +36,6 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
         description: description.trim() || null,
         timestamp: date,
         relatedSkill,
-        relatedCourse,
         durationHours,
         durationMinutes,
       })
@@ -62,11 +61,9 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
     >
         <h2 id="record-activity-dialog-title" className="font-display text-2xl text-ink mb-1">Record an activity</h2>
         <p className="text-sm text-secondary mb-4">
-          {relatedCourse
-            ? `A quick log of something you did as part of "${relatedCourse.name}".`
-            : fixedSkill
-              ? `A quick log of something you did related to "${fixedSkill.name}".`
-              : "A quick log of something you did — separate from your work & education timeline."}
+          {fixedSkill
+            ? `A quick log of something you did related to "${fixedSkill.name}".`
+            : "A quick log of something you did — separate from your work & education timeline."}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">

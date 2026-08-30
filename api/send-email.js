@@ -54,6 +54,24 @@ async function sendInvite(res, { toEmail, inviterName, skillName, shareUrl }) {
   }
 }
 
+async function sendRecommend(res, { toEmail, inviterName, skillName, shareUrl }) {
+  if (!toEmail || !skillName || !shareUrl) {
+    res.status(400).json({ error: 'Missing toEmail, skillName, or shareUrl' })
+    return
+  }
+  const fromName = inviterName?.trim() || 'A LearnScope user'
+  const html = `
+    <p>${escapeHtml(fromName)} thinks you'd be a good fit to develop <strong>${escapeHtml(skillName)}</strong> and recommends you start tracking it on LearnScope.</p>
+    <p><a href="${escapeHtml(shareUrl)}">Add ${escapeHtml(skillName)} to your profile</a></p>
+    <p style="color:#666;font-size:13px">If you don't recognize this, you can safely ignore this email.</p>
+  `
+  if (
+    await sendResendEmail(res, { to: toEmail, subject: `${fromName} recommends you track "${skillName}"`, html })
+  ) {
+    res.status(200).json({ ok: true })
+  }
+}
+
 async function sendValidationRequest(res, { toEmail, requesterName, skillName, reviewUrl }) {
   if (!toEmail || !skillName || !reviewUrl) {
     res.status(400).json({ error: 'Missing toEmail, skillName, or reviewUrl' })
@@ -95,6 +113,9 @@ export default async function handler(req, res) {
     switch (type) {
       case 'invite':
         await sendInvite(res, payload)
+        return
+      case 'recommend':
+        await sendRecommend(res, payload)
         return
       case 'validation_request':
         await sendValidationRequest(res, payload)

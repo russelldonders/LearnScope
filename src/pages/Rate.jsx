@@ -7,6 +7,7 @@ import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import {
   getInvitePreview,
   acceptInviteAndRate,
+  declineInvite,
   setPendingInviteCode,
   clearPendingInviteCode,
 } from '../lib/connections'
@@ -22,6 +23,8 @@ export default function Rate() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
   const [done, setDone] = useState(false)
+  const [declining, setDeclining] = useState(false)
+  const [declined, setDeclined] = useState(false)
 
   useEffect(() => {
     getInvitePreview(code)
@@ -53,6 +56,20 @@ export default function Rate() {
     navigate(path)
   }
 
+  async function handleDecline() {
+    setError(null)
+    setDeclining(true)
+    try {
+      await declineInvite(code)
+      refreshPendingActionCount()
+      setDeclined(true)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setDeclining(false)
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-paper px-4">
       <div className="w-full max-w-sm bg-card border border-hairline rounded-lg p-8">
@@ -76,6 +93,10 @@ export default function Rate() {
               Go to your dashboard
             </Link>
           </>
+        ) : preview.invite_type !== 'rate' ? (
+          <p className="text-sm text-ink mt-4">This link isn't a rating invite.</p>
+        ) : declined ? (
+          <p className="text-ink mt-4">You've dismissed this invite.</p>
         ) : preview.status !== 'pending' ? (
           <p className="text-sm text-ink mt-4">This invite has already been used.</p>
         ) : (
@@ -136,10 +157,18 @@ export default function Rate() {
 
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || declining}
                   className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
                 >
                   {submitting ? 'Submitting…' : 'Submit rating'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDecline}
+                  disabled={submitting || declining}
+                  className="w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper disabled:opacity-60"
+                >
+                  {declining ? 'Dismissing…' : 'Not for me'}
                 </button>
               </form>
             )}

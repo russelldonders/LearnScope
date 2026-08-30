@@ -1,7 +1,6 @@
 import { XAPI_VERBS } from './xapiVerbs'
 
 export const SKILL_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/skill'
-export const COURSE_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/course'
 export const DIAGNOSTIC_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/diagnostic'
 
 // True for statements an automated diagnostic generated (e.g. the
@@ -18,7 +17,7 @@ export function isDiagnosticStatement(statement) {
 }
 
 // Statements about the same real-world activity (same name, same related
-// skill/course) should share one Activity id so anything consuming the
+// skill) should share one Activity id so anything consuming the
 // statements later -- an LRS, an export, a reporting query -- can recognise
 // and aggregate them by inspecting the JSON alone, per xAPI's Activity
 // concept. Deriving it from the name + context keeps it deterministic
@@ -33,8 +32,8 @@ function activitySlug(name) {
   )
 }
 
-function buildActivityId(activityName, relatedSkill, relatedCourse) {
-  const scope = relatedSkill ? `skill-${relatedSkill.id}` : relatedCourse ? `course-${relatedCourse.id}` : 'general'
+function buildActivityId(activityName, relatedSkill) {
+  const scope = relatedSkill ? `skill-${relatedSkill.id}` : 'general'
   return `https://learnscope.app/activities/${scope}/${activitySlug(activityName)}`
 }
 
@@ -63,7 +62,7 @@ export function formatDuration(statement) {
 
 // Builds a spec-shaped xAPI statement from the guided-form fields.
 // actor: { name, email }. verbValue: one of XAPI_VERBS[].value.
-// relatedSkill/relatedCourse: optional { id, name } recorded as context extensions.
+// relatedSkill: optional { id, name } recorded as a context extension.
 export function buildStatement({
   actor,
   verbValue,
@@ -71,7 +70,6 @@ export function buildStatement({
   description,
   timestamp,
   relatedSkill,
-  relatedCourse,
   durationHours,
   durationMinutes,
 }) {
@@ -90,7 +88,7 @@ export function buildStatement({
       display: { 'en-US': verb.label },
     },
     object: {
-      id: buildActivityId(activityName, relatedSkill, relatedCourse),
+      id: buildActivityId(activityName, relatedSkill),
       objectType: 'Activity',
       definition: {
         name: { 'en-US': activityName },
@@ -103,11 +101,8 @@ export function buildStatement({
   const duration = buildDuration(durationHours, durationMinutes)
   if (duration) statement.result = { duration }
 
-  if (relatedSkill || relatedCourse) {
-    const extensions = {}
-    if (relatedSkill) extensions[SKILL_EXTENSION_IRI] = { id: relatedSkill.id, name: relatedSkill.name }
-    if (relatedCourse) extensions[COURSE_EXTENSION_IRI] = { id: relatedCourse.id, name: relatedCourse.name }
-    statement.context = { extensions }
+  if (relatedSkill) {
+    statement.context = { extensions: { [SKILL_EXTENSION_IRI]: { id: relatedSkill.id, name: relatedSkill.name } } }
   }
 
   return statement
@@ -127,8 +122,4 @@ export function verbLabel(statement) {
 
 export function relatedSkillFromStatement(statement) {
   return statement.context?.extensions?.[SKILL_EXTENSION_IRI] ?? null
-}
-
-export function relatedCourseFromStatement(statement) {
-  return statement.context?.extensions?.[COURSE_EXTENSION_IRI] ?? null
 }

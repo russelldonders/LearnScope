@@ -6,10 +6,13 @@ import { OrganisationStaffPanel } from '../admin/AdminProviders'
 import ResourceLibrarySection from '../../components/ResourceLibrarySection'
 import ProviderSkillsSection from '../../components/ProviderSkillsSection'
 import OrganisationSettingsModal from '../../components/OrganisationSettingsModal'
+import AccessibleDialog from '../../components/AccessibleDialog'
+import ProgressBar from '../../components/ProgressBar'
 import { listOrganisations } from '../../lib/admin/organisations'
 import {
   listOrganisationCatalogueCourses,
   createProviderCourse,
+  listCourseParticipants,
   listCatalogueApprovers,
   approveCatalogueCourse,
   rejectCatalogueCourse,
@@ -31,7 +34,7 @@ const SECTIONS = [
   { key: 'resources', label: 'Resources' },
 ]
 
-const EMPTY_FORM = { name: '', provider: '', courseType: '', duration: '', synopsis: '' }
+const EMPTY_FORM = { name: '', courseCode: '', provider: '', courseType: '', duration: '', synopsis: '' }
 
 // Console for a provider's own staff (organisation_members rows) -- built on
 // top of the RLS/role model 0065/0066 already shipped: any org member
@@ -165,7 +168,12 @@ export default function ProviderConsole() {
                 </div>
 
                 {currentSection === 'training' && (
-                  <ProviderTrainingSection key={selectedOrg.id} organisation={selectedOrg} userId={user.id} />
+                  <ProviderTrainingSection
+                    key={selectedOrg.id}
+                    organisation={selectedOrg}
+                    userId={user.id}
+                    canViewParticipants={myRole === 'admin'}
+                  />
                 )}
                 {currentSection === 'skills' && (
                   <ProviderSkillsSection key={selectedOrg.id} organisationId={selectedOrg.id} userId={user.id} />
@@ -195,7 +203,7 @@ export default function ProviderConsole() {
   )
 }
 
-function ProviderTrainingSection({ organisation, userId }) {
+function ProviderTrainingSection({ organisation, userId, canViewParticipants }) {
   const navigate = useNavigate()
   const [courses, setCourses] = useState([])
   const [isApprover, setIsApprover] = useState(false)
@@ -207,6 +215,7 @@ function ProviderTrainingSection({ organisation, userId }) {
   const [actioningId, setActioningId] = useState(null)
   const [rejectingId, setRejectingId] = useState(null)
   const [rejectionReason, setRejectionReason] = useState('')
+  const [participantCourse, setParticipantCourse] = useState(null)
 
   useEffect(() => {
     load()
@@ -332,6 +341,19 @@ function ProviderTrainingSection({ organisation, userId }) {
               />
             </div>
             <div>
+              <label className="block text-sm text-secondary mb-1" htmlFor="providerCourseCode">
+                Course code / ID
+              </label>
+              <input
+                id="providerCourseCode"
+                required
+                value={form.courseCode}
+                onChange={(e) => setForm((f) => ({ ...f, courseCode: e.target.value }))}
+                placeholder="e.g. LS-101"
+                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+            </div>
+            <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="providerCourseDuration">
                 Duration
               </label>
@@ -392,9 +414,15 @@ function ProviderTrainingSection({ organisation, userId }) {
               onApprove={() => handleApprove(course)}
               onReject={() => handleReject(course)}
               onSetStatus={(status) => handleSetStatus(course, status)}
+              canViewParticipants={canViewParticipants}
+              onViewParticipants={() => setParticipantCourse(course)}
             />
           ))}
         </div>
+      )}
+
+      {participantCourse && (
+        <CourseParticipantsDialog course={participantCourse} onClose={() => setParticipantCourse(null)} />
       )}
     </div>
   )
@@ -406,11 +434,11 @@ function ProviderTrainingSection({ organisation, userId }) {
 // pages once there was more than a form's worth of detail to show.
 // canModerate (0095) mirrors AdminCatalogue.jsx's own approve/reject/
 // deactivate/reactivate actions, just scoped here to a designated catalogue
-// approver acting on their own organisation's submissions -- the moderation
-// row sits outside the card's Link so clicking a button doesn't also
-// navigate into the editor.
+// approver acting on their own organisation's submissions.
 function CourseCard({
   course,
+  canViewParticipants,
+  onViewParticipants,
   canModerate,
   actioning,
   rejecting,
@@ -424,23 +452,33 @@ function CourseCard({
 }) {
   const editable = course.status === 'draft' || course.status === 'rejected'
   return (
-    <div className="bg-card border border-hairline rounded-lg hover:border-moss/60 transition-colors overflow-hidden">
-      <Link to={`/provider/training/${course.id}`} className="block p-3">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-ink font-medium">{course.name}</p>
-          <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
-            {STATUS_LABELS[course.status] ?? course.status}
-          </span>
-        </div>
-        {course.synopsis && <p className="text-sm text-secondary mt-1">{course.synopsis}</p>}
-        {course.status === 'rejected' && course.rejection_reason && (
-          <p className="text-xs text-red-700 mt-1">Rejected: {course.rejection_reason}</p>
+    <article className="bg-card border border-hairline rounded-lg p-3 hover:border-moss/60 transition-colors">
+      <div className="flex items-center justify-between gap-3">
+        <Link to={`/provider/training/${course.id}`} className="text-ink font-medium hover:text-moss">
+          {course.name}
+        </Link>
+        <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
+          v{course.version_number} · {STATUS_LABELS[course.status] ?? course.status}
+        </span>
+      </div>
+      {course.course_code && <p className="font-mono text-xs text-secondary mt-1">{course.course_code}</p>}
+      {course.synopsis && <p className="text-sm text-secondary mt-1">{course.synopsis}</p>}
+      {course.status === 'rejected' && course.rejection_reason && (
+        <p className="text-xs text-red-700 mt-1">Rejected: {course.rejection_reason}</p>
+      )}
+      <div className="mt-2 flex items-center gap-3">
+        <Link to={`/provider/training/${course.id}`} className="text-xs font-medium text-moss hover:underline">
+          {editable ? 'Edit course' : 'View course'}
+        </Link>
+        {canViewParticipants && (
+          <button type="button" onClick={onViewParticipants} className="text-xs font-medium text-moss hover:underline">
+            View participants
+          </button>
         )}
-        <p className="font-mono text-[10px] text-moss mt-1">{editable ? 'Edit →' : 'View →'}</p>
-      </Link>
+      </div>
 
       {canModerate && (
-        <div className="px-3 pb-3 pt-2 border-t border-hairline flex flex-wrap items-center gap-2">
+        <div className="mt-3 pt-2 border-t border-hairline flex flex-wrap items-center gap-2">
           {(course.status === 'pending_approval' || course.status === 'draft') && (
             <>
               <button
@@ -506,6 +544,89 @@ function CourseCard({
           )}
         </div>
       )}
-    </div>
+    </article>
+  )
+}
+
+const PARTICIPANT_STATUS_LABELS = { enrolled: 'Enrolled', started: 'Started', complete: 'Complete' }
+
+function formatParticipantDate(value) {
+  if (!value) return '—'
+  return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value))
+}
+
+function CourseParticipantsDialog({ course, onClose }) {
+  const [participants, setParticipants] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    listCourseParticipants(course.id)
+      .then(setParticipants)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false))
+  }, [course.id])
+
+  return (
+    <AccessibleDialog
+      labelledBy="course-participants-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-3xl max-h-[90vh] overflow-y-auto overscroll-contain rounded-lg border border-hairline bg-card p-5 sm:p-6"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 id="course-participants-title" className="font-display text-xl text-ink">{course.name} participants</h2>
+          <p className="mt-1 text-sm text-secondary">Enrolment, progress and completion for this course.</p>
+        </div>
+        <button type="button" onClick={onClose} className="shrink-0 text-sm text-secondary hover:text-ink">Close</button>
+      </div>
+
+      {loading && <p role="status" className="mt-6 text-sm text-secondary">Loading participants…</p>}
+      {error && <p role="alert" className="mt-6 text-sm text-red-700">Couldn’t load participants: {error}</p>}
+      {!loading && !error && participants.length === 0 && (
+        <p className="mt-6 rounded-md border border-dashed border-hairline px-4 py-8 text-center text-sm text-secondary">
+          No one has enrolled in this course yet.
+        </p>
+      )}
+      {!loading && !error && participants.length > 0 && (
+        <ul className="mt-5 divide-y divide-hairline border-y border-hairline">
+          {participants.map((participant) => (
+            <li key={participant.id} className="py-4">
+              <div className="flex items-start gap-3">
+                <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full bg-paper border border-hairline flex items-center justify-center">
+                  {participant.profile?.avatar_url ? (
+                    <img src={participant.profile.avatar_url} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-sm font-medium text-secondary">{participant.profile?.full_name?.[0]?.toUpperCase() ?? '?'}</span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium text-ink">{participant.profile?.full_name || 'Unnamed participant'}</p>
+                    <span className="rounded-full border border-hairline px-2 py-0.5 text-xs font-medium text-secondary">
+                      {PARTICIPANT_STATUS_LABELS[participant.status]}
+                    </span>
+                  </div>
+                  {participant.status !== 'enrolled' ? (
+                    <div className="mt-3">
+                      <div className="mb-1 flex items-center justify-between text-xs text-secondary">
+                        <span>{participant.percent}% complete</span>
+                        <span className="tabular-nums">Started {formatParticipantDate(participant.startedAt)}</span>
+                      </div>
+                      <ProgressBar percent={participant.status === 'complete' ? 100 : participant.percent} />
+                      <p className="mt-2 text-xs text-secondary tabular-nums">
+                        End date: {formatParticipantDate(participant.completed_date)}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-xs text-secondary tabular-nums">Enrolled {formatParticipantDate(participant.created_at)}</p>
+                  )}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </AccessibleDialog>
   )
 }

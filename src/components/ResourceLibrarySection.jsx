@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import {
   listOrganisationResources,
   uploadVideoResource,
+  uploadScreenRecordingResource,
   uploadFileResource,
   uploadScormResource,
   uploadXapiResource,
   addExternalVideoResource,
+  addWebResource,
   deleteResource,
   contentFileUrl,
 } from '../lib/courseContent'
@@ -14,13 +16,16 @@ import XapiPlayer from './XapiPlayer'
 import ConfirmDialog from './ConfirmDialog'
 import EditedVideoPlayer from './EditedVideoPlayer'
 import VideoEditorModal from './VideoEditorModal'
+import ScreenRecorderModal from './ScreenRecorderModal'
 
 const TYPE_LABELS = {
   video: 'Video',
+  screen_recording: 'Screen recording',
   file: 'File',
   scorm: 'SCORM package',
   xapi: 'xAPI package',
   external_video: 'External video',
+  web_url: 'Web link',
 }
 
 // An organisation's whole content library -- upload once here, then attach
@@ -42,6 +47,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
   const [dragActive, setDragActive] = useState(false)
   const [videoUrl, setVideoUrl] = useState('')
   const [editingResource, setEditingResource] = useState(null)
+  const [showScreenRecorder, setShowScreenRecorder] = useState(false)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -61,15 +67,16 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
   }
 
   async function handleUpload() {
-    if (type === 'external_video') {
+    if (type === 'external_video' || type === 'web_url') {
       if (!videoUrl.trim()) {
-        setError('Paste a YouTube or Vimeo link first.')
+        setError(type === 'web_url' ? 'Enter a web address first.' : 'Paste a YouTube or Vimeo link first.')
         return
       }
       setUploading(true)
       setError(null)
       try {
-        await addExternalVideoResource(organisationId, userId, videoUrl, title)
+        if (type === 'web_url') await addWebResource(organisationId, userId, videoUrl, title)
+        else await addExternalVideoResource(organisationId, userId, videoUrl, title)
         setTitle('')
         setVideoUrl('')
         setShowUploadForm(false)
@@ -84,13 +91,14 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
 
     const file = fileInputRef.current?.files[0]
     if (!file) {
-      setError('Choose a file first.')
+      setError(type === 'screen_recording' ? 'Record your screen first.' : 'Choose a file first.')
       return
     }
     setUploading(true)
     setError(null)
     try {
       if (type === 'video') await uploadVideoResource(organisationId, userId, file, title)
+      else if (type === 'screen_recording') await uploadScreenRecordingResource(organisationId, userId, file, title)
       else if (type === 'file') await uploadFileResource(organisationId, userId, file, title)
       else if (type === 'scorm') await uploadScormResource(organisationId, userId, file, title)
       else await uploadXapiResource(organisationId, userId, file, title)
@@ -143,11 +151,11 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
           onClick={() => setShowUploadForm((v) => !v)}
           className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 shrink-0"
         >
-          {showUploadForm ? 'Cancel' : '+ Upload resource'}
+          {showUploadForm ? 'Cancel' : '+ Add resource'}
         </button>
       </div>
       <p className="text-sm text-secondary mb-4">
-        Upload video, files, and SCORM packages here, then attach them to any of your training courses from that
+        Add videos, screen recordings, files, and learning packages here, then attach them to any training course from that
         course's own edit view.
       </p>
 
@@ -160,14 +168,21 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
           <select
             id="resourceType"
             value={type}
-            onChange={(e) => setType(e.target.value)}
+            onChange={(e) => {
+              setType(e.target.value)
+              if (fileInputRef.current) fileInputRef.current.value = ''
+              setFileName('')
+              setVideoUrl('')
+            }}
             className="rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
           >
             <option value="video">Video</option>
+            <option value="screen_recording">Screen recording</option>
             <option value="file">File</option>
             <option value="scorm">SCORM package (.zip)</option>
             <option value="xapi">xAPI package (.zip)</option>
             <option value="external_video">External video (YouTube/Vimeo)</option>
+            <option value="web_url">Web link</option>
           </select>
         </div>
         <div className="flex-1 min-w-[160px]">
@@ -181,18 +196,35 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
             className="w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
           />
         </div>
-        {type === 'external_video' ? (
+        {type === 'external_video' || type === 'web_url' ? (
           <div className="flex-1 min-w-[220px]">
             <label className="block text-xs text-secondary mb-1" htmlFor="resourceVideoUrl">
-              YouTube or Vimeo link
+              {type === 'web_url' ? 'Web address' : 'YouTube or Vimeo link'}
             </label>
             <input
               id="resourceVideoUrl"
               value={videoUrl}
               onChange={(e) => setVideoUrl(e.target.value)}
-              placeholder="https://www.youtube.com/watch?v=..."
+              placeholder={type === 'web_url' ? 'https://example.com/resource' : 'https://www.youtube.com/watch?v=...'}
               className="w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
             />
+          </div>
+        ) : type === 'screen_recording' ? (
+          <div className="flex-1 min-w-[220px]">
+            <span className="block text-xs text-secondary mb-1">Recording</span>
+            <button
+              type="button"
+              onClick={() => setShowScreenRecorder(true)}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-md border border-moss text-moss px-3 py-2 text-sm font-medium hover:bg-moss/5"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="13" rx="2" />
+                <path d="M8 21h8M12 17v4" />
+              </svg>
+              {fileName ? 'Record again' : 'Record screen'}
+            </button>
+            {fileName && <p className="text-xs text-secondary mt-1 truncate">Ready: {fileName}</p>}
+            <input ref={fileInputRef} type="file" accept="video/*" className="sr-only" tabIndex={-1} />
           </div>
         ) : (
         <div className="flex-1 min-w-[220px]">
@@ -286,6 +318,15 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
                     >
                       Download
                     </a>
+                  ) : resource.type === 'web_url' ? (
+                    <a
+                      href={resource.external_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-moss font-medium hover:underline underline-offset-2"
+                    >
+                      Open link
+                    </a>
                   ) : (
                     <button
                       type="button"
@@ -295,7 +336,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
                       {previewingId === resource.id ? 'Hide preview' : 'Preview'}
                     </button>
                   )}
-                  {resource.type === 'video' && (
+                  {(resource.type === 'video' || resource.type === 'screen_recording') && (
                     <button
                       type="button"
                       onClick={() => setEditingResource(resource)}
@@ -313,7 +354,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
                   </button>
                 </div>
               </div>
-              {previewingId === resource.id && resource.type === 'video' && (
+              {previewingId === resource.id && (resource.type === 'video' || resource.type === 'screen_recording') && (
                 <EditedVideoPlayer resource={resource} className="w-full mt-2 rounded-md bg-black" />
               )}
               {previewingId === resource.id && resource.type === 'scorm' && (
@@ -355,6 +396,16 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
           resource={editingResource}
           onClose={() => setEditingResource(null)}
           onSaved={(saved) => setResources((prev) => prev.map((r) => (r.id === saved.id ? saved : r)))}
+        />
+      )}
+
+      {showScreenRecorder && (
+        <ScreenRecorderModal
+          onClose={() => setShowScreenRecorder(false)}
+          onRecorded={(file) => {
+            setSelectedFile(file)
+            if (!title.trim()) setTitle('Screen recording')
+          }}
         />
       )}
     </div>

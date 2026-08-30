@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { EXPERIENCE_TYPES } from '../lib/experienceTypes'
@@ -13,11 +13,17 @@ const ADD_EXPERIENCE_TYPES = EXPERIENCE_TYPES.filter((t) => t.value !== 'educati
 export default function ExperienceSection() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [items, setItems] = useState([])
   const [learningSummaries, setLearningSummaries] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [modalType, setModalType] = useState(null)
+  // Lets a caller (e.g. the dashboard's "record your current role" prompt)
+  // land here with the right "Add" modal already open, instead of making
+  // the learner pick the type themselves right after choosing to act on it.
+  const [modalType, setModalType] = useState(
+    ADD_EXPERIENCE_TYPES.includes(location.state?.autoOpenType) ? location.state.autoOpenType : null
+  )
   const [pendingJob, setPendingJob] = useState(null)
   const [existingCurrentJob, setExistingCurrentJob] = useState(null)
 
@@ -122,9 +128,16 @@ export default function ExperienceSection() {
 
   return (
     <section>
-      <div className="mb-6">
-        <h1 className="font-display text-xl text-ink mb-3">Experience timeline</h1>
-        <AddExperienceButton types={ADD_EXPERIENCE_TYPES} onSelect={setModalType} />
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between mb-8">
+        <div className="max-w-2xl">
+          <h1 className="font-display text-3xl sm:text-4xl text-ink text-balance">Experience timeline</h1>
+          <p className="text-secondary mt-2 text-pretty">
+            Your employment, education, and other milestones, in order.
+          </p>
+        </div>
+        <div className="shrink-0 self-start">
+          <AddExperienceButton types={ADD_EXPERIENCE_TYPES} onSelect={setModalType} />
+        </div>
       </div>
 
       {loading && <p className="text-secondary">Loading…</p>}

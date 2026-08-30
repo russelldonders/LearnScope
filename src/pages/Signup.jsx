@@ -51,7 +51,7 @@ export default function Signup() {
         return
       }
       const enrolled = await resumePendingEnrolment(data.user.id).catch(() => null)
-      navigate(enrolled ? `/courses/${enrolled.id}` : '/dashboard')
+      navigate(enrolled ? `/courses/${enrolled.id}/learn` : '/dashboard')
     } else {
       setConfirmationSent(true)
     }
