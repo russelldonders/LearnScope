@@ -5,10 +5,19 @@ import { useAuth } from '../context/AuthContext'
 import ImportProfileDataButton from '../components/ImportProfileDataButton'
 import SkillsToLearnStep from '../components/onboarding/SkillsToLearnStep'
 
+// Fallback if onboarding_steps can't be read for some reason -- keeps the
+// wizard working (both steps, current order) rather than stranding a new
+// user on a blank screen.
+const DEFAULT_STEP_KEYS = ['import', 'skills']
+
 export default function Onboarding() {
   const { user, markOnboardingComplete } = useAuth()
   const navigate = useNavigate()
-  const [step, setStep] = useState('import')
+  // null = not yet loaded from onboarding_steps. Platform-admin-configurable
+  // (see /admin/onboarding) -- only the steps an admin has enabled, in
+  // order, ever get shown; an empty list finishes onboarding immediately.
+  const [stepKeys, setStepKeys] = useState(null)
+  const [stepIndex, setStepIndex] = useState(0)
   const [error, setError] = useState(null)
   const [avatarUrl, setAvatarUrl] = useState(null)
   const [profileFields, setProfileFields] = useState(null)
@@ -23,6 +32,17 @@ export default function Onboarding() {
       .then(({ data }) => {
         setAvatarUrl(data?.avatar_url ?? null)
         setProfileFields(data ?? {})
+      })
+  }, [])
+
+  useEffect(() => {
+    supabase
+      .from('onboarding_steps')
+      .select('key')
+      .eq('enabled', true)
+      .order('order_index')
+      .then(({ data, error }) => {
+        setStepKeys(!error && data ? data.map((s) => s.key) : DEFAULT_STEP_KEYS)
       })
   }, [])
 
@@ -53,12 +73,35 @@ export default function Onboarding() {
     navigate('/dashboard')
   }
 
+  // Shared by every step's "done" action -- moves to whatever's next in the
+  // admin-enabled list, or finishes onboarding once there's nothing left.
+  function handleStepComplete() {
+    if (stepIndex + 1 < stepKeys.length) setStepIndex((i) => i + 1)
+    else finish()
+  }
+
+  // Every step disabled: nothing to show, so finish immediately rather than
+  // rendering an empty wizard shell.
+  useEffect(() => {
+    if (stepKeys && stepKeys.length === 0 && !finishing) finish()
+  }, [stepKeys])
+
+  if (stepKeys === null || (stepKeys.length === 0 && !error)) {
+    return (
+      <div className="min-h-screen bg-paper px-4 py-10 flex items-center justify-center">
+        <p className="text-secondary">Loading…</p>
+      </div>
+    )
+  }
+
+  const currentStep = stepKeys[stepIndex]
+
   return (
     <div className="min-h-screen bg-paper px-4 py-10">
       <div className="w-full max-w-xl mx-auto bg-card border border-hairline rounded-lg p-8">
         <span className="font-display text-2xl text-ink mb-1 block">Welcome to LearnScope</span>
 
-        {step === 'import' && (
+        {currentStep === 'import' && (
           <>
             <p className="text-sm text-secondary mb-6">
               Let's get some starting information into your profile. If you have a CV, LinkedIn
@@ -72,13 +115,13 @@ export default function Onboarding() {
               hasAvatar={Boolean(avatarUrl)}
               onAvatarSet={setAvatarUrl}
               onProfileFieldsFilled={persistProfileFields}
-              onImported={() => setStep('skills')}
+              onImported={handleStepComplete}
             />
 
             <div className="pt-6 mt-6 border-t border-hairline">
               <button
                 type="button"
-                onClick={() => setStep('skills')}
+                onClick={handleStepComplete}
                 className="text-sm text-secondary hover:text-ink"
               >
                 Skip this step →
@@ -87,7 +130,7 @@ export default function Onboarding() {
           </>
         )}
 
-        {step === 'skills' && <SkillsToLearnStep onDone={finish} />}
+        {currentStep === 'skills' && <SkillsToLearnStep onDone={handleStepComplete} />}
 
         {error && <p className="text-sm text-red-700 mt-4">{error}</p>}
         {finishing && !error && (

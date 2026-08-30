@@ -14,13 +14,16 @@ create table onboarding_steps (
 insert into onboarding_steps (key, label, order_index) values
   ('import', 'Import your CV or LinkedIn history', 0),
   ('skills', 'Choose skills you want to learn', 1);
+
 alter table onboarding_steps enable row level security;
+
 -- Every signed-in user needs to read this to render their own onboarding
 -- wizard -- it's shared platform configuration, not private data.
 create policy "Authenticated users can view onboarding steps"
   on onboarding_steps for select
   to authenticated
   using (true);
+
 create policy "Platform admins can update onboarding steps"
   on onboarding_steps for update
   to authenticated
