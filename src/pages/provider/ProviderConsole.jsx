@@ -242,7 +242,7 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
     setActioningId(course.id)
     setError(null)
     try {
-      await approveCatalogueCourse(course.id, userId)
+      await approveCatalogueCourse(course.id)
       await load()
     } catch (err) {
       setError(err.message)
