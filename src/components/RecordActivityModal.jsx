@@ -7,7 +7,7 @@ function todayDate() {
   return new Date().toISOString().slice(0, 10)
 }
 
-export default function RecordActivityModal({ actor, skills, relatedSkill: fixedSkill, onSave, onClose }) {
+export default function RecordActivityModal({ actor, skills, experiences = [], relatedSkill: fixedSkill, relatedExperience: fixedExperience, onSave, onClose }) {
   const [verbValue, setVerbValue] = useState('experienced')
   const [activityTitle, setActivityTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -15,10 +15,12 @@ export default function RecordActivityModal({ actor, skills, relatedSkill: fixed
   const [durationHours, setDurationHours] = useState('')
   const [durationMinutes, setDurationMinutes] = useState('')
   const [relatedSkillId, setRelatedSkillId] = useState('')
+  const [relatedExperienceId, setRelatedExperienceId] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [showDuration, setShowDuration] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
+  const selectedExperience = fixedExperience ?? experiences.find((experience) => experience.id === relatedExperienceId)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -29,6 +31,9 @@ export default function RecordActivityModal({ actor, skills, relatedSkill: fixed
       if (!date) throw new Error('A date is required.')
       const relatedSkill =
         fixedSkill ?? (relatedSkillId ? { id: relatedSkillId, name: skills.find((s) => s.id === relatedSkillId)?.name } : null)
+      if (!relatedSkill) throw new Error('Choose the skill this activity contributed to.')
+      const selectedExperience = experiences.find((experience) => experience.id === relatedExperienceId)
+      const relatedExperience = fixedExperience ?? selectedExperience ?? null
       statement = buildStatement({
         actor,
         verbValue,
@@ -36,6 +41,7 @@ export default function RecordActivityModal({ actor, skills, relatedSkill: fixed
         description: description.trim() || null,
         timestamp: date,
         relatedSkill,
+        relatedExperience,
         durationHours,
         durationMinutes,
       })
@@ -59,11 +65,13 @@ export default function RecordActivityModal({ actor, skills, relatedSkill: fixed
       onClose={onClose}
       panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
-        <h2 id="record-activity-dialog-title" className="font-display text-2xl text-ink mb-1">Record an activity</h2>
+        <h2 id="record-activity-dialog-title" className="font-display text-2xl text-ink mb-1">Log skill activity</h2>
         <p className="text-sm text-secondary mb-4">
-          {fixedSkill
-            ? `A quick log of something you did related to "${fixedSkill.name}".`
-            : "A quick log of something you did — separate from your work & education timeline."}
+          {fixedExperience
+            ? `Capture one thing you did within “${fixedExperience.title}” and the skill it helped you develop.`
+            : fixedSkill
+              ? `Capture one thing you did that contributed to “${fixedSkill.name}”.`
+              : 'Capture one thing you did and the skill it helped you develop.'}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -74,6 +82,8 @@ export default function RecordActivityModal({ actor, skills, relatedSkill: fixed
             <input
               id="activityTitle"
               required
+              min={selectedExperience?.start_date ?? undefined}
+              max={selectedExperience?.end_date ?? undefined}
               value={activityTitle}
               onChange={(e) => setActivityTitle(e.target.value)}
               placeholder={
@@ -117,22 +127,42 @@ export default function RecordActivityModal({ actor, skills, relatedSkill: fixed
             />
           </div>
 
-          {!fixedSkill && skills.length > 0 && (
+          {!fixedSkill && (
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="relatedSkill">
-                Related skill (optional)
+                Skill
               </label>
               <select
                 id="relatedSkill"
+                required
                 value={relatedSkillId}
                 onChange={(e) => setRelatedSkillId(e.target.value)}
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
               >
-                <option value="">— None —</option>
+                <option value="">Choose a skill…</option>
                 {skills.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {!fixedExperience && experiences.length > 0 && (
+            <div>
+              <label className="block text-sm text-secondary mb-1" htmlFor="relatedExperience">
+                Experience context (optional)
+              </label>
+              <select
+                id="relatedExperience"
+                value={relatedExperienceId}
+                onChange={(e) => setRelatedExperienceId(e.target.value)}
+                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              >
+                <option value="">No specific experience</option>
+                {experiences.map((experience) => (
+                  <option key={experience.id} value={experience.id}>{experience.title}</option>
                 ))}
               </select>
             </div>
@@ -215,7 +245,7 @@ export default function RecordActivityModal({ actor, skills, relatedSkill: fixed
               disabled={saving}
               className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
             >
-              {saving ? 'Saving…' : 'Save'}
+              {saving ? 'Saving…' : 'Log activity'}
             </button>
             <button
               type="button"

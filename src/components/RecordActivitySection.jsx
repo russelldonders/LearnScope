@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import RecordActivityModal from './RecordActivityModal'
 import ConfirmDialog from './ConfirmDialog'
-import { activityName, verbLabel, relatedSkillFromStatement, formatDuration } from '../lib/xapiStatement'
+import { activityName, verbLabel, relatedSkillFromStatement, relatedExperienceFromStatement, formatDuration } from '../lib/xapiStatement'
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 
 const RECENT_LIMIT = 6
@@ -12,6 +12,7 @@ export default function RecordActivitySection() {
   const { user } = useAuth()
   const [statements, setStatements] = useState([])
   const [skills, setSkills] = useState([])
+  const [experiences, setExperiences] = useState([])
   const [actorName, setActorName] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -22,6 +23,7 @@ export default function RecordActivitySection() {
   useEffect(() => {
     loadStatements()
     loadSkills()
+    loadExperiences()
     loadActorName()
   }, [])
 
@@ -51,11 +53,24 @@ export default function RecordActivitySection() {
     setActorName(data?.full_name ?? '')
   }
 
+  async function loadExperiences() {
+    const { data } = await supabase
+      .from('experience')
+      .select('id, title, type, start_date')
+      .eq('user_id', user.id)
+      .order('start_date', { ascending: false })
+    setExperiences(data ?? [])
+  }
+
   async function handleSave(statement) {
+    const relatedSkill = relatedSkillFromStatement(statement)
+    const relatedExperience = relatedExperienceFromStatement(statement)
     const { error } = await supabase.from('xapi_statements').insert({
       user_id: user.id,
       statement,
       recorded_at: statement.timestamp,
+      skill_id: relatedSkill?.id ?? null,
+      experience_id: relatedExperience?.id ?? null,
     })
     if (error) throw error
     setModalOpen(false)
@@ -74,17 +89,16 @@ export default function RecordActivitySection() {
   return (
     <section>
       <div className="flex items-center justify-between mb-1">
-        <h2 className="font-display text-xl text-ink">Record activity</h2>
+        <h2 className="font-display text-xl text-ink">Skill activity</h2>
         <button
           onClick={() => setModalOpen(true)}
           className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90"
         >
-          + Record activity
+          + Log skill activity
         </button>
       </div>
       <p className="text-sm text-secondary mb-6">
-        A day-to-day activity log, saved as xAPI statements — separate from your work &amp; education
-        timeline below.
+        Quick notes about things you did that contributed to developing a skill.
       </p>
 
       {loading && <p className="text-secondary">Loading…</p>}
@@ -99,6 +113,7 @@ export default function RecordActivitySection() {
       <div className="space-y-2">
         {statements.slice(0, RECENT_LIMIT).map((row) => {
           const relatedSkill = relatedSkillFromStatement(row.statement)
+          const relatedExperience = relatedExperienceFromStatement(row.statement)
           const duration = formatDuration(row.statement)
           return (
             <div
@@ -116,6 +131,7 @@ export default function RecordActivitySection() {
                   {formatRelativeDate(row.recorded_at)}
                   {duration ? ` · ${duration}` : ''}
                   {relatedSkill ? ` · ${relatedSkill.name}` : ''}
+                  {relatedExperience ? ` · ${relatedExperience.title}` : ''}
                 </p>
                 {row.statement.object?.definition?.description?.['en-US'] && (
                   <p className="text-sm text-ink mt-1">
@@ -145,6 +161,7 @@ export default function RecordActivitySection() {
         <RecordActivityModal
           actor={{ name: actorName, email: user.email }}
           skills={skills}
+          experiences={experiences}
           onSave={handleSave}
           onClose={() => setModalOpen(false)}
         />

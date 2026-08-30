@@ -15,10 +15,8 @@ import OrganizationUrlField from '../components/OrganizationUrlField'
 import ExperienceModal from '../components/ExperienceModal'
 import AddExperienceButton from '../components/AddExperienceButton'
 import ConfirmDialog from '../components/ConfirmDialog'
-import {
-  addRecommendedSkills,
-  recommendExperienceSkills,
-} from '../lib/experienceSkillRecommendations'
+import RecordActivityModal from '../components/RecordActivityModal'
+import { activityName, relatedSkillFromStatement, verbLabel } from '../lib/xapiStatement'
 
 // Keeps a nested experience's dates from silently
 // drifting outside the parent role's dates -- an open-ended parent
@@ -58,7 +56,7 @@ function undatedChildTimelineDate(item, today) {
   return new Date(start + Math.max(0, end - start) / 2).toISOString()
 }
 
-export function buildExperienceTimelineEvents(item, childExperiences, linkedCourses, achievements, today = new Date()) {
+export function buildExperienceTimelineEvents(item, childExperiences, linkedCourses, achievements, activities = [], today = new Date()) {
   const undatedChildDate = undatedChildTimelineDate(item, today)
   return [
     ...(item.start_date ? [{ type: 'start', date: item.start_date }] : []),
@@ -72,13 +70,13 @@ export function buildExperienceTimelineEvents(item, childExperiences, linkedCour
       .filter((link) => link.courses?.completed_date)
       .map((link) => ({ type: 'course', date: link.courses.completed_date, link })),
     ...achievements.map((entry) => ({ type: 'achievement', date: entry.assessed_at, entry })),
+    ...activities.map((activity) => ({ type: 'activity', date: activity.recorded_at, activity })),
   ].sort((a, b) => dateKey(b.date).localeCompare(dateKey(a.date)))
 }
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'courses', label: 'Courses' },
-  { id: 'skills', label: 'Skills' },
 ]
 
 export function getExperienceTabs(item, linkedCourses) {
@@ -100,18 +98,14 @@ export default function ExperienceDetail() {
   const [skillLinks, setSkillLinks] = useState([])
   const [achievements, setAchievements] = useState([])
   const [skillHistory, setSkillHistory] = useState([])
+  const [experienceActivities, setExperienceActivities] = useState([])
+  const [activitySkills, setActivitySkills] = useState([])
+  const [activityOpen, setActivityOpen] = useState(false)
   const [learningLoaded, setLearningLoaded] = useState(false)
   const [childExperiences, setChildExperiences] = useState([])
   const [parentExperience, setParentExperience] = useState(null)
   const [childModalType, setChildModalType] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [addSkillOpen, setAddSkillOpen] = useState(false)
-  const [recommendations, setRecommendations] = useState([])
-  const [selectedRecommendations, setSelectedRecommendations] = useState(new Set())
-  const [recommending, setRecommending] = useState(false)
-  const [addingRecommendations, setAddingRecommendations] = useState(false)
-  const [recommendationError, setRecommendationError] = useState(null)
-  const [recommendationNotice, setRecommendationNotice] = useState(null)
 
   useEffect(() => {
     loadItem()
@@ -125,7 +119,7 @@ export default function ExperienceDetail() {
   }, [item?.id])
 
   useEffect(() => {
-    if (learningLoaded && tab === 'courses' && linkedCourses.length === 0) setTab('overview')
+    if (learningLoaded && (tab === 'skills' || (tab === 'courses' && linkedCourses.length === 0))) setTab('overview')
   }, [learningLoaded, linkedCourses.length, tab])
 
   async function loadItem() {
@@ -146,7 +140,7 @@ export default function ExperienceDetail() {
   }
 
   async function loadLearning() {
-    const [{ data: cl }, { data: sl }, { data: ach }] = await Promise.all([
+    const [{ data: cl }, { data: sl }, { data: ach }, { data: activities }, { data: allSkills }] = await Promise.all([
       supabase
         .from('course_experience_links')
         .select('id, course_id, courses(id, name, provider, completed_date)')
@@ -161,6 +155,16 @@ export default function ExperienceDetail() {
         .select('*, skills(name), courses(name)')
         .eq('experience_id', item.id)
         .order('assessed_at', { ascending: false }),
+      supabase
+        .from('xapi_statements')
+        .select('id, statement, recorded_at, skill_id, skills(id, name)')
+        .eq('experience_id', item.id)
+        .order('recorded_at', { ascending: false }),
+      supabase
+        .from('skills')
+        .select('id, name')
+        .eq('user_id', user.id)
+        .order('name'),
     ])
     const skillIds = (sl ?? []).map((link) => link.skill_id)
     const { data: history } = skillIds.length
@@ -175,6 +179,8 @@ export default function ExperienceDetail() {
     setSkillLinks(sl ?? [])
     setAchievements(ach ?? [])
     setSkillHistory(history ?? [])
+    setExperienceActivities(activities ?? [])
+    setActivitySkills(allSkills ?? [])
     setLearningLoaded(true)
   }
 
@@ -232,59 +238,20 @@ export default function ExperienceDetail() {
     navigate('/experience')
   }
 
-  async function handleRecommend() {
-    setTab('skills')
-    setRecommending(true)
-    setRecommendationError(null)
-    setRecommendationNotice(null)
-    try {
-      const result = await recommendExperienceSkills(
-        item,
-        skillLinks.map((link) => link.skills?.name).filter(Boolean)
-      )
-      setRecommendations(result)
-      setSelectedRecommendations(new Set(result.map((recommendation) => recommendation.name)))
-      if (result.length === 0) setRecommendationNotice('No additional skills were identified from these details.')
-    } catch (err) {
-      setRecommendationError(err.message)
-    } finally {
-      setRecommending(false)
-    }
-  }
-
-  function toggleRecommendation(name) {
-    setSelectedRecommendations((current) => {
-      const next = new Set(current)
-      if (next.has(name)) next.delete(name)
-      else next.add(name)
-      return next
+  async function handleLogActivity(statement) {
+    const relatedSkill = relatedSkillFromStatement(statement)
+    const { error } = await supabase.from('xapi_statements').insert({
+      user_id: user.id,
+      statement,
+      recorded_at: statement.timestamp,
+      skill_id: relatedSkill.id,
+      experience_id: item.id,
     })
+    if (error) throw error
+    setActivityOpen(false)
+    await loadLearning()
   }
 
-  async function handleAddRecommendations() {
-    const names = recommendations
-      .map((recommendation) => recommendation.name)
-      .filter((name) => selectedRecommendations.has(name))
-    if (names.length === 0) return
-
-    setAddingRecommendations(true)
-    setRecommendationError(null)
-    setRecommendationNotice(null)
-    try {
-      const added = await addRecommendedSkills({ userId: user.id, experienceId: item.id, names })
-      setRecommendations([])
-      setSelectedRecommendations(new Set())
-      setRecommendationNotice(
-        `${added.length} skill${added.length === 1 ? '' : 's'} added to this experience and your profile.`
-      )
-      await loadLearning()
-    } catch (err) {
-      setRecommendationError(`${err.message} Any skills added before the error are still saved.`)
-      await loadLearning()
-    } finally {
-      setAddingRecommendations(false)
-    }
-  }
 
   return (
     <div className="min-h-screen bg-paper">
@@ -339,15 +306,24 @@ export default function ExperienceDetail() {
             <ExperienceActionButtons
               itemType={item.type}
               onAddExperience={setChildModalType}
-              onRecommend={handleRecommend}
-              onAddSkill={() => {
-                setTab('skills')
-                setAddSkillOpen(true)
-              }}
-              recommending={recommending}
-              addingRecommendations={addingRecommendations}
-              hasRecommendations={recommendations.length > 0}
+              onLogActivity={() => setActivityOpen(true)}
             />
+
+            {activityOpen && (
+              <RecordActivityModal
+                actor={{ name: user.user_metadata?.full_name ?? '', email: user.email }}
+                skills={activitySkills}
+                relatedExperience={{
+                  id: item.id,
+                  title: item.title,
+                  type: item.type,
+                  start_date: item.start_date,
+                  end_date: item.end_date,
+                }}
+                onSave={handleLogActivity}
+                onClose={() => setActivityOpen(false)}
+              />
+            )}
 
             {childModalType && (
               <ExperienceModal
@@ -361,7 +337,7 @@ export default function ExperienceDetail() {
               />
             )}
 
-            <div className="flex items-center gap-1 border-b border-hairline mt-4 mb-4 overflow-x-auto">
+            <div className="flex items-center gap-1 border-b border-hairline mt-4 mb-4">
               {getExperienceTabs(item, linkedCourses).map((t) => (
                 <button
                   key={t.id}
@@ -386,6 +362,7 @@ export default function ExperienceDetail() {
                 skillHistory={skillHistory}
                 achievements={achievements}
                 childExperiences={childExperiences}
+                activities={experienceActivities}
                 loaded={learningLoaded}
               />
             )}
@@ -394,27 +371,6 @@ export default function ExperienceDetail() {
               <CoursesSubsection item={item} linkedCourses={linkedCourses} onChange={loadLearning} />
             )}
 
-            {tab === 'skills' && (
-              <SkillsSubsection
-                item={item}
-                skillLinks={skillLinks}
-                onChange={loadLearning}
-                user={user}
-                addOpen={addSkillOpen}
-                onAddOpenChange={setAddSkillOpen}
-                recommendations={recommendations}
-                selectedRecommendations={selectedRecommendations}
-                onToggleRecommendation={toggleRecommendation}
-                onAddRecommendations={handleAddRecommendations}
-                onDismissRecommendations={() => {
-                  setRecommendations([])
-                  setSelectedRecommendations(new Set())
-                }}
-                addingRecommendations={addingRecommendations}
-                recommendationError={recommendationError}
-                recommendationNotice={recommendationNotice}
-              />
-            )}
 
             {settingsOpen && (
               <div
@@ -678,7 +634,7 @@ function DetailsTab({ item, parentExperience, onSave, onDelete }) {
   )
 }
 
-function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievements, childExperiences, loaded }) {
+function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievements, childExperiences, activities, loaded }) {
   const navigate = useNavigate()
   if (!loaded) return <p className="text-sm text-secondary">Loading…</p>
 
@@ -687,7 +643,7 @@ function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievemen
   }
 
   const pendingCourseLinks = linkedCourses.filter((l) => l.courses && !l.courses.completed_date)
-  const events = buildExperienceTimelineEvents(item, childExperiences, linkedCourses, achievements)
+  const events = buildExperienceTimelineEvents(item, childExperiences, linkedCourses, achievements, activities)
   const total = pendingCourseLinks.length + events.length
 
   return (
@@ -709,7 +665,7 @@ function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievemen
         ))}
         {events.map((event, i) => (
           <ExperienceTimelineEntry
-            key={event.child?.id ?? event.link?.id ?? event.entry?.id ?? event.type}
+            key={event.child?.id ?? event.link?.id ?? event.entry?.id ?? event.activity?.id ?? event.type}
             item={item}
             event={event}
             isLast={pendingCourseLinks.length + i === total - 1}
@@ -963,6 +919,27 @@ function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse }) {
     )
   }
 
+  if (event.type === 'activity') {
+    const row = event.activity
+    return (
+      <div className="flex gap-3">
+        <div className="flex flex-col items-center w-12 shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-moss shrink-0 mt-1.5" />
+          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
+        </div>
+        <div className="min-w-0 flex-1 mb-3">
+          <p className="text-sm text-ink break-words">
+            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{verbLabel(row.statement)}</span>{' '}
+            {activityName(row.statement)}
+          </p>
+          <p className="font-mono text-[10px] text-secondary mt-0.5">
+            {row.skills?.name ? `${row.skills.name} · ` : ''}{formatFullDate(row.recorded_at)}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   const entry = event.entry
   return (
     <div className="flex gap-3">
@@ -1190,22 +1167,10 @@ export function SkillsSubsection({
   )
 }
 
-function SparkIcon() {
-  return (
-    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3l1.3 4.2a5 5 0 0 0 3.3 3.3L21 12l-4.4 1.5a5 5 0 0 0-3.3 3.3L12 21l-1.3-4.2a5 5 0 0 0-3.3-3.3L3 12l4.4-1.5a5 5 0 0 0 3.3-3.3L12 3Z" />
-    </svg>
-  )
-}
-
 export function ExperienceActionButtons({
   itemType,
   onAddExperience,
-  onRecommend,
-  onAddSkill,
-  recommending = false,
-  addingRecommendations = false,
-  hasRecommendations = false,
+  onLogActivity,
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2 mt-4">
@@ -1213,16 +1178,13 @@ export function ExperienceActionButtons({
         types={nestedExperienceTypesFor(itemType)}
         onSelect={onAddExperience}
         label="+ Add"
-        leadingOptions={[{ value: 'skill', label: 'Skill', onSelect: onAddSkill }]}
       />
       <button
         type="button"
-        onClick={onRecommend}
-        disabled={recommending || addingRecommendations}
+        onClick={onLogActivity}
         className="inline-flex items-center gap-2 rounded-md border border-moss text-moss px-3 py-2 text-sm font-medium hover:bg-moss/10 disabled:opacity-60"
       >
-        <SparkIcon />
-        {recommending ? 'Finding skills…' : hasRecommendations ? 'Recommend again' : 'Recommend skills'}
+        Log skill activity
       </button>
     </div>
   )

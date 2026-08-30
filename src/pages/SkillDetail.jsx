@@ -603,7 +603,7 @@ export default function SkillDetail() {
                         </p>
                       }
                       actions={[
-                        { label: 'Record activity', onClick: () => setRecordActivityOpen(true) },
+                        { label: 'Log skill activity', onClick: () => setRecordActivityOpen(true) },
                         ...(canShowDemonstrateAction
                           ? [{ label: 'Demonstrate skill', onClick: handleDemonstrateSkill }]
                           : []),

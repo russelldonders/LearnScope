@@ -64,6 +64,13 @@ No generated database types. Update this map only when implementation changes ma
 ## 8. Development Rules
 
 * Read this file before implementation.
+* At the start of every new session, synchronize local status with remote Staging before implementation:
+  1. Run `git status --short`, then `git fetch origin`.
+  2. Compare the current local branch/HEAD with `origin/staging` (for example, `git rev-list --left-right --count HEAD...origin/staging`).
+  3. If the worktree is clean and the local branch is only behind `origin/staging`, fast-forward it with `git merge --ff-only origin/staging`.
+  4. If the worktree is dirty, ahead, or diverged, do not reset, discard, overwrite, rebase, or auto-merge work. Report the state and resolve it safely before implementation.
+  5. Confirm the linked Supabase project is Staging (`ussqcmfxbbtncjvepuyn`) and compare local/remote migration status with `npx supabase migration list --linked`.
+  6. Report any pending local or remote migrations. Do not apply migrations, push commits, or modify migration history merely as part of startup synchronization unless the user has explicitly authorised that action.
 * Start with files explicitly named by the task; use targeted searches rather than reading entire directories; inspect further only when necessary.
 * Understand existing behaviour before modifying it; follow established architecture, naming and component patterns; reuse existing components/utilities/forms/dialogs.
 * Prefer the smallest coherent change that fully achieves the requested outcome.

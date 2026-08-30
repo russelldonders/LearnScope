@@ -108,31 +108,23 @@ describe('experience skill recommendations', () => {
     expect(onAddRecommendations).toHaveBeenCalled()
   })
 
-  it('combines skill and experience creation into one add menu with skill first', () => {
+  it('offers lightweight skill activity separately from adding a sub-experience', () => {
     const onAddExperience = vi.fn()
-    const onRecommend = vi.fn()
-    const onAddSkill = vi.fn()
+    const onLogActivity = vi.fn()
     render(
       <ExperienceActionButtons
         itemType="employment"
         onAddExperience={onAddExperience}
-        onRecommend={onRecommend}
-        onAddSkill={onAddSkill}
+        onLogActivity={onLogActivity}
       />,
     )
-
-    fireEvent.click(screen.getByRole('button', { name: '+ Add' }))
-    const menuOptions = screen.getAllByRole('button').map((button) => button.textContent)
-    expect(menuOptions.indexOf('Skill')).toBeLessThan(menuOptions.indexOf('Project'))
-    fireEvent.click(screen.getByRole('button', { name: 'Skill' }))
-    expect(onAddSkill).toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: '+ Add' }))
     fireEvent.click(screen.getByRole('button', { name: 'Project' }))
     expect(onAddExperience).toHaveBeenCalledWith('project')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Recommend skills' }))
-    expect(onRecommend).toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Log skill activity' }))
+    expect(onLogActivity).toHaveBeenCalled()
   })
 
   it('offers subjects only beneath education experiences', () => {
@@ -145,8 +137,7 @@ describe('experience skill recommendations', () => {
       <ExperienceActionButtons
         itemType="education"
         onAddExperience={onAddExperience}
-        onRecommend={vi.fn()}
-        onAddSkill={vi.fn()}
+        onLogActivity={vi.fn()}
       />,
     )
 
@@ -160,11 +151,10 @@ describe('experience skill recommendations', () => {
 
 describe('experience tabs', () => {
   it('hides Courses until the first course is linked', () => {
-    expect(getExperienceTabs(item, []).map((tab) => tab.id)).toEqual(['overview', 'skills'])
+    expect(getExperienceTabs(item, []).map((tab) => tab.id)).toEqual(['overview'])
     expect(getExperienceTabs(item, [{ id: 'course-link-1' }]).map((tab) => tab.id)).toEqual([
       'overview',
       'courses',
-      'skills',
     ])
   })
 
@@ -173,7 +163,7 @@ describe('experience tabs', () => {
       getExperienceTabs({ ...item, parent_experience_id: 'parent-1' }, [{ id: 'course-link-1' }]).map(
         (tab) => tab.id,
       ),
-    ).toEqual(['overview', 'skills'])
+    ).toEqual(['overview'])
   })
 })
 
@@ -199,6 +189,14 @@ describe('nested experience dates and timeline placement', () => {
 
     expect(events.map((event) => event.type)).toEqual(['end', 'child', 'start'])
     expect(events.find((event) => event.type === 'child').child).toBe(subject)
+  })
+
+  it('includes logged skill activity in the experience timeline', () => {
+    const activity = { id: 'activity-1', recorded_at: '2022-04-12T09:00:00Z', statement: {} }
+    const events = buildExperienceTimelineEvents(parent, [], [], [], [activity])
+
+    expect(events.map((event) => event.type)).toEqual(['end', 'activity', 'start'])
+    expect(events.find((event) => event.type === 'activity').activity).toBe(activity)
   })
 })
 

@@ -62,7 +62,7 @@ export function computeUpNextItems({
       },
       {
         key: 'activity',
-        label: 'Record an activity',
+        label: 'Log skill activity',
         description: 'Log something you did that shows this skill in action.',
         done: statementsCount > 0,
       },
@@ -125,7 +125,7 @@ export function computeUpNextItems({
     return [
       {
         key: 'record-activity',
-        label: 'Record activity',
+        label: 'Log skill activity',
         description: 'Log something that shows you demonstrating this skill.',
         done: false,
       },
