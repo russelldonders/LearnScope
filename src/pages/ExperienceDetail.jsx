@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { formatMonthYear, formatFullDate } from '../lib/dates'
 import { LEVEL_LABELS } from '../lib/levels'
-import { EXPERIENCE_TYPE_LABELS, EXPERIENCE_TYPE_CONFIG, nestedExperienceTypesFor } from '../lib/experienceTypes'
+import { EXPERIENCE_TYPE_LABELS, EXPERIENCE_TYPE_CONFIG, formatStudyDuration, nestedExperienceTypesFor } from '../lib/experienceTypes'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import ChildExperienceEntry from '../components/ChildExperienceEntry'
@@ -149,13 +149,13 @@ export default function ExperienceDetail() {
     const [{ data: children }, parentResult] = await Promise.all([
       supabase
         .from('experience')
-        .select('id, type, title, start_date, end_date, study_duration')
+        .select('id, type, title, start_date, end_date, study_duration, study_duration_value, study_duration_unit')
         .eq('parent_experience_id', item.id)
         .order('start_date', { ascending: false }),
       item.parent_experience_id
         ? supabase
             .from('experience')
-            .select('id, title, start_date, end_date')
+            .select('id, title, organization, organization_url, start_date, end_date')
             .eq('id', item.parent_experience_id)
             .maybeSingle()
         : Promise.resolve({ data: null }),
@@ -165,10 +165,13 @@ export default function ExperienceDetail() {
   }
 
   async function handleAddChildExperience(values) {
-    const validationError = validateWithinParent(values, item)
+    const childValues = values.type === 'subject'
+      ? { ...values, organization: item.organization, organization_url: item.organization_url }
+      : values
+    const validationError = validateWithinParent(childValues, item)
     if (validationError) throw new Error(validationError)
     const { error } = await supabase.from('experience').insert({
-      ...values,
+      ...childValues,
       user_id: user.id,
       parent_experience_id: item.id,
     })
@@ -178,11 +181,14 @@ export default function ExperienceDetail() {
   }
 
   async function handleSaveDetails(values) {
+    const savedValues = item.type === 'subject' && parentExperience
+      ? { ...values, organization: parentExperience.organization, organization_url: parentExperience.organization_url }
+      : values
     if (item.parent_experience_id && parentExperience) {
-      const validationError = validateWithinParent(values, parentExperience)
+      const validationError = validateWithinParent(savedValues, parentExperience)
       if (validationError) throw new Error(validationError)
     }
-    const { error } = await supabase.from('experience').update(values).eq('id', item.id)
+    const { error } = await supabase.from('experience').update(savedValues).eq('id', item.id)
     if (error) throw error
     await loadItem()
   }
@@ -266,7 +272,7 @@ export default function ExperienceDetail() {
                   {EXPERIENCE_TYPE_LABELS[item.type] ?? item.type}
                 </span>
                 <h1 className="font-display text-2xl text-ink mt-0.5">{item.title}</h1>
-                {item.organization && (
+                {item.type !== 'subject' && item.organization && (
                   <div className="flex items-center gap-2 mt-0.5">
                     {item.organization_url && (
                       <OrganizationLogo organizationUrl={item.organization_url} size={24} />
@@ -412,7 +418,8 @@ function DetailsTab({ item, onSave, onDelete }) {
   const [organizationUrl, setOrganizationUrl] = useState(item.organization_url ?? '')
   const [startDate, setStartDate] = useState(item.start_date ?? '')
   const [endDate, setEndDate] = useState(item.end_date ?? '')
-  const [studyDuration, setStudyDuration] = useState(item.study_duration ?? '')
+  const [studyDurationValue, setStudyDurationValue] = useState(item.study_duration_value?.toString() ?? '')
+  const [studyDurationUnit, setStudyDurationUnit] = useState(item.study_duration_unit ?? 'months')
   const [current, setCurrent] = useState(!item.end_date)
   const [description, setDescription] = useState(item.description ?? '')
   const [saving, setSaving] = useState(false)
@@ -428,7 +435,7 @@ function DetailsTab({ item, onSave, onDelete }) {
       setError(`Title${config.orgRequired ? ', organization,' : ''}${datesRequired ? ' and start date are' : ' is'} required.`)
       return
     }
-    if (!datesRequired && !startDate && !studyDuration.trim()) {
+    if (!datesRequired && !startDate && !studyDurationValue && !item.study_duration) {
       setError('Enter a start date or a duration of study.')
       return
     }
@@ -446,7 +453,9 @@ function DetailsTab({ item, onSave, onDelete }) {
         organization_url: organizationUrl.trim() || null,
         start_date: startDate || null,
         end_date: startDate && !current ? endDate || null : null,
-        study_duration: config.allowsStudyDuration ? studyDuration.trim() || null : null,
+        study_duration: config.allowsStudyDuration && !studyDurationValue ? item.study_duration ?? null : null,
+        study_duration_value: config.allowsStudyDuration ? Number(studyDurationValue) || null : null,
+        study_duration_unit: config.allowsStudyDuration && studyDurationValue ? studyDurationUnit : null,
         description: description.trim() || null,
       })
     } catch (err) {
@@ -512,7 +521,7 @@ function DetailsTab({ item, onSave, onDelete }) {
         />
       </div>
 
-      <div>
+      {!config.inheritsOrganization && <div>
         <label className="block text-sm text-secondary mb-1" htmlFor="organization">
           {config.orgLabel}
         </label>
@@ -523,9 +532,25 @@ function DetailsTab({ item, onSave, onDelete }) {
           onChange={(e) => setOrganization(e.target.value)}
           className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
         />
-      </div>
+      </div>}
 
-      <OrganizationUrlField value={organizationUrl} onChange={setOrganizationUrl} />
+      {!config.inheritsOrganization && <OrganizationUrlField value={organizationUrl} onChange={setOrganizationUrl} />}
+
+      {config.allowsStudyDuration && (
+        <div>
+          <label className="block text-sm text-secondary mb-1" htmlFor="studyDurationValue">Duration of study</label>
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,0.7fr)] gap-2">
+            <input id="studyDurationValue" type="number" min="1" step="1" inputMode="numeric" value={studyDurationValue} onChange={(e) => setStudyDurationValue(e.target.value)} placeholder="e.g. 6" className="min-w-0 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
+            <select aria-label="Duration unit" value={studyDurationUnit} onChange={(e) => setStudyDurationUnit(e.target.value)} className="min-w-0 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss">
+              <option value="days">Days</option>
+              <option value="months">Months</option>
+              <option value="years">Years</option>
+            </select>
+          </div>
+          {item.study_duration && !studyDurationValue && <p className="text-xs text-secondary mt-1">Previously entered: {item.study_duration}</p>}
+          <p className="text-xs text-secondary mt-1">Use this instead of dates, or alongside them.</p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
@@ -555,22 +580,6 @@ function DetailsTab({ item, onSave, onDelete }) {
           />
         </div>
       </div>
-
-      {config.allowsStudyDuration && (
-        <div>
-          <label className="block text-sm text-secondary mb-1" htmlFor="studyDuration">
-            Duration of study
-          </label>
-          <input
-            id="studyDuration"
-            value={studyDuration}
-            onChange={(e) => setStudyDuration(e.target.value)}
-            placeholder="e.g. 12 weeks or one semester"
-            className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-          />
-          <p className="text-xs text-secondary mt-1">Use this instead of dates, or alongside them.</p>
-        </div>
-      )}
 
       {(config.datesRequired !== false || startDate) && (
         <label className="flex items-center gap-2 text-sm text-secondary">
@@ -655,8 +664,8 @@ function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievemen
   return (
     <div className="space-y-6">
       {item.description && <p className="text-sm text-ink whitespace-pre-line">{item.description}</p>}
-      {item.study_duration && (
-        <p className="text-sm text-secondary"><span className="font-medium text-ink">Duration of study:</span> {item.study_duration}</p>
+      {formatStudyDuration(item) && (
+        <p className="text-sm text-secondary"><span className="font-medium text-ink">Duration of study:</span> {formatStudyDuration(item)}</p>
       )}
 
       <div>

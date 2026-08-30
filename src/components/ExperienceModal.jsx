@@ -16,7 +16,8 @@ export default function ExperienceModal({
   const [organizationUrl, setOrganizationUrl] = useState(initialOrganizationUrl)
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
-  const [studyDuration, setStudyDuration] = useState('')
+  const [studyDurationValue, setStudyDurationValue] = useState('')
+  const [studyDurationUnit, setStudyDurationUnit] = useState('months')
   const [current, setCurrent] = useState(false)
   const [description, setDescription] = useState('')
   const [saving, setSaving] = useState(false)
@@ -29,7 +30,7 @@ export default function ExperienceModal({
       setError(`Title${config.orgRequired ? ', organization,' : ''}${datesRequired ? ' and start date are' : ' is'} required.`)
       return
     }
-    if (!datesRequired && !startDate && !studyDuration.trim()) {
+    if (!datesRequired && !startDate && !studyDurationValue) {
       setError('Enter a start date or a duration of study.')
       return
     }
@@ -47,7 +48,9 @@ export default function ExperienceModal({
         organization_url: organizationUrl.trim() || null,
         start_date: startDate || null,
         end_date: startDate && !current ? endDate || null : null,
-        study_duration: config.allowsStudyDuration ? studyDuration.trim() || null : null,
+        study_duration: null,
+        study_duration_value: config.allowsStudyDuration ? Number(studyDurationValue) || null : null,
+        study_duration_unit: config.allowsStudyDuration && studyDurationValue ? studyDurationUnit : null,
         description: description.trim() || null,
       })
     } catch (err) {
@@ -79,7 +82,7 @@ export default function ExperienceModal({
             />
           </div>
 
-          <div>
+          {!config.inheritsOrganization && <div>
             <label className="block text-sm text-secondary mb-1" htmlFor="organization">
               {config.orgLabel}
             </label>
@@ -90,9 +93,24 @@ export default function ExperienceModal({
               onChange={(e) => setOrganization(e.target.value)}
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
             />
-          </div>
+          </div>}
 
-          <OrganizationUrlField value={organizationUrl} onChange={setOrganizationUrl} />
+          {!config.inheritsOrganization && <OrganizationUrlField value={organizationUrl} onChange={setOrganizationUrl} />}
+
+          {config.allowsStudyDuration && (
+            <div>
+              <label className="block text-sm text-secondary mb-1" htmlFor="studyDurationValue">Duration of study</label>
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,0.7fr)] gap-2">
+                <input id="studyDurationValue" type="number" min="1" step="1" inputMode="numeric" value={studyDurationValue} onChange={(e) => setStudyDurationValue(e.target.value)} placeholder="e.g. 6" className="min-w-0 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
+                <select aria-label="Duration unit" value={studyDurationUnit} onChange={(e) => setStudyDurationUnit(e.target.value)} className="min-w-0 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss">
+                  <option value="days">Days</option>
+                  <option value="months">Months</option>
+                  <option value="years">Years</option>
+                </select>
+              </div>
+              <p className="text-xs text-secondary mt-1">Use this instead of dates, or alongside them.</p>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -126,22 +144,6 @@ export default function ExperienceModal({
               />
             </div>
           </div>
-
-          {config.allowsStudyDuration && (
-            <div>
-              <label className="block text-sm text-secondary mb-1" htmlFor="studyDuration">
-                Duration of study
-              </label>
-              <input
-                id="studyDuration"
-                value={studyDuration}
-                onChange={(e) => setStudyDuration(e.target.value)}
-                placeholder="e.g. 12 weeks or one semester"
-                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-              />
-              <p className="text-xs text-secondary mt-1">Use this instead of dates, or alongside them.</p>
-            </div>
-          )}
 
           {(config.datesRequired !== false || startDate) && (
             <label className="flex items-center gap-2 text-sm text-secondary">

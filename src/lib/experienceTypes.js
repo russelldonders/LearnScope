@@ -21,6 +21,16 @@ export function nestedExperienceTypesFor(parentType) {
   return []
 }
 
+export function formatStudyDuration(experience) {
+  if (experience.study_duration_value && experience.study_duration_unit) {
+    const unit = experience.study_duration_value === 1
+      ? experience.study_duration_unit.replace(/s$/, '')
+      : experience.study_duration_unit
+    return `${experience.study_duration_value} ${unit}`
+  }
+  return experience.study_duration ?? ''
+}
+
 // Field copy and requiredness vary slightly per type -- a project or other
 // personal pursuit doesn't always have an organization behind it, while a
 // job or volunteer role expects one.
@@ -68,6 +78,7 @@ export const EXPERIENCE_TYPE_CONFIG = {
     periodNoun: 'subject',
     datesRequired: false,
     allowsStudyDuration: true,
+    inheritsOrganization: true,
   },
   education: {
     modalTitle: 'Add education',

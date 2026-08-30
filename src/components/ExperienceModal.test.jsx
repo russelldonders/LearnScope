@@ -9,8 +9,12 @@ describe('ExperienceModal subject timing', () => {
     const onSave = vi.fn().mockResolvedValue(undefined)
     render(<ExperienceModal type="subject" onSave={onSave} onClose={vi.fn()} />)
 
+    expect(screen.queryByLabelText(/Institution/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Organization website/)).not.toBeInTheDocument()
+
     fireEvent.change(screen.getByLabelText('Subject name'), { target: { value: 'Applied Mathematics' } })
-    fireEvent.change(screen.getByLabelText('Duration of study'), { target: { value: 'One semester' } })
+    fireEvent.change(screen.getByLabelText('Duration of study'), { target: { value: '6' } })
+    fireEvent.change(screen.getByLabelText('Duration unit'), { target: { value: 'months' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
@@ -19,7 +23,9 @@ describe('ExperienceModal subject timing', () => {
       title: 'Applied Mathematics',
       start_date: null,
       end_date: null,
-      study_duration: 'One semester',
+      study_duration: null,
+      study_duration_value: 6,
+      study_duration_unit: 'months',
     }))
   })
 
