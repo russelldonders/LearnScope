@@ -203,17 +203,19 @@ export async function createDraftCourseVersion(id) {
   return data
 }
 
+// Routed through security-definer RPCs (0112), same reasoning as
+// approveCatalogueCourse/publish_course_version -- a catalogue approver may
+// be an ordinary staff member, not an org admin, so a plain RLS-gated table
+// update could only constrain the columns it names and couldn't check
+// authorization against the specific catalogue(s) the course was actually
+// submitted to.
 export async function rejectCatalogueCourse(id, reason) {
-  const { error } = await supabase
-    .from('course_catalogue')
-    .update({ status: 'rejected', is_current_published: false, rejection_reason: reason || null, approved_by: null, approved_at: null })
-    .eq('id', id)
+  const { error } = await supabase.rpc('reject_course_submission', { p_course_id: id, p_reason: reason || null })
   if (error) throw error
 }
 
-export async function setCatalogueCourseStatus(id, status) {
-  const changes = status === 'inactive' ? { status, is_current_published: false } : { status }
-  const { error } = await supabase.from('course_catalogue').update(changes).eq('id', id)
+export async function deactivateCatalogueCourse(id) {
+  const { error } = await supabase.rpc('deactivate_course_publication', { p_course_id: id })
   if (error) throw error
 }
 
@@ -246,24 +248,90 @@ export async function removeCourseImage(courseId) {
   if (error) throw error
 }
 
-// Catalogue approvers (0095): an org admin's picks from their own
-// organisation_members, able to approve/reject/deactivate that org's own
-// course_catalogue submissions without a platform admin. RLS-scoped
-// directly (no service-role hop needed) -- unlike listOrganisationMembers,
-// nothing here needs an email lookup against auth.users.
-export async function listCatalogueApprovers(organisationId) {
+// Catalogue destinations (0111): a provider can submit a course to the
+// platform-managed Global catalogue and/or any catalogue their own
+// organisation owns.
+export async function listAvailableCatalogues(organisationId) {
   const { data, error } = await supabase
-    .from('catalogue_approvers')
+    .from('catalogues')
     .select('*')
-    .eq('organisation_id', organisationId)
+    .or(`is_global.eq.true,organisation_id.eq.${organisationId}`)
+    .order('is_global', { ascending: false })
+    .order('name')
   if (error) throw error
   return data ?? []
 }
 
-export async function addCatalogueApprover(organisationId, userId, addedBy) {
+export async function submitCourseForPublication(courseId, catalogueIds) {
+  const { error } = await supabase.rpc('submit_course_for_publication', {
+    p_course_id: courseId,
+    p_catalogue_ids: catalogueIds,
+  })
+  if (error) throw error
+}
+
+// Org-owned catalogues only (excludes the Global catalogue, which has no
+// organisation_id) -- this is what the provider console's own "Catalogues"
+// management tab lists/creates/deletes.
+export async function listOrganisationCatalogues(organisationId) {
+  const { data, error } = await supabase
+    .from('catalogues')
+    .select('*')
+    .eq('organisation_id', organisationId)
+    .order('name')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function createCatalogue(organisationId, { name, description }, userId) {
+  const { data, error } = await supabase
+    .from('catalogues')
+    .insert({ organisation_id: organisationId, name: name.trim(), description: description?.trim() || null, created_by: userId })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+// Deleting a catalogue cascades to course_catalogue_publications (0111),
+// which can drop a course's only remaining publication destination and
+// make an otherwise-still-"Approved" course invisible to learners with no
+// course-specific warning -- surfaced so the delete confirmation can tell
+// an org admin how many currently-live courses that would affect.
+export async function countPublishedCoursesInCatalogue(catalogueId) {
+  const { count, error } = await supabase
+    .from('course_catalogue_publications')
+    .select('course_id', { count: 'exact', head: true })
+    .eq('catalogue_id', catalogueId)
+    .not('published_at', 'is', null)
+  if (error) throw error
+  return count ?? 0
+}
+
+export async function deleteCatalogue(catalogueId) {
+  const { error } = await supabase.from('catalogues').delete().eq('id', catalogueId)
+  if (error) throw error
+}
+
+// Catalogue approvers (0112): an org admin's picks from their own
+// organisation_members, scoped to one specific catalogue their org owns --
+// able to approve/reject/deactivate a course being published into that
+// catalogue, without a platform admin. RLS-scoped directly (no service-role
+// hop needed) -- unlike listOrganisationMembers, nothing here needs an
+// email lookup against auth.users.
+export async function listCatalogueApprovers(catalogueId) {
   const { data, error } = await supabase
     .from('catalogue_approvers')
-    .insert({ organisation_id: organisationId, user_id: userId, added_by: addedBy })
+    .select('*')
+    .eq('catalogue_id', catalogueId)
+  if (error) throw error
+  return data ?? []
+}
+
+export async function addCatalogueApprover(catalogueId, userId, addedBy) {
+  const { data, error } = await supabase
+    .from('catalogue_approvers')
+    .insert({ catalogue_id: catalogueId, user_id: userId, added_by: addedBy })
     .select()
     .single()
   if (error) throw error
@@ -273,4 +341,23 @@ export async function addCatalogueApprover(organisationId, userId, addedBy) {
 export async function removeCatalogueApprover(approverRowId) {
   const { error } = await supabase.from('catalogue_approvers').delete().eq('id', approverRowId)
   if (error) throw error
+}
+
+// Coarse "is this user an approver of at least one of this org's own
+// catalogues" check for the provider console's moderation buttons -- purely
+// a UI affordance, computed client-side since that's just as cheap as a
+// round trip and avoids exposing a single-purpose RPC just for this. The
+// actual approve/reject/deactivate calls remain enforced server-side by
+// publish_course_version/reject_course_submission/
+// deactivate_course_publication's own per-catalogue authorization
+// regardless of what this returns.
+export async function listOrganisationCatalogueApprovers(organisationId) {
+  const catalogues = await listOrganisationCatalogues(organisationId)
+  if (catalogues.length === 0) return []
+  const { data, error } = await supabase
+    .from('catalogue_approvers')
+    .select('*')
+    .in('catalogue_id', catalogues.map((c) => c.id))
+  if (error) throw error
+  return data ?? []
 }

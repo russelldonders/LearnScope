@@ -13,10 +13,11 @@ import ScreenRecorderModal from '../../components/ScreenRecorderModal'
 import {
   getCatalogueCourse,
   updateProviderCourse,
-  setCatalogueCourseStatus,
   createDraftCourseVersion,
   uploadCourseImage,
   removeCourseImage,
+  listAvailableCatalogues,
+  submitCourseForPublication,
 } from '../../lib/admin/catalogue'
 import {
   listCourseSections,
@@ -312,6 +313,10 @@ export default function ProviderCourseEditor() {
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [saveError, setSaveError] = useState(null)
+  const [showPublishDialog, setShowPublishDialog] = useState(false)
+  const [availableCatalogues, setAvailableCatalogues] = useState([])
+  const [selectedCatalogueIds, setSelectedCatalogueIds] = useState([])
+  const [loadingCatalogues, setLoadingCatalogues] = useState(false)
 
   useEffect(() => {
     load()
@@ -363,16 +368,37 @@ export default function ProviderCourseEditor() {
     }
   }
 
-  async function handleSubmitForApproval() {
+  // Publishing now means choosing which catalogue(s) (0111/0112) the course
+  // should be submitted to -- the Global platform catalogue and/or any of
+  // this org's own -- before it goes to pending_approval, since approval
+  // itself is authorized per selected catalogue.
+  async function handleOpenPublishDialog() {
     if (!form.courseCode.trim()) {
       setSaveError('Course code / ID is required.')
       return
     }
+    setSaveError(null)
+    setShowPublishDialog(true)
+    setLoadingCatalogues(true)
+    try {
+      const catalogues = await listAvailableCatalogues(course.organisation_id)
+      setAvailableCatalogues(catalogues)
+      setSelectedCatalogueIds(catalogues.map((c) => c.id))
+    } catch (err) {
+      setSaveError(err.message)
+      setShowPublishDialog(false)
+    } finally {
+      setLoadingCatalogues(false)
+    }
+  }
+
+  async function handleSubmitForApproval() {
     setSubmitting(true)
     setSaveError(null)
     try {
       await updateProviderCourse(course.id, form)
-      await setCatalogueCourseStatus(course.id, 'pending_approval')
+      await submitCourseForPublication(course.id, selectedCatalogueIds)
+      setShowPublishDialog(false)
       await load()
     } catch (err) {
       setSaveError(err.message)
@@ -425,14 +451,29 @@ export default function ProviderCourseEditor() {
                   </button>
                   <button
                     type="button"
-                    onClick={handleSubmitForApproval}
+                    onClick={handleOpenPublishDialog}
                     disabled={saving || submitting}
                     className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
                   >
-                    {submitting ? 'Publishing…' : 'Publish'}
+                    Publish
                   </button>
                 </div>
               </div>
+            )}
+
+            {showPublishDialog && (
+              <PublishDialog
+                catalogues={availableCatalogues}
+                loading={loadingCatalogues}
+                selectedIds={selectedCatalogueIds}
+                onToggle={(id, checked) =>
+                  setSelectedCatalogueIds((ids) => (checked ? [...ids, id] : ids.filter((existingId) => existingId !== id)))
+                }
+                error={saveError}
+                submitting={submitting}
+                onCancel={() => setShowPublishDialog(false)}
+                onSubmit={handleSubmitForApproval}
+              />
             )}
 
             <div className="flex items-center gap-1 border-b border-hairline">
@@ -471,6 +512,69 @@ export default function ProviderCourseEditor() {
         )}
       </main>
     </div>
+  )
+}
+
+function PublishDialog({ catalogues, loading, selectedIds, onToggle, error, submitting, onCancel, onSubmit }) {
+  return (
+    <AccessibleDialog
+      labelledBy="publish-course-dialog-title"
+      onClose={onCancel}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6"
+    >
+      <h2 id="publish-course-dialog-title" className="font-display text-lg text-ink mb-2">
+        Choose where to publish
+      </h2>
+      <p className="text-sm text-secondary mb-4">Select at least one catalogue to submit this course to for approval.</p>
+
+      {loading ? (
+        <p className="text-sm text-secondary mb-4">Loading catalogues…</p>
+      ) : (
+        <ul className="space-y-2 mb-4">
+          {catalogues.map((catalogue) => (
+            <li key={catalogue.id}>
+              <label className="flex items-start gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(catalogue.id)}
+                  onChange={(e) => onToggle(catalogue.id, e.target.checked)}
+                  className="mt-0.5 rounded border-hairline"
+                />
+                <span>
+                  {catalogue.name}
+                  <span className="block text-xs text-secondary">
+                    {catalogue.is_global
+                      ? 'Visible platform-wide -- always needs a platform admin to approve.'
+                      : "Can be approved by this catalogue's own approvers, without a platform admin."}
+                  </span>
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
+
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={submitting}
+          className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={submitting || loading || selectedIds.length === 0}
+          className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+        >
+          {submitting ? 'Submitting…' : 'Submit for approval'}
+        </button>
+      </div>
+    </AccessibleDialog>
   )
 }
 

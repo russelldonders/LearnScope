@@ -5,6 +5,7 @@ import AppHeader from '../../components/AppHeader'
 import { OrganisationStaffPanel } from '../admin/AdminProviders'
 import ResourceLibrarySection from '../../components/ResourceLibrarySection'
 import ProviderSkillsSection from '../../components/ProviderSkillsSection'
+import ProviderCataloguesSection from '../../components/ProviderCataloguesSection'
 import OrganisationSettingsModal from '../../components/OrganisationSettingsModal'
 import AccessibleDialog from '../../components/AccessibleDialog'
 import ProgressBar from '../../components/ProgressBar'
@@ -13,10 +14,10 @@ import {
   listOrganisationCatalogueCourses,
   createProviderCourse,
   listCourseParticipants,
-  listCatalogueApprovers,
+  listOrganisationCatalogueApprovers,
   approveCatalogueCourse,
   rejectCatalogueCourse,
-  setCatalogueCourseStatus,
+  deactivateCatalogueCourse,
 } from '../../lib/admin/catalogue'
 
 const STATUS_LABELS = {
@@ -30,6 +31,7 @@ const STATUS_LABELS = {
 const SECTIONS = [
   { key: 'training', label: 'Training' },
   { key: 'skills', label: 'Skills' },
+  { key: 'catalogues', label: 'Catalogues', adminOnly: true },
   { key: 'staff', label: 'Users', adminOnly: true },
   { key: 'resources', label: 'Resources' },
 ]
@@ -65,10 +67,11 @@ export default function ProviderConsole() {
   )
   const myRole = (organisationMemberships ?? []).find((m) => m.organisation_id === selectedOrgId)?.role
   const selectedOrg = myOrgs.find((o) => o.id === selectedOrgId)
-  // Guards against a stale 'staff' tab surviving a switch to an org where
-  // the current user isn't an admin (staff isn't in that org's own tab
-  // bar, but activeSection state persists across the org switch).
-  const currentSection = activeSection === 'staff' && myRole !== 'admin' ? 'training' : activeSection
+  // Guards against a stale 'staff'/'catalogues' tab surviving a switch to an
+  // org where the current user isn't an admin (neither tab is in that org's
+  // own tab bar, but activeSection state persists across the org switch).
+  const currentSection =
+    (activeSection === 'staff' || activeSection === 'catalogues') && myRole !== 'admin' ? 'training' : activeSection
 
   useEffect(() => {
     reloadOrganisations().finally(() => setLoading(false))
@@ -178,6 +181,9 @@ export default function ProviderConsole() {
                 {currentSection === 'skills' && (
                   <ProviderSkillsSection key={selectedOrg.id} organisationId={selectedOrg.id} userId={user.id} />
                 )}
+                {currentSection === 'catalogues' && myRole === 'admin' && (
+                  <ProviderCataloguesSection key={selectedOrg.id} organisationId={selectedOrg.id} />
+                )}
                 {currentSection === 'staff' && myRole === 'admin' && (
                   <OrganisationStaffPanel key={selectedOrg.id} organisation={selectedOrg} />
                 )}
@@ -227,7 +233,7 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
     try {
       const [courseList, approvers] = await Promise.all([
         listOrganisationCatalogueCourses(organisation.id),
-        listCatalogueApprovers(organisation.id),
+        listOrganisationCatalogueApprovers(organisation.id),
       ])
       setCourses(courseList)
       setIsApprover(approvers.some((a) => a.user_id === userId))
@@ -266,11 +272,11 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
     }
   }
 
-  async function handleSetStatus(course, status) {
+  async function handleDeactivate(course) {
     setActioningId(course.id)
     setError(null)
     try {
-      await setCatalogueCourseStatus(course.id, status)
+      await deactivateCatalogueCourse(course.id)
       await load()
     } catch (err) {
       setError(err.message)
@@ -413,7 +419,7 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
               }}
               onApprove={() => handleApprove(course)}
               onReject={() => handleReject(course)}
-              onSetStatus={(status) => handleSetStatus(course, status)}
+              onDeactivate={() => handleDeactivate(course)}
               canViewParticipants={canViewParticipants}
               onViewParticipants={() => setParticipantCourse(course)}
             />
@@ -448,7 +454,7 @@ function CourseCard({
   onCancelReject,
   onApprove,
   onReject,
-  onSetStatus,
+  onDeactivate,
 }) {
   const editable = course.status === 'draft' || course.status === 'rejected'
   return (
@@ -503,7 +509,7 @@ function CourseCard({
             <button
               type="button"
               disabled={actioning}
-              onClick={() => onSetStatus('inactive')}
+              onClick={onDeactivate}
               className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper disabled:opacity-50"
             >
               Deactivate

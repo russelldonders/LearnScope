@@ -4,7 +4,7 @@ import {
   listAllCatalogueCourses,
   approveCatalogueCourse,
   rejectCatalogueCourse,
-  setCatalogueCourseStatus,
+  deactivateCatalogueCourse,
 } from '../../lib/admin/catalogue'
 
 const STATUS_FILTERS = ['all', 'draft', 'pending_approval', 'approved', 'rejected', 'inactive']
@@ -67,11 +67,11 @@ export default function AdminCatalogue() {
     }
   }
 
-  async function handleSetStatus(course, status) {
+  async function handleDeactivate(course) {
     setActioningId(course.id)
     setError(null)
     try {
-      await setCatalogueCourseStatus(course.id, status)
+      await deactivateCatalogueCourse(course.id)
       await load()
     } catch (err) {
       setError(err.message)
@@ -149,7 +149,7 @@ export default function AdminCatalogue() {
                       <button
                         type="button"
                         disabled={actioningId === course.id}
-                        onClick={() => handleSetStatus(course, 'inactive')}
+                        onClick={() => handleDeactivate(course)}
                         className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper disabled:opacity-50"
                       >
                         Deactivate

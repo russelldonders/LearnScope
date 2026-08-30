@@ -6277,165 +6277,237 @@ create policy "Platform admins can update onboarding steps"
 -- all, which that column alone wouldn't catch.
 alter table profiles add column cv_imported_at timestamptz;
 alter table profiles add column cv_import_banner_dismissed_at timestamptz;
--- Lets an organisation admin designate specific members of their own
--- provider organisation as "catalogue approvers" -- able to approve/reject/
--- deactivate their own org's course_catalogue submissions without needing
--- a platform admin. Platform admins keep their existing, unscoped
--- moderation power (0066's "Platform admins can update any catalogue
--- entry") over every organisation's entries and the platform-curated
--- (organisation_id is null) catalogue -- this migration only adds a
--- narrower, org-scoped alternative path, it doesn't touch that policy.
+-- Provider-owned catalogue destinations plus the platform-managed global
+-- catalogue. Publication choices belong to a specific immutable course
+-- version, so a new version can request a different destination set without
+-- changing where the currently published version appears.
 
-create table catalogue_approvers (
+create table catalogues (
   id uuid primary key default gen_random_uuid(),
-  organisation_id uuid not null references organisations(id) on delete cascade,
-  user_id uuid not null references auth.users(id) on delete cascade,
-  added_by uuid references auth.users(id) on delete set null,
+  organisation_id uuid references organisations(id) on delete cascade,
+  name text not null check (length(trim(name)) > 0),
+  description text,
+  is_global boolean not null default false,
+  created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
-  unique (organisation_id, user_id)
+  updated_at timestamptz not null default now(),
+  check (
+    (is_global and organisation_id is null)
+    or (not is_global and organisation_id is not null)
+  )
 );
 
-create index catalogue_approvers_organisation_idx on catalogue_approvers (organisation_id);
-create index catalogue_approvers_user_idx on catalogue_approvers (user_id);
+create unique index catalogues_one_global_idx
+  on catalogues (is_global)
+  where is_global;
 
--- security definer, same shape/reason as is_org_admin/is_org_member (0065),
--- including the organisations.status = 'active' check 0069 added to those
--- two -- without it, a platform admin deactivating a provider org (meant to
--- have "real consequence" for that org's own access, per 0069) would leave
--- a previously-designated approver still able to move that org's
--- course_catalogue rows.
-create or replace function is_catalogue_approver(org_id uuid, check_user_id uuid)
-returns boolean
-language sql
-security definer
-set search_path = public
-stable
-as $$
-  select exists (
-    select 1 from catalogue_approvers
-    join organisations on organisations.id = catalogue_approvers.organisation_id
-    where catalogue_approvers.organisation_id = org_id
-      and catalogue_approvers.user_id = check_user_id
-      and organisations.status = 'active'
-  )
-$$;
+create unique index catalogues_organisation_name_idx
+  on catalogues (organisation_id, lower(name))
+  where organisation_id is not null;
 
-grant execute on function is_catalogue_approver(uuid, uuid) to authenticated;
+create index catalogues_organisation_idx on catalogues (organisation_id, name);
 
-alter table catalogue_approvers enable row level security;
+insert into catalogues (name, description, is_global)
+values ('Global catalogue', 'Training published across LearnScope.', true);
 
-create policy "Org members can view their organisation's catalogue approvers"
-  on catalogue_approvers for select
+create table course_catalogue_publications (
+  course_id uuid references course_catalogue(id) on delete cascade not null,
+  catalogue_id uuid references catalogues(id) on delete cascade not null,
+  selected_by uuid references auth.users(id) on delete set null,
+  selected_at timestamptz not null default now(),
+  published_at timestamptz,
+  primary key (course_id, catalogue_id)
+);
+
+create index course_catalogue_publications_catalogue_idx
+  on course_catalogue_publications (catalogue_id, published_at, course_id);
+
+-- Preserve the existing learner catalogue exactly: every version that is
+-- live when this migration runs starts published to the Global catalogue.
+insert into course_catalogue_publications (course_id, catalogue_id, selected_by, selected_at, published_at)
+select cc.id, c.id, cc.created_by, cc.created_at, coalesce(cc.approved_at, cc.created_at)
+from course_catalogue cc
+cross join catalogues c
+where cc.status = 'approved'
+  and cc.is_current_published
+  and c.is_global;
+
+alter table catalogues enable row level security;
+
+alter table course_catalogue_publications enable row level security;
+
+create policy "Authenticated users can view catalogues"
+  on catalogues for select
   to authenticated
-  using (is_org_member(organisation_id, auth.uid()));
+  using (true);
 
--- The designated user must already be an active member of the same
--- organisation (not a still-pending invite, matching is_org_member's own
--- 0070 status check) -- this is a list of that org's own users, not an
--- arbitrary allowlist.
-create policy "Org admins can designate catalogue approvers from their own users"
-  on catalogue_approvers for insert
+create policy "Provider admins and platform admins can create catalogues"
+  on catalogues for insert
   to authenticated
   with check (
-    is_org_admin(organisation_id, auth.uid())
-    and exists (
-      select 1 from organisation_members om
-      where om.organisation_id = catalogue_approvers.organisation_id
-        and om.user_id = catalogue_approvers.user_id
-        and om.status = 'active'
+    is_platform_admin((select auth.uid()))
+    or (
+      not is_global
+      and organisation_id is not null
+      and is_org_admin(organisation_id, (select auth.uid()))
     )
   );
 
-create policy "Org admins can remove catalogue approvers"
-  on catalogue_approvers for delete
+create policy "Provider admins and platform admins can update catalogues"
+  on catalogues for update
   to authenticated
-  using (is_org_admin(organisation_id, auth.uid()));
+  using (
+    is_platform_admin((select auth.uid()))
+    or (
+      not is_global
+      and organisation_id is not null
+      and is_org_admin(organisation_id, (select auth.uid()))
+    )
+  )
+  with check (
+    is_platform_admin((select auth.uid()))
+    or (
+      not is_global
+      and organisation_id is not null
+      and is_org_admin(organisation_id, (select auth.uid()))
+    )
+  );
 
--- catalogue_approvers has no FK to organisation_members (it points straight
--- at organisations/auth.users, since an approver grant should outlive a
--- role change), so removing someone's staff access (removeOrganisationMember
--- -- a hard delete, not a status flip) wouldn't otherwise also revoke an
--- existing approver grant, leaving a former member able to keep approving
--- that org's submissions via is_catalogue_approver.
-create or replace function revoke_catalogue_approver_on_membership_removal()
-returns trigger
+create policy "Provider admins can delete their own catalogues"
+  on catalogues for delete
+  to authenticated
+  using (
+    not is_global
+    and organisation_id is not null
+    and (
+      is_platform_admin((select auth.uid()))
+      or is_org_admin(organisation_id, (select auth.uid()))
+    )
+  );
+
+create policy "View publication destinations for viewable courses"
+  on course_catalogue_publications for select
+  to authenticated
+  using (
+    exists (
+      select 1
+      from course_catalogue cc
+      where cc.id = course_catalogue_publications.course_id
+        and (
+          (cc.status = 'approved' and cc.is_current_published and course_catalogue_publications.published_at is not null)
+          or is_platform_admin((select auth.uid()))
+          or (
+            cc.organisation_id is not null
+            and is_org_member(cc.organisation_id, (select auth.uid()))
+          )
+          or exists (
+            select 1 from courses c
+            where c.catalogue_course_id = cc.id
+              and c.user_id = (select auth.uid())
+          )
+        )
+    )
+  );
+
+create policy "Manage destinations for editable provider courses"
+  on course_catalogue_publications for all
+  to authenticated
+  using (
+    exists (
+      select 1
+      from course_catalogue cc
+      join catalogues c on c.id = course_catalogue_publications.catalogue_id
+      where cc.id = course_catalogue_publications.course_id
+        and (
+          is_platform_admin((select auth.uid()))
+          or (
+            cc.organisation_id is not null
+            and is_org_member(cc.organisation_id, (select auth.uid()))
+            and cc.status in ('draft', 'rejected')
+            and (c.is_global or c.organisation_id = cc.organisation_id)
+          )
+        )
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from course_catalogue cc
+      join catalogues c on c.id = course_catalogue_publications.catalogue_id
+      where cc.id = course_catalogue_publications.course_id
+        and (
+          is_platform_admin((select auth.uid()))
+          or (
+            cc.organisation_id is not null
+            and is_org_member(cc.organisation_id, (select auth.uid()))
+            and cc.status in ('draft', 'rejected')
+            and (c.is_global or c.organisation_id = cc.organisation_id)
+          )
+        )
+    )
+  );
+
+grant select, insert, update, delete on table catalogues to authenticated;
+
+grant select, insert, update, delete on table course_catalogue_publications to authenticated;
+
+create or replace function submit_course_for_publication(p_course_id uuid, p_catalogue_ids uuid[])
+returns void
 language plpgsql
-security definer set search_path = public
+security invoker
+set search_path = public
 as $$
+declare
+  v_organisation_id uuid;
 begin
-  delete from catalogue_approvers
-  where organisation_id = old.organisation_id and user_id = old.user_id;
-  return old;
+  select organisation_id into v_organisation_id
+  from course_catalogue
+  where id = p_course_id
+    and status in ('draft', 'rejected')
+  for update;
+
+  if v_organisation_id is null then
+    raise exception 'Course is not editable or does not belong to a provider';
+  end if;
+
+  if not (
+    is_platform_admin((select auth.uid()))
+    or is_org_member(v_organisation_id, (select auth.uid()))
+  ) then
+    raise exception 'Not authorized';
+  end if;
+
+  if coalesce(cardinality(p_catalogue_ids), 0) = 0 then
+    raise exception 'Choose at least one catalogue';
+  end if;
+
+  if exists (
+    select 1
+    from unnest(p_catalogue_ids) selected_id
+    left join catalogues c
+      on c.id = selected_id
+      and (c.is_global or c.organisation_id = v_organisation_id)
+    where c.id is null
+  ) then
+    raise exception 'One or more catalogues are not available to this provider';
+  end if;
+
+  delete from course_catalogue_publications where course_id = p_course_id;
+
+  insert into course_catalogue_publications (course_id, catalogue_id, selected_by)
+  select p_course_id, selected_id, (select auth.uid())
+  from (select distinct unnest(p_catalogue_ids) as selected_id) selected;
+
+  update course_catalogue
+  set status = 'pending_approval', rejection_reason = null
+  where id = p_course_id;
 end;
 $$;
 
-create trigger revoke_catalogue_approver_on_membership_removal_trigger
-  after delete on organisation_members
-  for each row execute procedure revoke_catalogue_approver_on_membership_removal();
+revoke all on function submit_course_for_publication(uuid, uuid[]) from public;
 
--- Unlike "Platform admins can update any catalogue entry" (0066, deliberately
--- unrestricted), these are split into the specific status transitions
--- src/pages/admin/AdminCatalogue.jsx's own moderation actions actually use
--- (approve, reject, deactivate, reactivate) -- same narrow-policy-per-
--- transition shape as 0066/0088's org-member policies. Restricting `with
--- check`'s target status this way also means a plain content-only edit
--- (name/synopsis/etc, status left unchanged) can never satisfy any of these
--- three, so an approver can't use this update path to silently rewrite an
--- already-approved, live course's content -- they'd have to genuinely
--- deactivate/reactivate it, same as the admin console requires.
-create policy "Catalogue approvers can approve or reject their organisation's submissions"
-  on course_catalogue for update
-  to authenticated
-  using (
-    organisation_id is not null
-    and is_catalogue_approver(organisation_id, auth.uid())
-    and status in ('draft', 'pending_approval')
-  )
-  with check (
-    organisation_id is not null
-    and is_catalogue_approver(organisation_id, auth.uid())
-    and status in ('approved', 'rejected')
-  );
+grant execute on function submit_course_for_publication(uuid, uuid[]) to authenticated;
 
-create policy "Catalogue approvers can deactivate their organisation's approved courses"
-  on course_catalogue for update
-  to authenticated
-  using (
-    organisation_id is not null
-    and is_catalogue_approver(organisation_id, auth.uid())
-    and status = 'approved'
-  )
-  with check (
-    organisation_id is not null
-    and is_catalogue_approver(organisation_id, auth.uid())
-    and status = 'inactive'
-  );
-
-create policy "Catalogue approvers can reactivate their organisation's inactive or rejected courses"
-  on course_catalogue for update
-  to authenticated
-  using (
-    organisation_id is not null
-    and is_catalogue_approver(organisation_id, auth.uid())
-    and status in ('inactive', 'rejected')
-  )
-  with check (
-    organisation_id is not null
-    and is_catalogue_approver(organisation_id, auth.uid())
-    and status = 'approved'
-  );
--- 0107 (course versioning, merged from staging after this branch's 0112
--- catalogue_approvers was written) introduced publish_course_version and
--- routed the app's only "approve"/"reactivate" action
--- (approveCatalogueCourse, src/lib/admin/catalogue.js) through it instead of
--- a plain table update. That function's authorization check is hardcoded to
--- is_platform_admin only, so a designated catalogue approver (0112) would
--- hit "Not authorized" trying to approve/reactivate their own org's
--- course -- 0112's course_catalogue RLS policies were never actually
--- reachable through the app for that action. This re-defines the function
--- to also authorize a catalogue approver for the course's own organisation,
--- matching is_catalogue_approver's own current-org-only scope; platform
--- admin behaviour is unchanged.
 create or replace function publish_course_version(p_course_id uuid)
 returns void
 language plpgsql
@@ -6444,22 +6516,25 @@ set search_path = public
 as $$
 declare
   v_group_id uuid;
-  v_org_id uuid;
 begin
-  select version_group_id, organisation_id into v_group_id, v_org_id
+  if not is_platform_admin((select auth.uid())) then
+    raise exception 'Not authorized';
+  end if;
+
+  if not exists (
+    select 1 from course_catalogue_publications
+    where course_id = p_course_id
+  ) then
+    raise exception 'Choose at least one publication catalogue';
+  end if;
+
+  select version_group_id into v_group_id
   from course_catalogue
   where id = p_course_id
   for update;
 
   if v_group_id is null then
     raise exception 'Course not found';
-  end if;
-
-  if not (
-    is_platform_admin((select auth.uid()))
-    or (v_org_id is not null and is_catalogue_approver(v_org_id, (select auth.uid())))
-  ) then
-    raise exception 'Not authorized';
   end if;
 
   update course_catalogue
@@ -6475,5 +6550,381 @@ begin
       approved_at = now(),
       rejection_reason = null
   where id = p_course_id;
+
+  update course_catalogue_publications
+  set published_at = now()
+  where course_id = p_course_id;
 end;
 $$;
+
+revoke all on function publish_course_version(uuid) from public;
+
+grant execute on function publish_course_version(uuid) to authenticated;
+
+-- Approved courses only appear to general learners after at least one
+-- selected catalogue destination has actually been published. Provider
+-- staff, platform admins, and existing enrollees retain their prior access.
+-- Keep the lookup out of course_catalogue_publications' RLS graph: that
+-- table's own SELECT policy checks its parent course, so an inline EXISTS
+-- here would recurse back into course_catalogue.
+create or replace function is_course_published_to_catalogue(check_course_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from course_catalogue_publications
+    where course_id = check_course_id
+      and published_at is not null
+  )
+$$;
+
+revoke all on function is_course_published_to_catalogue(uuid) from public;
+
+grant execute on function is_course_published_to_catalogue(uuid) to authenticated;
+
+drop policy if exists "View approved courses, your own organisation's, as a platform admin, or your own enrollment" on course_catalogue;
+
+create policy "View published courses, your own organisation's, as a platform admin, or your own enrollment"
+  on course_catalogue for select
+  to authenticated
+  using (
+    (
+      status = 'approved'
+      and is_current_published
+      and is_course_published_to_catalogue(id)
+    )
+    or is_platform_admin((select auth.uid()))
+    or (
+      organisation_id is not null
+      and is_org_member(organisation_id, (select auth.uid()))
+    )
+    or exists (
+      select 1 from courses c
+      where c.catalogue_course_id = course_catalogue.id
+        and c.user_id = (select auth.uid())
+    )
+  );
+-- Redesigned against 0111's real per-catalogue model (a provider can own
+-- several named catalogues, plus the platform-managed Global catalogue) --
+-- an org admin designates specific active members of their own org as
+-- approvers of one of their org's own (non-global) catalogues, able to
+-- approve/reject/deactivate a course being published into that catalogue,
+-- without needing a platform admin. Nobody can be an approver of the
+-- Global catalogue (it has no organisation_id, so the insert policy below
+-- can never match it) -- publishing anything into it stays platform-admin
+-- only, same as today.
+
+create table catalogue_approvers (
+  id uuid primary key default gen_random_uuid(),
+  catalogue_id uuid not null references catalogues(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  added_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique (catalogue_id, user_id)
+);
+
+create index catalogue_approvers_catalogue_idx on catalogue_approvers (catalogue_id);
+create index catalogue_approvers_user_idx on catalogue_approvers (user_id);
+
+-- security definer, same shape/reason as is_org_admin/is_org_member (0065),
+-- including the organisations.status = 'active' check 0069 added to those
+-- two -- without it, a platform admin deactivating a provider org would
+-- leave a previously-designated approver still able to move that org's
+-- course_catalogue rows.
+create or replace function is_catalogue_approver(p_catalogue_id uuid, p_user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from catalogue_approvers ca
+    join catalogues c on c.id = ca.catalogue_id
+    join organisations o on o.id = c.organisation_id
+    where ca.catalogue_id = p_catalogue_id
+      and ca.user_id = p_user_id
+      and o.status = 'active'
+  )
+$$;
+
+grant execute on function is_catalogue_approver(uuid, uuid) to authenticated;
+
+alter table catalogue_approvers enable row level security;
+
+create policy "Org members can view their organisation's catalogue approvers"
+  on catalogue_approvers for select
+  to authenticated
+  using (
+    exists (
+      select 1 from catalogues c
+      where c.id = catalogue_approvers.catalogue_id
+        and c.organisation_id is not null
+        and is_org_member(c.organisation_id, auth.uid())
+    )
+  );
+
+-- The target catalogue must belong to the calling admin's own organisation
+-- (never the Global catalogue, since it has no organisation_id), and the
+-- designated user must already be an active member of that same
+-- organisation (not a still-pending invite, matching is_org_member's own
+-- 0070 status check) -- this is a list of that org's own users against
+-- that org's own catalogue, not an arbitrary allowlist. added_by is pinned
+-- to the caller so a crafted request can't misattribute (or null out) who
+-- granted the approval right.
+create policy "Org admins can designate catalogue approvers from their own users"
+  on catalogue_approvers for insert
+  to authenticated
+  with check (
+    added_by = auth.uid()
+    and exists (
+      select 1 from catalogues c
+      where c.id = catalogue_approvers.catalogue_id
+        and c.organisation_id is not null
+        and is_org_admin(c.organisation_id, auth.uid())
+        and exists (
+          select 1 from organisation_members om
+          where om.organisation_id = c.organisation_id
+            and om.user_id = catalogue_approvers.user_id
+            and om.status = 'active'
+        )
+    )
+  );
+
+create policy "Org admins can remove catalogue approvers"
+  on catalogue_approvers for delete
+  to authenticated
+  using (
+    exists (
+      select 1 from catalogues c
+      where c.id = catalogue_approvers.catalogue_id
+        and c.organisation_id is not null
+        and is_org_admin(c.organisation_id, auth.uid())
+    )
+  );
+
+-- catalogue_approvers has no FK to organisation_members (it points at
+-- catalogues/auth.users, since an approver grant should outlive a role
+-- change), so removing someone's staff access (removeOrganisationMember --
+-- a hard delete, not a status flip) wouldn't otherwise also revoke an
+-- existing approver grant on that org's catalogues.
+create or replace function revoke_catalogue_approver_on_membership_removal()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  delete from catalogue_approvers
+  using catalogues
+  where catalogue_approvers.catalogue_id = catalogues.id
+    and catalogues.organisation_id = old.organisation_id
+    and catalogue_approvers.user_id = old.user_id;
+  return old;
+end;
+$$;
+
+create trigger revoke_catalogue_approver_on_membership_removal_trigger
+  after delete on organisation_members
+  for each row execute procedure revoke_catalogue_approver_on_membership_removal();
+
+-- Reject/deactivate/approve are all authorized through security-definer
+-- RPCs rather than plain-table-update RLS grants. A general-purpose RLS
+-- UPDATE policy for a catalogue approver (who may be an ordinary staff
+-- member, not an org admin) can only constrain the columns it names in its
+-- with-check -- it can't stop the same statement from also rewriting
+-- name/synopsis/image_url/etc on a pending_approval or already-approved
+-- row, since 0066's own org-member edit policy only ever applies while
+-- status is draft/rejected. Routing every transition through a function
+-- that performs its own narrow `set status = ..., <specific columns>`
+-- closes that off entirely, and lets each one check authorization against
+-- the *specific* catalogue(s) the course was actually submitted to
+-- (course_catalogue_publications), not just "approver of some catalogue in
+-- this org" -- matching what an org that splits approval authority across
+-- multiple catalogues actually expects.
+--
+-- All three also front-load the authorization check ahead of any
+-- course-specific detail: a non-admin caller always gets a flat 'Not
+-- authorized' whether the course doesn't exist, has no publications yet, or
+-- they're simply not an approver for all of its selected catalogues, so
+-- probing an arbitrary course id can't be used to learn anything about it.
+-- Platform admins (who can already see everything) get the more specific
+-- diagnostic instead.
+
+create or replace function publish_course_version(p_course_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_group_id uuid;
+  v_caller uuid := (select auth.uid());
+  v_is_admin boolean := is_platform_admin(v_caller);
+  v_has_publications boolean;
+  v_approved_for_all boolean;
+begin
+  select version_group_id into v_group_id
+  from course_catalogue
+  where id = p_course_id
+  for update;
+
+  v_has_publications := v_group_id is not null and exists (
+    select 1 from course_catalogue_publications where course_id = p_course_id
+  );
+
+  v_approved_for_all := v_group_id is not null and not exists (
+    select 1
+    from course_catalogue_publications ccp
+    where ccp.course_id = p_course_id
+      and not is_catalogue_approver(ccp.catalogue_id, v_caller)
+  );
+
+  if not v_is_admin and (v_group_id is null or not v_has_publications or not v_approved_for_all) then
+    raise exception 'Not authorized';
+  end if;
+
+  if v_is_admin and v_group_id is null then
+    raise exception 'Course not found';
+  end if;
+
+  if not v_has_publications then
+    raise exception 'Choose at least one publication catalogue';
+  end if;
+
+  update course_catalogue
+  set status = 'inactive', is_current_published = false
+  where version_group_id = v_group_id
+    and is_current_published
+    and id <> p_course_id;
+
+  update course_catalogue
+  set status = 'approved',
+      is_current_published = true,
+      approved_by = v_caller,
+      approved_at = now(),
+      rejection_reason = null
+  where id = p_course_id;
+
+  update course_catalogue_publications
+  set published_at = now()
+  where course_id = p_course_id;
+end;
+$$;
+
+revoke all on function publish_course_version(uuid) from public;
+grant execute on function publish_course_version(uuid) to authenticated;
+
+create or replace function reject_course_submission(p_course_id uuid, p_reason text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_caller uuid := (select auth.uid());
+  v_is_admin boolean := is_platform_admin(v_caller);
+  v_status text;
+  v_found boolean;
+  v_has_publications boolean;
+  v_approved_for_all boolean;
+begin
+  select status into v_status
+  from course_catalogue
+  where id = p_course_id
+  for update;
+
+  v_found := found;
+
+  v_has_publications := v_found and exists (
+    select 1 from course_catalogue_publications where course_id = p_course_id
+  );
+
+  v_approved_for_all := v_found and not exists (
+    select 1
+    from course_catalogue_publications ccp
+    where ccp.course_id = p_course_id
+      and not is_catalogue_approver(ccp.catalogue_id, v_caller)
+  );
+
+  if not v_is_admin and (not v_found or not v_has_publications or not v_approved_for_all) then
+    raise exception 'Not authorized';
+  end if;
+
+  if not v_found then
+    raise exception 'Course not found';
+  end if;
+
+  if v_status <> 'pending_approval' then
+    raise exception 'Only a pending submission can be rejected';
+  end if;
+
+  update course_catalogue
+  set status = 'rejected',
+      rejection_reason = p_reason,
+      approved_by = null,
+      approved_at = null,
+      is_current_published = false
+  where id = p_course_id;
+end;
+$$;
+
+revoke all on function reject_course_submission(uuid, text) from public;
+grant execute on function reject_course_submission(uuid, text) to authenticated;
+
+create or replace function deactivate_course_publication(p_course_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_caller uuid := (select auth.uid());
+  v_is_admin boolean := is_platform_admin(v_caller);
+  v_status text;
+  v_found boolean;
+  v_has_publications boolean;
+  v_approved_for_all boolean;
+begin
+  select status into v_status
+  from course_catalogue
+  where id = p_course_id
+  for update;
+
+  v_found := found;
+
+  v_has_publications := v_found and exists (
+    select 1 from course_catalogue_publications where course_id = p_course_id
+  );
+
+  v_approved_for_all := v_found and not exists (
+    select 1
+    from course_catalogue_publications ccp
+    where ccp.course_id = p_course_id
+      and not is_catalogue_approver(ccp.catalogue_id, v_caller)
+  );
+
+  if not v_is_admin and (not v_found or not v_has_publications or not v_approved_for_all) then
+    raise exception 'Not authorized';
+  end if;
+
+  if not v_found then
+    raise exception 'Course not found';
+  end if;
+
+  if v_status <> 'approved' then
+    raise exception 'Only an approved course can be deactivated';
+  end if;
+
+  update course_catalogue
+  set status = 'inactive', is_current_published = false
+  where id = p_course_id;
+end;
+$$;
+
+revoke all on function deactivate_course_publication(uuid) from public;
+grant execute on function deactivate_course_publication(uuid) to authenticated;

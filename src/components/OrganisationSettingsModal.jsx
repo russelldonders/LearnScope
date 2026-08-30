@@ -1,7 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { useAuth } from '../context/AuthContext'
-import { updateOrganisation, uploadOrganisationLogo, removeOrganisationLogo, listOrganisationMembers } from '../lib/admin/organisations'
-import { listCatalogueApprovers, addCatalogueApprover, removeCatalogueApprover } from '../lib/admin/catalogue'
+import { useRef, useState } from 'react'
+import { updateOrganisation, uploadOrganisationLogo, removeOrganisationLogo } from '../lib/admin/organisations'
 import AccessibleDialog from './AccessibleDialog'
 
 const MAX_LOGO_BYTES = 5 * 1024 * 1024
@@ -225,8 +223,6 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
             )}
           </div>
 
-          <CatalogueApproversSection organisationId={organisation.id} />
-
           {error && <p className="text-sm text-red-700">{error}</p>}
 
           <div className="flex justify-end gap-2 pt-2">
@@ -248,95 +244,5 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
           </div>
         </form>
     </AccessibleDialog>
-  )
-}
-
-// Lets an org admin pick which of their own (active) users can approve,
-// reject or deactivate this organisation's own catalogue submissions
-// without a platform admin (0095) -- each toggle is its own immediate
-// add/remove, same "not part of the Save button" pattern as the logo above,
-// rather than a field bundled into handleSave's payload.
-function CatalogueApproversSection({ organisationId }) {
-  const { user } = useAuth()
-  const [members, setMembers] = useState([])
-  const [approvers, setApprovers] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [togglingUserId, setTogglingUserId] = useState(null)
-
-  useEffect(() => {
-    load()
-  }, [organisationId])
-
-  async function load() {
-    setLoading(true)
-    setError(null)
-    try {
-      const [memberList, approverList] = await Promise.all([
-        listOrganisationMembers(organisationId),
-        listCatalogueApprovers(organisationId),
-      ])
-      setMembers(memberList.filter((m) => m.status === 'active'))
-      setApprovers(approverList)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleToggle(member, isApprover) {
-    setTogglingUserId(member.user_id)
-    setError(null)
-    try {
-      if (isApprover) {
-        const row = approvers.find((a) => a.user_id === member.user_id)
-        if (row) await removeCatalogueApprover(row.id)
-      } else {
-        await addCatalogueApprover(organisationId, member.user_id, user.id)
-      }
-      await load()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setTogglingUserId(null)
-    }
-  }
-
-  return (
-    <div className="border-t border-hairline pt-4">
-      <label className="block text-sm text-ink font-medium mb-1">Catalogue approvers</label>
-      <p className="text-xs text-secondary mb-2">
-        These users can approve, reject or deactivate this organisation's own training in the catalogue,
-        without needing a platform admin.
-      </p>
-      {error && <p className="text-xs text-red-700 mb-2">{error}</p>}
-      {loading ? (
-        <p className="text-xs text-secondary">Loading users…</p>
-      ) : members.length === 0 ? (
-        <p className="text-xs text-secondary">No users yet.</p>
-      ) : (
-        <ul className="divide-y divide-hairline border border-hairline rounded-md">
-          {members.map((m) => {
-            const isApprover = approvers.some((a) => a.user_id === m.user_id)
-            return (
-              <li key={m.user_id} className="flex items-center justify-between gap-2 text-sm p-2">
-                <span className="text-ink text-xs truncate">{m.email || m.user_id}</span>
-                <label className="flex items-center gap-1.5 text-xs text-secondary shrink-0">
-                  <input
-                    type="checkbox"
-                    checked={isApprover}
-                    disabled={togglingUserId === m.user_id}
-                    onChange={() => handleToggle(m, isApprover)}
-                    className="rounded border-hairline"
-                  />
-                  Approver
-                </label>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-    </div>
   )
 }
