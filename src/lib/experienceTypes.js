@@ -66,6 +66,8 @@ export const EXPERIENCE_TYPE_CONFIG = {
     orgLabel: 'Institution (optional)',
     orgRequired: false,
     periodNoun: 'subject',
+    datesRequired: false,
+    allowsStudyDuration: true,
   },
   education: {
     modalTitle: 'Add education',

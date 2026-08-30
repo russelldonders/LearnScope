@@ -26,7 +26,9 @@ export default function ChildExperienceEntry({ child, isLast, onNavigate }) {
           <span className="uppercase tracking-wide shrink-0">
             {EXPERIENCE_TYPE_LABELS[child.type] ?? child.type}
           </span>
-          <span className="shrink-0">{formatDateRange(child.start_date, child.end_date)}</span>
+          {(child.study_duration || child.start_date) && (
+            <span className="shrink-0">{child.study_duration || formatDateRange(child.start_date, child.end_date)}</span>
+          )}
         </p>
       </Link>
     </div>

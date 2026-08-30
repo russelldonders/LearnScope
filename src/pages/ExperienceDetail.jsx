@@ -25,14 +25,17 @@ import {
 // (end_date null) places no upper bound on its children.
 function validateWithinParent(values, parent) {
   if (!parent) return null
-  if (values.start_date < parent.start_date) {
+  if (values.start_date && values.start_date < parent.start_date) {
     return `Start date can't be before ${formatMonthYear(parent.start_date)}, when "${parent.title}" started.`
   }
   if (parent.end_date) {
-    if (values.start_date > parent.end_date) {
+    if (values.start_date && values.start_date > parent.end_date) {
       return `Start date can't be after ${formatMonthYear(parent.end_date)}, when "${parent.title}" ended.`
     }
-    if (!values.end_date || values.end_date > parent.end_date) {
+    if (values.end_date && values.end_date > parent.end_date) {
+      return `End date can't be after ${formatMonthYear(parent.end_date)}, when "${parent.title}" ended.`
+    }
+    if (values.type !== 'subject' && !values.end_date) {
       return `End date can't be after ${formatMonthYear(parent.end_date)}, when "${parent.title}" ended.`
     }
   }
@@ -146,7 +149,7 @@ export default function ExperienceDetail() {
     const [{ data: children }, parentResult] = await Promise.all([
       supabase
         .from('experience')
-        .select('id, type, title, start_date, end_date')
+        .select('id, type, title, start_date, end_date, study_duration')
         .eq('parent_experience_id', item.id)
         .order('start_date', { ascending: false }),
       item.parent_experience_id
@@ -409,6 +412,7 @@ function DetailsTab({ item, onSave, onDelete }) {
   const [organizationUrl, setOrganizationUrl] = useState(item.organization_url ?? '')
   const [startDate, setStartDate] = useState(item.start_date ?? '')
   const [endDate, setEndDate] = useState(item.end_date ?? '')
+  const [studyDuration, setStudyDuration] = useState(item.study_duration ?? '')
   const [current, setCurrent] = useState(!item.end_date)
   const [description, setDescription] = useState(item.description ?? '')
   const [saving, setSaving] = useState(false)
@@ -419,8 +423,17 @@ function DetailsTab({ item, onSave, onDelete }) {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!title.trim() || (config.orgRequired && !organization.trim()) || !startDate) {
-      setError(`Title${config.orgRequired ? ', organization,' : ''} and start date are required.`)
+    const datesRequired = config.datesRequired !== false
+    if (!title.trim() || (config.orgRequired && !organization.trim()) || (datesRequired && !startDate)) {
+      setError(`Title${config.orgRequired ? ', organization,' : ''}${datesRequired ? ' and start date are' : ' is'} required.`)
+      return
+    }
+    if (!datesRequired && !startDate && !studyDuration.trim()) {
+      setError('Enter a start date or a duration of study.')
+      return
+    }
+    if (endDate && !startDate) {
+      setError('Enter a start date before adding an end date.')
       return
     }
     setError(null)
@@ -431,8 +444,9 @@ function DetailsTab({ item, onSave, onDelete }) {
         title: title.trim(),
         organization: organization.trim() || null,
         organization_url: organizationUrl.trim() || null,
-        start_date: startDate,
-        end_date: current ? null : endDate || null,
+        start_date: startDate || null,
+        end_date: startDate && !current ? endDate || null : null,
+        study_duration: config.allowsStudyDuration ? studyDuration.trim() || null : null,
         description: description.trim() || null,
       })
     } catch (err) {
@@ -513,15 +527,15 @@ function DetailsTab({ item, onSave, onDelete }) {
 
       <OrganizationUrlField value={organizationUrl} onChange={setOrganizationUrl} />
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm text-secondary mb-1" htmlFor="startDate">
-            Start date
+            Start date{config.datesRequired === false ? ' (optional)' : ''}
           </label>
           <input
             id="startDate"
             type="date"
-            required
+            required={config.datesRequired !== false}
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
             className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
@@ -529,7 +543,7 @@ function DetailsTab({ item, onSave, onDelete }) {
         </div>
         <div>
           <label className="block text-sm text-secondary mb-1" htmlFor="endDate">
-            End date
+            End date{config.datesRequired === false ? ' (optional)' : ''}
           </label>
           <input
             id="endDate"
@@ -542,15 +556,33 @@ function DetailsTab({ item, onSave, onDelete }) {
         </div>
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-secondary">
-        <input
-          type="checkbox"
-          checked={current}
-          onChange={(e) => setCurrent(e.target.checked)}
-          className="rounded border-hairline"
-        />
-        This is ongoing / current
-      </label>
+      {config.allowsStudyDuration && (
+        <div>
+          <label className="block text-sm text-secondary mb-1" htmlFor="studyDuration">
+            Duration of study
+          </label>
+          <input
+            id="studyDuration"
+            value={studyDuration}
+            onChange={(e) => setStudyDuration(e.target.value)}
+            placeholder="e.g. 12 weeks or one semester"
+            className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+          />
+          <p className="text-xs text-secondary mt-1">Use this instead of dates, or alongside them.</p>
+        </div>
+      )}
+
+      {(config.datesRequired !== false || startDate) && (
+        <label className="flex items-center gap-2 text-sm text-secondary">
+          <input
+            type="checkbox"
+            checked={current}
+            onChange={(e) => setCurrent(e.target.checked)}
+            className="rounded border-hairline"
+          />
+          This is ongoing / current
+        </label>
+      )}
 
       <div>
         <label className="block text-sm text-secondary mb-1" htmlFor="description">
@@ -608,9 +640,9 @@ function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievemen
 
   const pendingCourseLinks = linkedCourses.filter((l) => l.courses && !l.courses.completed_date)
   const events = [
-    { type: 'start', date: item.start_date },
-    item.end_date ? { type: 'end', date: item.end_date } : { type: 'today', date: new Date().toISOString() },
-    ...(childExperiences ?? []).map((c) => ({ type: 'child', date: c.start_date, child: c })),
+    ...(item.start_date ? [{ type: 'start', date: item.start_date }] : []),
+    ...(item.start_date ? [item.end_date ? { type: 'end', date: item.end_date } : { type: 'today', date: new Date().toISOString() }] : []),
+    ...(childExperiences ?? []).filter((c) => c.start_date).map((c) => ({ type: 'child', date: c.start_date, child: c })),
     ...linkedCourses
       .filter((l) => l.courses?.completed_date)
       .map((l) => ({ type: 'course', date: l.courses.completed_date, link: l })),
@@ -623,6 +655,9 @@ function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievemen
   return (
     <div className="space-y-6">
       {item.description && <p className="text-sm text-ink whitespace-pre-line">{item.description}</p>}
+      {item.study_duration && (
+        <p className="text-sm text-secondary"><span className="font-medium text-ink">Duration of study:</span> {item.study_duration}</p>
+      )}
 
       <div>
         <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Timeline</h4>

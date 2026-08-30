@@ -16,6 +16,7 @@ export default function ExperienceModal({
   const [organizationUrl, setOrganizationUrl] = useState(initialOrganizationUrl)
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [studyDuration, setStudyDuration] = useState('')
   const [current, setCurrent] = useState(false)
   const [description, setDescription] = useState('')
   const [saving, setSaving] = useState(false)
@@ -23,8 +24,17 @@ export default function ExperienceModal({
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!title.trim() || (config.orgRequired && !organization.trim()) || !startDate) {
-      setError(`Title${config.orgRequired ? ', organization,' : ''} and start date are required.`)
+    const datesRequired = config.datesRequired !== false
+    if (!title.trim() || (config.orgRequired && !organization.trim()) || (datesRequired && !startDate)) {
+      setError(`Title${config.orgRequired ? ', organization,' : ''}${datesRequired ? ' and start date are' : ' is'} required.`)
+      return
+    }
+    if (!datesRequired && !startDate && !studyDuration.trim()) {
+      setError('Enter a start date or a duration of study.')
+      return
+    }
+    if (endDate && !startDate) {
+      setError('Enter a start date before adding an end date.')
       return
     }
     setError(null)
@@ -35,8 +45,9 @@ export default function ExperienceModal({
         title: title.trim(),
         organization: organization.trim() || null,
         organization_url: organizationUrl.trim() || null,
-        start_date: startDate,
-        end_date: current ? null : endDate || null,
+        start_date: startDate || null,
+        end_date: startDate && !current ? endDate || null : null,
+        study_duration: config.allowsStudyDuration ? studyDuration.trim() || null : null,
         description: description.trim() || null,
       })
     } catch (err) {
@@ -83,15 +94,15 @@ export default function ExperienceModal({
 
           <OrganizationUrlField value={organizationUrl} onChange={setOrganizationUrl} />
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="startDate">
-                Start date
+                Start date{config.datesRequired === false ? ' (optional)' : ''}
               </label>
               <input
                 id="startDate"
                 type="date"
-                required
+                required={config.datesRequired !== false}
                 value={startDate}
                 onChange={(e) => {
                   const value = e.target.value
@@ -103,7 +114,7 @@ export default function ExperienceModal({
             </div>
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="endDate">
-                End date
+                End date{config.datesRequired === false ? ' (optional)' : ''}
               </label>
               <input
                 id="endDate"
@@ -116,15 +127,33 @@ export default function ExperienceModal({
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-secondary">
-            <input
-              type="checkbox"
-              checked={current}
-              onChange={(e) => setCurrent(e.target.checked)}
-              className="rounded border-hairline"
-            />
-            This is ongoing / current
-          </label>
+          {config.allowsStudyDuration && (
+            <div>
+              <label className="block text-sm text-secondary mb-1" htmlFor="studyDuration">
+                Duration of study
+              </label>
+              <input
+                id="studyDuration"
+                value={studyDuration}
+                onChange={(e) => setStudyDuration(e.target.value)}
+                placeholder="e.g. 12 weeks or one semester"
+                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+              <p className="text-xs text-secondary mt-1">Use this instead of dates, or alongside them.</p>
+            </div>
+          )}
+
+          {(config.datesRequired !== false || startDate) && (
+            <label className="flex items-center gap-2 text-sm text-secondary">
+              <input
+                type="checkbox"
+                checked={current}
+                onChange={(e) => setCurrent(e.target.checked)}
+                className="rounded border-hairline"
+              />
+              This is ongoing / current
+            </label>
+          )}
 
           <div>
             <label className="block text-sm text-secondary mb-1" htmlFor="description">
