@@ -91,10 +91,11 @@ For destructive/potentially destructive migrations, explicitly identify: affecte
 **CLI**: `npx supabase ...` (project-local). Staging project ref: `ussqcmfxbbtncjvepuyn` — before any remote DB command, confirm the linked project matches this ref; if uncertain, stop and ask.
 
 **Migration workflow**, every schema change:
-1. New file in `supabase/migrations/`; never edit an already-applied one.
-2. `npx supabase db reset` locally — proceed only if it succeeds.
-3. `npx supabase db push` to apply to Staging.
-4. Verify it applied; regenerate `stage_bootstrap_consolidated.sql` (§17).
+1. Before naming a new migration file, confirm this checkout is caught up: `git fetch origin staging` and diff this branch's `supabase/migrations/` against `origin/staging`'s. Worktrees and long-lived branches drift silently — if `origin/staging` has migrations this branch lacks, merge it in first. Then run `npx supabase migration list` (project already confirmed linked to Staging, per above) and check its `remote` column doesn't include a version absent from both this branch and `origin/staging` — that means something was applied to Staging outside of a committed migration file; stop and ask rather than guessing a number or repairing history around it.
+2. New file in `supabase/migrations/`, numbered after the highest version seen in step 1; never edit an already-applied one.
+3. `npx supabase db reset` locally — proceed only if it succeeds.
+4. `npx supabase db push` to apply to Staging.
+5. Verify it applied; regenerate `stage_bootstrap_consolidated.sql` (§17).
 
 All persistent schema changes go through a migration file.
 
