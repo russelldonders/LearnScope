@@ -2,8 +2,8 @@ import { Link } from 'react-router-dom'
 import { formatDateRange } from '../lib/dates'
 import { EXPERIENCE_TYPE_LABELS } from '../lib/experienceTypes'
 
-// A single sub-experience (project/course/other nested under a job or
-// volunteer role), rendered as one row of a mini dot-timeline. Used both on
+// A single sub-experience (including a subject nested under education),
+// rendered as one row of a mini dot-timeline. Used both on
 // the experience detail page's own timeline and nested inside the parent's
 // card on the main experience list.
 export default function ChildExperienceEntry({ child, isLast, onNavigate }) {

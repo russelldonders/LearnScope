@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { formatMonthYear, formatFullDate } from '../lib/dates'
 import { LEVEL_LABELS } from '../lib/levels'
-import { EXPERIENCE_TYPE_LABELS, EXPERIENCE_TYPE_CONFIG, NESTED_EXPERIENCE_TYPES } from '../lib/experienceTypes'
+import { EXPERIENCE_TYPE_LABELS, EXPERIENCE_TYPE_CONFIG, nestedExperienceTypesFor } from '../lib/experienceTypes'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import ChildExperienceEntry from '../components/ChildExperienceEntry'
@@ -20,9 +20,7 @@ import {
   recommendExperienceSkills,
 } from '../lib/experienceSkillRecommendations'
 
-const NESTABLE_PARENT_TYPES = ['employment', 'volunteer']
-
-// Keeps a nested project/course/other experience's dates from silently
+// Keeps a nested experience's dates from silently
 // drifting outside the parent role's dates -- an open-ended parent
 // (end_date null) places no upper bound on its children.
 function validateWithinParent(values, parent) {
@@ -1139,7 +1137,7 @@ export function ExperienceActionButtons({
   return (
     <div className="flex flex-wrap items-center gap-2 mt-4">
       <AddExperienceButton
-        types={NESTABLE_PARENT_TYPES.includes(itemType) ? NESTED_EXPERIENCE_TYPES : []}
+        types={nestedExperienceTypesFor(itemType)}
         onSelect={onAddExperience}
         label="+ Add"
         leadingOptions={[{ value: 'skill', label: 'Skill', onSelect: onAddSkill }]}

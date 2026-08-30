@@ -31,6 +31,7 @@ import {
   getExperienceTabs,
   SkillsSubsection,
 } from './ExperienceDetail'
+import { nestedExperienceTypesFor } from '../lib/experienceTypes'
 
 const item = {
   id: 'experience-1',
@@ -130,6 +131,28 @@ describe('experience skill recommendations', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Recommend skills' }))
     expect(onRecommend).toHaveBeenCalled()
+  })
+
+  it('offers subjects only beneath education experiences', () => {
+    expect(nestedExperienceTypesFor('education')).toEqual(['subject'])
+    expect(nestedExperienceTypesFor('employment')).toEqual(['project', 'course', 'other'])
+    expect(nestedExperienceTypesFor('project')).toEqual([])
+
+    const onAddExperience = vi.fn()
+    render(
+      <ExperienceActionButtons
+        itemType="education"
+        onAddExperience={onAddExperience}
+        onRecommend={vi.fn()}
+        onAddSkill={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Add' }))
+    expect(screen.getByRole('button', { name: 'Subject' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Project' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Subject' }))
+    expect(onAddExperience).toHaveBeenCalledWith('subject')
   })
 })
 
