@@ -152,3 +152,32 @@ export async function removeCourseImage(courseId) {
   const { error } = await supabase.from('course_catalogue').update({ image_url: null }).eq('id', courseId)
   if (error) throw error
 }
+
+// Catalogue approvers (0095): an org admin's picks from their own
+// organisation_members, able to approve/reject/deactivate that org's own
+// course_catalogue submissions without a platform admin. RLS-scoped
+// directly (no service-role hop needed) -- unlike listOrganisationMembers,
+// nothing here needs an email lookup against auth.users.
+export async function listCatalogueApprovers(organisationId) {
+  const { data, error } = await supabase
+    .from('catalogue_approvers')
+    .select('*')
+    .eq('organisation_id', organisationId)
+  if (error) throw error
+  return data ?? []
+}
+
+export async function addCatalogueApprover(organisationId, userId, addedBy) {
+  const { data, error } = await supabase
+    .from('catalogue_approvers')
+    .insert({ organisation_id: organisationId, user_id: userId, added_by: addedBy })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function removeCatalogueApprover(approverRowId) {
+  const { error } = await supabase.from('catalogue_approvers').delete().eq('id', approverRowId)
+  if (error) throw error
+}

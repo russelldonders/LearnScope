@@ -7,7 +7,14 @@ import ResourceLibrarySection from '../../components/ResourceLibrarySection'
 import ProviderSkillsSection from '../../components/ProviderSkillsSection'
 import OrganisationSettingsModal from '../../components/OrganisationSettingsModal'
 import { listOrganisations } from '../../lib/admin/organisations'
-import { listOrganisationCatalogueCourses, createProviderCourse } from '../../lib/admin/catalogue'
+import {
+  listOrganisationCatalogueCourses,
+  createProviderCourse,
+  listCatalogueApprovers,
+  approveCatalogueCourse,
+  rejectCatalogueCourse,
+  setCatalogueCourseStatus,
+} from '../../lib/admin/catalogue'
 
 const STATUS_LABELS = {
   draft: 'Draft',
@@ -191,11 +198,15 @@ export default function ProviderConsole() {
 function ProviderTrainingSection({ organisation, userId }) {
   const navigate = useNavigate()
   const [courses, setCourses] = useState([])
+  const [isApprover, setIsApprover] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [creating, setCreating] = useState(false)
+  const [actioningId, setActioningId] = useState(null)
+  const [rejectingId, setRejectingId] = useState(null)
+  const [rejectionReason, setRejectionReason] = useState('')
 
   useEffect(() => {
     load()
@@ -205,11 +216,57 @@ function ProviderTrainingSection({ organisation, userId }) {
     setLoading(true)
     setError(null)
     try {
-      setCourses(await listOrganisationCatalogueCourses(organisation.id))
+      const [courseList, approvers] = await Promise.all([
+        listOrganisationCatalogueCourses(organisation.id),
+        listCatalogueApprovers(organisation.id),
+      ])
+      setCourses(courseList)
+      setIsApprover(approvers.some((a) => a.user_id === userId))
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleApprove(course) {
+    setActioningId(course.id)
+    setError(null)
+    try {
+      await approveCatalogueCourse(course.id, userId)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setActioningId(null)
+    }
+  }
+
+  async function handleReject(course) {
+    setActioningId(course.id)
+    setError(null)
+    try {
+      await rejectCatalogueCourse(course.id, rejectionReason.trim())
+      setRejectingId(null)
+      setRejectionReason('')
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setActioningId(null)
+    }
+  }
+
+  async function handleSetStatus(course, status) {
+    setActioningId(course.id)
+    setError(null)
+    try {
+      await setCatalogueCourseStatus(course.id, status)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setActioningId(null)
     }
   }
 
@@ -319,7 +376,23 @@ function ProviderTrainingSection({ organisation, userId }) {
       ) : (
         <div className="space-y-2">
           {courses.map((course) => (
-            <CourseCard key={course.id} course={course} />
+            <CourseCard
+              key={course.id}
+              course={course}
+              canModerate={isApprover}
+              actioning={actioningId === course.id}
+              rejecting={rejectingId === course.id}
+              rejectionReason={rejectionReason}
+              onRejectionReasonChange={setRejectionReason}
+              onStartReject={() => setRejectingId(course.id)}
+              onCancelReject={() => {
+                setRejectingId(null)
+                setRejectionReason('')
+              }}
+              onApprove={() => handleApprove(course)}
+              onReject={() => handleReject(course)}
+              onSetStatus={(status) => handleSetStatus(course, status)}
+            />
           ))}
         </div>
       )}
@@ -331,24 +404,108 @@ function ProviderTrainingSection({ organisation, userId }) {
 // course's own page (ProviderCourseEditor), the same way AdminUserDetail/
 // AdminSkillDetail moved their consoles' inline expansions onto dedicated
 // pages once there was more than a form's worth of detail to show.
-function CourseCard({ course }) {
+// canModerate (0095) mirrors AdminCatalogue.jsx's own approve/reject/
+// deactivate/reactivate actions, just scoped here to a designated catalogue
+// approver acting on their own organisation's submissions -- the moderation
+// row sits outside the card's Link so clicking a button doesn't also
+// navigate into the editor.
+function CourseCard({
+  course,
+  canModerate,
+  actioning,
+  rejecting,
+  rejectionReason,
+  onRejectionReasonChange,
+  onStartReject,
+  onCancelReject,
+  onApprove,
+  onReject,
+  onSetStatus,
+}) {
   const editable = course.status === 'draft' || course.status === 'rejected'
   return (
-    <Link
-      to={`/provider/training/${course.id}`}
-      className="block bg-card border border-hairline rounded-lg p-3 hover:border-moss/60 transition-colors"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-ink font-medium">{course.name}</p>
-        <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
-          {STATUS_LABELS[course.status] ?? course.status}
-        </span>
-      </div>
-      {course.synopsis && <p className="text-sm text-secondary mt-1">{course.synopsis}</p>}
-      {course.status === 'rejected' && course.rejection_reason && (
-        <p className="text-xs text-red-700 mt-1">Rejected: {course.rejection_reason}</p>
+    <div className="bg-card border border-hairline rounded-lg hover:border-moss/60 transition-colors overflow-hidden">
+      <Link to={`/provider/training/${course.id}`} className="block p-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-ink font-medium">{course.name}</p>
+          <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
+            {STATUS_LABELS[course.status] ?? course.status}
+          </span>
+        </div>
+        {course.synopsis && <p className="text-sm text-secondary mt-1">{course.synopsis}</p>}
+        {course.status === 'rejected' && course.rejection_reason && (
+          <p className="text-xs text-red-700 mt-1">Rejected: {course.rejection_reason}</p>
+        )}
+        <p className="font-mono text-[10px] text-moss mt-1">{editable ? 'Edit →' : 'View →'}</p>
+      </Link>
+
+      {canModerate && (
+        <div className="px-3 pb-3 pt-2 border-t border-hairline flex flex-wrap items-center gap-2">
+          {(course.status === 'pending_approval' || course.status === 'draft') && (
+            <>
+              <button
+                type="button"
+                disabled={actioning}
+                onClick={onApprove}
+                className="rounded-md bg-moss text-paper py-1 px-3 text-xs font-medium hover:opacity-90 disabled:opacity-50"
+              >
+                Approve
+              </button>
+              <button
+                type="button"
+                disabled={actioning}
+                onClick={onStartReject}
+                className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper disabled:opacity-50"
+              >
+                Reject
+              </button>
+            </>
+          )}
+          {course.status === 'approved' && (
+            <button
+              type="button"
+              disabled={actioning}
+              onClick={() => onSetStatus('inactive')}
+              className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper disabled:opacity-50"
+            >
+              Deactivate
+            </button>
+          )}
+          {(course.status === 'inactive' || course.status === 'rejected') && (
+            <button
+              type="button"
+              disabled={actioning}
+              onClick={onApprove}
+              className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper disabled:opacity-50"
+            >
+              Reactivate (approve)
+            </button>
+          )}
+
+          {rejecting && (
+            <div className="w-full flex flex-wrap items-end gap-2 mt-1">
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-xs text-secondary mb-1">Rejection reason (optional)</label>
+                <input
+                  value={rejectionReason}
+                  onChange={(e) => onRejectionReasonChange(e.target.value)}
+                  className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={onReject}
+                className="rounded-md bg-red-700 text-white py-1.5 px-3 text-sm font-medium hover:bg-red-800"
+              >
+                Confirm reject
+              </button>
+              <button type="button" onClick={onCancelReject} className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm hover:bg-paper">
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
       )}
-      <p className="font-mono text-[10px] text-moss mt-1">{editable ? 'Edit →' : 'View →'}</p>
-    </Link>
+    </div>
   )
 }
