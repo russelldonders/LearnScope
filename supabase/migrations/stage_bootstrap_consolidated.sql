@@ -6928,3 +6928,355 @@ $$;
 
 revoke all on function deactivate_course_publication(uuid) from public;
 grant execute on function deactivate_course_publication(uuid) to authenticated;
+-- Subjects are experience records nested beneath an Education experience.
+-- Reusing the existing parent relationship means they automatically appear
+-- in the education timeline and can carry their own dates, description and
+-- linked skills without introducing a parallel content model.
+
+alter table public.experience drop constraint experience_type_check;
+
+alter table public.experience add constraint experience_type_check
+  check (type in ('education', 'employment', 'project', 'volunteer', 'other', 'course', 'subject'));
+
+create or replace function public.validate_experience_parent_type()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  parent_type text;
+  parent_user_id uuid;
+begin
+  if new.parent_experience_id is null then
+    if new.type = 'subject' then
+      raise exception 'A subject must belong to an education experience';
+    end if;
+    return new;
+  end if;
+
+  if new.parent_experience_id = new.id then
+    raise exception 'An experience cannot be its own parent';
+  end if;
+
+  select type, user_id
+    into parent_type, parent_user_id
+  from public.experience
+  where id = new.parent_experience_id;
+
+  if not found then
+    raise exception 'Parent experience not found';
+  end if;
+
+  if parent_user_id <> new.user_id then
+    raise exception 'Parent and child experiences must belong to the same user';
+  end if;
+
+  if parent_type = 'education' and new.type <> 'subject' then
+    raise exception 'Education experiences can only contain subjects';
+  end if;
+
+  if new.type = 'subject' and parent_type <> 'education' then
+    raise exception 'Subjects can only belong to education experiences';
+  end if;
+
+  if parent_type in ('employment', 'volunteer') and new.type not in ('project', 'course', 'other') then
+    raise exception 'This experience type cannot be added to a job or volunteer position';
+  end if;
+
+  if parent_type not in ('education', 'employment', 'volunteer') then
+    raise exception 'This experience type cannot contain sub-experiences';
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.validate_experience_parent_type() from public;
+
+create trigger validate_experience_parent_type_before_write
+before insert or update of type, parent_experience_id, user_id
+on public.experience
+for each row execute function public.validate_experience_parent_type();
+-- Subjects may be recorded with exact dates, a human-readable study
+-- duration, or both. Other experience types retain the app's required-date
+-- behaviour even though the column must become nullable for subjects.
+
+alter table public.experience
+  alter column start_date drop not null,
+  add column study_duration text;
+
+alter table public.experience
+  add constraint experience_subject_timing_check check (
+    (
+      type = 'subject'
+      and (start_date is not null or length(trim(study_duration)) > 0)
+      and (end_date is null or start_date is not null)
+    )
+    or (
+      type <> 'subject'
+      and start_date is not null
+      and study_duration is null
+    )
+  );
+-- Replace free-text duration entry with a queryable number and fixed unit.
+-- Keep the old text column as a legacy fallback so any duration entered
+-- between the preceding deployment and this one is not discarded.
+
+alter table public.experience
+  add column study_duration_value integer,
+  add column study_duration_unit text;
+
+update public.experience e
+set study_duration_value = parsed.duration_value,
+    study_duration_unit = parsed.duration_unit,
+    study_duration = null
+from (
+  select id,
+         parts[1]::integer as duration_value,
+         case
+           when lower(parts[2]) like 'day%' then 'days'
+           when lower(parts[2]) like 'month%' then 'months'
+           else 'years'
+         end as duration_unit
+  from public.experience
+  cross join lateral regexp_match(study_duration, '^\s*([0-9]+)\s*(day|days|month|months|year|years)\s*$', 'i') as parsed_match(parts)
+  where type = 'subject'
+) parsed
+where e.id = parsed.id;
+
+alter table public.experience drop constraint experience_subject_timing_check;
+
+alter table public.experience
+  add constraint experience_subject_timing_check check (
+    (
+      type = 'subject'
+      and (
+        start_date is not null
+        or (study_duration_value is not null and study_duration_unit is not null)
+        or length(trim(study_duration)) > 0
+      )
+      and (end_date is null or start_date is not null)
+      and (study_duration_value is null or study_duration_value > 0)
+      and (study_duration_unit is null or study_duration_unit in ('days', 'months', 'years'))
+      and ((study_duration_value is null) = (study_duration_unit is null))
+    )
+    or (
+      type <> 'subject'
+      and start_date is not null
+      and study_duration is null
+      and study_duration_value is null
+      and study_duration_unit is null
+    )
+  );
+
+-- Institution details are owned by the parent education row. Copy them on
+-- every subject write so direct API calls cannot create conflicting values.
+create or replace function public.validate_experience_parent_type()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  parent_type text;
+  parent_user_id uuid;
+  parent_organization text;
+  parent_organization_url text;
+begin
+  if new.parent_experience_id is null then
+    if new.type = 'subject' then
+      raise exception 'A subject must belong to an education experience';
+    end if;
+    return new;
+  end if;
+
+  if new.parent_experience_id = new.id then
+    raise exception 'An experience cannot be its own parent';
+  end if;
+
+  select type, user_id, organization, organization_url
+    into parent_type, parent_user_id, parent_organization, parent_organization_url
+  from public.experience
+  where id = new.parent_experience_id;
+
+  if not found then raise exception 'Parent experience not found'; end if;
+  if parent_user_id <> new.user_id then raise exception 'Parent and child experiences must belong to the same user'; end if;
+  if parent_type = 'education' and new.type <> 'subject' then raise exception 'Education experiences can only contain subjects'; end if;
+  if new.type = 'subject' and parent_type <> 'education' then raise exception 'Subjects can only belong to education experiences'; end if;
+  if parent_type in ('employment', 'volunteer') and new.type not in ('project', 'course', 'other') then raise exception 'This experience type cannot be added to a job or volunteer position'; end if;
+  if parent_type not in ('education', 'employment', 'volunteer') then raise exception 'This experience type cannot contain sub-experiences'; end if;
+
+  if new.type = 'subject' then
+    new.organization := parent_organization;
+    new.organization_url := parent_organization_url;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger validate_experience_parent_type_before_write on public.experience;
+
+create trigger validate_experience_parent_type_before_write
+before insert or update of type, parent_experience_id, user_id, organization, organization_url
+on public.experience
+for each row execute function public.validate_experience_parent_type();
+
+create or replace function public.sync_subject_organization_from_parent()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if new.type = 'education'
+     and (new.organization is distinct from old.organization
+          or new.organization_url is distinct from old.organization_url) then
+    update public.experience
+    set organization = new.organization,
+        organization_url = new.organization_url
+    where parent_experience_id = new.id
+      and type = 'subject';
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.sync_subject_organization_from_parent() from public;
+
+create trigger sync_subject_organization_after_parent_update
+after update of organization, organization_url
+on public.experience
+for each row execute function public.sync_subject_organization_from_parent();
+-- Keep nested experiences within their parent's period at the database
+-- boundary, including writes made outside the web client.
+
+create or replace function public.validate_experience_parent_type()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  parent_type text;
+  parent_user_id uuid;
+  parent_organization text;
+  parent_organization_url text;
+  parent_start_date date;
+  parent_end_date date;
+begin
+  if new.parent_experience_id is null then
+    if new.type = 'subject' then
+      raise exception 'A subject must belong to an education experience';
+    end if;
+
+    if tg_op = 'UPDATE'
+       and (new.start_date is distinct from old.start_date
+            or new.end_date is distinct from old.end_date)
+       and exists (
+         select 1
+         from public.experience child
+         where child.parent_experience_id = new.id
+           and (
+             child.start_date < new.start_date
+             or child.end_date < new.start_date
+             or (new.end_date is not null and child.start_date > new.end_date)
+             or (new.end_date is not null and child.end_date > new.end_date)
+           )
+       ) then
+      raise exception 'Parent dates cannot exclude an existing sub-experience';
+    end if;
+
+    return new;
+  end if;
+
+  if new.parent_experience_id = new.id then
+    raise exception 'An experience cannot be its own parent';
+  end if;
+
+  select type, user_id, organization, organization_url, start_date, end_date
+    into parent_type, parent_user_id, parent_organization, parent_organization_url,
+         parent_start_date, parent_end_date
+  from public.experience
+  where id = new.parent_experience_id;
+
+  if not found then raise exception 'Parent experience not found'; end if;
+  if parent_user_id <> new.user_id then raise exception 'Parent and child experiences must belong to the same user'; end if;
+  if parent_type = 'education' and new.type <> 'subject' then raise exception 'Education experiences can only contain subjects'; end if;
+  if new.type = 'subject' and parent_type <> 'education' then raise exception 'Subjects can only belong to education experiences'; end if;
+  if parent_type in ('employment', 'volunteer') and new.type not in ('project', 'course', 'other') then raise exception 'This experience type cannot be added to a job or volunteer position'; end if;
+  if parent_type not in ('education', 'employment', 'volunteer') then raise exception 'This experience type cannot contain sub-experiences'; end if;
+
+  if new.start_date < parent_start_date or new.end_date < parent_start_date then
+    raise exception 'Sub-experience dates cannot be before the parent start date';
+  end if;
+  if parent_end_date is not null
+     and (new.start_date > parent_end_date or new.end_date > parent_end_date) then
+    raise exception 'Sub-experience dates cannot be after the parent end date';
+  end if;
+  if new.start_date is not null and new.end_date < new.start_date then
+    raise exception 'Sub-experience end date cannot be before its start date';
+  end if;
+
+  if new.type = 'subject' then
+    new.organization := parent_organization;
+    new.organization_url := parent_organization_url;
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.validate_experience_parent_type() from public;
+
+drop trigger validate_experience_parent_type_before_write on public.experience;
+
+create trigger validate_experience_parent_type_before_write
+before insert or update of type, parent_experience_id, user_id, organization,
+  organization_url, start_date, end_date
+on public.experience
+for each row execute function public.validate_experience_parent_type();
+-- A logged skill activity can optionally happen within a specific work,
+-- education, subject, project, or other experience. The xAPI statement keeps
+-- the portable context extension; this column is its queryable mirror.
+
+alter table public.xapi_statements
+  add column experience_id uuid references public.experience(id) on delete set null;
+
+create index xapi_statements_experience_id_recorded_at_idx
+  on public.xapi_statements (experience_id, recorded_at desc)
+  where experience_id is not null;
+
+create or replace function public.validate_xapi_statement_context_ownership()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if new.skill_id is not null and not exists (
+    select 1 from public.skills
+    where id = new.skill_id and user_id = new.user_id
+  ) then
+    raise exception 'Activity skill must belong to the same user';
+  end if;
+
+  if new.experience_id is not null and not exists (
+    select 1 from public.experience
+    where id = new.experience_id and user_id = new.user_id
+  ) then
+    raise exception 'Activity experience must belong to the same user';
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.validate_xapi_statement_context_ownership() from public;
+
+create trigger validate_xapi_statement_context_ownership_before_write
+before insert or update of user_id, skill_id, experience_id
+on public.xapi_statements
+for each row execute function public.validate_xapi_statement_context_ownership();
