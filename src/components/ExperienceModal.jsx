@@ -7,6 +7,8 @@ export default function ExperienceModal({
   type = 'employment',
   initialOrganization = '',
   initialOrganizationUrl = '',
+  minimumDate,
+  maximumDate,
   onSave,
   onClose,
 }) {
@@ -120,6 +122,8 @@ export default function ExperienceModal({
               <input
                 id="startDate"
                 type="date"
+                min={minimumDate}
+                max={maximumDate}
                 required={config.datesRequired !== false}
                 value={startDate}
                 onChange={(e) => {
@@ -137,6 +141,8 @@ export default function ExperienceModal({
               <input
                 id="endDate"
                 type="date"
+                min={minimumDate}
+                max={maximumDate}
                 disabled={current}
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
@@ -166,7 +172,7 @@ export default function ExperienceModal({
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Responsibilities, achievements, focus areas…"
+              placeholder="What did you learn? What knowledge or skills did you develop?"
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
             />
           </div>

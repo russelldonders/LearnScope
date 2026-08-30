@@ -23,7 +23,7 @@ import {
 // Keeps a nested experience's dates from silently
 // drifting outside the parent role's dates -- an open-ended parent
 // (end_date null) places no upper bound on its children.
-function validateWithinParent(values, parent) {
+export function validateWithinParent(values, parent) {
   if (!parent) return null
   if (values.start_date && values.start_date < parent.start_date) {
     return `Start date can't be before ${formatMonthYear(parent.start_date)}, when "${parent.title}" started.`
@@ -39,7 +39,40 @@ function validateWithinParent(values, parent) {
       return `End date can't be after ${formatMonthYear(parent.end_date)}, when "${parent.title}" ended.`
     }
   }
+  if (values.end_date && values.end_date < parent.start_date) {
+    return `End date can't be before ${formatMonthYear(parent.start_date)}, when "${parent.title}" started.`
+  }
+  if (values.start_date && values.end_date && values.end_date < values.start_date) {
+    return 'End date can\'t be before the start date.'
+  }
   return null
+}
+
+function undatedChildTimelineDate(item, today) {
+  const start = item.start_date
+    ? new Date(`${item.start_date}T00:00:00Z`).getTime()
+    : today.getTime()
+  const end = item.end_date
+    ? new Date(`${item.end_date}T00:00:00Z`).getTime()
+    : today.getTime()
+  return new Date(start + Math.max(0, end - start) / 2).toISOString()
+}
+
+export function buildExperienceTimelineEvents(item, childExperiences, linkedCourses, achievements, today = new Date()) {
+  const undatedChildDate = undatedChildTimelineDate(item, today)
+  return [
+    ...(item.start_date ? [{ type: 'start', date: item.start_date }] : []),
+    ...(item.start_date ? [item.end_date ? { type: 'end', date: item.end_date } : { type: 'today', date: today.toISOString() }] : []),
+    ...(childExperiences ?? []).map((child) => ({
+      type: 'child',
+      date: child.start_date ?? undatedChildDate,
+      child,
+    })),
+    ...linkedCourses
+      .filter((link) => link.courses?.completed_date)
+      .map((link) => ({ type: 'course', date: link.courses.completed_date, link })),
+    ...achievements.map((entry) => ({ type: 'achievement', date: entry.assessed_at, entry })),
+  ].sort((a, b) => dateKey(b.date).localeCompare(dateKey(a.date)))
 }
 
 const TABS = [
@@ -321,6 +354,8 @@ export default function ExperienceDetail() {
                 type={childModalType}
                 initialOrganization={item.organization ?? ''}
                 initialOrganizationUrl={item.organization_url ?? ''}
+                minimumDate={item.start_date}
+                maximumDate={item.end_date ?? undefined}
                 onSave={handleAddChildExperience}
                 onClose={() => setChildModalType(null)}
               />
@@ -400,7 +435,7 @@ export default function ExperienceDetail() {
                       Close
                     </button>
                   </div>
-                  <DetailsTab item={item} onSave={handleSaveDetails} onDelete={handleDelete} />
+                  <DetailsTab item={item} parentExperience={parentExperience} onSave={handleSaveDetails} onDelete={handleDelete} />
                 </div>
               </div>
             )}
@@ -411,7 +446,7 @@ export default function ExperienceDetail() {
   )
 }
 
-function DetailsTab({ item, onSave, onDelete }) {
+function DetailsTab({ item, parentExperience, onSave, onDelete }) {
   const [type, setType] = useState(item.type)
   const [title, setTitle] = useState(item.title)
   const [organization, setOrganization] = useState(item.organization ?? '')
@@ -560,6 +595,8 @@ function DetailsTab({ item, onSave, onDelete }) {
           <input
             id="startDate"
             type="date"
+            min={parentExperience?.start_date}
+            max={parentExperience?.end_date ?? undefined}
             required={config.datesRequired !== false}
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
@@ -573,6 +610,8 @@ function DetailsTab({ item, onSave, onDelete }) {
           <input
             id="endDate"
             type="date"
+            min={parentExperience?.start_date}
+            max={parentExperience?.end_date ?? undefined}
             disabled={current}
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
@@ -602,7 +641,7 @@ function DetailsTab({ item, onSave, onDelete }) {
           rows={3}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Responsibilities, achievements, focus areas…"
+          placeholder="What did you learn? What knowledge or skills did you develop?"
           className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
         />
       </div>
@@ -648,17 +687,7 @@ function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievemen
   }
 
   const pendingCourseLinks = linkedCourses.filter((l) => l.courses && !l.courses.completed_date)
-  const events = [
-    ...(item.start_date ? [{ type: 'start', date: item.start_date }] : []),
-    ...(item.start_date ? [item.end_date ? { type: 'end', date: item.end_date } : { type: 'today', date: new Date().toISOString() }] : []),
-    ...(childExperiences ?? []).filter((c) => c.start_date).map((c) => ({ type: 'child', date: c.start_date, child: c })),
-    ...linkedCourses
-      .filter((l) => l.courses?.completed_date)
-      .map((l) => ({ type: 'course', date: l.courses.completed_date, link: l })),
-    ...achievements.map((a) => ({ type: 'achievement', date: a.assessed_at, entry: a })),
-  ].sort((a, b) =>
-    new Date(b.date).toISOString().slice(0, 10).localeCompare(new Date(a.date).toISOString().slice(0, 10))
-  )
+  const events = buildExperienceTimelineEvents(item, childExperiences, linkedCourses, achievements)
   const total = pendingCourseLinks.length + events.length
 
   return (

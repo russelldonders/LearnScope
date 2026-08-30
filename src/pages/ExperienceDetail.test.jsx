@@ -26,10 +26,12 @@ vi.mock('../lib/experienceSkillRecommendations', () => ({
 
 import {
   buildExperienceSkillProgress,
+  buildExperienceTimelineEvents,
   ExperienceActionButtons,
   getDevelopedSkills,
   getExperienceTabs,
   SkillsSubsection,
+  validateWithinParent,
 } from './ExperienceDetail'
 import { nestedExperienceTypesFor } from '../lib/experienceTypes'
 
@@ -172,6 +174,31 @@ describe('experience tabs', () => {
         (tab) => tab.id,
       ),
     ).toEqual(['overview', 'skills'])
+  })
+})
+
+describe('nested experience dates and timeline placement', () => {
+  const parent = {
+    id: 'education-1',
+    type: 'education',
+    title: 'BSc Computing',
+    start_date: '2020-09-01',
+    end_date: '2023-06-30',
+  }
+
+  it('rejects child dates outside the parent period', () => {
+    expect(validateWithinParent({ type: 'subject', start_date: '2020-08-01' }, parent)).toMatch(/can't be before/)
+    expect(validateWithinParent({ type: 'subject', start_date: '2023-07-01' }, parent)).toMatch(/can't be after/)
+    expect(validateWithinParent({ type: 'subject', start_date: '2022-01-01', end_date: '2023-07-01' }, parent)).toMatch(/can't be after/)
+    expect(validateWithinParent({ type: 'subject', start_date: '2022-01-01', end_date: '2021-12-31' }, parent)).toBe("End date can't be before the start date.")
+  })
+
+  it('places a duration-only subject between the parent end and start events', () => {
+    const subject = { id: 'subject-1', type: 'subject', title: 'Algorithms', start_date: null, study_duration_value: 6, study_duration_unit: 'months' }
+    const events = buildExperienceTimelineEvents(parent, [subject], [], [])
+
+    expect(events.map((event) => event.type)).toEqual(['end', 'child', 'start'])
+    expect(events.find((event) => event.type === 'child').child).toBe(subject)
   })
 })
 
