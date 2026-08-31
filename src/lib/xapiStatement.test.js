@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildStatement,
   experienceTrail,
+  provenanceFromStatement,
   relatedExperienceFromStatement,
   relatedSkillFromStatement,
 } from './xapiStatement'
@@ -43,6 +44,33 @@ describe('skill activity context', () => {
     const relatedExperience = relatedExperienceFromStatement(statement)
     expect(relatedExperience.parent).toEqual({ id: 'experience-0', title: 'Computer Science BSc', type: 'education' })
     expect(experienceTrail(relatedExperience)).toBe('Advanced Databases · Computer Science BSc')
+  })
+})
+
+describe('provenance', () => {
+  it('marks a statement as synced from an external source and carries its external id', () => {
+    const statement = buildStatement({
+      actor: { name: 'Learner', email: 'learner@example.com' },
+      verbValue: 'practiced',
+      activityName: 'Morning run',
+      timestamp: '2026-08-30',
+      relatedSkill: { id: 'skill-1', name: 'Running' },
+      provenance: { source: 'strava', externalId: '123456789' },
+    })
+
+    expect(provenanceFromStatement(statement)).toEqual({ source: 'strava', externalId: '123456789' })
+  })
+
+  it('is absent when no provenance was supplied, so manually logged statements are unaffected', () => {
+    const statement = buildStatement({
+      actor: { name: 'Learner', email: 'learner@example.com' },
+      verbValue: 'experienced',
+      activityName: 'Solved a graph traversal problem',
+      timestamp: '2026-08-30',
+      relatedSkill: { id: 'skill-1', name: 'Algorithms' },
+    })
+
+    expect(provenanceFromStatement(statement)).toBeNull()
   })
 })
 

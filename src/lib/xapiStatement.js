@@ -3,6 +3,11 @@ import { XAPI_VERBS } from './xapiVerbs'
 export const SKILL_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/skill'
 export const EXPERIENCE_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/experience'
 export const DIAGNOSTIC_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/diagnostic'
+// Generic (not Strava-specific) so any future external connector reuses the
+// same shape -- marks a statement as synced from an external data source
+// rather than typed in by hand, and carries the source's own activity id so
+// a later sync can tell it's already been imported.
+export const PROVENANCE_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/provenance'
 
 // True for statements an automated diagnostic generated (e.g. the
 // Confirming Baseline knowledge-check quiz, see skillDiagnostics.js) rather
@@ -72,6 +77,7 @@ export function buildStatement({
   timestamp,
   relatedSkill,
   relatedExperience,
+  provenance,
   durationHours,
   durationMinutes,
 }) {
@@ -103,7 +109,7 @@ export function buildStatement({
   const duration = buildDuration(durationHours, durationMinutes)
   if (duration) statement.result = { duration }
 
-  if (relatedSkill || relatedExperience) {
+  if (relatedSkill || relatedExperience || provenance) {
     statement.context = { extensions: {} }
     if (relatedSkill) {
       statement.context.extensions[SKILL_EXTENSION_IRI] = { id: relatedSkill.id, name: relatedSkill.name }
@@ -123,6 +129,9 @@ export function buildStatement({
           ? { parent: { id: relatedExperience.parent.id, title: relatedExperience.parent.title, type: relatedExperience.parent.type } }
           : {}),
       }
+    }
+    if (provenance) {
+      statement.context.extensions[PROVENANCE_EXTENSION_IRI] = { source: provenance.source, externalId: provenance.externalId }
     }
   }
 
@@ -147,6 +156,10 @@ export function relatedSkillFromStatement(statement) {
 
 export function relatedExperienceFromStatement(statement) {
   return statement.context?.extensions?.[EXPERIENCE_EXTENSION_IRI] ?? null
+}
+
+export function provenanceFromStatement(statement) {
+  return statement.context?.extensions?.[PROVENANCE_EXTENSION_IRI] ?? null
 }
 
 // "Advanced Databases · Computer Science BSc" rather than just "Advanced

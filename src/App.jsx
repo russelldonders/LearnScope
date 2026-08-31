@@ -21,6 +21,7 @@ import Experience from './pages/Experience'
 import ExperienceDetail from './pages/ExperienceDetail'
 import Profile from './pages/Profile'
 import ProfilePrivacy from './pages/ProfilePrivacy'
+import ConnectedAccounts from './pages/ConnectedAccounts'
 import ProfileImport from './pages/ProfileImport'
 import ProfileExport from './pages/ProfileExport'
 import Rate from './pages/Rate'
@@ -134,6 +135,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ProfilePrivacy />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile/connected-accounts"
+            element={
+              <ProtectedRoute>
+                <ConnectedAccounts />
               </ProtectedRoute>
             }
           />
