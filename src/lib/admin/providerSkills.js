@@ -72,13 +72,17 @@ export async function getProviderSkillAlignment(organisationId, skillLibraryId) 
   const [{ data: courses, error: coursesError }, { data: resources, error: resourcesError }] = await Promise.all([
     supabase
       .from('course_catalogue')
-      .select('id, name, status, course_catalogue_skills(id, level, skill_library_id)')
+      .select('id, name, status, version_number, course_catalogue_skills(id, level, skill_library_id)')
       .eq('organisation_id', organisationId)
+      .eq('status', 'approved')
+      .eq('is_current_published', true)
       .order('name'),
     supabase
       .from('content_resources')
-      .select('id, title, type, content_resource_skills(id, skill_library_id)')
+      .select('id, title, type, version_number, content_resource_skills(id, skill_library_id)')
       .eq('organisation_id', organisationId)
+      .eq('status', 'published')
+      .eq('is_current_published', true)
       .order('title'),
   ])
   if (coursesError) throw coursesError
