@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
 import { OrganisationStaffPanel } from '../admin/AdminProviders'
@@ -57,11 +57,12 @@ const EMPTY_FORM = { name: '', courseCode: '', provider: '', courseType: '', dur
 // (organisation_id, user_id) constraint.
 export default function ProviderConsole() {
   const { user, organisationMemberships } = useAuth()
+  const location = useLocation()
   const [organisations, setOrganisations] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [selectedOrgId, setSelectedOrgId] = useState(null)
-  const [activeSection, setActiveSection] = useState('training')
+  const [selectedOrgId, setSelectedOrgId] = useState(location.state?.organisationId ?? null)
+  const [activeSection, setActiveSection] = useState(location.state?.providerSection ?? 'training')
   const [showSettings, setShowSettings] = useState(false)
 
   const myOrgIds = useMemo(
