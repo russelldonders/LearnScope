@@ -168,6 +168,12 @@ describe('experience tabs', () => {
       ),
     ).toEqual(['overview', 'skills'])
   })
+
+  it('hides Skills once the experience has ended', () => {
+    expect(getExperienceTabs({ ...item, end_date: '2024-01-01' }, []).map((tab) => tab.id)).toEqual([
+      'overview',
+    ])
+  })
 })
 
 describe('nested experience dates and timeline placement', () => {

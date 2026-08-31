@@ -85,9 +85,14 @@ const TABS = [
 ]
 
 export function getExperienceTabs(item, linkedCourses) {
-  return TABS.filter(
-    (tab) => tab.id !== 'courses' || (!item.parent_experience_id && linkedCourses.length > 0)
-  )
+  return TABS.filter((tab) => {
+    if (tab.id === 'courses') return !item.parent_experience_id && linkedCourses.length > 0
+    // Skill management (adding/suggesting/viewing what's being worked on)
+    // only makes sense for a still-open experience -- a historical one is
+    // done, so there's nothing left to add to it.
+    if (tab.id === 'skills') return !item.end_date
+    return true
+  })
 }
 
 export default function ExperienceDetail() {
@@ -132,8 +137,10 @@ export default function ExperienceDetail() {
   }, [item?.id])
 
   useEffect(() => {
-    if (learningLoaded && tab === 'courses' && linkedCourses.length === 0) setTab('overview')
-  }, [learningLoaded, linkedCourses.length, tab])
+    if (!learningLoaded) return
+    if (tab === 'courses' && linkedCourses.length === 0) setTab('overview')
+    else if (tab === 'skills' && item?.end_date) setTab('overview')
+  }, [learningLoaded, linkedCourses.length, tab, item?.end_date])
 
   async function loadItem() {
     setLoadingItem(true)
