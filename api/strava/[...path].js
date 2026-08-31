@@ -38,7 +38,7 @@ async function handleConnect(req, res, user) {
     return
   }
 
-  const clientId = process.env.STRAVA_CLIENT_ID
+  const clientId = process.env.VITE_STRAVA_CLIENT_ID
   const clientSecret = process.env.STRAVA_CLIENT_SECRET
   if (!clientId || !clientSecret) {
     res.status(500).json({ error: 'Strava is not configured.' })
@@ -94,7 +94,7 @@ async function ensureFreshToken(admin, connection) {
     return connection.access_token
   }
 
-  const clientId = process.env.STRAVA_CLIENT_ID
+  const clientId = process.env.VITE_STRAVA_CLIENT_ID
   const clientSecret = process.env.STRAVA_CLIENT_SECRET
   const refreshRes = await fetch('https://www.strava.com/oauth/token', {
     method: 'POST',
@@ -240,7 +240,14 @@ export default async function handler(req, res) {
   const user = await requireUser(req, res)
   if (!user) return
 
-  const path = Array.isArray(req.query.path) ? req.query.path : []
+  // See api/xapi/[...path].js for why both shapes are handled -- the
+  // explicit vercel.json route this project needs (course-content proxy)
+  // passes req.query.path as a single slash-joined string, not an array.
+  const path = Array.isArray(req.query.path)
+    ? req.query.path
+    : typeof req.query.path === 'string'
+      ? req.query.path.split('/')
+      : []
   const action = path[0]
 
   try {

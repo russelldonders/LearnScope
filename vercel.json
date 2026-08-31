@@ -68,6 +68,8 @@
       "dest": "${VITE_SUPABASE_URL}/storage/v1/object/public/course-content/$1",
       "env": ["VITE_SUPABASE_URL"]
     },
+    { "src": "/api/xapi/(.*)", "dest": "/api/xapi/[...path]?path=$1" },
+    { "src": "/api/strava/(.*)", "dest": "/api/strava/[...path]?path=$1" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]

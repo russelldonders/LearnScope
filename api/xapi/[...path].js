@@ -189,7 +189,15 @@ export default async function handler(req, res) {
     return
   }
 
-  const path = Array.isArray(req.query.path) ? req.query.path : []
+  // Vercel's zero-config dynamic routing gives req.query.path as an array;
+  // the explicit vercel.json route this project needs for the course-content
+  // proxy (see that file's comments) instead passes it as a single
+  // slash-joined string, so both shapes are handled here.
+  const path = Array.isArray(req.query.path)
+    ? req.query.path
+    : typeof req.query.path === 'string'
+      ? req.query.path.split('/')
+      : []
   const resource = path[0]
 
   try {
