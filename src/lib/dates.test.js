@@ -49,6 +49,16 @@ describe('formatRelativeDate', () => {
     expect(formatRelativeDate('2024-03-20')).toBe('In 5 days')
   })
 
+  it('scales to months once the day count gets too high to read at a glance', () => {
+    expect(formatRelativeDate('2024-01-15')).toBe('2 months ago')
+    expect(formatRelativeDate('2024-05-14')).toBe('In 2 months')
+  })
+
+  it('scales to years for dates far in the past or future', () => {
+    expect(formatRelativeDate('2022-03-15')).toBe('2 years ago')
+    expect(formatRelativeDate('2026-03-15')).toBe('In 2 years')
+  })
+
   it('compares calendar days, not raw elapsed hours, for a full timestamp', () => {
     // 2024-03-15T23:00 is still "today" by calendar date even though it's
     // under 24 raw hours from the fake "now" of 2024-03-15T14:30.
