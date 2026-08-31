@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import AdminLayout from './AdminLayout'
 import ConfirmDialog from '../../components/ConfirmDialog'
@@ -251,6 +251,8 @@ export function OrganisationStaffPanel({ organisation, alwaysShowForm = false })
   const [removeTarget, setRemoveTarget] = useState(null)
   const [removing, setRemoving] = useState(false)
   const [showInviteForm, setShowInviteForm] = useState(false)
+  const [query, setQuery] = useState('')
+  const [roleFilter, setRoleFilter] = useState('all')
 
   useEffect(() => {
     load()
@@ -305,6 +307,14 @@ export function OrganisationStaffPanel({ organisation, alwaysShowForm = false })
   }
 
   const formVisible = alwaysShowForm || showInviteForm
+  const filteredMembers = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    return members.filter(
+      (member) =>
+        (roleFilter === 'all' || member.role === roleFilter) &&
+        (!needle || [member.email, member.user_id].filter(Boolean).some((value) => value.toLowerCase().includes(needle)))
+    )
+  }, [members, query, roleFilter])
 
   return (
     <div className={alwaysShowForm ? 'border-t border-hairline bg-paper p-4 space-y-3' : 'space-y-3'}>
@@ -371,6 +381,19 @@ export function OrganisationStaffPanel({ organisation, alwaysShowForm = false })
         </form>
       )}
 
+      {!alwaysShowForm && (
+        <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_180px] gap-2" role="search">
+          <label className="sr-only" htmlFor={`staffSearch-${organisation.id}`}>Search users</label>
+          <input id={`staffSearch-${organisation.id}`} type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search users…" className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
+          <label className="sr-only" htmlFor={`staffRoleFilter-${organisation.id}`}>Filter users by role</label>
+          <select id={`staffRoleFilter-${organisation.id}`} value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss">
+            <option value="all">All roles</option>
+            <option value="admin">Admins</option>
+            <option value="trainer">Trainers</option>
+          </select>
+        </div>
+      )}
+
       {message && <p className="text-xs text-moss">{message}</p>}
       {error && <p className="text-xs text-red-700">{error}</p>}
 
@@ -384,13 +407,17 @@ export function OrganisationStaffPanel({ organisation, alwaysShowForm = false })
             <p className="text-secondary">No users yet.</p>
           </div>
         )
+      ) : filteredMembers.length === 0 ? (
+        <div className="text-center py-10 border border-dashed border-hairline rounded-lg">
+          <p className="text-secondary">No users match these filters.</p>
+        </div>
       ) : (
         <ul
           className={
             alwaysShowForm ? 'divide-y divide-hairline' : 'divide-y divide-hairline border border-hairline rounded-md'
           }
         >
-          {members.map((m) => (
+          {filteredMembers.map((m) => (
             <li
               key={m.id}
               className={`flex items-center justify-between gap-2 text-sm ${alwaysShowForm ? 'py-2' : 'p-3'}`}

@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   listOrganisationOfferedSkills,
   createProviderLibrarySkill,
   addOfferedSkill,
   removeOfferedSkill,
+  getProviderSkillAlignment,
+  setTrainingSkillAlignment,
+  setResourceSkillAlignment,
 } from '../lib/admin/providerSkills'
 import { listLibrarySkills, isDuplicateLibrarySkillError, duplicateLibrarySkillMessage } from '../lib/skillLibrary'
 
@@ -31,6 +34,9 @@ export default function ProviderSkillsSection({ organisationId, userId }) {
   const [addingId, setAddingId] = useState(null)
 
   const [removingId, setRemovingId] = useState(null)
+  const [query, setQuery] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [selectedSkill, setSelectedSkill] = useState(null)
 
   useEffect(() => {
     load()
@@ -111,6 +117,18 @@ export default function ProviderSkillsSection({ organisationId, userId }) {
   const globalResults = globalSkills
     .filter((s) => !offeredIds.has(s.id))
     .filter((s) => !gq || s.name.toLowerCase().includes(gq))
+  const categories = useMemo(
+    () => [...new Set(offered.map((item) => item.category).filter(Boolean))].sort(),
+    [offered]
+  )
+  const filteredOffered = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    return offered.filter(
+      (item) =>
+        (categoryFilter === 'all' || item.category === categoryFilter) &&
+        (!needle || [item.name, item.category, item.description].filter(Boolean).some((value) => value.toLowerCase().includes(needle)))
+    )
+  }, [offered, query, categoryFilter])
 
   return (
     <div>
@@ -137,6 +155,28 @@ export default function ProviderSkillsSection({ organisationId, userId }) {
         The skills your organisation offers training in. Add existing skills from the shared library, or create one
         specific to your organisation.
       </p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_220px] gap-2 mb-4" role="search">
+        <label className="sr-only" htmlFor="providerSkillSearch">Search skills</label>
+        <input
+          id="providerSkillSearch"
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search skills…"
+          className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+        />
+        <label className="sr-only" htmlFor="providerSkillCategoryFilter">Filter skills by category</label>
+        <select
+          id="providerSkillCategoryFilter"
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+        >
+          <option value="all">All categories</option>
+          {categories.map((category) => <option key={category} value={category}>{category}</option>)}
+        </select>
+      </div>
 
       {showAddGlobal && (
         <div className="bg-card border border-hairline rounded-lg p-4 mb-4">
@@ -234,11 +274,20 @@ export default function ProviderSkillsSection({ organisationId, userId }) {
         <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
           <p className="text-secondary">No skills added yet.</p>
         </div>
+      ) : filteredOffered.length === 0 ? (
+        <div className="text-center py-10 border border-dashed border-hairline rounded-lg">
+          <p className="text-secondary">No skills match these filters.</p>
+        </div>
       ) : (
         <ul className="divide-y divide-hairline border border-hairline rounded-md">
-          {offered.map((item) => (
+          {filteredOffered.map((item) => (
             <li key={item.offeredId} className="p-3 flex items-center justify-between gap-3 text-sm">
-              <div className="min-w-0">
+              <button
+                type="button"
+                onClick={() => setSelectedSkill(item)}
+                className="min-w-0 flex-1 text-left rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-moss"
+                aria-label={`Align training and resources to ${item.name}`}
+              >
                 <p className="text-ink font-medium">
                   {item.name}
                   {item.isOwnOrgSkill && (
@@ -251,7 +300,8 @@ export default function ProviderSkillsSection({ organisationId, userId }) {
                   {item.category || 'No category'}
                   {item.description ? ` — ${item.description}` : ''}
                 </p>
-              </div>
+                <span className="inline-block text-xs text-moss font-medium mt-1">Manage alignment →</span>
+              </button>
               <button
                 type="button"
                 disabled={removingId === item.skillLibraryId}
@@ -264,6 +314,116 @@ export default function ProviderSkillsSection({ organisationId, userId }) {
           ))}
         </ul>
       )}
+
+      {selectedSkill && (
+        <SkillAlignmentPanel
+          skill={selectedSkill}
+          organisationId={organisationId}
+          userId={userId}
+          onClose={() => setSelectedSkill(null)}
+        />
+      )}
     </div>
+  )
+}
+
+function SkillAlignmentPanel({ skill, organisationId, userId, onClose }) {
+  const [alignment, setAlignment] = useState({ courses: [], resources: [] })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [savingKey, setSavingKey] = useState(null)
+
+  useEffect(() => {
+    getProviderSkillAlignment(organisationId, skill.skillLibraryId)
+      .then(setAlignment)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false))
+  }, [organisationId, skill.skillLibraryId])
+
+  async function updateCourse(course, aligned, level = course.level) {
+    setSavingKey(`course-${course.id}`)
+    setError(null)
+    try {
+      await setTrainingSkillAlignment(course.id, skill.skillLibraryId, aligned, level)
+      setAlignment(await getProviderSkillAlignment(organisationId, skill.skillLibraryId))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSavingKey(null)
+    }
+  }
+
+  async function updateResource(resource, aligned) {
+    setSavingKey(`resource-${resource.id}`)
+    setError(null)
+    try {
+      await setResourceSkillAlignment(resource.id, skill.skillLibraryId, userId, aligned)
+      setAlignment(await getProviderSkillAlignment(organisationId, skill.skillLibraryId))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSavingKey(null)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-ink/40 flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="skillAlignmentTitle">
+      <div className="bg-card w-full sm:max-w-2xl max-h-[88vh] overflow-y-auto rounded-t-xl sm:rounded-xl border border-hairline p-4 sm:p-6">
+        <div className="flex items-start justify-between gap-4 mb-1">
+          <div>
+            <h3 id="skillAlignmentTitle" className="font-display text-xl text-ink">{skill.name}</h3>
+            <p className="text-sm text-secondary mt-1">Choose the training and resources that develop this skill.</p>
+          </div>
+          <button type="button" onClick={onClose} className="min-w-11 min-h-11 rounded-md border border-hairline text-ink text-sm hover:bg-paper">Close</button>
+        </div>
+
+        {error && <p className="text-sm text-red-700 mt-3">{error}</p>}
+        {loading ? <p className="text-secondary py-8">Loading alignment…</p> : (
+          <div className="mt-5 space-y-6">
+            <AlignmentGroup title="Training" empty="No training has been created yet.">
+              {alignment.courses.map((course) => {
+                const editable = course.status === 'draft' || course.status === 'rejected'
+                const busy = savingKey === `course-${course.id}`
+                return (
+                  <li key={course.id} className="py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                    <label className={`flex min-w-0 flex-1 items-start gap-3 ${editable ? 'cursor-pointer' : 'opacity-60'}`}>
+                      <input type="checkbox" checked={Boolean(course.alignmentId)} disabled={!editable || busy} onChange={(e) => updateCourse(course, e.target.checked)} className="mt-1 accent-moss" />
+                      <span className="min-w-0"><span className="block text-sm text-ink font-medium break-words">{course.name}</span><span className="block text-xs text-secondary">{course.status.replace('_', ' ')}{!editable && ' · edit the training draft to change alignment'}</span></span>
+                    </label>
+                    {course.alignmentId && editable && (
+                      <label className="flex items-center gap-2 text-xs text-secondary pl-7 sm:pl-0">Target level
+                        <select value={course.level} disabled={busy} onChange={(e) => updateCourse(course, true, Number(e.target.value))} className="rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink">
+                          {[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>{level}</option>)}
+                        </select>
+                      </label>
+                    )}
+                  </li>
+                )
+              })}
+            </AlignmentGroup>
+            <AlignmentGroup title="Resources" empty="No resources have been added yet.">
+              {alignment.resources.map((resource) => (
+                <li key={resource.id} className="py-3">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input type="checkbox" checked={Boolean(resource.alignmentId)} disabled={savingKey === `resource-${resource.id}`} onChange={(e) => updateResource(resource, e.target.checked)} className="mt-1 accent-moss" />
+                    <span className="min-w-0"><span className="block text-sm text-ink font-medium break-words">{resource.title}</span><span className="block text-xs text-secondary">{resource.type.replace('_', ' ')}</span></span>
+                  </label>
+                </li>
+              ))}
+            </AlignmentGroup>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function AlignmentGroup({ title, empty, children }) {
+  const items = Array.isArray(children) ? children : [children].filter(Boolean)
+  return (
+    <section>
+      <h4 className="font-display text-base text-ink mb-2">{title}</h4>
+      {items.length === 0 ? <p className="text-sm text-secondary py-3">{empty}</p> : <ul className="divide-y divide-hairline border-y border-hairline">{children}</ul>}
+    </section>
   )
 }
