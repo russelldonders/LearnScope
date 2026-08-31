@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { listProviderCatalogues } from '../catalogues'
 
 const ADMIN_CATALOGUE_SELECT = `*, organisations(id, name),
   course_catalogue_publications(catalogue_id, published_at, catalogues(id, name, is_global))`
@@ -339,7 +340,7 @@ export async function removeCatalogueApprover(approverRowId) {
 // deactivate_course_publication's own per-catalogue authorization
 // regardless of what this returns.
 export async function listOrganisationCatalogueApprovers(organisationId) {
-  const catalogues = await listOrganisationCatalogues(organisationId)
+  const catalogues = await listProviderCatalogues(organisationId)
   if (catalogues.length === 0) return []
   const { data, error } = await supabase
     .from('catalogue_approvers')
