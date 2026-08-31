@@ -1558,9 +1558,7 @@ function TimelineEntry({
   assessorName,
   onSelect,
 }) {
-  const boxClass = isMostRecent
-    ? 'rounded-md border border-moss/40 bg-moss/5 p-3'
-    : 'rounded-md border border-hairline bg-paper p-3'
+  const boxClass = 'rounded-md border border-hairline bg-paper p-3'
   const clickableProps = onSelect
     ? {
         role: 'button',

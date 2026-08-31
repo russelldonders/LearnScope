@@ -143,6 +143,18 @@ export default function ExperienceDetail() {
   }
 
   async function loadLearning() {
+    // Skills linked to a child experience (e.g. a subject under this
+    // education, or a project under this job) count as developed under
+    // this experience too -- a subject is a chapter of the parent, not a
+    // separate one, so its skills roll up into the parent's own "Skills
+    // developed" section rather than only ever showing on the subject's
+    // own page.
+    const { data: children } = await supabase
+      .from('experience')
+      .select('id')
+      .eq('parent_experience_id', item.id)
+    const experienceIds = [item.id, ...(children ?? []).map((c) => c.id)]
+
     const [{ data: cl }, { data: sl }, { data: ach }, { data: activities }, { data: allSkills }] = await Promise.all([
       supabase
         .from('course_experience_links')
@@ -151,7 +163,7 @@ export default function ExperienceDetail() {
       supabase
         .from('skill_experience_links')
         .select('id, skill_id, skills(id, name, level)')
-        .eq('experience_id', item.id)
+        .in('experience_id', experienceIds)
         .order('created_at'),
       supabase
         .from('skill_assessments')
@@ -169,7 +181,11 @@ export default function ExperienceDetail() {
         .eq('user_id', user.id)
         .order('name'),
     ])
-    const skillIds = (sl ?? []).map((link) => link.skill_id)
+    // A skill linked both directly and via a child experience would
+    // otherwise appear twice -- keep one row per skill (earliest-linked,
+    // since sl is ordered by created_at).
+    const uniqueSkillLinks = [...new Map((sl ?? []).map((link) => [link.skill_id, link])).values()]
+    const skillIds = uniqueSkillLinks.map((link) => link.skill_id)
     const { data: history } = skillIds.length
       ? await supabase
           .from('skill_assessments')
@@ -179,7 +195,7 @@ export default function ExperienceDetail() {
           .order('assessed_at', { ascending: true })
       : { data: [] }
     setLinkedCourses(cl ?? [])
-    setSkillLinks(sl ?? [])
+    setSkillLinks(uniqueSkillLinks)
     setAchievements(ach ?? [])
     setSkillHistory(history ?? [])
     setExperienceActivities(activities ?? [])
