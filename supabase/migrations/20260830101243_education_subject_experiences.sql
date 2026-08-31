@@ -4,7 +4,6 @@
 -- linked skills without introducing a parallel content model.
 
 alter table public.experience drop constraint experience_type_check;
-
 alter table public.experience add constraint experience_type_check
   check (type in ('education', 'employment', 'project', 'volunteer', 'other', 'course', 'subject'));
 

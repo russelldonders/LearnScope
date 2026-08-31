@@ -5,16 +5,28 @@ import AppHeader from '../../components/AppHeader'
 import { OrganisationStaffPanel } from '../admin/AdminProviders'
 import ResourceLibrarySection from '../../components/ResourceLibrarySection'
 import ProviderSkillsSection from '../../components/ProviderSkillsSection'
-import ProviderCataloguesSection from '../../components/ProviderCataloguesSection'
 import OrganisationSettingsModal from '../../components/OrganisationSettingsModal'
 import AccessibleDialog from '../../components/AccessibleDialog'
+import ConfirmDialog from '../../components/ConfirmDialog'
 import ProgressBar from '../../components/ProgressBar'
-import { listOrganisations } from '../../lib/admin/organisations'
+import {
+  createProviderCatalogue,
+  deleteProviderCatalogue,
+  listProviderCatalogues,
+  updateProviderCatalogue,
+} from '../../lib/catalogues'
+import { listOrganisations, listOrganisationMembers } from '../../lib/admin/organisations'
 import {
   listOrganisationCatalogueCourses,
   createProviderCourse,
   listCourseParticipants,
+  listCourseVersionHistory,
+  createDraftCourseVersion,
   listOrganisationCatalogueApprovers,
+  listCatalogueApprovers,
+  addCatalogueApprover,
+  removeCatalogueApprover,
+  countPublishedCoursesInCatalogue,
   approveCatalogueCourse,
   rejectCatalogueCourse,
   deactivateCatalogueCourse,
@@ -182,7 +194,7 @@ export default function ProviderConsole() {
                   <ProviderSkillsSection key={selectedOrg.id} organisationId={selectedOrg.id} userId={user.id} />
                 )}
                 {currentSection === 'catalogues' && myRole === 'admin' && (
-                  <ProviderCataloguesSection key={selectedOrg.id} organisationId={selectedOrg.id} />
+                  <ProviderCataloguesSection key={selectedOrg.id} organisation={selectedOrg} userId={user.id} />
                 )}
                 {currentSection === 'staff' && myRole === 'admin' && (
                   <OrganisationStaffPanel key={selectedOrg.id} organisation={selectedOrg} />
@@ -209,6 +221,246 @@ export default function ProviderConsole() {
   )
 }
 
+function ProviderCataloguesSection({ organisation, userId }) {
+  const [catalogues, setCatalogues] = useState([])
+  const [form, setForm] = useState({ name: '', description: '' })
+  const [editingId, setEditingId] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+  const [expandedId, setExpandedId] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleteTargetPublishedCount, setDeleteTargetPublishedCount] = useState(0)
+  const [deleting, setDeleting] = useState(false)
+
+  useEffect(() => {
+    load()
+  }, [organisation.id])
+
+  async function load() {
+    setLoading(true)
+    setError(null)
+    try {
+      setCatalogues(await listProviderCatalogues(organisation.id))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+    if (!form.name.trim()) return
+    setSaving(true)
+    setError(null)
+    try {
+      if (editingId) await updateProviderCatalogue(editingId, form)
+      else await createProviderCatalogue(userId, organisation.id, form)
+      setForm({ name: '', description: '' })
+      setEditingId(null)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleStartDelete(catalogue) {
+    setError(null)
+    setDeleteTarget(catalogue)
+    setDeleteTargetPublishedCount(0)
+    try {
+      setDeleteTargetPublishedCount(await countPublishedCoursesInCatalogue(catalogue.id))
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleDelete() {
+    setDeleting(true)
+    setError(null)
+    try {
+      await deleteProviderCatalogue(deleteTarget.id)
+      if (expandedId === deleteTarget.id) setExpandedId(null)
+      setDeleteTarget(null)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <section aria-labelledby="provider-catalogues-heading">
+      <div className="mb-5">
+        <h2 id="provider-catalogues-heading" className="font-display text-lg text-ink">Provider catalogues</h2>
+        <p className="text-sm text-secondary mt-1 max-w-2xl">
+          Organise published training into named collections. Your catalogues and the platform-managed Global catalogue are available whenever a course is submitted. Each catalogue can have its own approvers, picked from your organisation's own users, so training destined for it can be approved without a platform admin.
+        </p>
+      </div>
+
+      {error && <p role="alert" className="text-sm text-red-700 mb-4">{error}</p>}
+
+      <form onSubmit={handleSubmit} className="bg-card border border-hairline rounded-lg p-4 mb-6">
+        <h3 className="text-sm font-medium text-ink mb-3">{editingId ? 'Edit catalogue' : 'Create a catalogue'}</h3>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <label className="text-xs text-secondary">
+            Name
+            <input required value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} className="mt-1 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
+          </label>
+          <label className="text-xs text-secondary">
+            Description (optional)
+            <input value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} className="mt-1 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
+          </label>
+        </div>
+        <div className="flex gap-2 mt-3">
+          <button disabled={saving || !form.name.trim()} className="rounded-md bg-moss px-3 py-1.5 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-50">
+            {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create catalogue'}
+          </button>
+          {editingId && (
+            <button type="button" onClick={() => { setEditingId(null); setForm({ name: '', description: '' }) }} className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink hover:bg-paper">Cancel</button>
+          )}
+        </div>
+      </form>
+
+      {loading ? (
+        <p role="status" className="text-sm text-secondary">Loading catalogues…</p>
+      ) : catalogues.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-hairline py-10 text-center">
+          <p className="text-sm text-secondary">No provider catalogues yet.</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-hairline border-y border-hairline">
+          {catalogues.map((catalogue) => (
+            <div key={catalogue.id}>
+              <div className="flex items-start justify-between gap-4 py-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-ink">{catalogue.name}</p>
+                  {catalogue.description && <p className="text-xs text-secondary mt-1">{catalogue.description}</p>}
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button type="button" onClick={() => { setEditingId(catalogue.id); setForm({ name: catalogue.name, description: catalogue.description ?? '' }) }} className="text-xs font-medium text-moss hover:underline">Edit</button>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedId((id) => (id === catalogue.id ? null : catalogue.id))}
+                    className="text-xs font-medium text-moss hover:underline"
+                  >
+                    {expandedId === catalogue.id ? 'Hide approvers' : 'Manage approvers'}
+                  </button>
+                  <button type="button" onClick={() => handleStartDelete(catalogue)} className="text-xs font-medium text-red-700 hover:underline">Delete</button>
+                </div>
+              </div>
+              {expandedId === catalogue.id && (
+                <CatalogueApproversPanel catalogueId={catalogue.id} organisationId={organisation.id} />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          message={
+            deleteTargetPublishedCount > 0
+              ? `Delete the "${deleteTarget.name}" catalogue? ${deleteTargetPublishedCount} currently live ${
+                  deleteTargetPublishedCount === 1 ? 'course is' : 'courses are'
+                } published there -- ${
+                  deleteTargetPublishedCount === 1 ? 'it' : 'they'
+                } will disappear from it, and may become invisible to learners entirely if this was its only destination.`
+              : `Delete the "${deleteTarget.name}" catalogue? Courses currently published there will no longer appear in it.`
+          }
+          onConfirm={handleDelete}
+          onCancel={() => setDeleteTarget(null)}
+          confirming={deleting}
+        />
+      )}
+    </section>
+  )
+}
+
+function CatalogueApproversPanel({ catalogueId, organisationId }) {
+  const { user } = useAuth()
+  const [members, setMembers] = useState([])
+  const [approvers, setApprovers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [togglingUserId, setTogglingUserId] = useState(null)
+
+  useEffect(() => {
+    load()
+  }, [catalogueId])
+
+  async function load() {
+    setLoading(true)
+    setError(null)
+    try {
+      const [memberList, approverList] = await Promise.all([
+        listOrganisationMembers(organisationId),
+        listCatalogueApprovers(catalogueId),
+      ])
+      setMembers(memberList.filter((m) => m.status === 'active'))
+      setApprovers(approverList)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleToggle(member, isApprover) {
+    setTogglingUserId(member.user_id)
+    setError(null)
+    try {
+      if (isApprover) {
+        const row = approvers.find((a) => a.user_id === member.user_id)
+        if (row) await removeCatalogueApprover(row.id)
+      } else {
+        await addCatalogueApprover(catalogueId, member.user_id, user.id)
+      }
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setTogglingUserId(null)
+    }
+  }
+
+  return (
+    <div className="border-t border-hairline bg-paper p-4 space-y-2 mb-2">
+      {error && <p className="text-xs text-red-700">{error}</p>}
+      {loading ? (
+        <p className="text-xs text-secondary">Loading users…</p>
+      ) : members.length === 0 ? (
+        <p className="text-xs text-secondary">No users yet.</p>
+      ) : (
+        <ul className="divide-y divide-hairline">
+          {members.map((m) => {
+            const isApprover = approvers.some((a) => a.user_id === m.user_id)
+            return (
+              <li key={m.user_id} className="flex items-center justify-between gap-2 text-sm py-2">
+                <span className="text-ink text-xs truncate">{m.email || m.user_id}</span>
+                <label className="flex items-center gap-1.5 text-xs text-secondary shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={isApprover}
+                    disabled={togglingUserId === m.user_id}
+                    onChange={() => handleToggle(m, isApprover)}
+                    className="rounded border-hairline"
+                  />
+                  Approver
+                </label>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 function ProviderTrainingSection({ organisation, userId, canViewParticipants }) {
   const navigate = useNavigate()
   const [courses, setCourses] = useState([])
@@ -222,6 +474,8 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
   const [rejectingId, setRejectingId] = useState(null)
   const [rejectionReason, setRejectionReason] = useState('')
   const [participantCourse, setParticipantCourse] = useState(null)
+  const [historyCourse, setHistoryCourse] = useState(null)
+  const [creatingDraftCourseId, setCreatingDraftCourseId] = useState(null)
 
   useEffect(() => {
     load()
@@ -300,6 +554,23 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
       setError(err.message)
     } finally {
       setCreating(false)
+    }
+  }
+
+  async function handleEditCourse(course) {
+    if (course.status !== 'approved') {
+      navigate(`/provider/training/${course.id}`)
+      return
+    }
+
+    setCreatingDraftCourseId(course.id)
+    setError(null)
+    try {
+      const draftId = await createDraftCourseVersion(course.id)
+      navigate(`/provider/training/${draftId}`)
+    } catch (err) {
+      setError(`Couldn’t create a new course version. ${err.message}`)
+      setCreatingDraftCourseId(null)
     }
   }
 
@@ -422,6 +693,9 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
               onDeactivate={() => handleDeactivate(course)}
               canViewParticipants={canViewParticipants}
               onViewParticipants={() => setParticipantCourse(course)}
+              onViewHistory={() => setHistoryCourse(course)}
+              onEdit={() => handleEditCourse(course)}
+              creatingDraft={creatingDraftCourseId === course.id}
             />
           ))}
         </div>
@@ -429,6 +703,9 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
 
       {participantCourse && (
         <CourseParticipantsDialog course={participantCourse} onClose={() => setParticipantCourse(null)} />
+      )}
+      {historyCourse && (
+        <CourseVersionHistoryDialog course={historyCourse} onClose={() => setHistoryCourse(null)} />
       )}
     </div>
   )
@@ -438,13 +715,16 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
 // course's own page (ProviderCourseEditor), the same way AdminUserDetail/
 // AdminSkillDetail moved their consoles' inline expansions onto dedicated
 // pages once there was more than a form's worth of detail to show.
-// canModerate (0095) mirrors AdminCatalogue.jsx's own approve/reject/
-// deactivate/reactivate actions, just scoped here to a designated catalogue
-// approver acting on their own organisation's submissions.
+// canModerate mirrors AdminCatalogue.jsx's own approve/reject/deactivate/
+// reactivate actions, just scoped here to a designated catalogue approver
+// acting on their own organisation's submissions.
 function CourseCard({
   course,
   canViewParticipants,
   onViewParticipants,
+  onViewHistory,
+  onEdit,
+  creatingDraft,
   canModerate,
   actioning,
   rejecting,
@@ -457,6 +737,7 @@ function CourseCard({
   onDeactivate,
 }) {
   const editable = course.status === 'draft' || course.status === 'rejected'
+  const canStartEditing = editable || course.status === 'approved'
   return (
     <article className="bg-card border border-hairline rounded-lg p-3 hover:border-moss/60 transition-colors">
       <div className="flex items-center justify-between gap-3">
@@ -464,18 +745,32 @@ function CourseCard({
           {course.name}
         </Link>
         <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
-          v{course.version_number} · {STATUS_LABELS[course.status] ?? course.status}
+          Version {course.version_number} · {STATUS_LABELS[course.status] ?? course.status}
         </span>
       </div>
-      {course.course_code && <p className="font-mono text-xs text-secondary mt-1">{course.course_code}</p>}
+      <p className="font-mono text-xs text-secondary mt-1">Course code: {course.course_code || 'Not set'}</p>
       {course.synopsis && <p className="text-sm text-secondary mt-1">{course.synopsis}</p>}
       {course.status === 'rejected' && course.rejection_reason && (
         <p className="text-xs text-red-700 mt-1">Rejected: {course.rejection_reason}</p>
       )}
       <div className="mt-2 flex items-center gap-3">
-        <Link to={`/provider/training/${course.id}`} className="text-xs font-medium text-moss hover:underline">
-          {editable ? 'Edit course' : 'View course'}
-        </Link>
+        {canStartEditing ? (
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={creatingDraft}
+            className="text-xs font-medium text-moss hover:underline disabled:cursor-wait disabled:opacity-60"
+          >
+            {creatingDraft ? 'Creating new version…' : 'Edit course'}
+          </button>
+        ) : (
+          <Link to={`/provider/training/${course.id}`} className="text-xs font-medium text-moss hover:underline">
+            View course
+          </Link>
+        )}
+        <button type="button" onClick={onViewHistory} className="text-xs font-medium text-moss hover:underline">
+          Version history
+        </button>
         {canViewParticipants && (
           <button type="button" onClick={onViewParticipants} className="text-xs font-medium text-moss hover:underline">
             View participants
@@ -551,6 +846,65 @@ function CourseCard({
         </div>
       )}
     </article>
+  )
+}
+
+function CourseVersionHistoryDialog({ course, onClose }) {
+  const [versions, setVersions] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    listCourseVersionHistory(course.id)
+      .then(setVersions)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false))
+  }, [course.id])
+
+  return (
+    <AccessibleDialog
+      labelledBy="course-version-history-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-2xl max-h-[90vh] overflow-y-auto overscroll-contain rounded-lg border border-hairline bg-card p-5 sm:p-6"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 id="course-version-history-title" className="font-display text-xl text-ink">{course.name} version history</h2>
+          <p className="mt-1 font-mono text-xs text-secondary">Course code: {course.course_code || 'Not set'}</p>
+        </div>
+        <button type="button" onClick={onClose} className="shrink-0 text-sm text-secondary hover:text-ink">Close</button>
+      </div>
+
+      {loading && <p role="status" className="mt-6 text-sm text-secondary">Loading version history…</p>}
+      {error && <p role="alert" className="mt-6 text-sm text-red-700">Couldn’t load version history: {error}</p>}
+      {!loading && !error && versions.length === 0 && (
+        <p className="mt-6 rounded-md border border-dashed border-hairline px-4 py-8 text-center text-sm text-secondary">
+          No versions found for this course.
+        </p>
+      )}
+      {!loading && !error && versions.length > 0 && (
+        <ol className="mt-5 divide-y divide-hairline border-y border-hairline">
+          {versions.map((version) => (
+            <li key={version.id} className="grid gap-3 py-4 sm:grid-cols-[90px_1fr_1fr] sm:items-center">
+              <div>
+                <p className="font-medium text-ink">Version {version.version_number}</p>
+                <p className="mt-0.5 text-xs text-secondary">{STATUS_LABELS[version.status] ?? version.status}</p>
+              </div>
+              <div>
+                <p className="text-xs text-secondary">Published</p>
+                <p className="mt-0.5 text-sm text-ink">
+                  {version.approved_at ? formatParticipantDate(version.approved_at) : 'Not published'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-secondary">Created by</p>
+                <p className="mt-0.5 text-sm text-ink">{version.creator?.full_name || 'Unknown user'}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </AccessibleDialog>
   )
 }
 

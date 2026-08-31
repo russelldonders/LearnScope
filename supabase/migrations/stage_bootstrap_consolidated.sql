@@ -6251,7 +6251,6 @@ create table onboarding_steps (
   order_index integer not null,
   updated_at timestamptz not null default now()
 );
-
 insert into onboarding_steps (key, label, order_index) values
   ('import', 'Import your CV or LinkedIn history', 0),
   ('skills', 'Choose skills you want to learn', 1);
@@ -6333,7 +6332,6 @@ where cc.status = 'approved'
   and c.is_global;
 
 alter table catalogues enable row level security;
-
 alter table course_catalogue_publications enable row level security;
 
 create policy "Authenticated users can view catalogues"
@@ -6448,7 +6446,6 @@ create policy "Manage destinations for editable provider courses"
   );
 
 grant select, insert, update, delete on table catalogues to authenticated;
-
 grant select, insert, update, delete on table course_catalogue_publications to authenticated;
 
 create or replace function submit_course_for_publication(p_course_id uuid, p_catalogue_ids uuid[])
@@ -6505,7 +6502,6 @@ end;
 $$;
 
 revoke all on function submit_course_for_publication(uuid, uuid[]) from public;
-
 grant execute on function submit_course_for_publication(uuid, uuid[]) to authenticated;
 
 create or replace function publish_course_version(p_course_id uuid)
@@ -6558,7 +6554,6 @@ end;
 $$;
 
 revoke all on function publish_course_version(uuid) from public;
-
 grant execute on function publish_course_version(uuid) to authenticated;
 
 -- Approved courses only appear to general learners after at least one
@@ -6583,11 +6578,9 @@ as $$
 $$;
 
 revoke all on function is_course_published_to_catalogue(uuid) from public;
-
 grant execute on function is_course_published_to_catalogue(uuid) to authenticated;
 
 drop policy if exists "View approved courses, your own organisation's, as a platform admin, or your own enrollment" on course_catalogue;
-
 create policy "View published courses, your own organisation's, as a platform admin, or your own enrollment"
   on course_catalogue for select
   to authenticated
@@ -6934,7 +6927,6 @@ grant execute on function deactivate_course_publication(uuid) to authenticated;
 -- linked skills without introducing a parallel content model.
 
 alter table public.experience drop constraint experience_type_check;
-
 alter table public.experience add constraint experience_type_check
   check (type in ('education', 'employment', 'project', 'volunteer', 'other', 'course', 'subject'));
 
@@ -7117,7 +7109,6 @@ end;
 $$;
 
 drop trigger validate_experience_parent_type_before_write on public.experience;
-
 create trigger validate_experience_parent_type_before_write
 before insert or update of type, parent_experience_id, user_id, organization, organization_url
 on public.experience
@@ -7232,7 +7223,6 @@ $$;
 revoke all on function public.validate_experience_parent_type() from public;
 
 drop trigger validate_experience_parent_type_before_write on public.experience;
-
 create trigger validate_experience_parent_type_before_write
 before insert or update of type, parent_experience_id, user_id, organization,
   organization_url, start_date, end_date

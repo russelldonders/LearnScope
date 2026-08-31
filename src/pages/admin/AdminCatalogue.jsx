@@ -123,6 +123,11 @@ export default function AdminCatalogue() {
                     {course.rejection_reason && (
                       <p className="text-xs text-red-700 mt-1">Rejected: {course.rejection_reason}</p>
                     )}
+                    {(course.course_catalogue_publications ?? []).length > 0 && (
+                      <p className="text-xs text-secondary mt-1">
+                        Destinations: {course.course_catalogue_publications.map((publication) => publication.catalogues?.name).filter(Boolean).join(', ')}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 flex-wrap justify-end">
                     {(course.status === 'pending_approval' || course.status === 'draft') && (

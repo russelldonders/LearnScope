@@ -8,7 +8,9 @@ import ExperienceModal from './ExperienceModal'
 import AddExperienceButton from './AddExperienceButton'
 import AccessibleDialog from './AccessibleDialog'
 
-const ADD_EXPERIENCE_TYPES = EXPERIENCE_TYPES.filter((t) => t.value !== 'education').map((t) => t.value)
+const ADD_EXPERIENCE_TYPES = EXPERIENCE_TYPES
+  .filter((type) => type.value !== 'education' && type.value !== 'subject')
+  .map((type) => type.value)
 
 export default function ExperienceSection() {
   const { user } = useAuth()
@@ -114,8 +116,8 @@ export default function ExperienceSection() {
     setExistingCurrentJob(null)
   }
 
-  // Sub-experiences (projects/courses/other nested under a job or volunteer
-  // role) render inside their parent's card rather than as their own entry
+  // Sub-experiences (including subjects nested under education) render
+  // inside their parent's card rather than as their own entry
   // on the main timeline -- items is already ordered by start_date, so each
   // parent's children stay in that same order.
   const rootItems = items.filter((i) => !i.parent_experience_id)

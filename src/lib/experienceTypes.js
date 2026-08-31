@@ -2,6 +2,7 @@ export const EXPERIENCE_TYPES = [
   { value: 'employment', label: 'Job' },
   { value: 'project', label: 'Project' },
   { value: 'course', label: 'Course / Training Record' },
+  { value: 'subject', label: 'Subject' },
   { value: 'volunteer', label: 'Volunteer Position' },
   { value: 'other', label: 'Other Experience' },
   { value: 'education', label: 'Education' },
@@ -13,6 +14,22 @@ export const EXPERIENCE_TYPE_LABELS = Object.fromEntries(EXPERIENCE_TYPES.map((t
 // Volunteer Position -- e.g. a project or course record completed as part
 // of that role. Automatically linked to the parent via parent_experience_id.
 export const NESTED_EXPERIENCE_TYPES = ['project', 'course', 'other']
+
+export function nestedExperienceTypesFor(parentType) {
+  if (parentType === 'education') return ['subject']
+  if (parentType === 'employment' || parentType === 'volunteer') return NESTED_EXPERIENCE_TYPES
+  return []
+}
+
+export function formatStudyDuration(experience) {
+  if (experience.study_duration_value && experience.study_duration_unit) {
+    const unit = experience.study_duration_value === 1
+      ? experience.study_duration_unit.replace(/s$/, '')
+      : experience.study_duration_unit
+    return `${experience.study_duration_value} ${unit}`
+  }
+  return experience.study_duration ?? ''
+}
 
 // Field copy and requiredness vary slightly per type -- a project or other
 // personal pursuit doesn't always have an organization behind it, while a
@@ -52,6 +69,16 @@ export const EXPERIENCE_TYPE_CONFIG = {
     orgLabel: 'Provider (optional)',
     orgRequired: false,
     periodNoun: 'course',
+  },
+  subject: {
+    modalTitle: 'Add subject',
+    titleLabel: 'Subject name',
+    orgLabel: 'Institution (optional)',
+    orgRequired: false,
+    periodNoun: 'subject',
+    datesRequired: false,
+    allowsStudyDuration: true,
+    inheritsOrganization: true,
   },
   education: {
     modalTitle: 'Add education',

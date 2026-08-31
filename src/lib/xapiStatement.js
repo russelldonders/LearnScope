@@ -1,6 +1,7 @@
 import { XAPI_VERBS } from './xapiVerbs'
 
 export const SKILL_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/skill'
+export const EXPERIENCE_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/experience'
 export const DIAGNOSTIC_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/diagnostic'
 
 // True for statements an automated diagnostic generated (e.g. the
@@ -70,6 +71,7 @@ export function buildStatement({
   description,
   timestamp,
   relatedSkill,
+  relatedExperience,
   durationHours,
   durationMinutes,
 }) {
@@ -101,8 +103,18 @@ export function buildStatement({
   const duration = buildDuration(durationHours, durationMinutes)
   if (duration) statement.result = { duration }
 
-  if (relatedSkill) {
-    statement.context = { extensions: { [SKILL_EXTENSION_IRI]: { id: relatedSkill.id, name: relatedSkill.name } } }
+  if (relatedSkill || relatedExperience) {
+    statement.context = { extensions: {} }
+    if (relatedSkill) {
+      statement.context.extensions[SKILL_EXTENSION_IRI] = { id: relatedSkill.id, name: relatedSkill.name }
+    }
+    if (relatedExperience) {
+      statement.context.extensions[EXPERIENCE_EXTENSION_IRI] = {
+        id: relatedExperience.id,
+        title: relatedExperience.title,
+        type: relatedExperience.type,
+      }
+    }
   }
 
   return statement
@@ -122,4 +134,8 @@ export function verbLabel(statement) {
 
 export function relatedSkillFromStatement(statement) {
   return statement.context?.extensions?.[SKILL_EXTENSION_IRI] ?? null
+}
+
+export function relatedExperienceFromStatement(statement) {
+  return statement.context?.extensions?.[EXPERIENCE_EXTENSION_IRI] ?? null
 }

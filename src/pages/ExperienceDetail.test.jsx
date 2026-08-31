@@ -26,11 +26,14 @@ vi.mock('../lib/experienceSkillRecommendations', () => ({
 
 import {
   buildExperienceSkillProgress,
+  buildExperienceTimelineEvents,
   ExperienceActionButtons,
   getDevelopedSkills,
   getExperienceTabs,
   SkillsSubsection,
+  validateWithinParent,
 } from './ExperienceDetail'
+import { nestedExperienceTypesFor } from '../lib/experienceTypes'
 
 const item = {
   id: 'experience-1',
@@ -105,41 +108,53 @@ describe('experience skill recommendations', () => {
     expect(onAddRecommendations).toHaveBeenCalled()
   })
 
-  it('combines skill and experience creation into one add menu with skill first', () => {
+  it('offers lightweight skill activity separately from adding a sub-experience', () => {
     const onAddExperience = vi.fn()
-    const onRecommend = vi.fn()
-    const onAddSkill = vi.fn()
+    const onLogActivity = vi.fn()
     render(
       <ExperienceActionButtons
         itemType="employment"
         onAddExperience={onAddExperience}
-        onRecommend={onRecommend}
-        onAddSkill={onAddSkill}
+        onLogActivity={onLogActivity}
       />,
     )
-
-    fireEvent.click(screen.getByRole('button', { name: '+ Add' }))
-    const menuOptions = screen.getAllByRole('button').map((button) => button.textContent)
-    expect(menuOptions.indexOf('Skill')).toBeLessThan(menuOptions.indexOf('Project'))
-    fireEvent.click(screen.getByRole('button', { name: 'Skill' }))
-    expect(onAddSkill).toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: '+ Add' }))
     fireEvent.click(screen.getByRole('button', { name: 'Project' }))
     expect(onAddExperience).toHaveBeenCalledWith('project')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Recommend skills' }))
-    expect(onRecommend).toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Log skill activity' }))
+    expect(onLogActivity).toHaveBeenCalled()
+  })
+
+  it('offers subjects only beneath education experiences', () => {
+    expect(nestedExperienceTypesFor('education')).toEqual(['subject'])
+    expect(nestedExperienceTypesFor('employment')).toEqual(['project', 'course', 'other'])
+    expect(nestedExperienceTypesFor('project')).toEqual([])
+
+    const onAddExperience = vi.fn()
+    render(
+      <ExperienceActionButtons
+        itemType="education"
+        onAddExperience={onAddExperience}
+        onLogActivity={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Add' }))
+    expect(screen.getByRole('button', { name: 'Subject' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Project' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Subject' }))
+    expect(onAddExperience).toHaveBeenCalledWith('subject')
   })
 })
 
 describe('experience tabs', () => {
   it('hides Courses until the first course is linked', () => {
-    expect(getExperienceTabs(item, []).map((tab) => tab.id)).toEqual(['overview', 'skills'])
+    expect(getExperienceTabs(item, []).map((tab) => tab.id)).toEqual(['overview'])
     expect(getExperienceTabs(item, [{ id: 'course-link-1' }]).map((tab) => tab.id)).toEqual([
       'overview',
       'courses',
-      'skills',
     ])
   })
 
@@ -148,7 +163,40 @@ describe('experience tabs', () => {
       getExperienceTabs({ ...item, parent_experience_id: 'parent-1' }, [{ id: 'course-link-1' }]).map(
         (tab) => tab.id,
       ),
-    ).toEqual(['overview', 'skills'])
+    ).toEqual(['overview'])
+  })
+})
+
+describe('nested experience dates and timeline placement', () => {
+  const parent = {
+    id: 'education-1',
+    type: 'education',
+    title: 'BSc Computing',
+    start_date: '2020-09-01',
+    end_date: '2023-06-30',
+  }
+
+  it('rejects child dates outside the parent period', () => {
+    expect(validateWithinParent({ type: 'subject', start_date: '2020-08-01' }, parent)).toMatch(/can't be before/)
+    expect(validateWithinParent({ type: 'subject', start_date: '2023-07-01' }, parent)).toMatch(/can't be after/)
+    expect(validateWithinParent({ type: 'subject', start_date: '2022-01-01', end_date: '2023-07-01' }, parent)).toMatch(/can't be after/)
+    expect(validateWithinParent({ type: 'subject', start_date: '2022-01-01', end_date: '2021-12-31' }, parent)).toBe("End date can't be before the start date.")
+  })
+
+  it('places a duration-only subject between the parent end and start events', () => {
+    const subject = { id: 'subject-1', type: 'subject', title: 'Algorithms', start_date: null, study_duration_value: 6, study_duration_unit: 'months' }
+    const events = buildExperienceTimelineEvents(parent, [subject], [], [])
+
+    expect(events.map((event) => event.type)).toEqual(['end', 'child', 'start'])
+    expect(events.find((event) => event.type === 'child').child).toBe(subject)
+  })
+
+  it('includes logged skill activity in the experience timeline', () => {
+    const activity = { id: 'activity-1', recorded_at: '2022-04-12T09:00:00Z', statement: {} }
+    const events = buildExperienceTimelineEvents(parent, [], [], [], [activity])
+
+    expect(events.map((event) => event.type)).toEqual(['end', 'activity', 'start'])
+    expect(events.find((event) => event.type === 'activity').activity).toBe(activity)
   })
 })
 

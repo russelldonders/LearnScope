@@ -11,7 +11,6 @@ create table onboarding_steps (
   order_index integer not null,
   updated_at timestamptz not null default now()
 );
-
 insert into onboarding_steps (key, label, order_index) values
   ('import', 'Import your CV or LinkedIn history', 0),
   ('skills', 'Choose skills you want to learn', 1);

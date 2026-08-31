@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient'
 const CATALOGUE_SELECT = `*,
   course_catalogue_skills(id, level, skill_library(id, name)),
   course_catalogue_tags(id, tags(id, name)),
+  course_catalogue_publications!inner(published_at, catalogues(id, name, is_global)),
   organisations(logo_url, slug, public_profile_enabled)`
 
 function mapCatalogueCourse(course) {
@@ -14,6 +15,9 @@ function mapCatalogueCourse(course) {
     tags: (course.course_catalogue_tags ?? [])
       .filter((t) => t.tags)
       .map((t) => ({ id: t.tags.id, name: t.tags.name })),
+    catalogues: (course.course_catalogue_publications ?? [])
+      .filter((publication) => publication.published_at && publication.catalogues)
+      .map((publication) => publication.catalogues),
     // Platform-curated entries (organisation_id null, 0066) have no
     // organisation to embed, and a provider that's never set a logo (0081)
     // has organisations.logo_url null -- both just mean no badge to show.
@@ -36,6 +40,7 @@ export async function listCatalogueCourses() {
     .select(CATALOGUE_SELECT)
     .eq('status', 'approved')
     .eq('is_current_published', true)
+    .not('course_catalogue_publications.published_at', 'is', null)
     .order('name')
   if (error) throw error
   return (data ?? []).map(mapCatalogueCourse)

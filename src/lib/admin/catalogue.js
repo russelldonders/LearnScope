@@ -1,6 +1,7 @@
 import { supabase } from '../supabaseClient'
 
-const ADMIN_CATALOGUE_SELECT = '*, organisations(id, name)'
+const ADMIN_CATALOGUE_SELECT = `*, organisations(id, name),
+  course_catalogue_publications(catalogue_id, published_at, catalogues(id, name, is_global))`
 
 // Unlike src/lib/courseCatalogue.js's listCatalogueCourses (learner-facing,
 // approved-only), this surfaces every status -- RLS still applies (a
@@ -182,6 +183,34 @@ export async function listOrganisationCatalogueCourses(organisationId) {
   return [...byGroup.values()]
 }
 
+export async function listCourseVersionHistory(courseId) {
+  const { data: selectedCourse, error: selectedCourseError } = await supabase
+    .from('course_catalogue')
+    .select('version_group_id')
+    .eq('id', courseId)
+    .single()
+  if (selectedCourseError) throw selectedCourseError
+
+  const { data: versions, error: versionError } = await supabase
+    .from('course_catalogue')
+    .select('id, version_number, status, is_current_published, created_at, created_by, approved_at')
+    .eq('version_group_id', selectedCourse.version_group_id)
+    .order('version_number', { ascending: false })
+  if (versionError) throw versionError
+
+  const creatorIds = [...new Set((versions ?? []).map((version) => version.created_by).filter(Boolean))]
+  const { data: profiles, error: profileError } = creatorIds.length
+    ? await supabase.from('profiles').select('id, full_name').in('id', creatorIds)
+    : { data: [], error: null }
+  if (profileError) throw profileError
+
+  const profileById = new Map((profiles ?? []).map((profile) => [profile.id, profile]))
+  return (versions ?? []).map((version) => ({
+    ...version,
+    creator: profileById.get(version.created_by) ?? null,
+  }))
+}
+
 // Single-course fetch for the provider course editor page -- RLS (course_
 // catalogue's own select policy) already scopes this to approved courses,
 // the caller's own organisation's courses, or a platform admin, so a `null`
@@ -194,6 +223,14 @@ export async function getCatalogueCourse(id) {
 
 export async function approveCatalogueCourse(id) {
   const { error } = await supabase.rpc('publish_course_version', { p_course_id: id })
+  if (error) throw error
+}
+
+export async function submitCatalogueCourseForApproval(id, catalogueIds) {
+  const { error } = await supabase.rpc('submit_course_for_publication', {
+    p_course_id: id,
+    p_catalogue_ids: catalogueIds,
+  })
   if (error) throw error
 }
 
@@ -248,51 +285,6 @@ export async function removeCourseImage(courseId) {
   if (error) throw error
 }
 
-// Catalogue destinations (0111): a provider can submit a course to the
-// platform-managed Global catalogue and/or any catalogue their own
-// organisation owns.
-export async function listAvailableCatalogues(organisationId) {
-  const { data, error } = await supabase
-    .from('catalogues')
-    .select('*')
-    .or(`is_global.eq.true,organisation_id.eq.${organisationId}`)
-    .order('is_global', { ascending: false })
-    .order('name')
-  if (error) throw error
-  return data ?? []
-}
-
-export async function submitCourseForPublication(courseId, catalogueIds) {
-  const { error } = await supabase.rpc('submit_course_for_publication', {
-    p_course_id: courseId,
-    p_catalogue_ids: catalogueIds,
-  })
-  if (error) throw error
-}
-
-// Org-owned catalogues only (excludes the Global catalogue, which has no
-// organisation_id) -- this is what the provider console's own "Catalogues"
-// management tab lists/creates/deletes.
-export async function listOrganisationCatalogues(organisationId) {
-  const { data, error } = await supabase
-    .from('catalogues')
-    .select('*')
-    .eq('organisation_id', organisationId)
-    .order('name')
-  if (error) throw error
-  return data ?? []
-}
-
-export async function createCatalogue(organisationId, { name, description }, userId) {
-  const { data, error } = await supabase
-    .from('catalogues')
-    .insert({ organisation_id: organisationId, name: name.trim(), description: description?.trim() || null, created_by: userId })
-    .select()
-    .single()
-  if (error) throw error
-  return data
-}
-
 // Deleting a catalogue cascades to course_catalogue_publications (0111),
 // which can drop a course's only remaining publication destination and
 // make an otherwise-still-"Approved" course invisible to learners with no
@@ -306,11 +298,6 @@ export async function countPublishedCoursesInCatalogue(catalogueId) {
     .not('published_at', 'is', null)
   if (error) throw error
   return count ?? 0
-}
-
-export async function deleteCatalogue(catalogueId) {
-  const { error } = await supabase.from('catalogues').delete().eq('id', catalogueId)
-  if (error) throw error
 }
 
 // Catalogue approvers (0112): an org admin's picks from their own

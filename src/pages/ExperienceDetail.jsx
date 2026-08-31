@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { formatMonthYear, formatFullDate } from '../lib/dates'
 import { LEVEL_LABELS } from '../lib/levels'
-import { EXPERIENCE_TYPE_LABELS, EXPERIENCE_TYPE_CONFIG, NESTED_EXPERIENCE_TYPES } from '../lib/experienceTypes'
+import { EXPERIENCE_TYPE_LABELS, EXPERIENCE_TYPE_CONFIG, formatStudyDuration, nestedExperienceTypesFor } from '../lib/experienceTypes'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import ChildExperienceEntry from '../components/ChildExperienceEntry'
@@ -15,36 +15,68 @@ import OrganizationUrlField from '../components/OrganizationUrlField'
 import ExperienceModal from '../components/ExperienceModal'
 import AddExperienceButton from '../components/AddExperienceButton'
 import ConfirmDialog from '../components/ConfirmDialog'
-import {
-  addRecommendedSkills,
-  recommendExperienceSkills,
-} from '../lib/experienceSkillRecommendations'
+import RecordActivityModal from '../components/RecordActivityModal'
+import { activityName, relatedSkillFromStatement, verbLabel } from '../lib/xapiStatement'
 
-const NESTABLE_PARENT_TYPES = ['employment', 'volunteer']
-
-// Keeps a nested project/course/other experience's dates from silently
+// Keeps a nested experience's dates from silently
 // drifting outside the parent role's dates -- an open-ended parent
 // (end_date null) places no upper bound on its children.
-function validateWithinParent(values, parent) {
+export function validateWithinParent(values, parent) {
   if (!parent) return null
-  if (values.start_date < parent.start_date) {
+  if (values.start_date && values.start_date < parent.start_date) {
     return `Start date can't be before ${formatMonthYear(parent.start_date)}, when "${parent.title}" started.`
   }
   if (parent.end_date) {
-    if (values.start_date > parent.end_date) {
+    if (values.start_date && values.start_date > parent.end_date) {
       return `Start date can't be after ${formatMonthYear(parent.end_date)}, when "${parent.title}" ended.`
     }
-    if (!values.end_date || values.end_date > parent.end_date) {
+    if (values.end_date && values.end_date > parent.end_date) {
+      return `End date can't be after ${formatMonthYear(parent.end_date)}, when "${parent.title}" ended.`
+    }
+    if (values.type !== 'subject' && !values.end_date) {
       return `End date can't be after ${formatMonthYear(parent.end_date)}, when "${parent.title}" ended.`
     }
   }
+  if (values.end_date && values.end_date < parent.start_date) {
+    return `End date can't be before ${formatMonthYear(parent.start_date)}, when "${parent.title}" started.`
+  }
+  if (values.start_date && values.end_date && values.end_date < values.start_date) {
+    return 'End date can\'t be before the start date.'
+  }
   return null
+}
+
+function undatedChildTimelineDate(item, today) {
+  const start = item.start_date
+    ? new Date(`${item.start_date}T00:00:00Z`).getTime()
+    : today.getTime()
+  const end = item.end_date
+    ? new Date(`${item.end_date}T00:00:00Z`).getTime()
+    : today.getTime()
+  return new Date(start + Math.max(0, end - start) / 2).toISOString()
+}
+
+export function buildExperienceTimelineEvents(item, childExperiences, linkedCourses, achievements, activities = [], today = new Date()) {
+  const undatedChildDate = undatedChildTimelineDate(item, today)
+  return [
+    ...(item.start_date ? [{ type: 'start', date: item.start_date }] : []),
+    ...(item.start_date ? [item.end_date ? { type: 'end', date: item.end_date } : { type: 'today', date: today.toISOString() }] : []),
+    ...(childExperiences ?? []).map((child) => ({
+      type: 'child',
+      date: child.start_date ?? undatedChildDate,
+      child,
+    })),
+    ...linkedCourses
+      .filter((link) => link.courses?.completed_date)
+      .map((link) => ({ type: 'course', date: link.courses.completed_date, link })),
+    ...achievements.map((entry) => ({ type: 'achievement', date: entry.assessed_at, entry })),
+    ...activities.map((activity) => ({ type: 'activity', date: activity.recorded_at, activity })),
+  ].sort((a, b) => dateKey(b.date).localeCompare(dateKey(a.date)))
 }
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'courses', label: 'Courses' },
-  { id: 'skills', label: 'Skills' },
 ]
 
 export function getExperienceTabs(item, linkedCourses) {
@@ -66,18 +98,14 @@ export default function ExperienceDetail() {
   const [skillLinks, setSkillLinks] = useState([])
   const [achievements, setAchievements] = useState([])
   const [skillHistory, setSkillHistory] = useState([])
+  const [experienceActivities, setExperienceActivities] = useState([])
+  const [activitySkills, setActivitySkills] = useState([])
+  const [activityOpen, setActivityOpen] = useState(false)
   const [learningLoaded, setLearningLoaded] = useState(false)
   const [childExperiences, setChildExperiences] = useState([])
   const [parentExperience, setParentExperience] = useState(null)
   const [childModalType, setChildModalType] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [addSkillOpen, setAddSkillOpen] = useState(false)
-  const [recommendations, setRecommendations] = useState([])
-  const [selectedRecommendations, setSelectedRecommendations] = useState(new Set())
-  const [recommending, setRecommending] = useState(false)
-  const [addingRecommendations, setAddingRecommendations] = useState(false)
-  const [recommendationError, setRecommendationError] = useState(null)
-  const [recommendationNotice, setRecommendationNotice] = useState(null)
 
   useEffect(() => {
     loadItem()
@@ -91,7 +119,7 @@ export default function ExperienceDetail() {
   }, [item?.id])
 
   useEffect(() => {
-    if (learningLoaded && tab === 'courses' && linkedCourses.length === 0) setTab('overview')
+    if (learningLoaded && (tab === 'skills' || (tab === 'courses' && linkedCourses.length === 0))) setTab('overview')
   }, [learningLoaded, linkedCourses.length, tab])
 
   async function loadItem() {
@@ -112,7 +140,7 @@ export default function ExperienceDetail() {
   }
 
   async function loadLearning() {
-    const [{ data: cl }, { data: sl }, { data: ach }] = await Promise.all([
+    const [{ data: cl }, { data: sl }, { data: ach }, { data: activities }, { data: allSkills }] = await Promise.all([
       supabase
         .from('course_experience_links')
         .select('id, course_id, courses(id, name, provider, completed_date)')
@@ -127,6 +155,16 @@ export default function ExperienceDetail() {
         .select('*, skills(name), courses(name)')
         .eq('experience_id', item.id)
         .order('assessed_at', { ascending: false }),
+      supabase
+        .from('xapi_statements')
+        .select('id, statement, recorded_at, skill_id, skills(id, name)')
+        .eq('experience_id', item.id)
+        .order('recorded_at', { ascending: false }),
+      supabase
+        .from('skills')
+        .select('id, name')
+        .eq('user_id', user.id)
+        .order('name'),
     ])
     const skillIds = (sl ?? []).map((link) => link.skill_id)
     const { data: history } = skillIds.length
@@ -141,6 +179,8 @@ export default function ExperienceDetail() {
     setSkillLinks(sl ?? [])
     setAchievements(ach ?? [])
     setSkillHistory(history ?? [])
+    setExperienceActivities(activities ?? [])
+    setActivitySkills(allSkills ?? [])
     setLearningLoaded(true)
   }
 
@@ -148,13 +188,13 @@ export default function ExperienceDetail() {
     const [{ data: children }, parentResult] = await Promise.all([
       supabase
         .from('experience')
-        .select('id, type, title, start_date, end_date')
+        .select('id, type, title, start_date, end_date, study_duration, study_duration_value, study_duration_unit')
         .eq('parent_experience_id', item.id)
         .order('start_date', { ascending: false }),
       item.parent_experience_id
         ? supabase
             .from('experience')
-            .select('id, title, start_date, end_date')
+            .select('id, title, organization, organization_url, start_date, end_date')
             .eq('id', item.parent_experience_id)
             .maybeSingle()
         : Promise.resolve({ data: null }),
@@ -164,10 +204,13 @@ export default function ExperienceDetail() {
   }
 
   async function handleAddChildExperience(values) {
-    const validationError = validateWithinParent(values, item)
+    const childValues = values.type === 'subject'
+      ? { ...values, organization: item.organization, organization_url: item.organization_url }
+      : values
+    const validationError = validateWithinParent(childValues, item)
     if (validationError) throw new Error(validationError)
     const { error } = await supabase.from('experience').insert({
-      ...values,
+      ...childValues,
       user_id: user.id,
       parent_experience_id: item.id,
     })
@@ -177,11 +220,14 @@ export default function ExperienceDetail() {
   }
 
   async function handleSaveDetails(values) {
+    const savedValues = item.type === 'subject' && parentExperience
+      ? { ...values, organization: parentExperience.organization, organization_url: parentExperience.organization_url }
+      : values
     if (item.parent_experience_id && parentExperience) {
-      const validationError = validateWithinParent(values, parentExperience)
+      const validationError = validateWithinParent(savedValues, parentExperience)
       if (validationError) throw new Error(validationError)
     }
-    const { error } = await supabase.from('experience').update(values).eq('id', item.id)
+    const { error } = await supabase.from('experience').update(savedValues).eq('id', item.id)
     if (error) throw error
     await loadItem()
   }
@@ -192,59 +238,20 @@ export default function ExperienceDetail() {
     navigate('/experience')
   }
 
-  async function handleRecommend() {
-    setTab('skills')
-    setRecommending(true)
-    setRecommendationError(null)
-    setRecommendationNotice(null)
-    try {
-      const result = await recommendExperienceSkills(
-        item,
-        skillLinks.map((link) => link.skills?.name).filter(Boolean)
-      )
-      setRecommendations(result)
-      setSelectedRecommendations(new Set(result.map((recommendation) => recommendation.name)))
-      if (result.length === 0) setRecommendationNotice('No additional skills were identified from these details.')
-    } catch (err) {
-      setRecommendationError(err.message)
-    } finally {
-      setRecommending(false)
-    }
-  }
-
-  function toggleRecommendation(name) {
-    setSelectedRecommendations((current) => {
-      const next = new Set(current)
-      if (next.has(name)) next.delete(name)
-      else next.add(name)
-      return next
+  async function handleLogActivity(statement) {
+    const relatedSkill = relatedSkillFromStatement(statement)
+    const { error } = await supabase.from('xapi_statements').insert({
+      user_id: user.id,
+      statement,
+      recorded_at: statement.timestamp,
+      skill_id: relatedSkill.id,
+      experience_id: item.id,
     })
+    if (error) throw error
+    setActivityOpen(false)
+    await loadLearning()
   }
 
-  async function handleAddRecommendations() {
-    const names = recommendations
-      .map((recommendation) => recommendation.name)
-      .filter((name) => selectedRecommendations.has(name))
-    if (names.length === 0) return
-
-    setAddingRecommendations(true)
-    setRecommendationError(null)
-    setRecommendationNotice(null)
-    try {
-      const added = await addRecommendedSkills({ userId: user.id, experienceId: item.id, names })
-      setRecommendations([])
-      setSelectedRecommendations(new Set())
-      setRecommendationNotice(
-        `${added.length} skill${added.length === 1 ? '' : 's'} added to this experience and your profile.`
-      )
-      await loadLearning()
-    } catch (err) {
-      setRecommendationError(`${err.message} Any skills added before the error are still saved.`)
-      await loadLearning()
-    } finally {
-      setAddingRecommendations(false)
-    }
-  }
 
   return (
     <div className="min-h-screen bg-paper">
@@ -265,7 +272,7 @@ export default function ExperienceDetail() {
                   {EXPERIENCE_TYPE_LABELS[item.type] ?? item.type}
                 </span>
                 <h1 className="font-display text-2xl text-ink mt-0.5">{item.title}</h1>
-                {item.organization && (
+                {item.type !== 'subject' && item.organization && (
                   <div className="flex items-center gap-2 mt-0.5">
                     {item.organization_url && (
                       <OrganizationLogo organizationUrl={item.organization_url} size={24} />
@@ -299,27 +306,38 @@ export default function ExperienceDetail() {
             <ExperienceActionButtons
               itemType={item.type}
               onAddExperience={setChildModalType}
-              onRecommend={handleRecommend}
-              onAddSkill={() => {
-                setTab('skills')
-                setAddSkillOpen(true)
-              }}
-              recommending={recommending}
-              addingRecommendations={addingRecommendations}
-              hasRecommendations={recommendations.length > 0}
+              onLogActivity={() => setActivityOpen(true)}
             />
+
+            {activityOpen && (
+              <RecordActivityModal
+                actor={{ name: user.user_metadata?.full_name ?? '', email: user.email }}
+                skills={activitySkills}
+                relatedExperience={{
+                  id: item.id,
+                  title: item.title,
+                  type: item.type,
+                  start_date: item.start_date,
+                  end_date: item.end_date,
+                }}
+                onSave={handleLogActivity}
+                onClose={() => setActivityOpen(false)}
+              />
+            )}
 
             {childModalType && (
               <ExperienceModal
                 type={childModalType}
                 initialOrganization={item.organization ?? ''}
                 initialOrganizationUrl={item.organization_url ?? ''}
+                minimumDate={item.start_date}
+                maximumDate={item.end_date ?? undefined}
                 onSave={handleAddChildExperience}
                 onClose={() => setChildModalType(null)}
               />
             )}
 
-            <div className="flex items-center gap-1 border-b border-hairline mt-4 mb-4 overflow-x-auto">
+            <div className="flex items-center gap-1 border-b border-hairline mt-4 mb-4">
               {getExperienceTabs(item, linkedCourses).map((t) => (
                 <button
                   key={t.id}
@@ -344,6 +362,7 @@ export default function ExperienceDetail() {
                 skillHistory={skillHistory}
                 achievements={achievements}
                 childExperiences={childExperiences}
+                activities={experienceActivities}
                 loaded={learningLoaded}
               />
             )}
@@ -352,27 +371,6 @@ export default function ExperienceDetail() {
               <CoursesSubsection item={item} linkedCourses={linkedCourses} onChange={loadLearning} />
             )}
 
-            {tab === 'skills' && (
-              <SkillsSubsection
-                item={item}
-                skillLinks={skillLinks}
-                onChange={loadLearning}
-                user={user}
-                addOpen={addSkillOpen}
-                onAddOpenChange={setAddSkillOpen}
-                recommendations={recommendations}
-                selectedRecommendations={selectedRecommendations}
-                onToggleRecommendation={toggleRecommendation}
-                onAddRecommendations={handleAddRecommendations}
-                onDismissRecommendations={() => {
-                  setRecommendations([])
-                  setSelectedRecommendations(new Set())
-                }}
-                addingRecommendations={addingRecommendations}
-                recommendationError={recommendationError}
-                recommendationNotice={recommendationNotice}
-              />
-            )}
 
             {settingsOpen && (
               <div
@@ -393,7 +391,7 @@ export default function ExperienceDetail() {
                       Close
                     </button>
                   </div>
-                  <DetailsTab item={item} onSave={handleSaveDetails} onDelete={handleDelete} />
+                  <DetailsTab item={item} parentExperience={parentExperience} onSave={handleSaveDetails} onDelete={handleDelete} />
                 </div>
               </div>
             )}
@@ -404,13 +402,15 @@ export default function ExperienceDetail() {
   )
 }
 
-function DetailsTab({ item, onSave, onDelete }) {
+function DetailsTab({ item, parentExperience, onSave, onDelete }) {
   const [type, setType] = useState(item.type)
   const [title, setTitle] = useState(item.title)
   const [organization, setOrganization] = useState(item.organization ?? '')
   const [organizationUrl, setOrganizationUrl] = useState(item.organization_url ?? '')
   const [startDate, setStartDate] = useState(item.start_date ?? '')
   const [endDate, setEndDate] = useState(item.end_date ?? '')
+  const [studyDurationValue, setStudyDurationValue] = useState(item.study_duration_value?.toString() ?? '')
+  const [studyDurationUnit, setStudyDurationUnit] = useState(item.study_duration_unit ?? 'months')
   const [current, setCurrent] = useState(!item.end_date)
   const [description, setDescription] = useState(item.description ?? '')
   const [saving, setSaving] = useState(false)
@@ -421,8 +421,17 @@ function DetailsTab({ item, onSave, onDelete }) {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!title.trim() || (config.orgRequired && !organization.trim()) || !startDate) {
-      setError(`Title${config.orgRequired ? ', organization,' : ''} and start date are required.`)
+    const datesRequired = config.datesRequired !== false
+    if (!title.trim() || (config.orgRequired && !organization.trim()) || (datesRequired && !startDate)) {
+      setError(`Title${config.orgRequired ? ', organization,' : ''}${datesRequired ? ' and start date are' : ' is'} required.`)
+      return
+    }
+    if (!datesRequired && !startDate && !studyDurationValue && !item.study_duration) {
+      setError('Enter a start date or a duration of study.')
+      return
+    }
+    if (endDate && !startDate) {
+      setError('Enter a start date before adding an end date.')
       return
     }
     setError(null)
@@ -433,8 +442,11 @@ function DetailsTab({ item, onSave, onDelete }) {
         title: title.trim(),
         organization: organization.trim() || null,
         organization_url: organizationUrl.trim() || null,
-        start_date: startDate,
-        end_date: current ? null : endDate || null,
+        start_date: startDate || null,
+        end_date: startDate && !current ? endDate || null : null,
+        study_duration: config.allowsStudyDuration && !studyDurationValue ? item.study_duration ?? null : null,
+        study_duration_value: config.allowsStudyDuration ? Number(studyDurationValue) || null : null,
+        study_duration_unit: config.allowsStudyDuration && studyDurationValue ? studyDurationUnit : null,
         description: description.trim() || null,
       })
     } catch (err) {
@@ -500,7 +512,7 @@ function DetailsTab({ item, onSave, onDelete }) {
         />
       </div>
 
-      <div>
+      {!config.inheritsOrganization && <div>
         <label className="block text-sm text-secondary mb-1" htmlFor="organization">
           {config.orgLabel}
         </label>
@@ -511,19 +523,37 @@ function DetailsTab({ item, onSave, onDelete }) {
           onChange={(e) => setOrganization(e.target.value)}
           className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
         />
-      </div>
+      </div>}
 
-      <OrganizationUrlField value={organizationUrl} onChange={setOrganizationUrl} />
+      {!config.inheritsOrganization && <OrganizationUrlField value={organizationUrl} onChange={setOrganizationUrl} />}
 
-      <div className="grid grid-cols-2 gap-4">
+      {config.allowsStudyDuration && (
+        <div>
+          <label className="block text-sm text-secondary mb-1" htmlFor="studyDurationValue">Duration of study</label>
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,0.7fr)] gap-2">
+            <input id="studyDurationValue" type="number" min="1" step="1" inputMode="numeric" value={studyDurationValue} onChange={(e) => setStudyDurationValue(e.target.value)} placeholder="e.g. 6" className="min-w-0 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
+            <select aria-label="Duration unit" value={studyDurationUnit} onChange={(e) => setStudyDurationUnit(e.target.value)} className="min-w-0 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss">
+              <option value="days">Days</option>
+              <option value="months">Months</option>
+              <option value="years">Years</option>
+            </select>
+          </div>
+          {item.study_duration && !studyDurationValue && <p className="text-xs text-secondary mt-1">Previously entered: {item.study_duration}</p>}
+          <p className="text-xs text-secondary mt-1">Use this instead of dates, or alongside them.</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm text-secondary mb-1" htmlFor="startDate">
-            Start date
+            Start date{config.datesRequired === false ? ' (optional)' : ''}
           </label>
           <input
             id="startDate"
             type="date"
-            required
+            min={parentExperience?.start_date}
+            max={parentExperience?.end_date ?? undefined}
+            required={config.datesRequired !== false}
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
             className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
@@ -531,11 +561,13 @@ function DetailsTab({ item, onSave, onDelete }) {
         </div>
         <div>
           <label className="block text-sm text-secondary mb-1" htmlFor="endDate">
-            End date
+            End date{config.datesRequired === false ? ' (optional)' : ''}
           </label>
           <input
             id="endDate"
             type="date"
+            min={parentExperience?.start_date}
+            max={parentExperience?.end_date ?? undefined}
             disabled={current}
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
@@ -544,15 +576,17 @@ function DetailsTab({ item, onSave, onDelete }) {
         </div>
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-secondary">
-        <input
-          type="checkbox"
-          checked={current}
-          onChange={(e) => setCurrent(e.target.checked)}
-          className="rounded border-hairline"
-        />
-        This is ongoing / current
-      </label>
+      {(config.datesRequired !== false || startDate) && (
+        <label className="flex items-center gap-2 text-sm text-secondary">
+          <input
+            type="checkbox"
+            checked={current}
+            onChange={(e) => setCurrent(e.target.checked)}
+            className="rounded border-hairline"
+          />
+          This is ongoing / current
+        </label>
+      )}
 
       <div>
         <label className="block text-sm text-secondary mb-1" htmlFor="description">
@@ -563,7 +597,7 @@ function DetailsTab({ item, onSave, onDelete }) {
           rows={3}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Responsibilities, achievements, focus areas…"
+          placeholder="What did you learn? What knowledge or skills did you develop?"
           className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
         />
       </div>
@@ -600,7 +634,7 @@ function DetailsTab({ item, onSave, onDelete }) {
   )
 }
 
-function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievements, childExperiences, loaded }) {
+function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievements, childExperiences, activities, loaded }) {
   const navigate = useNavigate()
   if (!loaded) return <p className="text-sm text-secondary">Loading…</p>
 
@@ -609,22 +643,15 @@ function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievemen
   }
 
   const pendingCourseLinks = linkedCourses.filter((l) => l.courses && !l.courses.completed_date)
-  const events = [
-    { type: 'start', date: item.start_date },
-    item.end_date ? { type: 'end', date: item.end_date } : { type: 'today', date: new Date().toISOString() },
-    ...(childExperiences ?? []).map((c) => ({ type: 'child', date: c.start_date, child: c })),
-    ...linkedCourses
-      .filter((l) => l.courses?.completed_date)
-      .map((l) => ({ type: 'course', date: l.courses.completed_date, link: l })),
-    ...achievements.map((a) => ({ type: 'achievement', date: a.assessed_at, entry: a })),
-  ].sort((a, b) =>
-    new Date(b.date).toISOString().slice(0, 10).localeCompare(new Date(a.date).toISOString().slice(0, 10))
-  )
+  const events = buildExperienceTimelineEvents(item, childExperiences, linkedCourses, achievements, activities)
   const total = pendingCourseLinks.length + events.length
 
   return (
     <div className="space-y-6">
       {item.description && <p className="text-sm text-ink whitespace-pre-line">{item.description}</p>}
+      {formatStudyDuration(item) && (
+        <p className="text-sm text-secondary"><span className="font-medium text-ink">Duration of study:</span> {formatStudyDuration(item)}</p>
+      )}
 
       <div>
         <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Timeline</h4>
@@ -638,7 +665,7 @@ function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievemen
         ))}
         {events.map((event, i) => (
           <ExperienceTimelineEntry
-            key={event.child?.id ?? event.link?.id ?? event.entry?.id ?? event.type}
+            key={event.child?.id ?? event.link?.id ?? event.entry?.id ?? event.activity?.id ?? event.type}
             item={item}
             event={event}
             isLast={pendingCourseLinks.length + i === total - 1}
@@ -892,6 +919,27 @@ function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse }) {
     )
   }
 
+  if (event.type === 'activity') {
+    const row = event.activity
+    return (
+      <div className="flex gap-3">
+        <div className="flex flex-col items-center w-12 shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-moss shrink-0 mt-1.5" />
+          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
+        </div>
+        <div className="min-w-0 flex-1 mb-3">
+          <p className="text-sm text-ink break-words">
+            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{verbLabel(row.statement)}</span>{' '}
+            {activityName(row.statement)}
+          </p>
+          <p className="font-mono text-[10px] text-secondary mt-0.5">
+            {row.skills?.name ? `${row.skills.name} · ` : ''}{formatFullDate(row.recorded_at)}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   const entry = event.entry
   return (
     <div className="flex gap-3">
@@ -1119,39 +1167,24 @@ export function SkillsSubsection({
   )
 }
 
-function SparkIcon() {
-  return (
-    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3l1.3 4.2a5 5 0 0 0 3.3 3.3L21 12l-4.4 1.5a5 5 0 0 0-3.3 3.3L12 21l-1.3-4.2a5 5 0 0 0-3.3-3.3L3 12l4.4-1.5a5 5 0 0 0 3.3-3.3L12 3Z" />
-    </svg>
-  )
-}
-
 export function ExperienceActionButtons({
   itemType,
   onAddExperience,
-  onRecommend,
-  onAddSkill,
-  recommending = false,
-  addingRecommendations = false,
-  hasRecommendations = false,
+  onLogActivity,
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2 mt-4">
       <AddExperienceButton
-        types={NESTABLE_PARENT_TYPES.includes(itemType) ? NESTED_EXPERIENCE_TYPES : []}
+        types={nestedExperienceTypesFor(itemType)}
         onSelect={onAddExperience}
         label="+ Add"
-        leadingOptions={[{ value: 'skill', label: 'Skill', onSelect: onAddSkill }]}
       />
       <button
         type="button"
-        onClick={onRecommend}
-        disabled={recommending || addingRecommendations}
+        onClick={onLogActivity}
         className="inline-flex items-center gap-2 rounded-md border border-moss text-moss px-3 py-2 text-sm font-medium hover:bg-moss/10 disabled:opacity-60"
       >
-        <SparkIcon />
-        {recommending ? 'Finding skills…' : hasRecommendations ? 'Recommend again' : 'Recommend skills'}
+        Log skill activity
       </button>
     </div>
   )

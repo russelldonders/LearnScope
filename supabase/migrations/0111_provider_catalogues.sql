@@ -54,7 +54,6 @@ where cc.status = 'approved'
   and c.is_global;
 
 alter table catalogues enable row level security;
-
 alter table course_catalogue_publications enable row level security;
 
 create policy "Authenticated users can view catalogues"
@@ -169,7 +168,6 @@ create policy "Manage destinations for editable provider courses"
   );
 
 grant select, insert, update, delete on table catalogues to authenticated;
-
 grant select, insert, update, delete on table course_catalogue_publications to authenticated;
 
 create or replace function submit_course_for_publication(p_course_id uuid, p_catalogue_ids uuid[])
@@ -226,7 +224,6 @@ end;
 $$;
 
 revoke all on function submit_course_for_publication(uuid, uuid[]) from public;
-
 grant execute on function submit_course_for_publication(uuid, uuid[]) to authenticated;
 
 create or replace function publish_course_version(p_course_id uuid)
@@ -279,7 +276,6 @@ end;
 $$;
 
 revoke all on function publish_course_version(uuid) from public;
-
 grant execute on function publish_course_version(uuid) to authenticated;
 
 -- Approved courses only appear to general learners after at least one
@@ -304,11 +300,9 @@ as $$
 $$;
 
 revoke all on function is_course_published_to_catalogue(uuid) from public;
-
 grant execute on function is_course_published_to_catalogue(uuid) to authenticated;
 
 drop policy if exists "View approved courses, your own organisation's, as a platform admin, or your own enrollment" on course_catalogue;
-
 create policy "View published courses, your own organisation's, as a platform admin, or your own enrollment"
   on course_catalogue for select
   to authenticated

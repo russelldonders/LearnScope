@@ -96,7 +96,6 @@ end;
 $$;
 
 drop trigger validate_experience_parent_type_before_write on public.experience;
-
 create trigger validate_experience_parent_type_before_write
 before insert or update of type, parent_experience_id, user_id, organization, organization_url
 on public.experience
