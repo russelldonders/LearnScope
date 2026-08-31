@@ -450,6 +450,34 @@ export async function addWebResource(organisationId, userId, url, title) {
   return data
 }
 
+export async function createPageResource(organisationId, userId, title, pageContent) {
+  const { data, error } = await supabase
+    .from('content_resources')
+    .insert({
+      organisation_id: organisationId,
+      type: 'page',
+      title: title.trim(),
+      page_content: pageContent,
+      created_by: userId,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function updatePageResource(resourceId, title, pageContent) {
+  const { data, error } = await supabase
+    .from('content_resources')
+    .update({ title: title.trim(), page_content: pageContent, updated_at: new Date().toISOString() })
+    .eq('id', resourceId)
+    .eq('type', 'page')
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
 // Non-destructive video edit (trim/filter/speed/overlays, 0087) -- see
 // videoEdit.js for the stored shape. Applied at playback time only; never
 // touches the uploaded file or storage.
@@ -718,7 +746,7 @@ async function removeStorageFolder(prefix) {
 // the DB level (0073), so it disappears from every course it was attached
 // to, not just the one you were looking at when you deleted it.
 export async function deleteResource(resource) {
-  if (!['external_video', 'web_url'].includes(resource.type)) {
+  if (!['external_video', 'web_url', 'page'].includes(resource.type)) {
     const { count, error: countError } = await supabase
       .from('content_resources')
       .select('id', { count: 'exact', head: true })

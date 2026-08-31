@@ -7575,3 +7575,617 @@ for each row execute function public.validate_xapi_statement_context_ownership()
 alter table xapi_statements add column evidence_url text;
 alter table xapi_statements add column evidence_paths text[];
 
+-- Expand provider catalogues into scoped workspaces with skills and role-based users.
+alter table catalogue_approvers
+  add column role text not null default 'approver'
+  check (role in ('admin', 'approver'));
+
+create table catalogue_skills (
+  id uuid primary key default gen_random_uuid(),
+  catalogue_id uuid not null references catalogues(id) on delete cascade,
+  skill_library_id uuid not null references skill_library(id) on delete cascade,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique (catalogue_id, skill_library_id)
+);
+
+create index catalogue_skills_catalogue_idx on catalogue_skills (catalogue_id);
+create index catalogue_skills_skill_idx on catalogue_skills (skill_library_id);
+
+create or replace function is_catalogue_admin(p_catalogue_id uuid, p_user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from catalogue_approvers ca
+    join catalogues c on c.id = ca.catalogue_id
+    join organisations o on o.id = c.organisation_id
+    where ca.catalogue_id = p_catalogue_id
+      and ca.user_id = p_user_id
+      and ca.role = 'admin'
+      and o.status = 'active'
+  )
+$$;
+
+revoke all on function is_catalogue_admin(uuid, uuid) from public;
+grant execute on function is_catalogue_admin(uuid, uuid) to authenticated;
+
+create policy "Catalogue admins can update their catalogue"
+  on catalogues for update to authenticated
+  using (is_catalogue_admin(id, (select auth.uid())))
+  with check (is_catalogue_admin(id, (select auth.uid())));
+
+create policy "Catalogue admins can add catalogue users"
+  on catalogue_approvers for insert to authenticated
+  with check (
+    added_by = (select auth.uid())
+    and is_catalogue_admin(catalogue_id, (select auth.uid()))
+    and exists (
+      select 1 from catalogues c
+      join organisation_members om on om.organisation_id = c.organisation_id
+      where c.id = catalogue_id and om.user_id = catalogue_approvers.user_id and om.status = 'active'
+    )
+  );
+
+create policy "Catalogue admins can update catalogue users"
+  on catalogue_approvers for update to authenticated
+  using (is_catalogue_admin(catalogue_id, (select auth.uid())))
+  with check (is_catalogue_admin(catalogue_id, (select auth.uid())));
+
+create policy "Organisation admins can update catalogue users"
+  on catalogue_approvers for update to authenticated
+  using (
+    exists (select 1 from catalogues c where c.id = catalogue_id and is_org_admin(c.organisation_id, (select auth.uid())))
+  )
+  with check (
+    exists (select 1 from catalogues c where c.id = catalogue_id and is_org_admin(c.organisation_id, (select auth.uid())))
+  );
+
+create policy "Catalogue admins can remove catalogue users"
+  on catalogue_approvers for delete to authenticated
+  using (is_catalogue_admin(catalogue_id, (select auth.uid())));
+
+alter table catalogue_skills enable row level security;
+
+create policy "Organisation members can view catalogue skills"
+  on catalogue_skills for select to authenticated
+  using (
+    exists (
+      select 1 from catalogues c
+      where c.id = catalogue_id and is_org_member(c.organisation_id, (select auth.uid()))
+    )
+  );
+
+create policy "Catalogue admins manage catalogue skills"
+  on catalogue_skills for all to authenticated
+  using (
+    is_catalogue_admin(catalogue_id, (select auth.uid()))
+    or exists (select 1 from catalogues c where c.id = catalogue_id and is_org_admin(c.organisation_id, (select auth.uid())))
+  )
+  with check (
+    (
+      is_catalogue_admin(catalogue_id, (select auth.uid()))
+      or exists (select 1 from catalogues c where c.id = catalogue_id and is_org_admin(c.organisation_id, (select auth.uid())))
+    )
+    and exists (
+      select 1
+      from catalogues c
+      join organisation_offered_skills os on os.organisation_id = c.organisation_id
+      where c.id = catalogue_id and os.skill_library_id = catalogue_skills.skill_library_id
+    )
+  );
+
+-- Organisation provider admins automatically administer every catalogue
+-- owned by their organisation; explicit catalogue-admin grants remain for
+-- non-admin provider users.
+create or replace function is_catalogue_admin(p_catalogue_id uuid, p_user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from catalogues c
+    where c.id = p_catalogue_id
+      and is_org_admin(c.organisation_id, p_user_id)
+  ) or exists (
+    select 1
+    from catalogue_approvers ca
+    join catalogues c on c.id = ca.catalogue_id
+    join organisations o on o.id = c.organisation_id
+    where ca.catalogue_id = p_catalogue_id
+      and ca.user_id = p_user_id
+      and ca.role = 'admin'
+      and o.status = 'active'
+  )
+$$;
+
+revoke all on function is_catalogue_admin(uuid, uuid) from public;
+grant execute on function is_catalogue_admin(uuid, uuid) to authenticated;
+
+-- Allow an organisation resource to be assigned to one or more catalogues
+-- without duplicating or transferring ownership of the underlying resource.
+create table catalogue_resources (
+  id uuid primary key default gen_random_uuid(),
+  catalogue_id uuid not null references catalogues(id) on delete cascade,
+  resource_id uuid not null references content_resources(id) on delete cascade,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique (catalogue_id, resource_id)
+);
+
+create index catalogue_resources_catalogue_idx on catalogue_resources (catalogue_id);
+create index catalogue_resources_resource_idx on catalogue_resources (resource_id);
+
+alter table catalogue_resources enable row level security;
+
+revoke all on table catalogue_resources from anon, authenticated;
+grant select, insert, delete on table catalogue_resources to authenticated;
+
+create policy "Organisation members can view catalogue resources"
+  on catalogue_resources for select to authenticated
+  using (
+    exists (
+      select 1
+      from catalogues c
+      where c.id = catalogue_resources.catalogue_id
+        and is_org_member(c.organisation_id, (select auth.uid()))
+    )
+  );
+
+create policy "Catalogue admins can assign resources"
+  on catalogue_resources for insert to authenticated
+  with check (
+    is_catalogue_admin(catalogue_resources.catalogue_id, (select auth.uid()))
+    and catalogue_resources.created_by = (select auth.uid())
+    and exists (
+      select 1
+      from catalogues c
+      join content_resources cr on cr.organisation_id = c.organisation_id
+      where c.id = catalogue_resources.catalogue_id
+        and cr.id = catalogue_resources.resource_id
+    )
+  );
+
+create policy "Catalogue admins can unassign resources"
+  on catalogue_resources for delete to authenticated
+  using (is_catalogue_admin(catalogue_resources.catalogue_id, (select auth.uid())));
+
+-- Catalogue admins can assign an existing course owned by the catalogue's
+-- organisation. Approved current versions are published immediately;
+-- editable versions enter (or remain in) the normal approval workflow.
+create or replace function assign_course_to_catalogue(p_catalogue_id uuid, p_course_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_caller uuid := (select auth.uid());
+  v_catalogue_organisation_id uuid;
+  v_course_organisation_id uuid;
+  v_course_status text;
+  v_is_current_published boolean;
+begin
+  if v_caller is null or not is_catalogue_admin(p_catalogue_id, v_caller) then
+    raise exception 'Not authorized';
+  end if;
+
+  select organisation_id
+  into v_catalogue_organisation_id
+  from catalogues
+  where id = p_catalogue_id
+    and not is_global;
+
+  select organisation_id, status, is_current_published
+  into v_course_organisation_id, v_course_status, v_is_current_published
+  from course_catalogue
+  where id = p_course_id
+  for update;
+
+  if v_catalogue_organisation_id is null
+    or v_course_organisation_id is distinct from v_catalogue_organisation_id then
+    raise exception 'Course and catalogue must belong to the same organisation';
+  end if;
+
+  if v_course_status not in ('draft', 'rejected', 'pending_approval', 'approved')
+    or (v_course_status = 'approved' and not v_is_current_published) then
+    raise exception 'This course version cannot be added to a catalogue';
+  end if;
+
+  insert into course_catalogue_publications (
+    course_id,
+    catalogue_id,
+    selected_by,
+    published_at
+  )
+  values (
+    p_course_id,
+    p_catalogue_id,
+    v_caller,
+    case when v_course_status = 'approved' then now() else null end
+  )
+  on conflict (course_id, catalogue_id) do nothing;
+
+  if v_course_status in ('draft', 'rejected') then
+    update course_catalogue
+    set status = 'pending_approval', rejection_reason = null
+    where id = p_course_id;
+  end if;
+end;
+$$;
+
+revoke all on function assign_course_to_catalogue(uuid, uuid) from public, anon, authenticated;
+grant execute on function assign_course_to_catalogue(uuid, uuid) to authenticated;
+
+-- Tighten catalogue assignment: only a current course version that has
+-- already been approved and published to at least one catalogue may be
+-- added from inside another catalogue.
+create or replace function assign_course_to_catalogue(p_catalogue_id uuid, p_course_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_caller uuid := (select auth.uid());
+  v_catalogue_organisation_id uuid;
+  v_course_organisation_id uuid;
+  v_course_status text;
+  v_is_current_published boolean;
+begin
+  if v_caller is null or not is_catalogue_admin(p_catalogue_id, v_caller) then
+    raise exception 'Not authorized';
+  end if;
+
+  select organisation_id
+  into v_catalogue_organisation_id
+  from catalogues
+  where id = p_catalogue_id
+    and not is_global;
+
+  select organisation_id, status, is_current_published
+  into v_course_organisation_id, v_course_status, v_is_current_published
+  from course_catalogue
+  where id = p_course_id
+  for update;
+
+  if v_catalogue_organisation_id is null
+    or v_course_organisation_id is distinct from v_catalogue_organisation_id then
+    raise exception 'Course and catalogue must belong to the same organisation';
+  end if;
+
+  if v_course_status <> 'approved'
+    or not v_is_current_published
+    or not is_course_published_to_catalogue(p_course_id) then
+    raise exception 'Only published courses can be added to a catalogue';
+  end if;
+
+  insert into course_catalogue_publications (
+    course_id,
+    catalogue_id,
+    selected_by,
+    published_at
+  )
+  values (p_course_id, p_catalogue_id, v_caller, now())
+  on conflict (course_id, catalogue_id) do nothing;
+end;
+$$;
+
+revoke all on function assign_course_to_catalogue(uuid, uuid) from public, anon, authenticated;
+grant execute on function assign_course_to_catalogue(uuid, uuid) to authenticated;
+
+-- A current approved course may receive its first catalogue destination;
+-- it does not need to have a pre-existing publication row.
+create or replace function assign_course_to_catalogue(p_catalogue_id uuid, p_course_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_caller uuid := (select auth.uid());
+  v_catalogue_organisation_id uuid;
+  v_course_organisation_id uuid;
+  v_course_status text;
+  v_is_current_published boolean;
+begin
+  if v_caller is null or not is_catalogue_admin(p_catalogue_id, v_caller) then
+    raise exception 'Not authorized';
+  end if;
+
+  select organisation_id
+  into v_catalogue_organisation_id
+  from catalogues
+  where id = p_catalogue_id
+    and not is_global;
+
+  select organisation_id, status, is_current_published
+  into v_course_organisation_id, v_course_status, v_is_current_published
+  from course_catalogue
+  where id = p_course_id
+  for update;
+
+  if v_catalogue_organisation_id is null
+    or v_course_organisation_id is distinct from v_catalogue_organisation_id then
+    raise exception 'Course and catalogue must belong to the same organisation';
+  end if;
+
+  if v_course_status <> 'approved' or not v_is_current_published then
+    raise exception 'Only published courses can be added to a catalogue';
+  end if;
+
+  insert into course_catalogue_publications (
+    course_id,
+    catalogue_id,
+    selected_by,
+    published_at
+  )
+  values (p_course_id, p_catalogue_id, v_caller, now())
+  on conflict (course_id, catalogue_id) do nothing;
+end;
+$$;
+
+revoke all on function assign_course_to_catalogue(uuid, uuid) from public, anon, authenticated;
+grant execute on function assign_course_to_catalogue(uuid, uuid) to authenticated;
+
+-- Immutable resource version families. Existing rows remain live as
+-- published v1, preserving every course and catalogue link.
+alter table content_resources
+  add column version_group_id uuid,
+  add column version_number integer,
+  add column status text,
+  add column is_current_published boolean,
+  add column published_at timestamptz,
+  add column published_by uuid references auth.users(id) on delete set null;
+
+update content_resources
+set version_group_id = id,
+    version_number = 1,
+    status = 'published',
+    is_current_published = true,
+    published_at = created_at,
+    published_by = created_by;
+
+alter table content_resources
+  alter column version_group_id set not null,
+  alter column version_number set not null,
+  alter column version_number set default 1,
+  alter column status set not null,
+  alter column status set default 'published',
+  alter column is_current_published set not null,
+  alter column is_current_published set default true,
+  add constraint content_resources_version_number_positive check (version_number > 0),
+  add constraint content_resources_status_check check (status in ('draft', 'published', 'inactive')),
+  add constraint content_resources_version_group_version_key unique (version_group_id, version_number);
+
+create unique index content_resources_one_current_published_idx
+  on content_resources (version_group_id)
+  where is_current_published;
+
+create index content_resources_version_group_idx
+  on content_resources (version_group_id, version_number desc);
+
+create or replace function initialise_resource_version()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  new.version_group_id := coalesce(new.version_group_id, new.id);
+  new.version_number := coalesce(new.version_number, 1);
+  new.status := coalesce(new.status, 'published');
+  new.is_current_published := coalesce(new.is_current_published, new.status = 'published');
+  if new.status = 'published' then
+    new.published_at := coalesce(new.published_at, now());
+    new.published_by := coalesce(new.published_by, new.created_by);
+  end if;
+  return new;
+end;
+$$;
+
+create trigger initialise_resource_version_trigger
+  before insert on content_resources
+  for each row execute procedure initialise_resource_version();
+
+create or replace function create_resource_draft_version(p_resource_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_caller uuid := (select auth.uid());
+  v_source public.content_resources%rowtype;
+  v_new_id uuid := gen_random_uuid();
+  v_next_version integer;
+begin
+  select * into v_source
+  from public.content_resources
+  where id = p_resource_id
+  for update;
+
+  if v_source.id is null
+    or v_caller is null
+    or not public.is_org_member(v_source.organisation_id, v_caller) then
+    raise exception 'Not authorized';
+  end if;
+
+  if v_source.status <> 'published' or not v_source.is_current_published then
+    raise exception 'Create a version from the current published resource';
+  end if;
+
+  if exists (
+    select 1 from public.content_resources
+    where version_group_id = v_source.version_group_id and status = 'draft'
+  ) then
+    raise exception 'This resource already has a draft version';
+  end if;
+
+  select coalesce(max(version_number), 0) + 1 into v_next_version
+  from public.content_resources
+  where version_group_id = v_source.version_group_id;
+
+  insert into public.content_resources (
+    id, organisation_id, type, title, storage_path, file_name, launch_path,
+    external_url, video_edit, created_by, version_group_id, version_number,
+    status, is_current_published, published_at, published_by
+  ) values (
+    v_new_id, v_source.organisation_id, v_source.type, v_source.title,
+    v_source.storage_path, v_source.file_name, v_source.launch_path,
+    v_source.external_url, v_source.video_edit, v_caller,
+    v_source.version_group_id, v_next_version, 'draft', false, null, null
+  );
+
+  return v_new_id;
+end;
+$$;
+
+create or replace function publish_resource_version(p_resource_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_caller uuid := (select auth.uid());
+  v_resource public.content_resources%rowtype;
+begin
+  select * into v_resource
+  from public.content_resources
+  where id = p_resource_id
+  for update;
+
+  if v_resource.id is null
+    or v_caller is null
+    or not public.is_org_member(v_resource.organisation_id, v_caller) then
+    raise exception 'Not authorized';
+  end if;
+
+  if v_resource.status <> 'draft' then
+    raise exception 'Only a draft resource version can be published';
+  end if;
+
+  update public.content_resources
+  set status = 'inactive', is_current_published = false, updated_at = now()
+  where version_group_id = v_resource.version_group_id
+    and is_current_published;
+
+  update public.content_resources
+  set status = 'published',
+      is_current_published = true,
+      published_at = now(),
+      published_by = v_caller,
+      updated_at = now()
+  where id = p_resource_id;
+
+  update public.catalogue_resources cr
+  set resource_id = p_resource_id
+  where cr.resource_id in (
+    select id from public.content_resources
+    where version_group_id = v_resource.version_group_id
+      and id <> p_resource_id
+  )
+  and not exists (
+    select 1 from public.catalogue_resources existing
+    where existing.catalogue_id = cr.catalogue_id
+      and existing.resource_id = p_resource_id
+  );
+end;
+$$;
+
+revoke all on function create_resource_draft_version(uuid) from public, anon, authenticated;
+revoke all on function publish_resource_version(uuid) from public, anon, authenticated;
+grant execute on function create_resource_draft_version(uuid) to authenticated;
+grant execute on function publish_resource_version(uuid) to authenticated;
+
+-- Resource rows are immutable once published. Direct client updates are
+-- limited to drafts; the narrowly-scoped publish function performs the
+-- controlled state transition.
+drop policy "Org members manage their own organisation's resources" on content_resources;
+
+create policy "Org members create resources for their organisation"
+  on content_resources for insert to authenticated
+  with check (
+    is_platform_admin((select auth.uid()))
+    or is_org_member(organisation_id, (select auth.uid()))
+  );
+
+create policy "Org members update draft resources"
+  on content_resources for update to authenticated
+  using (
+    status = 'draft'
+    and (
+      is_platform_admin((select auth.uid()))
+      or is_org_member(organisation_id, (select auth.uid()))
+    )
+  )
+  with check (
+    status = 'draft'
+    and not is_current_published
+    and (
+      is_platform_admin((select auth.uid()))
+      or is_org_member(organisation_id, (select auth.uid()))
+    )
+  );
+
+create policy "Org members delete resources for their organisation"
+  on content_resources for delete to authenticated
+  using (
+    is_platform_admin((select auth.uid()))
+    or is_org_member(organisation_id, (select auth.uid()))
+  );
+
+-- Catalogue assignments accept only the current published version.
+drop policy "Catalogue admins can assign resources" on catalogue_resources;
+create policy "Catalogue admins can assign resources"
+  on catalogue_resources for insert to authenticated
+  with check (
+    is_catalogue_admin(catalogue_resources.catalogue_id, (select auth.uid()))
+    and catalogue_resources.created_by = (select auth.uid())
+    and exists (
+      select 1
+      from catalogues c
+      join content_resources cr on cr.organisation_id = c.organisation_id
+      where c.id = catalogue_resources.catalogue_id
+        and cr.id = catalogue_resources.resource_id
+        and cr.status = 'published'
+        and cr.is_current_published
+    )
+  );
+
+-- Authored content pages are reusable organisation resources, attached to
+-- courses through the existing course_content_links relationship. Their
+-- versioned block document lives on the resource row; unlike uploaded media
+-- there is no storage object or external URL to manage.
+alter table content_resources drop constraint content_resources_type_check;
+alter table content_resources add constraint content_resources_type_check
+  check (type in ('video', 'screen_recording', 'file', 'scorm', 'xapi', 'external_video', 'web_url', 'page'));
+
+alter table content_resources add column page_content jsonb;
+
+alter table content_resources drop constraint content_resources_storage_or_external_check;
+alter table content_resources add constraint content_resources_storage_or_external_check
+  check (
+    (type in ('external_video', 'web_url') and storage_path is null and external_url is not null and external_url ~ '^https?://' and page_content is null)
+    or (type = 'page' and storage_path is null and external_url is null and page_content is not null)
+    or (type not in ('external_video', 'web_url', 'page') and storage_path is not null and external_url is null and page_content is null)
+  );
+
+alter table content_resources add constraint content_resources_page_content_check
+  check (
+    page_content is null
+    or (
+      jsonb_typeof(page_content) = 'object'
+      and page_content->>'version' = '1'
+      and jsonb_typeof(page_content->'blocks') = 'array'
+      and jsonb_array_length(page_content->'blocks') <= 100
+    )
+  );
