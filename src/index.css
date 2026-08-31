@@ -237,6 +237,55 @@ body {
   .page-insert-options button { border-radius: 6px; padding: 0.45rem 0.65rem; font-size: 0.8rem; color: var(--color-ink); }
   .page-insert-options button:hover { background: var(--color-paper); }
 
+  .page-media { margin: 0; }
+  .page-media img,
+  .page-media video,
+  .page-media iframe {
+    display: block;
+    width: 100%;
+    border: 0;
+    border-radius: 12px;
+    background: #000;
+  }
+
+  .page-media img { height: auto; background: transparent; }
+  .page-media video,
+  .page-media iframe { aspect-ratio: 16 / 9; }
+  .page-media figcaption { margin-top: 0.6rem; font-size: 0.8rem; line-height: 1.5; color: var(--color-secondary); }
+
+  .page-media-placeholder {
+    display: flex;
+    min-height: 15rem;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    border: 1px dashed var(--color-hairline);
+    border-radius: 12px;
+    background: var(--color-paper);
+    padding: 2rem;
+    text-align: center;
+    color: var(--color-secondary);
+  }
+
+  .page-media-placeholder strong { color: var(--color-ink); }
+  .page-media-fields { display: grid; gap: 0.75rem; margin-top: 0.85rem; }
+  .page-media-fields label { display: grid; gap: 0.3rem; }
+  .page-media-fields label > span { font-size: 0.7rem; font-weight: 600; color: var(--color-secondary); }
+  .page-media-fields input {
+    width: 100%;
+    border: 1px solid var(--color-hairline);
+    border-radius: 7px;
+    background: var(--color-paper);
+    padding: 0.55rem 0.65rem;
+    font-size: 0.82rem;
+    color: var(--color-ink);
+  }
+
+  @media (min-width: 640px) {
+    .page-media-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
   .page-content > * + * { margin-top: 1.5rem; }
   .page-content .page-heading { font-family: var(--font-display); font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1.04; }
   .page-content .page-subheading { margin-top: 2.75rem; font-family: var(--font-display); font-size: clamp(1.5rem, 3vw, 2.15rem); line-height: 1.15; }
