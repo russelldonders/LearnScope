@@ -252,13 +252,15 @@ export default function ExperienceDetail() {
     await loadLearning()
   }
 
+  const backTo = location.state?.backTo ?? (parentExperience ? `/experience/${parentExperience.id}` : '/experience')
+  const backLabel = location.state?.backLabel ?? (parentExperience ? parentExperience.title : 'experience')
 
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
-        <Link to="/experience" className="text-sm text-secondary hover:text-ink mb-6 inline-block">
-          ← Back to experience
+        <Link to={backTo} className="text-sm text-secondary hover:text-ink mb-6 inline-block">
+          ← Back to {backLabel}
         </Link>
 
         {loadingItem && <p className="text-secondary">Loading…</p>}
@@ -1172,13 +1174,16 @@ export function ExperienceActionButtons({
   onAddExperience,
   onLogActivity,
 }) {
+  const nestedTypes = nestedExperienceTypesFor(itemType)
   return (
     <div className="flex flex-wrap items-center gap-2 mt-4">
-      <AddExperienceButton
-        types={nestedExperienceTypesFor(itemType)}
-        onSelect={onAddExperience}
-        label="+ Add"
-      />
+      {nestedTypes.length > 0 && (
+        <AddExperienceButton
+          types={nestedTypes}
+          onSelect={onAddExperience}
+          label="+ Add"
+        />
+      )}
       <button
         type="button"
         onClick={onLogActivity}

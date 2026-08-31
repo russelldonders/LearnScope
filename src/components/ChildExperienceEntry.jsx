@@ -23,9 +23,11 @@ export default function ChildExperienceEntry({ child, isLast, onNavigate }) {
       >
         <p className="text-sm text-ink break-words">{child.title}</p>
         <p className="flex items-center gap-2 font-mono text-[10px] text-secondary/80 mt-0.5">
-          <span className="uppercase tracking-wide shrink-0">
-            {EXPERIENCE_TYPE_LABELS[child.type] ?? child.type}
-          </span>
+          {child.type !== 'subject' && (
+            <span className="uppercase tracking-wide shrink-0">
+              {EXPERIENCE_TYPE_LABELS[child.type] ?? child.type}
+            </span>
+          )}
           {(formatStudyDuration(child) || child.start_date) && (
             <span className="shrink-0">{formatStudyDuration(child) || formatDateRange(child.start_date, child.end_date)}</span>
           )}
