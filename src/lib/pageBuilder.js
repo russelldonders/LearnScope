@@ -46,9 +46,11 @@ export function sanitiseRichText(value = '') {
 }
 
 export function normaliseMediaUrl(value = '', type = 'image') {
+  const rawValue = String(value).trim()
+  if (/^\/course-content\/[a-zA-Z0-9-]+\/page-media\/[a-zA-Z0-9._-]+$/.test(rawValue)) return rawValue
   let parsed
   try {
-    parsed = new URL(String(value).trim())
+    parsed = new URL(rawValue)
   } catch {
     return ''
   }
@@ -84,6 +86,7 @@ export function normalisePageDocument(document) {
       ...(block.type === 'columns' ? { secondaryContent: sanitiseRichText(block.secondaryContent || '') } : {}),
       ...(['image', 'video'].includes(block.type) ? {
         url: normaliseMediaUrl(block.url, block.type),
+        storagePath: /^[-a-zA-Z0-9]+\/page-media\/[a-zA-Z0-9._-]+$/.test(block.storagePath || '') ? block.storagePath : '',
         alt: String(block.alt || '').slice(0, 300),
         caption: String(block.caption || '').slice(0, 500),
       } : {}),
