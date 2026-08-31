@@ -46,6 +46,7 @@ import AdminOnboarding from './pages/admin/AdminOnboarding'
 import ProviderConsole from './pages/provider/ProviderConsole'
 import ProviderCourseEditor from './pages/provider/ProviderCourseEditor'
 import ProviderCatalogueDetail from './pages/provider/ProviderCatalogueDetail'
+import ProviderSkillDetail from './pages/provider/ProviderSkillDetail'
 import RouteTitle from './components/RouteTitle'
 
 function App() {
@@ -247,6 +248,14 @@ function App() {
             element={
               <ProviderAdminRoute>
                 <ProviderCourseEditor />
+              </ProviderAdminRoute>
+            }
+          />
+          <Route
+            path="/provider/organisations/:organisationId/skills/:skillId"
+            element={
+              <ProviderAdminRoute>
+                <ProviderSkillDetail />
               </ProviderAdminRoute>
             }
           />
