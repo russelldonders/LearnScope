@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient'
 import { findOrCreateLibrarySkill } from './skillLibrary'
+import { syncSkillIsCurrentRole } from './currentRole'
 
 export async function recommendExperienceSkills(experience, linkedSkillNames) {
   const {
@@ -80,6 +81,10 @@ export async function addRecommendedSkills({ userId, experienceId, names }) {
       experience_id: experienceId,
     })
     if (error && error.code !== '23505') throw error
+    // Same belt-and-suspenders sync FindSkillModal does after linking a
+    // skill to an experience -- keeps skills.is_current_role accurate
+    // whether the link came from a search/create pick or an AI suggestion.
+    await syncSkillIsCurrentRole(userId, skill.id)
     added.push({ ...skill, created })
   }
   return added
