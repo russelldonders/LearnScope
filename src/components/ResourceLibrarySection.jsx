@@ -9,6 +9,9 @@ import {
   addExternalVideoResource,
   addWebResource,
   deleteResource,
+  createResourceDraftVersion,
+  listResourceVersions,
+  publishResourceVersion,
   contentFileUrl,
 } from '../lib/courseContent'
 import ScormPlayer from './ScormPlayer'
@@ -48,10 +51,14 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
   const [videoUrl, setVideoUrl] = useState('')
   const [editingResource, setEditingResource] = useState(null)
   const [showScreenRecorder, setShowScreenRecorder] = useState(false)
+  const [historyForId, setHistoryForId] = useState(null)
+  const [versionHistory, setVersionHistory] = useState([])
   const fileInputRef = useRef(null)
 
   useEffect(() => {
     load()
+    // load is also reused after mutations; organisationId is the boundary.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [organisationId])
 
   async function load() {
@@ -139,6 +146,41 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
       setError(err.message)
     } finally {
       setDeleting(false)
+    }
+  }
+
+  async function handleCreateVersion(resource) {
+    setError(null)
+    try {
+      await createResourceDraftVersion(resource.id)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handlePublishVersion(resource) {
+    setError(null)
+    try {
+      await publishResourceVersion(resource.id)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleToggleHistory(resource) {
+    if (historyForId === resource.id) {
+      setHistoryForId(null)
+      setVersionHistory([])
+      return
+    }
+    setError(null)
+    try {
+      setVersionHistory(await listResourceVersions(resource.id))
+      setHistoryForId(resource.id)
+    } catch (err) {
+      setError(err.message)
     }
   }
 
@@ -303,7 +345,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-ink truncate">{resource.title}</p>
-                  <p className="font-mono text-[10px] text-secondary">{TYPE_LABELS[resource.type]}</p>
+                  <p className="text-xs text-secondary">{TYPE_LABELS[resource.type]} · v{resource.version_number ?? 1} · {resource.status === 'draft' ? 'Draft' : resource.status === 'inactive' ? 'Previous version' : 'Published'}</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {resource.type === 'file' ? (
@@ -336,7 +378,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
                       {previewingId === resource.id ? 'Hide preview' : 'Preview'}
                     </button>
                   )}
-                  {(resource.type === 'video' || resource.type === 'screen_recording') && (
+                  {(resource.type === 'video' || resource.type === 'screen_recording') && resource.status === 'draft' && (
                     <button
                       type="button"
                       onClick={() => setEditingResource(resource)}
@@ -345,6 +387,19 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
                       Edit Video
                     </button>
                   )}
+                  {resource.status === 'published' && resource.is_current_published && (
+                    <button type="button" onClick={() => handleCreateVersion(resource)} className="text-xs text-moss font-medium hover:underline">
+                      Create new version
+                    </button>
+                  )}
+                  {resource.status === 'draft' && (
+                    <button type="button" onClick={() => handlePublishVersion(resource)} className="text-xs text-moss font-medium hover:underline">
+                      Publish version
+                    </button>
+                  )}
+                  <button type="button" onClick={() => handleToggleHistory(resource)} className="text-xs text-moss font-medium hover:underline">
+                    {historyForId === resource.id ? 'Hide versions' : 'Version history'}
+                  </button>
                   <button
                     type="button"
                     onClick={() => setPendingDelete(resource)}
@@ -375,6 +430,20 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
                   allowFullScreen
                   className="w-full aspect-video mt-2 rounded-md"
                 />
+              )}
+              {historyForId === resource.id && (
+                <div className="mt-3 border-t border-hairline pt-3">
+                  <p className="mb-2 text-xs font-medium text-ink">Version history</p>
+                  <ul className="space-y-1.5">
+                    {versionHistory.map((version) => (
+                      <li key={version.id} className="flex items-center justify-between gap-3 text-xs text-secondary">
+                        <span>v{version.version_number}</span>
+                        <span>{version.status === 'draft' ? 'Draft' : version.status === 'inactive' ? 'Previous version' : 'Published'}</span>
+                        <time dateTime={version.published_at || version.created_at}>{new Date(version.published_at || version.created_at).toLocaleDateString()}</time>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </li>
           ))}
