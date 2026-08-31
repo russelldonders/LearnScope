@@ -162,6 +162,13 @@ export function provenanceFromStatement(statement) {
   return statement.context?.extensions?.[PROVENANCE_EXTENSION_IRI] ?? null
 }
 
+// Display name for a provenance.source value (see PROVENANCE_EXTENSION_IRI) --
+// only Strava exists today, but keeping this a lookup rather than a literal
+// "Strava" string means a future connector just adds an entry here.
+export const PROVENANCE_SOURCE_LABELS = {
+  strava: 'Strava',
+}
+
 // "Advanced Databases · Computer Science BSc" rather than just "Advanced
 // Databases" -- a subject or project name alone doesn't say which
 // education/job it belongs to, especially once someone has more than one.

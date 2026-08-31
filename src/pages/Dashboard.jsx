@@ -13,6 +13,9 @@ import {
 import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
 import AppHeader from '../components/AppHeader'
 import RecordActivitySection from '../components/RecordActivitySection'
+import RecordActivityModal from '../components/RecordActivityModal'
+import SetTargetModal from '../components/SetTargetModal'
+import InviteRaterModal from '../components/InviteRaterModal'
 import FindSkillModal from '../components/FindSkillModal'
 import AccessibleDialog from '../components/AccessibleDialog'
 import GrowthRing from '../components/GrowthRing'
@@ -23,20 +26,28 @@ import { LEVEL_LABELS } from '../lib/levels'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
 import { isDiagnosticStatement } from '../lib/xapiStatement'
+import { uploadEvidenceFiles } from '../lib/skillEvidence'
 import { isSelfAssessmentDue, todayDateString } from '../lib/checkin'
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 
 // Drives the dashboard's "import your CV/history" banner -- shown until
 // the learner has actually run an import once (cv_imported_at, set by
 // ResumeImportReviewModal on first successful import from either the
-// onboarding wizard or /profile/import) or explicitly dismissed it.
+// onboarding wizard or /profile/import) or explicitly dismissed it --
+// and the "add your current role" banner, dismissible independently.
 async function loadImportBannerState(userId) {
   const { data } = await supabase
     .from('profiles')
-    .select('cv_imported_at, cv_import_banner_dismissed_at')
+    .select('cv_imported_at, cv_import_banner_dismissed_at, current_role_banner_dismissed_at')
     .eq('id', userId)
     .single()
-  return data ?? { cv_imported_at: null, cv_import_banner_dismissed_at: null }
+  return (
+    data ?? {
+      cv_imported_at: null,
+      cv_import_banner_dismissed_at: null,
+      current_role_banner_dismissed_at: null,
+    }
+  )
 }
 
 async function countRows(table, userId) {
@@ -223,7 +234,7 @@ const STAGE_ORDER = Object.fromEntries(SKILL_LIFECYCLE_FLOW_STAGES.map((s, i) =>
 async function loadUpNextRecommendations(userId) {
   const { data: skills } = await supabase
     .from('skills')
-    .select('id, name, level, lifecycle_stage, knowledge_level')
+    .select('id, name, level, lifecycle_stage, knowledge_level, library_skill_id')
     .eq('user_id', userId)
     .not('lifecycle_stage', 'is', null)
   if (!skills || skills.length === 0) return []
@@ -368,6 +379,15 @@ export default function Dashboard() {
     setLoading(false)
   }
 
+  // A quick action taken straight from an Up Next card (logging activity,
+  // setting a target, an invite sent...) can change what a skill's next
+  // recommended step is -- refetched on its own rather than via loadSummary
+  // so the rest of the dashboard doesn't flash back to its loading skeleton
+  // for what should feel like an inline update.
+  async function refreshUpNext() {
+    setUpNext(await loadUpNextRecommendations(user.id))
+  }
+
   async function retryConnectionsActivity() {
     const result = await loadConnectionsActivity()
     setConnectionsActivity(result.data)
@@ -381,6 +401,14 @@ export default function Dashboard() {
     await supabase
       .from('profiles')
       .update({ cv_import_banner_dismissed_at: new Date().toISOString() })
+      .eq('id', user.id)
+  }
+
+  async function dismissCurrentRoleBanner() {
+    setImportBanner((prev) => ({ ...prev, current_role_banner_dismissed_at: new Date().toISOString() }))
+    await supabase
+      .from('profiles')
+      .update({ current_role_banner_dismissed_at: new Date().toISOString() })
       .eq('id', user.id)
   }
 
@@ -426,22 +454,34 @@ export default function Dashboard() {
           )}
         </section>
 
-        {!loading && counts.experience === 0 && counts.skills + counts.courses + counts.connections > 0 && (
-          <div className="rounded-lg border border-dashed border-hairline bg-card p-6 text-center">
-            <h2 className="font-display text-xl text-ink mb-1">Add your current role</h2>
-            <p className="text-sm text-secondary mb-4 max-w-md mx-auto text-pretty">
-              Your Experience timeline is empty. Record the job you're in now so LearnScope can
-              start linking your skills, courses and achievements to it.
-            </p>
-            <button
-              type="button"
-              onClick={() => navigate('/experience', { state: { autoOpenType: 'employment' } })}
-              className="inline-block rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
-            >
-              Record your current role
-            </button>
-          </div>
-        )}
+        {!loading &&
+          counts.experience === 0 &&
+          counts.skills + counts.courses + counts.connections > 0 &&
+          !importBanner?.current_role_banner_dismissed_at && (
+            <div className="rounded-lg border border-dashed border-hairline bg-card p-6 text-center">
+              <h2 className="font-display text-xl text-ink mb-1">Add your current role</h2>
+              <p className="text-sm text-secondary mb-4 max-w-md mx-auto text-pretty">
+                Your Experience timeline is empty. Record the job you're in now so LearnScope can
+                start linking your skills, courses and achievements to it.
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate('/experience', { state: { autoOpenType: 'employment' } })}
+                  className="inline-block rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
+                >
+                  Record your current role
+                </button>
+                <button
+                  type="button"
+                  onClick={dismissCurrentRoleBanner}
+                  className="text-sm text-secondary hover:text-ink whitespace-nowrap"
+                >
+                  Don't show this again
+                </button>
+              </div>
+            </div>
+          )}
 
         {!loading &&
           (upcomingSelfAssessments.length > 0 || upcomingTargets.length > 0 || pendingReviewTasks.length > 0) && (
@@ -489,7 +529,7 @@ export default function Dashboard() {
           <div>
             <h2 className="font-display text-xl text-ink mb-2">More ways to make progress</h2>
             <p className="text-sm text-secondary mb-6">Useful next steps across your other skills.</p>
-            <UpNextSlider recommendations={upNext.slice(1)} />
+            <UpNextSlider recommendations={upNext.slice(1)} onActionComplete={refreshUpNext} />
           </div>
         )}
 
@@ -788,7 +828,7 @@ function buildUpNextSlides(recommendations) {
   )
 }
 
-function UpNextSlider({ recommendations }) {
+function UpNextSlider({ recommendations, onActionComplete }) {
   const { scrollerRef, canScrollLeft, canScrollRight, scrollByPage } = useHorizontalScroller()
   const slides = buildUpNextSlides(recommendations)
 
@@ -801,10 +841,12 @@ function UpNextSlider({ recommendations }) {
       >
         {slides.map((slide) =>
           slide.type === 'skill' ? (
-            <Link
+            <UpNextActionTrigger
               key={slide.skill.id}
-              to={`/skills/${slide.skill.id}`}
-              className="snap-start shrink-0 w-64 bg-card border border-hairline rounded-lg p-4 hover:border-moss transition-colors"
+              skill={slide.skill}
+              item={slide.item}
+              onDone={onActionComplete}
+              className="snap-start shrink-0 w-64 bg-card border border-hairline rounded-lg p-4 text-left hover:border-moss transition-colors"
             >
               <div className="flex items-center gap-3 mb-3">
                 <GrowthRing level={slide.skill.level} size={40} />
@@ -812,7 +854,7 @@ function UpNextSlider({ recommendations }) {
               </div>
               <p className="text-sm text-ink font-medium">{slide.item.label}</p>
               <p className="text-xs text-secondary mt-1">{slide.item.description}</p>
-            </Link>
+            </UpNextActionTrigger>
           ) : (
             <div
               key={`action-${slide.label}`}
@@ -820,13 +862,172 @@ function UpNextSlider({ recommendations }) {
             >
               <h3 className="font-display text-base text-ink">{slide.label}</h3>
               <p className="text-xs text-secondary mt-1 mb-3">{slide.description}</p>
-              <ActionSkillsButton label={slide.label} recs={slide.recs} />
+              <ActionSkillsButton label={slide.label} recs={slide.recs} onActionComplete={onActionComplete} />
             </div>
           )
         )}
       </div>
       {canScrollRight && <SliderArrow direction="right" onClick={() => scrollByPage(1)} />}
     </div>
+  )
+}
+
+// Actions with a clear, self-contained existing modal (or a one-click stage
+// update the skill page already performs with no confirmation step -- see
+// handleDemonstrateSkill/handleValidateSkillStage in SkillDetail.jsx) get
+// triggered right from the card instead of detouring through the skill
+// page just to click the same thing again. Item keys without a direct
+// equivalent here (self-assessment, the knowledge quiz, requesting
+// validation/AI assessment) lean on richer page state -- assessment
+// history, AI-generated guide text -- that isn't worth duplicating for a
+// dashboard shortcut, so those keep navigating to the skill page as before.
+const DIRECT_UPNEXT_ACTION_KEYS = new Set([
+  'activity',
+  'record-activity',
+  'target',
+  'invite',
+  'invite-demonstrating',
+  'invite-validating',
+  'find-course',
+  'demonstrate',
+  'validate',
+])
+
+function UpNextActionTrigger({ skill, item, className, children, onDone }) {
+  const { user } = useAuth()
+  const navigate = useNavigate()
+  const [recordActivityOpen, setRecordActivityOpen] = useState(false)
+  const [targetOpen, setTargetOpen] = useState(false)
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [actorName, setActorName] = useState('')
+  const [targets, setTargets] = useState([])
+  const [busy, setBusy] = useState(false)
+
+  async function handleClick() {
+    switch (item.key) {
+      case 'activity':
+      case 'record-activity': {
+        if (!actorName) {
+          const { data } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
+          setActorName(data?.full_name || user.email)
+        }
+        setRecordActivityOpen(true)
+        return
+      }
+      case 'target': {
+        const { data } = await supabase
+          .from('skill_targets')
+          .select('*')
+          .eq('skill_id', skill.id)
+          .order('created_at', { ascending: false })
+        setTargets(data ?? [])
+        setTargetOpen(true)
+        return
+      }
+      case 'invite':
+      case 'invite-demonstrating':
+      case 'invite-validating':
+        setInviteOpen(true)
+        return
+      case 'find-course':
+        navigate('/training', {
+          state: {
+            skillId: skill.id,
+            skillName: skill.name,
+            librarySkillId: skill.library_skill_id,
+            skillLevel: skill.level,
+            backTo: '/dashboard',
+          },
+        })
+        return
+      case 'demonstrate':
+        setBusy(true)
+        await supabase.from('skills').update({ lifecycle_stage: 'developing' }).eq('id', skill.id)
+        setBusy(false)
+        onDone?.()
+        return
+      case 'validate':
+        setBusy(true)
+        await supabase.from('skills').update({ lifecycle_stage: 'demonstrated' }).eq('id', skill.id)
+        setBusy(false)
+        onDone?.()
+        return
+      default:
+        navigate(`/skills/${skill.id}`)
+    }
+  }
+
+  async function handleSaveActivity(statement, evidence) {
+    const { data, error } = await supabase
+      .from('xapi_statements')
+      .insert({
+        user_id: user.id,
+        statement,
+        recorded_at: statement.timestamp,
+        skill_id: skill.id,
+        evidence_url: evidence?.evidenceUrl || null,
+      })
+      .select()
+      .single()
+    if (error) throw error
+    if (evidence?.files.length > 0) {
+      const paths = await uploadEvidenceFiles(user.id, skill.id, data.id, evidence.files)
+      const { error: updateError } = await supabase
+        .from('xapi_statements')
+        .update({ evidence_paths: paths })
+        .eq('id', data.id)
+      if (updateError) throw updateError
+    }
+    setRecordActivityOpen(false)
+    onDone?.()
+  }
+
+  if (!DIRECT_UPNEXT_ACTION_KEYS.has(item.key)) {
+    return (
+      <Link to={`/skills/${skill.id}`} className={className}>
+        {children}
+      </Link>
+    )
+  }
+
+  return (
+    <>
+      <button type="button" onClick={handleClick} disabled={busy} className={className}>
+        {children}
+      </button>
+
+      {recordActivityOpen && (
+        <RecordActivityModal
+          actor={{ name: actorName, email: user.email }}
+          skills={[]}
+          relatedSkill={{ id: skill.id, name: skill.name }}
+          onSave={handleSaveActivity}
+          onClose={() => setRecordActivityOpen(false)}
+        />
+      )}
+      {targetOpen && (
+        <SetTargetModal
+          skill={skill}
+          user={user}
+          targets={targets}
+          currentLevel={skill.level}
+          onClose={() => setTargetOpen(false)}
+          onSet={() => {
+            setTargetOpen(false)
+            onDone?.()
+          }}
+        />
+      )}
+      {inviteOpen && (
+        <InviteRaterModal
+          skill={skill}
+          onClose={() => {
+            setInviteOpen(false)
+            onDone?.()
+          }}
+        />
+      )}
+    </>
   )
 }
 
@@ -839,9 +1040,14 @@ function UpNextSlider({ recommendations }) {
 // gets cut off and can even shift the row's scroll position. A dialog
 // avoids that entirely since its fixed overlay isn't part of the row's
 // layout or clipping box.
-function ActionSkillsButton({ label, recs }) {
+function ActionSkillsButton({ label, recs, onActionComplete }) {
   const [open, setOpen] = useState(false)
   const titleId = useId()
+
+  function handleDone() {
+    setOpen(false)
+    onActionComplete?.()
+  }
 
   return (
     <>
@@ -858,22 +1064,24 @@ function ActionSkillsButton({ label, recs }) {
         <AccessibleDialog
           labelledBy={titleId}
           onClose={() => setOpen(false)}
-          panelClassName="w-full max-w-sm bg-card border border-hairline rounded-lg p-6"
+          panelClassName="w-full max-w-sm bg-card border border-hairline rounded-lg p-6 max-h-[85vh] overflow-y-auto overscroll-contain"
         >
           <h2 id={titleId} className="font-display text-lg text-ink mb-1">
             {label}
           </h2>
           <p className="text-sm text-secondary mb-4">Choose which skill to continue with.</p>
           <div className="space-y-2">
-            {recs.map(({ skill }) => (
-              <Link
+            {recs.map(({ skill, item }) => (
+              <UpNextActionTrigger
                 key={skill.id}
-                to={`/skills/${skill.id}`}
-                className="flex items-center gap-3 border border-hairline rounded-md p-2.5 hover:border-moss transition-colors"
+                skill={skill}
+                item={item}
+                onDone={handleDone}
+                className="flex items-center gap-3 border border-hairline rounded-md p-2.5 text-left w-full hover:border-moss transition-colors"
               >
                 <GrowthRing level={skill.level} size={28} />
                 <span className="text-sm text-ink">{skill.name}</span>
-              </Link>
+              </UpNextActionTrigger>
             ))}
           </div>
         </AccessibleDialog>
