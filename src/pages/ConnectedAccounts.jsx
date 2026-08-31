@@ -20,6 +20,7 @@ export default function ConnectedAccounts() {
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false)
   const [reviewActivities, setReviewActivities] = useState(null)
   const [error, setError] = useState(null)
+  const [successMessage, setSuccessMessage] = useState(null)
 
   useEffect(() => {
     handleOAuthReturn()
@@ -88,11 +89,12 @@ export default function ConnectedAccounts() {
 
   async function handleSync() {
     setError(null)
+    setSuccessMessage(null)
     setSyncing(true)
     try {
       const activities = await syncStrava()
       if (activities.length === 0) {
-        setError('No new activities since your last sync.')
+        setSuccessMessage('Synced — no new activities since your last sync.')
       } else {
         setReviewActivities(activities)
       }
@@ -109,6 +111,7 @@ export default function ConnectedAccounts() {
   }
 
   async function handleDisconnect() {
+    setSuccessMessage(null)
     setDisconnecting(true)
     try {
       await disconnectStrava()
@@ -135,6 +138,7 @@ export default function ConnectedAccounts() {
         </div>
 
         {error && <p className="text-sm text-red-700">{error}</p>}
+        {successMessage && <p className="text-sm text-moss">{successMessage}</p>}
 
         <div className="bg-card border border-hairline rounded-lg p-6">
           <h3 className="font-display text-lg text-ink mb-1">Strava</h3>
@@ -195,7 +199,10 @@ export default function ConnectedAccounts() {
           <StravaActivityReviewModal
             activities={reviewActivities}
             onClose={() => setReviewActivities(null)}
-            onImported={() => setReviewActivities(null)}
+            onImported={(count) => {
+              setReviewActivities(null)
+              setSuccessMessage(`Imported ${count} ${count === 1 ? 'activity' : 'activities'}.`)
+            }}
           />
         )}
       </main>

@@ -162,7 +162,7 @@ export default function StravaActivityReviewModal({ activities, onClose, onImpor
         if (insertError) throw insertError
       }
 
-      onImported()
+      onImported(totalSelected)
     } catch (err) {
       setError(err.message)
       setImporting(false)
