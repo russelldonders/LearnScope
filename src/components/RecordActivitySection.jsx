@@ -31,11 +31,16 @@ export default function RecordActivitySection() {
 
   async function loadStatements() {
     setLoading(true)
+    // Ordered by when it was logged, not the (possibly backdated) date it
+    // happened -- this widget is "things you've recently recorded," so a
+    // historical activity you just added should still show up here even
+    // though its own date sorts older. The subject/skill pages show the
+    // true chronological history separately, sorted by recorded_at.
     const { data, error } = await supabase
       .from('xapi_statements')
       .select('*')
       .eq('user_id', user.id)
-      .order('recorded_at', { ascending: false })
+      .order('created_at', { ascending: false })
     if (error) setError(error.message)
     else setStatements(data)
     setLoading(false)
