@@ -44,6 +44,7 @@ export default function AdminUserDetail() {
           <>
             <div className="bg-card border border-hairline rounded-lg p-6">
               <h2 className="font-display text-xl text-ink mb-1">{name || '(no name set)'}</h2>
+              <p className="font-mono text-xs text-secondary">{data.profile.userCode}</p>
               <p className="text-sm text-secondary mb-3">{data.profile.email}</p>
               <div className="flex flex-wrap gap-2 text-xs">
                 <span

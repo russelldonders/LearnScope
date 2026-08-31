@@ -401,7 +401,7 @@ async function getUserProfile(admin, caller, { userId }, res) {
 
   const { data: profile, error: profileError } = await admin
     .from('profiles')
-    .select('first_name, last_name, account_status, country, location, language, avatar_url')
+    .select('first_name, last_name, account_status, country, location, language, avatar_url, user_code')
     .eq('id', userId)
     .maybeSingle()
   if (profileError) throw profileError
@@ -480,6 +480,7 @@ async function getUserProfile(admin, caller, { userId }, res) {
   res.status(200).json({
     profile: {
       id: userId,
+      userCode: profile?.user_code ?? null,
       email: targetUser.user.email,
       firstName: profile?.first_name ?? null,
       lastName: profile?.last_name ?? null,

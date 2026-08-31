@@ -75,6 +75,7 @@ export default function AdminSkillDetail() {
           <>
             <div className="bg-card border border-hairline rounded-lg p-6">
               <h2 className="font-display text-xl text-ink mb-1">{skill.name}</h2>
+              <p className="font-mono text-xs text-secondary">{skill.skill_code}</p>
               {skill.description && <p className="text-sm text-secondary mb-3">{skill.description}</p>}
               <div className="flex flex-wrap gap-2 text-xs">
                 <span className="font-mono uppercase tracking-wide rounded-full px-2 py-0.5 border border-hairline text-secondary">
