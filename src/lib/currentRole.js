@@ -32,7 +32,11 @@ async function createCurrentRoleExperience(userId) {
   return data.id
 }
 
-async function linkSkillToExperiences(userId, skillId, experienceIds) {
+// Idempotent: only inserts links that don't already exist, so this is safe
+// to call every time an activity is logged against a skill+experience pair
+// (see RecordActivitySection/ExperienceDetail's handleLogActivity) without
+// risking a unique-constraint error on a skill already linked another way.
+export async function linkSkillToExperiences(userId, skillId, experienceIds) {
   if (experienceIds.length === 0) return
   const { data: existingLinks } = await supabase
     .from('skill_experience_links')
@@ -94,23 +98,52 @@ export async function enableCurrentRole(userId, skillId) {
   return { needsSelection: true, roles }
 }
 
-// Finishes what enableCurrentRole started once the learner has picked
-// which of their several current roles this skill applies to.
+// Finishes what enableCurrentRole/trackUnderCurrentRole started once the
+// learner has picked which of their several current roles this skill
+// applies to.
 export async function applyCurrentRoleSelection(userId, skillId, experienceIds) {
   await linkSkillToExperiences(userId, skillId, experienceIds)
   await syncSkillIsCurrentRole(userId, skillId)
 }
 
-// Turns "part of my current role" off: removes links to every current
-// (ongoing) employment entry.
-export async function disableCurrentRole(userId, skillId) {
+// Full picture needed to render "Track under current role" on the skill
+// detail page: every current (ongoing) role, and which of those this skill
+// isn't linked to yet. The button hides only once there's at least one
+// current role and all of them already have this skill; with zero current
+// roles it still shows, since clicking creates one.
+export async function getCurrentRoleTrackingStatus(userId, skillId) {
   const roles = await listCurrentRoleExperiences(userId)
-  if (roles.length > 0) {
-    await supabase
-      .from('skill_experience_links')
-      .delete()
-      .eq('skill_id', skillId)
-      .in('experience_id', roles.map((r) => r.id))
+  if (roles.length === 0) return { roles, untracked: [] }
+  const { data: links } = await supabase
+    .from('skill_experience_links')
+    .select('experience_id')
+    .eq('skill_id', skillId)
+    .in('experience_id', roles.map((r) => r.id))
+  const linkedIds = new Set((links ?? []).map((l) => l.experience_id))
+  return { roles, untracked: roles.filter((r) => !linkedIds.has(r.id)) }
+}
+
+// "Track under current role" click handler. With no ongoing job yet,
+// creates one (titled "Current role") and links it. With exactly one
+// untracked current role, links it directly -- no decision for the
+// learner to make either way. With more than one, returns
+// { needsSelection: true, roles } (the untracked ones only) for the
+// caller to show a picker and finish via applyCurrentRoleSelection.
+// Takes the result of getCurrentRoleTrackingStatus so callers that already
+// fetched it (to decide whether to show the button) don't re-query.
+export async function trackUnderCurrentRole(userId, skillId, { roles, untracked }) {
+  if (roles.length === 0) {
+    const newId = await createCurrentRoleExperience(userId)
+    await linkSkillToExperiences(userId, skillId, [newId])
+    await syncSkillIsCurrentRole(userId, skillId)
+    return { needsSelection: false }
   }
-  await syncSkillIsCurrentRole(userId, skillId)
+
+  if (untracked.length === 1) {
+    await linkSkillToExperiences(userId, skillId, [untracked[0].id])
+    await syncSkillIsCurrentRole(userId, skillId)
+    return { needsSelection: false }
+  }
+
+  return { needsSelection: true, roles: untracked }
 }

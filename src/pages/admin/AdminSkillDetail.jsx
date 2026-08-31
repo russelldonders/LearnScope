@@ -75,6 +75,7 @@ export default function AdminSkillDetail() {
           <>
             <div className="bg-card border border-hairline rounded-lg p-6">
               <h2 className="font-display text-xl text-ink mb-1">{skill.name}</h2>
+              <p className="font-mono text-xs text-secondary">{skill.skill_code}</p>
               {skill.description && <p className="text-sm text-secondary mb-3">{skill.description}</p>}
               <div className="flex flex-wrap gap-2 text-xs">
                 <span className="font-mono uppercase tracking-wide rounded-full px-2 py-0.5 border border-hairline text-secondary">
@@ -97,6 +98,37 @@ export default function AdminSkillDetail() {
                 >
                   {skill.status}
                 </span>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-display text-lg text-ink mb-2">
+                Statistics ({totalTrackers} {totalTrackers === 1 ? 'person tracks' : 'people track'} this skill)
+              </h3>
+              <div className="bg-card border border-hairline rounded-lg overflow-hidden">
+                {totalTrackers === 0 ? (
+                  <p className="px-4 py-6 text-center text-sm text-secondary">No one tracks this skill yet.</p>
+                ) : (
+                  <ul className="divide-y divide-hairline">
+                    {LEVELS.map((level) => {
+                      const count = countByLevel.get(level) ?? 0
+                      const pct = totalTrackers ? Math.round((count / totalTrackers) * 100) : 0
+                      return (
+                        <li key={level} className="px-4 py-2 text-sm flex items-center gap-3">
+                          <span className="text-ink w-28 shrink-0">
+                            {level}. {LEVEL_LABELS[level]}
+                          </span>
+                          <div className="flex-1 h-2 rounded-full bg-paper overflow-hidden">
+                            <div className="h-full bg-moss" style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="text-secondary text-xs w-16 text-right shrink-0">
+                            {count} ({pct}%)
+                          </span>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
               </div>
             </div>
 
@@ -136,37 +168,6 @@ export default function AdminSkillDetail() {
                   fallbackDescriptions={LEVEL_DESCRIPTIONS}
                   skillName={skill.name}
                 />
-              </div>
-            </div>
-
-            <div>
-              <h3 className="font-display text-lg text-ink mb-2">
-                Statistics ({totalTrackers} {totalTrackers === 1 ? 'person tracks' : 'people track'} this skill)
-              </h3>
-              <div className="bg-card border border-hairline rounded-lg overflow-hidden">
-                {totalTrackers === 0 ? (
-                  <p className="px-4 py-6 text-center text-sm text-secondary">No one tracks this skill yet.</p>
-                ) : (
-                  <ul className="divide-y divide-hairline">
-                    {LEVELS.map((level) => {
-                      const count = countByLevel.get(level) ?? 0
-                      const pct = totalTrackers ? Math.round((count / totalTrackers) * 100) : 0
-                      return (
-                        <li key={level} className="px-4 py-2 text-sm flex items-center gap-3">
-                          <span className="text-ink w-28 shrink-0">
-                            {level}. {LEVEL_LABELS[level]}
-                          </span>
-                          <div className="flex-1 h-2 rounded-full bg-paper overflow-hidden">
-                            <div className="h-full bg-moss" style={{ width: `${pct}%` }} />
-                          </div>
-                          <span className="text-secondary text-xs w-16 text-right shrink-0">
-                            {count} ({pct}%)
-                          </span>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                )}
               </div>
             </div>
           </>

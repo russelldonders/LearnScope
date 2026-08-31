@@ -7,6 +7,8 @@ export default function ExperienceModal({
   type = 'employment',
   initialOrganization = '',
   initialOrganizationUrl = '',
+  minimumDate,
+  maximumDate,
   onSave,
   onClose,
 }) {
@@ -16,6 +18,8 @@ export default function ExperienceModal({
   const [organizationUrl, setOrganizationUrl] = useState(initialOrganizationUrl)
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [studyDurationValue, setStudyDurationValue] = useState('')
+  const [studyDurationUnit, setStudyDurationUnit] = useState('months')
   const [current, setCurrent] = useState(false)
   const [description, setDescription] = useState('')
   const [saving, setSaving] = useState(false)
@@ -23,8 +27,17 @@ export default function ExperienceModal({
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!title.trim() || (config.orgRequired && !organization.trim()) || !startDate) {
-      setError(`Title${config.orgRequired ? ', organization,' : ''} and start date are required.`)
+    const datesRequired = config.datesRequired !== false
+    if (!title.trim() || (config.orgRequired && !organization.trim()) || (datesRequired && !startDate)) {
+      setError(`Title${config.orgRequired ? ', organization,' : ''}${datesRequired ? ' and start date are' : ' is'} required.`)
+      return
+    }
+    if (!datesRequired && !startDate && !studyDurationValue) {
+      setError('Enter a start date or a duration of study.')
+      return
+    }
+    if (endDate && !startDate) {
+      setError('Enter a start date before adding an end date.')
       return
     }
     setError(null)
@@ -35,8 +48,11 @@ export default function ExperienceModal({
         title: title.trim(),
         organization: organization.trim() || null,
         organization_url: organizationUrl.trim() || null,
-        start_date: startDate,
-        end_date: current ? null : endDate || null,
+        start_date: startDate || null,
+        end_date: startDate && !current ? endDate || null : null,
+        study_duration: null,
+        study_duration_value: config.allowsStudyDuration ? Number(studyDurationValue) || null : null,
+        study_duration_unit: config.allowsStudyDuration && studyDurationValue ? studyDurationUnit : null,
         description: description.trim() || null,
       })
     } catch (err) {
@@ -68,7 +84,7 @@ export default function ExperienceModal({
             />
           </div>
 
-          <div>
+          {!config.inheritsOrganization && <div>
             <label className="block text-sm text-secondary mb-1" htmlFor="organization">
               {config.orgLabel}
             </label>
@@ -79,19 +95,36 @@ export default function ExperienceModal({
               onChange={(e) => setOrganization(e.target.value)}
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
             />
-          </div>
+          </div>}
 
-          <OrganizationUrlField value={organizationUrl} onChange={setOrganizationUrl} />
+          {!config.inheritsOrganization && <OrganizationUrlField value={organizationUrl} onChange={setOrganizationUrl} />}
 
-          <div className="grid grid-cols-2 gap-4">
+          {config.allowsStudyDuration && (
+            <div>
+              <label className="block text-sm text-secondary mb-1" htmlFor="studyDurationValue">Duration of study</label>
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,0.7fr)] gap-2">
+                <input id="studyDurationValue" type="number" min="1" step="1" inputMode="numeric" value={studyDurationValue} onChange={(e) => setStudyDurationValue(e.target.value)} placeholder="e.g. 6" className="min-w-0 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
+                <select aria-label="Duration unit" value={studyDurationUnit} onChange={(e) => setStudyDurationUnit(e.target.value)} className="min-w-0 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss">
+                  <option value="days">Days</option>
+                  <option value="months">Months</option>
+                  <option value="years">Years</option>
+                </select>
+              </div>
+              <p className="text-xs text-secondary mt-1">Use this instead of dates, or alongside them.</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="startDate">
-                Start date
+                Start date{config.datesRequired === false ? ' (optional)' : ''}
               </label>
               <input
                 id="startDate"
                 type="date"
-                required
+                min={minimumDate}
+                max={maximumDate}
+                required={config.datesRequired !== false}
                 value={startDate}
                 onChange={(e) => {
                   const value = e.target.value
@@ -103,11 +136,13 @@ export default function ExperienceModal({
             </div>
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="endDate">
-                End date
+                End date{config.datesRequired === false ? ' (optional)' : ''}
               </label>
               <input
                 id="endDate"
                 type="date"
+                min={minimumDate}
+                max={maximumDate}
                 disabled={current}
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
@@ -116,15 +151,17 @@ export default function ExperienceModal({
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-secondary">
-            <input
-              type="checkbox"
-              checked={current}
-              onChange={(e) => setCurrent(e.target.checked)}
-              className="rounded border-hairline"
-            />
-            This is ongoing / current
-          </label>
+          {(config.datesRequired !== false || startDate) && (
+            <label className="flex items-center gap-2 text-sm text-secondary">
+              <input
+                type="checkbox"
+                checked={current}
+                onChange={(e) => setCurrent(e.target.checked)}
+                className="rounded border-hairline"
+              />
+              This is ongoing / current
+            </label>
+          )}
 
           <div>
             <label className="block text-sm text-secondary mb-1" htmlFor="description">
@@ -135,7 +172,7 @@ export default function ExperienceModal({
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Responsibilities, achievements, focus areas…"
+              placeholder="What did you learn? What knowledge or skills did you develop?"
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
             />
           </div>

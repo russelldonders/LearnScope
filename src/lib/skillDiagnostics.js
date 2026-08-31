@@ -94,18 +94,19 @@ export async function saveDiagnosticAttempt({
 
 // Server decides cache-hit vs. generate, same reasoning as the quiz above.
 // calibrate=true (no level) produces a plan spanning the full 1-5 range
-// instead of one pitched at a single level -- see api/generate-interview-plan.js.
+// instead of one pitched at a single level -- see api/interview.js.
 export async function fetchOrGenerateInterviewPlan({ skill, level, calibrate = false }) {
   const {
     data: { session },
   } = await supabase.auth.getSession()
-  const res = await fetch('/api/generate-interview-plan', {
+  const res = await fetch('/api/interview', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`,
     },
     body: JSON.stringify({
+      type: 'plan',
       skillName: skill.name,
       level,
       calibrate,
@@ -128,13 +129,13 @@ export async function sendInterviewTurn({ skillName, level, calibrate = false, p
   const {
     data: { session },
   } = await supabase.auth.getSession()
-  const res = await fetch('/api/interview-turn', {
+  const res = await fetch('/api/interview', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify({ skillName, level, calibrate, plan, transcript }),
+    body: JSON.stringify({ type: 'turn', skillName, level, calibrate, plan, transcript }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))

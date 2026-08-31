@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('../lib/supabaseClient', () => ({ supabase: {} }))
 
-import { ConnectionsActivityFeed, FocusPanel, OverviewStrip } from './Dashboard'
+import ConnectionsActivityFeed from '../components/ConnectionsActivityFeed'
+import { FocusPanel, OverviewStrip } from './Dashboard'
 
 function renderWithRouter(ui) {
   return render(<MemoryRouter>{ui}</MemoryRouter>)

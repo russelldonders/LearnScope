@@ -1,17 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useAuth } from '../../context/AuthContext'
 import AdminLayout from './AdminLayout'
 import {
   listAllCatalogueCourses,
   approveCatalogueCourse,
   rejectCatalogueCourse,
-  setCatalogueCourseStatus,
+  deactivateCatalogueCourse,
 } from '../../lib/admin/catalogue'
 
 const STATUS_FILTERS = ['all', 'draft', 'pending_approval', 'approved', 'rejected', 'inactive']
 
 export default function AdminCatalogue() {
-  const { user } = useAuth()
   const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -45,7 +43,7 @@ export default function AdminCatalogue() {
     setActioningId(course.id)
     setError(null)
     try {
-      await approveCatalogueCourse(course.id, user.id)
+      await approveCatalogueCourse(course.id)
       await load()
     } catch (err) {
       setError(err.message)
@@ -69,11 +67,11 @@ export default function AdminCatalogue() {
     }
   }
 
-  async function handleSetStatus(course, status) {
+  async function handleDeactivate(course) {
     setActioningId(course.id)
     setError(null)
     try {
-      await setCatalogueCourseStatus(course.id, status)
+      await deactivateCatalogueCourse(course.id)
       await load()
     } catch (err) {
       setError(err.message)
@@ -118,12 +116,17 @@ export default function AdminCatalogue() {
                   <div>
                     <p className="text-ink font-medium">{course.name}</p>
                     <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mt-0.5">
-                      {[course.provider, course.organisations?.name, course.status.replace('_', ' ')]
+                      {[course.course_code, `v${course.version_number}`, course.provider, course.organisations?.name, course.status.replace('_', ' ')]
                         .filter(Boolean)
                         .join(' · ')}
                     </p>
                     {course.rejection_reason && (
                       <p className="text-xs text-red-700 mt-1">Rejected: {course.rejection_reason}</p>
+                    )}
+                    {(course.course_catalogue_publications ?? []).length > 0 && (
+                      <p className="text-xs text-secondary mt-1">
+                        Destinations: {course.course_catalogue_publications.map((publication) => publication.catalogues?.name).filter(Boolean).join(', ')}
+                      </p>
                     )}
                   </div>
                   <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -151,7 +154,7 @@ export default function AdminCatalogue() {
                       <button
                         type="button"
                         disabled={actioningId === course.id}
-                        onClick={() => handleSetStatus(course, 'inactive')}
+                        onClick={() => handleDeactivate(course)}
                         className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper disabled:opacity-50"
                       >
                         Deactivate

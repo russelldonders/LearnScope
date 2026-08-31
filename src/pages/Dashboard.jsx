@@ -1,22 +1,43 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useNavVisibility } from '../context/NavVisibilityContext'
 import { supabase } from '../lib/supabaseClient'
-import { listConnections, listConnectionsActivity, listIncomingRateInvites, getProfiles } from '../lib/connections'
+import {
+  listConnections,
+  listConnectionsActivity,
+  listIncomingRateInvites,
+  listIncomingRecommendInvites,
+  getProfiles,
+} from '../lib/connections'
 import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
 import AppHeader from '../components/AppHeader'
 import RecordActivitySection from '../components/RecordActivitySection'
 import FindSkillModal from '../components/FindSkillModal'
+import AccessibleDialog from '../components/AccessibleDialog'
 import GrowthRing from '../components/GrowthRing'
 import CourseThumbnail from '../components/CourseThumbnail'
-import PersonAvatar from '../components/PersonAvatar'
+import ConnectionsActivityFeed from '../components/ConnectionsActivityFeed'
+import GrowthArrow from '../components/GrowthArrow'
 import { LEVEL_LABELS } from '../lib/levels'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
 import { isDiagnosticStatement } from '../lib/xapiStatement'
 import { isSelfAssessmentDue, todayDateString } from '../lib/checkin'
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
+
+// Drives the dashboard's "import your CV/history" banner -- shown until
+// the learner has actually run an import once (cv_imported_at, set by
+// ResumeImportReviewModal on first successful import from either the
+// onboarding wizard or /profile/import) or explicitly dismissed it.
+async function loadImportBannerState(userId) {
+  const { data } = await supabase
+    .from('profiles')
+    .select('cv_imported_at, cv_import_banner_dismissed_at')
+    .eq('id', userId)
+    .single()
+  return data ?? { cv_imported_at: null, cv_import_banner_dismissed_at: null }
+}
 
 async function countRows(table, userId) {
   const { count } = await supabase
@@ -32,7 +53,7 @@ async function countRows(table, userId) {
 async function loadCurrentLearning(userId) {
   const { data, error } = await supabase
     .from('courses')
-    .select('id, name, provider, course_type, duration')
+    .select('id, name, provider, course_type, duration, course_catalogue(image_url, organisations(logo_url))')
     .eq('user_id', userId)
     .is('completed_date', null)
     .order('created_at', { ascending: false })
@@ -112,8 +133,9 @@ async function loadUpcomingTargets(userId) {
 // to validate" sections already fetch (see Actions.jsx) rather than a
 // second implementation of the same query.
 async function loadPendingReviewTasks(userId) {
-  const [rateInvites, validationRequests] = await Promise.all([
+  const [rateInvites, recommendInvites, validationRequests] = await Promise.all([
     listIncomingRateInvites(),
+    listIncomingRecommendInvites(),
     listIncomingPendingValidationRequests(userId),
   ])
   const profiles = await getProfiles(validationRequests.map((r) => r.requester_id))
@@ -123,13 +145,19 @@ async function loadPendingReviewTasks(userId) {
     date: invite.created_at,
     to: `/rate/${invite.share_code}`,
   }))
+  const recommendTasks = recommendInvites.map((invite) => ({
+    key: `recommend-${invite.id}`,
+    label: `${invite.inviter_name || 'Someone'} recommends you track "${invite.skill_name}"`,
+    date: invite.created_at,
+    to: `/recommend/${invite.share_code}`,
+  }))
   const validationTasks = validationRequests.map((r) => ({
     key: `validate-${r.id}`,
     label: `Confirm ${profiles[r.requester_id]?.name || 'someone'} reached ${LEVEL_LABELS[r.target_level]} in "${r.skills?.name}"`,
     date: r.created_at,
     to: `/validate-request/${r.id}`,
   }))
-  return [...rateTasks, ...validationTasks].sort((a, b) => new Date(b.date) - new Date(a.date))
+  return [...rateTasks, ...recommendTasks, ...validationTasks].sort((a, b) => new Date(b.date) - new Date(a.date))
 }
 
 const RECENT_GROWTH_WINDOW_DAYS = 28
@@ -212,7 +240,8 @@ async function loadUpNextRecommendations(userId) {
   ] = await Promise.all([
     supabase.from('skill_assessments').select('skill_id, source, axis').in('skill_id', ids),
     supabase.from('skill_peer_ratings').select('skill_id').in('skill_id', ids),
-    supabase.from('connection_invites').select('skill_id').in('skill_id', ids),
+    // invite_type='rate' only -- see the matching filter in SkillDetail.jsx.
+    supabase.from('connection_invites').select('skill_id').in('skill_id', ids).eq('invite_type', 'rate'),
     supabase.from('xapi_statements').select('skill_id, statement').eq('user_id', userId).in('skill_id', ids),
     supabase.from('skill_course_links').select('skill_id, courses(completed_date)').in('skill_id', ids),
     supabase.from('skill_targets').select('skill_id').in('skill_id', ids),
@@ -290,6 +319,7 @@ export default function Dashboard() {
   const [upcomingSelfAssessments, setUpcomingSelfAssessments] = useState([])
   const [upcomingTargets, setUpcomingTargets] = useState([])
   const [pendingReviewTasks, setPendingReviewTasks] = useState([])
+  const [importBanner, setImportBanner] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -310,6 +340,7 @@ export default function Dashboard() {
       selfAssessmentsDue,
       targetsDue,
       reviewTasks,
+      importBannerState,
     ] = await Promise.all([
       countRows('skills', user.id),
       countRows('courses', user.id),
@@ -322,6 +353,7 @@ export default function Dashboard() {
       loadUpcomingSelfAssessments(user.id),
       loadUpcomingTargets(user.id),
       loadPendingReviewTasks(user.id),
+      loadImportBannerState(user.id),
     ])
     setCounts({ skills, courses, experience, connections })
     setRecentGrowth(growth)
@@ -332,6 +364,7 @@ export default function Dashboard() {
     setUpcomingSelfAssessments(selfAssessmentsDue)
     setUpcomingTargets(targetsDue)
     setPendingReviewTasks(reviewTasks)
+    setImportBanner(importBannerState)
     setLoading(false)
   }
 
@@ -341,11 +374,25 @@ export default function Dashboard() {
     setConnectionsActivityError(result.error)
   }
 
+  // Best-effort, same as persistProfileFields elsewhere -- if it fails, the
+  // banner just reappears next visit rather than blocking anything.
+  async function dismissImportBanner() {
+    setImportBanner((prev) => ({ ...prev, cv_import_banner_dismissed_at: new Date().toISOString() }))
+    await supabase
+      .from('profiles')
+      .update({ cv_import_banner_dismissed_at: new Date().toISOString() })
+      .eq('id', user.id)
+  }
+
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
 
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8 space-y-12">
+        {!loading && importBanner && !importBanner.cv_imported_at && !importBanner.cv_import_banner_dismissed_at && (
+          <ImportCvBanner onDismiss={dismissImportBanner} />
+        )}
+
         <section aria-labelledby="dashboard-heading">
           <div className="max-w-2xl mb-7">
             <h1 id="dashboard-heading" className="font-display text-3xl sm:text-4xl text-ink text-balance">
@@ -378,6 +425,23 @@ export default function Dashboard() {
             </div>
           )}
         </section>
+
+        {!loading && counts.experience === 0 && counts.skills + counts.courses + counts.connections > 0 && (
+          <div className="rounded-lg border border-dashed border-hairline bg-card p-6 text-center">
+            <h2 className="font-display text-xl text-ink mb-1">Add your current role</h2>
+            <p className="text-sm text-secondary mb-4 max-w-md mx-auto text-pretty">
+              Your Experience timeline is empty. Record the job you're in now so LearnScope can
+              start linking your skills, courses and achievements to it.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/experience', { state: { autoOpenType: 'employment' } })}
+              className="inline-block rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
+            >
+              Record your current role
+            </button>
+          </div>
+        )}
 
         {!loading &&
           (upcomingSelfAssessments.length > 0 || upcomingTargets.length > 0 || pendingReviewTasks.length > 0) && (
@@ -513,103 +577,6 @@ export default function Dashboard() {
           }}
         />
       )}
-    </div>
-  )
-}
-
-// Turns one list_connections_activity (0063) row into a plain-language
-// sentence -- everything the RPC needs to say is already in the row itself
-// (skill_name/level/detail), never a client-side lookup, since each row is
-// independently privacy-checked server-side and shouldn't need extra trust.
-function activitySkillLabel(event) {
-  const additionalSkills = (event.skills?.length ?? 1) - 1
-  if (additionalSkills <= 0) return event.skill_name
-  return `${event.skill_name} and ${additionalSkills} other ${additionalSkills === 1 ? 'skill' : 'skills'}`
-}
-
-function describeActivityEvent(event) {
-  const level = event.level ? LEVEL_LABELS[event.level] : null
-  const skillLabel = activitySkillLabel(event)
-  switch (event.event_type) {
-    case 'skill_confirmed':
-      return `confirmed ${level ?? 'a level'} in ${skillLabel}`
-    case 'skill_validated':
-      return `had ${skillLabel} validated at ${level ?? 'their target level'}`
-    case 'skill_added':
-      return `started tracking ${skillLabel}`
-    case 'experience_added':
-      return `added ${event.detail}`
-    case 'course_started':
-      return `started ${event.detail}`
-    case 'target_set':
-      return `set a target of ${level ?? 'a new level'} for ${skillLabel}`
-    default:
-      return null
-  }
-}
-
-// Group skill milestones when the actor, action and milestone details match.
-// The RPC returns newest-first, so the first event (and its skill) always
-// remains the visible representative of the group.
-function groupConnectionsActivity(events) {
-  const groups = []
-  const groupByKey = new Map()
-
-  for (const event of events) {
-    if (!event.skill_name) {
-      groups.push({ ...event, skills: [] })
-      continue
-    }
-
-    const key = JSON.stringify([
-      event.actor_id,
-      event.event_type,
-      event.level ?? null,
-      event.detail ?? null,
-    ])
-    const existing = groupByKey.get(key)
-
-    if (existing && !existing.skills.includes(event.skill_name)) {
-      existing.skills.push(event.skill_name)
-      continue
-    }
-
-    const group = { ...event, skills: [event.skill_name] }
-    groups.push(group)
-    if (!existing) groupByKey.set(key, group)
-  }
-
-  return groups
-}
-
-export function ConnectionsActivityFeed({ events }) {
-  const groupedEvents = groupConnectionsActivity(events).slice(0, 5)
-
-  return (
-    <div className="space-y-2">
-      {groupedEvents.map((event, i) => {
-        const description = describeActivityEvent(event)
-        if (!description) return null
-        return (
-          <div
-            key={`${event.event_type}-${event.actor_id}-${event.event_at}-${i}`}
-            className="flex items-start gap-3 bg-card border border-hairline rounded-lg px-4 py-3"
-          >
-            <PersonAvatar name={event.full_name} avatarUrl={event.avatar_url} size={9} />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm text-ink">
-                <span className="font-medium">{event.full_name || 'A connection'}</span> {description}
-              </p>
-              {event.event_type === 'skill_confirmed' && event.detail && (
-                <p className="text-xs text-secondary mt-0.5">{event.detail}</p>
-              )}
-            </div>
-            <p className="font-mono text-xs text-secondary shrink-0" title={formatAbsoluteDate(event.event_at)}>
-              {formatRelativeDate(event.event_at)}
-            </p>
-          </div>
-        )
-      })}
     </div>
   )
 }
@@ -788,8 +755,42 @@ function SliderArrow({ direction, onClick }) {
   )
 }
 
+// Above 5 cards, skills sharing the same recommended action (e.g. several
+// skills all needing "Self-assess your own level") collapse into a single
+// action-focused card instead of each getting its own near-duplicate card --
+// an action used by only one skill still gets its normal skill-focused card,
+// so the slider ends up with mixed card types rather than all-or-nothing.
+// Below the threshold, one card per skill (unchanged) reads fine on its own.
+const UPNEXT_GROUPING_THRESHOLD = 5
+
+function buildUpNextSlides(recommendations) {
+  if (recommendations.length <= UPNEXT_GROUPING_THRESHOLD) {
+    return recommendations.map((rec) => ({ type: 'skill', skill: rec.skill, item: rec.item }))
+  }
+
+  // Same action (e.g. "Self-assess your own level") can come from different
+  // lifecycle stages with slightly different item.key/description --
+  // grouping by label is what reads as "one action" to the learner, so the
+  // first description seen for a label wins rather than trying to reconcile
+  // them. Insertion order follows upNext's existing stage-priority sort, so
+  // the most-urgent actions still lead.
+  const groups = new Map()
+  for (const rec of recommendations) {
+    const { label, description } = rec.item
+    if (!groups.has(label)) groups.set(label, { label, description, recs: [] })
+    groups.get(label).recs.push(rec)
+  }
+
+  return [...groups.values()].map((group) =>
+    group.recs.length === 1
+      ? { type: 'skill', skill: group.recs[0].skill, item: group.recs[0].item }
+      : { type: 'action', label: group.label, description: group.description, recs: group.recs }
+  )
+}
+
 function UpNextSlider({ recommendations }) {
   const { scrollerRef, canScrollLeft, canScrollRight, scrollByPage } = useHorizontalScroller()
+  const slides = buildUpNextSlides(recommendations)
 
   return (
     <div className="relative">
@@ -798,23 +799,86 @@ function UpNextSlider({ recommendations }) {
         ref={scrollerRef}
         className="scrollbar-hide flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 -mx-4 px-4 sm:mx-0 sm:px-0"
       >
-        {recommendations.map(({ skill, item }) => (
-          <Link
-            key={skill.id}
-            to={`/skills/${skill.id}`}
-            className="snap-start shrink-0 w-64 bg-card border border-hairline rounded-lg p-4 hover:border-moss transition-colors"
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <GrowthRing level={skill.level} size={40} />
-              <h3 className="font-display text-base text-ink truncate min-w-0">{skill.name}</h3>
+        {slides.map((slide) =>
+          slide.type === 'skill' ? (
+            <Link
+              key={slide.skill.id}
+              to={`/skills/${slide.skill.id}`}
+              className="snap-start shrink-0 w-64 bg-card border border-hairline rounded-lg p-4 hover:border-moss transition-colors"
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <GrowthRing level={slide.skill.level} size={40} />
+                <h3 className="font-display text-base text-ink truncate min-w-0">{slide.skill.name}</h3>
+              </div>
+              <p className="text-sm text-ink font-medium">{slide.item.label}</p>
+              <p className="text-xs text-secondary mt-1">{slide.item.description}</p>
+            </Link>
+          ) : (
+            <div
+              key={`action-${slide.label}`}
+              className="snap-start shrink-0 w-64 bg-card border border-hairline rounded-lg p-4"
+            >
+              <h3 className="font-display text-base text-ink">{slide.label}</h3>
+              <p className="text-xs text-secondary mt-1 mb-3">{slide.description}</p>
+              <ActionSkillsButton label={slide.label} recs={slide.recs} />
             </div>
-            <p className="text-sm text-ink font-medium">{item.label}</p>
-            <p className="text-xs text-secondary mt-1">{item.description}</p>
-          </Link>
-        ))}
+          )
+        )}
       </div>
       {canScrollRight && <SliderArrow direction="right" onClick={() => scrollByPage(1)} />}
     </div>
+  )
+}
+
+// Stands in for the skill-focused card's own Link when one action is shared
+// by several skills -- picking a skill from here is what replaces having
+// them all listed out on the card at once.
+// A dropdown anchored to the button would get clipped by the slider's own
+// scroll container -- overflow-x-auto forces overflow-y to auto too (they
+// can't be visible/auto independently), so anything taller than the row
+// gets cut off and can even shift the row's scroll position. A dialog
+// avoids that entirely since its fixed overlay isn't part of the row's
+// layout or clipping box.
+function ActionSkillsButton({ label, recs }) {
+  const [open, setOpen] = useState(false)
+  const titleId = useId()
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+        aria-label={`Choose a skill for: ${label}`}
+        className="text-sm font-medium text-moss hover:opacity-80"
+      >
+        {recs.length} skills
+      </button>
+      {open && (
+        <AccessibleDialog
+          labelledBy={titleId}
+          onClose={() => setOpen(false)}
+          panelClassName="w-full max-w-sm bg-card border border-hairline rounded-lg p-6"
+        >
+          <h2 id={titleId} className="font-display text-lg text-ink mb-1">
+            {label}
+          </h2>
+          <p className="text-sm text-secondary mb-4">Choose which skill to continue with.</p>
+          <div className="space-y-2">
+            {recs.map(({ skill }) => (
+              <Link
+                key={skill.id}
+                to={`/skills/${skill.id}`}
+                className="flex items-center gap-3 border border-hairline rounded-md p-2.5 hover:border-moss transition-colors"
+              >
+                <GrowthRing level={skill.level} size={28} />
+                <span className="text-sm text-ink">{skill.name}</span>
+              </Link>
+            ))}
+          </div>
+        </AccessibleDialog>
+      )}
+    </>
   )
 }
 
@@ -824,11 +888,17 @@ function CurrentLearningPanel({ courses }) {
       {courses.map((course) => (
         <Link
           key={course.id}
-          to={`/courses/${course.id}`}
+          to={`/courses/${course.id}/learn`}
           state={{ backTo: '/dashboard', backLabel: 'Dashboard' }}
           className="bg-card border border-hairline rounded-lg overflow-hidden hover:border-moss transition-colors"
         >
-          <CourseThumbnail name={course.name} provider={course.provider} className="h-20 w-full" />
+          <CourseThumbnail
+            name={course.name}
+            provider={course.provider}
+            imageUrl={course.course_catalogue?.image_url}
+            logoUrl={course.course_catalogue?.organisations?.logo_url}
+            className="h-20 w-full"
+          />
           <div className="p-3">
             <h3 className="font-display text-base text-ink truncate">{course.name}</h3>
             <p className="font-mono text-xs text-secondary mt-1 truncate">
@@ -841,22 +911,32 @@ function CurrentLearningPanel({ courses }) {
   )
 }
 
-function GrowthArrow() {
+function ImportCvBanner({ onDismiss }) {
   return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="var(--color-secondary)"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="shrink-0"
-    >
-      <path d="M5 12h14" />
-      <path d="M13 6l6 6-6 6" />
-    </svg>
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-lg border border-hairline bg-card px-5 py-4">
+      <div>
+        <p className="text-sm font-medium text-ink">Have a CV or LinkedIn export handy?</p>
+        <p className="text-sm text-secondary mt-0.5">
+          Import it to pull in your skills, courses and experience automatically — you'll choose
+          exactly what to keep before anything is saved.
+        </p>
+      </div>
+      <div className="flex items-center gap-3 shrink-0">
+        <Link
+          to="/profile/import"
+          className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 whitespace-nowrap"
+        >
+          Import now
+        </Link>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="text-sm text-secondary hover:text-ink whitespace-nowrap"
+        >
+          Don't show this again
+        </button>
+      </div>
+    </div>
   )
 }
 

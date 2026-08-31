@@ -137,6 +137,7 @@ export default function ProviderProfile() {
                         name={course.name}
                         provider={profile.organisation.name}
                         logoUrl={profile.organisation.logoUrl}
+                        imageUrl={course.imageUrl}
                         className="h-24 w-full shrink-0"
                       />
                       <div className="p-4 flex flex-col flex-1">

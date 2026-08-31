@@ -103,6 +103,7 @@ export default function AdminUsers() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-hairline text-left text-secondary">
+                  <th className="px-4 py-2 font-medium">ID</th>
                   <th className="px-4 py-2 font-medium">Name</th>
                   <th className="px-4 py-2 font-medium">Email</th>
                   <th className="px-4 py-2 font-medium">Status</th>
@@ -113,6 +114,7 @@ export default function AdminUsers() {
               <tbody>
                 {users.map((u) => (
                   <tr key={u.id} className="border-b border-hairline last:border-0">
+                    <td className="px-4 py-2 text-secondary font-mono text-xs whitespace-nowrap">{u.userCode || '—'}</td>
                     <td className="px-4 py-2 text-ink whitespace-nowrap">
                       <Link to={`/admin/users/${u.id}`} className="hover:text-moss hover:underline">
                         {u.fullName || '—'}
@@ -174,7 +176,7 @@ export default function AdminUsers() {
                 ))}
                 {users.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-6 text-center text-secondary">
+                    <td colSpan={6} className="px-4 py-6 text-center text-secondary">
                       No users yet.
                     </td>
                   </tr>

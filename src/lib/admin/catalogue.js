@@ -1,6 +1,8 @@
 import { supabase } from '../supabaseClient'
+import { listProviderCatalogues } from '../catalogues'
 
-const ADMIN_CATALOGUE_SELECT = '*, organisations(id, name)'
+const ADMIN_CATALOGUE_SELECT = `*, organisations(id, name),
+  course_catalogue_publications(catalogue_id, published_at, catalogues(id, name, is_global))`
 
 // Unlike src/lib/courseCatalogue.js's listCatalogueCourses (learner-facing,
 // approved-only), this surfaces every status -- RLS still applies (a
@@ -18,11 +20,12 @@ export async function listAllCatalogueCourses() {
 // Platform admins can create a catalogue entry that's immediately live
 // (status 'approved') -- providers instead insert as 'draft'/
 // 'pending_approval' via the (not-yet-built) provider console, per RLS.
-export async function createPlatformCourse(userId, { name, provider, courseType, duration, synopsis, organisationId }) {
+export async function createPlatformCourse(userId, { name, courseCode, provider, courseType, duration, synopsis, organisationId }) {
   const { data, error } = await supabase
     .from('course_catalogue')
     .insert({
       name: name.trim(),
+      course_code: courseCode?.trim() || null,
       provider: provider?.trim() || null,
       course_type: courseType?.trim() || null,
       duration: duration?.trim() || null,
@@ -32,6 +35,7 @@ export async function createPlatformCourse(userId, { name, provider, courseType,
       status: 'approved',
       approved_by: userId,
       approved_at: new Date().toISOString(),
+      is_current_published: true,
     })
     .select()
     .single()
@@ -45,11 +49,12 @@ export async function createPlatformCourse(userId, { name, provider, courseType,
 // (edit details, attach content) before choosing to submit it for review.
 // RLS (0066) rejects anything but draft/pending_approval from this role, so
 // there's no way to self-approve from here even if the app layer tried.
-export async function createProviderCourse(userId, organisationId, { name, provider, courseType, duration, synopsis }) {
+export async function createProviderCourse(userId, organisationId, { name, courseCode, provider, courseType, duration, synopsis }) {
   const { data, error } = await supabase
     .from('course_catalogue')
     .insert({
       name: name.trim(),
+      course_code: courseCode?.trim() || null,
       provider: provider?.trim() || null,
       course_type: courseType?.trim() || null,
       duration: duration?.trim() || null,
@@ -68,11 +73,12 @@ export async function createProviderCourse(userId, organisationId, { name, provi
 // for the org-members update policy), matching what the provider console UI
 // exposes an edit affordance for -- pending_approval/approved rows are
 // read-only from here regardless.
-export async function updateProviderCourse(id, { name, provider, courseType, duration, synopsis }) {
+export async function updateProviderCourse(id, { name, courseCode, provider, courseType, duration, synopsis }) {
   const { error } = await supabase
     .from('course_catalogue')
     .update({
       name: name.trim(),
+      course_code: courseCode?.trim() || null,
       provider: provider?.trim() || null,
       course_type: courseType?.trim() || null,
       duration: duration?.trim() || null,
@@ -80,6 +86,83 @@ export async function updateProviderCourse(id, { name, provider, courseType, dur
     })
     .eq('id', id)
   if (error) throw error
+}
+
+export async function listCourseParticipants(courseId) {
+  const { data: selectedCourse, error: selectedCourseError } = await supabase
+    .from('course_catalogue')
+    .select('version_group_id')
+    .eq('id', courseId)
+    .single()
+  if (selectedCourseError) throw selectedCourseError
+
+  const { data: versions, error: versionError } = await supabase
+    .from('course_catalogue')
+    .select('id')
+    .eq('version_group_id', selectedCourse.version_group_id)
+  if (versionError) throw versionError
+  const versionIds = (versions ?? []).map((version) => version.id)
+
+  const [{ data: enrolments, error: enrolmentError }, { data: items, error: itemError }] = await Promise.all([
+    supabase
+      .from('courses')
+      .select('id, user_id, catalogue_course_id, created_at, completed_date')
+      .in('catalogue_course_id', versionIds)
+      .order('created_at'),
+    supabase.from('course_content_links').select('course_id, resource_id').in('course_id', versionIds),
+  ])
+  if (enrolmentError) throw enrolmentError
+  if (itemError) throw itemError
+  if (!enrolments?.length) return []
+
+  const userIds = enrolments.map((row) => row.user_id)
+  const itemIds = [...new Set((items ?? []).map((row) => row.resource_id))]
+  const itemIdsByVersion = new Map()
+  for (const item of items ?? []) {
+    const ids = itemIdsByVersion.get(item.course_id) ?? new Set()
+    ids.add(item.resource_id)
+    itemIdsByVersion.set(item.course_id, ids)
+  }
+  const [{ data: profiles, error: profileError }, progressResult] = await Promise.all([
+    supabase.from('profiles').select('id, full_name, avatar_url').in('id', userIds),
+    itemIds.length
+      ? supabase
+          .from('course_content_progress')
+          .select('content_item_id, user_id, status, updated_at')
+          .in('content_item_id', itemIds)
+          .in('user_id', userIds)
+      : Promise.resolve({ data: [], error: null }),
+  ])
+  if (profileError) throw profileError
+  if (progressResult.error) throw progressResult.error
+
+  const profileById = new Map((profiles ?? []).map((profile) => [profile.id, profile]))
+  const progressByUser = new Map()
+  for (const row of progressResult.data ?? []) {
+    if (row.status === 'not_attempted') continue
+    const current = progressByUser.get(row.user_id) ?? { completed: 0, startedAt: null }
+    if (['completed', 'passed'].includes(row.status)) current.completed += 1
+    if (!current.startedAt || row.updated_at < current.startedAt) current.startedAt = row.updated_at
+    progressByUser.set(row.user_id, current)
+  }
+
+  return enrolments.map((enrolment) => {
+    const progress = progressByUser.get(enrolment.user_id)
+    const versionItemIds = itemIdsByVersion.get(enrolment.catalogue_course_id) ?? new Set()
+    const completedForVersion = [...versionItemIds].filter((id) =>
+      (progressResult.data ?? []).some(
+        (row) => row.user_id === enrolment.user_id && row.content_item_id === id && ['completed', 'passed'].includes(row.status)
+      )
+    ).length
+    const status = enrolment.completed_date ? 'complete' : progress ? 'started' : 'enrolled'
+    return {
+      ...enrolment,
+      profile: profileById.get(enrolment.user_id) ?? null,
+      status,
+      percent: versionItemIds.size ? Math.round((completedForVersion / versionItemIds.size) * 100) : 0,
+      startedAt: progress?.startedAt ?? null,
+    }
+  })
 }
 
 // Providers can only list their own organisation's catalogue entries (RLS
@@ -93,7 +176,40 @@ export async function listOrganisationCatalogueCourses(organisationId) {
     .eq('organisation_id', organisationId)
     .order('created_at', { ascending: false })
   if (error) throw error
-  return data ?? []
+  const byGroup = new Map()
+  for (const course of data ?? []) {
+    const current = byGroup.get(course.version_group_id)
+    if (!current || course.version_number > current.version_number) byGroup.set(course.version_group_id, course)
+  }
+  return [...byGroup.values()]
+}
+
+export async function listCourseVersionHistory(courseId) {
+  const { data: selectedCourse, error: selectedCourseError } = await supabase
+    .from('course_catalogue')
+    .select('version_group_id')
+    .eq('id', courseId)
+    .single()
+  if (selectedCourseError) throw selectedCourseError
+
+  const { data: versions, error: versionError } = await supabase
+    .from('course_catalogue')
+    .select('id, version_number, status, is_current_published, created_at, created_by, approved_at')
+    .eq('version_group_id', selectedCourse.version_group_id)
+    .order('version_number', { ascending: false })
+  if (versionError) throw versionError
+
+  const creatorIds = [...new Set((versions ?? []).map((version) => version.created_by).filter(Boolean))]
+  const { data: profiles, error: profileError } = creatorIds.length
+    ? await supabase.from('profiles').select('id, full_name').in('id', creatorIds)
+    : { data: [], error: null }
+  if (profileError) throw profileError
+
+  const profileById = new Map((profiles ?? []).map((profile) => [profile.id, profile]))
+  return (versions ?? []).map((version) => ({
+    ...version,
+    creator: profileById.get(version.created_by) ?? null,
+  }))
 }
 
 // Single-course fetch for the provider course editor page -- RLS (course_
@@ -106,23 +222,130 @@ export async function getCatalogueCourse(id) {
   return data
 }
 
-export async function approveCatalogueCourse(id, userId) {
-  const { error } = await supabase
-    .from('course_catalogue')
-    .update({ status: 'approved', approved_by: userId, approved_at: new Date().toISOString(), rejection_reason: null })
-    .eq('id', id)
+export async function approveCatalogueCourse(id) {
+  const { error } = await supabase.rpc('publish_course_version', { p_course_id: id })
   if (error) throw error
 }
 
+export async function submitCatalogueCourseForApproval(id, catalogueIds) {
+  const { error } = await supabase.rpc('submit_course_for_publication', {
+    p_course_id: id,
+    p_catalogue_ids: catalogueIds,
+  })
+  if (error) throw error
+}
+
+export async function createDraftCourseVersion(id) {
+  const { data, error } = await supabase.rpc('create_course_draft_version', { p_course_id: id })
+  if (error) throw error
+  return data
+}
+
+// Routed through security-definer RPCs (0112), same reasoning as
+// approveCatalogueCourse/publish_course_version -- a catalogue approver may
+// be an ordinary staff member, not an org admin, so a plain RLS-gated table
+// update could only constrain the columns it names and couldn't check
+// authorization against the specific catalogue(s) the course was actually
+// submitted to.
 export async function rejectCatalogueCourse(id, reason) {
-  const { error } = await supabase
-    .from('course_catalogue')
-    .update({ status: 'rejected', rejection_reason: reason || null, approved_by: null, approved_at: null })
-    .eq('id', id)
+  const { error } = await supabase.rpc('reject_course_submission', { p_course_id: id, p_reason: reason || null })
   if (error) throw error
 }
 
-export async function setCatalogueCourseStatus(id, status) {
-  const { error } = await supabase.from('course_catalogue').update({ status }).eq('id', id)
+export async function deactivateCatalogueCourse(id) {
+  const { error } = await supabase.rpc('deactivate_course_publication', { p_course_id: id })
   if (error) throw error
+}
+
+// Same public-bucket, path-scoped-by-owner pattern as uploadOrganisationLogo
+// (organisations.js) -- upsert-in-place at a fixed path per course, so
+// re-uploading just replaces the file rather than accumulating old ones.
+export async function uploadCourseImage(courseId, fileOrBlob) {
+  const path = `${courseId}/image.webp`
+
+  const { error: uploadError } = await supabase.storage
+    .from('course-catalogue-images')
+    .upload(path, fileOrBlob, { upsert: true, contentType: fileOrBlob.type })
+  if (uploadError) throw uploadError
+
+  const { data } = supabase.storage.from('course-catalogue-images').getPublicUrl(path)
+  const url = `${data.publicUrl}?t=${Date.now()}`
+
+  const { error: courseError } = await supabase.from('course_catalogue').update({ image_url: url }).eq('id', courseId)
+  if (courseError) throw courseError
+
+  return url
+}
+
+export async function removeCourseImage(courseId) {
+  const paths = ['webp', 'jpeg', 'jpg', 'png'].map((extension) => `${courseId}/image.${extension}`)
+  const { error: storageError } = await supabase.storage.from('course-catalogue-images').remove(paths)
+  if (storageError) throw storageError
+
+  const { error } = await supabase.from('course_catalogue').update({ image_url: null }).eq('id', courseId)
+  if (error) throw error
+}
+
+// Deleting a catalogue cascades to course_catalogue_publications (0111),
+// which can drop a course's only remaining publication destination and
+// make an otherwise-still-"Approved" course invisible to learners with no
+// course-specific warning -- surfaced so the delete confirmation can tell
+// an org admin how many currently-live courses that would affect.
+export async function countPublishedCoursesInCatalogue(catalogueId) {
+  const { count, error } = await supabase
+    .from('course_catalogue_publications')
+    .select('course_id', { count: 'exact', head: true })
+    .eq('catalogue_id', catalogueId)
+    .not('published_at', 'is', null)
+  if (error) throw error
+  return count ?? 0
+}
+
+// Catalogue approvers (0112): an org admin's picks from their own
+// organisation_members, scoped to one specific catalogue their org owns --
+// able to approve/reject/deactivate a course being published into that
+// catalogue, without a platform admin. RLS-scoped directly (no service-role
+// hop needed) -- unlike listOrganisationMembers, nothing here needs an
+// email lookup against auth.users.
+export async function listCatalogueApprovers(catalogueId) {
+  const { data, error } = await supabase
+    .from('catalogue_approvers')
+    .select('*')
+    .eq('catalogue_id', catalogueId)
+  if (error) throw error
+  return data ?? []
+}
+
+export async function addCatalogueApprover(catalogueId, userId, addedBy) {
+  const { data, error } = await supabase
+    .from('catalogue_approvers')
+    .insert({ catalogue_id: catalogueId, user_id: userId, added_by: addedBy })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function removeCatalogueApprover(approverRowId) {
+  const { error } = await supabase.from('catalogue_approvers').delete().eq('id', approverRowId)
+  if (error) throw error
+}
+
+// Coarse "is this user an approver of at least one of this org's own
+// catalogues" check for the provider console's moderation buttons -- purely
+// a UI affordance, computed client-side since that's just as cheap as a
+// round trip and avoids exposing a single-purpose RPC just for this. The
+// actual approve/reject/deactivate calls remain enforced server-side by
+// publish_course_version/reject_course_submission/
+// deactivate_course_publication's own per-catalogue authorization
+// regardless of what this returns.
+export async function listOrganisationCatalogueApprovers(organisationId) {
+  const catalogues = await listProviderCatalogues(organisationId)
+  if (catalogues.length === 0) return []
+  const { data, error } = await supabase
+    .from('catalogue_approvers')
+    .select('*')
+    .in('catalogue_id', catalogues.map((c) => c.id))
+  if (error) throw error
+  return data ?? []
 }

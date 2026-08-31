@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { XAPI_VERBS } from '../lib/xapiVerbs'
-import { buildStatement } from '../lib/xapiStatement'
+import { buildStatement, experienceTrail } from '../lib/xapiStatement'
 import AccessibleDialog from './AccessibleDialog'
+import EvidenceFields from './EvidenceFields'
 
 function todayDate() {
   return new Date().toISOString().slice(0, 10)
 }
 
-export default function RecordActivityModal({ actor, skills, relatedCourse, relatedSkill: fixedSkill, onSave, onClose }) {
+export default function RecordActivityModal({ actor, skills, experiences = [], relatedSkill: fixedSkill, relatedExperience: fixedExperience, onSave, onClose }) {
   const [verbValue, setVerbValue] = useState('experienced')
   const [activityTitle, setActivityTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -15,10 +16,15 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
   const [durationHours, setDurationHours] = useState('')
   const [durationMinutes, setDurationMinutes] = useState('')
   const [relatedSkillId, setRelatedSkillId] = useState('')
+  const [relatedExperienceId, setRelatedExperienceId] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [showDuration, setShowDuration] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
+  const [showEvidence, setShowEvidence] = useState(false)
+  const [evidenceUrl, setEvidenceUrl] = useState('')
+  const [evidenceFiles, setEvidenceFiles] = useState([])
+  const selectedExperience = fixedExperience ?? experiences.find((experience) => experience.id === relatedExperienceId)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -29,6 +35,9 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
       if (!date) throw new Error('A date is required.')
       const relatedSkill =
         fixedSkill ?? (relatedSkillId ? { id: relatedSkillId, name: skills.find((s) => s.id === relatedSkillId)?.name } : null)
+      if (!relatedSkill) throw new Error('Choose the skill this activity contributed to.')
+      const selectedExperience = experiences.find((experience) => experience.id === relatedExperienceId)
+      const relatedExperience = fixedExperience ?? selectedExperience ?? null
       statement = buildStatement({
         actor,
         verbValue,
@@ -36,7 +45,7 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
         description: description.trim() || null,
         timestamp: date,
         relatedSkill,
-        relatedCourse,
+        relatedExperience,
         durationHours,
         durationMinutes,
       })
@@ -47,7 +56,10 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
 
     setSaving(true)
     try {
-      await onSave(statement)
+      await onSave(statement, {
+        evidenceUrl: showEvidence ? evidenceUrl.trim() : '',
+        files: showEvidence ? evidenceFiles : [],
+      })
     } catch (err) {
       setError(err.message)
       setSaving(false)
@@ -60,13 +72,13 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
       onClose={onClose}
       panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
-        <h2 id="record-activity-dialog-title" className="font-display text-2xl text-ink mb-1">Record an activity</h2>
+        <h2 id="record-activity-dialog-title" className="font-display text-2xl text-ink mb-1">Log skill activity</h2>
         <p className="text-sm text-secondary mb-4">
-          {relatedCourse
-            ? `A quick log of something you did as part of "${relatedCourse.name}".`
+          {fixedExperience
+            ? `Capture one thing you did within “${fixedExperience.title}” and the skill it helped you develop.`
             : fixedSkill
-              ? `A quick log of something you did related to "${fixedSkill.name}".`
-              : "A quick log of something you did — separate from your work & education timeline."}
+              ? `Capture one thing you did that contributed to “${fixedSkill.name}”.`
+              : 'Capture one thing you did and the skill it helped you develop.'}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -77,6 +89,8 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
             <input
               id="activityTitle"
               required
+              min={selectedExperience?.start_date ?? undefined}
+              max={selectedExperience?.end_date ?? undefined}
               value={activityTitle}
               onChange={(e) => setActivityTitle(e.target.value)}
               placeholder={
@@ -120,22 +134,42 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
             />
           </div>
 
-          {!fixedSkill && skills.length > 0 && (
+          {!fixedSkill && (
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="relatedSkill">
-                Related skill (optional)
+                Skill
               </label>
               <select
                 id="relatedSkill"
+                required
                 value={relatedSkillId}
                 onChange={(e) => setRelatedSkillId(e.target.value)}
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
               >
-                <option value="">— None —</option>
+                <option value="">Choose a skill…</option>
                 {skills.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {!fixedExperience && experiences.length > 0 && (
+            <div>
+              <label className="block text-sm text-secondary mb-1" htmlFor="relatedExperience">
+                Experience context (optional)
+              </label>
+              <select
+                id="relatedExperience"
+                value={relatedExperienceId}
+                onChange={(e) => setRelatedExperienceId(e.target.value)}
+                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              >
+                <option value="">No specific experience</option>
+                {experiences.map((experience) => (
+                  <option key={experience.id} value={experience.id}>{experienceTrail(experience)}</option>
                 ))}
               </select>
             </div>
@@ -158,6 +192,15 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
                 className="text-xs text-secondary hover:text-ink underline"
               >
                 + Add more detail
+              </button>
+            )}
+            {!showEvidence && (
+              <button
+                type="button"
+                onClick={() => setShowEvidence(true)}
+                className="text-xs text-secondary hover:text-ink underline"
+              >
+                + Add evidence
               </button>
             )}
           </div>
@@ -210,6 +253,15 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
             </div>
           )}
 
+          {showEvidence && (
+            <EvidenceFields
+              evidenceUrl={evidenceUrl}
+              onEvidenceUrlChange={setEvidenceUrl}
+              files={evidenceFiles}
+              onFilesChange={setEvidenceFiles}
+            />
+          )}
+
           {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
           <div className="flex items-center gap-2 pt-2">
@@ -218,7 +270,7 @@ export default function RecordActivityModal({ actor, skills, relatedCourse, rela
               disabled={saving}
               className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
             >
-              {saving ? 'Saving…' : 'Save'}
+              {saving ? 'Saving…' : 'Log activity'}
             </button>
             <button
               type="button"

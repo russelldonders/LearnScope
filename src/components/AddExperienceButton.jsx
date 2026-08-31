@@ -1,9 +1,18 @@
 import { useState } from 'react'
 import { EXPERIENCE_TYPES } from '../lib/experienceTypes'
 
-export default function AddExperienceButton({ types, onSelect, label = '+ Add Experience' }) {
+export default function AddExperienceButton({
+  types,
+  onSelect,
+  label = '+ Add Experience',
+  leadingOptions = [],
+}) {
   const [open, setOpen] = useState(false)
-  const options = EXPERIENCE_TYPES.filter((t) => types.includes(t.value))
+  const experienceOptions = EXPERIENCE_TYPES.filter((type) => types.includes(type.value))
+  const options = [
+    ...leadingOptions.map((option) => ({ ...option, isLeading: true })),
+    ...experienceOptions,
+  ]
 
   return (
     <div className="relative inline-block">
@@ -23,10 +32,13 @@ export default function AddExperienceButton({ types, onSelect, label = '+ Add Ex
                 key={t.value}
                 type="button"
                 onClick={() => {
-                  onSelect(t.value)
+                  if (t.isLeading) t.onSelect()
+                  else onSelect(t.value)
                   setOpen(false)
                 }}
-                className="w-full text-left px-4 py-2.5 text-sm text-ink hover:bg-paper transition-colors"
+                className={`w-full text-left px-4 py-2.5 text-sm text-ink hover:bg-paper transition-colors ${
+                  t.isLeading && experienceOptions.length > 0 ? 'border-b border-hairline' : ''
+                }`}
               >
                 {t.label}
               </button>

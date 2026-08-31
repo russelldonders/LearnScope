@@ -2,7 +2,7 @@
 // same idea (a pure, deterministic checklist of what's worth doing next),
 // scaled down to a course's much simpler lifecycle (in progress vs.
 // completed) rather than a full multi-stage journey.
-export function computeCourseUpNextItems({ course, skillLinksCount, achievementsCount, statementsCount }) {
+export function computeCourseUpNextItems({ course, skillLinksCount, achievementsCount }) {
   const items = [
     {
       key: 'link-skills',
@@ -13,12 +13,6 @@ export function computeCourseUpNextItems({ course, skillLinksCount, achievements
   ]
 
   if (!course.completed_date) {
-    items.push({
-      key: 'log-activity',
-      label: 'Log an activity',
-      description: 'Record something you did as part of this course.',
-      done: statementsCount > 0,
-    })
     items.push({
       key: 'finish',
       label: 'Mark as finished',

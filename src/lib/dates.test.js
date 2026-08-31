@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { formatDateRange, formatRelativeDate, formatAbsoluteDate } from './dates'
+import { formatDateRange, formatRelativeDate, formatAbsoluteDate, formatFullDate } from './dates'
+
+describe('formatFullDate', () => {
+  it('formats a full assessment timestamp without producing Invalid Date', () => {
+    const timestamp = '2026-08-29T09:41:27Z'
+    expect(formatFullDate(timestamp)).toBe(new Date(timestamp).toLocaleDateString())
+  })
+})
 
 describe('formatDateRange', () => {
   it('collapses a range that starts and ends in the same month to one label', () => {
@@ -40,6 +47,16 @@ describe('formatRelativeDate', () => {
   it('labels dates further out in either direction', () => {
     expect(formatRelativeDate('2024-03-12')).toBe('3 days ago')
     expect(formatRelativeDate('2024-03-20')).toBe('In 5 days')
+  })
+
+  it('scales to months once the day count gets too high to read at a glance', () => {
+    expect(formatRelativeDate('2024-01-15')).toBe('2 months ago')
+    expect(formatRelativeDate('2024-05-14')).toBe('In 2 months')
+  })
+
+  it('scales to years for dates far in the past or future', () => {
+    expect(formatRelativeDate('2022-03-15')).toBe('2 years ago')
+    expect(formatRelativeDate('2026-03-15')).toBe('In 2 years')
   })
 
   it('compares calendar days, not raw elapsed hours, for a full timestamp', () => {

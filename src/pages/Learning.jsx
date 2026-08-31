@@ -23,7 +23,7 @@ export default function Learning() {
     setLoading(true)
     const { data, error } = await supabase
       .from('courses')
-      .select('*')
+      .select('*, course_catalogue(image_url, organisations(logo_url))')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
     if (error) {
@@ -62,11 +62,16 @@ export default function Learning() {
     <div className="min-h-screen bg-paper">
       <AppHeader />
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="font-display text-xl text-ink">Your learning</h1>
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between mb-8">
+          <div className="max-w-2xl">
+            <h1 className="font-display text-3xl sm:text-4xl text-ink text-balance">Your learning</h1>
+            <p className="text-secondary mt-2 text-pretty">
+              Courses you're taking or have completed, and where to find more.
+            </p>
+          </div>
           <Link
             to="/training"
-            className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90"
+            className="rounded-md bg-moss text-paper py-2.5 px-4 font-medium hover:opacity-90 shrink-0 self-start"
           >
             Find training
           </Link>
@@ -109,11 +114,17 @@ function CourseGrid({ courses, skillsByCourse, progressByCatalogueId }) {
         return (
           <Link
             key={course.id}
-            to={`/courses/${course.id}`}
+            to={`/courses/${course.id}/learn`}
             state={{ backTo: '/learning', backLabel: 'Learning' }}
             className="bg-card border border-hairline rounded-lg overflow-hidden flex flex-col hover:border-moss transition-colors"
           >
-            <CourseThumbnail name={course.name} provider={course.provider} className="h-24 w-full shrink-0" />
+            <CourseThumbnail
+              name={course.name}
+              provider={course.provider}
+              imageUrl={course.course_catalogue?.image_url}
+              logoUrl={course.course_catalogue?.organisations?.logo_url}
+              className="h-24 w-full shrink-0"
+            />
             <div className="p-4 flex flex-col flex-1">
               <h3 className="font-display text-lg text-ink">{course.name}</h3>
               <p className="font-mono text-xs text-secondary mt-0.5">

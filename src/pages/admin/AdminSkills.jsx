@@ -106,6 +106,8 @@ export default function AdminSkills() {
                       {skill.description ? ` — ${skill.description}` : ''}
                     </p>
                     <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mt-1">
+                      {skill.skill_code}
+                      {' · '}
                       {TYPE_LABELS[skill.type]}
                       {skill.ownerName ? ` · ${skill.ownerName}` : ''}
                     </p>

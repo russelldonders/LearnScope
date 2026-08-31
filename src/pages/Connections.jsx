@@ -118,6 +118,7 @@ export default function Connections() {
         inviterName: profiles[user.id]?.name || user.email,
         skillName: invite.skills?.name,
         shareUrl: invite.url,
+        emailType: invite.invite_type === 'recommend' ? 'recommend' : 'invite',
       })
       setResentId(invite.id)
       setTimeout(() => setResentId(null), 2000)
@@ -221,6 +222,7 @@ export default function Connections() {
                 >
                   <div className="min-w-0">
                     <p className="text-sm text-ink">
+                      {invite.invite_type === 'recommend' ? 'Recommended' : 'Rate'}{' '}
                       <strong>{invite.skills?.name}</strong> — sent to {invite.invitee_email}
                     </p>
                     <p className="font-mono text-xs text-secondary">

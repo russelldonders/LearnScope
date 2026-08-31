@@ -24,6 +24,7 @@ export default function CourseCatalogue() {
   const [enrollingId, setEnrollingId] = useState(null)
 
   const [tagId, setTagId] = useState(null)
+  const [catalogueId, setCatalogueId] = useState(null)
   const [skillId, setSkillId] = useState(scope?.librarySkillId ?? null)
   const [level, setLevel] = useState(null)
   const [myLevel, setMyLevel] = useState(null)
@@ -92,7 +93,7 @@ export default function CourseCatalogue() {
   function handleCardClick(course) {
     const enrollment = enrolledIds.get(course.id)
     if (enrollment) {
-      navigate(`/courses/${enrollment.id}`, { state: { backTo: '/training', backLabel: 'Training' } })
+      navigate(`/courses/${enrollment.id}/learn`, { state: { backTo: '/training', backLabel: 'Training' } })
       return
     }
     setSelectedCourse(course)
@@ -120,9 +121,15 @@ export default function CourseCatalogue() {
     return [...map.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
   }, [catalogue])
 
+  const availableCatalogues = useMemo(() => {
+    const map = new Map()
+    for (const course of catalogue) for (const item of course.catalogues ?? []) map.set(item.id, item.name)
+    return [...map.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
+  }, [catalogue])
+
   const myLibrarySkillIds = useMemo(() => new Set(mySkills.map((s) => s.library_skill_id)), [mySkills])
 
-  const activeFilterCount = [tagId, skillId, level, myLevel].filter((v) => v !== null).length
+  const activeFilterCount = [catalogueId, tagId, skillId, level, myLevel].filter((v) => v !== null).length
 
   const q = query.trim().toLowerCase()
   const filtered = catalogue.filter((course) => {
@@ -130,6 +137,7 @@ export default function CourseCatalogue() {
       return false
     }
     if (tagId && !course.tags.some((t) => t.id === tagId)) return false
+    if (catalogueId && !(course.catalogues ?? []).some((item) => item.id === catalogueId)) return false
     if (skillId) {
       const entries = course.skillEntries.filter((e) => e.skillId === skillId)
       if (entries.length === 0) return false
@@ -191,6 +199,12 @@ export default function CourseCatalogue() {
         {showFilters && (
           <div className="space-y-3 mb-6 bg-card border border-hairline rounded-lg p-4">
             <FilterRow
+              label="Catalogue"
+              value={catalogueId}
+              onChange={setCatalogueId}
+              options={availableCatalogues.map((item) => ({ value: item.id, label: item.name }))}
+            />
+            <FilterRow
               label="Category tag"
               value={tagId}
               onChange={setTagId}
@@ -251,10 +265,14 @@ export default function CourseCatalogue() {
                   name={course.name}
                   provider={course.provider}
                   logoUrl={course.logoUrl}
+                  imageUrl={course.image_url}
                   className="h-24 w-full shrink-0"
                 />
                 <div className="p-4 flex flex-col flex-1">
                   <h3 className="font-display text-lg text-ink">{course.name}</h3>
+                  {(course.catalogues ?? []).length > 0 && (
+                    <p className="text-[11px] text-moss mt-1">{course.catalogues.map((item) => item.name).join(' · ')}</p>
+                  )}
                   <p className="font-mono text-xs text-secondary mt-0.5">
                     {course.provider &&
                       (course.providerSlug ? (

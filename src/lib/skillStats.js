@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient'
-import { listConnections } from './connections'
+import { listConnections, getProfiles } from './connections'
 
 // Anonymous platform-wide total -- see 0053_skill_tracker_count.sql for why
 // this is a count-only RPC rather than a direct table query.
@@ -90,13 +90,23 @@ export async function listConnectionsWithSkill(librarySkillId, currentUserId) {
   if (connections.length === 0) return []
   const { data, error } = await supabase
     .from('skills')
-    .select('user_id')
+    .select('user_id, level')
     .eq('library_skill_id', librarySkillId)
     .in(
       'user_id',
       connections.map((c) => c.id)
     )
   if (error) throw error
-  const matchedIds = new Set((data ?? []).map((s) => s.user_id))
-  return connections.filter((c) => matchedIds.has(c.id))
+  const levelByUserId = new Map((data ?? []).map((s) => [s.user_id, s.level]))
+  const matched = connections.filter((c) => levelByUserId.has(c.id))
+  if (matched.length === 0) return []
+  // avatarUrl is the only thing ConnectionsWithSkillModal needs beyond what
+  // listConnections already returns -- fetched here rather than folded into
+  // that function since most of its other callers have no use for it.
+  const profiles = await getProfiles(matched.map((c) => c.id))
+  return matched.map((c) => ({
+    ...c,
+    level: levelByUserId.get(c.id),
+    avatarUrl: profiles[c.id]?.avatarUrl ?? null,
+  }))
 }

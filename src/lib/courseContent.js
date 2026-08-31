@@ -26,7 +26,52 @@ export async function listOrganisationResources(organisationId) {
     .eq('organisation_id', organisationId)
     .order('created_at', { ascending: false })
   if (error) throw error
+  const latestByGroup = new Map()
+  for (const resource of data ?? []) {
+    const groupId = resource.version_group_id ?? resource.id
+    const current = latestByGroup.get(groupId)
+    if (!current || (resource.version_number ?? 1) > (current.version_number ?? 1)) latestByGroup.set(groupId, resource)
+  }
+  return [...latestByGroup.values()]
+}
+
+export async function listPublishedOrganisationResources(organisationId) {
+  const { data, error } = await supabase
+    .from('content_resources')
+    .select('*')
+    .eq('organisation_id', organisationId)
+    .eq('status', 'published')
+    .eq('is_current_published', true)
+    .order('created_at', { ascending: false })
+  if (error) throw error
   return data ?? []
+}
+
+export async function listResourceVersions(resourceId) {
+  const { data: resource, error: resourceError } = await supabase
+    .from('content_resources')
+    .select('version_group_id')
+    .eq('id', resourceId)
+    .single()
+  if (resourceError) throw resourceError
+  const { data, error } = await supabase
+    .from('content_resources')
+    .select('*')
+    .eq('version_group_id', resource.version_group_id)
+    .order('version_number', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function createResourceDraftVersion(resourceId) {
+  const { data, error } = await supabase.rpc('create_resource_draft_version', { p_resource_id: resourceId })
+  if (error) throw error
+  return data
+}
+
+export async function publishResourceVersion(resourceId) {
+  const { error } = await supabase.rpc('publish_resource_version', { p_resource_id: resourceId })
+  if (error) throw error
 }
 
 // Resources attached to one specific course, in that course's own order --
@@ -56,7 +101,7 @@ export async function listCourseResources(courseId) {
 export async function listCourseSections(courseId) {
   const { data, error } = await supabase
     .from('course_sections')
-    .select('id, title, position')
+    .select('id, title, instructions, position')
     .eq('course_id', courseId)
     .order('position')
   if (error) throw error
@@ -83,8 +128,11 @@ export async function createCourseSection(courseId, title) {
   return data
 }
 
-export async function renameCourseSection(sectionId, title) {
-  const { error } = await supabase.from('course_sections').update({ title: title.trim() }).eq('id', sectionId)
+export async function updateCourseSection(sectionId, { title, instructions }) {
+  const { error } = await supabase
+    .from('course_sections')
+    .update({ title: title.trim(), instructions: instructions.trim() || null })
+    .eq('id', sectionId)
   if (error) throw error
 }
 
@@ -96,19 +144,14 @@ export async function deleteCourseSection(sectionId) {
   if (error) throw error
 }
 
-// Swaps this section with its immediate neighbour -- the simplest reorder
-// primitive that needs no drag-and-drop dependency; `sections` is the
-// caller's already-loaded, position-ordered list.
-export async function moveCourseSection(sections, sectionId, direction) {
-  const index = sections.findIndex((s) => s.id === sectionId)
-  const swapIndex = direction === 'up' ? index - 1 : index + 1
-  if (index === -1 || swapIndex < 0 || swapIndex >= sections.length) return
-  const a = sections[index]
-  const b = sections[swapIndex]
-  const { error: errorA } = await supabase.from('course_sections').update({ position: b.position }).eq('id', a.id)
-  if (errorA) throw errorA
-  const { error: errorB } = await supabase.from('course_sections').update({ position: a.position }).eq('id', b.id)
-  if (errorB) throw errorB
+// Persists a complete drag-and-drop order. Positions are normalized to a
+// contiguous sequence so repeated reorders cannot leave gaps behind.
+export async function reorderCourseSections(sections) {
+  for (const [position, section] of sections.entries()) {
+    if (section.position === position) continue
+    const { error } = await supabase.from('course_sections').update({ position }).eq('id', section.id)
+    if (error) throw error
+  }
 }
 
 async function nextLinkPosition(sectionId) {
@@ -128,26 +171,15 @@ export async function linkResourceToCourse(courseId, resourceId, sectionId) {
   if (error) throw error
 }
 
-// Swaps this item with its immediate neighbour within the same section --
-// `sectionItems` is the caller's already-loaded, position-ordered list for
-// just that one section (moving an item between sections isn't supported
-// here; detach and re-add to the other section instead).
-export async function moveContentLink(sectionItems, linkId, direction) {
-  const index = sectionItems.findIndex((r) => r.linkId === linkId)
-  const swapIndex = direction === 'up' ? index - 1 : index + 1
-  if (index === -1 || swapIndex < 0 || swapIndex >= sectionItems.length) return
-  const a = sectionItems[index]
-  const b = sectionItems[swapIndex]
-  const { error: errorA } = await supabase
-    .from('course_content_links')
-    .update({ position: b.position })
-    .eq('id', a.linkId)
-  if (errorA) throw errorA
-  const { error: errorB } = await supabase
-    .from('course_content_links')
-    .update({ position: a.position })
-    .eq('id', b.linkId)
-  if (errorB) throw errorB
+export async function reorderContentLinks(sectionItems, sectionId = sectionItems[0]?.sectionId ?? null) {
+  for (const [position, item] of sectionItems.entries()) {
+    if (item.position === position && item.sectionId === sectionId) continue
+    const { error } = await supabase
+      .from('course_content_links')
+      .update({ section_id: sectionId, position })
+      .eq('id', item.linkId)
+    if (error) throw error
+  }
 }
 
 // Detaches a resource from this course -- the resource itself (and any
@@ -362,6 +394,10 @@ export async function uploadVideoResource(organisationId, userId, file, title) {
   return uploadSingleFileResource(organisationId, userId, file, title, 'video')
 }
 
+export async function uploadScreenRecordingResource(organisationId, userId, file, title) {
+  return uploadSingleFileResource(organisationId, userId, file, title, 'screen_recording')
+}
+
 // Rebuilds a bare embed URL from a YouTube/Vimeo watch link ourselves,
 // rather than storing (and later using as an iframe src) whatever the
 // provider actually pasted -- an allowlisted host plus an id we extracted
@@ -405,6 +441,35 @@ export async function addExternalVideoResource(organisationId, userId, url, titl
       type: 'external_video',
       title: title?.trim() || url.trim(),
       external_url: embedUrl,
+      created_by: userId,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+function normalizedWebUrl(value) {
+  const input = value.trim()
+  let parsed
+  try {
+    parsed = new URL(/^https?:\/\//i.test(input) ? input : `https://${input}`)
+  } catch {
+    throw new Error('Enter a valid web address.')
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Enter an HTTP or HTTPS web address.')
+  return parsed.href
+}
+
+export async function addWebResource(organisationId, userId, url, title) {
+  const normalizedUrl = normalizedWebUrl(url)
+  const { data, error } = await supabase
+    .from('content_resources')
+    .insert({
+      organisation_id: organisationId,
+      type: 'web_url',
+      title: title?.trim() || new URL(normalizedUrl).hostname,
+      external_url: normalizedUrl,
       created_by: userId,
     })
     .select()
@@ -709,7 +774,15 @@ async function removeStorageFolder(prefix) {
 // the DB level (0073), so it disappears from every course it was attached
 // to, not just the one you were looking at when you deleted it.
 export async function deleteResource(resource) {
-  if (!['external_video', 'page'].includes(resource.type)) await removeStorageFolder(resource.storage_path)
+  if (!['external_video', 'web_url', 'page'].includes(resource.type)) {
+    const { count, error: countError } = await supabase
+      .from('content_resources')
+      .select('id', { count: 'exact', head: true })
+      .eq('storage_path', resource.storage_path)
+      .neq('id', resource.id)
+    if (countError) throw countError
+    if (count === 0) await removeStorageFolder(resource.storage_path)
+  }
   const { error } = await supabase.from('content_resources').delete().eq('id', resource.id)
   if (error) throw error
 }

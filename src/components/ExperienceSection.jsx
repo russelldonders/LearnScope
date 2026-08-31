@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { EXPERIENCE_TYPES } from '../lib/experienceTypes'
@@ -8,16 +8,24 @@ import ExperienceModal from './ExperienceModal'
 import AddExperienceButton from './AddExperienceButton'
 import AccessibleDialog from './AccessibleDialog'
 
-const ADD_EXPERIENCE_TYPES = EXPERIENCE_TYPES.filter((t) => t.value !== 'education').map((t) => t.value)
+const ADD_EXPERIENCE_TYPES = EXPERIENCE_TYPES
+  .filter((type) => type.value !== 'education' && type.value !== 'subject')
+  .map((type) => type.value)
 
 export default function ExperienceSection() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [items, setItems] = useState([])
   const [learningSummaries, setLearningSummaries] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [modalType, setModalType] = useState(null)
+  // Lets a caller (e.g. the dashboard's "record your current role" prompt)
+  // land here with the right "Add" modal already open, instead of making
+  // the learner pick the type themselves right after choosing to act on it.
+  const [modalType, setModalType] = useState(
+    ADD_EXPERIENCE_TYPES.includes(location.state?.autoOpenType) ? location.state.autoOpenType : null
+  )
   const [pendingJob, setPendingJob] = useState(null)
   const [existingCurrentJob, setExistingCurrentJob] = useState(null)
 
@@ -56,6 +64,20 @@ export default function ExperienceSection() {
     for (const row of cl ?? []) map[row.experience_id]?.courseNames.add(row.courses?.name)
     for (const row of sl ?? []) map[row.experience_id]?.skillNames.add(row.skills?.name)
     for (const row of ach ?? []) map[row.experience_id]?.skillNames.add(row.skills?.name)
+
+    // A skill/course linked to a nested subject or project rolls up into
+    // the parent's own summary too, mirroring the "Skills developed" rollup
+    // on the experience detail page -- otherwise education entries (whose
+    // links usually sit on their subjects) would never show anything here.
+    for (const item of experienceItems) {
+      if (!item.parent_experience_id) continue
+      const parentSummary = map[item.parent_experience_id]
+      const childSummary = map[item.id]
+      if (!parentSummary || !childSummary) continue
+      for (const name of childSummary.courseNames) parentSummary.courseNames.add(name)
+      for (const name of childSummary.skillNames) parentSummary.skillNames.add(name)
+    }
+
     const result = {}
     for (const id of ids) {
       result[id] = {
@@ -108,8 +130,8 @@ export default function ExperienceSection() {
     setExistingCurrentJob(null)
   }
 
-  // Sub-experiences (projects/courses/other nested under a job or volunteer
-  // role) render inside their parent's card rather than as their own entry
+  // Sub-experiences (including subjects nested under education) render
+  // inside their parent's card rather than as their own entry
   // on the main timeline -- items is already ordered by start_date, so each
   // parent's children stay in that same order.
   const rootItems = items.filter((i) => !i.parent_experience_id)
@@ -122,9 +144,16 @@ export default function ExperienceSection() {
 
   return (
     <section>
-      <div className="mb-6">
-        <h1 className="font-display text-xl text-ink mb-3">Experience timeline</h1>
-        <AddExperienceButton types={ADD_EXPERIENCE_TYPES} onSelect={setModalType} />
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between mb-8">
+        <div className="max-w-2xl">
+          <h1 className="font-display text-3xl sm:text-4xl text-ink text-balance">Experience timeline</h1>
+          <p className="text-secondary mt-2 text-pretty">
+            Your employment, education, and other milestones, in order.
+          </p>
+        </div>
+        <div className="shrink-0 self-start">
+          <AddExperienceButton types={ADD_EXPERIENCE_TYPES} onSelect={setModalType} />
+        </div>
       </div>
 
       {loading && <p className="text-secondary">Loading…</p>}

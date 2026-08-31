@@ -24,7 +24,7 @@ export default function Welcome() {
     const pendingEnrolId = searchParams.get('enrol') || getPendingEnrolCourseId()
     if (pendingEnrolId) {
       resumePendingEnrolment(user.id, pendingEnrolId)
-        .then((enrolled) => navigate(enrolled ? `/courses/${enrolled.id}` : '/dashboard'))
+        .then((enrolled) => navigate(enrolled ? `/courses/${enrolled.id}/learn` : '/dashboard'))
         .catch(() => navigate('/dashboard'))
     }
   }, [user, navigate, searchParams])

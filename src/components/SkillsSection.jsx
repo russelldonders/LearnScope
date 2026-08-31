@@ -227,7 +227,7 @@ export default function SkillsSection() {
 
       {!loading && !error && activeSkills.length > 0 && (
         <div className="border-y border-hairline py-4 mb-8 space-y-4">
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
             <label className="min-w-0">
               <span className="sr-only">Search skills</span>
               <input
@@ -237,19 +237,6 @@ export default function SkillsSection() {
                 placeholder="Search your skills"
                 className="w-full rounded-md border border-hairline bg-card px-3 py-2.5 text-ink placeholder:text-secondary"
               />
-            </label>
-            <label>
-              <span className="sr-only">Sort skills</span>
-              <select
-                value={sortBy}
-                onChange={(event) => setSortBy(event.target.value)}
-                className="w-full rounded-md border border-hairline bg-card px-3 py-2.5 text-ink sm:w-auto"
-              >
-                <option value="attention">Needs attention</option>
-                <option value="recent">Recently added</option>
-                <option value="name">Name</option>
-                <option value="level">Highest level</option>
-              </select>
             </label>
             <button
               type="button"
@@ -261,20 +248,35 @@ export default function SkillsSection() {
             </button>
           </div>
 
-          <div className="flex gap-1 overflow-x-auto scrollbar-hide" aria-label="Skill views">
-            {SKILL_VIEWS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setView(option.value)}
-                aria-pressed={view === option.value}
-                className={`shrink-0 rounded-full px-3 py-1.5 text-sm transition-colors ${
-                  view === option.value ? 'bg-moss text-paper' : 'text-secondary hover:bg-card hover:text-ink'
-                }`}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex gap-1 overflow-x-auto scrollbar-hide" aria-label="Skill views">
+              {SKILL_VIEWS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setView(option.value)}
+                  aria-pressed={view === option.value}
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                    view === option.value ? 'bg-moss text-paper' : 'text-secondary hover:bg-card hover:text-ink'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <label className="shrink-0">
+              <span className="sr-only">Sort skills</span>
+              <select
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value)}
+                className="rounded-md border border-hairline bg-card px-3 py-1.5 text-sm text-ink"
               >
-                {option.label}
-              </button>
-            ))}
+                <option value="attention">Needs attention</option>
+                <option value="recent">Recently added</option>
+                <option value="name">Name</option>
+                <option value="level">Highest level</option>
+              </select>
+            </label>
           </div>
 
           {showFilters && (

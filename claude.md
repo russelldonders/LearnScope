@@ -57,13 +57,20 @@ React 19 + Vite 8, client-rendered SPA (`react-router-dom`). JavaScript/JSX — 
 * Unit/component tests: colocated as `*.test.js` next to the code they test (e.g. `src/lib/dates.test.js`)
 * E2e tests: `e2e/`
 
-Routes: `/`, `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/welcome`, `/rate/:code`, `/providers/:slug`, `/dashboard`, `/profile`, `/connections`, `/actions`.
+Routes: `/`, `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/welcome`, `/rate/:code`, `/recommend/:code`, `/providers/:slug`, `/dashboard`, `/profile`, `/connections`, `/actions`.
 
 No generated database types. Update this map only when implementation changes make it materially inaccurate.
 
 ## 8. Development Rules
 
 * Read this file before implementation.
+* At the start of every new session **and before starting each new distinct task within a long-running session** (a long conversation is not one checkpoint — re-sync each time work resumes on something new, since `origin/staging` can move while you were working on something else), synchronize local status with remote Staging before implementation:
+  1. Run `git status --short`, then `git fetch origin`.
+  2. Compare the current local branch/HEAD with `origin/staging` (for example, `git rev-list --left-right --count HEAD...origin/staging`).
+  3. If the worktree is clean and the local branch is only behind `origin/staging`, fast-forward it with `git merge --ff-only origin/staging`.
+  4. If the worktree is dirty, ahead, or diverged, do not reset, discard, overwrite, rebase, or auto-merge work. Report the state and resolve it safely before implementation.
+  5. Confirm the linked Supabase project is Staging (`ussqcmfxbbtncjvepuyn`) and compare local/remote migration status with `npx supabase migration list --linked`.
+  6. Report any pending local or remote migrations. Do not apply migrations, push commits, or modify migration history merely as part of startup synchronization unless the user has explicitly authorised that action.
 * Start with files explicitly named by the task; use targeted searches rather than reading entire directories; inspect further only when necessary.
 * Understand existing behaviour before modifying it; follow established architecture, naming and component patterns; reuse existing components/utilities/forms/dialogs.
 * Prefer the smallest coherent change that fully achieves the requested outcome.
@@ -91,10 +98,11 @@ For destructive/potentially destructive migrations, explicitly identify: affecte
 **CLI**: `npx supabase ...` (project-local). Staging project ref: `ussqcmfxbbtncjvepuyn` — before any remote DB command, confirm the linked project matches this ref; if uncertain, stop and ask.
 
 **Migration workflow**, every schema change:
-1. New file in `supabase/migrations/`; never edit an already-applied one.
-2. `npx supabase db reset` locally — proceed only if it succeeds.
-3. `npx supabase db push` to apply to Staging.
-4. Verify it applied; regenerate `stage_bootstrap_consolidated.sql` (§17).
+1. Before naming a new migration file, confirm this checkout is caught up: `git fetch origin staging` and diff this branch's `supabase/migrations/` against `origin/staging`'s. Worktrees and long-lived branches drift silently — if `origin/staging` has migrations this branch lacks, merge it in first. Then run `npx supabase migration list` (project already confirmed linked to Staging, per above) and check its `remote` column doesn't include a version absent from both this branch and `origin/staging` — that means something was applied to Staging outside of a committed migration file; stop and ask rather than guessing a number or repairing history around it.
+2. New file in `supabase/migrations/`, numbered after the highest version seen in step 1; never edit an already-applied one.
+3. `npx supabase db reset` locally — proceed only if it succeeds.
+4. `npx supabase db push` to apply to Staging.
+5. Verify it applied; regenerate `stage_bootstrap_consolidated.sql` (§17).
 
 All persistent schema changes go through a migration file.
 

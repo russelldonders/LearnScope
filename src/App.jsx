@@ -14,15 +14,18 @@ import ResetPassword from './pages/ResetPassword'
 import Welcome from './pages/Welcome'
 import Onboarding from './pages/Onboarding'
 import Dashboard from './pages/Dashboard'
+import Activity from './pages/Activity'
 import Skills from './pages/Skills'
 import SkillDetail from './pages/SkillDetail'
 import Experience from './pages/Experience'
 import ExperienceDetail from './pages/ExperienceDetail'
 import Profile from './pages/Profile'
 import ProfilePrivacy from './pages/ProfilePrivacy'
+import ConnectedAccounts from './pages/ConnectedAccounts'
 import ProfileImport from './pages/ProfileImport'
 import ProfileExport from './pages/ProfileExport'
 import Rate from './pages/Rate'
+import Recommend from './pages/Recommend'
 import ProviderProfile from './pages/ProviderProfile'
 import Connections from './pages/Connections'
 import Actions from './pages/Actions'
@@ -39,8 +42,10 @@ import AdminCatalogue from './pages/admin/AdminCatalogue'
 import AdminSkills from './pages/admin/AdminSkills'
 import AdminSkillDetail from './pages/admin/AdminSkillDetail'
 import AdminTags from './pages/admin/AdminTags'
+import AdminOnboarding from './pages/admin/AdminOnboarding'
 import ProviderConsole from './pages/provider/ProviderConsole'
 import ProviderCourseEditor from './pages/provider/ProviderCourseEditor'
+import ProviderCatalogueDetail from './pages/provider/ProviderCatalogueDetail'
 import RouteTitle from './components/RouteTitle'
 
 function App() {
@@ -59,6 +64,7 @@ function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/rate/:code" element={<Rate />} />
+          <Route path="/recommend/:code" element={<Recommend />} />
           <Route path="/providers/:slug" element={<ProviderProfile />} />
           <Route
             path="/onboarding"
@@ -73,6 +79,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/activity"
+            element={
+              <ProtectedRoute>
+                <Activity />
               </ProtectedRoute>
             }
           />
@@ -121,6 +135,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ProfilePrivacy />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile/connected-accounts"
+            element={
+              <ProtectedRoute>
+                <ConnectedAccounts />
               </ProtectedRoute>
             }
           />
@@ -213,6 +235,14 @@ function App() {
             }
           />
           <Route
+            path="/provider/catalogues/:catalogueId"
+            element={
+              <ProviderAdminRoute>
+                <ProviderCatalogueDetail />
+              </ProviderAdminRoute>
+            }
+          />
+          <Route
             path="/provider/training/:courseId"
             element={
               <ProviderAdminRoute>
@@ -273,6 +303,14 @@ function App() {
             element={
               <PlatformAdminRoute>
                 <AdminTags />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/onboarding"
+            element={
+              <PlatformAdminRoute>
+                <AdminOnboarding />
               </PlatformAdminRoute>
             }
           />
