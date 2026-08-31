@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { XAPI_VERBS } from '../lib/xapiVerbs'
 import { buildStatement, experienceTrail } from '../lib/xapiStatement'
 import AccessibleDialog from './AccessibleDialog'
@@ -6,6 +6,24 @@ import EvidenceFields from './EvidenceFields'
 
 function todayDate() {
   return new Date().toISOString().slice(0, 10)
+}
+
+// Remembers which optional sections (duration/notes/evidence) were left open
+// last time, so the modal reopens the way the learner last set it up rather
+// than always starting collapsed.
+const PANELS_STORAGE_KEY = 'ls_record_activity_panels'
+
+function loadPanelPreferences() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(PANELS_STORAGE_KEY))
+    return {
+      duration: Boolean(stored?.duration),
+      notes: Boolean(stored?.notes),
+      evidence: Boolean(stored?.evidence),
+    }
+  } catch {
+    return { duration: false, notes: false, evidence: false }
+  }
 }
 
 export default function RecordActivityModal({ actor, skills, experiences = [], relatedSkill: fixedSkill, relatedExperience: fixedExperience, onSave, onClose }) {
@@ -19,11 +37,19 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
   const [relatedExperienceId, setRelatedExperienceId] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
-  const [showDuration, setShowDuration] = useState(false)
-  const [showNotes, setShowNotes] = useState(false)
-  const [showEvidence, setShowEvidence] = useState(false)
+  const [panelPrefs] = useState(loadPanelPreferences)
+  const [showDuration, setShowDuration] = useState(panelPrefs.duration)
+  const [showNotes, setShowNotes] = useState(panelPrefs.notes)
+  const [showEvidence, setShowEvidence] = useState(panelPrefs.evidence)
   const [evidenceUrl, setEvidenceUrl] = useState('')
   const [evidenceFiles, setEvidenceFiles] = useState([])
+
+  useEffect(() => {
+    localStorage.setItem(
+      PANELS_STORAGE_KEY,
+      JSON.stringify({ duration: showDuration, notes: showNotes, evidence: showEvidence })
+    )
+  }, [showDuration, showNotes, showEvidence])
   const selectedExperience = fixedExperience ?? experiences.find((experience) => experience.id === relatedExperienceId)
 
   async function handleSubmit(e) {
@@ -57,8 +83,8 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
     setSaving(true)
     try {
       await onSave(statement, {
-        evidenceUrl: showEvidence ? evidenceUrl.trim() : '',
-        files: showEvidence ? evidenceFiles : [],
+        evidenceUrl: evidenceUrl.trim(),
+        files: evidenceFiles,
       })
     } catch (err) {
       setError(err.message)
@@ -207,7 +233,16 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
 
           {showDuration && (
             <div>
-              <span className="block text-sm text-secondary mb-1">How long did it take?</span>
+              <div className="flex items-center justify-between mb-1">
+                <span className="block text-sm text-secondary">How long did it take?</span>
+                <button
+                  type="button"
+                  onClick={() => setShowDuration(false)}
+                  className="text-xs text-secondary hover:text-ink underline"
+                >
+                  Hide
+                </button>
+              </div>
               <div className="flex items-center gap-2">
                 <input
                   type="number"
@@ -238,9 +273,18 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
 
           {showNotes && (
             <div>
-              <label className="block text-sm text-secondary mb-1" htmlFor="description">
-                Anything else worth remembering?
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm text-secondary" htmlFor="description">
+                  Anything else worth remembering?
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowNotes(false)}
+                  className="text-xs text-secondary hover:text-ink underline"
+                >
+                  Hide
+                </button>
+              </div>
               <textarea
                 id="description"
                 rows={3}
@@ -259,6 +303,7 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
               onEvidenceUrlChange={setEvidenceUrl}
               files={evidenceFiles}
               onFilesChange={setEvidenceFiles}
+              onHide={() => setShowEvidence(false)}
             />
           )}
 

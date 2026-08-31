@@ -10,7 +10,7 @@ function UploadIcon() {
   )
 }
 
-export default function EvidenceFields({ evidenceUrl, onEvidenceUrlChange, files, onFilesChange }) {
+export default function EvidenceFields({ evidenceUrl, onEvidenceUrlChange, files, onFilesChange, onHide }) {
   const inputRef = useRef(null)
   const [dragging, setDragging] = useState(false)
   const dragCounter = useRef(0)
@@ -54,7 +54,18 @@ export default function EvidenceFields({ evidenceUrl, onEvidenceUrlChange, files
 
   return (
     <div className="border-t border-hairline pt-4 space-y-2">
-      <h4 className="font-mono text-xs uppercase tracking-wide text-secondary">Evidence</h4>
+      <div className="flex items-center justify-between">
+        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary">Evidence</h4>
+        {onHide && (
+          <button
+            type="button"
+            onClick={onHide}
+            className="text-xs text-secondary hover:text-ink underline normal-case"
+          >
+            Hide
+          </button>
+        )}
+      </div>
 
       <div>
         <label className="block text-xs text-secondary mb-1" htmlFor="evidenceUrl">
