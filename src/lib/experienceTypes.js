@@ -16,7 +16,7 @@ export const EXPERIENCE_TYPE_LABELS = Object.fromEntries(EXPERIENCE_TYPES.map((t
 export const NESTED_EXPERIENCE_TYPES = ['project', 'course', 'other']
 
 export function nestedExperienceTypesFor(parentType) {
-  if (parentType === 'education') return ['subject']
+  if (parentType === 'education') return ['subject', 'project']
   if (parentType === 'employment' || parentType === 'volunteer') return NESTED_EXPERIENCE_TYPES
   return []
 }

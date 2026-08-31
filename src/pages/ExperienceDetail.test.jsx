@@ -127,8 +127,8 @@ describe('experience skill recommendations', () => {
     expect(onLogActivity).toHaveBeenCalled()
   })
 
-  it('offers subjects only beneath education experiences', () => {
-    expect(nestedExperienceTypesFor('education')).toEqual(['subject'])
+  it('offers subjects and projects beneath education experiences', () => {
+    expect(nestedExperienceTypesFor('education')).toEqual(['subject', 'project'])
     expect(nestedExperienceTypesFor('employment')).toEqual(['project', 'course', 'other'])
     expect(nestedExperienceTypesFor('project')).toEqual([])
 
@@ -143,7 +143,7 @@ describe('experience skill recommendations', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '+ Add' }))
     expect(screen.getByRole('button', { name: 'Subject' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Project' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Project' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Subject' }))
     expect(onAddExperience).toHaveBeenCalledWith('subject')
   })

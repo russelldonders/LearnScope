@@ -64,6 +64,20 @@ export default function ExperienceSection() {
     for (const row of cl ?? []) map[row.experience_id]?.courseNames.add(row.courses?.name)
     for (const row of sl ?? []) map[row.experience_id]?.skillNames.add(row.skills?.name)
     for (const row of ach ?? []) map[row.experience_id]?.skillNames.add(row.skills?.name)
+
+    // A skill/course linked to a nested subject or project rolls up into
+    // the parent's own summary too, mirroring the "Skills developed" rollup
+    // on the experience detail page -- otherwise education entries (whose
+    // links usually sit on their subjects) would never show anything here.
+    for (const item of experienceItems) {
+      if (!item.parent_experience_id) continue
+      const parentSummary = map[item.parent_experience_id]
+      const childSummary = map[item.id]
+      if (!parentSummary || !childSummary) continue
+      for (const name of childSummary.courseNames) parentSummary.courseNames.add(name)
+      for (const name of childSummary.skillNames) parentSummary.skillNames.add(name)
+    }
+
     const result = {}
     for (const id of ids) {
       result[id] = {

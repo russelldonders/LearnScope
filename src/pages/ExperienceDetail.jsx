@@ -102,6 +102,7 @@ export default function ExperienceDetail() {
   const [achievements, setAchievements] = useState([])
   const [skillHistory, setSkillHistory] = useState([])
   const [experienceActivities, setExperienceActivities] = useState([])
+  const [allExperienceActivities, setAllExperienceActivities] = useState([])
   const [activitySkills, setActivitySkills] = useState([])
   const [activityOpen, setActivityOpen] = useState(false)
   const [learningLoaded, setLearningLoaded] = useState(false)
@@ -172,8 +173,8 @@ export default function ExperienceDetail() {
         .order('assessed_at', { ascending: false }),
       supabase
         .from('xapi_statements')
-        .select('id, statement, recorded_at, skill_id, evidence_url, evidence_paths, skills(id, name)')
-        .eq('experience_id', item.id)
+        .select('id, statement, recorded_at, skill_id, experience_id, evidence_url, evidence_paths, skills(id, name)')
+        .in('experience_id', experienceIds)
         .order('recorded_at', { ascending: false }),
       supabase
         .from('skills')
@@ -198,7 +199,12 @@ export default function ExperienceDetail() {
     setSkillLinks(uniqueSkillLinks)
     setAchievements(ach ?? [])
     setSkillHistory(history ?? [])
-    setExperienceActivities(activities ?? [])
+    // The Overview timeline only ever shows this experience's own logged
+    // activity; a child's activity stays on the child's own page. The
+    // broader set (including children) is used only for the "activities
+    // logged" count in the skills rollup below.
+    setExperienceActivities((activities ?? []).filter((a) => a.experience_id === item.id))
+    setAllExperienceActivities(activities ?? [])
     setActivitySkills(allSkills ?? [])
     setLearningLoaded(true)
   }
@@ -403,6 +409,7 @@ export default function ExperienceDetail() {
                 achievements={achievements}
                 childExperiences={childExperiences}
                 activities={experienceActivities}
+                allActivities={allExperienceActivities}
                 loaded={learningLoaded}
                 highlightActivityId={location.state?.highlightActivityId}
               />
@@ -444,7 +451,7 @@ export default function ExperienceDetail() {
 }
 
 function DetailsTab({ item, parentExperience, onSave, onDelete }) {
-  const [type, setType] = useState(item.type)
+  const type = item.type
   const [title, setTitle] = useState(item.title)
   const [organization, setOrganization] = useState(item.organization ?? '')
   const [organizationUrl, setOrganizationUrl] = useState(item.organization_url ?? '')
@@ -511,35 +518,6 @@ function DetailsTab({ item, parentExperience, onSave, onDelete }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {item.type === 'education' && (
-        <div>
-          <span className="block text-sm text-secondary mb-2">Type</span>
-          <div className="flex gap-2">
-            {[
-              { value: 'employment', label: 'Employment' },
-              { value: 'education', label: 'Education' },
-            ].map((opt) => (
-              <button
-                type="button"
-                key={opt.value}
-                onClick={() => setType(opt.value)}
-                className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
-                  type === opt.value
-                    ? 'bg-moss text-paper border-moss'
-                    : 'border-hairline text-ink hover:bg-paper'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-secondary mt-1">
-            Education entries are now recorded under Courses — this one is kept as-is since it
-            already exists.
-          </p>
-        </div>
-      )}
-
       <div>
         <label className="block text-sm text-secondary mb-1" htmlFor="title">
           {config.titleLabel}
@@ -675,7 +653,7 @@ function DetailsTab({ item, parentExperience, onSave, onDelete }) {
   )
 }
 
-function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievements, childExperiences, activities, loaded, highlightActivityId }) {
+function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievements, childExperiences, activities, allActivities, loaded, highlightActivityId }) {
   const navigate = useNavigate()
   if (!loaded) return <p className="text-sm text-secondary">Loading…</p>
 
@@ -721,7 +699,7 @@ function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievemen
         {skillLinks.length === 0 ? (
           <p className="text-sm text-secondary">No skills linked yet.</p>
         ) : (
-          <SkillDevelopmentList item={item} skillLinks={skillLinks} assessments={skillHistory} activities={activities} />
+          <SkillDevelopmentList item={item} skillLinks={skillLinks} assessments={skillHistory} activities={allActivities} />
         )}
       </div>
     </div>
@@ -778,35 +756,56 @@ function SkillDevelopmentList({ item, skillLinks, assessments, activities = [] }
         <ul className="overflow-hidden rounded-md border border-hairline divide-y divide-hairline">
           {developedSkills.map(({ link, progress }) => {
             const expanded = expandedSkillId === link.skill_id
+            const activityCount = activities.filter((activity) => activity.skill_id === link.skill_id).length
             return (
               <li key={link.skill_id} className="bg-paper/40">
-                <button
-                  type="button"
-                  aria-expanded={expanded}
-                  onClick={() => setExpandedSkillId(expanded ? null : link.skill_id)}
-                  className="w-full p-3 text-left hover:bg-paper transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moss focus-visible:ring-inset"
-                >
+                <div className="p-3">
                   <span className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-medium text-ink">{link.skills?.name}</span>
-                    <svg
-                      aria-hidden="true"
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.75"
-                      className={`h-4 w-4 shrink-0 text-secondary transition-transform ${expanded ? 'rotate-180' : ''}`}
+                    <span className="min-w-0 flex items-baseline gap-2">
+                      <Link
+                        to={`/skills/${link.skill_id}`}
+                        state={{ from: `/experience/${item.id}`, fromLabel: item.title }}
+                        className="text-sm font-medium text-ink hover:text-moss hover:underline truncate"
+                      >
+                        {link.skills?.name}
+                      </Link>
+                      {activityCount > 0 && (
+                        <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
+                          {activityCount} {activityCount === 1 ? 'activity' : 'activities'} logged
+                        </span>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      aria-expanded={expanded}
+                      aria-label={expanded ? 'Hide skill progress' : 'Show skill progress'}
+                      onClick={() => setExpandedSkillId(expanded ? null : link.skill_id)}
+                      className="shrink-0 p-1 -m-1 rounded-md hover:bg-paper transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moss"
                     >
-                      <path d="m5.5 7.5 4.5 4 4.5-4" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.75"
+                        className={`h-4 w-4 shrink-0 text-secondary transition-transform ${expanded ? 'rotate-180' : ''}`}
+                      >
+                        <path d="m5.5 7.5 4.5 4 4.5-4" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
                   </span>
-                  <span className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedSkillId(expanded ? null : link.skill_id)}
+                    className="mt-2 grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 text-left rounded-md hover:bg-paper transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moss focus-visible:ring-inset"
+                  >
                     <SkillLevelPoint label="At role start" level={progress.entryLevel} />
                     <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="h-4 w-4 text-secondary">
                       <path d="M3.5 10h13m-4-4 4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                     <SkillLevelPoint label={progress.endLabel} level={progress.endLevel} align="right" />
-                  </span>
-                </button>
+                  </button>
+                </div>
                 {expanded && <SkillProgressHistory progress={progress} />}
               </li>
             )
@@ -823,7 +822,13 @@ function SkillDevelopmentList({ item, skillLinks, assessments, activities = [] }
                 key={link.skill_id}
                 className="flex items-center justify-between gap-3 rounded-md border border-hairline bg-paper/40 px-3 py-2"
               >
-                <span className="text-sm text-ink">{link.skills?.name}</span>
+                <Link
+                  to={`/skills/${link.skill_id}`}
+                  state={{ from: `/experience/${item.id}`, fromLabel: item.title }}
+                  className="text-sm text-ink hover:text-moss hover:underline truncate"
+                >
+                  {link.skills?.name}
+                </Link>
                 <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
                   {activityCount > 0
                     ? `${activityCount} ${activityCount === 1 ? 'activity' : 'activities'} logged`
