@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import AppHeader from '../../components/AppHeader'
 import { useAuth } from '../../context/AuthContext'
-import { listOrganisationCatalogueCourses } from '../../lib/admin/catalogue'
 import { listOrganisationMembers } from '../../lib/admin/organisations'
 import { listOrganisationOfferedSkills } from '../../lib/admin/providerSkills'
 import { listOrganisationResources } from '../../lib/courseContent'
@@ -14,6 +13,7 @@ import {
   getProviderCatalogue,
   listProviderCatalogueCourses,
   listProviderCatalogueMembers,
+  listPublishedProviderCourses,
   listProviderCatalogueResources,
   listProviderCatalogueSkills,
   removeProviderCatalogueMember,
@@ -78,7 +78,7 @@ export default function ProviderCatalogueDetail() {
       }
       const [courseData, organisationCourseData, skillData, resourceData, memberData, organisationMemberData, offeredSkillData, organisationResourceData] = await Promise.all([
         listProviderCatalogueCourses(catalogueId),
-        listOrganisationCatalogueCourses(catalogueData.organisation_id),
+        listPublishedProviderCourses(catalogueData.organisation_id),
         listProviderCatalogueSkills(catalogueId),
         listProviderCatalogueResources(catalogueId),
         listProviderCatalogueMembers(catalogueId),
@@ -204,11 +204,7 @@ function ProviderPage({ children }) {
 function CoursesTab({ catalogue, courses, organisationCourses, canManage, canApprove, onReload, onError }) {
   const [adding, setAdding] = useState(false)
   const [savingId, setSavingId] = useState(null)
-  const available = organisationCourses.filter((course) =>
-    ['draft', 'rejected', 'pending_approval', 'approved'].includes(course.status)
-    && (course.status !== 'approved' || course.is_current_published)
-    && !courses.some((assigned) => assigned.id === course.id)
-  )
+  const available = organisationCourses.filter((course) => !courses.some((assigned) => assigned.id === course.id))
 
   async function handleAdd(courseId) {
     setSavingId(courseId)
@@ -236,7 +232,7 @@ function CoursesTab({ catalogue, courses, organisationCourses, canManage, canApp
   return (
     <section>
       <SectionHeading title="Courses" description="Training available through this catalogue." action={canManage && available.length ? { label: adding ? 'Cancel' : 'Add course', onClick: () => setAdding((value) => !value) } : null} />
-      {adding && <div className="mb-5 border-y border-hairline py-3"><p className="mb-2 text-xs text-secondary">Choose from courses created by your organisation.</p><ul className="divide-y divide-hairline">{available.map((course) => <li key={course.id} className="flex items-center justify-between gap-4 py-2 text-sm"><div className="min-w-0"><p className="truncate font-medium text-ink">{course.name}</p><p className="mt-0.5 text-xs text-secondary">{course.course_code || course.course_type || 'Course'} · {COURSE_STATUS[course.status] ?? course.status}</p></div><button type="button" disabled={savingId !== null} onClick={() => handleAdd(course.id)} className="shrink-0 font-medium text-moss hover:underline disabled:opacity-50">{savingId === course.id ? 'Adding…' : 'Add'}</button></li>)}</ul></div>}
+      {adding && <div className="mb-5 border-y border-hairline py-3"><p className="mb-2 text-xs text-secondary">Choose from your organisation’s published courses.</p><ul className="divide-y divide-hairline">{available.map((course) => <li key={course.id} className="flex items-center justify-between gap-4 py-2 text-sm"><div className="min-w-0"><p className="truncate font-medium text-ink">{course.name}</p><p className="mt-0.5 text-xs text-secondary">{course.course_code || course.course_type || 'Course'} · Published</p></div><button type="button" disabled={savingId !== null} onClick={() => handleAdd(course.id)} className="shrink-0 font-medium text-moss hover:underline disabled:opacity-50">{savingId === course.id ? 'Adding…' : 'Add'}</button></li>)}</ul></div>}
       {courses.length === 0 ? <EmptyState>No courses have been added to this catalogue.</EmptyState> : (
         <ul className="divide-y divide-hairline border-y border-hairline">
           {courses.map((course) => (
