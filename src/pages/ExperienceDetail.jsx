@@ -219,7 +219,7 @@ export default function ExperienceDetail() {
       item.parent_experience_id
         ? supabase
             .from('experience')
-            .select('id, title, organization, organization_url, start_date, end_date')
+            .select('id, type, title, organization, organization_url, start_date, end_date')
             .eq('id', item.parent_experience_id)
             .maybeSingle()
         : Promise.resolve({ data: null }),
@@ -365,6 +365,9 @@ export default function ExperienceDetail() {
                   type: item.type,
                   start_date: item.start_date,
                   end_date: item.end_date,
+                  parent: parentExperience
+                    ? { id: parentExperience.id, title: parentExperience.title, type: parentExperience.type }
+                    : null,
                 }}
                 onSave={handleLogActivity}
                 onClose={() => setActivityOpen(false)}

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { XAPI_VERBS } from '../lib/xapiVerbs'
-import { buildStatement } from '../lib/xapiStatement'
+import { buildStatement, experienceTrail } from '../lib/xapiStatement'
 import AccessibleDialog from './AccessibleDialog'
 import EvidenceFields from './EvidenceFields'
 
@@ -169,7 +169,7 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
               >
                 <option value="">No specific experience</option>
                 {experiences.map((experience) => (
-                  <option key={experience.id} value={experience.id}>{experience.title}</option>
+                  <option key={experience.id} value={experience.id}>{experienceTrail(experience)}</option>
                 ))}
               </select>
             </div>

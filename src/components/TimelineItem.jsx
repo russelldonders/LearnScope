@@ -61,7 +61,7 @@ export default function TimelineItem({ item, summary, childExperiences, onEdit, 
             )}
             {summary.skillNames.length > 0 && (
               <p className="text-xs text-secondary">
-                <span className="font-mono uppercase tracking-wide">Skills:</span>{' '}
+                <span className="font-mono uppercase tracking-wide">Skills developed:</span>{' '}
                 {summary.skillNames.join(', ')}
               </p>
             )}

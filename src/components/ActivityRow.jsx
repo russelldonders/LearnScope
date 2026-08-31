@@ -1,5 +1,5 @@
 import EvidenceAttachmentLink from './EvidenceAttachmentLink'
-import { activityName, verbLabel, relatedSkillFromStatement, relatedExperienceFromStatement, formatDuration } from '../lib/xapiStatement'
+import { activityName, verbLabel, relatedSkillFromStatement, relatedExperienceFromStatement, experienceTrail, formatDuration } from '../lib/xapiStatement'
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 
 // A single logged skill activity, shared by the dashboard's capped "Skill
@@ -34,7 +34,7 @@ export default function ActivityRow({ row, onClick }) {
         {formatRelativeDate(row.recorded_at)}
         {duration ? ` · ${duration}` : ''}
         {relatedSkill ? ` · ${relatedSkill.name}` : ''}
-        {relatedExperience ? ` · ${relatedExperience.title}` : ''}
+        {relatedExperience ? ` · ${experienceTrail(relatedExperience)}` : ''}
       </p>
       {row.statement.object?.definition?.description?.['en-US'] && (
         <p className="text-sm text-ink mt-1">

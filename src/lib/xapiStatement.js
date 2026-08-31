@@ -113,6 +113,15 @@ export function buildStatement({
         id: relatedExperience.id,
         title: relatedExperience.title,
         type: relatedExperience.type,
+        // A subject or project's parent (the education/job it belongs to)
+        // is captured alongside it, not looked up live -- so wherever this
+        // statement is later shown (dashboard, /activity, the skill page)
+        // the full experience trail is available without an extra join,
+        // and stays accurate to what it was at the time the activity was
+        // logged even if the parent is later renamed.
+        ...(relatedExperience.parent
+          ? { parent: { id: relatedExperience.parent.id, title: relatedExperience.parent.title, type: relatedExperience.parent.type } }
+          : {}),
       }
     }
   }
@@ -138,4 +147,14 @@ export function relatedSkillFromStatement(statement) {
 
 export function relatedExperienceFromStatement(statement) {
   return statement.context?.extensions?.[EXPERIENCE_EXTENSION_IRI] ?? null
+}
+
+// "Advanced Databases · Computer Science BSc" rather than just "Advanced
+// Databases" -- a subject or project name alone doesn't say which
+// education/job it belongs to, especially once someone has more than one.
+export function experienceTrail(relatedExperience) {
+  if (!relatedExperience) return ''
+  return relatedExperience.parent
+    ? `${relatedExperience.title} · ${relatedExperience.parent.title}`
+    : relatedExperience.title
 }

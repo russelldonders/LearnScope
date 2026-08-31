@@ -62,10 +62,20 @@ export default function RecordActivitySection() {
   async function loadExperiences() {
     const { data } = await supabase
       .from('experience')
-      .select('id, title, type, start_date')
+      .select('id, title, type, start_date, parent_experience_id')
       .eq('user_id', user.id)
       .order('start_date', { ascending: false })
-    setExperiences(data ?? [])
+    const items = data ?? []
+    // A subject or project's parent education/job is already in this same
+    // flat list -- look it up locally instead of a second round trip, so
+    // the picker (and the statement it builds) can carry the full trail.
+    const byId = new Map(items.map((e) => [e.id, e]))
+    setExperiences(
+      items.map((e) => ({
+        ...e,
+        parent: e.parent_experience_id ? byId.get(e.parent_experience_id) ?? null : null,
+      }))
+    )
   }
 
   async function handleSave(statement, evidence) {
