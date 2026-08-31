@@ -1,16 +1,45 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPageResource, updatePageResource } from '../lib/courseContent'
 import { EMPTY_PAGE_DOCUMENT, normalisePageDocument, sanitiseRichText } from '../lib/pageBuilder'
+import { PageMedia } from './PageContent'
 
-const BLOCK_LABELS = { heading: 'Heading', text: 'Text', callout: 'Callout', columns: 'Two columns', divider: 'Divider' }
+const BLOCK_LABELS = { heading: 'Heading', text: 'Text', image: 'Image', video: 'Video', callout: 'Callout', columns: 'Two columns', divider: 'Divider' }
 
 function newBlock(type) {
   if (type === 'divider') return { id: crypto.randomUUID(), type }
   if (type === 'columns') return { id: crypto.randomUUID(), type, content: 'First column', secondaryContent: 'Second column' }
+  if (type === 'image' || type === 'video') return { id: crypto.randomUUID(), type, url: '', alt: '', caption: '' }
   return {
     id: crypto.randomUUID(), type, ...(type === 'heading' ? { level: 2 } : {}),
     content: type === 'callout' ? 'Add an important note…' : type === 'heading' ? 'New section' : 'Write something…',
   }
+}
+
+function MediaEditor({ block, onChange }) {
+  return (
+    <div className="page-media-editor">
+      {block.url ? <PageMedia block={block} /> : (
+        <div className="page-media-placeholder">
+          <strong>{block.type === 'image' ? 'Add an image' : 'Add a video'}</strong>
+          <span>{block.type === 'image' ? 'Paste a direct image URL below.' : 'Paste a YouTube, Vimeo, or direct video URL below.'}</span>
+        </div>
+      )}
+      <div className="page-media-fields">
+        <label>
+          <span>{block.type === 'image' ? 'Image URL' : 'Video URL'}</span>
+          <input type="url" value={block.url} onChange={(event) => onChange({ url: event.target.value })} placeholder="https://…" />
+        </label>
+        <label>
+          <span>{block.type === 'image' ? 'Alternative text' : 'Accessible title'}</span>
+          <input value={block.alt} onChange={(event) => onChange({ alt: event.target.value })} placeholder={block.type === 'image' ? 'Describe the image' : 'Describe the video'} />
+        </label>
+        <label className="sm:col-span-2">
+          <span>Caption (optional)</span>
+          <input value={block.caption} onChange={(event) => onChange({ caption: event.target.value })} placeholder="Add context for learners" />
+        </label>
+      </div>
+    </div>
+  )
 }
 
 function Editable({ value, onChange, label, className = '', onFocus }) {
@@ -154,6 +183,9 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
                           <Editable value={block.content} onChange={(content) => updateBlock(block.id, { content })} onFocus={() => setActiveBlockId(block.id)} label="First column" />
                           <Editable value={block.secondaryContent} onChange={(secondaryContent) => updateBlock(block.id, { secondaryContent })} onFocus={() => setActiveBlockId(block.id)} label="Second column" />
                         </div>
+                      )}
+                      {(block.type === 'image' || block.type === 'video') && (
+                        <MediaEditor block={block} onChange={(changes) => updateBlock(block.id, changes)} />
                       )}
                     </section>
                     {isActive && <InsertMenu label="Insert below" onInsert={(type) => insertBlock(type, index + 1)} />}

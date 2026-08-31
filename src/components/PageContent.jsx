@@ -1,4 +1,4 @@
-import { normalisePageDocument } from '../lib/pageBuilder'
+import { normaliseMediaUrl, normalisePageDocument } from '../lib/pageBuilder'
 
 function RichText({ html, className = '' }) {
   return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />
@@ -23,8 +23,28 @@ export default function PageContent({ document, compact = false }) {
             </div>
           )
         }
+        if (block.type === 'image') return <PageMedia key={block.id} block={block} />
+        if (block.type === 'video') return <PageMedia key={block.id} block={block} />
         return <RichText key={block.id} html={block.content} className="page-paragraph" />
       })}
     </article>
+  )
+}
+
+export function PageMedia({ block }) {
+  const url = normaliseMediaUrl(block.url, block.type)
+  if (!url) return null
+  const isEmbed = /^(https:\/\/www\.youtube\.com\/embed\/|https:\/\/player\.vimeo\.com\/video\/)/.test(url)
+  return (
+    <figure className="page-media">
+      {block.type === 'image' ? (
+        <img src={url} alt={block.alt} loading="lazy" />
+      ) : isEmbed ? (
+        <iframe src={url} title={block.alt || block.caption || 'Embedded video'} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+      ) : (
+        <video src={url} controls preload="metadata" aria-label={block.alt || block.caption || 'Video'} />
+      )}
+      {block.caption && <figcaption>{block.caption}</figcaption>}
+    </figure>
   )
 }
