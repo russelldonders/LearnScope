@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import AppHeader from '../../components/AppHeader'
 import { useAuth } from '../../context/AuthContext'
-import { createProviderCourse } from '../../lib/admin/catalogue'
+import { listOrganisationCatalogueCourses } from '../../lib/admin/catalogue'
 import { listOrganisationMembers } from '../../lib/admin/organisations'
 import { listOrganisationOfferedSkills } from '../../lib/admin/providerSkills'
 import { listOrganisationResources } from '../../lib/courseContent'
 import {
   addProviderCatalogueResource,
   addProviderCatalogueSkill,
+  assignProviderCourseToCatalogue,
   approveProviderCatalogueCourse,
   getProviderCatalogue,
   listProviderCatalogueCourses,
@@ -47,14 +48,12 @@ const COURSE_STATUS = {
   inactive: 'Inactive',
 }
 
-const EMPTY_COURSE = { name: '', courseCode: '', courseType: '', duration: '', synopsis: '' }
-
 export default function ProviderCatalogueDetail() {
   const { catalogueId } = useParams()
   const { user, organisationMemberships } = useAuth()
-  const navigate = useNavigate()
   const [catalogue, setCatalogue] = useState(null)
   const [courses, setCourses] = useState([])
+  const [organisationCourses, setOrganisationCourses] = useState([])
   const [skills, setSkills] = useState([])
   const [resources, setResources] = useState([])
   const [members, setMembers] = useState([])
@@ -77,8 +76,9 @@ export default function ProviderCatalogueDetail() {
         setCatalogue(null)
         return
       }
-      const [courseData, skillData, resourceData, memberData, organisationMemberData, offeredSkillData, organisationResourceData] = await Promise.all([
+      const [courseData, organisationCourseData, skillData, resourceData, memberData, organisationMemberData, offeredSkillData, organisationResourceData] = await Promise.all([
         listProviderCatalogueCourses(catalogueId),
+        listOrganisationCatalogueCourses(catalogueData.organisation_id),
         listProviderCatalogueSkills(catalogueId),
         listProviderCatalogueResources(catalogueId),
         listProviderCatalogueMembers(catalogueId),
@@ -89,6 +89,7 @@ export default function ProviderCatalogueDetail() {
       setCatalogue(catalogueData)
       setEditForm({ name: catalogueData.name, description: catalogueData.description ?? '' })
       setCourses(courseData)
+      setOrganisationCourses(organisationCourseData)
       setSkills(skillData)
       setResources(resourceData)
       setMembers(memberData)
@@ -187,7 +188,7 @@ export default function ProviderCatalogueDetail() {
       </nav>
 
       <div className="pt-6">
-        {activeTab === 'courses' && <CoursesTab catalogue={catalogue} courses={courses} canManage={canManage} canApprove={canApprove} userId={user.id} onCreated={(course) => navigate(`/provider/training/${course.id}`)} onReload={load} onError={setError} />}
+        {activeTab === 'courses' && <CoursesTab catalogue={catalogue} courses={courses} organisationCourses={organisationCourses} canManage={canManage} canApprove={canApprove} onReload={load} onError={setError} />}
         {activeTab === 'skills' && <SkillsTab catalogueId={catalogue.id} skills={skills} offeredSkills={offeredSkills} canManage={canManage} userId={user.id} onReload={load} onError={setError} />}
         {activeTab === 'resources' && <ResourcesTab catalogueId={catalogue.id} resources={resources} organisationResources={organisationResources} canManage={canManage} userId={user.id} onReload={load} onError={setError} />}
         {activeTab === 'users' && <UsersTab catalogueId={catalogue.id} members={members} orgMembers={orgMembers} canManage={canManage} userId={user.id} onReload={load} onError={setError} />}
@@ -200,21 +201,25 @@ function ProviderPage({ children }) {
   return <div className="min-h-screen bg-paper"><AppHeader hideNavLinks /><main id="main-content" tabIndex={-1} className="mx-auto max-w-5xl px-4 py-8">{children}</main></div>
 }
 
-function CoursesTab({ catalogue, courses, canManage, canApprove, userId, onCreated, onReload, onError }) {
-  const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState(EMPTY_COURSE)
-  const [creating, setCreating] = useState(false)
+function CoursesTab({ catalogue, courses, organisationCourses, canManage, canApprove, onReload, onError }) {
+  const [adding, setAdding] = useState(false)
+  const [savingId, setSavingId] = useState(null)
+  const available = organisationCourses.filter((course) =>
+    ['draft', 'rejected', 'pending_approval', 'approved'].includes(course.status)
+    && (course.status !== 'approved' || course.is_current_published)
+    && !courses.some((assigned) => assigned.id === course.id)
+  )
 
-  async function handleCreate(event) {
-    event.preventDefault()
-    setCreating(true)
+  async function handleAdd(courseId) {
+    setSavingId(courseId)
     onError(null)
     try {
-      const course = await createProviderCourse(userId, catalogue.organisation_id, form)
-      onCreated(course)
+      await assignProviderCourseToCatalogue(catalogue.id, courseId)
+      await onReload()
     } catch (err) {
       onError(err.message)
-      setCreating(false)
+    } finally {
+      setSavingId(null)
     }
   }
 
@@ -230,19 +235,8 @@ function CoursesTab({ catalogue, courses, canManage, canApprove, userId, onCreat
 
   return (
     <section>
-      <SectionHeading title="Courses" description="Training available through this catalogue." action={canManage ? { label: showCreate ? 'Cancel' : 'Add course', onClick: () => setShowCreate((value) => !value) } : null} />
-      {showCreate && (
-        <form onSubmit={handleCreate} className="mb-5 border-y border-hairline py-5">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-sm text-secondary">Course name<input required value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-ink focus:ring-2 focus:ring-moss" /></label>
-            <label className="text-sm text-secondary">Course code<input required value={form.courseCode} onChange={(event) => setForm((current) => ({ ...current, courseCode: event.target.value }))} placeholder="e.g. LS-101" className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-ink focus:ring-2 focus:ring-moss" /></label>
-            <label className="text-sm text-secondary">Course type<input value={form.courseType} onChange={(event) => setForm((current) => ({ ...current, courseType: event.target.value }))} placeholder="Online, workshop…" className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-ink focus:ring-2 focus:ring-moss" /></label>
-            <label className="text-sm text-secondary">Duration<input value={form.duration} onChange={(event) => setForm((current) => ({ ...current, duration: event.target.value }))} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-ink focus:ring-2 focus:ring-moss" /></label>
-            <label className="text-sm text-secondary">Synopsis<textarea rows={2} value={form.synopsis} onChange={(event) => setForm((current) => ({ ...current, synopsis: event.target.value }))} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-ink focus:ring-2 focus:ring-moss" /></label>
-          </div>
-          <button disabled={creating} className="mt-3 rounded-md bg-moss px-3 py-2 text-sm font-medium text-paper disabled:opacity-50">{creating ? 'Creating…' : 'Create course'}</button>
-        </form>
-      )}
+      <SectionHeading title="Courses" description="Training available through this catalogue." action={canManage && available.length ? { label: adding ? 'Cancel' : 'Add course', onClick: () => setAdding((value) => !value) } : null} />
+      {adding && <div className="mb-5 border-y border-hairline py-3"><p className="mb-2 text-xs text-secondary">Choose from courses created by your organisation.</p><ul className="divide-y divide-hairline">{available.map((course) => <li key={course.id} className="flex items-center justify-between gap-4 py-2 text-sm"><div className="min-w-0"><p className="truncate font-medium text-ink">{course.name}</p><p className="mt-0.5 text-xs text-secondary">{course.course_code || course.course_type || 'Course'} · {COURSE_STATUS[course.status] ?? course.status}</p></div><button type="button" disabled={savingId !== null} onClick={() => handleAdd(course.id)} className="shrink-0 font-medium text-moss hover:underline disabled:opacity-50">{savingId === course.id ? 'Adding…' : 'Add'}</button></li>)}</ul></div>}
       {courses.length === 0 ? <EmptyState>No courses have been added to this catalogue.</EmptyState> : (
         <ul className="divide-y divide-hairline border-y border-hairline">
           {courses.map((course) => (

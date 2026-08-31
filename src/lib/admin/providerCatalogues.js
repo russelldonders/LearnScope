@@ -75,6 +75,14 @@ export async function removeProviderCatalogueSkill(linkId) {
   if (error) throw error
 }
 
+export async function assignProviderCourseToCatalogue(catalogueId, courseId) {
+  const { error } = await supabase.rpc('assign_course_to_catalogue', {
+    p_catalogue_id: catalogueId,
+    p_course_id: courseId,
+  })
+  if (error) throw error
+}
+
 export async function listProviderCatalogueResources(catalogueId) {
   const { data, error } = await supabase
     .from('catalogue_resources')
