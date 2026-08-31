@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { XAPI_VERBS } from '../lib/xapiVerbs'
 import { buildStatement } from '../lib/xapiStatement'
 import AccessibleDialog from './AccessibleDialog'
+import EvidenceFields from './EvidenceFields'
 
 function todayDate() {
   return new Date().toISOString().slice(0, 10)
@@ -20,6 +21,9 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
   const [error, setError] = useState(null)
   const [showDuration, setShowDuration] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
+  const [showEvidence, setShowEvidence] = useState(false)
+  const [evidenceUrl, setEvidenceUrl] = useState('')
+  const [evidenceFiles, setEvidenceFiles] = useState([])
   const selectedExperience = fixedExperience ?? experiences.find((experience) => experience.id === relatedExperienceId)
 
   async function handleSubmit(e) {
@@ -52,7 +56,10 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
 
     setSaving(true)
     try {
-      await onSave(statement)
+      await onSave(statement, {
+        evidenceUrl: showEvidence ? evidenceUrl.trim() : '',
+        files: showEvidence ? evidenceFiles : [],
+      })
     } catch (err) {
       setError(err.message)
       setSaving(false)
@@ -187,6 +194,15 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
                 + Add more detail
               </button>
             )}
+            {!showEvidence && (
+              <button
+                type="button"
+                onClick={() => setShowEvidence(true)}
+                className="text-xs text-secondary hover:text-ink underline"
+              >
+                + Add evidence
+              </button>
+            )}
           </div>
 
           {showDuration && (
@@ -235,6 +251,15 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
               />
             </div>
+          )}
+
+          {showEvidence && (
+            <EvidenceFields
+              evidenceUrl={evidenceUrl}
+              onEvidenceUrlChange={setEvidenceUrl}
+              files={evidenceFiles}
+              onFilesChange={setEvidenceFiles}
+            />
           )}
 
           {error && <p role="alert" className="text-sm text-red-700">{error}</p>}

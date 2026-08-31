@@ -32,7 +32,11 @@ async function createCurrentRoleExperience(userId) {
   return data.id
 }
 
-async function linkSkillToExperiences(userId, skillId, experienceIds) {
+// Idempotent: only inserts links that don't already exist, so this is safe
+// to call every time an activity is logged against a skill+experience pair
+// (see RecordActivitySection/ExperienceDetail's handleLogActivity) without
+// risking a unique-constraint error on a skill already linked another way.
+export async function linkSkillToExperiences(userId, skillId, experienceIds) {
   if (experienceIds.length === 0) return
   const { data: existingLinks } = await supabase
     .from('skill_experience_links')

@@ -16,7 +16,10 @@ import ExperienceModal from '../components/ExperienceModal'
 import AddExperienceButton from '../components/AddExperienceButton'
 import ConfirmDialog from '../components/ConfirmDialog'
 import RecordActivityModal from '../components/RecordActivityModal'
+import EvidenceAttachmentLink from '../components/EvidenceAttachmentLink'
 import { activityName, relatedSkillFromStatement, verbLabel } from '../lib/xapiStatement'
+import { uploadEvidenceFiles } from '../lib/skillEvidence'
+import { linkSkillToExperiences } from '../lib/currentRole'
 
 // Keeps a nested experience's dates from silently
 // drifting outside the parent role's dates -- an open-ended parent
@@ -157,7 +160,7 @@ export default function ExperienceDetail() {
         .order('assessed_at', { ascending: false }),
       supabase
         .from('xapi_statements')
-        .select('id, statement, recorded_at, skill_id, skills(id, name)')
+        .select('id, statement, recorded_at, skill_id, evidence_url, evidence_paths, skills(id, name)')
         .eq('experience_id', item.id)
         .order('recorded_at', { ascending: false }),
       supabase
@@ -238,16 +241,35 @@ export default function ExperienceDetail() {
     navigate('/experience')
   }
 
-  async function handleLogActivity(statement) {
+  async function handleLogActivity(statement, evidence) {
     const relatedSkill = relatedSkillFromStatement(statement)
-    const { error } = await supabase.from('xapi_statements').insert({
-      user_id: user.id,
-      statement,
-      recorded_at: statement.timestamp,
-      skill_id: relatedSkill.id,
-      experience_id: item.id,
-    })
+    const { data, error } = await supabase
+      .from('xapi_statements')
+      .insert({
+        user_id: user.id,
+        statement,
+        recorded_at: statement.timestamp,
+        skill_id: relatedSkill.id,
+        experience_id: item.id,
+        evidence_url: evidence?.evidenceUrl || null,
+      })
+      .select()
+      .single()
     if (error) throw error
+    if (evidence?.files.length > 0) {
+      const paths = await uploadEvidenceFiles(user.id, relatedSkill.id, data.id, evidence.files)
+      const { error: updateError } = await supabase
+        .from('xapi_statements')
+        .update({ evidence_paths: paths })
+        .eq('id', data.id)
+      if (updateError) throw updateError
+    }
+    // Logging an activity against a skill within this experience is itself
+    // evidence the skill was applied here -- link it the same way an
+    // explicit "Find a skill" link would, per the "reusable records"
+    // principle (one association table, not a parallel notion of "skills
+    // touched by activities").
+    await linkSkillToExperiences(user.id, relatedSkill.id, [item.id])
     setActivityOpen(false)
     await loadLearning()
   }
@@ -366,6 +388,7 @@ export default function ExperienceDetail() {
                 childExperiences={childExperiences}
                 activities={experienceActivities}
                 loaded={learningLoaded}
+                highlightActivityId={location.state?.highlightActivityId}
               />
             )}
 
@@ -636,7 +659,7 @@ function DetailsTab({ item, parentExperience, onSave, onDelete }) {
   )
 }
 
-function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievements, childExperiences, activities, loaded }) {
+function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievements, childExperiences, activities, loaded, highlightActivityId }) {
   const navigate = useNavigate()
   if (!loaded) return <p className="text-sm text-secondary">Loading…</p>
 
@@ -672,6 +695,7 @@ function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievemen
             event={event}
             isLast={pendingCourseLinks.length + i === total - 1}
             onSelectCourse={goToCourse}
+            highlighted={event.type === 'activity' && event.activity.id === highlightActivityId}
           />
         ))}
       </div>
@@ -846,7 +870,7 @@ function FlagIcon({ className }) {
   )
 }
 
-function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse }) {
+function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse, highlighted }) {
   if (event.type === 'start' || event.type === 'end') {
     const config = EXPERIENCE_TYPE_CONFIG[item.type] ?? EXPERIENCE_TYPE_CONFIG.employment
     const isSubExperience = Boolean(item.parent_experience_id)
@@ -923,13 +947,19 @@ function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse }) {
 
   if (event.type === 'activity') {
     const row = event.activity
+    const evidencePaths = row.evidence_paths ?? []
     return (
-      <div className="flex gap-3">
+      <div
+        className="flex gap-3"
+        ref={(el) => {
+          if (el && highlighted) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }}
+      >
         <div className="flex flex-col items-center w-12 shrink-0">
           <span className="w-1.5 h-1.5 rounded-full bg-moss shrink-0 mt-1.5" />
           {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
         </div>
-        <div className="min-w-0 flex-1 mb-3">
+        <div className={`min-w-0 flex-1 mb-3 ${highlighted ? 'rounded-md ring-2 ring-moss p-2 -m-2' : ''}`}>
           <p className="text-sm text-ink break-words">
             <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{verbLabel(row.statement)}</span>{' '}
             {activityName(row.statement)}
@@ -937,6 +967,23 @@ function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse }) {
           <p className="font-mono text-[10px] text-secondary mt-0.5">
             {row.skills?.name ? `${row.skills.name} · ` : ''}{formatFullDate(row.recorded_at)}
           </p>
+          {(row.evidence_url || evidencePaths.length > 0) && (
+            <div className="flex flex-wrap items-center gap-3 mt-1">
+              {row.evidence_url && (
+                <a
+                  href={row.evidence_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-moss font-medium"
+                >
+                  Evidence link
+                </a>
+              )}
+              {evidencePaths.map((path, i) => (
+                <EvidenceAttachmentLink key={path} path={path} index={i} />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     )

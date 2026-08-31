@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { getEvidenceSignedUrl } from '../lib/skillEvidence'
+import { uploadEvidenceFiles } from '../lib/skillEvidence'
 import { isSelfAssessmentDue, todayDateString } from '../lib/checkin'
 import { formatMonthYear } from '../lib/dates'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
+import EvidenceAttachmentLink from '../components/EvidenceAttachmentLink'
 import PeopleWithSkillModal from '../components/PeopleWithSkillModal'
 import PersonAvatar from '../components/PersonAvatar'
 import { getSearchPrivacySettings, listSearchableSkillIds, setSkillSearchable } from '../lib/skillDiscovery'
@@ -245,14 +246,27 @@ export default function SkillDetail() {
     setAssessorName(data?.full_name || user.email)
   }
 
-  async function handleRecordActivity(statement) {
-    const { error } = await supabase.from('xapi_statements').insert({
-      user_id: user.id,
-      statement,
-      recorded_at: statement.timestamp,
-      skill_id: skill.id,
-    })
+  async function handleRecordActivity(statement, evidence) {
+    const { data, error } = await supabase
+      .from('xapi_statements')
+      .insert({
+        user_id: user.id,
+        statement,
+        recorded_at: statement.timestamp,
+        skill_id: skill.id,
+        evidence_url: evidence?.evidenceUrl || null,
+      })
+      .select()
+      .single()
     if (error) throw error
+    if (evidence?.files.length > 0) {
+      const paths = await uploadEvidenceFiles(user.id, skill.id, data.id, evidence.files)
+      const { error: updateError } = await supabase
+        .from('xapi_statements')
+        .update({ evidence_paths: paths })
+        .eq('id', data.id)
+      if (updateError) throw updateError
+    }
     setRecordActivityOpen(false)
     await loadHistory()
   }
@@ -976,6 +990,7 @@ export default function SkillDetail() {
               validatorNames={validatorNames}
               loading={loadingHistory}
               raterAvatars={raterAvatars}
+              highlightActivityId={location.state?.highlightActivityId}
             />
           </div>
         )}
@@ -1342,6 +1357,7 @@ function HistorySection({
   validatorNames,
   loading,
   raterAvatars,
+  highlightActivityId,
 }) {
   const navigate = useNavigate()
   // The Confirming Baseline knowledge quiz logs its own xAPI attempt --
@@ -1351,6 +1367,16 @@ function HistorySection({
   const pendingValidationRequests = validationRequests.filter((r) => r.status === 'pending')
   const decidedValidationRequests = validationRequests.filter((r) => r.status !== 'pending')
   const [selectedEvent, setSelectedEvent] = useState(null)
+
+  // Arriving here from a dashboard/skill-list activity click -- jump
+  // straight to that activity's detail rather than making the learner find
+  // it themselves in a timeline that mixes assessments, ratings, training
+  // and activities together.
+  useEffect(() => {
+    if (!highlightActivityId) return
+    const match = statements.find((s) => s.id === highlightActivityId)
+    if (match) setSelectedEvent({ type: 'activity', statement: match })
+  }, [highlightActivityId, statements])
 
   function goToCourse(courseId) {
     navigate(`/courses/${courseId}/learn`, { state: { backTo: `/skills/${skill.id}`, backLabel: skill.name } })
@@ -1928,6 +1954,7 @@ function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assesso
     )
   } else if (event.type === 'activity') {
     const s = event.statement
+    const evidencePaths = s.evidence_paths ?? []
     title = activityName(s.statement)
     body = (
       <div className="space-y-2">
@@ -1938,6 +1965,26 @@ function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assesso
         </p>
         {s.statement.object?.definition?.description?.['en-US'] && (
           <p className="text-sm text-ink">{s.statement.object.definition.description['en-US']}</p>
+        )}
+        {(s.evidence_url || evidencePaths.length > 0) && (
+          <div>
+            <h5 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1">Evidence</h5>
+            <div className="flex flex-wrap items-center gap-3">
+              {s.evidence_url && (
+                <a
+                  href={s.evidence_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-moss font-medium"
+                >
+                  Evidence link
+                </a>
+              )}
+              {evidencePaths.map((path, i) => (
+                <EvidenceAttachmentLink key={path} path={path} index={i} />
+              ))}
+            </div>
+          </div>
         )}
       </div>
     )
@@ -1982,44 +2029,6 @@ function RaterAvatar({ url, size = 16 }) {
           <path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8" />
         </svg>
       )}
-    </span>
-  )
-}
-
-function EvidenceAttachmentLink({ path, index }) {
-  const [signedUrl, setSignedUrl] = useState(null)
-  const [loadingUrl, setLoadingUrl] = useState(false)
-  const [error, setError] = useState(null)
-
-  async function handleViewEvidence() {
-    if (signedUrl) {
-      window.open(signedUrl, '_blank', 'noopener')
-      return
-    }
-    setLoadingUrl(true)
-    setError(null)
-    try {
-      const url = await getEvidenceSignedUrl(path)
-      setSignedUrl(url)
-      window.open(url, '_blank', 'noopener')
-    } catch {
-      setError("Couldn't load — try again")
-    } finally {
-      setLoadingUrl(false)
-    }
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <button
-        type="button"
-        onClick={handleViewEvidence}
-        disabled={loadingUrl}
-        className="text-xs text-moss font-medium"
-      >
-        {loadingUrl ? 'Loading…' : `Attachment ${index + 1}`}
-      </button>
-      {error && <span className="text-xs text-red-700">{error}</span>}
     </span>
   )
 }
