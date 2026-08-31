@@ -64,7 +64,7 @@ No generated database types. Update this map only when implementation changes ma
 ## 8. Development Rules
 
 * Read this file before implementation.
-* At the start of every new session, synchronize local status with remote Staging before implementation:
+* At the start of every new session **and before starting each new distinct task within a long-running session** (a long conversation is not one checkpoint — re-sync each time work resumes on something new, since `origin/staging` can move while you were working on something else), synchronize local status with remote Staging before implementation:
   1. Run `git status --short`, then `git fetch origin`.
   2. Compare the current local branch/HEAD with `origin/staging` (for example, `git rev-list --left-right --count HEAD...origin/staging`).
   3. If the worktree is clean and the local branch is only behind `origin/staging`, fast-forward it with `git merge --ff-only origin/staging`.
