@@ -17,7 +17,7 @@ import TrackingReasonPicker from '../components/TrackingReasonPicker'
 import { LEVEL_LABELS, LEVEL_DESCRIPTIONS, KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
 import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
-import { activityName, verbLabel, formatDuration, isDiagnosticStatement } from '../lib/xapiStatement'
+import { activityName, verbLabel, formatDuration, isDiagnosticStatement, relatedExperienceFromStatement, experienceTrail } from '../lib/xapiStatement'
 import { applyCurrentRoleSelection, getCurrentRoleTrackingStatus, trackUnderCurrentRole } from '../lib/currentRole'
 import CurrentRoleSelectModal from '../components/CurrentRoleSelectModal'
 import AccessibleDialog from '../components/AccessibleDialog'
@@ -72,6 +72,8 @@ export default function SkillDetail() {
   const [confirmingBaselineOpen, setConfirmingBaselineOpen] = useState(false)
   const [interviewOpen, setInterviewOpen] = useState(false)
   const [recordActivityOpen, setRecordActivityOpen] = useState(false)
+  const [activitiesListOpen, setActivitiesListOpen] = useState(false)
+  const [selectedActivityEvent, setSelectedActivityEvent] = useState(null)
   const [assessMode, setAssessMode] = useState(null)
   const [targetOpen, setTargetOpen] = useState(false)
   const [validateOpen, setValidateOpen] = useState(false)
@@ -609,12 +611,25 @@ export default function SkillDetail() {
                     <NestedSkillPanel
                       title="Demonstrate"
                       status={
-                        <p className="text-sm text-secondary">
-                          {practicalStatements.length} activit{practicalStatements.length === 1 ? 'y' : 'ies'} logged
-                          {relationshipLinks.length > 0
-                            ? ` · linked to ${relationshipLinks.length} experience entr${relationshipLinks.length === 1 ? 'y' : 'ies'}`
-                            : ''}
-                        </p>
+                        practicalStatements.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => setActivitiesListOpen(true)}
+                            className="text-sm text-secondary underline decoration-dotted underline-offset-2 hover:text-moss text-left"
+                          >
+                            {practicalStatements.length} activit{practicalStatements.length === 1 ? 'y' : 'ies'} logged
+                            {relationshipLinks.length > 0
+                              ? ` · linked to ${relationshipLinks.length} experience entr${relationshipLinks.length === 1 ? 'y' : 'ies'}`
+                              : ''}
+                          </button>
+                        ) : (
+                          <p className="text-sm text-secondary">
+                            {practicalStatements.length} activit{practicalStatements.length === 1 ? 'y' : 'ies'} logged
+                            {relationshipLinks.length > 0
+                              ? ` · linked to ${relationshipLinks.length} experience entr${relationshipLinks.length === 1 ? 'y' : 'ies'}`
+                              : ''}
+                          </p>
+                        )
                       }
                       actions={[
                         { label: 'Log skill activity', onClick: () => setRecordActivityOpen(true) },
@@ -829,6 +844,24 @@ export default function SkillDetail() {
               />
             )}
 
+            {activitiesListOpen && (
+              <ActivitiesModal
+                statements={practicalStatements}
+                onSelect={(event) => {
+                  setActivitiesListOpen(false)
+                  setSelectedActivityEvent(event)
+                }}
+                onClose={() => setActivitiesListOpen(false)}
+              />
+            )}
+
+            {selectedActivityEvent && (
+              <TimelineDetailModal
+                event={selectedActivityEvent}
+                onClose={() => setSelectedActivityEvent(null)}
+              />
+            )}
+
             {assessMode && (
               <AssessBaselineModal
                 skill={skill}
@@ -1017,6 +1050,41 @@ function PeopleIcon() {
 // to their skills profile, GrowthRing for their level) -- these two modals
 // are opened from adjacent lines in the Skill Network section and should
 // read as one visual language, not a plain list next to a rich one.
+// Lists just the logged-activity entries the "Demonstrate" panel counts --
+// reuses TimelineEntry's activity card so the summary and the full Timeline
+// further down the page stay visually consistent. Selecting one hands off
+// to TimelineDetailModal instead of stacking a second dialog on top of this
+// one, so only one AccessibleDialog is ever mounted at a time.
+function ActivitiesModal({ statements, onSelect, onClose }) {
+  const sorted = [...statements].sort((a, b) => new Date(b.recorded_at) - new Date(a.recorded_at))
+  return (
+    <AccessibleDialog
+      labelledBy="activities-dialog-title"
+      onClose={onClose}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+        <div className="flex items-center justify-between mb-4">
+          <h2 id="activities-dialog-title" className="font-display text-2xl text-ink">
+            {sorted.length} activit{sorted.length === 1 ? 'y' : 'ies'} logged
+          </h2>
+          <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm shrink-0">
+            Close
+          </button>
+        </div>
+        <div>
+          {sorted.map((s, i) => (
+            <TimelineEntry
+              key={s.id}
+              event={{ type: 'activity', statement: s }}
+              isLast={i === sorted.length - 1}
+              onSelect={() => onSelect({ type: 'activity', statement: s })}
+            />
+          ))}
+        </div>
+    </AccessibleDialog>
+  )
+}
+
 function ConnectionsWithSkillModal({ connections, skillName, onClose }) {
   return (
     <AccessibleDialog
@@ -1592,6 +1660,7 @@ function TimelineEntry({
 
   if (event.type === 'activity') {
     const s = event.statement
+    const relatedExperience = relatedExperienceFromStatement(s.statement)
     return (
       <div className="flex gap-3">
         <div className="flex flex-col items-center w-12 shrink-0">
@@ -1610,6 +1679,9 @@ function TimelineEntry({
             {new Date(s.recorded_at).toLocaleDateString()}
             {formatDuration(s.statement) ? ` · ${formatDuration(s.statement)}` : ''}
           </p>
+          {relatedExperience && (
+            <p className="font-mono text-[10px] text-secondary mt-0.5 truncate">{experienceTrail(relatedExperience)}</p>
+          )}
         </div>
       </div>
     )
@@ -1712,7 +1784,7 @@ function TimelineEntry({
             {formatMonthYear(exp.start_date)} – {exp.end_date ? formatMonthYear(exp.end_date) : 'present'}
           </p>
           <p className="font-mono text-[10px] text-secondary mt-0.5">
-            {exp.type === 'education' ? 'Used during study' : 'Used during employment'} · {exp.organization}
+            {exp.type === 'education' ? 'Developed during education' : 'Used during employment'} · {exp.organization}
           </p>
         </div>
       </div>
@@ -1946,13 +2018,14 @@ function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assesso
           {formatMonthYear(exp.start_date)} – {exp.end_date ? formatMonthYear(exp.end_date) : 'present'}
         </p>
         <p className="text-sm text-secondary">
-          {exp.type === 'education' ? 'Used during study' : 'Used during employment'} · {exp.organization}
+          {exp.type === 'education' ? 'Developed during education' : 'Used during employment'} · {exp.organization}
         </p>
       </div>
     )
   } else if (event.type === 'activity') {
     const s = event.statement
     const evidencePaths = s.evidence_paths ?? []
+    const relatedExperience = relatedExperienceFromStatement(s.statement)
     title = activityName(s.statement)
     body = (
       <div className="space-y-2">
@@ -1961,6 +2034,9 @@ function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assesso
           {new Date(s.recorded_at).toLocaleDateString()}
           {formatDuration(s.statement) ? ` · ${formatDuration(s.statement)}` : ''}
         </p>
+        {relatedExperience && (
+          <p className="font-mono text-xs text-secondary">{experienceTrail(relatedExperience)}</p>
+        )}
         {s.statement.object?.definition?.description?.['en-US'] && (
           <p className="text-sm text-ink">{s.statement.object.definition.description['en-US']}</p>
         )}
