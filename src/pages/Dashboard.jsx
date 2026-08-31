@@ -29,14 +29,21 @@ import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 // Drives the dashboard's "import your CV/history" banner -- shown until
 // the learner has actually run an import once (cv_imported_at, set by
 // ResumeImportReviewModal on first successful import from either the
-// onboarding wizard or /profile/import) or explicitly dismissed it.
+// onboarding wizard or /profile/import) or explicitly dismissed it --
+// and the "add your current role" banner, dismissible independently.
 async function loadImportBannerState(userId) {
   const { data } = await supabase
     .from('profiles')
-    .select('cv_imported_at, cv_import_banner_dismissed_at')
+    .select('cv_imported_at, cv_import_banner_dismissed_at, current_role_banner_dismissed_at')
     .eq('id', userId)
     .single()
-  return data ?? { cv_imported_at: null, cv_import_banner_dismissed_at: null }
+  return (
+    data ?? {
+      cv_imported_at: null,
+      cv_import_banner_dismissed_at: null,
+      current_role_banner_dismissed_at: null,
+    }
+  )
 }
 
 async function countRows(table, userId) {
@@ -384,6 +391,14 @@ export default function Dashboard() {
       .eq('id', user.id)
   }
 
+  async function dismissCurrentRoleBanner() {
+    setImportBanner((prev) => ({ ...prev, current_role_banner_dismissed_at: new Date().toISOString() }))
+    await supabase
+      .from('profiles')
+      .update({ current_role_banner_dismissed_at: new Date().toISOString() })
+      .eq('id', user.id)
+  }
+
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
@@ -426,22 +441,34 @@ export default function Dashboard() {
           )}
         </section>
 
-        {!loading && counts.experience === 0 && counts.skills + counts.courses + counts.connections > 0 && (
-          <div className="rounded-lg border border-dashed border-hairline bg-card p-6 text-center">
-            <h2 className="font-display text-xl text-ink mb-1">Add your current role</h2>
-            <p className="text-sm text-secondary mb-4 max-w-md mx-auto text-pretty">
-              Your Experience timeline is empty. Record the job you're in now so LearnScope can
-              start linking your skills, courses and achievements to it.
-            </p>
-            <button
-              type="button"
-              onClick={() => navigate('/experience', { state: { autoOpenType: 'employment' } })}
-              className="inline-block rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
-            >
-              Record your current role
-            </button>
-          </div>
-        )}
+        {!loading &&
+          counts.experience === 0 &&
+          counts.skills + counts.courses + counts.connections > 0 &&
+          !importBanner?.current_role_banner_dismissed_at && (
+            <div className="rounded-lg border border-dashed border-hairline bg-card p-6 text-center">
+              <h2 className="font-display text-xl text-ink mb-1">Add your current role</h2>
+              <p className="text-sm text-secondary mb-4 max-w-md mx-auto text-pretty">
+                Your Experience timeline is empty. Record the job you're in now so LearnScope can
+                start linking your skills, courses and achievements to it.
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate('/experience', { state: { autoOpenType: 'employment' } })}
+                  className="inline-block rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
+                >
+                  Record your current role
+                </button>
+                <button
+                  type="button"
+                  onClick={dismissCurrentRoleBanner}
+                  className="text-sm text-secondary hover:text-ink whitespace-nowrap"
+                >
+                  Don't show this again
+                </button>
+              </div>
+            </div>
+          )}
 
         {!loading &&
           (upcomingSelfAssessments.length > 0 || upcomingTargets.length > 0 || pendingReviewTasks.length > 0) && (
