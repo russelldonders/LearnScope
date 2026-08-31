@@ -90,3 +90,48 @@ export async function findOrCreateLibrarySkill(name, category, userId, isPrivate
   }
   return data.id
 }
+
+async function findPersonalSkillByName(userId, name) {
+  const { data, error } = await supabase
+    .from('skills')
+    .select('id, name')
+    .eq('user_id', userId)
+    .ilike('name', name.trim())
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
+// Case-insensitive: reuses the learner's existing personal skill with this
+// name if they already have one, otherwise creates both the library entry
+// (via findOrCreateLibrarySkill) and their personal skills row for it.
+// Used wherever a skill needs to be created inline as a side effect of some
+// other flow -- an AI suggestion picked, a skill typed while logging an
+// activity -- rather than through the full "Find a skill" wizard.
+export async function findOrCreatePersonalSkill(userId, name) {
+  const existing = await findPersonalSkillByName(userId, name)
+  if (existing) return { skill: existing, created: false }
+
+  const librarySkillId = await findOrCreateLibrarySkill(name, null, userId)
+  const { data, error } = await supabase
+    .from('skills')
+    .insert({
+      name: name.trim(),
+      level: null,
+      is_current_role: false,
+      tracking_reason: 'career_development',
+      lifecycle_stage: 'identified',
+      library_skill_id: librarySkillId,
+      user_id: userId,
+    })
+    .select('id, name')
+    .single()
+
+  if (!error) return { skill: data, created: true }
+  if (error.code === '23505') {
+    const raced = await findPersonalSkillByName(userId, name)
+    if (raced) return { skill: raced, created: false }
+  }
+  throw error
+}

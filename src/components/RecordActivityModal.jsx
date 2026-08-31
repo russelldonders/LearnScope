@@ -3,6 +3,7 @@ import { XAPI_VERBS } from '../lib/xapiVerbs'
 import { buildStatement, experienceTrail } from '../lib/xapiStatement'
 import AccessibleDialog from './AccessibleDialog'
 import EvidenceFields from './EvidenceFields'
+import SkillPickerModal from './SkillPickerModal'
 
 function todayDate() {
   return new Date().toISOString().slice(0, 10)
@@ -33,7 +34,8 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
   const [date, setDate] = useState(todayDate())
   const [durationHours, setDurationHours] = useState('')
   const [durationMinutes, setDurationMinutes] = useState('')
-  const [relatedSkillId, setRelatedSkillId] = useState('')
+  const [selectedSkill, setSelectedSkill] = useState(null)
+  const [skillPickerOpen, setSkillPickerOpen] = useState(false)
   const [relatedExperienceId, setRelatedExperienceId] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -59,8 +61,7 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
     try {
       if (!activityTitle.trim()) throw new Error('An activity name is required.')
       if (!date) throw new Error('A date is required.')
-      const relatedSkill =
-        fixedSkill ?? (relatedSkillId ? { id: relatedSkillId, name: skills.find((s) => s.id === relatedSkillId)?.name } : null)
+      const relatedSkill = fixedSkill ?? selectedSkill
       if (!relatedSkill) throw new Error('Choose the skill this activity contributed to.')
       const selectedExperience = experiences.find((experience) => experience.id === relatedExperienceId)
       const relatedExperience = fixedExperience ?? selectedExperience ?? null
@@ -162,23 +163,14 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
 
           {!fixedSkill && (
             <div>
-              <label className="block text-sm text-secondary mb-1" htmlFor="relatedSkill">
-                Skill
-              </label>
-              <select
-                id="relatedSkill"
-                required
-                value={relatedSkillId}
-                onChange={(e) => setRelatedSkillId(e.target.value)}
-                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              <span className="block text-sm text-secondary mb-1">Skill</span>
+              <button
+                type="button"
+                onClick={() => setSkillPickerOpen(true)}
+                className="w-full text-left rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
               >
-                <option value="">Choose a skill…</option>
-                {skills.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+                {selectedSkill ? selectedSkill.name : <span className="text-secondary">Choose a skill…</span>}
+              </button>
             </div>
           )}
 
@@ -326,6 +318,19 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
             </button>
           </div>
         </form>
+
+        {skillPickerOpen && (
+          <SkillPickerModal
+            activityTitle={activityTitle}
+            activityDescription={description}
+            skills={skills}
+            onSelect={(skill) => {
+              setSelectedSkill(skill)
+              setSkillPickerOpen(false)
+            }}
+            onClose={() => setSkillPickerOpen(false)}
+          />
+        )}
     </AccessibleDialog>
   )
 }

@@ -1,5 +1,11 @@
 import { useEffect, useRef } from 'react'
 
+// Tracks every currently-mounted dialog instance so Escape closes only the
+// topmost one -- needed now that a dialog can open another on top of itself
+// (e.g. a skill picker opened mid-form from within another still-open
+// dialog) rather than every mounted dialog reacting to the same keypress.
+let openDialogStack = []
+
 const FOCUSABLE = [
   'a[href]',
   'button:not([disabled])',
@@ -30,11 +36,14 @@ export default function AccessibleDialog({
     document.body.style.overflow = 'hidden'
 
     const dialog = dialogRef.current
+    const instance = {}
+    openDialogStack.push(instance)
     const initialFocus = dialog?.querySelector('[data-dialog-initial-focus]') ?? dialog?.querySelector(FOCUSABLE)
     ;(initialFocus ?? dialog)?.focus()
 
     function handleKeyDown(event) {
       if (event.key === 'Escape') {
+        if (openDialogStack[openDialogStack.length - 1] !== instance) return
         event.preventDefault()
         onCloseRef.current?.()
         return
@@ -64,6 +73,7 @@ export default function AccessibleDialog({
     document.addEventListener('keydown', handleKeyDown)
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
+      openDialogStack = openDialogStack.filter((i) => i !== instance)
       document.body.style.overflow = previousOverflow
       if (previouslyFocused instanceof HTMLElement && previouslyFocused.isConnected) previouslyFocused.focus()
     }

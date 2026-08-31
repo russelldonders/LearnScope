@@ -72,6 +72,35 @@ Return at most 3 recommendations, ordered from most important to least important
   }
 }
 
+function buildActivitySkillSuggestionRequest(body) {
+  const { activityTitle, activityDescription, existingSkillNames } = body
+  const title = clean(activityTitle, 200)
+  if (!title) return { error: 'Missing activityTitle' }
+
+  const description = clean(activityDescription, 2000)
+  const existing = Array.isArray(existingSkillNames)
+    ? existingSkillNames.map((name) => clean(name, 120)).filter(Boolean).slice(0, 200)
+    : []
+
+  return {
+    schema: RECOMMENDATIONS_SCHEMA,
+    maxTokens: 512,
+    excluded: [],
+    refusalError: "Couldn't suggest skills for this activity.",
+    failureError: 'Failed to suggest skills.',
+    logLabel: 'suggest-activity-skills',
+    prompt: `A learner just described something they did. Suggest which skill(s) it most likely relates to.
+
+What they did: ${title}
+${description ? `Further detail: ${description}` : ''}
+
+The learner's existing tracked skills (prefer matching one of these by its exact name if it's a good fit):
+${existing.length ? existing.join(', ') : '(none yet)'}
+
+Return up to 3 possibilities, ordered by likelihood. If an existing skill above is a strong match, use its exact name from the list. Only suggest a new skill name if none of the existing ones are a reasonable fit. Each reason must be one concise sentence explaining why that skill fits what they described.`,
+  }
+}
+
 function buildTagSuggestionRequest(body) {
   const { skillName, existingTags } = body
   if (!skillName || typeof skillName !== 'string') return { error: 'Missing skillName' }
@@ -113,7 +142,9 @@ export default async function handler(req, res) {
   const body = req.body ?? {}
   const request = body.operation === 'experience-skills'
     ? buildExperienceRecommendationRequest(body)
-    : buildTagSuggestionRequest(body)
+    : body.operation === 'activity-skills'
+      ? buildActivitySkillSuggestionRequest(body)
+      : buildTagSuggestionRequest(body)
   if (request.error) {
     res.status(400).json({ error: request.error })
     return
@@ -136,7 +167,7 @@ export default async function handler(req, res) {
 
     const textBlock = response.content.find((block) => block.type === 'text')
     const data = JSON.parse(textBlock?.text ?? '{}')
-    if (body.operation !== 'experience-skills') {
+    if (body.operation !== 'experience-skills' && body.operation !== 'activity-skills') {
       res.status(200).json({ tags: (data.tags ?? []).slice(0, 3) })
       return
     }
