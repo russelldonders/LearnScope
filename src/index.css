@@ -269,6 +269,20 @@ body {
   }
 
   .page-media-placeholder strong { color: var(--color-ink); }
+  .page-media-upload { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.85rem; }
+  .page-media-upload button {
+    border-radius: 7px;
+    background: var(--color-moss);
+    padding: 0.6rem 0.85rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--color-paper);
+  }
+  .page-media-upload button:disabled { cursor: wait; opacity: 0.6; }
+  .page-media-upload span { font-size: 0.72rem; color: var(--color-secondary); }
+  .page-media-separator { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.85rem; color: var(--color-secondary); }
+  .page-media-separator::before, .page-media-separator::after { height: 1px; flex: 1; background: var(--color-hairline); content: ''; }
+  .page-media-separator span { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; }
   .page-media-fields { display: grid; gap: 0.75rem; margin-top: 0.85rem; }
   .page-media-fields label { display: grid; gap: 0.3rem; }
   .page-media-fields label > span { font-size: 0.7rem; font-weight: 600; color: var(--color-secondary); }

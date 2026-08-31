@@ -191,6 +191,34 @@ function publicUrlFor(path) {
   return `/course-content/${path}`
 }
 
+const PAGE_MEDIA_MAX_BYTES = 50 * 1024 * 1024
+
+export async function uploadPageMediaAsset(organisationId, file, mediaType) {
+  if (!organisationId || !file) throw new Error('Choose a file to upload.')
+  const expectedPrefix = mediaType === 'video' ? 'video/' : 'image/'
+  if (!file.type?.startsWith(expectedPrefix)) {
+    throw new Error(`Choose ${mediaType === 'video' ? 'a video' : 'an image'} file.`)
+  }
+  if (file.size > PAGE_MEDIA_MAX_BYTES) throw new Error('Uploads must be 50 MB or smaller.')
+
+  const rawExtension = file.name.split('.').pop()?.toLowerCase() || ''
+  const extension = /^[a-z0-9]{1,10}$/.test(rawExtension) ? `.${rawExtension}` : ''
+  const path = `${organisationId}/page-media/${crypto.randomUUID()}${extension}`
+  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+    cacheControl: '31536000',
+    contentType: file.type,
+    upsert: false,
+  })
+  if (error) throw error
+  return { url: publicUrlFor(path), storagePath: path }
+}
+
+export async function removePageMediaAsset(storagePath) {
+  if (!storagePath) return
+  const { error } = await supabase.storage.from(BUCKET).remove([storagePath])
+  if (error) throw error
+}
+
 export function contentFileUrl(item) {
   return publicUrlFor(item.storage_path)
 }

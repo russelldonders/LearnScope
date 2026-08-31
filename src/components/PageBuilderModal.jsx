@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { createPageResource, updatePageResource } from '../lib/courseContent'
+import { createPageResource, removePageMediaAsset, updatePageResource, uploadPageMediaAsset } from '../lib/courseContent'
 import { EMPTY_PAGE_DOCUMENT, normalisePageDocument, sanitiseRichText } from '../lib/pageBuilder'
 import { PageMedia } from './PageContent'
 
@@ -15,15 +15,25 @@ function newBlock(type) {
   }
 }
 
-function MediaEditor({ block, onChange }) {
+function MediaEditor({ block, onChange, onUpload, uploading }) {
+  const inputRef = useRef(null)
   return (
     <div className="page-media-editor">
       {block.url ? <PageMedia block={block} /> : (
         <div className="page-media-placeholder">
           <strong>{block.type === 'image' ? 'Add an image' : 'Add a video'}</strong>
-          <span>{block.type === 'image' ? 'Paste a direct image URL below.' : 'Paste a YouTube, Vimeo, or direct video URL below.'}</span>
+          <span>Upload a file or use a web address below.</span>
         </div>
       )}
+      <div className="page-media-upload">
+        <input ref={inputRef} className="sr-only" type="file" accept={block.type === 'image' ? 'image/*' : 'video/*'}
+          onChange={(event) => { const file = event.target.files?.[0]; if (file) onUpload(file); event.target.value = '' }} />
+        <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading}>
+          {uploading ? 'Uploading…' : `Upload ${block.type}`}
+        </button>
+        <span>Up to 50 MB</span>
+      </div>
+      <div className="page-media-separator"><span>or use a URL</span></div>
       <div className="page-media-fields">
         <label>
           <span>{block.type === 'image' ? 'Image URL' : 'Video URL'}</span>
@@ -79,12 +89,23 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
   const [error, setError] = useState(null)
   const [draggedId, setDraggedId] = useState(null)
   const [activeBlockId, setActiveBlockId] = useState(null)
+  const [uploadingBlockId, setUploadingBlockId] = useState(null)
+  const sessionUploadsRef = useRef(new Set())
+  const savedRef = useRef(false)
+
+  async function closeEditor() {
+    if (!savedRef.current && sessionUploadsRef.current.size) {
+      await Promise.allSettled([...sessionUploadsRef.current].map(removePageMediaAsset))
+      sessionUploadsRef.current.clear()
+    }
+    onClose()
+  }
 
   useEffect(() => {
-    function handleKeyDown(event) { if (event.key === 'Escape') onClose() }
+    function handleKeyDown(event) { if (event.key === 'Escape') void closeEditor() }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  })
 
   function updateBlock(id, changes) {
     setPageDocument((current) => ({ ...current, blocks: current.blocks.map((block) => block.id === id ? { ...block, ...changes } : block) }))
@@ -110,6 +131,27 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
     })
   }
 
+  async function uploadMedia(block, file) {
+    setUploadingBlockId(block.id); setError(null)
+    try {
+      if (block.storagePath && sessionUploadsRef.current.has(block.storagePath)) {
+        await removePageMediaAsset(block.storagePath)
+        sessionUploadsRef.current.delete(block.storagePath)
+      }
+      const asset = await uploadPageMediaAsset(organisationId, file, block.type)
+      sessionUploadsRef.current.add(asset.storagePath)
+      updateBlock(block.id, { ...asset, alt: block.alt || file.name.replace(/\.[^.]+$/, '') })
+    } catch (err) { setError(err.message) } finally { setUploadingBlockId(null) }
+  }
+
+  async function removeBlock(block) {
+    if (block.storagePath && sessionUploadsRef.current.has(block.storagePath)) {
+      try { await removePageMediaAsset(block.storagePath) } catch (err) { setError(err.message); return }
+      sessionUploadsRef.current.delete(block.storagePath)
+    }
+    setPageDocument((current) => ({ ...current, blocks: current.blocks.filter((item) => item.id !== block.id) }))
+  }
+
   function dropBefore(targetId) {
     if (!draggedId || draggedId === targetId) return
     setPageDocument((current) => {
@@ -129,6 +171,7 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
       const saved = resource
         ? await updatePageResource(resource.id, title, cleanDocument)
         : await createPageResource(organisationId, userId, title, cleanDocument)
+      savedRef.current = true
       onSaved(saved); onClose()
     } catch (err) { setError(err.message) } finally { setSaving(false) }
   }
@@ -137,7 +180,7 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
     <div className="fixed inset-0 z-50 bg-black/60 p-0 sm:p-3" role="dialog" aria-modal="true" aria-label="Page editor">
       <div className="page-builder-shell mx-auto flex h-full max-w-[1500px] flex-col overflow-hidden bg-paper sm:rounded-xl">
         <header className="flex flex-wrap items-center gap-3 border-b border-hairline bg-card px-4 py-3 sm:px-5">
-          <button type="button" onClick={onClose} className="text-sm font-medium text-secondary hover:text-ink">Close</button>
+          <button type="button" onClick={() => void closeEditor()} className="text-sm font-medium text-secondary hover:text-ink">Close</button>
           <span className="h-5 w-px bg-hairline" aria-hidden="true" />
           <input value={title} onChange={(event) => setTitle(event.target.value)} aria-label="Resource title"
             className="min-w-[180px] flex-1 bg-transparent font-display text-lg text-ink outline-none" />
@@ -171,7 +214,7 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
                         <span className="page-drag-handle" title="Drag to reorder">Drag</span>
                         <button type="button" onClick={() => moveBlock(block.id, -1)} disabled={index === 0} aria-label="Move block up">Up</button>
                         <button type="button" onClick={() => moveBlock(block.id, 1)} disabled={index === pageDocument.blocks.length - 1} aria-label="Move block down">Down</button>
-                        <button type="button" onClick={() => setPageDocument((current) => ({ ...current, blocks: current.blocks.filter((item) => item.id !== block.id) }))} className="text-red-700">Remove</button>
+                        <button type="button" onClick={() => void removeBlock(block)} className="text-red-700">Remove</button>
                       </div>
 
                       {block.type === 'divider' && <hr className="page-divider" />}
@@ -185,7 +228,8 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
                         </div>
                       )}
                       {(block.type === 'image' || block.type === 'video') && (
-                        <MediaEditor block={block} onChange={(changes) => updateBlock(block.id, changes)} />
+                        <MediaEditor block={block} onChange={(changes) => updateBlock(block.id, changes)}
+                          onUpload={(file) => uploadMedia(block, file)} uploading={uploadingBlockId === block.id} />
                       )}
                     </section>
                     {isActive && <InsertMenu label="Insert below" onInsert={(type) => insertBlock(type, index + 1)} />}

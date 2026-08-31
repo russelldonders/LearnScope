@@ -15,6 +15,8 @@ describe('page builder content', () => {
 
   it('normalises supported video links and rejects executable URLs', () => {
     expect(normaliseMediaUrl('https://youtu.be/abc123', 'video')).toBe('https://www.youtube.com/embed/abc123')
+    expect(normaliseMediaUrl('/course-content/org-1/page-media/image.png', 'image')).toBe('/course-content/org-1/page-media/image.png')
+    expect(normaliseMediaUrl('/course-content/org-1/page-media/../secret.png', 'image')).toBe('')
     expect(normaliseMediaUrl('javascript:alert(1)', 'image')).toBe('')
   })
 })
