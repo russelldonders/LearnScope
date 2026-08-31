@@ -705,7 +705,7 @@ function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievemen
         {skillLinks.length === 0 ? (
           <p className="text-sm text-secondary">No skills linked yet.</p>
         ) : (
-          <SkillDevelopmentList item={item} skillLinks={skillLinks} assessments={skillHistory} />
+          <SkillDevelopmentList item={item} skillLinks={skillLinks} assessments={skillHistory} activities={activities} />
         )}
       </div>
     </div>
@@ -745,52 +745,80 @@ export function getDevelopedSkills(skillLinks, assessments, item, today = new Da
     .filter(({ progress }) => progress.entryLevel && progress.endLevel > progress.entryLevel)
 }
 
-function SkillDevelopmentList({ item, skillLinks, assessments }) {
+function SkillDevelopmentList({ item, skillLinks, assessments, activities = [] }) {
   const [expandedSkillId, setExpandedSkillId] = useState(null)
   const developedSkills = getDevelopedSkills(skillLinks, assessments, item)
-
-  if (developedSkills.length === 0) {
-    return <p className="text-sm text-secondary">No measured skill growth during this experience yet.</p>
-  }
+  const developedIds = new Set(developedSkills.map(({ link }) => link.skill_id))
+  // A skill can be linked to this experience with real logged activity but
+  // no measured before/after level change yet -- worth showing as "worked
+  // on" evidence, distinct from (and without overclaiming) the measured
+  // growth comparison below. Per "evidence over unsupported claims", this
+  // never implies proficiency increased.
+  const otherLinks = skillLinks.filter((link) => !developedIds.has(link.skill_id))
 
   return (
-    <ul className="overflow-hidden rounded-md border border-hairline divide-y divide-hairline">
-      {developedSkills.map(({ link, progress }) => {
-        const expanded = expandedSkillId === link.skill_id
-        return (
-          <li key={link.skill_id} className="bg-paper/40">
-            <button
-              type="button"
-              aria-expanded={expanded}
-              onClick={() => setExpandedSkillId(expanded ? null : link.skill_id)}
-              className="w-full p-3 text-left hover:bg-paper transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moss focus-visible:ring-inset"
-            >
-              <span className="flex items-center justify-between gap-3">
-                <span className="text-sm font-medium text-ink">{link.skills?.name}</span>
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.75"
-                  className={`h-4 w-4 shrink-0 text-secondary transition-transform ${expanded ? 'rotate-180' : ''}`}
+    <div className="space-y-3">
+      {developedSkills.length > 0 && (
+        <ul className="overflow-hidden rounded-md border border-hairline divide-y divide-hairline">
+          {developedSkills.map(({ link, progress }) => {
+            const expanded = expandedSkillId === link.skill_id
+            return (
+              <li key={link.skill_id} className="bg-paper/40">
+                <button
+                  type="button"
+                  aria-expanded={expanded}
+                  onClick={() => setExpandedSkillId(expanded ? null : link.skill_id)}
+                  className="w-full p-3 text-left hover:bg-paper transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moss focus-visible:ring-inset"
                 >
-                  <path d="m5.5 7.5 4.5 4 4.5-4" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </span>
-              <span className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                <SkillLevelPoint label="At role start" level={progress.entryLevel} />
-                <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="h-4 w-4 text-secondary">
-                  <path d="M3.5 10h13m-4-4 4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <SkillLevelPoint label={progress.endLabel} level={progress.endLevel} align="right" />
-              </span>
-            </button>
-            {expanded && <SkillProgressHistory progress={progress} />}
-          </li>
-        )
-      })}
-    </ul>
+                  <span className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium text-ink">{link.skills?.name}</span>
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.75"
+                      className={`h-4 w-4 shrink-0 text-secondary transition-transform ${expanded ? 'rotate-180' : ''}`}
+                    >
+                      <path d="m5.5 7.5 4.5 4 4.5-4" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                  <span className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                    <SkillLevelPoint label="At role start" level={progress.entryLevel} />
+                    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="h-4 w-4 text-secondary">
+                      <path d="M3.5 10h13m-4-4 4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <SkillLevelPoint label={progress.endLabel} level={progress.endLevel} align="right" />
+                  </span>
+                </button>
+                {expanded && <SkillProgressHistory progress={progress} />}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      {otherLinks.length > 0 && (
+        <ul className="space-y-1.5">
+          {otherLinks.map((link) => {
+            const activityCount = activities.filter((activity) => activity.skill_id === link.skill_id).length
+            return (
+              <li
+                key={link.skill_id}
+                className="flex items-center justify-between gap-3 rounded-md border border-hairline bg-paper/40 px-3 py-2"
+              >
+                <span className="text-sm text-ink">{link.skills?.name}</span>
+                <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
+                  {activityCount > 0
+                    ? `${activityCount} ${activityCount === 1 ? 'activity' : 'activities'} logged`
+                    : 'Linked'}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
   )
 }
 
