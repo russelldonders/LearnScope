@@ -141,7 +141,7 @@ async function listUsers(admin, caller, res) {
   // latency is the slowest of the five, not the sum of all five.
   const [users, profilesResult, adminRowsResult, orgMemberRowsResult, orgsResult] = await Promise.all([
     listAllAuthUsers(admin),
-    admin.from('profiles').select('id, full_name, account_status'),
+    admin.from('profiles').select('id, full_name, account_status, user_code'),
     admin.from('platform_admins').select('user_id'),
     // Active org memberships only -- a 'pending' row (0070) isn't a real role
     // yet, the invite just hasn't been accepted, so it shouldn't read as one
@@ -179,6 +179,7 @@ async function listUsers(admin, caller, res) {
       email: u.email,
       createdAt: u.created_at,
       lastSignInAt: u.last_sign_in_at ?? null,
+      userCode: profile?.user_code ?? null,
       fullName: profile?.full_name ?? null,
       accountStatus: profile?.account_status ?? 'active',
       organisationMemberships: orgMembershipsByUser.get(u.id) ?? [],

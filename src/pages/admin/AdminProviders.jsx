@@ -183,7 +183,7 @@ export default function AdminProviders() {
                     <div className="min-w-0">
                       <p className="text-ink font-medium">{org.name}</p>
                       <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mt-0.5">
-                        {org.type} · {org.status}
+                        {org.org_code} · {org.type} · {org.status}
                       </p>
                       {org.url && (
                         <a

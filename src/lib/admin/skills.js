@@ -2,7 +2,7 @@ import { supabase } from '../supabaseClient'
 
 // Admin listing -- every status, unlike src/lib/skillLibrary.js's
 // listLibrarySkills (learner-facing, active-only).
-const ADMIN_SKILL_SELECT = 'id, name, category, description, status, is_private, organisation_id, created_by'
+const ADMIN_SKILL_SELECT = 'id, skill_code, name, category, description, status, is_private, organisation_id, created_by'
 
 // skill_library.created_by only references auth.users, and organisation_id
 // references organisations -- neither is a foreign key PostgREST can embed
