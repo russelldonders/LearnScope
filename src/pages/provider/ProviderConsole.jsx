@@ -451,6 +451,8 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
   const [participantCourse, setParticipantCourse] = useState(null)
   const [historyCourse, setHistoryCourse] = useState(null)
   const [creatingDraftCourseId, setCreatingDraftCourseId] = useState(null)
+  const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
 
   useEffect(() => {
     load()
@@ -549,6 +551,15 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
     }
   }
 
+  const filteredCourses = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    return courses.filter(
+      (course) =>
+        (statusFilter === 'all' || course.status === statusFilter) &&
+        (!needle || [course.name, course.course_code, course.synopsis, course.course_type].filter(Boolean).some((value) => value.toLowerCase().includes(needle)))
+    )
+  }, [courses, query, statusFilter])
+
   return (
     <div>
       <div className="flex items-center justify-between gap-3 mb-3">
@@ -639,6 +650,16 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
         </form>
       )}
 
+      <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_200px] gap-2 mb-4" role="search">
+        <label className="sr-only" htmlFor="providerTrainingSearch">Search training</label>
+        <input id="providerTrainingSearch" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search training…" className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
+        <label className="sr-only" htmlFor="providerTrainingStatus">Filter training by status</label>
+        <select id="providerTrainingStatus" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss">
+          <option value="all">All statuses</option>
+          {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+      </div>
+
       {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
 
       {loading ? (
@@ -647,9 +668,13 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
         <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
           <p className="text-secondary">No training created yet.</p>
         </div>
+      ) : filteredCourses.length === 0 ? (
+        <div className="text-center py-10 border border-dashed border-hairline rounded-lg">
+          <p className="text-secondary">No training matches these filters.</p>
+        </div>
       ) : (
         <div className="space-y-2">
-          {courses.map((course) => (
+          {filteredCourses.map((course) => (
             <CourseCard
               key={course.id}
               course={course}

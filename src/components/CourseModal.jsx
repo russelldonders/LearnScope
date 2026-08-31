@@ -309,7 +309,6 @@ export default function CourseModal({
     </AccessibleDialog>
   )
 }
-
 function OverviewTab({ course, linkedExperiences, skillLinks, achievements, loaded }) {
   if (!loaded) return <p className="text-sm text-secondary">Loading…</p>
 
@@ -887,4 +886,3 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
     </div>
   )
 }
-

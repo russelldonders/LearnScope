@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   listOrganisationResources,
   uploadVideoResource,
@@ -57,7 +57,18 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
   const [historyForId, setHistoryForId] = useState(null)
   const [versionHistory, setVersionHistory] = useState([])
   const [editingPage, setEditingPage] = useState(null)
+  const [query, setQuery] = useState('')
+  const [typeFilter, setTypeFilter] = useState('all')
   const fileInputRef = useRef(null)
+
+  const filteredResources = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    return resources.filter(
+      (resource) =>
+        (typeFilter === 'all' || resource.type === typeFilter) &&
+        (!needle || [resource.title, resource.file_name].filter(Boolean).some((value) => value.toLowerCase().includes(needle)))
+    )
+  }, [resources, query, typeFilter])
 
   useEffect(() => {
     load()
@@ -210,6 +221,16 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
         course's own edit view.
       </p>
 
+      <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_220px] gap-2 mb-4" role="search">
+        <label className="sr-only" htmlFor="providerResourceSearch">Search resources</label>
+        <input id="providerResourceSearch" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search resources…" className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
+        <label className="sr-only" htmlFor="providerResourceType">Filter resources by type</label>
+        <select id="providerResourceType" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss">
+          <option value="all">All resource types</option>
+          {Object.entries(TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+      </div>
+
       {showUploadForm && (
         <div className="bg-card border border-hairline rounded-lg p-4 flex flex-wrap items-end gap-2 mb-4">
         <div>
@@ -352,16 +373,20 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
         <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
           <p className="text-secondary">No resources uploaded yet.</p>
         </div>
+      ) : filteredResources.length === 0 ? (
+        <div className="text-center py-10 border border-dashed border-hairline rounded-lg">
+          <p className="text-secondary">No resources match these filters.</p>
+        </div>
       ) : (
         <ul className="divide-y divide-hairline border border-hairline rounded-md">
-          {resources.map((resource) => (
+          {filteredResources.map((resource) => (
             <li key={resource.id} className="p-3 text-sm">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-ink truncate">{resource.title}</p>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-ink font-medium break-words">{resource.title}</p>
                   <p className="text-xs text-secondary">{TYPE_LABELS[resource.type]} · v{resource.version_number ?? 1} · {resource.status === 'draft' ? 'Draft' : resource.status === 'inactive' ? 'Previous version' : 'Published'}</p>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-x-4 gap-y-2 flex-wrap sm:justify-end shrink-0 border-t border-hairline pt-2 sm:border-0 sm:pt-0">
                   {resource.type === 'file' ? (
                     // download, not target="_blank" -- an unrestricted-type
                     // upload served same-origin must never open as a

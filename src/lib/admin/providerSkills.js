@@ -67,3 +67,66 @@ export async function removeOfferedSkill(organisationId, skillLibraryId) {
     .eq('skill_library_id', skillLibraryId)
   if (error) throw error
 }
+
+export async function getProviderSkillAlignment(organisationId, skillLibraryId) {
+  const [{ data: courses, error: coursesError }, { data: resources, error: resourcesError }] = await Promise.all([
+    supabase
+      .from('course_catalogue')
+      .select('id, name, status, course_catalogue_skills(id, level, skill_library_id)')
+      .eq('organisation_id', organisationId)
+      .order('name'),
+    supabase
+      .from('content_resources')
+      .select('id, title, type, content_resource_skills(id, skill_library_id)')
+      .eq('organisation_id', organisationId)
+      .order('title'),
+  ])
+  if (coursesError) throw coursesError
+  if (resourcesError) throw resourcesError
+
+  return {
+    courses: (courses ?? []).map((course) => {
+      const alignment = course.course_catalogue_skills?.find((link) => link.skill_library_id === skillLibraryId)
+      return { ...course, alignmentId: alignment?.id ?? null, level: alignment?.level ?? 1 }
+    }),
+    resources: (resources ?? []).map((resource) => {
+      const alignment = resource.content_resource_skills?.find((link) => link.skill_library_id === skillLibraryId)
+      return { ...resource, alignmentId: alignment?.id ?? null }
+    }),
+  }
+}
+
+export async function setTrainingSkillAlignment(courseId, skillLibraryId, aligned, level = 1) {
+  if (aligned) {
+    const { error } = await supabase
+      .from('course_catalogue_skills')
+      .upsert(
+        { course_catalogue_id: courseId, skill_library_id: skillLibraryId, level },
+        { onConflict: 'course_catalogue_id,skill_library_id' }
+      )
+    if (error) throw error
+    return
+  }
+  const { error } = await supabase
+    .from('course_catalogue_skills')
+    .delete()
+    .eq('course_catalogue_id', courseId)
+    .eq('skill_library_id', skillLibraryId)
+  if (error) throw error
+}
+
+export async function setResourceSkillAlignment(resourceId, skillLibraryId, userId, aligned) {
+  if (aligned) {
+    const { error } = await supabase
+      .from('content_resource_skills')
+      .insert({ resource_id: resourceId, skill_library_id: skillLibraryId, created_by: userId })
+    if (error) throw error
+    return
+  }
+  const { error } = await supabase
+    .from('content_resource_skills')
+    .delete()
+    .eq('resource_id', resourceId)
+    .eq('skill_library_id', skillLibraryId)
+  if (error) throw error
+}
