@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { formatDateRange } from '../lib/dates'
-import { EXPERIENCE_TYPE_LABELS, formatStudyDuration } from '../lib/experienceTypes'
+import { experienceTypeLabel, formatStudyDuration } from '../lib/experienceTypes'
 
 // A single sub-experience (including a subject nested under education),
 // rendered as one row of a mini dot-timeline. Used both on
@@ -32,7 +32,7 @@ export default function ChildExperienceEntry({ child, isLast, onNavigate }) {
         <p className="text-sm text-ink break-words">{child.title}</p>
         <p className="flex items-center gap-2 font-mono text-[10px] text-secondary/80 mt-0.5">
           <span className="uppercase tracking-wide shrink-0">
-            {EXPERIENCE_TYPE_LABELS[child.type] ?? child.type}
+            {experienceTypeLabel(child)}
           </span>
           {(formatStudyDuration(child) || child.start_date) && (
             <span className="shrink-0">{formatStudyDuration(child) || formatDateRange(child.start_date, child.end_date)}</span>

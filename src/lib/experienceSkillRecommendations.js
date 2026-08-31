@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient'
-import { findOrCreateLibrarySkill } from './skillLibrary'
+import { findOrCreatePersonalSkill } from './skillLibrary'
 import { syncSkillIsCurrentRole } from './currentRole'
 
 export async function recommendExperienceSkills(experience, linkedSkillNames) {
@@ -32,49 +32,10 @@ export async function recommendExperienceSkills(experience, linkedSkillNames) {
   return (body.recommendations ?? []).slice(0, 3)
 }
 
-async function findPersonalSkill(userId, name) {
-  const { data, error } = await supabase
-    .from('skills')
-    .select('id, name')
-    .eq('user_id', userId)
-    .ilike('name', name.trim())
-    .limit(1)
-    .maybeSingle()
-  if (error) throw error
-  return data
-}
-
-async function ensurePersonalSkill(userId, name) {
-  const existing = await findPersonalSkill(userId, name)
-  if (existing) return { skill: existing, created: false }
-
-  const librarySkillId = await findOrCreateLibrarySkill(name, null, userId)
-  const { data, error } = await supabase
-    .from('skills')
-    .insert({
-      name: name.trim(),
-      level: null,
-      is_current_role: false,
-      tracking_reason: 'career_development',
-      lifecycle_stage: 'identified',
-      library_skill_id: librarySkillId,
-      user_id: userId,
-    })
-    .select('id, name')
-    .single()
-
-  if (!error) return { skill: data, created: true }
-  if (error.code === '23505') {
-    const raced = await findPersonalSkill(userId, name)
-    if (raced) return { skill: raced, created: false }
-  }
-  throw error
-}
-
 export async function addRecommendedSkills({ userId, experienceId, names }) {
   const added = []
   for (const name of names) {
-    const { skill, created } = await ensurePersonalSkill(userId, name)
+    const { skill, created } = await findOrCreatePersonalSkill(userId, name)
     const { error } = await supabase.from('skill_experience_links').insert({
       user_id: userId,
       skill_id: skill.id,

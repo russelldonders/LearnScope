@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { formatMonthYear, formatFullDate } from '../lib/dates'
 import { LEVEL_LABELS } from '../lib/levels'
-import { EXPERIENCE_TYPE_LABELS, EXPERIENCE_TYPE_CONFIG, formatStudyDuration, nestedExperienceTypesFor } from '../lib/experienceTypes'
+import { EXPERIENCE_TYPE_CONFIG, experienceTypeLabel, formatStudyDuration, nestedExperienceTypesFor } from '../lib/experienceTypes'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import ChildExperienceEntry from '../components/ChildExperienceEntry'
@@ -81,6 +81,7 @@ export function buildExperienceTimelineEvents(item, childExperiences, linkedCour
 const TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'courses', label: 'Courses' },
+  { id: 'skills', label: 'Skills' },
 ]
 
 export function getExperienceTabs(item, linkedCourses) {
@@ -131,7 +132,7 @@ export default function ExperienceDetail() {
   }, [item?.id])
 
   useEffect(() => {
-    if (learningLoaded && (tab === 'skills' || (tab === 'courses' && linkedCourses.length === 0))) setTab('overview')
+    if (learningLoaded && tab === 'courses' && linkedCourses.length === 0) setTab('overview')
   }, [learningLoaded, linkedCourses.length, tab])
 
   async function loadItem() {
@@ -221,7 +222,7 @@ export default function ExperienceDetail() {
     const [{ data: children }, parentResult] = await Promise.all([
       supabase
         .from('experience')
-        .select('id, type, title, start_date, end_date, study_duration, study_duration_value, study_duration_unit')
+        .select('id, type, title, other_type, start_date, end_date, study_duration, study_duration_value, study_duration_unit')
         .eq('parent_experience_id', item.id)
         .order('start_date', { ascending: false }),
       item.parent_experience_id
@@ -376,7 +377,7 @@ export default function ExperienceDetail() {
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
-                  {EXPERIENCE_TYPE_LABELS[item.type] ?? item.type}
+                  {experienceTypeLabel(item)}
                 </span>
                 <h1 className="font-display text-2xl text-ink mt-0.5">{item.title}</h1>
                 {item.type !== 'subject' && item.organization && (
@@ -414,96 +415,19 @@ export default function ExperienceDetail() {
               itemType={item.type}
               onAddExperience={setChildModalType}
               onLogActivity={() => setActivityOpen(true)}
-              canManageSkills={!item.end_date}
-              onAddSkill={() => setAddSkillOpen(true)}
-              onRecommendSkills={handleRecommend}
+              canManageSkills={!item.end_date && item.type !== 'project' && item.type !== 'course'}
+              onAddSkill={() => {
+                setTab('skills')
+                setAddSkillOpen(true)
+              }}
+              onRecommendSkills={() => {
+                setTab('skills')
+                handleRecommend()
+              }}
               recommending={recommending}
               addingRecommendations={addingRecommendations}
               hasRecommendations={recommendations.length > 0}
             />
-
-            {!item.end_date && (recommendationError || recommendationNotice || recommendations.length > 0) && (
-              <div className="mt-4">
-                {recommendationError && (
-                  <p role="alert" className="text-sm text-red-700 mb-3">
-                    {recommendationError}
-                  </p>
-                )}
-                {recommendationNotice && (
-                  <p role="status" className="text-sm text-secondary mb-3">
-                    {recommendationNotice}
-                  </p>
-                )}
-                {recommendations.length > 0 && (
-                  <section aria-labelledby="skill-recommendations-heading" className="bg-paper rounded-lg p-4">
-                    <div className="flex items-start justify-between gap-4 mb-3">
-                      <div>
-                        <h5 id="skill-recommendations-heading" className="font-display text-lg text-ink">
-                          Suggested for this experience
-                        </h5>
-                        <p className="text-sm text-secondary mt-1">Choose up to three skills to add.</p>
-                      </div>
-                      <span className="text-xs text-secondary tabular-nums shrink-0">
-                        {selectedRecommendations.size} selected
-                      </span>
-                    </div>
-                    <div className="divide-y divide-hairline">
-                      {recommendations.map((recommendation, index) => (
-                        <label key={recommendation.name} className="flex items-start gap-3 py-3 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedRecommendations.has(recommendation.name)}
-                            onChange={() => toggleRecommendation(recommendation.name)}
-                            className="mt-1 size-4 accent-moss"
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="flex flex-wrap items-baseline gap-x-2">
-                              <span className="text-sm font-semibold text-ink">{recommendation.name}</span>
-                              <span className="text-xs text-secondary">Priority {index + 1}</span>
-                            </span>
-                            <span className="block text-sm text-secondary mt-0.5">{recommendation.reason}</span>
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 mt-3">
-                      <button
-                        type="button"
-                        onClick={handleAddRecommendations}
-                        disabled={selectedRecommendations.size === 0 || addingRecommendations}
-                        className="rounded-md bg-moss text-paper px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-                      >
-                        {addingRecommendations
-                          ? 'Adding skills…'
-                          : `Add ${selectedRecommendations.size || ''} selected skill${selectedRecommendations.size === 1 ? '' : 's'}`}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRecommendations([])
-                          setSelectedRecommendations(new Set())
-                        }}
-                        disabled={addingRecommendations}
-                        className="rounded-md px-3 py-2 text-sm text-secondary hover:text-ink disabled:opacity-60"
-                      >
-                        Dismiss
-                      </button>
-                    </div>
-                  </section>
-                )}
-              </div>
-            )}
-
-            {addSkillOpen && (
-              <FindSkillModal
-                experienceId={item.id}
-                onClose={() => setAddSkillOpen(false)}
-                onCreated={() => {
-                  setAddSkillOpen(false)
-                  loadLearning()
-                }}
-              />
-            )}
 
             {activityOpen && (
               <RecordActivityModal
@@ -572,6 +496,27 @@ export default function ExperienceDetail() {
               <CoursesSubsection item={item} linkedCourses={linkedCourses} onChange={loadLearning} />
             )}
 
+            {tab === 'skills' && (
+              <SkillsSubsection
+                item={item}
+                skillLinks={skillLinks}
+                onChange={loadLearning}
+                user={user}
+                addOpen={addSkillOpen}
+                onAddOpenChange={setAddSkillOpen}
+                recommendations={recommendations}
+                selectedRecommendations={selectedRecommendations}
+                onToggleRecommendation={toggleRecommendation}
+                onAddRecommendations={handleAddRecommendations}
+                onDismissRecommendations={() => {
+                  setRecommendations([])
+                  setSelectedRecommendations(new Set())
+                }}
+                addingRecommendations={addingRecommendations}
+                recommendationError={recommendationError}
+                recommendationNotice={recommendationNotice}
+              />
+            )}
 
             {settingsOpen && (
               <div
@@ -605,14 +550,19 @@ export default function ExperienceDetail() {
 
 function DetailsTab({ item, parentExperience, onSave, onDelete }) {
   const type = item.type
+  // A child experience can't stay "ongoing" once its parent has ended --
+  // force it closed here too, so the end date field is usable instead of
+  // staying disabled behind a hidden checkbox.
+  const parentClosed = Boolean(parentExperience?.end_date)
   const [title, setTitle] = useState(item.title)
+  const [otherType, setOtherType] = useState(item.other_type ?? '')
   const [organization, setOrganization] = useState(item.organization ?? '')
   const [organizationUrl, setOrganizationUrl] = useState(item.organization_url ?? '')
   const [startDate, setStartDate] = useState(item.start_date ?? '')
   const [endDate, setEndDate] = useState(item.end_date ?? '')
   const [studyDurationValue, setStudyDurationValue] = useState(item.study_duration_value?.toString() ?? '')
   const [studyDurationUnit, setStudyDurationUnit] = useState(item.study_duration_unit ?? 'months')
-  const [current, setCurrent] = useState(!item.end_date)
+  const [current, setCurrent] = useState(!item.end_date && !parentClosed)
   const [description, setDescription] = useState(item.description ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -641,6 +591,7 @@ function DetailsTab({ item, parentExperience, onSave, onDelete }) {
       await onSave({
         type,
         title: title.trim(),
+        other_type: type === 'other' ? otherType.trim() || null : null,
         organization: organization.trim() || null,
         organization_url: organizationUrl.trim() || null,
         start_date: startDate || null,
@@ -683,6 +634,21 @@ function DetailsTab({ item, parentExperience, onSave, onDelete }) {
           className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
         />
       </div>
+
+      {type === 'other' && (
+        <div>
+          <label className="block text-sm text-secondary mb-1" htmlFor="otherType">
+            Type of experience
+          </label>
+          <input
+            id="otherType"
+            value={otherType}
+            onChange={(e) => setOtherType(e.target.value)}
+            placeholder="e.g. Hackathon, competition, personal pursuit…"
+            className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+          />
+        </div>
+      )}
 
       {!config.inheritsOrganization && <div>
         <label className="block text-sm text-secondary mb-1" htmlFor="organization">
@@ -748,7 +714,7 @@ function DetailsTab({ item, parentExperience, onSave, onDelete }) {
         </div>
       </div>
 
-      {(config.datesRequired !== false || startDate) && (
+      {(config.datesRequired !== false || startDate) && !parentClosed && (
         <label className="flex items-center gap-2 text-sm text-secondary">
           <input
             type="checkbox"
@@ -894,14 +860,21 @@ export function getDevelopedSkills(skillLinks, assessments, item, today = new Da
 
 function SkillDevelopmentList({ item, skillLinks, assessments, activities = [] }) {
   const [expandedSkillId, setExpandedSkillId] = useState(null)
-  const developedSkills = getDevelopedSkills(skillLinks, assessments, item)
+  // "Skills developed" is scoped to skills with real logged activity against
+  // this experience -- a skill that's merely been added/linked here, with
+  // nothing practiced yet, is "what they're working on" (see the Skills
+  // tab), not evidence of development.
+  const activeLinks = skillLinks.filter((link) =>
+    activities.some((activity) => activity.skill_id === link.skill_id)
+  )
+  const developedSkills = getDevelopedSkills(activeLinks, assessments, item)
   const developedIds = new Set(developedSkills.map(({ link }) => link.skill_id))
-  // A skill can be linked to this experience with real logged activity but
-  // no measured before/after level change yet -- worth showing as "worked
-  // on" evidence, distinct from (and without overclaiming) the measured
-  // growth comparison below. Per "evidence over unsupported claims", this
-  // never implies proficiency increased.
-  const otherLinks = skillLinks.filter((link) => !developedIds.has(link.skill_id))
+  // A skill can have real logged activity but no measured before/after
+  // level change yet -- worth showing as "worked on" evidence, distinct
+  // from (and without overclaiming) the measured growth comparison below.
+  // Per "evidence over unsupported claims", this never implies proficiency
+  // increased.
+  const otherLinks = activeLinks.filter((link) => !developedIds.has(link.skill_id))
 
   return (
     <div className="space-y-3">
@@ -983,9 +956,7 @@ function SkillDevelopmentList({ item, skillLinks, assessments, activities = [] }
                   {link.skills?.name}
                 </Link>
                 <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
-                  {activityCount > 0
-                    ? `${activityCount} ${activityCount === 1 ? 'activity' : 'activities'} logged`
-                    : 'Linked'}
+                  {activityCount} {activityCount === 1 ? 'activity' : 'activities'} logged
                 </span>
               </li>
             )
@@ -1438,13 +1409,15 @@ export function ExperienceActionButtons({
   hasRecommendations = false,
 }) {
   const nestedTypes = nestedExperienceTypesFor(itemType)
+  const showAddButton = nestedTypes.length > 0 || canManageSkills
   return (
     <div className="flex flex-wrap items-center gap-2 mt-4">
-      {nestedTypes.length > 0 && (
+      {showAddButton && (
         <AddExperienceButton
           types={nestedTypes}
           onSelect={onAddExperience}
           label="+ Add"
+          leadingOptions={canManageSkills ? [{ value: 'skill', label: 'Skill', onSelect: onAddSkill }] : []}
         />
       )}
       <button
@@ -1455,24 +1428,15 @@ export function ExperienceActionButtons({
         Log skill activity
       </button>
       {canManageSkills && (
-        <>
-          <button
-            type="button"
-            onClick={onAddSkill}
-            className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
-          >
-            + Add skill
-          </button>
-          <button
-            type="button"
-            onClick={onRecommendSkills}
-            disabled={recommending || addingRecommendations}
-            className="inline-flex items-center gap-2 rounded-md border border-moss text-moss px-3 py-2 text-sm font-medium hover:bg-moss/10 disabled:opacity-60"
-          >
-            <SparkIcon />
-            {recommending ? 'Finding skills…' : hasRecommendations ? 'Suggest again' : 'Suggest skills'}
-          </button>
-        </>
+        <button
+          type="button"
+          onClick={onRecommendSkills}
+          disabled={recommending || addingRecommendations}
+          className="inline-flex items-center gap-2 rounded-md border border-moss text-moss px-3 py-2 text-sm font-medium hover:bg-moss/10 disabled:opacity-60"
+        >
+          <SparkIcon />
+          {recommending ? 'Finding skills…' : hasRecommendations ? 'Suggest again' : 'Suggest additional skills'}
+        </button>
       )}
     </div>
   )

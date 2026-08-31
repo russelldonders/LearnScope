@@ -8534,3 +8534,9 @@ create policy "Org members remove skills from published training"
 -- shown when the learner has skills/courses/connections but no experience
 -- entries yet. Same pattern as cv_import_banner_dismissed_at (0110).
 alter table profiles add column current_role_banner_dismissed_at timestamptz;
+
+-- Free-text label for what kind of experience an "Other Experience" entry
+-- is (e.g. "Hackathon", "Open source contribution") -- the fixed type enum
+-- only says "other", which isn't enough to distinguish entries from one
+-- another on the learner's timeline.
+alter table experience add column other_type text;

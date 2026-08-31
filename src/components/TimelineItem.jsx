@@ -1,5 +1,5 @@
 import { formatMonthYear } from '../lib/dates'
-import { EXPERIENCE_TYPE_LABELS } from '../lib/experienceTypes'
+import { experienceTypeLabel } from '../lib/experienceTypes'
 import OrganizationLogo from './OrganizationLogo'
 import ChildExperienceEntry from './ChildExperienceEntry'
 
@@ -28,7 +28,7 @@ export default function TimelineItem({ item, summary, childExperiences, onEdit, 
       >
         <div className="flex items-center gap-2 mb-1">
           <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
-            {EXPERIENCE_TYPE_LABELS[item.type] ?? item.type}
+            {experienceTypeLabel(item)}
           </span>
         </div>
         <h3 className="font-display text-lg text-ink">{item.title}</h3>

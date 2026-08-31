@@ -105,6 +105,7 @@ export default function ExperienceSection() {
     const { error } = await supabase.from('experience').insert({
       type: values.type,
       title: values.title,
+      other_type: values.other_type,
       organization: values.organization,
       organization_url: values.organization_url,
       start_date: values.start_date,

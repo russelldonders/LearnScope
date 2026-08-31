@@ -127,8 +127,8 @@ describe('experience skill recommendations', () => {
     expect(onLogActivity).toHaveBeenCalled()
   })
 
-  it('offers subjects and projects beneath education experiences', () => {
-    expect(nestedExperienceTypesFor('education')).toEqual(['subject', 'project'])
+  it('offers subjects, projects and other experiences beneath education experiences, subject first', () => {
+    expect(nestedExperienceTypesFor('education')).toEqual(['subject', 'project', 'other'])
     expect(nestedExperienceTypesFor('employment')).toEqual(['project', 'course', 'other'])
     expect(nestedExperienceTypesFor('project')).toEqual([])
 
@@ -142,8 +142,10 @@ describe('experience skill recommendations', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: '+ Add' }))
-    expect(screen.getByRole('button', { name: 'Subject' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Project' })).toBeInTheDocument()
+    const optionLabels = screen.getAllByRole('button', { name: /Subject|Project|Other Experience/ }).map(
+      (button) => button.textContent,
+    )
+    expect(optionLabels).toEqual(['Subject', 'Project', 'Other Experience'])
     fireEvent.click(screen.getByRole('button', { name: 'Subject' }))
     expect(onAddExperience).toHaveBeenCalledWith('subject')
   })
@@ -151,10 +153,11 @@ describe('experience skill recommendations', () => {
 
 describe('experience tabs', () => {
   it('hides Courses until the first course is linked', () => {
-    expect(getExperienceTabs(item, []).map((tab) => tab.id)).toEqual(['overview'])
+    expect(getExperienceTabs(item, []).map((tab) => tab.id)).toEqual(['overview', 'skills'])
     expect(getExperienceTabs(item, [{ id: 'course-link-1' }]).map((tab) => tab.id)).toEqual([
       'overview',
       'courses',
+      'skills',
     ])
   })
 
@@ -163,7 +166,7 @@ describe('experience tabs', () => {
       getExperienceTabs({ ...item, parent_experience_id: 'parent-1' }, [{ id: 'course-link-1' }]).map(
         (tab) => tab.id,
       ),
-    ).toEqual(['overview'])
+    ).toEqual(['overview', 'skills'])
   })
 })
 

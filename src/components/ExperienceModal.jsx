@@ -14,6 +14,7 @@ export default function ExperienceModal({
 }) {
   const config = EXPERIENCE_TYPE_CONFIG[type]
   const [title, setTitle] = useState('')
+  const [otherType, setOtherType] = useState('')
   const [organization, setOrganization] = useState(initialOrganization)
   const [organizationUrl, setOrganizationUrl] = useState(initialOrganizationUrl)
   const [startDate, setStartDate] = useState('')
@@ -46,6 +47,7 @@ export default function ExperienceModal({
       await onSave({
         type,
         title: title.trim(),
+        other_type: type === 'other' ? otherType.trim() || null : null,
         organization: organization.trim() || null,
         organization_url: organizationUrl.trim() || null,
         start_date: startDate || null,
@@ -83,6 +85,21 @@ export default function ExperienceModal({
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
             />
           </div>
+
+          {type === 'other' && (
+            <div>
+              <label className="block text-sm text-secondary mb-1" htmlFor="otherType">
+                Type of experience
+              </label>
+              <input
+                id="otherType"
+                value={otherType}
+                onChange={(e) => setOtherType(e.target.value)}
+                placeholder="e.g. Hackathon, competition, personal pursuit…"
+                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+            </div>
+          )}
 
           {!config.inheritsOrganization && <div>
             <label className="block text-sm text-secondary mb-1" htmlFor="organization">
@@ -151,7 +168,7 @@ export default function ExperienceModal({
             </div>
           </div>
 
-          {(config.datesRequired !== false || startDate) && (
+          {(config.datesRequired !== false || startDate) && !maximumDate && (
             <label className="flex items-center gap-2 text-sm text-secondary">
               <input
                 type="checkbox"

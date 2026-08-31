@@ -8,7 +8,11 @@ export default function AddExperienceButton({
   leadingOptions = [],
 }) {
   const [open, setOpen] = useState(false)
-  const experienceOptions = EXPERIENCE_TYPES.filter((type) => types.includes(type.value))
+  // Preserve the caller's ordering (e.g. Subject before Project for
+  // education) rather than EXPERIENCE_TYPES' own fixed order.
+  const experienceOptions = types
+    .map((value) => EXPERIENCE_TYPES.find((type) => type.value === value))
+    .filter(Boolean)
   const options = [
     ...leadingOptions.map((option) => ({ ...option, isLeading: true })),
     ...experienceOptions,

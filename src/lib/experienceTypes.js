@@ -10,13 +10,21 @@ export const EXPERIENCE_TYPES = [
 
 export const EXPERIENCE_TYPE_LABELS = Object.fromEntries(EXPERIENCE_TYPES.map((t) => [t.value, t.label]))
 
+// An "Other Experience" entry's learner-entered other_type (e.g.
+// "Hackathon") is more specific than the generic "Other Experience" badge --
+// prefer it wherever the type label is displayed.
+export function experienceTypeLabel(item) {
+  if (item.type === 'other' && item.other_type) return item.other_type
+  return EXPERIENCE_TYPE_LABELS[item.type] ?? item.type
+}
+
 // The types that can be added as a "sub-experience" nested under a Job or
 // Volunteer Position -- e.g. a project or course record completed as part
 // of that role. Automatically linked to the parent via parent_experience_id.
 export const NESTED_EXPERIENCE_TYPES = ['project', 'course', 'other']
 
 export function nestedExperienceTypesFor(parentType) {
-  if (parentType === 'education') return ['subject', 'project']
+  if (parentType === 'education') return ['subject', 'project', 'other']
   if (parentType === 'employment' || parentType === 'volunteer') return NESTED_EXPERIENCE_TYPES
   return []
 }
