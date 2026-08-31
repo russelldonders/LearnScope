@@ -17,7 +17,7 @@ import TrackingReasonPicker from '../components/TrackingReasonPicker'
 import { LEVEL_LABELS, LEVEL_DESCRIPTIONS, KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
 import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
-import { activityName, verbLabel, formatDuration, isDiagnosticStatement } from '../lib/xapiStatement'
+import { activityName, verbLabel, formatDuration, isDiagnosticStatement, provenanceFromStatement, PROVENANCE_SOURCE_LABELS } from '../lib/xapiStatement'
 import { applyCurrentRoleSelection, getCurrentRoleTrackingStatus, trackUnderCurrentRole } from '../lib/currentRole'
 import CurrentRoleSelectModal from '../components/CurrentRoleSelectModal'
 import AccessibleDialog from '../components/AccessibleDialog'
@@ -1393,6 +1393,14 @@ function HistorySection({
         // them below "today", as if already done), they render as pending
         // items above "today", the same way an unmet target does.
         const pendingCourseLinks = courseLinks.filter((link) => link.courses && !link.courses.completed_date)
+        // An externally-imported skill's own row only says "external_import"
+        // (generic across providers, see the skills_source_check migration)
+        // -- the actual provider (e.g. Strava) lives on the synced xAPI
+        // statement's provenance extension instead, so it's looked up here
+        // to caption "Skill added" with who it really came from.
+        const importProvenanceSource = provenanceFromStatement(
+          statements.find((s) => provenanceFromStatement(s.statement))?.statement ?? {}
+        )?.source
         const events = [
           ...history.map((entry) => ({ type: 'assessment', date: entry.assessed_at, createdAt: entry.created_at, entry })),
           ...peerRatings.map((rating) => ({ type: 'peer', date: rating.rated_at, createdAt: rating.rated_at, rating })),
@@ -1419,7 +1427,13 @@ function HistorySection({
             createdAt: request.decided_at,
             request,
           })),
-          { type: 'added', date: skill.date_added, createdAt: skill.date_added, source: skill.source },
+          {
+            type: 'added',
+            date: skill.date_added,
+            createdAt: skill.date_added,
+            source: skill.source,
+            provenanceSource: importProvenanceSource,
+          },
           { type: 'today', date: new Date().toISOString(), createdAt: new Date().toISOString() },
           // Same-day events sort by day first, then by when the record was
           // actually created/assigned -- e.g. a course completed today
@@ -1650,7 +1664,11 @@ function TimelineEntry({
         <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3">
           <p className="text-sm font-medium text-ink">Skill added</p>
           {event.source && (
-            <p className="font-mono text-[10px] text-secondary mt-0.5">{SKILL_SOURCE_LABELS[event.source] ?? event.source}</p>
+            <p className="font-mono text-[10px] text-secondary mt-0.5">
+              {event.provenanceSource
+                ? `Synced from ${PROVENANCE_SOURCE_LABELS[event.provenanceSource] ?? event.provenanceSource}`
+                : SKILL_SOURCE_LABELS[event.source] ?? event.source}
+            </p>
           )}
           <p className="font-mono text-xs text-secondary mt-0.5">
             {new Date(event.date).toLocaleDateString()}
