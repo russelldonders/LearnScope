@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import RecordActivityModal from './RecordActivityModal'
-import EvidenceAttachmentLink from './EvidenceAttachmentLink'
-import { activityName, verbLabel, relatedSkillFromStatement, relatedExperienceFromStatement, formatDuration } from '../lib/xapiStatement'
-import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
+import ActivityRow from './ActivityRow'
+import { relatedSkillFromStatement, relatedExperienceFromStatement } from '../lib/xapiStatement'
 import { uploadEvidenceFiles } from '../lib/skillEvidence'
 import { linkSkillToExperiences } from '../lib/currentRole'
 
@@ -136,66 +135,21 @@ export default function RecordActivitySection() {
         {statements.slice(0, RECENT_LIMIT).map((row) => {
           const relatedSkill = relatedSkillFromStatement(row.statement)
           const relatedExperience = relatedExperienceFromStatement(row.statement)
-          const duration = formatDuration(row.statement)
-          const evidencePaths = row.evidence_paths ?? []
           const canNavigate = Boolean(relatedExperience || relatedSkill)
           return (
-            <div
+            <ActivityRow
               key={row.id}
-              role={canNavigate ? 'button' : undefined}
-              tabIndex={canNavigate ? 0 : undefined}
+              row={row}
               onClick={canNavigate ? () => goToActivity(row, relatedSkill, relatedExperience) : undefined}
-              onKeyDown={(e) => {
-                if (canNavigate && (e.key === 'Enter' || e.key === ' ')) {
-                  e.preventDefault()
-                  goToActivity(row, relatedSkill, relatedExperience)
-                }
-              }}
-              className={`bg-card border border-hairline rounded-lg px-4 py-3 ${canNavigate ? 'cursor-pointer hover:border-moss/60 transition-colors' : ''}`}
-            >
-              <p className="text-sm text-ink">
-                <span className="font-mono text-[11px] uppercase tracking-wide text-secondary">
-                  {verbLabel(row.statement)}
-                </span>{' '}
-                {activityName(row.statement)}
-              </p>
-              <p className="font-mono text-xs text-secondary mt-0.5" title={formatAbsoluteDate(row.recorded_at)}>
-                {formatRelativeDate(row.recorded_at)}
-                {duration ? ` · ${duration}` : ''}
-                {relatedSkill ? ` · ${relatedSkill.name}` : ''}
-                {relatedExperience ? ` · ${relatedExperience.title}` : ''}
-              </p>
-              {row.statement.object?.definition?.description?.['en-US'] && (
-                <p className="text-sm text-ink mt-1">
-                  {row.statement.object.definition.description['en-US']}
-                </p>
-              )}
-              {(row.evidence_url || evidencePaths.length > 0) && (
-                <div className="flex flex-wrap items-center gap-3 mt-1" onClick={(e) => e.stopPropagation()}>
-                  {row.evidence_url && (
-                    <a
-                      href={row.evidence_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-moss font-medium"
-                    >
-                      Evidence link
-                    </a>
-                  )}
-                  {evidencePaths.map((path, i) => (
-                    <EvidenceAttachmentLink key={path} path={path} index={i} />
-                  ))}
-                </div>
-              )}
-            </div>
+            />
           )
         })}
       </div>
 
       {statements.length > RECENT_LIMIT && (
-        <p className="text-xs text-secondary mt-2">
-          Showing your {RECENT_LIMIT} most recent of {statements.length}.
-        </p>
+        <Link to="/activity" className="block text-xs text-moss font-medium mt-2 hover:underline">
+          Showing your {RECENT_LIMIT} most recent of {statements.length} — see all activity →
+        </Link>
       )}
 
       {modalOpen && (

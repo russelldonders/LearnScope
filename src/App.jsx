@@ -14,6 +14,7 @@ import ResetPassword from './pages/ResetPassword'
 import Welcome from './pages/Welcome'
 import Onboarding from './pages/Onboarding'
 import Dashboard from './pages/Dashboard'
+import Activity from './pages/Activity'
 import Skills from './pages/Skills'
 import SkillDetail from './pages/SkillDetail'
 import Experience from './pages/Experience'
@@ -77,6 +78,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/activity"
+            element={
+              <ProtectedRoute>
+                <Activity />
               </ProtectedRoute>
             }
           />
