@@ -43,6 +43,7 @@ import AdminTags from './pages/admin/AdminTags'
 import AdminOnboarding from './pages/admin/AdminOnboarding'
 import ProviderConsole from './pages/provider/ProviderConsole'
 import ProviderCourseEditor from './pages/provider/ProviderCourseEditor'
+import ProviderCatalogueDetail from './pages/provider/ProviderCatalogueDetail'
 import RouteTitle from './components/RouteTitle'
 
 function App() {
@@ -212,6 +213,14 @@ function App() {
             element={
               <ProviderAdminRoute>
                 <ProviderConsole />
+              </ProviderAdminRoute>
+            }
+          />
+          <Route
+            path="/provider/catalogues/:catalogueId"
+            element={
+              <ProviderAdminRoute>
+                <ProviderCatalogueDetail />
               </ProviderAdminRoute>
             }
           />

@@ -26,7 +26,6 @@ import {
   listCatalogueApprovers,
   addCatalogueApprover,
   removeCatalogueApprover,
-  countPublishedCoursesInCatalogue,
   approveCatalogueCourse,
   rejectCatalogueCourse,
   deactivateCatalogueCourse,
@@ -43,7 +42,7 @@ const STATUS_LABELS = {
 const SECTIONS = [
   { key: 'training', label: 'Training' },
   { key: 'skills', label: 'Skills' },
-  { key: 'catalogues', label: 'Catalogues', adminOnly: true },
+  { key: 'catalogues', label: 'Catalogues' },
   { key: 'staff', label: 'Users', adminOnly: true },
   { key: 'resources', label: 'Resources' },
 ]
@@ -79,11 +78,8 @@ export default function ProviderConsole() {
   )
   const myRole = (organisationMemberships ?? []).find((m) => m.organisation_id === selectedOrgId)?.role
   const selectedOrg = myOrgs.find((o) => o.id === selectedOrgId)
-  // Guards against a stale 'staff'/'catalogues' tab surviving a switch to an
-  // org where the current user isn't an admin (neither tab is in that org's
-  // own tab bar, but activeSection state persists across the org switch).
-  const currentSection =
-    (activeSection === 'staff' || activeSection === 'catalogues') && myRole !== 'admin' ? 'training' : activeSection
+  // Guards against a stale staff tab surviving an organisation switch.
+  const currentSection = activeSection === 'staff' && myRole !== 'admin' ? 'training' : activeSection
 
   useEffect(() => {
     reloadOrganisations().finally(() => setLoading(false))
@@ -193,8 +189,8 @@ export default function ProviderConsole() {
                 {currentSection === 'skills' && (
                   <ProviderSkillsSection key={selectedOrg.id} organisationId={selectedOrg.id} userId={user.id} />
                 )}
-                {currentSection === 'catalogues' && myRole === 'admin' && (
-                  <ProviderCataloguesSection key={selectedOrg.id} organisation={selectedOrg} userId={user.id} />
+                {currentSection === 'catalogues' && (
+                  <ProviderCataloguesSection key={selectedOrg.id} organisation={selectedOrg} userId={user.id} canCreate={myRole === 'admin'} />
                 )}
                 {currentSection === 'staff' && myRole === 'admin' && (
                   <OrganisationStaffPanel key={selectedOrg.id} organisation={selectedOrg} />
@@ -221,7 +217,7 @@ export default function ProviderConsole() {
   )
 }
 
-function ProviderCataloguesSection({ organisation, userId }) {
+function ProviderCataloguesSection({ organisation, userId, canCreate }) {
   const [catalogues, setCatalogues] = useState([])
   const [form, setForm] = useState({ name: '', description: '' })
   const [editingId, setEditingId] = useState(null)
@@ -230,7 +226,7 @@ function ProviderCataloguesSection({ organisation, userId }) {
   const [error, setError] = useState(null)
   const [expandedId, setExpandedId] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
-  const [deleteTargetPublishedCount, setDeleteTargetPublishedCount] = useState(0)
+  const [deleteTargetPublishedCount] = useState(0)
   const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
@@ -267,17 +263,6 @@ function ProviderCataloguesSection({ organisation, userId }) {
     }
   }
 
-  async function handleStartDelete(catalogue) {
-    setError(null)
-    setDeleteTarget(catalogue)
-    setDeleteTargetPublishedCount(0)
-    try {
-      setDeleteTargetPublishedCount(await countPublishedCoursesInCatalogue(catalogue.id))
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
   async function handleDelete() {
     setDeleting(true)
     setError(null)
@@ -304,7 +289,7 @@ function ProviderCataloguesSection({ organisation, userId }) {
 
       {error && <p role="alert" className="text-sm text-red-700 mb-4">{error}</p>}
 
-      <form onSubmit={handleSubmit} className="bg-card border border-hairline rounded-lg p-4 mb-6">
+      {canCreate && <form onSubmit={handleSubmit} className="bg-card border border-hairline rounded-lg p-4 mb-6">
         <h3 className="text-sm font-medium text-ink mb-3">{editingId ? 'Edit catalogue' : 'Create a catalogue'}</h3>
         <div className="grid sm:grid-cols-2 gap-3">
           <label className="text-xs text-secondary">
@@ -324,7 +309,7 @@ function ProviderCataloguesSection({ organisation, userId }) {
             <button type="button" onClick={() => { setEditingId(null); setForm({ name: '', description: '' }) }} className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink hover:bg-paper">Cancel</button>
           )}
         </div>
-      </form>
+      </form>}
 
       {loading ? (
         <p role="status" className="text-sm text-secondary">Loading catalogues…</p>
@@ -341,17 +326,7 @@ function ProviderCataloguesSection({ organisation, userId }) {
                   <p className="text-sm font-medium text-ink">{catalogue.name}</p>
                   {catalogue.description && <p className="text-xs text-secondary mt-1">{catalogue.description}</p>}
                 </div>
-                <div className="flex shrink-0 gap-2">
-                  <button type="button" onClick={() => { setEditingId(catalogue.id); setForm({ name: catalogue.name, description: catalogue.description ?? '' }) }} className="text-xs font-medium text-moss hover:underline">Edit</button>
-                  <button
-                    type="button"
-                    onClick={() => setExpandedId((id) => (id === catalogue.id ? null : catalogue.id))}
-                    className="text-xs font-medium text-moss hover:underline"
-                  >
-                    {expandedId === catalogue.id ? 'Hide approvers' : 'Manage approvers'}
-                  </button>
-                  <button type="button" onClick={() => handleStartDelete(catalogue)} className="text-xs font-medium text-red-700 hover:underline">Delete</button>
-                </div>
+                <Link to={`/provider/catalogues/${catalogue.id}`} className="shrink-0 text-xs font-medium text-moss hover:underline">Open catalogue →</Link>
               </div>
               {expandedId === catalogue.id && (
                 <CatalogueApproversPanel catalogueId={catalogue.id} organisationId={organisation.id} />
