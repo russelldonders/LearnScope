@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient'
 export async function listProviderCatalogues(organisationId) {
   const { data, error } = await supabase
     .from('catalogues')
-    .select('*, course_catalogue_publications(count), catalogue_skills(count), catalogue_approvers(count)')
+    .select('*, course_catalogue_publications(count), catalogue_skills(count), catalogue_resources(count), catalogue_approvers(count)')
     .eq('organisation_id', organisationId)
     .order('created_at')
   if (error) throw error
@@ -11,6 +11,7 @@ export async function listProviderCatalogues(organisationId) {
     ...catalogue,
     courseCount: catalogue.course_catalogue_publications?.[0]?.count ?? 0,
     skillCount: catalogue.catalogue_skills?.[0]?.count ?? 0,
+    resourceCount: catalogue.catalogue_resources?.[0]?.count ?? 0,
     userCount: catalogue.catalogue_approvers?.[0]?.count ?? 0,
   }))
 }
@@ -71,6 +72,28 @@ export async function addProviderCatalogueSkill(catalogueId, skillLibraryId, use
 
 export async function removeProviderCatalogueSkill(linkId) {
   const { error } = await supabase.from('catalogue_skills').delete().eq('id', linkId)
+  if (error) throw error
+}
+
+export async function listProviderCatalogueResources(catalogueId) {
+  const { data, error } = await supabase
+    .from('catalogue_resources')
+    .select('id, resource:resource_id(id, title, type, file_name, external_url)')
+    .eq('catalogue_id', catalogueId)
+    .order('created_at')
+  if (error) throw error
+  return (data ?? []).filter((item) => item.resource).map((item) => ({ ...item.resource, linkId: item.id }))
+}
+
+export async function addProviderCatalogueResource(catalogueId, resourceId, userId) {
+  const { error } = await supabase
+    .from('catalogue_resources')
+    .insert({ catalogue_id: catalogueId, resource_id: resourceId, created_by: userId })
+  if (error) throw error
+}
+
+export async function removeProviderCatalogueResource(linkId) {
+  const { error } = await supabase.from('catalogue_resources').delete().eq('id', linkId)
   if (error) throw error
 }
 

@@ -5,14 +5,18 @@ import { useAuth } from '../../context/AuthContext'
 import { createProviderCourse } from '../../lib/admin/catalogue'
 import { listOrganisationMembers } from '../../lib/admin/organisations'
 import { listOrganisationOfferedSkills } from '../../lib/admin/providerSkills'
+import { listOrganisationResources } from '../../lib/courseContent'
 import {
+  addProviderCatalogueResource,
   addProviderCatalogueSkill,
   approveProviderCatalogueCourse,
   getProviderCatalogue,
   listProviderCatalogueCourses,
   listProviderCatalogueMembers,
+  listProviderCatalogueResources,
   listProviderCatalogueSkills,
   removeProviderCatalogueMember,
+  removeProviderCatalogueResource,
   removeProviderCatalogueSkill,
   updateProviderCatalogue,
   upsertProviderCatalogueMember,
@@ -21,8 +25,19 @@ import {
 const TABS = [
   { key: 'courses', label: 'Courses' },
   { key: 'skills', label: 'Skills' },
+  { key: 'resources', label: 'Resources' },
   { key: 'users', label: 'Users' },
 ]
+
+const RESOURCE_TYPE_LABELS = {
+  video: 'Video',
+  screen_recording: 'Screen recording',
+  file: 'File',
+  scorm: 'SCORM package',
+  xapi: 'xAPI package',
+  external_video: 'External video',
+  web_url: 'Web link',
+}
 
 const COURSE_STATUS = {
   draft: 'Draft',
@@ -41,9 +56,11 @@ export default function ProviderCatalogueDetail() {
   const [catalogue, setCatalogue] = useState(null)
   const [courses, setCourses] = useState([])
   const [skills, setSkills] = useState([])
+  const [resources, setResources] = useState([])
   const [members, setMembers] = useState([])
   const [orgMembers, setOrgMembers] = useState([])
   const [offeredSkills, setOfferedSkills] = useState([])
+  const [organisationResources, setOrganisationResources] = useState([])
   const [activeTab, setActiveTab] = useState('courses')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -60,20 +77,24 @@ export default function ProviderCatalogueDetail() {
         setCatalogue(null)
         return
       }
-      const [courseData, skillData, memberData, organisationMemberData, offeredSkillData] = await Promise.all([
+      const [courseData, skillData, resourceData, memberData, organisationMemberData, offeredSkillData, organisationResourceData] = await Promise.all([
         listProviderCatalogueCourses(catalogueId),
         listProviderCatalogueSkills(catalogueId),
+        listProviderCatalogueResources(catalogueId),
         listProviderCatalogueMembers(catalogueId),
         listOrganisationMembers(catalogueData.organisation_id),
         listOrganisationOfferedSkills(catalogueData.organisation_id),
+        listOrganisationResources(catalogueData.organisation_id),
       ])
       setCatalogue(catalogueData)
       setEditForm({ name: catalogueData.name, description: catalogueData.description ?? '' })
       setCourses(courseData)
       setSkills(skillData)
+      setResources(resourceData)
       setMembers(memberData)
       setOrgMembers(organisationMemberData)
       setOfferedSkills(offeredSkillData)
+      setOrganisationResources(organisationResourceData)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -160,7 +181,7 @@ export default function ProviderCatalogueDetail() {
         {TABS.map((tab) => (
           <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)} className={`-mb-px border-b-2 px-3 py-2 text-sm ${activeTab === tab.key ? 'border-moss font-medium text-ink' : 'border-transparent text-secondary hover:text-ink'}`}>
             {tab.label}
-            <span className="ml-2 tabular-nums text-xs text-secondary">{tab.key === 'courses' ? courses.length : tab.key === 'skills' ? skills.length : members.length}</span>
+            <span className="ml-2 tabular-nums text-xs text-secondary">{tab.key === 'courses' ? courses.length : tab.key === 'skills' ? skills.length : tab.key === 'resources' ? resources.length : members.length}</span>
           </button>
         ))}
       </nav>
@@ -168,6 +189,7 @@ export default function ProviderCatalogueDetail() {
       <div className="pt-6">
         {activeTab === 'courses' && <CoursesTab catalogue={catalogue} courses={courses} canManage={canManage} canApprove={canApprove} userId={user.id} onCreated={(course) => navigate(`/provider/training/${course.id}`)} onReload={load} onError={setError} />}
         {activeTab === 'skills' && <SkillsTab catalogueId={catalogue.id} skills={skills} offeredSkills={offeredSkills} canManage={canManage} userId={user.id} onReload={load} onError={setError} />}
+        {activeTab === 'resources' && <ResourcesTab catalogueId={catalogue.id} resources={resources} organisationResources={organisationResources} canManage={canManage} userId={user.id} onReload={load} onError={setError} />}
         {activeTab === 'users' && <UsersTab catalogueId={catalogue.id} members={members} orgMembers={orgMembers} canManage={canManage} userId={user.id} onReload={load} onError={setError} />}
       </div>
     </ProviderPage>
@@ -243,6 +265,41 @@ function SkillsTab({ catalogueId, skills, offeredSkills, canManage, userId, onRe
   return <section><SectionHeading title="Skills" description="Capabilities represented by the courses in this catalogue." action={canManage && available.length ? { label: adding ? 'Cancel' : 'Add skill', onClick: () => setAdding((value) => !value) } : null} />
     {adding && <div className="mb-5 border-y border-hairline py-3"><p className="mb-2 text-xs text-secondary">Choose from skills your organisation offers.</p><ul className="divide-y divide-hairline">{available.map((skill) => <li key={skill.skillLibraryId} className="flex items-center justify-between py-2 text-sm"><span className="text-ink">{skill.name}</span><button type="button" onClick={() => add(skill.skillLibraryId)} className="font-medium text-moss hover:underline">Add</button></li>)}</ul></div>}
     {skills.length === 0 ? <EmptyState>No skills have been added to this catalogue.</EmptyState> : <ul className="divide-y divide-hairline border-y border-hairline">{skills.map((skill) => <li key={skill.linkId} className="flex items-center justify-between gap-4 py-4"><div><p className="font-medium text-ink">{skill.name}</p><p className="mt-1 text-sm text-secondary">{skill.category || 'Uncategorised'}</p></div>{canManage && <CogMenu label={`Manage ${skill.name}`} destructiveLabel="Remove from catalogue" onDestructive={() => remove(skill.linkId)} />}</li>)}</ul>}
+  </section>
+}
+
+function ResourcesTab({ catalogueId, resources, organisationResources, canManage, userId, onReload, onError }) {
+  const [adding, setAdding] = useState(false)
+  const [savingId, setSavingId] = useState(null)
+  const available = organisationResources.filter((resource) => !resources.some((assigned) => assigned.id === resource.id))
+
+  async function add(resourceId) {
+    setSavingId(resourceId)
+    onError(null)
+    try {
+      await addProviderCatalogueResource(catalogueId, resourceId, userId)
+      await onReload()
+    } catch (err) {
+      onError(err.message)
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  async function remove(linkId) {
+    onError(null)
+    try {
+      await removeProviderCatalogueResource(linkId)
+      await onReload()
+    } catch (err) {
+      onError(err.message)
+    }
+  }
+
+  return <section><SectionHeading title="Resources" description="Learning resources shared through this catalogue." action={canManage && available.length ? { label: adding ? 'Cancel' : 'Add resource', onClick: () => setAdding((value) => !value) } : null} />
+    {adding && <div className="mb-5 border-y border-hairline py-3"><p className="mb-2 text-xs text-secondary">Choose from your organisation’s resource library.</p><ul className="divide-y divide-hairline">{available.map((resource) => <li key={resource.id} className="flex items-center justify-between gap-4 py-2 text-sm"><div className="min-w-0"><p className="truncate text-ink">{resource.title}</p><p className="mt-0.5 text-xs text-secondary">{RESOURCE_TYPE_LABELS[resource.type] ?? resource.type}</p></div><button type="button" disabled={savingId !== null} onClick={() => add(resource.id)} className="shrink-0 font-medium text-moss hover:underline disabled:opacity-50">{savingId === resource.id ? 'Adding…' : 'Add'}</button></li>)}</ul></div>}
+    {resources.length === 0 ? <EmptyState>No resources have been added to this catalogue.</EmptyState> : <ul className="divide-y divide-hairline border-y border-hairline">{resources.map((resource) => <li key={resource.linkId} className="flex items-center justify-between gap-4 py-4"><div className="min-w-0"><p className="truncate font-medium text-ink">{resource.title}</p><p className="mt-1 text-sm text-secondary">{RESOURCE_TYPE_LABELS[resource.type] ?? resource.type}</p></div>{canManage && <CogMenu label={`Manage ${resource.title}`} destructiveLabel="Remove from catalogue" onDestructive={() => remove(resource.linkId)} />}</li>)}</ul>}
+    {resources.length > 0 && canManage && <p className="mt-3 text-xs text-secondary">Removing a resource only unlinks it from this catalogue.</p>}
   </section>
 }
 
