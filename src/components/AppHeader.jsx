@@ -15,7 +15,7 @@ const NAV_LINKS = [
 const MENU_ITEMS = [
   { to: '/profile', label: 'Profile' },
   { to: '/connections', label: 'Connections', requires: 'hasConnectionsActivity' },
-  { to: '/profile/connected-accounts', label: 'Connected Accounts' },
+  { to: '/profile/connected-accounts', label: 'Connected Apps' },
   { to: '/profile/privacy', label: 'Privacy Settings' },
   { to: '/profile/import', label: 'Import Skills & Experience' },
 ]

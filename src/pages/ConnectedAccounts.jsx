@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import AppHeader from '../components/AppHeader'
 import ConfirmDialog from '../components/ConfirmDialog'
 import StravaConnectButton from '../components/StravaConnectButton'
+import StravaIcon from '../components/StravaIcon'
 import StravaActivityReviewModal from '../components/StravaActivityReviewModal'
 import { buildStravaAuthorizeUrl, connectStrava, disconnectStrava, getMyExternalConnections, syncStrava } from '../lib/strava'
 import { formatRelativeDate } from '../lib/dates'
@@ -129,7 +130,7 @@ export default function ConnectedAccounts() {
       <AppHeader />
       <main id="main-content" tabIndex={-1} className="max-w-2xl mx-auto px-4 py-8 space-y-6">
         <div>
-          <h1 className="font-display text-2xl text-ink">Connected accounts</h1>
+          <h1 className="font-display text-2xl text-ink">Connected apps</h1>
           <p className="text-secondary mt-1 text-sm">
             Bring in activity from other services so it can count as skill evidence, without typing it in by
             hand. You choose what gets imported and which skill it counts toward — nothing is added
@@ -141,7 +142,10 @@ export default function ConnectedAccounts() {
         {successMessage && <p className="text-sm text-moss">{successMessage}</p>}
 
         <div className="bg-card border border-hairline rounded-lg p-6">
-          <h3 className="font-display text-lg text-ink mb-1">Strava</h3>
+          <h3 className="flex items-center gap-2 font-display text-lg text-ink mb-1">
+            <StravaIcon size={20} />
+            Strava
+          </h3>
           {loading || connecting ? (
             <p className="text-sm text-secondary">{connecting ? 'Connecting…' : 'Loading…'}</p>
           ) : connection ? (
