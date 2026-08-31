@@ -67,7 +67,8 @@
       "src": "/course-content/(.*)",
       "dest": "${VITE_SUPABASE_URL}/storage/v1/object/public/course-content/$1",
       "env": ["VITE_SUPABASE_URL"]
-    }
-  ],
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+    },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
 }
