@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import RecordActivityModal from './RecordActivityModal'
-import ConfirmDialog from './ConfirmDialog'
 import { activityName, verbLabel, relatedSkillFromStatement, relatedExperienceFromStatement, formatDuration } from '../lib/xapiStatement'
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 
@@ -17,8 +16,6 @@ export default function RecordActivitySection() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [modalOpen, setModalOpen] = useState(false)
-  const [pendingDeleteId, setPendingDeleteId] = useState(null)
-  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     loadStatements()
@@ -77,15 +74,6 @@ export default function RecordActivitySection() {
     await loadStatements()
   }
 
-  async function confirmDelete() {
-    setDeleting(true)
-    const { error } = await supabase.from('xapi_statements').delete().eq('id', pendingDeleteId)
-    if (error) setError(error.message)
-    else await loadStatements()
-    setDeleting(false)
-    setPendingDeleteId(null)
-  }
-
   return (
     <section>
       <div className="flex items-center justify-between mb-1">
@@ -118,34 +106,25 @@ export default function RecordActivitySection() {
           return (
             <div
               key={row.id}
-              className="flex items-start justify-between gap-2 bg-card border border-hairline rounded-lg px-4 py-3"
+              className="bg-card border border-hairline rounded-lg px-4 py-3"
             >
-              <div className="min-w-0">
-                <p className="text-sm text-ink">
-                  <span className="font-mono text-[11px] uppercase tracking-wide text-secondary">
-                    {verbLabel(row.statement)}
-                  </span>{' '}
-                  {activityName(row.statement)}
+              <p className="text-sm text-ink">
+                <span className="font-mono text-[11px] uppercase tracking-wide text-secondary">
+                  {verbLabel(row.statement)}
+                </span>{' '}
+                {activityName(row.statement)}
+              </p>
+              <p className="font-mono text-xs text-secondary mt-0.5" title={formatAbsoluteDate(row.recorded_at)}>
+                {formatRelativeDate(row.recorded_at)}
+                {duration ? ` · ${duration}` : ''}
+                {relatedSkill ? ` · ${relatedSkill.name}` : ''}
+                {relatedExperience ? ` · ${relatedExperience.title}` : ''}
+              </p>
+              {row.statement.object?.definition?.description?.['en-US'] && (
+                <p className="text-sm text-ink mt-1">
+                  {row.statement.object.definition.description['en-US']}
                 </p>
-                <p className="font-mono text-xs text-secondary mt-0.5" title={formatAbsoluteDate(row.recorded_at)}>
-                  {formatRelativeDate(row.recorded_at)}
-                  {duration ? ` · ${duration}` : ''}
-                  {relatedSkill ? ` · ${relatedSkill.name}` : ''}
-                  {relatedExperience ? ` · ${relatedExperience.title}` : ''}
-                </p>
-                {row.statement.object?.definition?.description?.['en-US'] && (
-                  <p className="text-sm text-ink mt-1">
-                    {row.statement.object.definition.description['en-US']}
-                  </p>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => setPendingDeleteId(row.id)}
-                className="shrink-0 text-xs text-red-700 font-medium"
-              >
-                Remove
-              </button>
+              )}
             </div>
           )
         })}
@@ -164,15 +143,6 @@ export default function RecordActivitySection() {
           experiences={experiences}
           onSave={handleSave}
           onClose={() => setModalOpen(false)}
-        />
-      )}
-
-      {pendingDeleteId && (
-        <ConfirmDialog
-          message="Delete this recorded activity? This can't be undone."
-          onConfirm={confirmDelete}
-          onCancel={() => setPendingDeleteId(null)}
-          confirming={deleting}
         />
       )}
     </section>
