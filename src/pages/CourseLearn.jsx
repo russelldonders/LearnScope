@@ -14,6 +14,7 @@ import XapiPlayer from '../components/XapiPlayer'
 import EditedVideoPlayer from '../components/EditedVideoPlayer'
 import AppHeader from '../components/AppHeader'
 import ProgressBar from '../components/ProgressBar'
+import PageContent from '../components/PageContent'
 
 const TYPE_LABELS = {
   video: 'Video',
@@ -21,6 +22,7 @@ const TYPE_LABELS = {
   scorm: 'SCORM package',
   xapi: 'xAPI package',
   external_video: 'External video',
+  page: 'Page',
 }
 
 // Items come back ordered by their own `position`, which only resets to 0
@@ -259,6 +261,8 @@ export default function CourseLearn() {
                     className="w-full aspect-video rounded-md"
                   />
                 )}
+
+                {currentItem.type === 'page' && <PageContent document={currentItem.page_content} />}
 
                 <div className="flex items-center gap-2 mt-6 pt-4 border-t border-hairline">
                   {currentItem.type !== 'scorm' && (

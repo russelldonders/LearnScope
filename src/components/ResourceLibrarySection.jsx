@@ -14,6 +14,8 @@ import XapiPlayer from './XapiPlayer'
 import ConfirmDialog from './ConfirmDialog'
 import EditedVideoPlayer from './EditedVideoPlayer'
 import VideoEditorModal from './VideoEditorModal'
+import PageBuilderModal from './PageBuilderModal'
+import PageContent from './PageContent'
 
 const TYPE_LABELS = {
   video: 'Video',
@@ -21,6 +23,7 @@ const TYPE_LABELS = {
   scorm: 'SCORM package',
   xapi: 'xAPI package',
   external_video: 'External video',
+  page: 'Page',
 }
 
 // An organisation's whole content library -- upload once here, then attach
@@ -42,6 +45,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
   const [dragActive, setDragActive] = useState(false)
   const [videoUrl, setVideoUrl] = useState('')
   const [editingResource, setEditingResource] = useState(null)
+  const [editingPage, setEditingPage] = useState(null)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -61,6 +65,11 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
   }
 
   async function handleUpload() {
+    if (type === 'page') {
+      setShowUploadForm(false)
+      setEditingPage({ isNew: true, title })
+      return
+    }
     if (type === 'external_video') {
       if (!videoUrl.trim()) {
         setError('Paste a YouTube or Vimeo link first.')
@@ -143,11 +152,11 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
           onClick={() => setShowUploadForm((v) => !v)}
           className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 shrink-0"
         >
-          {showUploadForm ? 'Cancel' : '+ Upload resource'}
+          {showUploadForm ? 'Cancel' : '+ Add resource'}
         </button>
       </div>
       <p className="text-sm text-secondary mb-4">
-        Upload video, files, and SCORM packages here, then attach them to any of your training courses from that
+        Upload media or build polished content pages here, then attach them to any of your training courses from that
         course's own edit view.
       </p>
 
@@ -168,6 +177,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
             <option value="scorm">SCORM package (.zip)</option>
             <option value="xapi">xAPI package (.zip)</option>
             <option value="external_video">External video (YouTube/Vimeo)</option>
+            <option value="page">Content page</option>
           </select>
         </div>
         <div className="flex-1 min-w-[160px]">
@@ -181,7 +191,11 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
             className="w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
           />
         </div>
-        {type === 'external_video' ? (
+        {type === 'page' ? (
+          <div className="flex-1 min-w-[220px] rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-secondary">
+            Opens the visual page builder. You can add and reorder content after continuing.
+          </div>
+        ) : type === 'external_video' ? (
           <div className="flex-1 min-w-[220px]">
             <label className="block text-xs text-secondary mb-1" htmlFor="resourceVideoUrl">
               YouTube or Vimeo link
@@ -251,7 +265,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
           disabled={uploading}
           className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
         >
-          {uploading ? 'Uploading…' : 'Add'}
+          {uploading ? 'Adding…' : type === 'page' ? 'Open builder' : 'Add'}
         </button>
         </div>
       )}
@@ -304,6 +318,15 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
                       Edit
                     </button>
                   )}
+                  {resource.type === 'page' && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingPage(resource)}
+                      className="text-xs text-moss font-medium"
+                    >
+                      Edit page
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setPendingDelete(resource)}
@@ -335,6 +358,11 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
                   className="w-full aspect-video mt-2 rounded-md"
                 />
               )}
+              {previewingId === resource.id && resource.type === 'page' && (
+                <div className="mt-3 rounded-md border border-hairline bg-paper px-5 py-8 sm:px-8">
+                  <PageContent document={resource.page_content} compact />
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -355,6 +383,22 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
           resource={editingResource}
           onClose={() => setEditingResource(null)}
           onSaved={(saved) => setResources((prev) => prev.map((r) => (r.id === saved.id ? saved : r)))}
+        />
+      )}
+
+      {editingPage && (
+        <PageBuilderModal
+          organisationId={organisationId}
+          userId={userId}
+          resource={editingPage.isNew ? null : editingPage}
+          initialTitle={editingPage.isNew ? editingPage.title : undefined}
+          onClose={() => setEditingPage(null)}
+          onSaved={(saved) => {
+            setResources((current) => {
+              const exists = current.some((resource) => resource.id === saved.id)
+              return exists ? current.map((resource) => (resource.id === saved.id ? saved : resource)) : [saved, ...current]
+            })
+          }}
         />
       )}
     </div>
