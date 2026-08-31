@@ -9,6 +9,9 @@ import {
   addExternalVideoResource,
   addWebResource,
   deleteResource,
+  createResourceDraftVersion,
+  listResourceVersions,
+  publishResourceVersion,
   contentFileUrl,
 } from '../lib/courseContent'
 import ScormPlayer from './ScormPlayer'
@@ -17,6 +20,8 @@ import ConfirmDialog from './ConfirmDialog'
 import EditedVideoPlayer from './EditedVideoPlayer'
 import VideoEditorModal from './VideoEditorModal'
 import ScreenRecorderModal from './ScreenRecorderModal'
+import PageBuilderModal from './PageBuilderModal'
+import PageContent from './PageContent'
 
 const TYPE_LABELS = {
   video: 'Video',
@@ -26,6 +31,7 @@ const TYPE_LABELS = {
   xapi: 'xAPI package',
   external_video: 'External video',
   web_url: 'Web link',
+  page: 'Page',
 }
 
 // An organisation's whole content library -- upload once here, then attach
@@ -48,10 +54,15 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
   const [videoUrl, setVideoUrl] = useState('')
   const [editingResource, setEditingResource] = useState(null)
   const [showScreenRecorder, setShowScreenRecorder] = useState(false)
+  const [historyForId, setHistoryForId] = useState(null)
+  const [versionHistory, setVersionHistory] = useState([])
+  const [editingPage, setEditingPage] = useState(null)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
     load()
+    // load is also reused after mutations; organisationId is the boundary.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [organisationId])
 
   async function load() {
@@ -67,6 +78,11 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
   }
 
   async function handleUpload() {
+    if (type === 'page') {
+      setShowUploadForm(false)
+      setEditingPage({ isNew: true, title })
+      return
+    }
     if (type === 'external_video' || type === 'web_url') {
       if (!videoUrl.trim()) {
         setError(type === 'web_url' ? 'Enter a web address first.' : 'Paste a YouTube or Vimeo link first.')
@@ -142,6 +158,41 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
     }
   }
 
+  async function handleCreateVersion(resource) {
+    setError(null)
+    try {
+      await createResourceDraftVersion(resource.id)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handlePublishVersion(resource) {
+    setError(null)
+    try {
+      await publishResourceVersion(resource.id)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleToggleHistory(resource) {
+    if (historyForId === resource.id) {
+      setHistoryForId(null)
+      setVersionHistory([])
+      return
+    }
+    setError(null)
+    try {
+      setVersionHistory(await listResourceVersions(resource.id))
+      setHistoryForId(resource.id)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between gap-3 mb-3">
@@ -155,7 +206,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
         </button>
       </div>
       <p className="text-sm text-secondary mb-4">
-        Add videos, screen recordings, files, and learning packages here, then attach them to any training course from that
+        Add media, links, learning packages, or build polished content pages here, then attach them to any training course from that
         course's own edit view.
       </p>
 
@@ -183,6 +234,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
             <option value="xapi">xAPI package (.zip)</option>
             <option value="external_video">External video (YouTube/Vimeo)</option>
             <option value="web_url">Web link</option>
+            <option value="page">Content page</option>
           </select>
         </div>
         <div className="flex-1 min-w-[160px]">
@@ -196,7 +248,11 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
             className="w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
           />
         </div>
-        {type === 'external_video' || type === 'web_url' ? (
+        {type === 'page' ? (
+          <div className="flex-1 min-w-[220px] rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-secondary">
+            Opens the visual page builder. Add and reorder content after continuing.
+          </div>
+        ) : type === 'external_video' || type === 'web_url' ? (
           <div className="flex-1 min-w-[220px]">
             <label className="block text-xs text-secondary mb-1" htmlFor="resourceVideoUrl">
               {type === 'web_url' ? 'Web address' : 'YouTube or Vimeo link'}
@@ -283,7 +339,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
           disabled={uploading}
           className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
         >
-          {uploading ? 'Uploading…' : 'Add'}
+          {uploading ? 'Adding…' : type === 'page' ? 'Open builder' : 'Add'}
         </button>
         </div>
       )}
@@ -303,7 +359,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-ink truncate">{resource.title}</p>
-                  <p className="font-mono text-[10px] text-secondary">{TYPE_LABELS[resource.type]}</p>
+                  <p className="text-xs text-secondary">{TYPE_LABELS[resource.type]} · v{resource.version_number ?? 1} · {resource.status === 'draft' ? 'Draft' : resource.status === 'inactive' ? 'Previous version' : 'Published'}</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {resource.type === 'file' ? (
@@ -336,7 +392,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
                       {previewingId === resource.id ? 'Hide preview' : 'Preview'}
                     </button>
                   )}
-                  {(resource.type === 'video' || resource.type === 'screen_recording') && (
+                  {(resource.type === 'video' || resource.type === 'screen_recording') && resource.status === 'draft' && (
                     <button
                       type="button"
                       onClick={() => setEditingResource(resource)}
@@ -345,6 +401,24 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
                       Edit Video
                     </button>
                   )}
+                  {resource.type === 'page' && resource.status === 'draft' && (
+                    <button type="button" onClick={() => setEditingPage(resource)} className="text-xs text-moss font-medium">
+                      Edit page
+                    </button>
+                  )}
+                  {resource.status === 'published' && resource.is_current_published && (
+                    <button type="button" onClick={() => handleCreateVersion(resource)} className="text-xs text-moss font-medium hover:underline">
+                      Create new version
+                    </button>
+                  )}
+                  {resource.status === 'draft' && (
+                    <button type="button" onClick={() => handlePublishVersion(resource)} className="text-xs text-moss font-medium hover:underline">
+                      Publish version
+                    </button>
+                  )}
+                  <button type="button" onClick={() => handleToggleHistory(resource)} className="text-xs text-moss font-medium hover:underline">
+                    {historyForId === resource.id ? 'Hide versions' : 'Version history'}
+                  </button>
                   <button
                     type="button"
                     onClick={() => setPendingDelete(resource)}
@@ -376,6 +450,25 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
                   className="w-full aspect-video mt-2 rounded-md"
                 />
               )}
+              {previewingId === resource.id && resource.type === 'page' && (
+                <div className="mt-3 rounded-md border border-hairline bg-paper px-5 py-8 sm:px-8">
+                  <PageContent document={resource.page_content} compact />
+                </div>
+              )}
+              {historyForId === resource.id && (
+                <div className="mt-3 border-t border-hairline pt-3">
+                  <p className="mb-2 text-xs font-medium text-ink">Version history</p>
+                  <ul className="space-y-1.5">
+                    {versionHistory.map((version) => (
+                      <li key={version.id} className="flex items-center justify-between gap-3 text-xs text-secondary">
+                        <span>v{version.version_number}</span>
+                        <span>{version.status === 'draft' ? 'Draft' : version.status === 'inactive' ? 'Previous version' : 'Published'}</span>
+                        <time dateTime={version.published_at || version.created_at}>{new Date(version.published_at || version.created_at).toLocaleDateString()}</time>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -405,6 +498,22 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
           onRecorded={(file) => {
             setSelectedFile(file)
             if (!title.trim()) setTitle('Screen recording')
+          }}
+        />
+      )}
+
+      {editingPage && (
+        <PageBuilderModal
+          organisationId={organisationId}
+          userId={userId}
+          resource={editingPage.isNew ? null : editingPage}
+          initialTitle={editingPage.isNew ? editingPage.title : undefined}
+          onClose={() => setEditingPage(null)}
+          onSaved={(saved) => {
+            setResources((current) => {
+              const exists = current.some((resource) => resource.id === saved.id)
+              return exists ? current.map((resource) => (resource.id === saved.id ? saved : resource)) : [saved, ...current]
+            })
           }}
         />
       )}

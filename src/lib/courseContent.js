@@ -26,7 +26,52 @@ export async function listOrganisationResources(organisationId) {
     .eq('organisation_id', organisationId)
     .order('created_at', { ascending: false })
   if (error) throw error
+  const latestByGroup = new Map()
+  for (const resource of data ?? []) {
+    const groupId = resource.version_group_id ?? resource.id
+    const current = latestByGroup.get(groupId)
+    if (!current || (resource.version_number ?? 1) > (current.version_number ?? 1)) latestByGroup.set(groupId, resource)
+  }
+  return [...latestByGroup.values()]
+}
+
+export async function listPublishedOrganisationResources(organisationId) {
+  const { data, error } = await supabase
+    .from('content_resources')
+    .select('*')
+    .eq('organisation_id', organisationId)
+    .eq('status', 'published')
+    .eq('is_current_published', true)
+    .order('created_at', { ascending: false })
+  if (error) throw error
   return data ?? []
+}
+
+export async function listResourceVersions(resourceId) {
+  const { data: resource, error: resourceError } = await supabase
+    .from('content_resources')
+    .select('version_group_id')
+    .eq('id', resourceId)
+    .single()
+  if (resourceError) throw resourceError
+  const { data, error } = await supabase
+    .from('content_resources')
+    .select('*')
+    .eq('version_group_id', resource.version_group_id)
+    .order('version_number', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function createResourceDraftVersion(resourceId) {
+  const { data, error } = await supabase.rpc('create_resource_draft_version', { p_resource_id: resourceId })
+  if (error) throw error
+  return data
+}
+
+export async function publishResourceVersion(resourceId) {
+  const { error } = await supabase.rpc('publish_resource_version', { p_resource_id: resourceId })
+  if (error) throw error
 }
 
 // Resources attached to one specific course, in that course's own order --
@@ -176,6 +221,34 @@ export async function unlinkResourceFromCourse(linkId) {
 // that memory/issue before changing this again.
 function publicUrlFor(path) {
   return `/course-content/${path}`
+}
+
+const PAGE_MEDIA_MAX_BYTES = 50 * 1024 * 1024
+
+export async function uploadPageMediaAsset(organisationId, file, mediaType) {
+  if (!organisationId || !file) throw new Error('Choose a file to upload.')
+  const expectedPrefix = mediaType === 'video' ? 'video/' : 'image/'
+  if (!file.type?.startsWith(expectedPrefix)) {
+    throw new Error(`Choose ${mediaType === 'video' ? 'a video' : 'an image'} file.`)
+  }
+  if (file.size > PAGE_MEDIA_MAX_BYTES) throw new Error('Uploads must be 50 MB or smaller.')
+
+  const rawExtension = file.name.split('.').pop()?.toLowerCase() || ''
+  const extension = /^[a-z0-9]{1,10}$/.test(rawExtension) ? `.${rawExtension}` : ''
+  const path = `${organisationId}/page-media/${crypto.randomUUID()}${extension}`
+  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+    cacheControl: '31536000',
+    contentType: file.type,
+    upsert: false,
+  })
+  if (error) throw error
+  return { url: publicUrlFor(path), storagePath: path }
+}
+
+export async function removePageMediaAsset(storagePath) {
+  if (!storagePath) return
+  const { error } = await supabase.storage.from(BUCKET).remove([storagePath])
+  if (error) throw error
 }
 
 export function contentFileUrl(item) {
@@ -399,6 +472,34 @@ export async function addWebResource(organisationId, userId, url, title) {
       external_url: normalizedUrl,
       created_by: userId,
     })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function createPageResource(organisationId, userId, title, pageContent) {
+  const { data, error } = await supabase
+    .from('content_resources')
+    .insert({
+      organisation_id: organisationId,
+      type: 'page',
+      title: title.trim(),
+      page_content: pageContent,
+      created_by: userId,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function updatePageResource(resourceId, title, pageContent) {
+  const { data, error } = await supabase
+    .from('content_resources')
+    .update({ title: title.trim(), page_content: pageContent, updated_at: new Date().toISOString() })
+    .eq('id', resourceId)
+    .eq('type', 'page')
     .select()
     .single()
   if (error) throw error
@@ -673,7 +774,15 @@ async function removeStorageFolder(prefix) {
 // the DB level (0073), so it disappears from every course it was attached
 // to, not just the one you were looking at when you deleted it.
 export async function deleteResource(resource) {
-  if (!['external_video', 'web_url'].includes(resource.type)) await removeStorageFolder(resource.storage_path)
+  if (!['external_video', 'web_url', 'page'].includes(resource.type)) {
+    const { count, error: countError } = await supabase
+      .from('content_resources')
+      .select('id', { count: 'exact', head: true })
+      .eq('storage_path', resource.storage_path)
+      .neq('id', resource.id)
+    if (countError) throw countError
+    if (count === 0) await removeStorageFolder(resource.storage_path)
+  }
   const { error } = await supabase.from('content_resources').delete().eq('id', resource.id)
   if (error) throw error
 }

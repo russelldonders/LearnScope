@@ -4,7 +4,7 @@ import AppHeader from '../../components/AppHeader'
 import { useAuth } from '../../context/AuthContext'
 import { listOrganisationMembers } from '../../lib/admin/organisations'
 import { listOrganisationOfferedSkills } from '../../lib/admin/providerSkills'
-import { listOrganisationResources } from '../../lib/courseContent'
+import { listPublishedOrganisationResources } from '../../lib/courseContent'
 import {
   addProviderCatalogueResource,
   addProviderCatalogueSkill,
@@ -84,7 +84,7 @@ export default function ProviderCatalogueDetail() {
         listProviderCatalogueMembers(catalogueId),
         listOrganisationMembers(catalogueData.organisation_id),
         listOrganisationOfferedSkills(catalogueData.organisation_id),
-        listOrganisationResources(catalogueData.organisation_id),
+        listPublishedOrganisationResources(catalogueData.organisation_id),
       ])
       setCatalogue(catalogueData)
       setEditForm({ name: catalogueData.name, description: catalogueData.description ?? '' })
@@ -261,7 +261,11 @@ function SkillsTab({ catalogueId, skills, offeredSkills, canManage, userId, onRe
 function ResourcesTab({ catalogueId, resources, organisationResources, canManage, userId, onReload, onError }) {
   const [adding, setAdding] = useState(false)
   const [savingId, setSavingId] = useState(null)
-  const available = organisationResources.filter((resource) => !resources.some((assigned) => assigned.id === resource.id))
+  const available = organisationResources.filter((resource) =>
+    resource.status === 'published'
+    && resource.is_current_published
+    && !resources.some((assigned) => assigned.id === resource.id)
+  )
 
   async function add(resourceId) {
     setSavingId(resourceId)
@@ -288,7 +292,7 @@ function ResourcesTab({ catalogueId, resources, organisationResources, canManage
 
   return <section><SectionHeading title="Resources" description="Learning resources shared through this catalogue." action={canManage && available.length ? { label: adding ? 'Cancel' : 'Add resource', onClick: () => setAdding((value) => !value) } : null} />
     {adding && <div className="mb-5 border-y border-hairline py-3"><p className="mb-2 text-xs text-secondary">Choose from your organisation’s resource library.</p><ul className="divide-y divide-hairline">{available.map((resource) => <li key={resource.id} className="flex items-center justify-between gap-4 py-2 text-sm"><div className="min-w-0"><p className="truncate text-ink">{resource.title}</p><p className="mt-0.5 text-xs text-secondary">{RESOURCE_TYPE_LABELS[resource.type] ?? resource.type}</p></div><button type="button" disabled={savingId !== null} onClick={() => add(resource.id)} className="shrink-0 font-medium text-moss hover:underline disabled:opacity-50">{savingId === resource.id ? 'Adding…' : 'Add'}</button></li>)}</ul></div>}
-    {resources.length === 0 ? <EmptyState>No resources have been added to this catalogue.</EmptyState> : <ul className="divide-y divide-hairline border-y border-hairline">{resources.map((resource) => <li key={resource.linkId} className="flex items-center justify-between gap-4 py-4"><div className="min-w-0"><p className="truncate font-medium text-ink">{resource.title}</p><p className="mt-1 text-sm text-secondary">{RESOURCE_TYPE_LABELS[resource.type] ?? resource.type}</p></div>{canManage && <CogMenu label={`Manage ${resource.title}`} destructiveLabel="Remove from catalogue" onDestructive={() => remove(resource.linkId)} />}</li>)}</ul>}
+    {resources.length === 0 ? <EmptyState>No resources have been added to this catalogue.</EmptyState> : <ul className="divide-y divide-hairline border-y border-hairline">{resources.map((resource) => <li key={resource.linkId} className="flex items-center justify-between gap-4 py-4"><div className="min-w-0"><p className="truncate font-medium text-ink">{resource.title}</p><p className="mt-1 text-sm text-secondary">{RESOURCE_TYPE_LABELS[resource.type] ?? resource.type} · v{resource.version_number ?? 1}</p></div>{canManage && <CogMenu label={`Manage ${resource.title}`} destructiveLabel="Remove from catalogue" onDestructive={() => remove(resource.linkId)} />}</li>)}</ul>}
     {resources.length > 0 && canManage && <p className="mt-3 text-xs text-secondary">Removing a resource only unlinks it from this catalogue.</p>}
   </section>
 }

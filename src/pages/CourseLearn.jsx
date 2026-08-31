@@ -16,6 +16,7 @@ import EditedVideoPlayer from '../components/EditedVideoPlayer'
 import AppHeader from '../components/AppHeader'
 import ProgressBar from '../components/ProgressBar'
 import CourseModal from '../components/CourseModal'
+import PageContent from '../components/PageContent'
 
 const TYPE_LABELS = {
   video: 'Video',
@@ -25,6 +26,7 @@ const TYPE_LABELS = {
   xapi: 'xAPI package',
   external_video: 'External video',
   web_url: 'Web link',
+  page: 'Page',
 }
 
 // Items come back ordered by their own `position`, which only resets to 0
@@ -111,6 +113,8 @@ function CourseItemPlayer({
           <span className="font-medium text-moss shrink-0">Open link ↗</span>
         </a>
       )}
+
+      {item.type === 'page' && <PageContent document={item.page_content} />}
 
       <div className="flex items-center justify-between gap-2 mt-6 pt-4 border-t border-hairline">
         {hasPrevious ? (

@@ -98,7 +98,7 @@ export async function assignProviderCourseToCatalogue(catalogueId, courseId) {
 export async function listProviderCatalogueResources(catalogueId) {
   const { data, error } = await supabase
     .from('catalogue_resources')
-    .select('id, resource:resource_id(id, title, type, file_name, external_url)')
+    .select('id, resource:resource_id(id, title, type, file_name, external_url, version_number, status, is_current_published)')
     .eq('catalogue_id', catalogueId)
     .order('created_at')
   if (error) throw error
