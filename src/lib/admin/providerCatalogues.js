@@ -78,11 +78,10 @@ export async function removeProviderCatalogueSkill(linkId) {
 export async function listPublishedProviderCourses(organisationId) {
   const { data, error } = await supabase
     .from('course_catalogue')
-    .select('*, course_catalogue_publications!inner(published_at)')
+    .select('*')
     .eq('organisation_id', organisationId)
     .eq('status', 'approved')
     .eq('is_current_published', true)
-    .not('course_catalogue_publications.published_at', 'is', null)
     .order('created_at', { ascending: false })
   if (error) throw error
   return data ?? []
