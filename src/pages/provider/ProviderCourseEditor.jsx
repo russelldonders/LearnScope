@@ -285,12 +285,14 @@ export function DragHandle({
 // Catalogue selection during publish is entirely optional -- publishing
 // makes this version the org's current live version, full stop. Pushing it
 // into a catalogue (so it's discoverable by learners) is a separate choice
-// layered on top, which is why nothing is pre-selected here: ticking a
-// catalogue is an explicit decision to also submit it for that catalogue's
-// approval, not something publishing should assume.
-function PublishCourseDialog({ organisationId, currentCatalogues, submitting, onClose, onPublish }) {
+// layered on top. Nothing is pre-selected for a genuinely new draft, but a
+// version that was already submitted to one or more catalogues (e.g. a
+// rejected submission being fixed and resent) opens with those same
+// catalogues still ticked, rather than silently dropping them and making
+// resubmission look like starting over.
+function PublishCourseDialog({ organisationId, currentCatalogues, assignedCatalogueIds, submitting, onClose, onPublish }) {
   const [catalogues, setCatalogues] = useState([])
-  const [selectedIds, setSelectedIds] = useState([])
+  const [selectedIds, setSelectedIds] = useState(() => assignedCatalogueIds ?? [])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -602,6 +604,12 @@ export default function ProviderCourseEditor() {
     .filter((publication) => publication.published_at && publication.catalogues)
     .map((publication) => publication.catalogues)
   const publishedCatalogueIds = publishedCatalogues.map((catalogue) => catalogue.id)
+  // Unlike publishedCatalogueIds above, this isn't filtered to published_at
+  // -- while this version is still draft/rejected its own publication rows
+  // (if any, from an earlier submission) never have a published_at yet, so
+  // filtering on that would always come back empty and lose the prior
+  // selection the publish dialog needs to restore.
+  const assignedCatalogueIds = (course?.course_catalogue_publications ?? []).map((publication) => publication.catalogue_id)
 
   async function handleCreateDraftVersion() {
     setSaveError(null)
@@ -658,6 +666,7 @@ export default function ProviderCourseEditor() {
               <PublishCourseDialog
                 organisationId={course.organisation_id}
                 currentCatalogues={currentCatalogues}
+                assignedCatalogueIds={assignedCatalogueIds}
                 submitting={submitting}
                 onClose={() => setShowPublishDialog(false)}
                 onPublish={handleSubmitForApproval}
