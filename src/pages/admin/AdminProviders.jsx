@@ -17,13 +17,16 @@ import { SortableTh, TablePagination } from '../../components/TableControls'
 const ORG_SORT_ACCESSORS = {
   name: (o) => o.name?.toLowerCase() ?? '',
   org_code: (o) => o.org_code?.toLowerCase() ?? '',
+  url: (o) => o.url?.toLowerCase() ?? '',
   type: (o) => o.type ?? '',
   status: (o) => o.status ?? '',
 }
 
 const STAFF_SORT_ACCESSORS = {
+  id: (m) => m.id ?? '',
   email: (m) => (m.email || m.user_id || '').toLowerCase(),
   role: (m) => m.role ?? '',
+  status: (m) => m.status ?? '',
 }
 
 export default function AdminProviders() {
@@ -32,6 +35,7 @@ export default function AdminProviders() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  const [showCreateForm, setShowCreateForm] = useState(false)
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
 
@@ -67,6 +71,7 @@ export default function AdminProviders() {
     try {
       await createOrganisation(user.id, newName)
       setNewName('')
+      setShowCreateForm(false)
       await load()
     } catch (err) {
       setError(err.message)
@@ -110,31 +115,44 @@ export default function AdminProviders() {
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <form
-          onSubmit={handleCreate}
-          className="bg-card border border-hairline rounded-lg p-4 flex flex-wrap items-end gap-3"
-        >
-          <div className="flex-1 min-w-[220px]">
-            <label className="block text-sm text-secondary mb-1" htmlFor="orgName">
-              Create a provider organisation
-            </label>
-            <input
-              id="orgName"
-              required
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Organisation name…"
-              className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-            />
-          </div>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-display text-lg text-ink">Providers</h2>
           <button
-            type="submit"
-            disabled={creating}
-            className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90 disabled:opacity-60"
+            type="button"
+            onClick={() => setShowCreateForm((v) => !v)}
+            className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
           >
-            {creating ? 'Creating…' : 'Create'}
+            {showCreateForm ? 'Cancel' : '+ Create organisation'}
           </button>
-        </form>
+        </div>
+
+        {showCreateForm && (
+          <form
+            onSubmit={handleCreate}
+            className="bg-card border border-hairline rounded-lg p-4 flex flex-wrap items-end gap-3"
+          >
+            <div className="flex-1 min-w-[220px]">
+              <label className="block text-sm text-secondary mb-1" htmlFor="orgName">
+                Organisation name
+              </label>
+              <input
+                id="orgName"
+                required
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Organisation name…"
+                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={creating}
+              className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90 disabled:opacity-60"
+            >
+              {creating ? 'Creating…' : 'Create'}
+            </button>
+          </form>
+        )}
 
         {error && <p className="text-sm text-red-700">{error}</p>}
 
@@ -150,8 +168,9 @@ export default function AdminProviders() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-hairline text-left text-secondary">
+                    <SortableTh label="ID" columnKey="org_code" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                     <SortableTh label="Organisation" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh label="Code" columnKey="org_code" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                    <SortableTh label="Website" columnKey="url" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                     <SortableTh label="Type" columnKey="type" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                     <SortableTh label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                     <th className="px-4 py-2 font-medium"></th>
@@ -200,16 +219,18 @@ function OrganisationRow({
 }) {
   return (
     <>
-      <tr className="border-b border-hairline last:border-0 align-top">
-        <td className="px-4 py-3">
-          <p className="text-ink font-medium">{org.name}</p>
-          {org.url && (
-            <a href={org.url} target="_blank" rel="noopener noreferrer" className="text-xs text-moss font-medium mt-0.5 inline-block truncate max-w-full">
+      <tr className="border-b border-hairline last:border-0">
+        <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{org.org_code}</td>
+        <td className="px-4 py-3 text-ink font-medium whitespace-nowrap">{org.name}</td>
+        <td className="px-4 py-3 truncate max-w-[200px]">
+          {org.url ? (
+            <a href={org.url} target="_blank" rel="noopener noreferrer" className="text-xs text-moss font-medium hover:underline">
               {org.url}
             </a>
+          ) : (
+            <span className="text-secondary">—</span>
           )}
         </td>
-        <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{org.org_code}</td>
         <td className="px-4 py-3 text-secondary whitespace-nowrap">{org.type}</td>
         <td className="px-4 py-3 whitespace-nowrap">
           <span
@@ -221,7 +242,7 @@ function OrganisationRow({
           </span>
         </td>
         <td className="px-4 py-3">
-          <div className="flex items-center gap-2 flex-wrap justify-end">
+          <div className="flex items-center gap-2 justify-end whitespace-nowrap">
             <button type="button" onClick={onStartEdit} className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper whitespace-nowrap">
               Edit
             </button>
@@ -236,7 +257,7 @@ function OrganisationRow({
       </tr>
       {editing && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={5} className="px-4 pb-4 pt-1">
+          <td colSpan={6} className="px-4 pb-4 pt-1">
             <form onSubmit={onSaveEdit} className="space-y-3 border-t border-hairline pt-3">
               <div>
                 <label className="block text-sm text-secondary mb-1" htmlFor={`orgEditName-${org.id}`}>
@@ -277,7 +298,7 @@ function OrganisationRow({
       )}
       {expanded && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={5} className="px-4 pb-4 pt-1">
+          <td colSpan={6} className="px-4 pb-4 pt-1">
             <div className="border-t border-hairline pt-3">
               <OrganisationStaffPanel organisation={org} alwaysShowForm />
             </div>
@@ -477,19 +498,20 @@ export function OrganisationStaffPanel({ organisation, alwaysShowForm = false })
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-hairline text-left text-secondary">
-                  <SortableTh label="User" columnKey="email" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className={alwaysShowForm ? 'px-0' : ''} />
+                  <SortableTh label="ID" columnKey="id" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className={`whitespace-nowrap ${alwaysShowForm ? 'px-0' : ''}`} />
+                  <SortableTh label="User" columnKey="email" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <SortableTh label="Role" columnKey="role" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                  <SortableTh label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   <th className="px-4 py-2 font-medium"></th>
                 </tr>
               </thead>
               <tbody>
                 {pageItems.map((m) => (
                   <tr key={m.id} className="border-b border-hairline last:border-0">
-                    <td className={`py-2 text-ink text-xs truncate ${alwaysShowForm ? 'pl-0 pr-4' : 'px-4'}`}>{m.email || m.user_id}</td>
-                    <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">
-                      {m.role}
-                      {m.status === 'pending' && ' · pending'}
-                    </td>
+                    <td className={`py-2 font-mono text-[10px] text-secondary whitespace-nowrap ${alwaysShowForm ? 'pl-0 pr-4' : 'px-4'}`}>{m.id.slice(0, 8)}</td>
+                    <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{m.email || m.user_id}</td>
+                    <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{m.role}</td>
+                    <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{m.status === 'pending' ? 'Pending' : 'Active'}</td>
                     <td className="px-4 py-2 text-right">
                       <button type="button" onClick={() => setRemoveTarget(m)} className="text-xs text-red-700 hover:underline whitespace-nowrap">
                         Remove

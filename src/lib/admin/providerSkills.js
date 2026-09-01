@@ -10,7 +10,7 @@ import { supabase } from '../supabaseClient'
 export async function listOrganisationOfferedSkills(organisationId) {
   const { data, error } = await supabase
     .from('organisation_offered_skills')
-    .select('id, skill_library:skill_library_id(id, name, category, description, organisation_id)')
+    .select('id, skill_library:skill_library_id(id, skill_code, name, category, description, organisation_id)')
     .eq('organisation_id', organisationId)
     .order('created_at', { ascending: false })
   if (error) throw error
@@ -19,6 +19,7 @@ export async function listOrganisationOfferedSkills(organisationId) {
     .map((r) => ({
       offeredId: r.id,
       skillLibraryId: r.skill_library.id,
+      skillCode: r.skill_library.skill_code,
       name: r.skill_library.name,
       category: r.skill_library.category,
       description: r.skill_library.description,

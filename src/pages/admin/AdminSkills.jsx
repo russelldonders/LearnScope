@@ -8,9 +8,13 @@ import { SortableTh, TablePagination } from '../../components/TableControls'
 const TYPE_LABELS = { global: 'Global', personal: 'Personal', provider: 'Provider' }
 
 const SKILL_SORT_ACCESSORS = {
-  name: (s) => s.name?.toLowerCase() ?? '',
   code: (s) => s.skill_code?.toLowerCase() ?? '',
+  name: (s) => s.name?.toLowerCase() ?? '',
+  category: (s) => s.category?.toLowerCase() ?? '',
+  description: (s) => s.description?.toLowerCase() ?? '',
+  visibility: (s) => (s.is_private ? 'Private' : 'Public'),
   type: (s) => TYPE_LABELS[s.type] ?? s.type ?? '',
+  owner: (s) => s.ownerName?.toLowerCase() ?? '',
   status: (s) => s.status ?? '',
 }
 
@@ -107,9 +111,13 @@ export default function AdminSkills() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-hairline text-left text-secondary">
+                    <SortableTh label="ID" columnKey="code" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                     <SortableTh label="Skill" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh label="Code" columnKey="code" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                    <SortableTh label="Category" columnKey="category" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                    <SortableTh label="Description" columnKey="description" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableTh label="Visibility" columnKey="visibility" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                     <SortableTh label="Type" columnKey="type" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                    <SortableTh label="Owner" columnKey="owner" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                     <SortableTh label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                     <th className="px-4 py-2 font-medium"></th>
                   </tr>
@@ -144,28 +152,18 @@ export default function AdminSkills() {
 function SkillRow({ skill, editing, editForm, onEditFormChange, saving, actioning, onStartEdit, onCancelEdit, onSaveEdit, onToggleStatus }) {
   return (
     <>
-      <tr className="border-b border-hairline last:border-0 align-top">
-        <td className="px-4 py-3">
-          <p className="text-ink font-medium">
-            <Link to={`/admin/skills/${skill.id}`} className="hover:text-moss hover:underline">
-              {skill.name}
-            </Link>
-            {skill.is_private && (
-              <span className="ml-1.5 font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-1.5 py-0.5">
-                Private
-              </span>
-            )}
-          </p>
-          <p className="text-xs text-secondary mt-0.5">
-            {skill.category || 'No category'}
-            {skill.description ? ` — ${skill.description}` : ''}
-          </p>
-        </td>
+      <tr className="border-b border-hairline last:border-0">
         <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{skill.skill_code}</td>
-        <td className="px-4 py-3 text-secondary whitespace-nowrap">
-          {TYPE_LABELS[skill.type]}
-          {skill.ownerName ? ` · ${skill.ownerName}` : ''}
+        <td className="px-4 py-3 text-ink font-medium whitespace-nowrap">
+          <Link to={`/admin/skills/${skill.id}`} className="hover:text-moss hover:underline">
+            {skill.name}
+          </Link>
         </td>
+        <td className="px-4 py-3 text-secondary whitespace-nowrap">{skill.category || '—'}</td>
+        <td className="px-4 py-3 text-secondary truncate max-w-[220px]">{skill.description || '—'}</td>
+        <td className="px-4 py-3 text-secondary whitespace-nowrap">{skill.is_private ? 'Private' : 'Public'}</td>
+        <td className="px-4 py-3 text-secondary whitespace-nowrap">{TYPE_LABELS[skill.type]}</td>
+        <td className="px-4 py-3 text-secondary whitespace-nowrap">{skill.ownerName || '—'}</td>
         <td className="px-4 py-3 whitespace-nowrap">
           <span
             className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border ${
@@ -193,7 +191,7 @@ function SkillRow({ skill, editing, editForm, onEditFormChange, saving, actionin
       </tr>
       {editing && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={5} className="px-4 pb-4 pt-1">
+          <td colSpan={9} className="px-4 pb-4 pt-1">
             <div className="space-y-2 border-t border-hairline pt-3">
               <div>
                 <label className="block text-xs text-secondary mb-1">Category</label>

@@ -39,6 +39,7 @@ const TYPE_LABELS = {
 const STATUS_LABELS = { draft: 'Draft', inactive: 'Previous version', published: 'Published' }
 
 const RESOURCE_SORT_ACCESSORS = {
+  id: (r) => r.id ?? '',
   title: (r) => r.title?.toLowerCase() ?? '',
   type: (r) => TYPE_LABELS[r.type] ?? r.type ?? '',
   version: (r) => r.version_number ?? 1,
@@ -397,6 +398,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-hairline text-left text-secondary">
+                  <SortableTh label="ID" columnKey="id" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   <SortableTh label="Resource" columnKey="title" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <SortableTh label="Type" columnKey="type" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   <SortableTh label="Version" columnKey="version" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
@@ -497,8 +499,9 @@ function ResourceRow({
 }) {
   return (
     <Fragment>
-      <tr className="border-b border-hairline last:border-0 align-top">
-        <td className="px-4 py-3 text-ink font-medium break-words">{resource.title}</td>
+      <tr className="border-b border-hairline last:border-0">
+        <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{resource.id.slice(0, 8)}</td>
+        <td className="px-4 py-3 text-ink font-medium truncate max-w-[220px]">{resource.title}</td>
         <td className="px-4 py-3 text-secondary whitespace-nowrap">{TYPE_LABELS[resource.type]}</td>
         <td className="px-4 py-3 whitespace-nowrap">
           <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{resource.version_number ?? 1}</span>
@@ -507,7 +510,7 @@ function ResourceRow({
           <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{STATUS_LABELS[resource.status] ?? resource.status}</span>
         </td>
         <td className="px-4 py-3">
-          <div className="flex items-center gap-x-4 gap-y-2 flex-wrap justify-end">
+          <div className="flex items-center gap-x-4 justify-end whitespace-nowrap">
             {resource.type === 'file' ? (
               // download, not target="_blank" -- an unrestricted-type
               // upload served same-origin must never open as a
@@ -556,7 +559,7 @@ function ResourceRow({
       </tr>
       {previewing && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={5} className="px-4 pb-3">
+          <td colSpan={6} className="px-4 pb-3">
             {(resource.type === 'video' || resource.type === 'screen_recording') && (
               <EditedVideoPlayer resource={resource} className="w-full rounded-md bg-black" />
             )}
@@ -581,7 +584,7 @@ function ResourceRow({
       )}
       {historyOpen && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={5} className="px-4 pb-3">
+          <td colSpan={6} className="px-4 pb-3">
             <p className="mb-2 text-xs font-medium text-ink">Version history</p>
             <ul className="space-y-1.5">
               {versionHistory.map((version) => (

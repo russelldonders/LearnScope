@@ -5,6 +5,7 @@ import { useSortedPage } from '../../lib/useSortedPage'
 import { SortableTh, TablePagination } from '../../components/TableControls'
 
 const TAG_SORT_ACCESSORS = {
+  id: (t) => t.id ?? '',
   name: (t) => t.name?.toLowerCase() ?? '',
   status: (t) => (t.is_blacklisted ? 1 : 0),
 }
@@ -64,6 +65,7 @@ export default function AdminTags() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-hairline text-left text-secondary">
+                    <SortableTh label="ID" columnKey="id" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                     <SortableTh label="Tag" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                     <SortableTh label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                     <th className="px-4 py-2 font-medium"></th>
@@ -72,13 +74,16 @@ export default function AdminTags() {
                 <tbody>
                   {pageItems.map((tag) => (
                     <tr key={tag.id} className="border-b border-hairline last:border-0">
-                      <td className="px-4 py-2.5 text-ink">{tag.name}</td>
+                      <td className="px-4 py-2.5 font-mono text-xs text-secondary whitespace-nowrap">{tag.id.slice(0, 8)}</td>
+                      <td className="px-4 py-2.5 text-ink whitespace-nowrap">{tag.name}</td>
                       <td className="px-4 py-2.5 whitespace-nowrap">
-                        {tag.is_blacklisted && (
-                          <span className="font-mono text-[10px] uppercase tracking-wide text-red-700 border border-red-300 rounded-full px-2 py-0.5">
-                            Blacklisted
-                          </span>
-                        )}
+                        <span
+                          className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border ${
+                            tag.is_blacklisted ? 'text-red-700 border-red-300' : 'text-secondary border-hairline'
+                          }`}
+                        >
+                          {tag.is_blacklisted ? 'Blacklisted' : 'Active'}
+                        </span>
                       </td>
                       <td className="px-4 py-2.5 text-right">
                         <button

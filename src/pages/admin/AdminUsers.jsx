@@ -20,6 +20,7 @@ export default function AdminUsers() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  const [showInviteForm, setShowInviteForm] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviting, setInviting] = useState(false)
   const [inviteMessage, setInviteMessage] = useState(null)
@@ -55,6 +56,7 @@ export default function AdminUsers() {
       await inviteUser(inviteEmail.trim())
       setInviteMessage(`Invitation sent to ${inviteEmail.trim()}.`)
       setInviteEmail('')
+      setShowInviteForm(false)
       await load()
     } catch (err) {
       setError(err.message)
@@ -79,31 +81,44 @@ export default function AdminUsers() {
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <form
-          onSubmit={handleInvite}
-          className="bg-card border border-hairline rounded-lg p-4 flex flex-wrap items-end gap-3"
-        >
-          <div className="flex-1 min-w-[220px]">
-            <label className="block text-sm text-secondary mb-1" htmlFor="inviteEmail">
-              Invite a user by email
-            </label>
-            <input
-              id="inviteEmail"
-              type="email"
-              required
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-            />
-          </div>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-display text-lg text-ink">Users</h2>
           <button
-            type="submit"
-            disabled={inviting}
-            className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90 disabled:opacity-60"
+            type="button"
+            onClick={() => setShowInviteForm((v) => !v)}
+            className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
           >
-            {inviting ? 'Sending…' : 'Send invite'}
+            {showInviteForm ? 'Cancel' : '+ Invite user'}
           </button>
-        </form>
+        </div>
+
+        {showInviteForm && (
+          <form
+            onSubmit={handleInvite}
+            className="bg-card border border-hairline rounded-lg p-4 flex flex-wrap items-end gap-3"
+          >
+            <div className="flex-1 min-w-[220px]">
+              <label className="block text-sm text-secondary mb-1" htmlFor="inviteEmail">
+                Invite a user by email
+              </label>
+              <input
+                id="inviteEmail"
+                type="email"
+                required
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={inviting}
+              className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90 disabled:opacity-60"
+            >
+              {inviting ? 'Sending…' : 'Send invite'}
+            </button>
+          </form>
+        )}
 
         {inviteMessage && <p role="status" className="text-sm text-moss">{inviteMessage}</p>}
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
@@ -120,7 +135,8 @@ export default function AdminUsers() {
                   <SortableTh label="Name" columnKey="fullName" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <SortableTh label="Email" columnKey="email" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <SortableTh label="Status" columnKey="accountStatus" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                  <th className="px-4 py-2 font-medium">Role</th>
+                  <th className="px-4 py-2 font-medium whitespace-nowrap">Platform admin</th>
+                  <th className="px-4 py-2 font-medium">Organisations</th>
                   <th className="px-4 py-2 font-medium"></th>
                 </tr>
               </thead>
@@ -149,15 +165,11 @@ export default function AdminUsers() {
                         {u.accountStatus}
                       </span>
                     </td>
-                    <td className="px-4 py-2 text-secondary whitespace-nowrap">
-                      <div className="flex flex-col gap-0.5">
-                        {u.isPlatformAdmin && <span>Platform admin</span>}
-                        {u.organisationMemberships.map((m, i) => (
-                          <span key={i}>
-                            {m.organisationName} ({m.role})
-                          </span>
-                        ))}
-                      </div>
+                    <td className="px-4 py-2 text-secondary whitespace-nowrap">{u.isPlatformAdmin ? 'Yes' : '—'}</td>
+                    <td className="px-4 py-2 text-secondary truncate max-w-xs" title={u.organisationMemberships.map((m) => `${m.organisationName} (${m.role})`).join(', ')}>
+                      {u.organisationMemberships.length === 0
+                        ? '—'
+                        : u.organisationMemberships.map((m) => `${m.organisationName} (${m.role}${m.status === 'pending' ? ', pending' : ''})`).join(', ')}
                     </td>
                     <td className="px-4 py-2 text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -189,7 +201,7 @@ export default function AdminUsers() {
                 ))}
                 {users.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-secondary">
+                    <td colSpan={7} className="px-4 py-6 text-center text-secondary">
                       No users yet.
                     </td>
                   </tr>

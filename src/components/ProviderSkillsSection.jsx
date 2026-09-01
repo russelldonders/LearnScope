@@ -13,8 +13,11 @@ import { SortableTh, TablePagination } from './TableControls'
 const EMPTY_FORM = { name: '', category: '', description: '' }
 
 const OFFERED_SKILL_SORT_ACCESSORS = {
+  skillCode: (item) => item.skillCode?.toLowerCase() ?? '',
   name: (item) => item.name?.toLowerCase() ?? '',
   category: (item) => item.category?.toLowerCase() ?? '',
+  description: (item) => item.description?.toLowerCase() ?? '',
+  source: (item) => (item.isOwnOrgSkill ? 'Your organisation' : 'Shared library'),
 }
 
 // The provider console's "Skills" tab: the primary list is this org's
@@ -291,26 +294,22 @@ export default function ProviderSkillsSection({ organisationId, userId }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-hairline text-left text-secondary">
+                  <SortableTh label="ID" columnKey="skillCode" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   <SortableTh label="Skill" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <SortableTh label="Category" columnKey="category" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                  <SortableTh label="Description" columnKey="description" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortableTh label="Source" columnKey="source" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   <th className="px-4 py-2 font-medium"></th>
                 </tr>
               </thead>
               <tbody>
                 {pageItems.map((item) => (
-                  <tr key={item.offeredId} className="border-b border-hairline last:border-0 align-top">
-                    <td className="px-4 py-3">
-                      <p className="text-ink font-medium">
-                        {item.name}
-                        {item.isOwnOrgSkill && (
-                          <span className="ml-1.5 font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-1.5 py-0.5">
-                            Your organisation
-                          </span>
-                        )}
-                      </p>
-                      {item.description && <p className="text-xs text-secondary mt-0.5">{item.description}</p>}
-                    </td>
-                    <td className="px-4 py-3 text-secondary whitespace-nowrap">{item.category || 'No category'}</td>
+                  <tr key={item.offeredId} className="border-b border-hairline last:border-0">
+                    <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{item.skillCode}</td>
+                    <td className="px-4 py-3 text-ink font-medium whitespace-nowrap">{item.name}</td>
+                    <td className="px-4 py-3 text-secondary whitespace-nowrap">{item.category || '—'}</td>
+                    <td className="px-4 py-3 text-secondary truncate max-w-[220px]">{item.description || '—'}</td>
+                    <td className="px-4 py-3 text-secondary whitespace-nowrap">{item.isOwnOrgSkill ? 'Your organisation' : 'Shared library'}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3 justify-end">
                         <Link
