@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import {
   listOrganisationResources,
   uploadVideoResource,
@@ -22,6 +22,8 @@ import VideoEditorModal from './VideoEditorModal'
 import ScreenRecorderModal from './ScreenRecorderModal'
 import PageBuilderModal from './PageBuilderModal'
 import PageContent from './PageContent'
+import { useSortedPage } from '../lib/useSortedPage'
+import { SortableTh, TablePagination } from './TableControls'
 
 const TYPE_LABELS = {
   video: 'Video',
@@ -32,6 +34,15 @@ const TYPE_LABELS = {
   external_video: 'External video',
   web_url: 'Web link',
   page: 'Page',
+}
+
+const STATUS_LABELS = { draft: 'Draft', inactive: 'Previous version', published: 'Published' }
+
+const RESOURCE_SORT_ACCESSORS = {
+  title: (r) => r.title?.toLowerCase() ?? '',
+  type: (r) => TYPE_LABELS[r.type] ?? r.type ?? '',
+  version: (r) => r.version_number ?? 1,
+  status: (r) => STATUS_LABELS[r.status] ?? r.status ?? '',
 }
 
 // An organisation's whole content library -- upload once here, then attach
@@ -69,6 +80,9 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
         (!needle || [resource.title, resource.file_name].filter(Boolean).some((value) => value.toLowerCase().includes(needle)))
     )
   }, [resources, query, typeFilter])
+
+  const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
+    useSortedPage(filteredResources, RESOURCE_SORT_ACCESSORS)
 
   useEffect(() => {
     load()
@@ -378,125 +392,41 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
           <p className="text-secondary">No resources match these filters.</p>
         </div>
       ) : (
-        <ul className="divide-y divide-hairline border border-hairline rounded-md">
-          {filteredResources.map((resource) => (
-            <li key={resource.id} className="p-3 text-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-ink font-medium break-words">{resource.title}</p>
-                  <p className="text-xs text-secondary">{TYPE_LABELS[resource.type]} · v{resource.version_number ?? 1} · {resource.status === 'draft' ? 'Draft' : resource.status === 'inactive' ? 'Previous version' : 'Published'}</p>
-                </div>
-                <div className="flex items-center gap-x-4 gap-y-2 flex-wrap sm:justify-end shrink-0 border-t border-hairline pt-2 sm:border-0 sm:pt-0">
-                  {resource.type === 'file' ? (
-                    // download, not target="_blank" -- an unrestricted-type
-                    // upload served same-origin must never open as a
-                    // navigation (see ScormPlayer.jsx's sandbox comment for
-                    // the full reasoning).
-                    <a
-                      href={contentFileUrl(resource)}
-                      download={resource.file_name || true}
-                      className="text-xs text-moss font-medium"
-                    >
-                      Download
-                    </a>
-                  ) : resource.type === 'web_url' ? (
-                    <a
-                      href={resource.external_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-moss font-medium hover:underline underline-offset-2"
-                    >
-                      Open link
-                    </a>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setPreviewingId((id) => (id === resource.id ? null : resource.id))}
-                      className="text-xs text-moss font-medium"
-                    >
-                      {previewingId === resource.id ? 'Hide preview' : 'Preview'}
-                    </button>
-                  )}
-                  {(resource.type === 'video' || resource.type === 'screen_recording') && resource.status === 'draft' && (
-                    <button
-                      type="button"
-                      onClick={() => setEditingResource(resource)}
-                      className="text-xs text-moss font-medium"
-                    >
-                      Edit Video
-                    </button>
-                  )}
-                  {resource.type === 'page' && resource.status === 'draft' && (
-                    <button type="button" onClick={() => setEditingPage(resource)} className="text-xs text-moss font-medium">
-                      Edit page
-                    </button>
-                  )}
-                  {resource.status === 'published' && resource.is_current_published && (
-                    <button type="button" onClick={() => handleCreateVersion(resource)} className="text-xs text-moss font-medium hover:underline">
-                      Create new version
-                    </button>
-                  )}
-                  {resource.status === 'draft' && (
-                    <button type="button" onClick={() => handlePublishVersion(resource)} className="text-xs text-moss font-medium hover:underline">
-                      Publish version
-                    </button>
-                  )}
-                  <button type="button" onClick={() => handleToggleHistory(resource)} className="text-xs text-moss font-medium hover:underline">
-                    {historyForId === resource.id ? 'Hide versions' : 'Version history'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPendingDelete(resource)}
-                    className="text-xs text-red-700 hover:underline"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-              {previewingId === resource.id && (resource.type === 'video' || resource.type === 'screen_recording') && (
-                <EditedVideoPlayer resource={resource} className="w-full mt-2 rounded-md bg-black" />
-              )}
-              {previewingId === resource.id && resource.type === 'scorm' && (
-                <div className="mt-2">
-                  <ScormPlayer contentItem={resource} userId={userId} />
-                </div>
-              )}
-              {previewingId === resource.id && resource.type === 'xapi' && (
-                <div className="mt-2">
-                  <XapiPlayer contentItem={resource} userId={userId} />
-                </div>
-              )}
-              {previewingId === resource.id && resource.type === 'external_video' && (
-                <iframe
-                  src={resource.external_url}
-                  title={resource.title}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  className="w-full aspect-video mt-2 rounded-md"
-                />
-              )}
-              {previewingId === resource.id && resource.type === 'page' && (
-                <div className="mt-3 rounded-md border border-hairline bg-paper px-5 py-8 sm:px-8">
-                  <PageContent document={resource.page_content} compact />
-                </div>
-              )}
-              {historyForId === resource.id && (
-                <div className="mt-3 border-t border-hairline pt-3">
-                  <p className="mb-2 text-xs font-medium text-ink">Version history</p>
-                  <ul className="space-y-1.5">
-                    {versionHistory.map((version) => (
-                      <li key={version.id} className="flex items-center justify-between gap-3 text-xs text-secondary">
-                        <span>v{version.version_number}</span>
-                        <span>{version.status === 'draft' ? 'Draft' : version.status === 'inactive' ? 'Previous version' : 'Published'}</span>
-                        <time dateTime={version.published_at || version.created_at}>{new Date(version.published_at || version.created_at).toLocaleDateString()}</time>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+        <div className="bg-card border border-hairline rounded-lg">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-hairline text-left text-secondary">
+                  <SortableTh label="Resource" columnKey="title" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortableTh label="Type" columnKey="type" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                  <SortableTh label="Version" columnKey="version" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                  <SortableTh label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                  <th className="px-4 py-2 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageItems.map((resource) => (
+                  <ResourceRow
+                    key={resource.id}
+                    resource={resource}
+                    userId={userId}
+                    previewing={previewingId === resource.id}
+                    onTogglePreview={() => setPreviewingId((id) => (id === resource.id ? null : resource.id))}
+                    historyOpen={historyForId === resource.id}
+                    versionHistory={versionHistory}
+                    onToggleHistory={() => handleToggleHistory(resource)}
+                    onEditVideo={() => setEditingResource(resource)}
+                    onEditPage={() => setEditingPage(resource)}
+                    onCreateVersion={() => handleCreateVersion(resource)}
+                    onPublishVersion={() => handlePublishVersion(resource)}
+                    onRemove={() => setPendingDelete(resource)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <TablePagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalItems={totalItems} idPrefix="provider-resources" />
+        </div>
       )}
 
       {pendingDelete && (
@@ -543,5 +473,128 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
         />
       )}
     </div>
+  )
+}
+
+// Preview and version history are two independent expansions (a row can
+// show either, both, or neither), so each gets its own full-width row
+// beneath the resource's own -- rather than cramming heterogeneous
+// content (video/SCORM/xAPI/iframe/PageContent, or a version list) into a
+// single expansion the way a simpler row-detail table might.
+function ResourceRow({
+  resource,
+  userId,
+  previewing,
+  onTogglePreview,
+  historyOpen,
+  versionHistory,
+  onToggleHistory,
+  onEditVideo,
+  onEditPage,
+  onCreateVersion,
+  onPublishVersion,
+  onRemove,
+}) {
+  return (
+    <Fragment>
+      <tr className="border-b border-hairline last:border-0 align-top">
+        <td className="px-4 py-3 text-ink font-medium break-words">{resource.title}</td>
+        <td className="px-4 py-3 text-secondary whitespace-nowrap">{TYPE_LABELS[resource.type]}</td>
+        <td className="px-4 py-3 whitespace-nowrap">
+          <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{resource.version_number ?? 1}</span>
+        </td>
+        <td className="px-4 py-3 whitespace-nowrap">
+          <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{STATUS_LABELS[resource.status] ?? resource.status}</span>
+        </td>
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-x-4 gap-y-2 flex-wrap justify-end">
+            {resource.type === 'file' ? (
+              // download, not target="_blank" -- an unrestricted-type
+              // upload served same-origin must never open as a
+              // navigation (see ScormPlayer.jsx's sandbox comment for
+              // the full reasoning).
+              <a href={contentFileUrl(resource)} download={resource.file_name || true} className="text-xs text-moss font-medium whitespace-nowrap">
+                Download
+              </a>
+            ) : resource.type === 'web_url' ? (
+              <a href={resource.external_url} target="_blank" rel="noopener noreferrer" className="text-xs text-moss font-medium hover:underline underline-offset-2 whitespace-nowrap">
+                Open link
+              </a>
+            ) : (
+              <button type="button" onClick={onTogglePreview} className="text-xs text-moss font-medium whitespace-nowrap">
+                {previewing ? 'Hide preview' : 'Preview'}
+              </button>
+            )}
+            {(resource.type === 'video' || resource.type === 'screen_recording') && resource.status === 'draft' && (
+              <button type="button" onClick={onEditVideo} className="text-xs text-moss font-medium whitespace-nowrap">
+                Edit Video
+              </button>
+            )}
+            {resource.type === 'page' && resource.status === 'draft' && (
+              <button type="button" onClick={onEditPage} className="text-xs text-moss font-medium whitespace-nowrap">
+                Edit page
+              </button>
+            )}
+            {resource.status === 'published' && resource.is_current_published && (
+              <button type="button" onClick={onCreateVersion} className="text-xs text-moss font-medium hover:underline whitespace-nowrap">
+                Create new version
+              </button>
+            )}
+            {resource.status === 'draft' && (
+              <button type="button" onClick={onPublishVersion} className="text-xs text-moss font-medium hover:underline whitespace-nowrap">
+                Publish version
+              </button>
+            )}
+            <button type="button" onClick={onToggleHistory} className="text-xs text-moss font-medium hover:underline whitespace-nowrap">
+              {historyOpen ? 'Hide versions' : 'Version history'}
+            </button>
+            <button type="button" onClick={onRemove} className="text-xs text-red-700 hover:underline whitespace-nowrap">
+              Remove
+            </button>
+          </div>
+        </td>
+      </tr>
+      {previewing && (
+        <tr className="border-b border-hairline last:border-0">
+          <td colSpan={5} className="px-4 pb-3">
+            {(resource.type === 'video' || resource.type === 'screen_recording') && (
+              <EditedVideoPlayer resource={resource} className="w-full rounded-md bg-black" />
+            )}
+            {resource.type === 'scorm' && <ScormPlayer contentItem={resource} userId={userId} />}
+            {resource.type === 'xapi' && <XapiPlayer contentItem={resource} userId={userId} />}
+            {resource.type === 'external_video' && (
+              <iframe
+                src={resource.external_url}
+                title={resource.title}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                className="w-full aspect-video rounded-md"
+              />
+            )}
+            {resource.type === 'page' && (
+              <div className="rounded-md border border-hairline bg-paper px-5 py-8 sm:px-8">
+                <PageContent document={resource.page_content} compact />
+              </div>
+            )}
+          </td>
+        </tr>
+      )}
+      {historyOpen && (
+        <tr className="border-b border-hairline last:border-0">
+          <td colSpan={5} className="px-4 pb-3">
+            <p className="mb-2 text-xs font-medium text-ink">Version history</p>
+            <ul className="space-y-1.5">
+              {versionHistory.map((version) => (
+                <li key={version.id} className="flex items-center justify-between gap-3 text-xs text-secondary">
+                  <span>v{version.version_number}</span>
+                  <span>{STATUS_LABELS[version.status] ?? version.status}</span>
+                  <time dateTime={version.published_at || version.created_at}>{new Date(version.published_at || version.created_at).toLocaleDateString()}</time>
+                </li>
+              ))}
+            </ul>
+          </td>
+        </tr>
+      )}
+    </Fragment>
   )
 }

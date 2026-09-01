@@ -11,6 +11,20 @@ import {
   removeOrganisationMember,
   inviteOrganisationStaff,
 } from '../../lib/admin/organisations'
+import { useSortedPage } from '../../lib/useSortedPage'
+import { SortableTh, TablePagination } from '../../components/TableControls'
+
+const ORG_SORT_ACCESSORS = {
+  name: (o) => o.name?.toLowerCase() ?? '',
+  org_code: (o) => o.org_code?.toLowerCase() ?? '',
+  type: (o) => o.type ?? '',
+  status: (o) => o.status ?? '',
+}
+
+const STAFF_SORT_ACCESSORS = {
+  email: (m) => (m.email || m.user_id || '').toLowerCase(),
+  role: (m) => m.role ?? '',
+}
 
 export default function AdminProviders() {
   const { user } = useAuth()
@@ -25,6 +39,9 @@ export default function AdminProviders() {
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({ name: '', url: '' })
   const [saving, setSaving] = useState(false)
+
+  const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
+    useSortedPage(organisations, ORG_SORT_ACCESSORS)
 
   useEffect(() => {
     load()
@@ -128,106 +145,146 @@ export default function AdminProviders() {
             <p className="text-secondary">No provider organisations yet.</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {organisations.map((org) => (
-              <div key={org.id} className="bg-card border border-hairline rounded-lg overflow-hidden">
-                {editingId === org.id ? (
-                  <form
-                    onSubmit={(e) => handleSaveEdit(e, org.id)}
-                    className="p-4 space-y-3"
-                  >
-                    <div>
-                      <label className="block text-sm text-secondary mb-1" htmlFor={`orgEditName-${org.id}`}>
-                        Name
-                      </label>
-                      <input
-                        id={`orgEditName-${org.id}`}
-                        required
-                        value={editForm.name}
-                        onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                        className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-secondary mb-1" htmlFor={`orgEditUrl-${org.id}`}>
-                        Website URL
-                      </label>
-                      <input
-                        id={`orgEditUrl-${org.id}`}
-                        type="url"
-                        placeholder="https://…"
-                        value={editForm.url}
-                        onChange={(e) => setEditForm((f) => ({ ...f, url: e.target.value }))}
-                        className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="submit"
-                        disabled={saving}
-                        className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-                      >
-                        {saving ? 'Saving…' : 'Save'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditingId(null)}
-                        className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </form>
-                ) : (
-                  <div className="flex items-center justify-between gap-3 p-4">
-                    <div className="min-w-0">
-                      <p className="text-ink font-medium">{org.name}</p>
-                      <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mt-0.5">
-                        {org.org_code} · {org.type} · {org.status}
-                      </p>
-                      {org.url && (
-                        <a
-                          href={org.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-moss font-medium mt-1 inline-block truncate max-w-full"
-                        >
-                          {org.url}
-                        </a>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => startEdit(org)}
-                        className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setExpandedId((id) => (id === org.id ? null : org.id))}
-                        className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper"
-                      >
-                        {expandedId === org.id ? 'Hide users' : 'Manage users'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleToggleStatus(org)}
-                        className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper"
-                      >
-                        {org.status === 'active' ? 'Deactivate' : 'Reactivate'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {expandedId === org.id && <OrganisationStaffPanel organisation={org} alwaysShowForm />}
-              </div>
-            ))}
+          <div className="bg-card border border-hairline rounded-lg">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-hairline text-left text-secondary">
+                    <SortableTh label="Organisation" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableTh label="Code" columnKey="org_code" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                    <SortableTh label="Type" columnKey="type" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                    <SortableTh label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                    <th className="px-4 py-2 font-medium"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageItems.map((org) => (
+                    <OrganisationRow
+                      key={org.id}
+                      org={org}
+                      editing={editingId === org.id}
+                      editForm={editForm}
+                      onEditFormChange={setEditForm}
+                      saving={saving}
+                      expanded={expandedId === org.id}
+                      onStartEdit={() => startEdit(org)}
+                      onCancelEdit={() => setEditingId(null)}
+                      onSaveEdit={(e) => handleSaveEdit(e, org.id)}
+                      onToggleExpanded={() => setExpandedId((id) => (id === org.id ? null : org.id))}
+                      onToggleStatus={() => handleToggleStatus(org)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <TablePagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalItems={totalItems} idPrefix="admin-providers" />
           </div>
         )}
       </div>
     </AdminLayout>
+  )
+}
+
+function OrganisationRow({
+  org,
+  editing,
+  editForm,
+  onEditFormChange,
+  saving,
+  expanded,
+  onStartEdit,
+  onCancelEdit,
+  onSaveEdit,
+  onToggleExpanded,
+  onToggleStatus,
+}) {
+  return (
+    <>
+      <tr className="border-b border-hairline last:border-0 align-top">
+        <td className="px-4 py-3">
+          <p className="text-ink font-medium">{org.name}</p>
+          {org.url && (
+            <a href={org.url} target="_blank" rel="noopener noreferrer" className="text-xs text-moss font-medium mt-0.5 inline-block truncate max-w-full">
+              {org.url}
+            </a>
+          )}
+        </td>
+        <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{org.org_code}</td>
+        <td className="px-4 py-3 text-secondary whitespace-nowrap">{org.type}</td>
+        <td className="px-4 py-3 whitespace-nowrap">
+          <span
+            className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border ${
+              org.status === 'active' ? 'border-hairline text-secondary' : 'border-red-300 text-red-700'
+            }`}
+          >
+            {org.status}
+          </span>
+        </td>
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <button type="button" onClick={onStartEdit} className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper whitespace-nowrap">
+              Edit
+            </button>
+            <button type="button" onClick={onToggleExpanded} className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper whitespace-nowrap">
+              {expanded ? 'Hide users' : 'Manage users'}
+            </button>
+            <button type="button" onClick={onToggleStatus} className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper whitespace-nowrap">
+              {org.status === 'active' ? 'Deactivate' : 'Reactivate'}
+            </button>
+          </div>
+        </td>
+      </tr>
+      {editing && (
+        <tr className="border-b border-hairline last:border-0">
+          <td colSpan={5} className="px-4 pb-4 pt-1">
+            <form onSubmit={onSaveEdit} className="space-y-3 border-t border-hairline pt-3">
+              <div>
+                <label className="block text-sm text-secondary mb-1" htmlFor={`orgEditName-${org.id}`}>
+                  Name
+                </label>
+                <input
+                  id={`orgEditName-${org.id}`}
+                  required
+                  value={editForm.name}
+                  onChange={(e) => onEditFormChange((f) => ({ ...f, name: e.target.value }))}
+                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-secondary mb-1" htmlFor={`orgEditUrl-${org.id}`}>
+                  Website URL
+                </label>
+                <input
+                  id={`orgEditUrl-${org.id}`}
+                  type="url"
+                  placeholder="https://…"
+                  value={editForm.url}
+                  onChange={(e) => onEditFormChange((f) => ({ ...f, url: e.target.value }))}
+                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="submit" disabled={saving} className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60">
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+                <button type="button" onClick={onCancelEdit} className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper">
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </td>
+        </tr>
+      )}
+      {expanded && (
+        <tr className="border-b border-hairline last:border-0">
+          <td colSpan={5} className="px-4 pb-4 pt-1">
+            <div className="border-t border-hairline pt-3">
+              <OrganisationStaffPanel organisation={org} alwaysShowForm />
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   )
 }
 
@@ -315,6 +372,9 @@ export function OrganisationStaffPanel({ organisation, alwaysShowForm = false })
         (!needle || [member.email, member.user_id].filter(Boolean).some((value) => value.toLowerCase().includes(needle)))
     )
   }, [members, query, roleFilter])
+
+  const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
+    useSortedPage(filteredMembers, STAFF_SORT_ACCESSORS)
 
   return (
     <div className={alwaysShowForm ? 'border-t border-hairline bg-paper p-4 space-y-3' : 'space-y-3'}>
@@ -412,31 +472,36 @@ export function OrganisationStaffPanel({ organisation, alwaysShowForm = false })
           <p className="text-secondary">No users match these filters.</p>
         </div>
       ) : (
-        <ul
-          className={
-            alwaysShowForm ? 'divide-y divide-hairline' : 'divide-y divide-hairline border border-hairline rounded-md'
-          }
-        >
-          {filteredMembers.map((m) => (
-            <li
-              key={m.id}
-              className={`flex items-center justify-between gap-2 text-sm ${alwaysShowForm ? 'py-2' : 'p-3'}`}
-            >
-              <span className="text-ink text-xs truncate">{m.email || m.user_id}</span>
-              <span className="text-secondary text-xs shrink-0">
-                {m.role}
-                {m.status === 'pending' && ' · pending'}
-              </span>
-              <button
-                type="button"
-                onClick={() => setRemoveTarget(m)}
-                className="shrink-0 text-xs text-red-700 hover:underline"
-              >
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div className={alwaysShowForm ? '' : 'bg-card border border-hairline rounded-lg'}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-hairline text-left text-secondary">
+                  <SortableTh label="User" columnKey="email" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className={alwaysShowForm ? 'px-0' : ''} />
+                  <SortableTh label="Role" columnKey="role" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                  <th className="px-4 py-2 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageItems.map((m) => (
+                  <tr key={m.id} className="border-b border-hairline last:border-0">
+                    <td className={`py-2 text-ink text-xs truncate ${alwaysShowForm ? 'pl-0 pr-4' : 'px-4'}`}>{m.email || m.user_id}</td>
+                    <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">
+                      {m.role}
+                      {m.status === 'pending' && ' · pending'}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <button type="button" onClick={() => setRemoveTarget(m)} className="text-xs text-red-700 hover:underline whitespace-nowrap">
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <TablePagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalItems={totalItems} idPrefix={`staff-${organisation.id}`} />
+        </div>
       )}
 
       {removeTarget && (

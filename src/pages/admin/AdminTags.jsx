@@ -1,12 +1,22 @@
 import { useEffect, useState } from 'react'
 import AdminLayout from './AdminLayout'
 import { listAllTags, setTagBlacklisted } from '../../lib/admin/tags'
+import { useSortedPage } from '../../lib/useSortedPage'
+import { SortableTh, TablePagination } from '../../components/TableControls'
+
+const TAG_SORT_ACCESSORS = {
+  name: (t) => t.name?.toLowerCase() ?? '',
+  status: (t) => (t.is_blacklisted ? 1 : 0),
+}
 
 export default function AdminTags() {
   const [tags, setTags] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [actioningId, setActioningId] = useState(null)
+
+  const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
+    useSortedPage(tags, TAG_SORT_ACCESSORS)
 
   useEffect(() => {
     load()
@@ -44,29 +54,48 @@ export default function AdminTags() {
 
         {loading ? (
           <p className="text-secondary">Loading…</p>
+        ) : tags.length === 0 ? (
+          <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
+            <p className="text-secondary">No tags yet.</p>
+          </div>
         ) : (
-          <div className="bg-card border border-hairline rounded-lg divide-y divide-hairline">
-            {tags.map((tag) => (
-              <div key={tag.id} className="flex items-center justify-between gap-3 p-3">
-                <span className="text-ink text-sm">{tag.name}</span>
-                <div className="flex items-center gap-2 shrink-0">
-                  {tag.is_blacklisted && (
-                    <span className="font-mono text-[10px] uppercase tracking-wide text-red-700 border border-red-300 rounded-full px-2 py-0.5">
-                      Blacklisted
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    disabled={actioningId === tag.id}
-                    onClick={() => handleToggle(tag)}
-                    className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper disabled:opacity-50"
-                  >
-                    {tag.is_blacklisted ? 'Remove from blacklist' : 'Blacklist'}
-                  </button>
-                </div>
-              </div>
-            ))}
-            {tags.length === 0 && <p className="p-4 text-center text-secondary">No tags yet.</p>}
+          <div className="bg-card border border-hairline rounded-lg">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-hairline text-left text-secondary">
+                    <SortableTh label="Tag" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortableTh label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                    <th className="px-4 py-2 font-medium"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageItems.map((tag) => (
+                    <tr key={tag.id} className="border-b border-hairline last:border-0">
+                      <td className="px-4 py-2.5 text-ink">{tag.name}</td>
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        {tag.is_blacklisted && (
+                          <span className="font-mono text-[10px] uppercase tracking-wide text-red-700 border border-red-300 rounded-full px-2 py-0.5">
+                            Blacklisted
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        <button
+                          type="button"
+                          disabled={actioningId === tag.id}
+                          onClick={() => handleToggle(tag)}
+                          className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper disabled:opacity-50 whitespace-nowrap"
+                        >
+                          {tag.is_blacklisted ? 'Remove from blacklist' : 'Blacklist'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <TablePagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalItems={totalItems} idPrefix="admin-tags" />
           </div>
         )}
       </div>

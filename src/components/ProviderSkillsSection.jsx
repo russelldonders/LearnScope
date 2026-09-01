@@ -7,8 +7,15 @@ import {
   removeOfferedSkill,
 } from '../lib/admin/providerSkills'
 import { listLibrarySkills, isDuplicateLibrarySkillError, duplicateLibrarySkillMessage } from '../lib/skillLibrary'
+import { useSortedPage } from '../lib/useSortedPage'
+import { SortableTh, TablePagination } from './TableControls'
 
 const EMPTY_FORM = { name: '', category: '', description: '' }
+
+const OFFERED_SKILL_SORT_ACCESSORS = {
+  name: (item) => item.name?.toLowerCase() ?? '',
+  category: (item) => item.category?.toLowerCase() ?? '',
+}
 
 // The provider console's "Skills" tab: the primary list is this org's
 // offered-skills roster (organisation_offered_skills, 0076) -- skills
@@ -126,6 +133,9 @@ export default function ProviderSkillsSection({ organisationId, userId }) {
         (!needle || [item.name, item.category, item.description].filter(Boolean).some((value) => value.toLowerCase().includes(needle)))
     )
   }, [offered, query, categoryFilter])
+
+  const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
+    useSortedPage(filteredOffered, OFFERED_SKILL_SORT_ACCESSORS)
 
   return (
     <div>
@@ -276,39 +286,56 @@ export default function ProviderSkillsSection({ organisationId, userId }) {
           <p className="text-secondary">No skills match these filters.</p>
         </div>
       ) : (
-        <ul className="divide-y divide-hairline border border-hairline rounded-md">
-          {filteredOffered.map((item) => (
-            <li key={item.offeredId} className="p-3 flex items-center justify-between gap-3 text-sm">
-              <Link
-                to={`/provider/organisations/${organisationId}/skills/${item.skillLibraryId}`}
-                className="min-w-0 flex-1 text-left rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-moss"
-                aria-label={`Align training and resources to ${item.name}`}
-              >
-                <p className="text-ink font-medium">
-                  {item.name}
-                  {item.isOwnOrgSkill && (
-                    <span className="ml-1.5 font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-1.5 py-0.5">
-                      Your organisation
-                    </span>
-                  )}
-                </p>
-                <p className="text-xs text-secondary mt-0.5">
-                  {item.category || 'No category'}
-                  {item.description ? ` — ${item.description}` : ''}
-                </p>
-                <span className="inline-block text-xs text-moss font-medium mt-1">Manage alignment →</span>
-              </Link>
-              <button
-                type="button"
-                disabled={removingId === item.skillLibraryId}
-                onClick={() => handleRemove(item)}
-                className="shrink-0 text-xs text-red-700 hover:underline disabled:opacity-50"
-              >
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div className="bg-card border border-hairline rounded-lg">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-hairline text-left text-secondary">
+                  <SortableTh label="Skill" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortableTh label="Category" columnKey="category" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                  <th className="px-4 py-2 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageItems.map((item) => (
+                  <tr key={item.offeredId} className="border-b border-hairline last:border-0 align-top">
+                    <td className="px-4 py-3">
+                      <p className="text-ink font-medium">
+                        {item.name}
+                        {item.isOwnOrgSkill && (
+                          <span className="ml-1.5 font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-1.5 py-0.5">
+                            Your organisation
+                          </span>
+                        )}
+                      </p>
+                      {item.description && <p className="text-xs text-secondary mt-0.5">{item.description}</p>}
+                    </td>
+                    <td className="px-4 py-3 text-secondary whitespace-nowrap">{item.category || 'No category'}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3 justify-end">
+                        <Link
+                          to={`/provider/organisations/${organisationId}/skills/${item.skillLibraryId}`}
+                          className="text-xs font-medium text-moss hover:underline whitespace-nowrap"
+                        >
+                          Manage alignment
+                        </Link>
+                        <button
+                          type="button"
+                          disabled={removingId === item.skillLibraryId}
+                          onClick={() => handleRemove(item)}
+                          className="text-xs text-red-700 hover:underline disabled:opacity-50 whitespace-nowrap"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <TablePagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalItems={totalItems} idPrefix="provider-skills" />
+        </div>
       )}
 
     </div>

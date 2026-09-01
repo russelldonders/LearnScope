@@ -4,6 +4,15 @@ import { useAuth } from '../../context/AuthContext'
 import AdminLayout from './AdminLayout'
 import { listUsers, inviteUser, setUserBlocked, getUserLinkages, deleteUser } from '../../lib/admin/users'
 import AccessibleDialog from '../../components/AccessibleDialog'
+import { useSortedPage } from '../../lib/useSortedPage'
+import { SortableTh, TablePagination } from '../../components/TableControls'
+
+const USER_SORT_ACCESSORS = {
+  userCode: (u) => u.userCode?.toLowerCase() ?? '',
+  fullName: (u) => u.fullName?.toLowerCase() ?? '',
+  email: (u) => u.email?.toLowerCase() ?? '',
+  accountStatus: (u) => u.accountStatus ?? '',
+}
 
 export default function AdminUsers() {
   const { user } = useAuth()
@@ -17,6 +26,9 @@ export default function AdminUsers() {
 
   const [actioningId, setActioningId] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+
+  const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
+    useSortedPage(users, USER_SORT_ACCESSORS)
 
   useEffect(() => {
     load()
@@ -99,20 +111,21 @@ export default function AdminUsers() {
         {loading ? (
           <p className="text-secondary">Loading…</p>
         ) : (
-          <div className="bg-card border border-hairline rounded-lg overflow-x-auto">
+          <div className="bg-card border border-hairline rounded-lg">
+          <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-hairline text-left text-secondary">
-                  <th className="px-4 py-2 font-medium">ID</th>
-                  <th className="px-4 py-2 font-medium">Name</th>
-                  <th className="px-4 py-2 font-medium">Email</th>
-                  <th className="px-4 py-2 font-medium">Status</th>
+                  <SortableTh label="ID" columnKey="userCode" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortableTh label="Name" columnKey="fullName" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortableTh label="Email" columnKey="email" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortableTh label="Status" columnKey="accountStatus" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <th className="px-4 py-2 font-medium">Role</th>
                   <th className="px-4 py-2 font-medium"></th>
                 </tr>
               </thead>
               <tbody>
-                {users.map((u) => (
+                {pageItems.map((u) => (
                   <tr key={u.id} className="border-b border-hairline last:border-0">
                     <td className="px-4 py-2 text-secondary font-mono text-xs whitespace-nowrap">{u.userCode || '—'}</td>
                     <td className="px-4 py-2 text-ink whitespace-nowrap">
@@ -183,6 +196,8 @@ export default function AdminUsers() {
                 )}
               </tbody>
             </table>
+          </div>
+          <TablePagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalItems={totalItems} idPrefix="admin-users" />
           </div>
         )}
       </div>

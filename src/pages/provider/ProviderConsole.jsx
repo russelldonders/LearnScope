@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
@@ -16,6 +16,8 @@ import {
   updateProviderCatalogue,
 } from '../../lib/catalogues'
 import { listOrganisations, listOrganisationMembers } from '../../lib/admin/organisations'
+import { useSortedPage } from '../../lib/useSortedPage'
+import { SortableTh, TablePagination } from '../../components/TableControls'
 import {
   listOrganisationCatalogueCourses,
   createProviderCourse,
@@ -37,6 +39,18 @@ const STATUS_LABELS = {
   approved: 'Approved',
   rejected: 'Rejected',
   inactive: 'Inactive',
+}
+
+const COURSE_SORT_ACCESSORS = {
+  name: (c) => c.name?.toLowerCase() ?? '',
+  version: (c) => c.version_number ?? 0,
+  status: (c) => STATUS_LABELS[c.status] ?? c.status,
+  synopsis: (c) => c.synopsis?.toLowerCase() ?? '',
+}
+
+const CATALOGUE_SORT_ACCESSORS = {
+  name: (c) => c.name?.toLowerCase() ?? '',
+  description: (c) => c.description?.toLowerCase() ?? '',
 }
 
 const SECTIONS = [
@@ -230,6 +244,9 @@ function ProviderCataloguesSection({ organisation, userId, canCreate }) {
   const [deleteTargetPublishedCount] = useState(0)
   const [deleting, setDeleting] = useState(false)
 
+  const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
+    useSortedPage(catalogues, CATALOGUE_SORT_ACCESSORS)
+
   useEffect(() => {
     load()
   }, [organisation.id])
@@ -319,21 +336,41 @@ function ProviderCataloguesSection({ organisation, userId, canCreate }) {
           <p className="text-sm text-secondary">No provider catalogues yet.</p>
         </div>
       ) : (
-        <div className="divide-y divide-hairline border-y border-hairline">
-          {catalogues.map((catalogue) => (
-            <div key={catalogue.id}>
-              <div className="flex items-start justify-between gap-4 py-4">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-ink">{catalogue.name}</p>
-                  {catalogue.description && <p className="text-xs text-secondary mt-1">{catalogue.description}</p>}
-                </div>
-                <Link to={`/provider/catalogues/${catalogue.id}`} className="shrink-0 text-xs font-medium text-moss hover:underline">Open catalogue →</Link>
-              </div>
-              {expandedId === catalogue.id && (
-                <CatalogueApproversPanel catalogueId={catalogue.id} organisationId={organisation.id} />
-              )}
-            </div>
-          ))}
+        <div className="bg-card border border-hairline rounded-lg">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-hairline text-left text-secondary">
+                  <SortableTh label="Catalogue" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortableTh label="Description" columnKey="description" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <th className="px-4 py-2 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageItems.map((catalogue) => (
+                  <Fragment key={catalogue.id}>
+                    <tr className="border-b border-hairline last:border-0">
+                      <td className="px-4 py-3 text-ink font-medium whitespace-nowrap">{catalogue.name}</td>
+                      <td className="px-4 py-3 text-secondary">{catalogue.description || '—'}</td>
+                      <td className="px-4 py-3 text-right">
+                        <Link to={`/provider/catalogues/${catalogue.id}`} className="text-xs font-medium text-moss hover:underline whitespace-nowrap">
+                          Open catalogue →
+                        </Link>
+                      </td>
+                    </tr>
+                    {expandedId === catalogue.id && (
+                      <tr className="border-b border-hairline last:border-0">
+                        <td colSpan={3} className="px-4 pb-3">
+                          <CatalogueApproversPanel catalogueId={catalogue.id} organisationId={organisation.id} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <TablePagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalItems={totalItems} idPrefix="provider-catalogues" />
         </div>
       )}
 
@@ -561,6 +598,9 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
     )
   }, [courses, query, statusFilter])
 
+  const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
+    useSortedPage(filteredCourses, COURSE_SORT_ACCESSORS)
+
   return (
     <div>
       <div className="flex items-center justify-between gap-3 mb-3">
@@ -674,43 +714,47 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
           <p className="text-secondary">No training matches these filters.</p>
         </div>
       ) : (
-        <div className="bg-card border border-hairline rounded-lg overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-hairline text-left text-secondary">
-                <th className="px-4 py-2 font-medium">Training</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2 font-medium">Synopsis</th>
-                <th className="px-4 py-2 font-medium"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredCourses.map((course) => (
-                <CourseRow
-                  key={course.id}
-                  course={course}
-                  canModerate={isApprover}
-                  actioning={actioningId === course.id}
-                  rejecting={rejectingId === course.id}
-                  rejectionReason={rejectionReason}
-                  onRejectionReasonChange={setRejectionReason}
-                  onStartReject={() => setRejectingId(course.id)}
-                  onCancelReject={() => {
-                    setRejectingId(null)
-                    setRejectionReason('')
-                  }}
-                  onApprove={() => handleApprove(course)}
-                  onReject={() => handleReject(course)}
-                  onDeactivate={() => handleDeactivate(course)}
-                  canViewParticipants={canViewParticipants}
-                  onViewParticipants={() => setParticipantCourse(course)}
-                  onViewHistory={() => setHistoryCourse(course)}
-                  onEdit={() => handleEditCourse(course)}
-                  creatingDraft={creatingDraftCourseId === course.id}
-                />
-              ))}
-            </tbody>
-          </table>
+        <div className="bg-card border border-hairline rounded-lg">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-hairline text-left text-secondary">
+                  <SortableTh label="Training" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortableTh label="Version" columnKey="version" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                  <SortableTh label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                  <SortableTh label="Synopsis" columnKey="synopsis" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <th className="px-4 py-2 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageItems.map((course) => (
+                  <CourseRow
+                    key={course.id}
+                    course={course}
+                    canModerate={isApprover}
+                    actioning={actioningId === course.id}
+                    rejecting={rejectingId === course.id}
+                    rejectionReason={rejectionReason}
+                    onRejectionReasonChange={setRejectionReason}
+                    onStartReject={() => setRejectingId(course.id)}
+                    onCancelReject={() => {
+                      setRejectingId(null)
+                      setRejectionReason('')
+                    }}
+                    onApprove={() => handleApprove(course)}
+                    onReject={() => handleReject(course)}
+                    onDeactivate={() => handleDeactivate(course)}
+                    canViewParticipants={canViewParticipants}
+                    onViewParticipants={() => setParticipantCourse(course)}
+                    onViewHistory={() => setHistoryCourse(course)}
+                    onEdit={() => handleEditCourse(course)}
+                    creatingDraft={creatingDraftCourseId === course.id}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <TablePagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalItems={totalItems} idPrefix="provider-training" />
         </div>
       )}
 
@@ -763,9 +807,10 @@ function CourseRow({
         <p className="font-mono text-xs text-secondary mt-0.5">{course.course_code || 'Not set'}</p>
       </td>
       <td className="px-4 py-3 whitespace-nowrap">
-        <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
-          Version {course.version_number} · {STATUS_LABELS[course.status] ?? course.status}
-        </span>
+        <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{course.version_number}</span>
+      </td>
+      <td className="px-4 py-3 whitespace-nowrap">
+        <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{STATUS_LABELS[course.status] ?? course.status}</span>
         {course.status === 'rejected' && course.rejection_reason && (
           <p className="text-xs text-red-700 mt-1">Rejected: {course.rejection_reason}</p>
         )}
