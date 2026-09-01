@@ -6,10 +6,12 @@ import AccessibleDialog from './AccessibleDialog'
 
 // A lighter-weight picker than FindSkillModal's full add-a-skill wizard --
 // no tracking-reason or self-assessment steps, since this only needs to
-// resolve which skill an activity being logged relates to. Runs an AI
+// resolve which skill(s) an activity being logged relates to. Runs an AI
 // suggestion once on open using whatever activity text was already typed,
-// rather than per keystroke, to keep this to a single request.
-export default function SkillPickerModal({ activityTitle, activityDescription, skills, onSelect, onClose }) {
+// rather than per keystroke, to keep this to a single request. Supports
+// picking more than one skill in a single visit -- toggled into `chosen`
+// and confirmed together, rather than closing after the first pick.
+export default function SkillPickerModal({ activityTitle, activityDescription, skills, onConfirm, onClose }) {
   const { user } = useAuth()
   const [query, setQuery] = useState('')
   const [suggestions, setSuggestions] = useState([])
@@ -17,6 +19,7 @@ export default function SkillPickerModal({ activityTitle, activityDescription, s
   const [suggestionError, setSuggestionError] = useState(null)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState(null)
+  const [chosen, setChosen] = useState(new Map())
 
   useEffect(() => {
     if (!activityTitle?.trim()) return
@@ -50,21 +53,36 @@ export default function SkillPickerModal({ activityTitle, activityDescription, s
 
   const exactMatch = skills.some((s) => s.name.toLowerCase() === query.trim().toLowerCase())
 
-  async function selectByName(name) {
+  function toggleChosen(skill) {
+    setChosen((current) => {
+      const next = new Map(current)
+      if (next.has(skill.id)) next.delete(skill.id)
+      else next.set(skill.id, skill)
+      return next
+    })
+  }
+
+  async function chooseByName(name) {
     const existing = skills.find((s) => s.name.toLowerCase() === name.trim().toLowerCase())
     if (existing) {
-      onSelect(existing)
+      toggleChosen(existing)
       return
     }
     setCreating(true)
     setError(null)
     try {
       const { skill } = await findOrCreatePersonalSkill(user.id, name)
-      onSelect(skill)
+      setChosen((current) => new Map(current).set(skill.id, skill))
+      setQuery('')
     } catch (err) {
       setError(err.message)
+    } finally {
       setCreating(false)
     }
+  }
+
+  function handleConfirm() {
+    onConfirm([...chosen.values()])
   }
 
   return (
@@ -75,9 +93,11 @@ export default function SkillPickerModal({ activityTitle, activityDescription, s
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
       <h2 id="skill-picker-dialog-title" className="font-display text-2xl text-ink mb-1">
-        Choose a skill
+        Choose skills
       </h2>
-      <p className="text-sm text-secondary mb-4">Pick one of your skills, or create a new one.</p>
+      <p className="text-sm text-secondary mb-4">
+        Pick as many of your skills as apply, or create a new one.
+      </p>
 
       {loadingSuggestions && <p className="text-sm text-secondary mb-3">Finding likely skills…</p>}
       {suggestionError && (
@@ -88,19 +108,26 @@ export default function SkillPickerModal({ activityTitle, activityDescription, s
       {!loadingSuggestions && suggestions.length > 0 && (
         <div className="mb-4">
           <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">Suggested</h3>
-          <div className="space-y-2">
-            {suggestions.map((s) => (
-              <button
-                key={s.name}
-                type="button"
-                disabled={creating}
-                onClick={() => selectByName(s.name)}
-                className="w-full text-left rounded-md border border-hairline bg-paper px-3 py-2 hover:border-moss/60 transition-colors disabled:opacity-60"
-              >
-                <span className="block text-sm font-medium text-ink">{s.name}</span>
-                <span className="block text-xs text-secondary mt-0.5">{s.reason}</span>
-              </button>
-            ))}
+          <div className="divide-y divide-hairline">
+            {suggestions.map((s) => {
+              const existing = skills.find((sk) => sk.name.toLowerCase() === s.name.toLowerCase())
+              const isChosen = existing ? chosen.has(existing.id) : false
+              return (
+                <label key={s.name} className="flex items-start gap-3 py-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isChosen}
+                    disabled={creating}
+                    onChange={() => chooseByName(s.name)}
+                    className="mt-1 size-4 accent-moss"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium text-ink">{s.name}</span>
+                    <span className="block text-xs text-secondary mt-0.5">{s.reason}</span>
+                  </span>
+                </label>
+              )
+            })}
           </div>
         </div>
       )}
@@ -115,17 +142,16 @@ export default function SkillPickerModal({ activityTitle, activityDescription, s
       <div className="max-h-48 overflow-y-auto mt-3 mb-3 divide-y divide-hairline">
         {filtered.length === 0 && <p className="text-sm text-secondary py-2">No matches.</p>}
         {filtered.map((s) => (
-          <div key={s.id} className="flex items-center justify-between gap-2 py-2">
-            <span className="text-sm text-ink truncate min-w-0">{s.name}</span>
-            <button
-              type="button"
+          <label key={s.id} className="flex items-center gap-3 py-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={chosen.has(s.id)}
               disabled={creating}
-              onClick={() => onSelect(s)}
-              className="shrink-0 rounded-md border border-hairline text-ink py-1 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-            >
-              Select
-            </button>
-          </div>
+              onChange={() => toggleChosen(s)}
+              className="size-4 accent-moss shrink-0"
+            />
+            <span className="text-sm text-ink truncate min-w-0">{s.name}</span>
+          </label>
         ))}
       </div>
 
@@ -135,17 +161,26 @@ export default function SkillPickerModal({ activityTitle, activityDescription, s
         </p>
       )}
 
+      {query.trim() && !exactMatch && (
+        <button
+          type="button"
+          disabled={creating}
+          onClick={() => chooseByName(query)}
+          className="w-full mb-3 rounded-md border border-hairline text-ink py-2 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+        >
+          {creating ? 'Creating…' : `+ Create "${query.trim()}"`}
+        </button>
+      )}
+
       <div className="flex items-center gap-2">
-        {query.trim() && !exactMatch && (
-          <button
-            type="button"
-            disabled={creating}
-            onClick={() => selectByName(query)}
-            className="flex-1 rounded-md border border-hairline text-ink py-2 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-          >
-            {creating ? 'Creating…' : `+ Create "${query.trim()}"`}
-          </button>
-        )}
+        <button
+          type="button"
+          disabled={chosen.size === 0 || creating}
+          onClick={handleConfirm}
+          className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
+        >
+          {`Add ${chosen.size || ''} skill${chosen.size === 1 ? '' : 's'}`}
+        </button>
         <button
           type="button"
           onClick={onClose}

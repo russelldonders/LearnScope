@@ -4,7 +4,8 @@ import {
   experienceTrail,
   provenanceFromStatement,
   relatedExperienceFromStatement,
-  relatedSkillFromStatement,
+  relatedSkillsFromStatement,
+  SKILL_EXTENSION_IRI,
 } from './xapiStatement'
 
 describe('skill activity context', () => {
@@ -14,16 +15,45 @@ describe('skill activity context', () => {
       verbValue: 'experienced',
       activityName: 'Solved a graph traversal problem',
       timestamp: '2026-08-30',
-      relatedSkill: { id: 'skill-1', name: 'Algorithms' },
+      relatedSkills: [{ id: 'skill-1', name: 'Algorithms' }],
       relatedExperience: { id: 'experience-1', title: 'Computer Science', type: 'subject' },
     })
 
-    expect(relatedSkillFromStatement(statement)).toEqual({ id: 'skill-1', name: 'Algorithms' })
+    expect(relatedSkillsFromStatement(statement)).toEqual([{ id: 'skill-1', name: 'Algorithms' }])
     expect(relatedExperienceFromStatement(statement)).toEqual({
       id: 'experience-1',
       title: 'Computer Science',
       type: 'subject',
     })
+  })
+
+  it('records every related skill when more than one is picked', () => {
+    const statement = buildStatement({
+      actor: { name: 'Learner', email: 'learner@example.com' },
+      verbValue: 'experienced',
+      activityName: 'Ran a retro for the team',
+      timestamp: '2026-08-30',
+      relatedSkills: [
+        { id: 'skill-1', name: 'Facilitation' },
+        { id: 'skill-2', name: 'Communication' },
+      ],
+    })
+
+    expect(relatedSkillsFromStatement(statement)).toEqual([
+      { id: 'skill-1', name: 'Facilitation' },
+      { id: 'skill-2', name: 'Communication' },
+    ])
+  })
+
+  it('normalizes a pre-multi-skill statement (a single object, not an array) to an array', () => {
+    const legacyStatement = {
+      context: { extensions: { [SKILL_EXTENSION_IRI]: { id: 'skill-1', name: 'Algorithms' } } },
+    }
+    expect(relatedSkillsFromStatement(legacyStatement)).toEqual([{ id: 'skill-1', name: 'Algorithms' }])
+  })
+
+  it('returns an empty array when no skill is related', () => {
+    expect(relatedSkillsFromStatement({})).toEqual([])
   })
 
   it('carries the parent education/job alongside a subject or project so the trail survives on the statement', () => {
@@ -32,7 +62,7 @@ describe('skill activity context', () => {
       verbValue: 'experienced',
       activityName: 'Solved a graph traversal problem',
       timestamp: '2026-08-30',
-      relatedSkill: { id: 'skill-1', name: 'Algorithms' },
+      relatedSkills: [{ id: 'skill-1', name: 'Algorithms' }],
       relatedExperience: {
         id: 'experience-1',
         title: 'Advanced Databases',
@@ -54,7 +84,7 @@ describe('provenance', () => {
       verbValue: 'practiced',
       activityName: 'Morning run',
       timestamp: '2026-08-30',
-      relatedSkill: { id: 'skill-1', name: 'Running' },
+      relatedSkills: [{ id: 'skill-1', name: 'Running' }],
       provenance: { source: 'strava', externalId: '123456789' },
     })
 
@@ -67,7 +97,7 @@ describe('provenance', () => {
       verbValue: 'experienced',
       activityName: 'Solved a graph traversal problem',
       timestamp: '2026-08-30',
-      relatedSkill: { id: 'skill-1', name: 'Algorithms' },
+      relatedSkills: [{ id: 'skill-1', name: 'Algorithms' }],
     })
 
     expect(provenanceFromStatement(statement)).toBeNull()

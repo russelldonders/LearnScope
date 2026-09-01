@@ -34,7 +34,7 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
   const [date, setDate] = useState(todayDate())
   const [durationHours, setDurationHours] = useState('')
   const [durationMinutes, setDurationMinutes] = useState('')
-  const [selectedSkill, setSelectedSkill] = useState(null)
+  const [selectedSkills, setSelectedSkills] = useState([])
   const [skillPickerOpen, setSkillPickerOpen] = useState(false)
   const [relatedExperienceId, setRelatedExperienceId] = useState('')
   const [saving, setSaving] = useState(false)
@@ -61,8 +61,8 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
     try {
       if (!activityTitle.trim()) throw new Error('An activity name is required.')
       if (!date) throw new Error('A date is required.')
-      const relatedSkill = fixedSkill ?? selectedSkill
-      if (!relatedSkill) throw new Error('Choose the skill this activity contributed to.')
+      const relatedSkills = fixedSkill ? [fixedSkill] : selectedSkills
+      if (relatedSkills.length === 0) throw new Error('Choose at least one skill this activity contributed to.')
       const selectedExperience = experiences.find((experience) => experience.id === relatedExperienceId)
       const relatedExperience = fixedExperience ?? selectedExperience ?? null
       statement = buildStatement({
@@ -71,7 +71,7 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
         activityName: activityTitle.trim(),
         description: description.trim() || null,
         timestamp: date,
-        relatedSkill,
+        relatedSkills,
         relatedExperience,
         durationHours,
         durationMinutes,
@@ -102,10 +102,10 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
         <h2 id="record-activity-dialog-title" className="font-display text-2xl text-ink mb-1">Log skill activity</h2>
         <p className="text-sm text-secondary mb-4">
           {fixedExperience
-            ? `Capture one thing you did within “${fixedExperience.title}” and the skill it helped you develop.`
+            ? `Capture one thing you did within “${fixedExperience.title}” and the skill(s) it helped you develop.`
             : fixedSkill
               ? `Capture one thing you did that contributed to “${fixedSkill.name}”.`
-              : 'Capture one thing you did and the skill it helped you develop.'}
+              : 'Capture one thing you did and the skill(s) it helped you develop.'}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -163,13 +163,37 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
 
           {!fixedSkill && (
             <div>
-              <span className="block text-sm text-secondary mb-1">Skill</span>
+              <span className="block text-sm text-secondary mb-1">Skills</span>
+              {selectedSkills.length > 0 && (
+                <ul className="flex flex-wrap gap-1.5 mb-2">
+                  {selectedSkills.map((s) => (
+                    <li
+                      key={s.id}
+                      className="inline-flex items-center gap-1 rounded-full border border-hairline bg-paper pl-2.5 pr-1 py-1 text-xs text-ink"
+                    >
+                      {s.name}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSkills((current) => current.filter((sk) => sk.id !== s.id))}
+                        aria-label={`Remove ${s.name}`}
+                        className="rounded-full p-0.5 text-secondary hover:text-ink"
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
               <button
                 type="button"
                 onClick={() => setSkillPickerOpen(true)}
                 className="w-full text-left rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
               >
-                {selectedSkill ? selectedSkill.name : <span className="text-secondary">Choose a skill…</span>}
+                {selectedSkills.length > 0 ? (
+                  '+ Add another skill'
+                ) : (
+                  <span className="text-secondary">Choose a skill…</span>
+                )}
               </button>
             </div>
           )}
@@ -323,9 +347,9 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
           <SkillPickerModal
             activityTitle={activityTitle}
             activityDescription={description}
-            skills={skills}
-            onSelect={(skill) => {
-              setSelectedSkill(skill)
+            skills={skills.filter((s) => !selectedSkills.some((sel) => sel.id === s.id))}
+            onConfirm={(newlySelected) => {
+              setSelectedSkills((current) => [...current, ...newlySelected])
               setSkillPickerOpen(false)
             }}
             onClose={() => setSkillPickerOpen(false)}

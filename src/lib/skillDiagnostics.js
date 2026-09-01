@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient'
 import { DIAGNOSTIC_EXTENSION_IRI, SKILL_EXTENSION_IRI } from './xapiStatement'
+import { insertStatementSkillLinks } from './activitySkillLinks'
 
 const DIAGNOSTIC_VERB_IRI = 'https://learnscope.app/xapi/verbs/assessed'
 
@@ -75,19 +76,24 @@ export async function saveDiagnosticAttempt({
     },
     context: {
       extensions: {
-        [SKILL_EXTENSION_IRI]: { id: skill.id, name: skill.name },
+        [SKILL_EXTENSION_IRI]: [{ id: skill.id, name: skill.name }],
       },
     },
     timestamp: new Date().toISOString(),
   }
 
-  const { error } = await supabase.from('xapi_statements').insert({
-    user_id: user.id,
-    statement,
-    recorded_at: statement.timestamp,
-    skill_id: skill.id,
-  })
+  const { data, error } = await supabase
+    .from('xapi_statements')
+    .insert({
+      user_id: user.id,
+      statement,
+      recorded_at: statement.timestamp,
+      skill_id: skill.id,
+    })
+    .select('id')
+    .single()
   if (error) throw error
+  await insertStatementSkillLinks(user.id, data.id, [skill.id])
 
   return { score, total }
 }
@@ -190,17 +196,22 @@ export async function saveInterviewAttempt({
     },
     context: {
       extensions: {
-        [SKILL_EXTENSION_IRI]: { id: skill.id, name: skill.name },
+        [SKILL_EXTENSION_IRI]: [{ id: skill.id, name: skill.name }],
       },
     },
     timestamp: new Date().toISOString(),
   }
 
-  const { error } = await supabase.from('xapi_statements').insert({
-    user_id: user.id,
-    statement,
-    recorded_at: statement.timestamp,
-    skill_id: skill.id,
-  })
+  const { data, error } = await supabase
+    .from('xapi_statements')
+    .insert({
+      user_id: user.id,
+      statement,
+      recorded_at: statement.timestamp,
+      skill_id: skill.id,
+    })
+    .select('id')
+    .single()
   if (error) throw error
+  await insertStatementSkillLinks(user.id, data.id, [skill.id])
 }

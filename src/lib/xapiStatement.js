@@ -38,8 +38,9 @@ function activitySlug(name) {
   )
 }
 
-function buildActivityId(activityName, relatedSkill) {
-  const scope = relatedSkill ? `skill-${relatedSkill.id}` : 'general'
+function buildActivityId(activityName, relatedSkills) {
+  const primary = relatedSkills?.[0]
+  const scope = primary ? `skill-${primary.id}` : 'general'
   return `https://learnscope.app/activities/${scope}/${activitySlug(activityName)}`
 }
 
@@ -68,14 +69,15 @@ export function formatDuration(statement) {
 
 // Builds a spec-shaped xAPI statement from the guided-form fields.
 // actor: { name, email }. verbValue: one of XAPI_VERBS[].value.
-// relatedSkill: optional { id, name } recorded as a context extension.
+// relatedSkills: [{ id, name }], recorded as a context extension -- one
+// activity can relate to more than one skill.
 export function buildStatement({
   actor,
   verbValue,
   activityName,
   description,
   timestamp,
-  relatedSkill,
+  relatedSkills,
   relatedExperience,
   provenance,
   durationHours,
@@ -83,6 +85,8 @@ export function buildStatement({
 }) {
   const verb = XAPI_VERBS.find((v) => v.value === verbValue)
   if (!verb) throw new Error('Choose a valid verb.')
+
+  const skills = relatedSkills ?? []
 
   const statement = {
     id: crypto.randomUUID(),
@@ -96,7 +100,7 @@ export function buildStatement({
       display: { 'en-US': verb.label },
     },
     object: {
-      id: buildActivityId(activityName, relatedSkill),
+      id: buildActivityId(activityName, skills),
       objectType: 'Activity',
       definition: {
         name: { 'en-US': activityName },
@@ -109,10 +113,10 @@ export function buildStatement({
   const duration = buildDuration(durationHours, durationMinutes)
   if (duration) statement.result = { duration }
 
-  if (relatedSkill || relatedExperience || provenance) {
+  if (skills.length > 0 || relatedExperience || provenance) {
     statement.context = { extensions: {} }
-    if (relatedSkill) {
-      statement.context.extensions[SKILL_EXTENSION_IRI] = { id: relatedSkill.id, name: relatedSkill.name }
+    if (skills.length > 0) {
+      statement.context.extensions[SKILL_EXTENSION_IRI] = skills.map((s) => ({ id: s.id, name: s.name }))
     }
     if (relatedExperience) {
       statement.context.extensions[EXPERIENCE_EXTENSION_IRI] = {
@@ -150,8 +154,13 @@ export function verbLabel(statement) {
   return statement.verb?.id ?? '(verb)'
 }
 
-export function relatedSkillFromStatement(statement) {
-  return statement.context?.extensions?.[SKILL_EXTENSION_IRI] ?? null
+// Normalizes to an array regardless of whether the underlying statement
+// predates multi-skill support (a single { id, name } object) or was logged
+// since (an array) -- every reader gets one consistent shape either way.
+export function relatedSkillsFromStatement(statement) {
+  const value = statement.context?.extensions?.[SKILL_EXTENSION_IRI]
+  if (!value) return []
+  return Array.isArray(value) ? value : [value]
 }
 
 export function relatedExperienceFromStatement(statement) {

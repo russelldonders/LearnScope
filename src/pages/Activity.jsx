@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
 import ActivityRow from '../components/ActivityRow'
 import FilterRow from '../components/FilterRow'
-import { relatedSkillFromStatement, relatedExperienceFromStatement } from '../lib/xapiStatement'
+import { relatedSkillsFromStatement, relatedExperienceFromStatement } from '../lib/xapiStatement'
 import { XAPI_VERBS, XAPI_VERB_BY_IRI } from '../lib/xapiVerbs'
 
 const SORT_OPTIONS = [
@@ -52,22 +52,22 @@ export default function Activity() {
     setSkills(data ?? [])
   }
 
-  function goToActivity(row, relatedSkill, relatedExperience) {
+  function goToActivity(row, relatedSkills, relatedExperience) {
     if (relatedExperience) {
       navigate(`/experience/${relatedExperience.id}`, { state: { highlightActivityId: row.id } })
-    } else if (relatedSkill) {
-      navigate(`/skills/${relatedSkill.id}`, { state: { highlightActivityId: row.id } })
+    } else if (relatedSkills[0]) {
+      navigate(`/skills/${relatedSkills[0].id}`, { state: { highlightActivityId: row.id } })
     }
   }
 
   const filteredStatements = useMemo(() => {
     return statements
       .filter((row) => {
-        const relatedSkill = relatedSkillFromStatement(row.statement)
+        const relatedSkills = relatedSkillsFromStatement(row.statement)
         const verb = XAPI_VERB_BY_IRI[row.statement.verb?.id]?.value
         const happenedDate = row.recorded_at.slice(0, 10)
         return (
-          (!skillFilter || relatedSkill?.id === skillFilter) &&
+          (!skillFilter || relatedSkills.some((s) => s.id === skillFilter)) &&
           (!typeFilter || verb === typeFilter) &&
           (!dateFrom || happenedDate >= dateFrom) &&
           (!dateTo || happenedDate <= dateTo)
@@ -190,14 +190,14 @@ export default function Activity() {
             ) : (
               <div className="space-y-2">
                 {filteredStatements.map((row) => {
-                  const relatedSkill = relatedSkillFromStatement(row.statement)
+                  const relatedSkills = relatedSkillsFromStatement(row.statement)
                   const relatedExperience = relatedExperienceFromStatement(row.statement)
-                  const canNavigate = Boolean(relatedExperience || relatedSkill)
+                  const canNavigate = Boolean(relatedExperience || relatedSkills[0])
                   return (
                     <ActivityRow
                       key={row.id}
                       row={row}
-                      onClick={canNavigate ? () => goToActivity(row, relatedSkill, relatedExperience) : undefined}
+                      onClick={canNavigate ? () => goToActivity(row, relatedSkills, relatedExperience) : undefined}
                     />
                   )
                 })}

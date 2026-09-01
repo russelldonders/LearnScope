@@ -17,7 +17,8 @@ import AddExperienceButton from '../components/AddExperienceButton'
 import ConfirmDialog from '../components/ConfirmDialog'
 import RecordActivityModal from '../components/RecordActivityModal'
 import EvidenceAttachmentLink from '../components/EvidenceAttachmentLink'
-import { activityName, relatedSkillFromStatement, verbLabel } from '../lib/xapiStatement'
+import { activityName, relatedSkillsFromStatement, verbLabel } from '../lib/xapiStatement'
+import { insertStatementSkillLinks } from '../lib/activitySkillLinks'
 import { uploadEvidenceFiles } from '../lib/skillEvidence'
 import { linkSkillToExperiences } from '../lib/currentRole'
 import { addRecommendedSkills, recommendExperienceSkills } from '../lib/experienceSkillRecommendations'
@@ -280,22 +281,24 @@ export default function ExperienceDetail() {
   }
 
   async function handleLogActivity(statement, evidence) {
-    const relatedSkill = relatedSkillFromStatement(statement)
+    const relatedSkills = relatedSkillsFromStatement(statement)
+    const primarySkill = relatedSkills[0]
     const { data, error } = await supabase
       .from('xapi_statements')
       .insert({
         user_id: user.id,
         statement,
         recorded_at: statement.timestamp,
-        skill_id: relatedSkill.id,
+        skill_id: primarySkill.id,
         experience_id: item.id,
         evidence_url: evidence?.evidenceUrl || null,
       })
       .select()
       .single()
     if (error) throw error
+    await insertStatementSkillLinks(user.id, data.id, relatedSkills.map((s) => s.id))
     if (evidence?.files.length > 0) {
-      const paths = await uploadEvidenceFiles(user.id, relatedSkill.id, data.id, evidence.files)
+      const paths = await uploadEvidenceFiles(user.id, primarySkill.id, data.id, evidence.files)
       const { error: updateError } = await supabase
         .from('xapi_statements')
         .update({ evidence_paths: paths })
@@ -306,8 +309,11 @@ export default function ExperienceDetail() {
     // evidence the skill was applied here -- link it the same way an
     // explicit "Find a skill" link would, per the "reusable records"
     // principle (one association table, not a parallel notion of "skills
-    // touched by activities").
-    await linkSkillToExperiences(user.id, relatedSkill.id, [item.id])
+    // touched by activities"). Every related skill gets linked, not just
+    // the primary one.
+    for (const skill of relatedSkills) {
+      await linkSkillToExperiences(user.id, skill.id, [item.id])
+    }
     setActivityOpen(false)
     await loadLearning()
   }
@@ -865,6 +871,13 @@ export function getDevelopedSkills(skillLinks, assessments, item, today = new Da
     .filter(({ progress }) => progress.entryLevel && progress.endLevel > progress.entryLevel)
 }
 
+// An activity's statement carries its full related-skill list (not just the
+// row's primary skill_id) -- checked here rather than the column so a
+// skill tagged as a secondary related skill still counts as "worked on".
+function activityIncludesSkill(activity, skillId) {
+  return relatedSkillsFromStatement(activity.statement).some((s) => s.id === skillId)
+}
+
 function SkillDevelopmentList({ item, skillLinks, assessments, activities = [] }) {
   const [expandedSkillId, setExpandedSkillId] = useState(null)
   // "Skills developed" is scoped to skills with real logged activity against
@@ -872,7 +885,7 @@ function SkillDevelopmentList({ item, skillLinks, assessments, activities = [] }
   // nothing practiced yet, is "what they're working on" (see the Skills
   // tab), not evidence of development.
   const activeLinks = skillLinks.filter((link) =>
-    activities.some((activity) => activity.skill_id === link.skill_id)
+    activities.some((activity) => activityIncludesSkill(activity, link.skill_id))
   )
   const developedSkills = getDevelopedSkills(activeLinks, assessments, item)
   const developedIds = new Set(developedSkills.map(({ link }) => link.skill_id))
@@ -889,7 +902,7 @@ function SkillDevelopmentList({ item, skillLinks, assessments, activities = [] }
         <ul className="overflow-hidden rounded-md border border-hairline divide-y divide-hairline">
           {developedSkills.map(({ link, progress }) => {
             const expanded = expandedSkillId === link.skill_id
-            const activityCount = activities.filter((activity) => activity.skill_id === link.skill_id).length
+            const activityCount = activities.filter((activity) => activityIncludesSkill(activity, link.skill_id)).length
             return (
               <li key={link.skill_id} className="bg-paper/40">
                 <div className="p-3">
@@ -949,7 +962,7 @@ function SkillDevelopmentList({ item, skillLinks, assessments, activities = [] }
       {otherLinks.length > 0 && (
         <ul className="space-y-1.5">
           {otherLinks.map((link) => {
-            const activityCount = activities.filter((activity) => activity.skill_id === link.skill_id).length
+            const activityCount = activities.filter((activity) => activityIncludesSkill(activity, link.skill_id)).length
             return (
               <li
                 key={link.skill_id}
@@ -1128,6 +1141,7 @@ function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse, highligh
   if (event.type === 'activity') {
     const row = event.activity
     const evidencePaths = row.evidence_paths ?? []
+    const rowSkills = relatedSkillsFromStatement(row.statement)
     return (
       <div
         className="flex gap-3"
@@ -1145,7 +1159,7 @@ function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse, highligh
             {activityName(row.statement)}
           </p>
           <p className="font-mono text-[10px] text-secondary mt-0.5">
-            {row.skills?.name ? `${row.skills.name} · ` : ''}{formatFullDate(row.recorded_at)}
+            {rowSkills.length > 0 ? `${rowSkills.map((s) => s.name).join(', ')} · ` : ''}{formatFullDate(row.recorded_at)}
           </p>
           {(row.evidence_url || evidencePaths.length > 0) && (
             <div className="flex flex-wrap items-center gap-3 mt-1">

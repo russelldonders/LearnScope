@@ -4,9 +4,10 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import RecordActivityModal from './RecordActivityModal'
 import ActivityRow from './ActivityRow'
-import { relatedSkillFromStatement, relatedExperienceFromStatement } from '../lib/xapiStatement'
+import { relatedSkillsFromStatement, relatedExperienceFromStatement } from '../lib/xapiStatement'
 import { uploadEvidenceFiles } from '../lib/skillEvidence'
 import { linkSkillToExperiences } from '../lib/currentRole'
+import { insertStatementSkillLinks } from '../lib/activitySkillLinks'
 
 const RECENT_LIMIT = 6
 
@@ -79,41 +80,45 @@ export default function RecordActivitySection() {
   }
 
   async function handleSave(statement, evidence) {
-    const relatedSkill = relatedSkillFromStatement(statement)
+    const relatedSkills = relatedSkillsFromStatement(statement)
     const relatedExperience = relatedExperienceFromStatement(statement)
+    const primarySkill = relatedSkills[0] ?? null
     const { data, error } = await supabase
       .from('xapi_statements')
       .insert({
         user_id: user.id,
         statement,
         recorded_at: statement.timestamp,
-        skill_id: relatedSkill?.id ?? null,
+        skill_id: primarySkill?.id ?? null,
         experience_id: relatedExperience?.id ?? null,
         evidence_url: evidence?.evidenceUrl || null,
       })
       .select()
       .single()
     if (error) throw error
+    await insertStatementSkillLinks(user.id, data.id, relatedSkills.map((s) => s.id))
     if (evidence?.files.length > 0) {
-      const paths = await uploadEvidenceFiles(user.id, relatedSkill.id, data.id, evidence.files)
+      const paths = await uploadEvidenceFiles(user.id, primarySkill.id, data.id, evidence.files)
       const { error: updateError } = await supabase
         .from('xapi_statements')
         .update({ evidence_paths: paths })
         .eq('id', data.id)
       if (updateError) throw updateError
     }
-    if (relatedSkill && relatedExperience) {
-      await linkSkillToExperiences(user.id, relatedSkill.id, [relatedExperience.id])
+    if (relatedExperience) {
+      for (const skill of relatedSkills) {
+        await linkSkillToExperiences(user.id, skill.id, [relatedExperience.id])
+      }
     }
     setModalOpen(false)
     await loadStatements()
   }
 
-  function goToActivity(row, relatedSkill, relatedExperience) {
+  function goToActivity(row, relatedSkills, relatedExperience) {
     if (relatedExperience) {
       navigate(`/experience/${relatedExperience.id}`, { state: { highlightActivityId: row.id } })
-    } else if (relatedSkill) {
-      navigate(`/skills/${relatedSkill.id}`, { state: { highlightActivityId: row.id } })
+    } else if (relatedSkills[0]) {
+      navigate(`/skills/${relatedSkills[0].id}`, { state: { highlightActivityId: row.id } })
     }
   }
 
@@ -143,14 +148,14 @@ export default function RecordActivitySection() {
 
       <div className="space-y-2">
         {statements.slice(0, RECENT_LIMIT).map((row) => {
-          const relatedSkill = relatedSkillFromStatement(row.statement)
+          const relatedSkills = relatedSkillsFromStatement(row.statement)
           const relatedExperience = relatedExperienceFromStatement(row.statement)
-          const canNavigate = Boolean(relatedExperience || relatedSkill)
+          const canNavigate = Boolean(relatedExperience || relatedSkills[0])
           return (
             <ActivityRow
               key={row.id}
               row={row}
-              onClick={canNavigate ? () => goToActivity(row, relatedSkill, relatedExperience) : undefined}
+              onClick={canNavigate ? () => goToActivity(row, relatedSkills, relatedExperience) : undefined}
             />
           )
         })}

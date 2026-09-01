@@ -19,6 +19,7 @@ import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
 import { activityName, verbLabel, formatDuration, isDiagnosticStatement, relatedExperienceFromStatement, experienceTrail, provenanceFromStatement, PROVENANCE_SOURCE_LABELS } from '../lib/xapiStatement'
 import { applyCurrentRoleSelection, getCurrentRoleTrackingStatus, trackUnderCurrentRole } from '../lib/currentRole'
+import { fetchStatementsForSkill, insertStatementSkillLinks } from '../lib/activitySkillLinks'
 import CurrentRoleSelectModal from '../components/CurrentRoleSelectModal'
 import AccessibleDialog from '../components/AccessibleDialog'
 import { listTags, listSkillTags, addTagToSkill, removeSkillTagLink } from '../lib/skillTags'
@@ -140,7 +141,7 @@ export default function SkillDetail() {
       { data: ratings },
       { data: sentInvites },
       { data: links },
-      { data: st },
+      st,
       tags,
       { data: skillTargets },
       { data: courses },
@@ -165,12 +166,7 @@ export default function SkillDetail() {
           .from('skill_experience_links')
           .select('id, created_at, experience(id, title, organization, type, start_date, end_date)')
           .eq('skill_id', skill.id),
-        supabase
-          .from('xapi_statements')
-          .select('*')
-          .eq('skill_id', skill.id)
-          .eq('user_id', user.id)
-          .order('recorded_at', { ascending: false }),
+        fetchStatementsForSkill(skill.id),
         listSkillTags(skill.id),
         supabase
           .from('skill_targets')
@@ -261,6 +257,7 @@ export default function SkillDetail() {
       .select()
       .single()
     if (error) throw error
+    await insertStatementSkillLinks(user.id, data.id, [skill.id])
     if (evidence?.files.length > 0) {
       const paths = await uploadEvidenceFiles(user.id, skill.id, data.id, evidence.files)
       const { error: updateError } = await supabase

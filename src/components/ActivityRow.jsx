@@ -1,12 +1,12 @@
 import EvidenceAttachmentLink from './EvidenceAttachmentLink'
-import { activityName, verbLabel, relatedSkillFromStatement, relatedExperienceFromStatement, experienceTrail, formatDuration } from '../lib/xapiStatement'
+import { activityName, verbLabel, relatedSkillsFromStatement, relatedExperienceFromStatement, experienceTrail, formatDuration } from '../lib/xapiStatement'
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 
 // A single logged skill activity, shared by the dashboard's capped "Skill
 // activity" list and the full /activity page -- same card, same optional
 // click-to-navigate behaviour, so the two never drift apart visually.
 export default function ActivityRow({ row, onClick }) {
-  const relatedSkill = relatedSkillFromStatement(row.statement)
+  const relatedSkills = relatedSkillsFromStatement(row.statement)
   const relatedExperience = relatedExperienceFromStatement(row.statement)
   const duration = formatDuration(row.statement)
   const evidencePaths = row.evidence_paths ?? []
@@ -33,7 +33,7 @@ export default function ActivityRow({ row, onClick }) {
       <p className="font-mono text-xs text-secondary mt-0.5" title={formatAbsoluteDate(row.recorded_at)}>
         {formatRelativeDate(row.recorded_at)}
         {duration ? ` · ${duration}` : ''}
-        {relatedSkill ? ` · ${relatedSkill.name}` : ''}
+        {relatedSkills.length > 0 ? ` · ${relatedSkills.map((s) => s.name).join(', ')}` : ''}
         {relatedExperience ? ` · ${experienceTrail(relatedExperience)}` : ''}
       </p>
       {row.statement.object?.definition?.description?.['en-US'] && (

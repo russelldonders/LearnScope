@@ -26,6 +26,7 @@ import { LEVEL_LABELS } from '../lib/levels'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
 import { isDiagnosticStatement } from '../lib/xapiStatement'
+import { insertStatementSkillLinks } from '../lib/activitySkillLinks'
 import { uploadEvidenceFiles } from '../lib/skillEvidence'
 import { isSelfAssessmentDue, todayDateString } from '../lib/checkin'
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
@@ -244,7 +245,7 @@ async function loadUpNextRecommendations(userId) {
     { data: assessments },
     { data: peerRatings },
     { data: sentInvites },
-    { data: statements },
+    { data: statementLinks },
     { data: courseLinks },
     { data: targets },
     { data: validationRequests },
@@ -253,7 +254,15 @@ async function loadUpNextRecommendations(userId) {
     supabase.from('skill_peer_ratings').select('skill_id').in('skill_id', ids),
     // invite_type='rate' only -- see the matching filter in SkillDetail.jsx.
     supabase.from('connection_invites').select('skill_id').in('skill_id', ids).eq('invite_type', 'rate'),
-    supabase.from('xapi_statements').select('skill_id, statement').eq('user_id', userId).in('skill_id', ids),
+    // Reads through xapi_statement_skills (every related skill, primary
+    // included, see 20260901090000) rather than xapi_statements.skill_id
+    // directly, so an activity logged against several skills counts for
+    // all of them, not just whichever was picked first.
+    supabase
+      .from('xapi_statement_skills')
+      .select('skill_id, xapi_statements(statement)')
+      .eq('user_id', userId)
+      .in('skill_id', ids),
     supabase.from('skill_course_links').select('skill_id, courses(completed_date)').in('skill_id', ids),
     supabase.from('skill_targets').select('skill_id').in('skill_id', ids),
     supabase.from('skill_validation_requests').select('skill_id, status').in('skill_id', ids),
@@ -279,7 +288,9 @@ async function loadUpNextRecommendations(userId) {
   // Excludes the Confirming Baseline knowledge quiz's own xAPI attempt --
   // that's knowledge-axis evidence, not practical activity (see
   // isDiagnosticStatement / SkillDetail.jsx for the full reasoning).
-  const statementCounts = countBy((statements ?? []).filter((s) => !isDiagnosticStatement(s.statement)))
+  const statementCounts = countBy(
+    (statementLinks ?? []).filter((link) => link.xapi_statements && !isDiagnosticStatement(link.xapi_statements.statement))
+  )
   const targetSkillIds = new Set((targets ?? []).map((t) => t.skill_id))
   const pendingValidationSkillIds = new Set(
     (validationRequests ?? []).filter((r) => r.status === 'pending').map((r) => r.skill_id)
@@ -970,6 +981,7 @@ function UpNextActionTrigger({ skill, item, className, children, onDone }) {
       .select()
       .single()
     if (error) throw error
+    await insertStatementSkillLinks(user.id, data.id, [skill.id])
     if (evidence?.files.length > 0) {
       const paths = await uploadEvidenceFiles(user.id, skill.id, data.id, evidence.files)
       const { error: updateError } = await supabase

@@ -7,6 +7,7 @@ import { getEvidenceSignedUrl } from '../lib/skillEvidence'
 import { decideValidationRequest } from '../lib/skillValidationRequests'
 import { LEVEL_LABELS } from '../lib/levels'
 import { activityName, verbLabel } from '../lib/xapiStatement'
+import { fetchStatementsForSkill } from '../lib/activitySkillLinks'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 
@@ -63,7 +64,7 @@ export default function ValidateRequest() {
 
     const isValidator = req.validator_id === user.id
     if (isValidator) {
-      const [{ data: sk }, { data: ass }, { data: ratings }, { data: courses }, { data: st }] = await Promise.all([
+      const [{ data: sk }, { data: ass }, { data: ratings }, { data: courses }, st] = await Promise.all([
         supabase.from('skills').select('*').eq('id', req.skill_id).single(),
         supabase
           .from('skill_assessments')
@@ -75,13 +76,13 @@ export default function ValidateRequest() {
           .from('skill_course_links')
           .select('id, courses(name, completed_date)')
           .eq('skill_id', req.skill_id),
-        supabase.from('xapi_statements').select('*').eq('skill_id', req.skill_id).order('recorded_at', { ascending: false }),
+        fetchStatementsForSkill(req.skill_id),
       ])
       setSkill(sk ?? null)
       setAssessments(ass ?? [])
       setPeerRatings(ratings ?? [])
       setCourseLinks(courses ?? [])
-      setStatements(st ?? [])
+      setStatements(st)
 
       const raterIds = [...new Set((ratings ?? []).map((r) => r.rater_id).filter(Boolean))]
       if (raterIds.length > 0) {

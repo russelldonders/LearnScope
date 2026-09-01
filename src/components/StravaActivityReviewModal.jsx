@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { findOrCreateLibrarySkill } from '../lib/skillLibrary'
 import { buildStatement, provenanceFromStatement } from '../lib/xapiStatement'
+import { insertStatementSkillLinks } from '../lib/activitySkillLinks'
 import { suggestedSkillNameForActivity } from '../lib/strava'
 import { formatMonthYear } from '../lib/dates'
 import AccessibleDialog from './AccessibleDialog'
@@ -147,19 +148,24 @@ export default function StravaActivityReviewModal({ activities, onClose, onImpor
           activityName: activity.name,
           description: `Synced from Strava${distance ? ` · ${distance}` : ''}`,
           timestamp: activity.startDate,
-          relatedSkill: { id: skillId, name: skillName },
+          relatedSkills: [{ id: skillId, name: skillName }],
           provenance: { source: 'strava', externalId: activity.id },
           durationHours: Math.floor(durationSeconds / 3600),
           durationMinutes: Math.round((durationSeconds % 3600) / 60),
         })
 
-        const { error: insertError } = await supabase.from('xapi_statements').insert({
-          user_id: user.id,
-          statement,
-          recorded_at: statement.timestamp,
-          skill_id: skillId,
-        })
+        const { data: inserted, error: insertError } = await supabase
+          .from('xapi_statements')
+          .insert({
+            user_id: user.id,
+            statement,
+            recorded_at: statement.timestamp,
+            skill_id: skillId,
+          })
+          .select('id')
+          .single()
         if (insertError) throw insertError
+        await insertStatementSkillLinks(user.id, inserted.id, [skillId])
       }
 
       onImported(totalSelected)
