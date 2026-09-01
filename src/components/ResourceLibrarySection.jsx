@@ -39,11 +39,12 @@ const TYPE_LABELS = {
 const STATUS_LABELS = { draft: 'Draft', inactive: 'Previous version', published: 'Published' }
 
 const RESOURCE_SORT_ACCESSORS = {
-  id: (r) => r.id ?? '',
+  code: (r) => r.resource_code?.toLowerCase() ?? '',
   title: (r) => r.title?.toLowerCase() ?? '',
   type: (r) => TYPE_LABELS[r.type] ?? r.type ?? '',
   version: (r) => r.version_number ?? 1,
   status: (r) => STATUS_LABELS[r.status] ?? r.status ?? '',
+  live: (r) => (r.is_current_published ? 1 : r.publishedVersionNumber ? 1 : 0),
 }
 
 // An organisation's whole content library -- upload once here, then attach
@@ -189,6 +190,30 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
     try {
       await createResourceDraftVersion(resource.id)
       await load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  // Unified "Edit" for the types with an in-place editor (video/screen
+  // recording, page) -- a published version can't be edited directly, so
+  // instead of making a provider first hit a separate "Create new version"
+  // button and then find and click a second "Edit" on the row that
+  // appears, this does both in one step: create the draft version, reload
+  // so the row reflects it, then open the editor on that fresh row. A
+  // resource already in draft just opens straight away.
+  async function handleEdit(resource) {
+    setError(null)
+    try {
+      let target = resource
+      if (resource.status !== 'draft') {
+        const newId = await createResourceDraftVersion(resource.id)
+        const refreshed = await listOrganisationResources(organisationId)
+        setResources(refreshed)
+        target = refreshed.find((r) => r.id === newId) ?? resource
+      }
+      if (resource.type === 'page') setEditingPage(target)
+      else setEditingResource(target)
     } catch (err) {
       setError(err.message)
     }
@@ -398,11 +423,12 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-hairline text-left text-secondary">
-                  <SortableTh label="ID" columnKey="id" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                  <SortableTh label="ID" columnKey="code" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   <SortableTh label="Resource" columnKey="title" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <SortableTh label="Type" columnKey="type" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   <SortableTh label="Version" columnKey="version" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   <SortableTh label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                  <SortableTh label="Live for learners" columnKey="live" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   <th className="px-4 py-2 font-medium"></th>
                 </tr>
               </thead>
@@ -417,8 +443,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
                     historyOpen={historyForId === resource.id}
                     versionHistory={versionHistory}
                     onToggleHistory={() => handleToggleHistory(resource)}
-                    onEditVideo={() => setEditingResource(resource)}
-                    onEditPage={() => setEditingPage(resource)}
+                    onEdit={() => handleEdit(resource)}
                     onCreateVersion={() => handleCreateVersion(resource)}
                     onPublishVersion={() => handlePublishVersion(resource)}
                     onRemove={() => setPendingDelete(resource)}
@@ -483,6 +508,14 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
 // beneath the resource's own -- rather than cramming heterogeneous
 // content (video/SCORM/xAPI/iframe/PageContent, or a version list) into a
 // single expansion the way a simpler row-detail table might.
+// Video/screen-recording/page are the types with an in-place editor
+// (VideoEditorModal/PageBuilderModal); a single "Edit" button covers both
+// "open the existing draft" and "start a new draft from the published
+// version" (handleEdit above decides which). The other types (file, SCORM,
+// xAPI, external video, web link) have no in-place editor, so those keep
+// the plain "Create new version" action instead.
+const EDITABLE_TYPES = new Set(['video', 'screen_recording', 'page'])
+
 function ResourceRow({
   resource,
   userId,
@@ -491,16 +524,16 @@ function ResourceRow({
   historyOpen,
   versionHistory,
   onToggleHistory,
-  onEditVideo,
-  onEditPage,
+  onEdit,
   onCreateVersion,
   onPublishVersion,
   onRemove,
 }) {
+  const editable = EDITABLE_TYPES.has(resource.type)
   return (
     <Fragment>
       <tr className="border-b border-hairline last:border-0">
-        <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{resource.id.slice(0, 8)}</td>
+        <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{resource.resource_code}</td>
         <td className="px-4 py-3 text-ink font-medium truncate max-w-[220px]">{resource.title}</td>
         <td className="px-4 py-3 text-secondary whitespace-nowrap">{TYPE_LABELS[resource.type]}</td>
         <td className="px-4 py-3 whitespace-nowrap">
@@ -508,6 +541,13 @@ function ResourceRow({
         </td>
         <td className="px-4 py-3 whitespace-nowrap">
           <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{STATUS_LABELS[resource.status] ?? resource.status}</span>
+        </td>
+        <td className="px-4 py-3 text-secondary whitespace-nowrap">
+          {resource.is_current_published
+            ? 'Yes'
+            : resource.publishedVersionNumber
+              ? `Yes (v${resource.publishedVersionNumber})`
+              : '—'}
         </td>
         <td className="px-4 py-3">
           <div className="flex items-center gap-x-4 justify-end whitespace-nowrap">
@@ -528,17 +568,12 @@ function ResourceRow({
                 {previewing ? 'Hide preview' : 'Preview'}
               </button>
             )}
-            {(resource.type === 'video' || resource.type === 'screen_recording') && resource.status === 'draft' && (
-              <button type="button" onClick={onEditVideo} className="text-xs text-moss font-medium whitespace-nowrap">
-                Edit Video
+            {editable && (
+              <button type="button" onClick={onEdit} className="text-xs text-moss font-medium whitespace-nowrap">
+                Edit
               </button>
             )}
-            {resource.type === 'page' && resource.status === 'draft' && (
-              <button type="button" onClick={onEditPage} className="text-xs text-moss font-medium whitespace-nowrap">
-                Edit page
-              </button>
-            )}
-            {resource.status === 'published' && resource.is_current_published && (
+            {!editable && resource.status === 'published' && resource.is_current_published && (
               <button type="button" onClick={onCreateVersion} className="text-xs text-moss font-medium hover:underline whitespace-nowrap">
                 Create new version
               </button>
@@ -559,7 +594,7 @@ function ResourceRow({
       </tr>
       {previewing && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={6} className="px-4 pb-3">
+          <td colSpan={7} className="px-4 pb-3">
             {(resource.type === 'video' || resource.type === 'screen_recording') && (
               <EditedVideoPlayer resource={resource} className="w-full rounded-md bg-black" />
             )}
@@ -584,7 +619,7 @@ function ResourceRow({
       )}
       {historyOpen && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={6} className="px-4 pb-3">
+          <td colSpan={7} className="px-4 pb-3">
             <p className="mb-2 text-xs font-medium text-ink">Version history</p>
             <ul className="space-y-1.5">
               {versionHistory.map((version) => (

@@ -27,12 +27,25 @@ export async function listOrganisationResources(organisationId) {
     .order('created_at', { ascending: false })
   if (error) throw error
   const latestByGroup = new Map()
+  const publishedByGroup = new Map()
   for (const resource of data ?? []) {
     const groupId = resource.version_group_id ?? resource.id
     const current = latestByGroup.get(groupId)
     if (!current || (resource.version_number ?? 1) > (current.version_number ?? 1)) latestByGroup.set(groupId, resource)
+    if (resource.is_current_published) publishedByGroup.set(groupId, resource)
   }
-  return [...latestByGroup.values()]
+  // A draft version hides its published sibling from this list (only the
+  // latest version per group is returned) -- surfaced here so the UI can
+  // still show a provider that something is live for learners right now,
+  // distinct from the draft they're looking at.
+  return [...latestByGroup.values()].map((resource) => {
+    const groupId = resource.version_group_id ?? resource.id
+    const published = publishedByGroup.get(groupId)
+    return {
+      ...resource,
+      publishedVersionNumber: published && published.id !== resource.id ? published.version_number : null,
+    }
+  })
 }
 
 export async function listPublishedOrganisationResources(organisationId) {
