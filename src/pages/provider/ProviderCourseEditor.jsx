@@ -10,6 +10,8 @@ import ConfirmDialog from '../../components/ConfirmDialog'
 import AccessibleDialog from '../../components/AccessibleDialog'
 import CourseThumbnail from '../../components/CourseThumbnail'
 import ScreenRecorderModal from '../../components/ScreenRecorderModal'
+import PageBuilderModal from '../../components/PageBuilderModal'
+import PageContent from '../../components/PageContent'
 import {
   getCatalogueCourse,
   updateProviderCourse,
@@ -17,8 +19,10 @@ import {
   createDraftCourseVersion,
   uploadCourseImage,
   removeCourseImage,
+  listCurrentVersionCatalogues,
 } from '../../lib/admin/catalogue'
 import { listPublicationCatalogueOptions } from '../../lib/catalogues'
+import { assignProviderCourseToCatalogue } from '../../lib/admin/providerCatalogues'
 import {
   listCourseSections,
   createCourseSection,
@@ -36,6 +40,7 @@ import {
   uploadScormResource,
   uploadXapiResource,
   addWebResource,
+  addExternalVideoResource,
   contentFileUrl,
 } from '../../lib/courseContent'
 import { optimizeCourseImage, COURSE_IMAGE_MAX_INPUT_BYTES } from '../../lib/optimizeImage'
@@ -49,6 +54,7 @@ const TYPE_LABELS = {
   xapi: 'xAPI package',
   external_video: 'External video',
   web_url: 'Web link',
+  page: 'Page',
 }
 const STATUS_LABELS = {
   draft: 'Draft',
@@ -276,7 +282,13 @@ export function DragHandle({
   )
 }
 
-function PublishCourseDialog({ organisationId, submitting, onClose, onPublish }) {
+// Catalogue selection during publish is entirely optional -- publishing
+// makes this version the org's current live version, full stop. Pushing it
+// into a catalogue (so it's discoverable by learners) is a separate choice
+// layered on top, which is why nothing is pre-selected here: ticking a
+// catalogue is an explicit decision to also submit it for that catalogue's
+// approval, not something publishing should assume.
+function PublishCourseDialog({ organisationId, currentCatalogues, submitting, onClose, onPublish }) {
   const [catalogues, setCatalogues] = useState([])
   const [selectedIds, setSelectedIds] = useState([])
   const [loading, setLoading] = useState(true)
@@ -284,10 +296,7 @@ function PublishCourseDialog({ organisationId, submitting, onClose, onPublish })
 
   useEffect(() => {
     listPublicationCatalogueOptions(organisationId)
-      .then((options) => {
-        setCatalogues(options)
-        setSelectedIds(options.map((option) => option.id))
-      })
+      .then((options) => setCatalogues(options))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }, [organisationId])
@@ -298,6 +307,8 @@ function PublishCourseDialog({ organisationId, submitting, onClose, onPublish })
     )
   }
 
+  const willLeaveCurrentCatalogues = selectedIds.length === 0 && (currentCatalogues?.length ?? 0) > 0
+
   return (
     <AccessibleDialog
       labelledBy="publish-course-title"
@@ -306,9 +317,11 @@ function PublishCourseDialog({ organisationId, submitting, onClose, onPublish })
       closeOnBackdrop={!submitting}
       panelClassName="w-full max-w-lg rounded-xl bg-card border border-hairline p-5 shadow-xl"
     >
-      <h2 id="publish-course-title" className="font-display text-lg text-ink">Choose catalogues</h2>
+      <h2 id="publish-course-title" className="font-display text-lg text-ink">Publish this version</h2>
       <p id="publish-course-description" className="text-sm text-secondary mt-1 mb-5">
-        Select every catalogue this version should be published to after platform approval.
+        Publishing makes this the course's live version for your organisation. Optionally, choose one or more
+        catalogues to also submit it to for approval -- you can push it to a catalogue later instead if you'd
+        rather publish first.
       </p>
 
       {error && <p role="alert" className="text-sm text-red-700 mb-3">{error}</p>}
@@ -340,8 +353,12 @@ function PublishCourseDialog({ organisationId, submitting, onClose, onPublish })
         </div>
       )}
 
-      {!loading && selectedIds.length === 0 && (
-        <p className="text-xs text-red-700 mt-3">Select at least one catalogue.</p>
+      {willLeaveCurrentCatalogues && (
+        <p className="text-xs text-amber-700 mt-3">
+          This course is currently visible in {currentCatalogues.map((c) => c.name).join(', ')}. Publishing this
+          version with no catalogue selected will replace it there, and it won't be discoverable again until you
+          push this version to a catalogue.
+        </p>
       )}
       <div className="flex justify-end gap-2 mt-5">
         <button type="button" onClick={onClose} disabled={submitting} className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink hover:bg-paper disabled:opacity-50">
@@ -350,10 +367,113 @@ function PublishCourseDialog({ organisationId, submitting, onClose, onPublish })
         <button
           type="button"
           onClick={() => onPublish(selectedIds)}
+          disabled={submitting || loading}
+          className="rounded-md bg-moss px-3 py-1.5 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-50"
+        >
+          {submitting ? 'Publishing…' : selectedIds.length === 0 ? 'Publish' : 'Submit for approval'}
+        </button>
+      </div>
+    </AccessibleDialog>
+  )
+}
+
+// Standalone catalogue-push, independent of publishing (PublishCourseDialog
+// above) -- lets an already-published version be added to a catalogue at
+// any later point, not just at the moment it was first published. Mirrors
+// ProviderCatalogueDetail's own "Add course" flow (same
+// assignProviderCourseToCatalogue call), just reachable from the course's
+// own page instead of requiring a trip through a specific catalogue.
+function PushToCatalogueDialog({ organisationId, courseId, alreadyPublishedIds, onClose, onDone }) {
+  const [catalogues, setCatalogues] = useState([])
+  const [selectedIds, setSelectedIds] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    listPublicationCatalogueOptions(organisationId)
+      .then((options) => setCatalogues(options.filter((option) => !alreadyPublishedIds.includes(option.id))))
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false))
+    // alreadyPublishedIds is derived fresh from the loaded course each
+    // render -- re-running this on every identity change would refetch for
+    // no reason, and the dialog is remounted (key-less) whenever it's
+    // reopened anyway.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [organisationId])
+
+  function toggleCatalogue(id) {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((catalogueId) => catalogueId !== id) : [...current, id]
+    )
+  }
+
+  async function handlePush() {
+    setSubmitting(true)
+    setError(null)
+    try {
+      for (const catalogueId of selectedIds) {
+        await assignProviderCourseToCatalogue(catalogueId, courseId)
+      }
+      onDone()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <AccessibleDialog
+      labelledBy="push-catalogue-title"
+      describedBy="push-catalogue-description"
+      onClose={submitting ? undefined : onClose}
+      closeOnBackdrop={!submitting}
+      panelClassName="w-full max-w-lg rounded-xl bg-card border border-hairline p-5 shadow-xl"
+    >
+      <h2 id="push-catalogue-title" className="font-display text-lg text-ink">Push to catalogue</h2>
+      <p id="push-catalogue-description" className="text-sm text-secondary mt-1 mb-5">
+        Choose one or more catalogues to add this published version to. It becomes visible there as soon as it's
+        added -- a platform admin still has to approve anything added to the global catalogue.
+      </p>
+
+      {error && <p role="alert" className="text-sm text-red-700 mb-3">{error}</p>}
+      {loading ? (
+        <p role="status" className="text-sm text-secondary">Loading catalogues…</p>
+      ) : catalogues.length === 0 ? (
+        <p className="text-sm text-secondary">This version is already in every catalogue available to you.</p>
+      ) : (
+        <div className="divide-y divide-hairline border-y border-hairline">
+          {catalogues.map((catalogue) => (
+            <label key={catalogue.id} className="flex items-start gap-3 py-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(catalogue.id)}
+                onChange={() => toggleCatalogue(catalogue.id)}
+                className="mt-0.5 h-4 w-4 accent-moss"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-ink">{catalogue.name}</span>
+                {catalogue.description && (
+                  <span className="block text-xs text-secondary mt-0.5">{catalogue.description}</span>
+                )}
+              </span>
+            </label>
+          ))}
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2 mt-5">
+        <button type="button" onClick={onClose} disabled={submitting} className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink hover:bg-paper disabled:opacity-50">
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handlePush}
           disabled={submitting || loading || selectedIds.length === 0}
           className="rounded-md bg-moss px-3 py-1.5 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-50"
         >
-          {submitting ? 'Submitting…' : 'Submit for approval'}
+          {submitting ? 'Adding…' : 'Add to catalogue'}
         </button>
       </div>
     </AccessibleDialog>
@@ -397,7 +517,14 @@ export default function ProviderCourseEditor() {
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showPublishDialog, setShowPublishDialog] = useState(false)
+  const [showCatalogueDialog, setShowCatalogueDialog] = useState(false)
   const [saveError, setSaveError] = useState(null)
+  // Whichever version is currently live for this course (which may not be
+  // the one being edited -- a new draft starts with no publications of its
+  // own, 0107) -- surfaced so the publish dialog can warn if publishing
+  // with no catalogue selected would pull the course out of a catalogue
+  // it's currently visible in.
+  const [currentCatalogues, setCurrentCatalogues] = useState([])
 
   useEffect(() => {
     load()
@@ -422,6 +549,11 @@ export default function ProviderCourseEditor() {
             duration: data.duration ?? '',
             synopsis: data.synopsis ?? '',
           })
+        }
+        if (data.status === 'draft' || data.status === 'rejected') {
+          listCurrentVersionCatalogues(data.version_group_id)
+            .then(setCurrentCatalogues)
+            .catch(() => setCurrentCatalogues([]))
         }
       }
     } catch (err) {
@@ -466,6 +598,10 @@ export default function ProviderCourseEditor() {
 
   const myRole = (organisationMemberships ?? []).find((m) => m.organisation_id === course?.organisation_id)?.role
   const canEdit = Boolean(myRole) && (course?.status === 'draft' || course?.status === 'rejected')
+  const publishedCatalogues = (course?.course_catalogue_publications ?? [])
+    .filter((publication) => publication.published_at && publication.catalogues)
+    .map((publication) => publication.catalogues)
+  const publishedCatalogueIds = publishedCatalogues.map((catalogue) => catalogue.id)
 
   async function handleCreateDraftVersion() {
     setSaveError(null)
@@ -521,9 +657,23 @@ export default function ProviderCourseEditor() {
             {showPublishDialog && (
               <PublishCourseDialog
                 organisationId={course.organisation_id}
+                currentCatalogues={currentCatalogues}
                 submitting={submitting}
                 onClose={() => setShowPublishDialog(false)}
                 onPublish={handleSubmitForApproval}
+              />
+            )}
+
+            {showCatalogueDialog && (
+              <PushToCatalogueDialog
+                organisationId={course.organisation_id}
+                courseId={course.id}
+                alreadyPublishedIds={publishedCatalogueIds}
+                onClose={() => setShowCatalogueDialog(false)}
+                onDone={() => {
+                  setShowCatalogueDialog(false)
+                  load()
+                }}
               />
             )}
 
@@ -554,6 +704,8 @@ export default function ProviderCourseEditor() {
                 onSubmit={handleSave}
                 onCreateDraftVersion={handleCreateDraftVersion}
                 creatingDraft={saving}
+                publishedCatalogues={publishedCatalogues}
+                onPushToCatalogue={() => setShowCatalogueDialog(true)}
               />
             )}
             {tab === 'content' && (
@@ -566,7 +718,7 @@ export default function ProviderCourseEditor() {
   )
 }
 
-function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCreateDraftVersion, creatingDraft }) {
+function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCreateDraftVersion, creatingDraft, publishedCatalogues, onPushToCatalogue }) {
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
       <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
@@ -586,14 +738,28 @@ function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCre
         <div className="mb-4 rounded-md border border-hairline bg-paper p-3">
           {course.synopsis && <p className="text-sm text-secondary mb-3">{course.synopsis}</p>}
           <p className="text-sm text-ink mb-2">This published version remains live while you work on the next version.</p>
-          <button
-            type="button"
-            onClick={onCreateDraftVersion}
-            disabled={creatingDraft}
-            className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
-          >
-            {creatingDraft ? 'Creating draft…' : 'Create next version'}
-          </button>
+          <p className="text-sm text-secondary mb-2">
+            {publishedCatalogues.length === 0
+              ? "Not in any catalogue yet -- it's only visible within your organisation."
+              : `Published to: ${publishedCatalogues.map((c) => c.name).join(', ')}.`}
+          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={onCreateDraftVersion}
+              disabled={creatingDraft}
+              className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+            >
+              {creatingDraft ? 'Creating draft…' : 'Create next version'}
+            </button>
+            <button
+              type="button"
+              onClick={onPushToCatalogue}
+              className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+            >
+              Push to catalogue
+            </button>
+          </div>
         </div>
       )}
 
@@ -1633,14 +1799,21 @@ function InlineSectionEditor({ section, onChanged, onClose }) {
   )
 }
 
-// Attach-existing / upload-new / record-screen / web-link, moved from the
-// now-removed right-hand detail panel into a popup scoped to whichever
-// section's "+" button opened it.
+// Attach-existing / upload-new / build-a-page, moved from the now-removed
+// right-hand detail panel into a popup scoped to whichever section's "+"
+// button opened it. Opens on a plain choice of the three ways to add
+// content -- rather than landing straight in the existing-resource picker
+// -- so the initial focus goes to that choice instead of pre-selecting a
+// dropdown option most people arrived here to skip past. Each choice's own
+// AccessibleDialog-mounted sub-view reuses the same dialog instance (this
+// component always returns exactly one <AccessibleDialog>, just with
+// different children), so switching modes doesn't retrigger the
+// mount-time initial-focus behaviour.
 function AddResourceModal({ section, courseId, organisationId, userId, availableResources, onChanged, onClose }) {
+  const [mode, setMode] = useState(null) // null (choice) | 'existing' | 'new'
   const [selectedResourceId, setSelectedResourceId] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
-  const [showUpload, setShowUpload] = useState(false)
   const [uploadType, setUploadType] = useState('video')
   const [uploadTitle, setUploadTitle] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -1673,15 +1846,18 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
   }
 
   async function handleUpload() {
-    if (uploadType === 'web_url') {
+    if (uploadType === 'web_url' || uploadType === 'external_video') {
       if (!webUrl.trim()) {
-        setError('Enter a web address first.')
+        setError(uploadType === 'web_url' ? 'Enter a web address first.' : 'Paste a YouTube or Vimeo link first.')
         return
       }
       setUploading(true)
       setError(null)
       try {
-        const resource = await addWebResource(organisationId, userId, webUrl, uploadTitle)
+        const resource =
+          uploadType === 'web_url'
+            ? await addWebResource(organisationId, userId, webUrl, uploadTitle)
+            : await addExternalVideoResource(organisationId, userId, webUrl, uploadTitle)
         await linkResourceToCourse(courseId, resource.id, section.id)
         await onChanged()
         onClose()
@@ -1719,6 +1895,30 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
     }
   }
 
+  // The page builder is its own full-screen editor (mirrors
+  // ResourceLibrarySection's usage) rather than a field inside this dialog
+  // -- createPageResource already records the caller as created_by, same
+  // as every other resource-creation path here, so whoever builds the page
+  // is its owner. Its own "Close"/save flow calls onClose itself, which
+  // unmounts this whole modal too since PageBuilderModal is this
+  // component's entire return value while in this mode.
+  if (mode === 'page') {
+    return (
+      <PageBuilderModal
+        organisationId={organisationId}
+        userId={userId}
+        onClose={onClose}
+        onSaved={async (saved) => {
+          try {
+            await linkResourceToCourse(courseId, saved.id, section.id)
+          } finally {
+            await onChanged()
+          }
+        }}
+      />
+    )
+  }
+
   return (
     <AccessibleDialog
       labelledBy="add-resource-dialog-title"
@@ -1728,52 +1928,110 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
       <h2 id="add-resource-dialog-title" className="font-display text-xl text-ink mb-1">
         Add content to {section.title}
       </h2>
-      <p className="text-sm text-secondary mb-4">Attach something already in your library, or add something new.</p>
 
-      {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
-
-      <div className="space-y-2">
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="flex-1 min-w-[200px]">
-            <label className="block text-xs text-secondary mb-1" htmlFor={`attachResource-${section.id}`}>
-              Add existing resource
-            </label>
-            <select
-              id={`attachResource-${section.id}`}
-              data-dialog-initial-focus
-              value={selectedResourceId}
-              onChange={(e) => setSelectedResourceId(e.target.value)}
-              disabled={availableResources.length === 0}
-              className="w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss disabled:opacity-60"
+      {mode === null && (
+        <>
+          <p className="text-sm text-secondary mb-4">Choose how you'd like to add content to this section.</p>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => setMode('existing')}
+              className="w-full flex items-center justify-between gap-3 rounded-md border border-hairline px-4 py-3 text-left hover:border-moss hover:bg-paper"
             >
-              <option value="">
-                {availableResources.length === 0 ? 'Nothing left to add' : 'Choose a resource…'}
-              </option>
-              {availableResources.map((resource) => (
-                <option key={resource.id} value={resource.id}>
-                  {resource.title} ({TYPE_LABELS[resource.type]})
-                </option>
-              ))}
-            </select>
+              <span>
+                <span className="block text-sm font-medium text-ink">Select existing resource</span>
+                <span className="block text-xs text-secondary mt-0.5">Reuse something already in your library.</span>
+              </span>
+              <span aria-hidden="true" className="text-secondary">›</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('new')}
+              className="w-full flex items-center justify-between gap-3 rounded-md border border-hairline px-4 py-3 text-left hover:border-moss hover:bg-paper"
+            >
+              <span>
+                <span className="block text-sm font-medium text-ink">Create new resource</span>
+                <span className="block text-xs text-secondary mt-0.5">Upload a file, video, package or link.</span>
+              </span>
+              <span aria-hidden="true" className="text-secondary">›</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('page')}
+              className="w-full flex items-center justify-between gap-3 rounded-md border border-hairline px-4 py-3 text-left hover:border-moss hover:bg-paper"
+            >
+              <span>
+                <span className="block text-sm font-medium text-ink">Create content page</span>
+                <span className="block text-xs text-secondary mt-0.5">Build a page with text, images and video.</span>
+              </span>
+              <span aria-hidden="true" className="text-secondary">›</span>
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={handleAttach}
-            disabled={busy || !selectedResourceId}
-            className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
-          >
-            Add
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowUpload((v) => !v)}
-            className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
-          >
-            {showUpload ? 'Cancel' : '+ Add new content'}
-          </button>
-        </div>
+          <div className="flex justify-end gap-2 mt-5">
+            <button type="button" onClick={onClose} className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink hover:bg-paper">
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
 
-        {showUpload && (
+      {mode === 'existing' && (
+        <>
+          <button type="button" onClick={() => setMode(null)} className="text-xs text-secondary hover:text-ink mb-4">
+            ‹ Back
+          </button>
+          <p className="text-sm text-secondary mb-4">Attach something already in your organisation's library.</p>
+
+          {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
+
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-xs text-secondary mb-1" htmlFor={`attachResource-${section.id}`}>
+                Resource
+              </label>
+              <select
+                id={`attachResource-${section.id}`}
+                value={selectedResourceId}
+                onChange={(e) => setSelectedResourceId(e.target.value)}
+                disabled={availableResources.length === 0}
+                className="w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss disabled:opacity-60"
+              >
+                <option value="">
+                  {availableResources.length === 0 ? 'Nothing left to add' : 'Choose a resource…'}
+                </option>
+                {availableResources.map((resource) => (
+                  <option key={resource.id} value={resource.id}>
+                    {resource.title} ({TYPE_LABELS[resource.type]})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              onClick={handleAttach}
+              disabled={busy || !selectedResourceId}
+              className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+            >
+              {busy ? 'Adding…' : 'Add'}
+            </button>
+          </div>
+
+          <div className="flex justify-end gap-2 mt-5">
+            <button type="button" onClick={onClose} disabled={busy} className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink hover:bg-paper disabled:opacity-50">
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
+
+      {mode === 'new' && (
+        <>
+          <button type="button" onClick={() => setMode(null)} className="text-xs text-secondary hover:text-ink mb-4">
+            ‹ Back
+          </button>
+
+          {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
+
           <div className="bg-paper border border-hairline rounded-md p-3 flex flex-wrap items-end gap-2">
             <div>
               <label className="block text-xs text-secondary mb-1" htmlFor={`uploadType-${section.id}`}>
@@ -1795,6 +2053,7 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
                 <option value="file">File</option>
                 <option value="scorm">SCORM package (.zip)</option>
                 <option value="xapi">xAPI package (.zip)</option>
+                <option value="external_video">External video (YouTube/Vimeo)</option>
                 <option value="web_url">Web link</option>
               </select>
             </div>
@@ -1809,15 +2068,17 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
                 className="w-full rounded-md border border-hairline bg-card px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
               />
             </div>
-            {uploadType === 'web_url' ? (
+            {uploadType === 'web_url' || uploadType === 'external_video' ? (
               <div className="flex-1 min-w-[220px]">
-                <label className="block text-xs text-secondary mb-1" htmlFor={`webUrl-${section.id}`}>Web address</label>
+                <label className="block text-xs text-secondary mb-1" htmlFor={`webUrl-${section.id}`}>
+                  {uploadType === 'web_url' ? 'Web address' : 'Video link'}
+                </label>
                 <input
                   id={`webUrl-${section.id}`}
                   type="url"
                   value={webUrl}
                   onChange={(e) => setWebUrl(e.target.value)}
-                  placeholder="https://example.com/resource"
+                  placeholder={uploadType === 'web_url' ? 'https://example.com/resource' : 'https://www.youtube.com/watch?v=…'}
                   className="w-full rounded-md border border-hairline bg-card px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
                 />
               </div>
@@ -1864,17 +2125,23 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
                 ? 'Adding…'
                 : uploadType === 'screen_recording'
                   ? 'Add recording'
-                  : uploadType === 'web_url'
+                  : uploadType === 'web_url' || uploadType === 'external_video'
                     ? 'Add link'
                     : 'Upload & add'}
             </button>
           </div>
-        )}
 
-        {showScreenRecorder && (
-          <ScreenRecorderModal onClose={() => setShowScreenRecorder(false)} onRecorded={setRecordedFile} />
-        )}
-      </div>
+          {showScreenRecorder && (
+            <ScreenRecorderModal onClose={() => setShowScreenRecorder(false)} onRecorded={setRecordedFile} />
+          )}
+
+          <div className="flex justify-end gap-2 mt-5">
+            <button type="button" onClick={onClose} disabled={uploading} className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink hover:bg-paper disabled:opacity-50">
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
     </AccessibleDialog>
   )
 }
@@ -1953,6 +2220,8 @@ function ItemPreviewBody({ item, userId, canEdit, onChanged }) {
           <span className="font-medium text-moss shrink-0">Open link ↗</span>
         </a>
       )}
+
+      {item.type === 'page' && <PageContent document={item.page_content} compact />}
 
       {canEdit && (
         <div className="flex items-center gap-2 mt-4 pt-4 border-t border-hairline">

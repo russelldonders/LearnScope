@@ -216,10 +216,35 @@ export async function listCourseVersionHistory(courseId) {
 // catalogue's own select policy) already scopes this to approved courses,
 // the caller's own organisation's courses, or a platform admin, so a `null`
 // result here just means "not found or not visible to you", not an error.
+// Publications are embedded so the editor can show which catalogues this
+// specific version is currently live in.
 export async function getCatalogueCourse(id) {
-  const { data, error } = await supabase.from('course_catalogue').select('*').eq('id', id).maybeSingle()
+  const { data, error } = await supabase
+    .from('course_catalogue')
+    .select('*, course_catalogue_publications(catalogue_id, published_at, catalogues(id, name, is_global))')
+    .eq('id', id)
+    .maybeSingle()
   if (error) throw error
   return data
+}
+
+// The version currently live for a course (if any) may differ from the one
+// being edited (a new draft version starts with no publications of its
+// own, 0107) -- used to warn a provider that publishing the draft with no
+// catalogue selected will pull the course out of wherever the current
+// version is live, since catalogue destinations belong to a specific
+// immutable version and are never carried forward automatically.
+export async function listCurrentVersionCatalogues(versionGroupId) {
+  const { data, error } = await supabase
+    .from('course_catalogue')
+    .select('course_catalogue_publications(published_at, catalogues(id, name, is_global))')
+    .eq('version_group_id', versionGroupId)
+    .eq('is_current_published', true)
+    .maybeSingle()
+  if (error) throw error
+  return (data?.course_catalogue_publications ?? [])
+    .filter((publication) => publication.published_at && publication.catalogues)
+    .map((publication) => publication.catalogues)
 }
 
 export async function approveCatalogueCourse(id) {
