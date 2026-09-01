@@ -674,31 +674,43 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
           <p className="text-secondary">No training matches these filters.</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {filteredCourses.map((course) => (
-            <CourseCard
-              key={course.id}
-              course={course}
-              canModerate={isApprover}
-              actioning={actioningId === course.id}
-              rejecting={rejectingId === course.id}
-              rejectionReason={rejectionReason}
-              onRejectionReasonChange={setRejectionReason}
-              onStartReject={() => setRejectingId(course.id)}
-              onCancelReject={() => {
-                setRejectingId(null)
-                setRejectionReason('')
-              }}
-              onApprove={() => handleApprove(course)}
-              onReject={() => handleReject(course)}
-              onDeactivate={() => handleDeactivate(course)}
-              canViewParticipants={canViewParticipants}
-              onViewParticipants={() => setParticipantCourse(course)}
-              onViewHistory={() => setHistoryCourse(course)}
-              onEdit={() => handleEditCourse(course)}
-              creatingDraft={creatingDraftCourseId === course.id}
-            />
-          ))}
+        <div className="bg-card border border-hairline rounded-lg overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-hairline text-left text-secondary">
+                <th className="px-4 py-2 font-medium">Training</th>
+                <th className="px-4 py-2 font-medium">Status</th>
+                <th className="px-4 py-2 font-medium">Synopsis</th>
+                <th className="px-4 py-2 font-medium"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredCourses.map((course) => (
+                <CourseRow
+                  key={course.id}
+                  course={course}
+                  canModerate={isApprover}
+                  actioning={actioningId === course.id}
+                  rejecting={rejectingId === course.id}
+                  rejectionReason={rejectionReason}
+                  onRejectionReasonChange={setRejectionReason}
+                  onStartReject={() => setRejectingId(course.id)}
+                  onCancelReject={() => {
+                    setRejectingId(null)
+                    setRejectionReason('')
+                  }}
+                  onApprove={() => handleApprove(course)}
+                  onReject={() => handleReject(course)}
+                  onDeactivate={() => handleDeactivate(course)}
+                  canViewParticipants={canViewParticipants}
+                  onViewParticipants={() => setParticipantCourse(course)}
+                  onViewHistory={() => setHistoryCourse(course)}
+                  onEdit={() => handleEditCourse(course)}
+                  creatingDraft={creatingDraftCourseId === course.id}
+                />
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -718,8 +730,11 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
 // pages once there was more than a form's worth of detail to show.
 // canModerate mirrors AdminCatalogue.jsx's own approve/reject/deactivate/
 // reactivate actions, just scoped here to a designated catalogue approver
-// acting on their own organisation's submissions.
-function CourseCard({
+// acting on their own organisation's submissions. A table row (mirroring
+// AdminUsers.jsx's list) rather than the card grid this replaced -- a
+// provider with more than a handful of courses could no longer scan
+// name/code/status across many cards at once.
+function CourseRow({
   course,
   canViewParticipants,
   onViewParticipants,
@@ -740,113 +755,117 @@ function CourseCard({
   const editable = course.status === 'draft' || course.status === 'rejected'
   const canStartEditing = editable || course.status === 'approved'
   return (
-    <article className="bg-card border border-hairline rounded-lg p-3 hover:border-moss/60 transition-colors">
-      <div className="flex items-center justify-between gap-3">
-        <Link to={`/provider/training/${course.id}`} className="text-ink font-medium hover:text-moss">
+    <tr className="border-b border-hairline last:border-0 align-top">
+      <td className="px-4 py-3">
+        <Link to={`/provider/training/${course.id}`} className="text-ink font-medium hover:text-moss hover:underline">
           {course.name}
         </Link>
-        <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
+        <p className="font-mono text-xs text-secondary mt-0.5">{course.course_code || 'Not set'}</p>
+      </td>
+      <td className="px-4 py-3 whitespace-nowrap">
+        <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
           Version {course.version_number} · {STATUS_LABELS[course.status] ?? course.status}
         </span>
-      </div>
-      <p className="font-mono text-xs text-secondary mt-1">Course code: {course.course_code || 'Not set'}</p>
-      {course.synopsis && <p className="text-sm text-secondary mt-1">{course.synopsis}</p>}
-      {course.status === 'rejected' && course.rejection_reason && (
-        <p className="text-xs text-red-700 mt-1">Rejected: {course.rejection_reason}</p>
-      )}
-      <div className="mt-2 flex items-center gap-3">
-        {canStartEditing ? (
-          <button
-            type="button"
-            onClick={onEdit}
-            disabled={creatingDraft}
-            className="text-xs font-medium text-moss hover:underline disabled:cursor-wait disabled:opacity-60"
-          >
-            {creatingDraft ? 'Creating new version…' : 'Edit course'}
-          </button>
-        ) : (
-          <Link to={`/provider/training/${course.id}`} className="text-xs font-medium text-moss hover:underline">
-            View course
-          </Link>
+        {course.status === 'rejected' && course.rejection_reason && (
+          <p className="text-xs text-red-700 mt-1">Rejected: {course.rejection_reason}</p>
         )}
-        <button type="button" onClick={onViewHistory} className="text-xs font-medium text-moss hover:underline">
-          Version history
-        </button>
-        {canViewParticipants && (
-          <button type="button" onClick={onViewParticipants} className="text-xs font-medium text-moss hover:underline">
-            View participants
+      </td>
+      <td className="px-4 py-3 text-secondary max-w-xs">{course.synopsis || '—'}</td>
+      <td className="px-4 py-3">
+        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+          {canStartEditing ? (
+            <button
+              type="button"
+              onClick={onEdit}
+              disabled={creatingDraft}
+              className="text-xs font-medium text-moss hover:underline disabled:cursor-wait disabled:opacity-60 whitespace-nowrap"
+            >
+              {creatingDraft ? 'Creating new version…' : 'Edit course'}
+            </button>
+          ) : (
+            <Link to={`/provider/training/${course.id}`} className="text-xs font-medium text-moss hover:underline whitespace-nowrap">
+              View course
+            </Link>
+          )}
+          <button type="button" onClick={onViewHistory} className="text-xs font-medium text-moss hover:underline whitespace-nowrap">
+            Version history
           </button>
-        )}
-      </div>
+          {canViewParticipants && (
+            <button type="button" onClick={onViewParticipants} className="text-xs font-medium text-moss hover:underline whitespace-nowrap">
+              View participants
+            </button>
+          )}
+        </div>
 
-      {canModerate && (
-        <div className="mt-3 pt-2 border-t border-hairline flex flex-wrap items-center gap-2">
-          {(course.status === 'pending_approval' || course.status === 'draft') && (
-            <>
+        {canModerate && (
+          <div className="mt-2 pt-2 border-t border-hairline flex flex-wrap items-center justify-end gap-2">
+            {(course.status === 'pending_approval' || course.status === 'draft') && (
+              <>
+                <button
+                  type="button"
+                  disabled={actioning}
+                  onClick={onApprove}
+                  className="rounded-md bg-moss text-paper py-1 px-3 text-xs font-medium hover:opacity-90 disabled:opacity-50 whitespace-nowrap"
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  disabled={actioning}
+                  onClick={onStartReject}
+                  className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper disabled:opacity-50 whitespace-nowrap"
+                >
+                  Reject
+                </button>
+              </>
+            )}
+            {course.status === 'approved' && (
+              <button
+                type="button"
+                disabled={actioning}
+                onClick={onDeactivate}
+                className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper disabled:opacity-50 whitespace-nowrap"
+              >
+                Deactivate
+              </button>
+            )}
+            {(course.status === 'inactive' || course.status === 'rejected') && (
               <button
                 type="button"
                 disabled={actioning}
                 onClick={onApprove}
-                className="rounded-md bg-moss text-paper py-1 px-3 text-xs font-medium hover:opacity-90 disabled:opacity-50"
+                className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper disabled:opacity-50 whitespace-nowrap"
               >
-                Approve
+                Reactivate (approve)
               </button>
-              <button
-                type="button"
-                disabled={actioning}
-                onClick={onStartReject}
-                className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper disabled:opacity-50"
-              >
-                Reject
-              </button>
-            </>
-          )}
-          {course.status === 'approved' && (
-            <button
-              type="button"
-              disabled={actioning}
-              onClick={onDeactivate}
-              className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper disabled:opacity-50"
-            >
-              Deactivate
-            </button>
-          )}
-          {(course.status === 'inactive' || course.status === 'rejected') && (
-            <button
-              type="button"
-              disabled={actioning}
-              onClick={onApprove}
-              className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper disabled:opacity-50"
-            >
-              Reactivate (approve)
-            </button>
-          )}
+            )}
 
-          {rejecting && (
-            <div className="w-full flex flex-wrap items-end gap-2 mt-1">
-              <div className="flex-1 min-w-[200px]">
-                <label className="block text-xs text-secondary mb-1">Rejection reason (optional)</label>
-                <input
-                  value={rejectionReason}
-                  onChange={(e) => onRejectionReasonChange(e.target.value)}
-                  className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                />
+            {rejecting && (
+              <div className="w-full flex flex-wrap items-end gap-2 mt-1">
+                <div className="flex-1 min-w-[200px]">
+                  <label className="block text-xs text-secondary mb-1">Rejection reason (optional)</label>
+                  <input
+                    value={rejectionReason}
+                    onChange={(e) => onRejectionReasonChange(e.target.value)}
+                    className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={onReject}
+                  className="rounded-md bg-red-700 text-white py-1.5 px-3 text-sm font-medium hover:bg-red-800"
+                >
+                  Confirm reject
+                </button>
+                <button type="button" onClick={onCancelReject} className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm hover:bg-paper">
+                  Cancel
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={onReject}
-                className="rounded-md bg-red-700 text-white py-1.5 px-3 text-sm font-medium hover:bg-red-800"
-              >
-                Confirm reject
-              </button>
-              <button type="button" onClick={onCancelReject} className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm hover:bg-paper">
-                Cancel
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </article>
+            )}
+          </div>
+        )}
+      </td>
+    </tr>
   )
 }
 
