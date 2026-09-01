@@ -10,7 +10,6 @@ import {
 } from '../../lib/skillStats'
 import { LEVEL_LABELS, LEVEL_DESCRIPTIONS, KNOWLEDGE_LEVEL_LABELS, LEVELS } from '../../lib/levels'
 import SkillTestQuestionsModal from '../../components/SkillTestQuestionsModal'
-import SkillKnowledgeStatsModal from '../../components/SkillKnowledgeStatsModal'
 
 const TYPE_LABELS = { global: 'Global', personal: 'Personal', provider: 'Provider' }
 
@@ -19,11 +18,11 @@ const TYPE_LABELS = { global: 'Global', personal: 'Personal', provider: 'Provide
 // that level's application-guide statement revealed on click, a real
 // learner's already-generated text via the anonymous skill_level_guide_sample
 // RPC -- see 0083 for why this can't be a direct `skills` query), and per
-// knowledge level how many self-assessed vs were verified, plus links into
-// that level's cached test questions and assessment results. Level stats come
-// from the count-only skill_level_stats / skill_knowledge_level_source_stats
-// RPCs (0076, 0092) rather than a direct `skills` query, since a platform
-// admin has no standing RLS access to every learner's personal skills rows.
+// knowledge level how many self-assessed vs were verified, plus a link into
+// that level's cached test questions. Level stats come from the count-only
+// skill_level_stats / skill_knowledge_level_source_stats RPCs (0076, 0092)
+// rather than a direct `skills` query, since a platform admin has no standing
+// RLS access to every learner's personal skills rows.
 export default function AdminSkillDetail() {
   const { skillId } = useParams()
   const [skill, setSkill] = useState(null)
@@ -35,7 +34,6 @@ export default function AdminSkillDetail() {
   const [error, setError] = useState(null)
   const [openAbilityLevel, setOpenAbilityLevel] = useState(null)
   const [questionsLevel, setQuestionsLevel] = useState(null)
-  const [statsLevel, setStatsLevel] = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -180,20 +178,13 @@ export default function AdminSkillDetail() {
                           <span>{selfCount} self-assessed at this level</span>
                           <span>{assessedCount} verified at this level</span>
                         </div>
-                        <div className="flex items-center gap-2 mt-2">
+                        <div className="mt-2">
                           <button
                             type="button"
                             onClick={() => setQuestionsLevel(level)}
                             className="rounded-md border border-hairline text-ink py-1 px-2.5 text-xs font-medium hover:bg-paper"
                           >
                             View test questions
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setStatsLevel(level)}
-                            className="rounded-md border border-hairline text-ink py-1 px-2.5 text-xs font-medium hover:bg-paper"
-                          >
-                            View assessment results
                           </button>
                         </div>
                       </li>
@@ -214,15 +205,8 @@ export default function AdminSkillDetail() {
           <SkillTestQuestionsModal
             librarySkillId={skillId}
             skillName={skill?.name}
-            initialLevel={questionsLevel}
+            level={questionsLevel}
             onClose={() => setQuestionsLevel(null)}
-          />
-        )}
-        {statsLevel && (
-          <SkillKnowledgeStatsModal
-            librarySkillId={skillId}
-            skillName={skill?.name}
-            onClose={() => setStatsLevel(null)}
           />
         )}
       </div>
