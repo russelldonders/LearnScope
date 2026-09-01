@@ -7,11 +7,11 @@ import AccessibleDialog from './AccessibleDialog'
 // questions per level -- see skill_diagnostic_content (0049). Shows exactly
 // what's cached today; it never generates new content itself, since
 // generation is a paid, server-side-only call (api/generate-diagnostic-quiz.js).
-export default function SkillTestQuestionsModal({ librarySkillId, skillName, onClose }) {
+export default function SkillTestQuestionsModal({ librarySkillId, skillName, initialLevel = null, onClose }) {
   const [byLevel, setByLevel] = useState(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [openLevel, setOpenLevel] = useState(null)
+  const [openLevel, setOpenLevel] = useState(initialLevel)
 
   useEffect(() => {
     setLoading(true)
