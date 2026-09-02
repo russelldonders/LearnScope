@@ -23,6 +23,7 @@ import {
 // select with no aggregate counts.
 import { assignProviderCourseToCatalogue, listProviderCatalogues } from '../../lib/admin/providerCatalogues'
 import { listOrganisations, listOrganisationMembers } from '../../lib/admin/organisations'
+import { listEmployers } from '../../lib/admin/employers'
 import { useRowSelection, useSortedPage } from '../../lib/useSortedPage'
 import { BulkActionBar, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 import {
@@ -101,9 +102,10 @@ const EMPTY_FORM = { name: '', courseCode: '', provider: '', courseType: '', dur
 // admin" is organisation_members.role = 'admin', scoped by the unique
 // (organisation_id, user_id) constraint.
 export default function ProviderConsole() {
-  const { user, organisationMemberships } = useAuth()
+  const { user, organisationMemberships, employerMemberships } = useAuth()
   const location = useLocation()
   const [organisations, setOrganisations] = useState([])
+  const [employers, setEmployers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selectedOrgId, setSelectedOrgId] = useState(location.state?.organisationId ?? null)
@@ -129,7 +131,24 @@ export default function ProviderConsole() {
 
   useEffect(() => {
     reloadOrganisations().finally(() => setLoading(false))
+    // listEmployers() is already scoped by RLS to employers this user
+    // actually belongs to -- best-effort here, since not being able to show
+    // the "Employer console" cross-link shouldn't take down this page.
+    listEmployers()
+      .then(setEmployers)
+      .catch(() => {})
   }, [])
+
+  // The employer (if any) whose auto-provisioned provider org this actually
+  // is, where the current user also holds an active employer_members admin
+  // role -- mirrors the matching check EmployerConsole.jsx does in reverse,
+  // so the "move back and forth" link only ever appears when it would
+  // genuinely lead somewhere the user can act, not just view.
+  const linkedEmployer = employers.find(
+    (e) =>
+      e.provider_organisation_id === selectedOrgId &&
+      (employerMemberships ?? []).some((m) => m.employer_id === e.id && m.role === 'admin')
+  )
 
   function reloadOrganisations() {
     return listOrganisations()
@@ -207,6 +226,18 @@ export default function ProviderConsole() {
                         {section.label}
                       </button>
                     ))}
+                    {linkedEmployer && (
+                      <>
+                        <span className="mx-1 h-5 w-px bg-hairline shrink-0" aria-hidden="true" />
+                        <Link
+                          to="/employer"
+                          state={{ employerId: linkedEmployer.id }}
+                          className="text-sm px-3 py-2 -mb-px border-b-2 border-transparent whitespace-nowrap text-amber-800 hover:text-amber-900 hover:border-amber-800"
+                        >
+                          ← {linkedEmployer.name} employer console
+                        </Link>
+                      </>
+                    )}
                   </div>
                   {myRole === 'admin' && (
                     <button

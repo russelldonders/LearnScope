@@ -3,13 +3,16 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePendingActions } from '../context/PendingActionsContext'
 import AppHeader from '../components/AppHeader'
-import { LEVEL_LABELS } from '../lib/levels'
+import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { listIncomingRateInvites, listIncomingRecommendInvites, getProfiles } from '../lib/connections'
 import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
 import { listIncomingConnectionRequests, respondToConnectionRequest } from '../lib/skillDiscovery'
 import { listMyPendingOrgInvites, decideOrgInvite } from '../lib/organisationInvites'
 import { listMyPendingEmployerInvites, decideEmployerInvite, listMyPendingDataAccessRequests, decideEmployerDataAccessRequest } from '../lib/admin/employers'
 import { listMyCourseAssignments, respondToCourseAssignment } from '../lib/courseCatalogue'
+import { listMySkillSuggestions, adoptSkillSuggestion, dismissSkillSuggestion } from '../lib/skillSuggestions'
+import { supabase } from '../lib/supabaseClient'
+import ShareSkillsModal from '../components/ShareSkillsModal'
 
 // Everything actually waiting on this learner to act -- the same sources
 // PendingActionsContext counts for the header badge, just rendered in full
@@ -33,9 +36,16 @@ export default function Actions() {
   const [dataAccessRequests, setDataAccessRequests] = useState([])
   const [dataAccessDecidingId, setDataAccessDecidingId] = useState(null)
   const [dataAccessError, setDataAccessError] = useState(null)
+  const [acceptingDataAccessRequest, setAcceptingDataAccessRequest] = useState(null)
+  const [mySkills, setMySkills] = useState([])
   const [courseAssignments, setCourseAssignments] = useState([])
   const [assignmentActingId, setAssignmentActingId] = useState(null)
   const [assignmentError, setAssignmentError] = useState(null)
+  const [skillSuggestions, setSkillSuggestions] = useState([])
+  const [adoptingSuggestion, setAdoptingSuggestion] = useState(null)
+  const [adoptForm, setAdoptForm] = useState({ setTarget: false, targetLevel: 3, targetDate: '', comments: '' })
+  const [suggestionActingId, setSuggestionActingId] = useState(null)
+  const [suggestionError, setSuggestionError] = useState(null)
   const [respondingId, setRespondingId] = useState(null)
   const [respondError, setRespondError] = useState(null)
   const [profiles, setProfiles] = useState({})
@@ -57,6 +67,8 @@ export default function Actions() {
         employerInvitesData,
         dataAccessRequestsData,
         courseAssignmentsData,
+        skillSuggestionsData,
+        { data: mySkillsData, error: mySkillsError },
       ] = await Promise.all([
         listIncomingRateInvites(),
         listIncomingRecommendInvites(),
@@ -66,7 +78,10 @@ export default function Actions() {
         listMyPendingEmployerInvites(user.id),
         listMyPendingDataAccessRequests(user.id),
         listMyCourseAssignments(user.id),
+        listMySkillSuggestions(user.id),
+        supabase.from('skills').select('id, name').eq('user_id', user.id).order('name', { ascending: true }),
       ])
+      if (mySkillsError) throw mySkillsError
       setIncomingRateInvites(incomingRateInvitesData)
       setIncomingRecommendInvites(incomingRecommendInvitesData)
       setValidationRequests(validationRequestsData)
@@ -75,6 +90,8 @@ export default function Actions() {
       setEmployerInvites(employerInvitesData)
       setDataAccessRequests(dataAccessRequestsData)
       setCourseAssignments(courseAssignmentsData)
+      setSkillSuggestions(skillSuggestionsData)
+      setMySkills(mySkillsData ?? [])
       const requesterIds = validationRequestsData.map((r) => r.requester_id)
       const requestSenderIds = incomingRequestsData.map((r) => r.requester_id)
       setProfiles(await getProfiles([...requesterIds, ...requestSenderIds]))
@@ -123,15 +140,40 @@ export default function Actions() {
     }
   }
 
-  async function handleDataAccessResponse(requestId, accept) {
+  // Decline stays a simple, immediate action -- no skills are ever shared,
+  // so there's nothing to choose. Accept instead opens ShareSkillsModal
+  // (below) so the learner picks which specific skills this employer gets
+  // to see, rather than granting blanket access to everything.
+  async function handleDataAccessDecline(requestId) {
     setDataAccessError(null)
     setDataAccessDecidingId(requestId)
     try {
-      await decideEmployerDataAccessRequest(requestId, accept)
+      await decideEmployerDataAccessRequest(requestId, false)
       setDataAccessRequests((prev) => prev.filter((r) => r.id !== requestId))
       refreshPendingActionCount()
     } catch (err) {
       setDataAccessError({ id: requestId, message: err.message })
+    } finally {
+      setDataAccessDecidingId(null)
+    }
+  }
+
+  function handleOpenAcceptDataAccess(request) {
+    setDataAccessError(null)
+    setAcceptingDataAccessRequest(request)
+  }
+
+  // Any thrown error propagates to ShareSkillsModal, which shows it inline
+  // and stays open (same pattern as its own save errors) rather than being
+  // caught here.
+  async function handleConfirmAcceptDataAccess(skillIds) {
+    const request = acceptingDataAccessRequest
+    setDataAccessDecidingId(request.id)
+    try {
+      await decideEmployerDataAccessRequest(request.id, true, skillIds)
+      setDataAccessRequests((prev) => prev.filter((r) => r.id !== request.id))
+      setAcceptingDataAccessRequest(null)
+      refreshPendingActionCount()
     } finally {
       setDataAccessDecidingId(null)
     }
@@ -154,6 +196,70 @@ export default function Actions() {
       setAssignmentError({ id: assignment.id, message: err.message })
     } finally {
       setAssignmentActingId(null)
+    }
+  }
+
+  // "Add to my skills" opens an inline form pre-filled with the employer's
+  // suggested level/date/comments (still fully editable before saving --
+  // never silently applied as-is, see adoptForm's initial state below).
+  // Choosing not to set a target at all is also valid (setTarget stays
+  // false unless the employer suggested a level, matching this suggestion's
+  // own optionality).
+  function handleOpenAdoptForm(suggestion) {
+    setSuggestionError(null)
+    setAdoptingSuggestion(suggestion.id)
+    setAdoptForm({
+      setTarget: suggestion.suggested_target_level != null,
+      targetLevel: suggestion.suggested_target_level ?? 3,
+      targetDate: suggestion.target_date ?? '',
+      comments: suggestion.comments ?? '',
+    })
+  }
+
+  function handleCancelAdopt() {
+    setAdoptingSuggestion(null)
+  }
+
+  // Calls adoptSkillSuggestion, which resolves-or-creates the real skills
+  // row via the existing, unchanged findOrCreatePersonalSkill, then (only
+  // if the learner kept a target) inserts a skill_targets row shaped like
+  // SetTargetModal's own -- never a silent copy of the employer's suggested
+  // values, since adoptForm was already reviewed/edited above.
+  async function handleAdoptSuggestion(suggestion) {
+    if (adoptForm.setTarget && !adoptForm.targetDate) {
+      setSuggestionError({ id: suggestion.id, message: 'Target date is required when setting a target level.' })
+      return
+    }
+    setSuggestionError(null)
+    setSuggestionActingId(suggestion.id)
+    try {
+      await adoptSkillSuggestion(user.id, suggestion, {
+        targetLevel: adoptForm.setTarget ? Number(adoptForm.targetLevel) : null,
+        targetDate: adoptForm.setTarget ? adoptForm.targetDate : null,
+        comments: adoptForm.setTarget ? adoptForm.comments : null,
+      })
+      setSkillSuggestions((prev) => prev.filter((s) => s.id !== suggestion.id))
+      setAdoptingSuggestion(null)
+      refreshPendingActionCount()
+    } catch (err) {
+      setSuggestionError({ id: suggestion.id, message: err.message })
+    } finally {
+      setSuggestionActingId(null)
+    }
+  }
+
+  async function handleDismissSuggestion(suggestion) {
+    setSuggestionError(null)
+    setSuggestionActingId(suggestion.id)
+    try {
+      await dismissSkillSuggestion(suggestion.id)
+      setSkillSuggestions((prev) => prev.filter((s) => s.id !== suggestion.id))
+      if (adoptingSuggestion === suggestion.id) setAdoptingSuggestion(null)
+      refreshPendingActionCount()
+    } catch (err) {
+      setSuggestionError({ id: suggestion.id, message: err.message })
+    } finally {
+      setSuggestionActingId(null)
     }
   }
 
@@ -180,6 +286,7 @@ export default function Actions() {
     employerInvites.length === 0 &&
     dataAccessRequests.length === 0 &&
     courseAssignments.length === 0 &&
+    skillSuggestions.length === 0 &&
     validationRequests.length === 0
 
   return (
@@ -392,7 +499,7 @@ export default function Actions() {
                   <div className="flex items-center gap-2 mt-3">
                     <button
                       type="button"
-                      onClick={() => handleDataAccessResponse(request.id, true)}
+                      onClick={() => handleOpenAcceptDataAccess(request)}
                       disabled={dataAccessDecidingId === request.id}
                       className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
                     >
@@ -400,7 +507,7 @@ export default function Actions() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleDataAccessResponse(request.id, false)}
+                      onClick={() => handleDataAccessDecline(request.id)}
                       disabled={dataAccessDecidingId === request.id}
                       className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
                     >
@@ -453,6 +560,129 @@ export default function Actions() {
           </div>
         )}
 
+        {skillSuggestions.length > 0 && (
+          <div>
+            <h2 className="font-display text-xl text-ink mb-6">Skill suggestions</h2>
+            <div className="space-y-3">
+              {skillSuggestions.map((suggestion) => (
+                <div key={suggestion.id} className="bg-card border border-hairline rounded-lg p-4">
+                  <p className="text-sm text-ink">
+                    <strong>{suggestion.employers?.name || 'An employer'}</strong> suggested you develop:{' '}
+                    <strong>{suggestion.skill_name}</strong>
+                  </p>
+                  {(suggestion.suggested_target_level || suggestion.target_date) && (
+                    <p className="text-sm text-secondary mt-1">
+                      {suggestion.suggested_target_level && `Suggested target: ${LEVEL_LABELS[suggestion.suggested_target_level]}`}
+                      {suggestion.suggested_target_level && suggestion.target_date && ' by '}
+                      {suggestion.target_date && new Date(`${suggestion.target_date}T00:00:00`).toLocaleDateString()}
+                    </p>
+                  )}
+                  {suggestion.comments && <p className="text-sm text-secondary mt-1">{suggestion.comments}</p>}
+                  <p className="font-mono text-xs text-secondary mt-1">
+                    {new Date(suggestion.created_at).toLocaleDateString()}
+                  </p>
+                  {suggestionError?.id === suggestion.id && (
+                    <p className="text-xs text-red-700 mt-1">{suggestionError.message}</p>
+                  )}
+
+                  {adoptingSuggestion === suggestion.id ? (
+                    <div className="mt-3 pt-3 border-t border-hairline space-y-3">
+                      <label className="flex items-center gap-2 text-sm text-ink">
+                        <input
+                          type="checkbox"
+                          checked={adoptForm.setTarget}
+                          onChange={(e) => setAdoptForm((f) => ({ ...f, setTarget: e.target.checked }))}
+                          className="size-4 accent-moss"
+                        />
+                        Also set a target
+                      </label>
+                      {adoptForm.setTarget && (
+                        <div className="flex flex-wrap items-end gap-3">
+                          <div>
+                            <label className="block text-xs text-secondary mb-1" htmlFor={`adoptLevel-${suggestion.id}`}>
+                              Target level
+                            </label>
+                            <select
+                              id={`adoptLevel-${suggestion.id}`}
+                              value={adoptForm.targetLevel}
+                              onChange={(e) => setAdoptForm((f) => ({ ...f, targetLevel: e.target.value }))}
+                              className="rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                            >
+                              {LEVELS.map((l) => (
+                                <option key={l} value={l}>{LEVEL_LABELS[l]}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs text-secondary mb-1" htmlFor={`adoptDate-${suggestion.id}`}>
+                              Achieve by
+                            </label>
+                            <input
+                              id={`adoptDate-${suggestion.id}`}
+                              type="date"
+                              value={adoptForm.targetDate}
+                              onChange={(e) => setAdoptForm((f) => ({ ...f, targetDate: e.target.value }))}
+                              className="rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-[180px]">
+                            <label className="block text-xs text-secondary mb-1" htmlFor={`adoptComments-${suggestion.id}`}>
+                              Comments
+                            </label>
+                            <input
+                              id={`adoptComments-${suggestion.id}`}
+                              value={adoptForm.comments}
+                              onChange={(e) => setAdoptForm((f) => ({ ...f, comments: e.target.value }))}
+                              className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                            />
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleAdoptSuggestion(suggestion)}
+                          disabled={suggestionActingId === suggestion.id}
+                          className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+                        >
+                          {suggestionActingId === suggestion.id ? 'Saving…' : 'Confirm and add'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancelAdopt}
+                          disabled={suggestionActingId === suggestion.id}
+                          className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 mt-3">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenAdoptForm(suggestion)}
+                        disabled={suggestionActingId === suggestion.id}
+                        className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+                      >
+                        Add to my skills
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDismissSuggestion(suggestion)}
+                        disabled={suggestionActingId === suggestion.id}
+                        className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {validationRequests.length > 0 && (
           <div>
             <h2 className="font-display text-xl text-ink mb-6">Requests to validate</h2>
@@ -477,6 +707,18 @@ export default function Actions() {
           </div>
         )}
       </main>
+
+      {acceptingDataAccessRequest && (
+        <ShareSkillsModal
+          skills={mySkills}
+          initiallySelectedIds={[]}
+          title="Choose skills to share"
+          description={`Pick which of your skills ${acceptingDataAccessRequest.employers?.name || 'this employer'} can see. You can change this any time from Privacy settings.`}
+          confirmLabel="Accept and share"
+          onConfirm={handleConfirmAcceptDataAccess}
+          onClose={() => setAcceptingDataAccessRequest(null)}
+        />
+      )}
     </div>
   )
 }

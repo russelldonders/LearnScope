@@ -13,7 +13,10 @@ import {
   listMyEmployerDataAccessStatus,
   shareDataWithEmployer,
   revokeEmployerDataAccess,
+  updateSharedEmployerSkills,
+  listSharedEmployerSkillIds,
 } from '../lib/admin/employers'
+import ShareSkillsModal from '../components/ShareSkillsModal'
 
 const VISIBILITY_OPTIONS = [
   {
@@ -51,6 +54,14 @@ export default function ProfilePrivacy() {
   const [dataAccessByEmployer, setDataAccessByEmployer] = useState({})
   const [dataAccessActingId, setDataAccessActingId] = useState(null)
   const [dataAccessError, setDataAccessError] = useState(null)
+  // Per-skill sharing: how many skills are currently shared under each
+  // approved request (keyed by employer_data_access_requests.id, not
+  // employer id, since that's what employer_data_access_shared_skills rows
+  // point at), the learner's own skills (for the share/edit picker), and
+  // which employer the picker is currently open for.
+  const [sharedSkillCountByRequest, setSharedSkillCountByRequest] = useState({})
+  const [mySkills, setMySkills] = useState([])
+  const [skillShareModal, setSkillShareModal] = useState(null)
 
   const activeEmployerIds = useMemo(
     () => (employerMemberships ?? []).map((m) => m.employer_id),
@@ -67,15 +78,18 @@ export default function ProfilePrivacy() {
 
   async function load() {
     try {
-      const [{ data }, searchSettings] = await Promise.all([
+      const [{ data }, searchSettings, { data: skillsData, error: skillsError }] = await Promise.all([
         supabase.from('profiles').select('skills_profile_visible').eq('id', user.id).single(),
         getSearchPrivacySettings(user.id),
+        supabase.from('skills').select('id, name').eq('user_id', user.id).order('name', { ascending: true }),
       ])
+      if (skillsError) throw skillsError
       setSkillsProfileVisible(data?.skills_profile_visible ?? false)
       setActivityFeedVisible(searchSettings?.activity_feed_visible ?? false)
       setProfileVisibleToMatches(searchSettings?.profile_visible_to_skill_matches ?? false)
       setSearchVisibility(searchSettings?.skill_search_visibility ?? 'hidden')
       setAutoIncludeNewSkills(searchSettings?.auto_include_new_skills_in_search ?? false)
+      setMySkills(skillsData ?? [])
     } catch (err) {
       setPrivacyError(err.message)
     } finally {
@@ -93,6 +107,7 @@ export default function ProfilePrivacy() {
     if (activeEmployerIds.length === 0) {
       setEmployers([])
       setDataAccessByEmployer({})
+      setSharedSkillCountByRequest({})
       return
     }
     try {
@@ -103,22 +118,67 @@ export default function ProfilePrivacy() {
       if (employersError) throw employersError
       setEmployers(employersData ?? [])
       setDataAccessByEmployer(Object.fromEntries(statusRows.map((r) => [r.employer_id, r])))
+
+      // Skill-count summary, so a learner can see at a glance what each
+      // approved employer can currently see -- one query across every
+      // approved request rather than one round trip per employer.
+      const approvedRequestIds = statusRows.filter((r) => r.status === 'approved').map((r) => r.id)
+      if (approvedRequestIds.length === 0) {
+        setSharedSkillCountByRequest({})
+      } else {
+        const { data: sharedRows, error: sharedError } = await supabase
+          .from('employer_data_access_shared_skills')
+          .select('request_id')
+          .in('request_id', approvedRequestIds)
+        if (sharedError) throw sharedError
+        const counts = {}
+        for (const row of sharedRows ?? []) {
+          counts[row.request_id] = (counts[row.request_id] ?? 0) + 1
+        }
+        setSharedSkillCountByRequest(counts)
+      }
     } catch (err) {
       setDataAccessError({ id: null, message: err.message })
     }
   }
 
-  async function handleShare(employerId) {
+  // Opens ShareSkillsModal for a brand-new share (nothing preselected).
+  function handleOpenShare(employerId) {
+    setDataAccessError(null)
+    setSkillShareModal({ employerId, requestId: null, initialSkillIds: [] })
+  }
+
+  // Opens ShareSkillsModal pre-filled with the employer's current shared
+  // skills, so the learner can add/remove without starting over.
+  async function handleOpenEditShared(employerId, requestId) {
     setDataAccessError(null)
     setDataAccessActingId(employerId)
     try {
-      const row = await shareDataWithEmployer(employerId)
-      setDataAccessByEmployer((prev) => ({ ...prev, [employerId]: row }))
+      const skillIds = await listSharedEmployerSkillIds(requestId)
+      setSkillShareModal({ employerId, requestId, initialSkillIds: skillIds })
     } catch (err) {
       setDataAccessError({ id: employerId, message: err.message })
     } finally {
       setDataAccessActingId(null)
     }
+  }
+
+  // Confirm handler for ShareSkillsModal -- branches on whether this is a
+  // fresh share (share_data_with_employer, may also accept a pending
+  // request in the same call) or editing an already-approved grant
+  // (update_shared_employer_skills). Throws back to the modal on error so
+  // it stays open and shows the message inline, matching its own pattern.
+  async function handleConfirmSkillShare(skillIds) {
+    const { employerId, requestId } = skillShareModal
+    if (requestId) {
+      await updateSharedEmployerSkills(requestId, skillIds)
+      setSharedSkillCountByRequest((prev) => ({ ...prev, [requestId]: skillIds.length }))
+    } else {
+      const row = await shareDataWithEmployer(employerId, skillIds)
+      setDataAccessByEmployer((prev) => ({ ...prev, [employerId]: row }))
+      setSharedSkillCountByRequest((prev) => ({ ...prev, [row.id]: skillIds.length }))
+    }
+    setSkillShareModal(null)
   }
 
   async function handleRevoke(employerId, requestId) {
@@ -127,6 +187,11 @@ export default function ProfilePrivacy() {
     try {
       await revokeEmployerDataAccess(requestId)
       setDataAccessByEmployer((prev) => ({ ...prev, [employerId]: { ...prev[employerId], status: 'revoked' } }))
+      setSharedSkillCountByRequest((prev) => {
+        const next = { ...prev }
+        delete next[requestId]
+        return next
+      })
     } catch (err) {
       setDataAccessError({ id: employerId, message: err.message })
     } finally {
@@ -327,15 +392,19 @@ export default function ProfilePrivacy() {
               <div className="bg-card border border-hairline rounded-lg p-6">
                 <h3 className="font-display text-lg text-ink mb-1">Employers</h3>
                 <p className="text-sm text-secondary mb-4">
-                  Control whether an employer you belong to can view your skills profile. This is
+                  Control which specific skills an employer you belong to can see. This is
                   separate from any training they've assigned you — sharing here also lets their
-                  admins see your skills and the evidence behind them. You can revoke access at
-                  any time.
+                  admins see the skills you choose and the evidence behind them. You choose which
+                  skills, and you can change your selection or revoke access entirely at any
+                  time; revoking only removes what you've explicitly shared here — it doesn't
+                  affect anything the employer already sees automatically from training they've
+                  assigned you.
                 </p>
                 <ul className="space-y-3">
                   {employers.map((employer) => {
                     const access = dataAccessByEmployer[employer.id]
                     const isShared = access?.status === 'approved'
+                    const sharedCount = isShared ? (sharedSkillCountByRequest[access.id] ?? 0) : 0
                     const acting = dataAccessActingId === employer.id
                     return (
                       <li
@@ -346,7 +415,9 @@ export default function ProfilePrivacy() {
                           <p className="text-sm text-ink">{employer.name}</p>
                           <p className="text-xs text-secondary">
                             {isShared
-                              ? 'Shared — this employer can view your skills profile'
+                              ? sharedCount > 0
+                                ? `Shared — ${sharedCount} skill${sharedCount === 1 ? '' : 's'} visible to this employer`
+                                : 'Shared — no skills selected yet'
                               : access?.status === 'pending'
                                 ? 'This employer has requested access — respond from your Actions page, or share directly below'
                                 : 'Not shared'}
@@ -356,22 +427,32 @@ export default function ProfilePrivacy() {
                           )}
                         </div>
                         {isShared ? (
-                          <button
-                            type="button"
-                            onClick={() => handleRevoke(employer.id, access.id)}
-                            disabled={acting}
-                            className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60 whitespace-nowrap"
-                          >
-                            {acting ? 'Revoking…' : 'Revoke access'}
-                          </button>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditShared(employer.id, access.id)}
+                              disabled={acting}
+                              className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60 whitespace-nowrap"
+                            >
+                              Edit shared skills
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRevoke(employer.id, access.id)}
+                              disabled={acting}
+                              className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60 whitespace-nowrap"
+                            >
+                              {acting ? 'Revoking…' : 'Revoke access'}
+                            </button>
+                          </div>
                         ) : (
                           <button
                             type="button"
-                            onClick={() => handleShare(employer.id)}
+                            onClick={() => handleOpenShare(employer.id)}
                             disabled={acting}
                             className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60 whitespace-nowrap"
                           >
-                            {acting ? 'Sharing…' : 'Share my skills profile'}
+                            Share my skills profile
                           </button>
                         )}
                       </li>
@@ -387,6 +468,22 @@ export default function ProfilePrivacy() {
       </main>
 
       {pickerOpen && <SearchableSkillsModal userId={user.id} onClose={() => setPickerOpen(false)} />}
+
+      {skillShareModal && (
+        <ShareSkillsModal
+          skills={mySkills}
+          initiallySelectedIds={skillShareModal.initialSkillIds}
+          title={skillShareModal.requestId ? 'Edit shared skills' : 'Choose skills to share'}
+          description={
+            skillShareModal.requestId
+              ? 'Add or remove which of your skills this employer can see.'
+              : 'Pick which of your skills this employer can see. You can change this any time.'
+          }
+          confirmLabel={skillShareModal.requestId ? 'Save' : 'Share'}
+          onConfirm={handleConfirmSkillShare}
+          onClose={() => setSkillShareModal(null)}
+        />
+      )}
     </div>
   )
 }

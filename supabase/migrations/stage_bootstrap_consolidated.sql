@@ -9866,3 +9866,559 @@ as $$
   )
 $$;
 
+-- Refines Phase 5 (employer_data_access_requests, 20260902200000/210000) from
+-- an all-or-nothing grant to per-skill sharing. Previously, once a request
+-- reached 'approved', has_employer_data_access made the learner's ENTIRE
+-- skills/skill_assessments visible to that employer's admins. This migration
+-- adds an explicit join table of which skills the learner actually chose to
+-- share, and re-points the two additive SELECT policies at a per-skill check
+-- instead. request_employer_data_access is untouched -- skill selection now
+-- happens at accept/share time (decide_employer_data_access_request,
+-- share_data_with_employer) or any time after via the new
+-- update_shared_employer_skills, not at request time.
+
+-- ----------------------------------------------------------------------------
+-- employer_data_access_shared_skills -- one row per skill actually shared
+-- under a given employer_data_access_requests row. Select-only RLS: every
+-- write goes through the security definer RPCs below, mirroring
+-- employer_data_access_requests' own "no insert/update policy at all" shape.
+-- ----------------------------------------------------------------------------
+
+create table employer_data_access_shared_skills (
+  id uuid primary key default gen_random_uuid(),
+  request_id uuid not null references employer_data_access_requests(id) on delete cascade,
+  skill_id uuid not null references skills(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (request_id, skill_id)
+);
+
+alter table employer_data_access_shared_skills enable row level security;
+
+create index employer_data_access_shared_skills_request_idx on employer_data_access_shared_skills (request_id);
+create index employer_data_access_shared_skills_skill_idx on employer_data_access_shared_skills (skill_id);
+
+create policy "Parties to a data access request can view its shared skills"
+  on employer_data_access_shared_skills for select
+  to authenticated
+  using (
+    exists (
+      select 1 from employer_data_access_requests r
+      where r.id = request_id and r.learner_id = auth.uid()
+    )
+    or exists (
+      select 1 from employer_data_access_requests r
+      where r.id = request_id and is_employer_admin(r.employer_id, auth.uid())
+    )
+  );
+
+-- ----------------------------------------------------------------------------
+-- Helper -- replaces has_employer_data_access as the predicate the skills/
+-- skill_assessments RLS policies rely on. Preserves the exact fix from
+-- 20260902210000 (the is_employer_member re-check) so a shared skill stops
+-- being visible the moment the learner leaves/is removed from the employer,
+-- not just when they revoke.
+-- ----------------------------------------------------------------------------
+
+create or replace function is_skill_shared_with_employer(p_skill_id uuid, p_check_user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from employer_data_access_shared_skills eas
+    join employer_data_access_requests r on r.id = eas.request_id
+    where eas.skill_id = p_skill_id
+      and r.status = 'approved'
+      and is_employer_admin(r.employer_id, p_check_user_id)
+      and is_employer_member(r.employer_id, r.learner_id)
+  )
+$$;
+
+grant execute on function is_skill_shared_with_employer(uuid, uuid) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Internal helper, not granted to authenticated -- called only from the
+-- security definer RPCs below, which already establish p_request_id belongs
+-- to the caller before delegating here. Validates every id in p_skill_ids
+-- actually belongs to a skills row owned by the caller (defense in depth --
+-- the UI never constructs a call with someone else's skill id, but the RPCs
+-- shouldn't trust that), then replaces the request's shared-skill set
+-- wholesale. `distinct` guards against a duplicate id in the input array
+-- tripping the (request_id, skill_id) unique constraint.
+-- ----------------------------------------------------------------------------
+
+create or replace function set_employer_data_access_shared_skills(p_request_id uuid, p_skill_ids uuid[])
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if exists (
+    select 1 from unnest(p_skill_ids) as sid
+    where not exists (select 1 from skills where id = sid and user_id = auth.uid())
+  ) then
+    raise exception 'One or more selected skills do not belong to you.';
+  end if;
+
+  delete from employer_data_access_shared_skills where request_id = p_request_id;
+
+  insert into employer_data_access_shared_skills (request_id, skill_id)
+  select distinct p_request_id, sid from unnest(p_skill_ids) as sid;
+end;
+$$;
+
+-- ----------------------------------------------------------------------------
+-- decide_employer_data_access_request -- adds p_skill_ids (defaulted, so
+-- existing callers passing just 2 args would fail to resolve now that the
+-- signature has changed identity; drop the old 2-arg overload explicitly
+-- rather than leaving a dangling stale signature behind).
+-- ----------------------------------------------------------------------------
+
+drop function if exists decide_employer_data_access_request(uuid, boolean);
+
+create or replace function decide_employer_data_access_request(
+  p_request_id uuid,
+  p_accept boolean,
+  p_skill_ids uuid[] default array[]::uuid[]
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row employer_data_access_requests%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select * into v_row from employer_data_access_requests where id = p_request_id for update;
+  if not found then
+    raise exception 'Request not found';
+  end if;
+  if v_row.learner_id != auth.uid() then
+    raise exception 'Not authorized';
+  end if;
+  if v_row.status != 'pending' then
+    raise exception 'This request has already been decided.';
+  end if;
+
+  update employer_data_access_requests
+  set status = case when p_accept then 'approved' else 'declined' end,
+      decided_at = now()
+  where id = p_request_id;
+
+  -- Decline needs no skill-set change -- there shouldn't be any yet.
+  if p_accept then
+    perform set_employer_data_access_shared_skills(p_request_id, p_skill_ids);
+  end if;
+end;
+$$;
+
+grant execute on function decide_employer_data_access_request(uuid, boolean, uuid[]) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- share_data_with_employer -- same shape change as above.
+-- ----------------------------------------------------------------------------
+
+drop function if exists share_data_with_employer(uuid);
+
+create or replace function share_data_with_employer(p_employer_id uuid, p_skill_ids uuid[] default array[]::uuid[])
+returns employer_data_access_requests
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row employer_data_access_requests%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+  if not exists (
+    select 1 from employer_members
+    where employer_id = p_employer_id and user_id = auth.uid() and status = 'active'
+  ) then
+    raise exception 'You are not an active member of this employer.';
+  end if;
+
+  insert into employer_data_access_requests (employer_id, learner_id, requested_by, status, decided_at)
+  values (p_employer_id, auth.uid(), null, 'approved', now())
+  on conflict (employer_id, learner_id) do update
+    set status = 'approved', requested_by = null, decided_at = now()
+  returning * into v_row;
+
+  perform set_employer_data_access_shared_skills(v_row.id, p_skill_ids);
+
+  return v_row;
+end;
+$$;
+
+grant execute on function share_data_with_employer(uuid, uuid[]) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- New: update_shared_employer_skills -- lets a learner change their mind
+-- about which skills are shared with an already-approved employer, without
+-- having to revoke and re-share from scratch. Only edits a live grant.
+-- ----------------------------------------------------------------------------
+
+create or replace function update_shared_employer_skills(p_request_id uuid, p_skill_ids uuid[])
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row employer_data_access_requests%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select * into v_row from employer_data_access_requests where id = p_request_id for update;
+  if not found then
+    raise exception 'Request not found';
+  end if;
+  if v_row.learner_id != auth.uid() then
+    raise exception 'Not authorized';
+  end if;
+  if v_row.status != 'approved' then
+    raise exception 'This access grant is not currently active.';
+  end if;
+
+  perform set_employer_data_access_shared_skills(p_request_id, p_skill_ids);
+end;
+$$;
+
+grant execute on function update_shared_employer_skills(uuid, uuid[]) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- revoke_employer_data_access -- same signature, now also clears the shared-
+-- skill set so a future share_data_with_employer/accept for the same
+-- (employer, learner) pair starts clean rather than silently reactivating
+-- stale selections.
+-- ----------------------------------------------------------------------------
+
+create or replace function revoke_employer_data_access(p_request_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row employer_data_access_requests%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select * into v_row from employer_data_access_requests where id = p_request_id for update;
+  if not found then
+    raise exception 'Request not found';
+  end if;
+  if v_row.learner_id != auth.uid() then
+    raise exception 'Not authorized';
+  end if;
+  if v_row.status != 'approved' then
+    raise exception 'This access grant is not currently active.';
+  end if;
+
+  update employer_data_access_requests
+  set status = 'revoked', decided_at = now()
+  where id = p_request_id;
+
+  delete from employer_data_access_shared_skills where request_id = p_request_id;
+end;
+$$;
+
+-- ----------------------------------------------------------------------------
+-- Re-point the two additive RLS policies (20260902200000) at the new
+-- per-skill predicate, then drop has_employer_data_access -- nothing else
+-- references it (confirmed by grep across supabase/migrations).
+-- ----------------------------------------------------------------------------
+
+drop policy "Employers with granted access can view skills" on skills;
+drop policy "Employers with granted access can view skill assessments" on skill_assessments;
+
+create policy "Employers with granted access can view skills"
+  on skills for select
+  using (is_skill_shared_with_employer(skills.id, auth.uid()));
+
+create policy "Employers with granted access can view skill assessments"
+  on skill_assessments for select
+  using (is_skill_shared_with_employer(skill_assessments.skill_id, auth.uid()));
+
+drop function if exists has_employer_data_access(uuid, uuid);
+
+-- Phase 4 of the employer domain concept (follows 20260902090000/150000/
+-- 160000/170000, and Phase 3's 20260902180000/190000 course_assignments):
+-- lets an employer admin push/suggest a skill (with an optional target
+-- level/date) to specific employer_members, mirroring course assignment's
+-- "push, don't force" shape exactly.
+--
+-- Same trust boundary as course_assignments: suggesting doesn't grant the
+-- employer any access to the learner's data and doesn't touch their actual
+-- record by itself, so an admin can create a suggestion without the
+-- learner's prior consent -- that's the point of "push". What it must NOT
+-- do is silently create or modify the learner's own skills/skill_targets
+-- rows -- that stays an action only the learner takes (clicking "Add to my
+-- skills" on /actions, via adoptSkillSuggestion ->
+-- findOrCreatePersonalSkill, the same unmodified function every other
+-- learner-initiated skill-add path already uses -- and a skill_targets
+-- insert shaped exactly like SetTargetModal's own, editable before saving,
+-- not a silent copy of the employer's suggested values). This table only
+-- ever tracks the suggestion's own lifecycle (suggested/adopted/dismissed);
+-- it is never itself the thing that shows up on a learner's skills profile.
+create table employer_skill_suggestions (
+  id uuid primary key default gen_random_uuid(),
+  employer_id uuid not null references employers(id) on delete cascade,
+  learner_id uuid not null references auth.users(id),
+  skill_library_id uuid not null references skill_library(id),
+  -- Denormalized copy of the library skill's name at suggestion time, so
+  -- adoptSkillSuggestion can call findOrCreatePersonalSkill(userId,
+  -- skill_name) directly without an extra join/lookup -- the same shape
+  -- findOrCreatePersonalSkill already expects (name-based resolve-or-
+  -- create), and consistent with course_assignments denormalizing nothing
+  -- further than a foreign key only because course_catalogue rows aren't
+  -- looked up by name anywhere.
+  skill_name text not null,
+  suggested_target_level int check (suggested_target_level between 1 and 5),
+  target_date date,
+  comments text,
+  assigned_by uuid references auth.users(id),
+  status text not null default 'suggested' check (status in ('suggested', 'adopted', 'dismissed')),
+  created_at timestamptz not null default now(),
+  unique (employer_id, learner_id, skill_library_id)
+);
+
+create index employer_skill_suggestions_learner_idx on employer_skill_suggestions (learner_id);
+create index employer_skill_suggestions_employer_idx on employer_skill_suggestions (employer_id);
+
+alter table employer_skill_suggestions enable row level security;
+
+-- A learner sees their own suggestions (whatever their status); an employer
+-- admin sees every suggestion they've made, for a roster/status view --
+-- mirrors course_assignments' select policy exactly.
+create policy "Learners and employer admins can view skill suggestions"
+  on employer_skill_suggestions for select
+  to authenticated
+  using (
+    learner_id = (select auth.uid())
+    or is_employer_admin(employer_id, (select auth.uid()))
+  );
+
+-- No insert policy -- creation only happens through
+-- suggest_skill_to_employer_members() below (security definer, validates
+-- admin status server-side), same reasoning as course_assignments having
+-- none either.
+
+-- The learner transitions their own row's status: 'adopted' once they've
+-- actually added the skill via the existing, unchanged
+-- findOrCreatePersonalSkill flow (adoptSkillSuggestion,
+-- src/lib/skillSuggestions.js), or 'dismissed' if they don't want it.
+--
+-- RLS alone can't restrict this to just the status column -- USING/WITH
+-- CHECK only gate which rows are touched, not which columns change within
+-- them. That exact bug class (an unrestricted `grant update` on a table
+-- with a legitimate self-service column update, letting a learner rewrite
+-- the row's other columns via direct PostgREST) was already found and
+-- fixed twice in this domain: once on employers
+-- (20260902150000_employers_drop_update_policy.sql, which had no
+-- legitimate self-service update at all so the fix was to drop the policy
+-- entirely) and once on course_assignments itself
+-- (20260902190000_course_assignment_security_fixes.sql, which -- like this
+-- table -- has a real self-service status flip, so the fix was narrowing
+-- the grant to just that column). Applying that column-grain grant here
+-- from the start rather than reintroducing the bug a third time.
+create policy "Learners can update their own suggestion status"
+  on employer_skill_suggestions for update
+  to authenticated
+  using (learner_id = (select auth.uid()))
+  with check (learner_id = (select auth.uid()));
+
+-- Lets an admin retract a suggestion (wrong skill/person).
+create policy "Employer admins can delete skill suggestions"
+  on employer_skill_suggestions for delete
+  to authenticated
+  using (is_employer_admin(employer_id, (select auth.uid())));
+
+grant select, delete on table employer_skill_suggestions to authenticated;
+-- Column-grain: only the learner-facing status transition is allowed via
+-- direct table grant; employer_id/learner_id/skill_library_id/skill_name/
+-- suggested_target_level/target_date/comments/assigned_by all stay
+-- unwritable by a direct PostgREST update, no matter what the RLS USING/
+-- WITH CHECK clause above would otherwise allow through.
+grant update (status) on table employer_skill_suggestions to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- suggest_skill_to_employer_members -- security definer, mirrors
+-- assign_course_to_employer_members's (20260902180000) validated-insert-
+-- with-on-conflict shape: check the caller's admin status server-side, then
+-- do the insert. Grant execute to authenticated (same convention as every
+-- other employer RPC) since the internal is_employer_admin check is what
+-- actually enforces admin-only.
+--
+-- The insert/select/on-conflict is one statement doing double duty: it
+-- filters p_user_ids down to actual active employer_members of this
+-- employer (same shape as the course-assignment RPC -- both roles
+-- assignable), and it dedupes against any existing suggestion via the
+-- unique constraint. On conflict, only resets a previously-'dismissed'
+-- row back to a fresh 'suggested' one (re-suggesting after a dismiss);
+-- an already-'suggested' or already-'adopted' row is left completely
+-- untouched -- don't silently reset something the learner already adopted,
+-- and don't spam-reset an already-pending ask. Returns setof
+-- employer_skill_suggestions so the caller can tell exactly which of the
+-- requested users actually got a new/reset row, and report the rest as
+-- skipped rather than claiming a uniform success (note: unlike the course-
+-- assignment RPC's plain "do nothing", an already-'suggested' target here
+-- still returns no row from `returning *` since the update is filtered out
+-- by the `where` clause, so it's correctly reported as skipped too).
+-- ----------------------------------------------------------------------------
+create or replace function suggest_skill_to_employer_members(
+  p_employer_id uuid,
+  p_skill_library_id uuid,
+  p_skill_name text,
+  p_user_ids uuid[],
+  p_target_level int default null,
+  p_target_date date default null,
+  p_comments text default null
+)
+returns setof employer_skill_suggestions
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_caller uuid := (select auth.uid());
+begin
+  if v_caller is null or not is_employer_admin(p_employer_id, v_caller) then
+    raise exception 'Not authorized';
+  end if;
+
+  if p_target_level is not null and (p_target_level < 1 or p_target_level > 5) then
+    raise exception 'Target level must be between 1 and 5';
+  end if;
+
+  return query
+    insert into employer_skill_suggestions
+      (employer_id, learner_id, skill_library_id, skill_name, suggested_target_level, target_date, comments, assigned_by)
+    select p_employer_id, uid.user_id, p_skill_library_id, p_skill_name, p_target_level, p_target_date, p_comments, v_caller
+    from unnest(p_user_ids) as uid(user_id)
+    where exists (
+      select 1 from employer_members
+      where employer_id = p_employer_id
+        and user_id = uid.user_id
+        and status = 'active'
+    )
+    on conflict (employer_id, learner_id, skill_library_id) do update
+      set status = 'suggested',
+          suggested_target_level = excluded.suggested_target_level,
+          target_date = excluded.target_date,
+          comments = excluded.comments,
+          assigned_by = excluded.assigned_by,
+          created_at = now()
+      where employer_skill_suggestions.status = 'dismissed'
+    returning *;
+end;
+$$;
+
+revoke all on function suggest_skill_to_employer_members(uuid, uuid, text, uuid[], int, date, text) from public, anon, authenticated;
+grant execute on function suggest_skill_to_employer_members(uuid, uuid, text, uuid[], int, date, text) to authenticated;
+
+
+-- CRITICAL security fixes, found by independent security review of
+-- 20260902220000 (per-skill employer data sharing) and 20260902230000
+-- (employer skill suggestions), both already live on Staging before this
+-- fix. Two real, exploitable gaps -- Supabase auto-grants ALL on every new
+-- table/function to anon/authenticated by default, and both migrations
+-- assumed (in comments, incorrectly) that omitting an explicit grant meant
+-- no access existed. It doesn't; an explicit revoke is required.
+
+-- ----------------------------------------------------------------------------
+-- 1. set_employer_data_access_shared_skills was directly callable by ANYONE,
+-- including unauthenticated (anon) callers, with no auth check and no
+-- ownership check on p_request_id -- only p_skill_ids' ownership was
+-- validated, which trivially passes for an empty array. Any caller could
+-- pass any learner's employer_data_access_requests.id and silently wipe
+-- their shared-skill set. Fixed with both a revoke (the actual fix -- this
+-- function is only ever meant to be called internally by the security
+-- definer RPCs below it, which already establish ownership) and, as
+-- defense in depth, explicit auth/ownership checks inside the function
+-- itself rather than trusting callers alone.
+-- ----------------------------------------------------------------------------
+
+create or replace function set_employer_data_access_shared_skills(p_request_id uuid, p_skill_ids uuid[])
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  if not exists (
+    select 1 from employer_data_access_requests
+    where id = p_request_id and learner_id = auth.uid()
+  ) then
+    raise exception 'Not authorized';
+  end if;
+
+  if exists (
+    select 1 from unnest(p_skill_ids) as sid
+    where not exists (select 1 from skills where id = sid and user_id = auth.uid())
+  ) then
+    raise exception 'One or more selected skills do not belong to you.';
+  end if;
+
+  delete from employer_data_access_shared_skills where request_id = p_request_id;
+
+  insert into employer_data_access_shared_skills (request_id, skill_id)
+  select distinct p_request_id, sid from unnest(p_skill_ids) as sid;
+end;
+$$;
+
+revoke all on function set_employer_data_access_shared_skills(uuid, uuid[]) from public, anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- 2. employer_skill_suggestions' column-grain `grant update (status)` never
+-- actually narrowed anything -- the table's default GRANT ALL to
+-- authenticated (applied automatically on creation) was never revoked, so
+-- a learner could rewrite any column on their own row (employer_id,
+-- skill_library_id, suggested_target_level, target_date, comments,
+-- assigned_by), not just status. Mirrors the exact fix already applied to
+-- course_assignments in 20260902190000 -- revoke the blanket grant first.
+-- ----------------------------------------------------------------------------
+
+revoke update on table employer_skill_suggestions from authenticated;
+grant update (status) on table employer_skill_suggestions to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- 3. Defense-in-depth: the remaining employer-data-access RPCs each have
+-- correct internal auth.uid()/ownership checks (so this isn't currently
+-- exploitable, unlike #1 above), but were left reachable by anon due to the
+-- same missing-revoke root cause. Close them off explicitly, consistent
+-- with suggest_skill_to_employer_members's own pattern in the same batch
+-- of work.
+-- ----------------------------------------------------------------------------
+
+revoke all on function decide_employer_data_access_request(uuid, boolean, uuid[]) from public, anon, authenticated;
+grant execute on function decide_employer_data_access_request(uuid, boolean, uuid[]) to authenticated;
+
+revoke all on function share_data_with_employer(uuid, uuid[]) from public, anon, authenticated;
+grant execute on function share_data_with_employer(uuid, uuid[]) to authenticated;
+
+revoke all on function update_shared_employer_skills(uuid, uuid[]) from public, anon, authenticated;
+grant execute on function update_shared_employer_skills(uuid, uuid[]) to authenticated;
+
+revoke all on function revoke_employer_data_access(uuid) from public, anon, authenticated;
+grant execute on function revoke_employer_data_access(uuid) to authenticated;
+
+revoke all on function is_skill_shared_with_employer(uuid, uuid) from public, anon, authenticated;
+grant execute on function is_skill_shared_with_employer(uuid, uuid) to authenticated;

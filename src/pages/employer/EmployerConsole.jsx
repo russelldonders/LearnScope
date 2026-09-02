@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
 import ConfirmDialog from '../../components/ConfirmDialog'
@@ -15,7 +15,11 @@ import {
   listEmployerCourseAssignments,
   requestEmployerDataAccess,
   listEmployerDataAccessRequests,
+  suggestSkillToEmployerMembers,
+  listEmployerSkillSuggestions,
 } from '../../lib/admin/employers'
+import { listLibrarySkills } from '../../lib/skillLibrary'
+import { LEVELS, LEVEL_LABELS } from '../../lib/levels'
 import { useSortedPage, useRowSelection } from '../../lib/useSortedPage'
 import { SortableTh, TablePagination, SelectionTh, BulkActionBar } from '../../components/TableControls'
 
@@ -23,6 +27,21 @@ const SECTIONS = [
   { key: 'training', label: 'Training' },
   { key: 'learners', label: 'Learners' },
   { key: 'assign', label: 'Assign training' },
+  { key: 'suggest-skills', label: 'Suggest skills' },
+]
+
+// Mirrors ProviderConsole.jsx's own (module-private) SECTIONS labels/keys --
+// not the actual provider tab content, just enough to render matching,
+// visually distinct nav buttons here that hand off to the real /provider
+// console (via its existing location.state.organisationId/providerSection
+// read) rather than re-authoring provider functionality a second time. Keep
+// in sync with ProviderConsole.jsx's SECTIONS if that ever changes.
+const PROVIDER_SECTIONS = [
+  { key: 'training', label: 'Training' },
+  { key: 'skills', label: 'Skills' },
+  { key: 'catalogues', label: 'Catalogues' },
+  { key: 'staff', label: 'Users', adminOnly: true },
+  { key: 'resources', label: 'Resources' },
 ]
 
 const LEARNER_SORT_ACCESSORS = {
@@ -45,6 +64,19 @@ const ASSIGNMENT_STATUS_LABELS = {
   dismissed: 'Dismissed',
 }
 
+const SKILL_SUGGESTION_SORT_ACCESSORS = {
+  skill: (s) => s.skill_name?.toLowerCase() ?? '',
+  learner: (s) => (s.learnerEmail || '').toLowerCase(),
+  status: (s) => s.status ?? '',
+  created_at: (s) => s.created_at ?? '',
+}
+
+const SKILL_SUGGESTION_STATUS_LABELS = {
+  suggested: 'Suggested',
+  adopted: 'Added by learner',
+  dismissed: 'Dismissed',
+}
+
 // Foundation console for an employer's own admin (employer_members
 // role = 'admin', gated by EmployerAdminRoute). Training reuses the
 // existing provider console components verbatim (readOnly), scoped to the
@@ -60,10 +92,11 @@ const ASSIGNMENT_STATUS_LABELS = {
 // learner-facing UI are still later phases.
 export default function EmployerConsole() {
   const { user, employerMemberships, organisationMemberships } = useAuth()
+  const location = useLocation()
   const [employers, setEmployers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [selectedEmployerId, setSelectedEmployerId] = useState(null)
+  const [selectedEmployerId, setSelectedEmployerId] = useState(location.state?.employerId ?? null)
   const [activeSection, setActiveSection] = useState('training')
 
   const myEmployerIds = useMemo(
@@ -140,7 +173,7 @@ export default function EmployerConsole() {
 
             {selectedEmployer && (
               <div>
-                <div className="flex items-center flex-wrap gap-1 mb-6 border-b border-hairline">
+                <div className="flex items-center flex-wrap gap-x-1 gap-y-2 mb-1 border-b border-hairline">
                   {SECTIONS.map((section) => (
                     <button
                       key={section.key}
@@ -155,23 +188,38 @@ export default function EmployerConsole() {
                       {section.label}
                     </button>
                   ))}
+                  {myProviderRole && (
+                    <>
+                      <span className="mx-1 h-5 w-px bg-hairline shrink-0" aria-hidden="true" />
+                      <span className="font-mono text-[10px] uppercase tracking-wide text-secondary self-center mr-1">
+                        Provider
+                      </span>
+                      {PROVIDER_SECTIONS.filter((s) => !s.adminOnly || myProviderRole === 'admin').map((section) => (
+                        <Link
+                          key={section.key}
+                          to="/provider"
+                          state={{ organisationId: selectedEmployer.provider_organisation_id, providerSection: section.key }}
+                          className="text-sm px-3 py-2 -mb-px border-b-2 border-transparent whitespace-nowrap text-amber-800 hover:text-amber-900 hover:border-amber-800"
+                        >
+                          {section.label} →
+                        </Link>
+                      ))}
+                    </>
+                  )}
                 </div>
+                <p className="text-xs text-secondary mb-6">
+                  Amber tabs open the full Provider console, where you manage this employer's actual courses,
+                  catalogues, and resources.
+                </p>
 
                 {activeSection === 'training' && (
                   <div className="space-y-10">
-                    <p className="text-sm text-secondary">
-                      This view is read-only.{' '}
-                      {myProviderRole ? (
-                        <>
-                          Manage courses, catalogues, and resources from the full{' '}
-                          <Link to="/provider" className="text-moss hover:underline">
-                            Provider console →
-                          </Link>
-                        </>
-                      ) : (
-                        "Ask an admin of this employer's provider organisation to manage courses, catalogues, and resources there."
-                      )}
-                    </p>
+                    {!myProviderRole && (
+                      <p className="text-sm text-secondary">
+                        This view is read-only. Ask an admin of this employer's provider organisation to manage
+                        courses, catalogues, and resources there.
+                      </p>
+                    )}
                     <ProviderTrainingSection
                       key={`${selectedEmployer.id}-training`}
                       organisation={{ id: selectedEmployer.provider_organisation_id }}
@@ -198,6 +246,9 @@ export default function EmployerConsole() {
                 )}
                 {activeSection === 'assign' && (
                   <EmployerAssignTrainingPanel key={selectedEmployer.id} employer={selectedEmployer} />
+                )}
+                {activeSection === 'suggest-skills' && (
+                  <EmployerSuggestSkillsPanel key={selectedEmployer.id} employer={selectedEmployer} />
                 )}
               </div>
             )}
@@ -790,6 +841,363 @@ function EmployerAssignTrainingPanel({ employer }) {
                   </table>
                 </div>
                 <TablePagination page={aPage} setPage={aSetPage} pageSize={aPageSize} setPageSize={aSetPageSize} totalItems={aTotalItems} idPrefix={`employer-assignments-${employer.id}`} />
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  )
+}
+
+// Phase 6: push a skill (with an optional target level/date) to specific
+// learners, mirroring EmployerAssignTrainingPanel's "push, don't force"
+// shape exactly. Suggesting never creates or modifies anyone's actual
+// skills/skill_targets rows by itself -- suggest_skill_to_employer_members
+// only creates an employer_skill_suggestions row; the learner still has to
+// click "Add to my skills" on their own /actions page
+// (adoptSkillSuggestion) to create the real skill (and, if they choose,
+// a target) via the same unmodified findOrCreatePersonalSkill/skill_targets
+// path any other learner-initiated skill-add already uses. Skill choices
+// come from listLibrarySkills (src/lib/skillLibrary.js) -- the same active,
+// public-or-own-private library search every learner-facing "Find skill"
+// flow already uses, rather than the platform-admin-only listAllLibrarySkills
+// (src/lib/admin/skills.js), which surfaces inactive/moderated entries and
+// pulls in owner-identity fields that have no place in this picker. Member
+// selection reuses the same useRowSelection/SelectionTh/BulkActionBar
+// primitives as the Assign training tab above, for a consistent picker feel.
+function EmployerSuggestSkillsPanel({ employer }) {
+  const [librarySkills, setLibrarySkills] = useState([])
+  const [members, setMembers] = useState([])
+  const [suggestions, setSuggestions] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  const [skillQuery, setSkillQuery] = useState('')
+  const [selectedSkill, setSelectedSkill] = useState(null)
+  const [targetLevel, setTargetLevel] = useState('')
+  const [targetDate, setTargetDate] = useState('')
+  const [comments, setComments] = useState('')
+  const [suggesting, setSuggesting] = useState(false)
+  const [suggestResult, setSuggestResult] = useState(null)
+
+  useEffect(() => {
+    load()
+  }, [employer.id])
+
+  async function load() {
+    setLoading(true)
+    setError(null)
+    try {
+      const [skillsData, membersData, suggestionsData] = await Promise.all([
+        listLibrarySkills(),
+        listEmployerMembers(employer.id),
+        listEmployerSkillSuggestions(employer.id),
+      ])
+      setLibrarySkills(skillsData)
+      setMembers(membersData)
+      setSuggestions(suggestionsData)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const activeMembers = useMemo(() => members.filter((m) => m.status === 'active'), [members])
+  const emailByUserId = useMemo(() => new Map(members.map((m) => [m.user_id, m.email || m.user_id])), [members])
+
+  const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
+    useSortedPage(activeMembers, LEARNER_SORT_ACCESSORS)
+  const selection = useRowSelection(activeMembers.map((m) => m.user_id))
+  const pageUserIds = pageItems.map((m) => m.user_id)
+  const selectedOnPage = pageUserIds.filter((id) => selection.selected.has(id)).length
+
+  const skillMatches = useMemo(() => {
+    const q = skillQuery.trim().toLowerCase()
+    if (!q) return []
+    return librarySkills.filter((s) => s.name.toLowerCase().includes(q)).slice(0, 20)
+  }, [librarySkills, skillQuery])
+
+  const suggestionsWithEmail = useMemo(
+    () => suggestions.map((s) => ({ ...s, learnerEmail: emailByUserId.get(s.learner_id) })),
+    [suggestions, emailByUserId]
+  )
+  const {
+    sortKey: sSortKey,
+    sortDir: sSortDir,
+    toggleSort: sToggleSort,
+    page: sPage,
+    setPage: sSetPage,
+    pageSize: sPageSize,
+    setPageSize: sSetPageSize,
+    pageItems: sPageItems,
+    totalItems: sTotalItems,
+  } = useSortedPage(suggestionsWithEmail, SKILL_SUGGESTION_SORT_ACCESSORS, { defaultSortKey: 'created_at', defaultSortDir: 'desc' })
+
+  function chooseSkill(skill) {
+    setSelectedSkill(skill)
+    setSkillQuery(skill.name)
+  }
+
+  function clearSkill() {
+    setSelectedSkill(null)
+    setSkillQuery('')
+  }
+
+  async function handleSuggest() {
+    if (!selectedSkill || selection.selected.size === 0) return
+    if (targetLevel && !targetDate) {
+      setError('A target date is required when a target level is set.')
+      return
+    }
+    setSuggesting(true)
+    setSuggestResult(null)
+    setError(null)
+    try {
+      const requestedIds = Array.from(selection.selected)
+      const inserted = await suggestSkillToEmployerMembers(
+        employer.id,
+        selectedSkill.id,
+        selectedSkill.name,
+        requestedIds,
+        {
+          targetLevel: targetLevel ? Number(targetLevel) : null,
+          targetDate: targetDate || null,
+          comments: comments.trim() || null,
+        }
+      )
+      const insertedIds = new Set(inserted.map((row) => row.learner_id))
+      // The RPC silently skips anyone not an active member by the time it
+      // ran, or already has a live ('suggested'/'adopted') suggestion for
+      // this skill -- report that explicitly rather than claiming a uniform
+      // success.
+      const skippedEmails = requestedIds
+        .filter((id) => !insertedIds.has(id))
+        .map((id) => emailByUserId.get(id) || id)
+      setSuggestResult({ suggestedCount: inserted.length, skippedEmails })
+      selection.clear()
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSuggesting(false)
+    }
+  }
+
+  return (
+    <section aria-labelledby="employer-suggest-skills-heading">
+      <div className="mb-5">
+        <h2 id="employer-suggest-skills-heading" className="font-display text-lg text-ink">Suggest skills</h2>
+        <p className="text-sm text-secondary mt-1 max-w-2xl">
+          Suggest a skill (and optionally a target level/date) for specific learners to develop. They'll see it on
+          their Actions page and decide whether to add it to their own profile -- suggesting doesn't touch their
+          skills automatically.
+        </p>
+      </div>
+
+      {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
+
+      {loading ? (
+        <p className="text-secondary">Loading…</p>
+      ) : (
+        <>
+          <div className="bg-card border border-hairline rounded-lg p-4 mb-4 space-y-3">
+            <div className="relative">
+              <label className="block text-xs text-secondary mb-1" htmlFor="employerSuggestSkill">
+                Skill
+              </label>
+              <input
+                id="employerSuggestSkill"
+                value={skillQuery}
+                onChange={(e) => {
+                  setSkillQuery(e.target.value)
+                  if (selectedSkill) setSelectedSkill(null)
+                }}
+                placeholder="Search the skill library…"
+                autoComplete="off"
+                className="w-full max-w-md rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+              {selectedSkill && (
+                <button
+                  type="button"
+                  onClick={clearSkill}
+                  className="ml-2 text-xs text-secondary hover:text-ink hover:underline"
+                >
+                  Change
+                </button>
+              )}
+              {!selectedSkill && skillQuery.trim() && (
+                <div className="absolute z-10 mt-1 w-full max-w-md bg-card border border-hairline rounded-md shadow-sm max-h-56 overflow-y-auto">
+                  {skillMatches.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-secondary">No matching skills.</p>
+                  ) : (
+                    skillMatches.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => chooseSkill(s)}
+                        className="block w-full text-left px-3 py-2 text-sm text-ink hover:bg-paper"
+                      >
+                        {s.name}
+                        {s.category && <span className="text-xs text-secondary ml-1.5">({s.category})</span>}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <div>
+                <label className="block text-xs text-secondary mb-1" htmlFor="employerSuggestLevel">
+                  Target level (optional)
+                </label>
+                <select
+                  id="employerSuggestLevel"
+                  value={targetLevel}
+                  onChange={(e) => setTargetLevel(e.target.value)}
+                  className="rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                >
+                  <option value="">No specific level</option>
+                  {LEVELS.map((l) => (
+                    <option key={l} value={l}>{LEVEL_LABELS[l]}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-secondary mb-1" htmlFor="employerSuggestDate">
+                  Target date {targetLevel ? '' : '(optional)'}
+                </label>
+                <input
+                  id="employerSuggestDate"
+                  type="date"
+                  value={targetDate}
+                  onChange={(e) => setTargetDate(e.target.value)}
+                  className="rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-secondary mb-1" htmlFor="employerSuggestComments">
+                Why this matters (optional)
+              </label>
+              <textarea
+                id="employerSuggestComments"
+                rows={2}
+                value={comments}
+                onChange={(e) => setComments(e.target.value)}
+                className="w-full max-w-md rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+            </div>
+          </div>
+
+          {suggestResult && (
+            <div className="bg-card border border-hairline rounded-lg p-4 mb-4 text-xs">
+              <p className="text-moss">{suggestResult.suggestedCount} learner(s) suggested this skill.</p>
+              {suggestResult.skippedEmails.length > 0 && (
+                <p className="text-secondary mt-1">
+                  Skipped (not an active member, or already have a live suggestion for this skill): {suggestResult.skippedEmails.join(', ')}
+                </p>
+              )}
+            </div>
+          )}
+
+          {activeMembers.length === 0 ? (
+            <div className="text-center py-12 border border-dashed border-hairline rounded-lg mb-8">
+              <p className="text-secondary">No active learners to suggest skills to yet.</p>
+            </div>
+          ) : (
+            <div className="bg-card border border-hairline rounded-lg mb-8">
+              <div className="p-3 pb-0">
+                <BulkActionBar
+                  count={selection.selected.size}
+                  onClear={selection.clear}
+                  busy={suggesting}
+                  actions={[
+                    {
+                      label: suggesting ? 'Suggesting…' : `Suggest skill (${selection.selected.size})`,
+                      disabled: !selectedSkill || selection.selected.size === 0,
+                      title: !selectedSkill ? 'Choose a skill above first' : undefined,
+                      onClick: handleSuggest,
+                    },
+                  ]}
+                />
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-hairline text-left text-secondary">
+                      <SelectionTh
+                        idPrefix="employer-suggest-members"
+                        checked={selection.isAllSelected(pageUserIds)}
+                        indeterminate={selectedOnPage > 0 && selectedOnPage < pageUserIds.length}
+                        onChange={() => selection.toggleAll(pageUserIds)}
+                      />
+                      <SortableTh label="Learner" columnKey="email" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                      <SortableTh label="Role" columnKey="role" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageItems.map((m) => (
+                      <tr key={m.user_id} className="border-b border-hairline last:border-0">
+                        <td className="px-4 py-2">
+                          <input
+                            type="checkbox"
+                            checked={selection.selected.has(m.user_id)}
+                            onChange={() => selection.toggle(m.user_id)}
+                            aria-label={`Select ${m.email || m.user_id}`}
+                            className="rounded border-hairline accent-moss"
+                          />
+                        </td>
+                        <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{m.email || m.user_id}</td>
+                        <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{m.role}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <TablePagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalItems={totalItems} idPrefix={`employer-suggest-members-${employer.id}`} />
+            </div>
+          )}
+
+          <div>
+            <h3 className="font-display text-base text-ink mb-3">Suggested so far</h3>
+            {suggestions.length === 0 ? (
+              <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
+                <p className="text-secondary">No skills suggested yet.</p>
+              </div>
+            ) : (
+              <div className="bg-card border border-hairline rounded-lg">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-hairline text-left text-secondary">
+                        <SortableTh label="Skill" columnKey="skill" sortKey={sSortKey} sortDir={sSortDir} onSort={sToggleSort} />
+                        <SortableTh label="Learner" columnKey="learner" sortKey={sSortKey} sortDir={sSortDir} onSort={sToggleSort} />
+                        <th className="px-4 py-2 font-medium whitespace-nowrap">Target</th>
+                        <SortableTh label="Status" columnKey="status" sortKey={sSortKey} sortDir={sSortDir} onSort={sToggleSort} className="whitespace-nowrap" />
+                        <SortableTh label="Suggested" columnKey="created_at" sortKey={sSortKey} sortDir={sSortDir} onSort={sToggleSort} className="whitespace-nowrap" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sPageItems.map((s) => (
+                        <tr key={s.id} className="border-b border-hairline last:border-0">
+                          <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{s.skill_name}</td>
+                          <td className="px-4 py-2 text-secondary text-xs truncate max-w-[220px]">{s.learnerEmail || s.learner_id}</td>
+                          <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">
+                            {s.suggested_target_level ? LEVEL_LABELS[s.suggested_target_level] : '—'}
+                            {s.target_date ? ` by ${new Date(`${s.target_date}T00:00:00`).toLocaleDateString()}` : ''}
+                          </td>
+                          <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{SKILL_SUGGESTION_STATUS_LABELS[s.status] || s.status}</td>
+                          <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{new Date(s.created_at).toLocaleDateString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <TablePagination page={sPage} setPage={sSetPage} pageSize={sPageSize} setPageSize={sSetPageSize} totalItems={sTotalItems} idPrefix={`employer-skill-suggestions-${employer.id}`} />
               </div>
             )}
           </div>

@@ -149,23 +149,58 @@ export async function requestEmployerDataAccess(employerId, learnerId) {
 }
 
 // Mirrors decideEmployerInvite's shape -- decide_employer_data_access_request
-// (20260902200000) is security definer, runs as the learner being asked,
-// checked against auth.uid() and the row's 'pending' status server-side.
-export async function decideEmployerDataAccessRequest(requestId, accept) {
+// (20260902200000, refined 20260902220000) is security definer, runs as the
+// learner being asked, checked against auth.uid() and the row's 'pending'
+// status server-side. skillIds is only meaningful when accepting -- it
+// replaces the request's shared-skill set (employer_data_access_shared_
+// skills), validated server-side to actually belong to the caller.
+export async function decideEmployerDataAccessRequest(requestId, accept, skillIds = []) {
   const { error } = await supabase.rpc('decide_employer_data_access_request', {
     p_request_id: requestId,
     p_accept: accept,
+    p_skill_ids: skillIds,
   })
   if (error) throw error
 }
 
 // Learner-initiated proactive share, no request needed -- caller must
 // already be an active member of the employer they're sharing with
-// (share_data_with_employer checks this server-side).
-export async function shareDataWithEmployer(employerId) {
-  const { data, error } = await supabase.rpc('share_data_with_employer', { p_employer_id: employerId })
+// (share_data_with_employer checks this server-side). skillIds is the set
+// of skills actually shared, replacing whatever set (if any) existed before.
+export async function shareDataWithEmployer(employerId, skillIds = []) {
+  const { data, error } = await supabase.rpc('share_data_with_employer', {
+    p_employer_id: employerId,
+    p_skill_ids: skillIds,
+  })
   if (error) throw error
   return data
+}
+
+// Lets a learner change which skills are shared with an already-approved
+// employer without revoking and re-sharing from scratch. update_shared_
+// employer_skills (20260902220000) only permits editing a live ('approved')
+// grant, and re-validates skill ownership server-side same as the above two.
+export async function updateSharedEmployerSkills(requestId, skillIds) {
+  const { error } = await supabase.rpc('update_shared_employer_skills', {
+    p_request_id: requestId,
+    p_skill_ids: skillIds,
+  })
+  if (error) throw error
+}
+
+// The current shared-skill set for a request -- used to pre-fill the share
+// picker when editing an existing approved grant, and to show a per-employer
+// summary of what's currently visible to them (ProfilePrivacy.jsx). Relies
+// on employer_data_access_shared_skills' own select policy (visible to the
+// learner or the employer's admins) rather than a dedicated RPC, since this
+// is read-only.
+export async function listSharedEmployerSkillIds(requestId) {
+  const { data, error } = await supabase
+    .from('employer_data_access_shared_skills')
+    .select('skill_id')
+    .eq('request_id', requestId)
+  if (error) throw error
+  return (data ?? []).map((row) => row.skill_id)
 }
 
 // Learner revokes a live grant (from either an accepted request or a
@@ -215,6 +250,55 @@ export async function listMyEmployerDataAccessStatus(userId) {
     .from('employer_data_access_requests')
     .select('id, employer_id, status, requested_by, created_at, decided_at, employers(id, name)')
     .eq('learner_id', userId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+// Phase 6: employer-side skill suggestion, mirroring Phase 3's course
+// assignment "push, don't force" pattern exactly. suggest_skill_to_
+// employer_members (20260902230000) is security definer: validates the
+// caller's admin status server-side, then inserts one employer_skill_
+// suggestions row per requested user who is actually an active member of
+// this employer, skipping anyone already suggested this skill (unless
+// their prior suggestion was dismissed, which gets reset to a fresh one).
+// It never creates or modifies the learner's own skills/skill_targets rows
+// -- that only happens via the learner's own explicit "Add to my skills"
+// action (adoptSkillSuggestion, src/lib/skillSuggestions.js). Returns only
+// the rows that were actually newly inserted/reset -- callers should
+// compare against the requested userIds to report any that were silently
+// skipped (not an active member, or already suggested/adopted) rather than
+// claiming a uniform success.
+export async function suggestSkillToEmployerMembers(
+  employerId,
+  skillLibraryId,
+  skillName,
+  userIds,
+  { targetLevel = null, targetDate = null, comments = null } = {}
+) {
+  const { data, error } = await supabase.rpc('suggest_skill_to_employer_members', {
+    p_employer_id: employerId,
+    p_skill_library_id: skillLibraryId,
+    p_skill_name: skillName,
+    p_user_ids: userIds,
+    p_target_level: targetLevel,
+    p_target_date: targetDate,
+    p_comments: comments,
+  })
+  if (error) throw error
+  return data ?? []
+}
+
+// Admin-side roster/status view: every skill suggestion this employer has
+// made, whatever its status (suggested/adopted/dismissed) -- mirrors
+// listEmployerCourseAssignments' shape. Doesn't resolve the learner's
+// email -- callers already have that from listEmployerMembers (keyed by
+// user_id).
+export async function listEmployerSkillSuggestions(employerId) {
+  const { data, error } = await supabase
+    .from('employer_skill_suggestions')
+    .select('id, skill_library_id, skill_name, learner_id, suggested_target_level, target_date, comments, status, created_at')
+    .eq('employer_id', employerId)
     .order('created_at', { ascending: false })
   if (error) throw error
   return data ?? []

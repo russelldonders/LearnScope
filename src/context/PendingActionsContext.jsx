@@ -5,6 +5,7 @@ import { listIncomingRateInvites, listIncomingRecommendInvites } from '../lib/co
 import { listMyPendingOrgInvites } from '../lib/organisationInvites'
 import { listMyPendingEmployerInvites, listMyPendingDataAccessRequests } from '../lib/admin/employers'
 import { listMyCourseAssignments } from '../lib/courseCatalogue'
+import { listMySkillSuggestions } from '../lib/skillSuggestions'
 
 const PendingActionsContext = createContext(undefined)
 
@@ -19,8 +20,9 @@ export function PendingActionsProvider({ children }) {
   // Everything actually waiting on this learner to do something -- pending
   // connection requests, validation requests, organisation staff invites,
   // employer invites, employer data access requests, pushed course
-  // assignments, and rate invites addressed to them -- not invites/requests
-  // they sent themselves, which are waiting on someone else instead.
+  // assignments, pushed skill suggestions, and rate invites addressed to
+  // them -- not invites/requests they sent themselves, which are waiting on
+  // someone else instead.
   const refreshPendingActionCount = useCallback(async () => {
     if (!user) {
       setPendingActionCount(0)
@@ -35,6 +37,7 @@ export function PendingActionsProvider({ children }) {
       employerInvites,
       dataAccessRequests,
       courseAssignments,
+      skillSuggestions,
     ] = await Promise.all([
       supabase
         .from('connection_requests')
@@ -52,6 +55,7 @@ export function PendingActionsProvider({ children }) {
       listMyPendingEmployerInvites(user.id),
       listMyPendingDataAccessRequests(user.id),
       listMyCourseAssignments(user.id),
+      listMySkillSuggestions(user.id),
     ])
     setPendingActionCount(
       (requestCount ?? 0) +
@@ -61,7 +65,8 @@ export function PendingActionsProvider({ children }) {
         orgInvites.length +
         employerInvites.length +
         dataAccessRequests.length +
-        courseAssignments.length
+        courseAssignments.length +
+        skillSuggestions.length
     )
   }, [user])
 
