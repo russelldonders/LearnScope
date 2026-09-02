@@ -6,7 +6,7 @@ import { useRowSelection, useSortedPage } from '../../lib/useSortedPage'
 import { BulkActionBar, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 
 const TAG_SORT_ACCESSORS = {
-  id: (t) => t.id ?? '',
+  id: (t) => t.tag_code ?? '',
   name: (t) => t.name?.toLowerCase() ?? '',
   status: (t) => (t.is_blacklisted ? 1 : 0),
 }
@@ -151,7 +151,7 @@ export default function AdminTags() {
                           className="rounded border-hairline accent-moss"
                         />
                       </td>
-                      <td className="px-4 py-2.5 font-mono text-xs text-secondary whitespace-nowrap">{tag.id.slice(0, 8)}</td>
+                      <td className="px-4 py-2.5 font-mono text-xs text-secondary whitespace-nowrap">{tag.tag_code}</td>
                       <td className="px-4 py-2.5 text-ink whitespace-nowrap">{tag.name}</td>
                       <td className="px-4 py-2.5 whitespace-nowrap">
                         <span

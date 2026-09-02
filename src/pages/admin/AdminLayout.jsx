@@ -8,7 +8,7 @@ const SECTIONS = [
   { to: '/admin/catalogue', label: 'Course catalogue' },
   { to: '/admin/skills', label: 'Skill library' },
   { to: '/admin/tags', label: 'Tags' },
-  { to: '/admin/onboarding', label: 'Onboarding' },
+  { to: '/admin/onboarding', label: 'Settings' },
 ]
 
 // Nav shell for the platform-owner console -- each Admin*.jsx page renders

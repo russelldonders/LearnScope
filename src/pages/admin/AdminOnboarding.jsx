@@ -40,6 +40,7 @@ export default function AdminOnboarding() {
   return (
     <AdminLayout>
       <div className="space-y-4">
+        <h2 className="font-display text-base text-ink">First Login Journey</h2>
         <p className="text-sm text-secondary">
           Choose which steps appear in the first-login wizard new learners see right after signing
           up. Disabling every step skips the wizard entirely — new learners land straight on the
