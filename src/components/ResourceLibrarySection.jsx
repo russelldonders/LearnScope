@@ -22,8 +22,8 @@ import VideoEditorModal from './VideoEditorModal'
 import ScreenRecorderModal from './ScreenRecorderModal'
 import PageBuilderModal from './PageBuilderModal'
 import PageContent from './PageContent'
-import { useSortedPage } from '../lib/useSortedPage'
-import { SortableTh, TablePagination } from './TableControls'
+import { useRowSelection, useSortedPage } from '../lib/useSortedPage'
+import { BulkActionBar, SelectionTh, SortableTh, TablePagination } from './TableControls'
 
 const TYPE_LABELS = {
   video: 'Video',
@@ -62,6 +62,17 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
   const [uploading, setUploading] = useState(false)
   const [pendingDelete, setPendingDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [pendingBulkDelete, setPendingBulkDelete] = useState(null)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  // Ids currently targeted by an in-flight bulk delete -- a row's own
+  // single-row actions (Edit, Create new version, Remove) get disabled for
+  // exactly these rows while true, on top of their usual own-action guards.
+  // Edit in particular can insert a new higher-version row for the same
+  // resource (createResourceDraftVersion) concurrently with a delete that
+  // only removes the exact original row by id -- without this, that new
+  // draft would silently resurface after the bulk delete "succeeds".
+  const [bulkDeletingIds, setBulkDeletingIds] = useState(() => new Set())
+  const [editingResourceId, setEditingResourceId] = useState(null)
   const [fileName, setFileName] = useState('')
   const [dragActive, setDragActive] = useState(false)
   const [videoUrl, setVideoUrl] = useState('')
@@ -85,6 +96,9 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
     useSortedPage(filteredResources, RESOURCE_SORT_ACCESSORS)
+  const selection = useRowSelection(filteredResources.map((r) => r.id))
+  const resourcePageIds = pageItems.map((r) => r.id)
+  const resourcesSelectedOnPage = resourcePageIds.filter((id) => selection.selected.has(id)).length
 
   useEffect(() => {
     load()
@@ -185,6 +199,41 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
     }
   }
 
+  async function handleBulkDelete() {
+    const targets = pendingBulkDelete
+    setBulkDeleting(true)
+    setBulkDeletingIds(new Set(targets.map((resource) => resource.id)))
+    setError(null)
+    try {
+      const results = await Promise.allSettled(targets.map((resource) => deleteResource(resource)))
+      const failures = results
+        .map((result, index) => ({ result, resource: targets[index] }))
+        .filter(({ result }) => result.status === 'rejected')
+      const succeededIds = targets
+        .filter((_, index) => results[index].status === 'fulfilled')
+        .map((resource) => resource.id)
+      setPendingBulkDelete(null)
+      // Full success clears the whole selection; a partial failure keeps
+      // the still-undeleted resources selected so they're easy to retry.
+      if (failures.length > 0) selection.clearIds(succeededIds)
+      else selection.clear()
+      await load()
+      if (failures.length > 0) {
+        setError(
+          `${failures.length} of ${targets.length} resources couldn't be removed: ` +
+            failures
+              .map(({ resource, result }) => `"${resource.title}" (${result.reason?.message ?? 'unknown error'})`)
+              .join('; ')
+        )
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBulkDeleting(false)
+      setBulkDeletingIds(new Set())
+    }
+  }
+
   async function handleCreateVersion(resource) {
     setError(null)
     try {
@@ -203,6 +252,12 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
   // so the row reflects it, then open the editor on that fresh row. A
   // resource already in draft just opens straight away.
   async function handleEdit(resource) {
+    // Guards against a fast double-click firing createResourceDraftVersion
+    // twice for the same resource -- mirrors the actioningId-style guards
+    // used everywhere else in these tables for an in-flight single-row
+    // action.
+    if (editingResourceId === resource.id) return
+    setEditingResourceId(resource.id)
     setError(null)
     try {
       let target = resource
@@ -216,6 +271,8 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
       else setEditingResource(target)
     } catch (err) {
       setError(err.message)
+    } finally {
+      setEditingResourceId(null)
     }
   }
 
@@ -419,10 +476,30 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
         </div>
       ) : (
         <div className="bg-card border border-hairline rounded-lg">
+          <div className="p-3 pb-0">
+            <BulkActionBar
+              count={selection.selected.size}
+              onClear={selection.clear}
+              busy={bulkDeleting}
+              actions={[
+                {
+                  label: `Remove selected (${selection.selected.size})`,
+                  variant: 'danger',
+                  onClick: () => setPendingBulkDelete(resources.filter((r) => selection.selected.has(r.id))),
+                },
+              ]}
+            />
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-hairline text-left text-secondary">
+                  <SelectionTh
+                    idPrefix="provider-resources"
+                    checked={selection.isAllSelected(resourcePageIds)}
+                    indeterminate={resourcesSelectedOnPage > 0 && resourcesSelectedOnPage < resourcePageIds.length}
+                    onChange={() => selection.toggleAll(resourcePageIds)}
+                  />
                   <SortableTh label="ID" columnKey="code" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   <SortableTh label="Resource" columnKey="title" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <SortableTh label="Type" columnKey="type" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
@@ -438,12 +515,16 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
                     key={resource.id}
                     resource={resource}
                     userId={userId}
+                    selected={selection.selected.has(resource.id)}
+                    onToggleSelected={() => selection.toggle(resource.id)}
                     previewing={previewingId === resource.id}
                     onTogglePreview={() => setPreviewingId((id) => (id === resource.id ? null : resource.id))}
                     historyOpen={historyForId === resource.id}
                     versionHistory={versionHistory}
                     onToggleHistory={() => handleToggleHistory(resource)}
                     onEdit={() => handleEdit(resource)}
+                    editing={editingResourceId === resource.id}
+                    disabledByBulk={bulkDeletingIds.has(resource.id)}
                     onCreateVersion={() => handleCreateVersion(resource)}
                     onPublishVersion={() => handlePublishVersion(resource)}
                     onRemove={() => setPendingDelete(resource)}
@@ -463,6 +544,16 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
           confirming={deleting}
           onConfirm={handleDelete}
           onCancel={() => setPendingDelete(null)}
+        />
+      )}
+
+      {pendingBulkDelete && (
+        <ConfirmDialog
+          message={`Remove ${pendingBulkDelete.length} resources? This removes each one from every course it's attached to, not just this list.`}
+          confirmLabel="Remove"
+          confirming={bulkDeleting}
+          onConfirm={handleBulkDelete}
+          onCancel={() => setPendingBulkDelete(null)}
         />
       )}
 
@@ -519,12 +610,16 @@ const EDITABLE_TYPES = new Set(['video', 'screen_recording', 'page'])
 function ResourceRow({
   resource,
   userId,
+  selected,
+  onToggleSelected,
   previewing,
   onTogglePreview,
   historyOpen,
   versionHistory,
   onToggleHistory,
   onEdit,
+  editing,
+  disabledByBulk,
   onCreateVersion,
   onPublishVersion,
   onRemove,
@@ -533,6 +628,16 @@ function ResourceRow({
   return (
     <Fragment>
       <tr className="border-b border-hairline last:border-0">
+        <td className="px-4 py-3">
+          <label className="sr-only" htmlFor={`select-resource-${resource.id}`}>Select {resource.title}</label>
+          <input
+            id={`select-resource-${resource.id}`}
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelected}
+            className="rounded border-hairline accent-moss"
+          />
+        </td>
         <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{resource.resource_code}</td>
         <td className="px-4 py-3 text-ink font-medium truncate max-w-[220px]">{resource.title}</td>
         <td className="px-4 py-3 text-secondary whitespace-nowrap">{TYPE_LABELS[resource.type]}</td>
@@ -569,12 +674,24 @@ function ResourceRow({
               </button>
             )}
             {editable && (
-              <button type="button" onClick={onEdit} className="text-xs text-moss font-medium whitespace-nowrap">
-                Edit
+              <button
+                type="button"
+                onClick={onEdit}
+                disabled={editing || disabledByBulk}
+                title={disabledByBulk ? 'This resource is being removed' : undefined}
+                className="text-xs text-moss font-medium whitespace-nowrap disabled:cursor-wait disabled:opacity-60"
+              >
+                {editing ? 'Opening…' : 'Edit'}
               </button>
             )}
             {!editable && resource.status === 'published' && resource.is_current_published && (
-              <button type="button" onClick={onCreateVersion} className="text-xs text-moss font-medium hover:underline whitespace-nowrap">
+              <button
+                type="button"
+                onClick={onCreateVersion}
+                disabled={disabledByBulk}
+                title={disabledByBulk ? 'This resource is being removed' : undefined}
+                className="text-xs text-moss font-medium hover:underline whitespace-nowrap disabled:cursor-wait disabled:opacity-60"
+              >
                 Create new version
               </button>
             )}
@@ -586,7 +703,13 @@ function ResourceRow({
             <button type="button" onClick={onToggleHistory} className="text-xs text-moss font-medium hover:underline whitespace-nowrap">
               {historyOpen ? 'Hide versions' : 'Version history'}
             </button>
-            <button type="button" onClick={onRemove} className="text-xs text-red-700 hover:underline whitespace-nowrap">
+            <button
+              type="button"
+              onClick={onRemove}
+              disabled={disabledByBulk}
+              title={disabledByBulk ? 'This resource is already being removed' : undefined}
+              className="text-xs text-red-700 hover:underline whitespace-nowrap disabled:cursor-wait disabled:opacity-60"
+            >
               Remove
             </button>
           </div>
@@ -594,7 +717,7 @@ function ResourceRow({
       </tr>
       {previewing && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={7} className="px-4 pb-3">
+          <td colSpan={8} className="px-4 pb-3">
             {(resource.type === 'video' || resource.type === 'screen_recording') && (
               <EditedVideoPlayer resource={resource} className="w-full rounded-md bg-black" />
             )}
@@ -619,7 +742,7 @@ function ResourceRow({
       )}
       {historyOpen && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={7} className="px-4 pb-3">
+          <td colSpan={8} className="px-4 pb-3">
             <p className="mb-2 text-xs font-medium text-ink">Version history</p>
             <ul className="space-y-1.5">
               {versionHistory.map((version) => (

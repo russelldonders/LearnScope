@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 export const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 500]
 
@@ -62,4 +62,69 @@ export function useSortedPage(items, sortAccessors, { defaultSortKey = null, def
   )
 
   return { sortKey, sortDir, toggleSort, page: safePage, setPage, pageSize, setPageSize, pageItems, totalItems, totalPages }
+}
+
+// Row selection shared by every list table's bulk-action bar. Callers pass
+// the ids of the current *filtered* (pre-pagination) list -- selection
+// survives a page turn (same filtered view, just a different slice), but
+// resets whenever that filtered set itself changes shape (search/filter
+// change, or a reload after a bulk action added/removed rows), since a
+// previously-selected id could otherwise point at a row no longer in view.
+// A bulk action that only changes row state without changing which ids are
+// present (e.g. bulk blacklist) won't trigger this on its own -- callers
+// that want a hard reset after any bulk action should also call clear()
+// once the action settles.
+export function useRowSelection(ids) {
+  const [selected, setSelected] = useState(() => new Set())
+  const idsSignature = ids.join(' ')
+  const previousSignature = useRef(idsSignature)
+
+  useEffect(() => {
+    if (previousSignature.current === idsSignature) return
+    previousSignature.current = idsSignature
+    setSelected(new Set())
+  }, [idsSignature])
+
+  const toggle = useCallback((id) => {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  // Scoped to whatever id list is passed in -- callers use this for the
+  // current page's ids (header checkbox is deliberately page-scoped, not
+  // "select all N matching").
+  const toggleAll = useCallback((pageIds) => {
+    setSelected((current) => {
+      const allSelected = pageIds.length > 0 && pageIds.every((id) => current.has(id))
+      const next = new Set(current)
+      if (allSelected) pageIds.forEach((id) => next.delete(id))
+      else pageIds.forEach((id) => next.add(id))
+      return next
+    })
+  }, [])
+
+  const clear = useCallback(() => setSelected(new Set()), [])
+
+  // Drops just the given ids from the selection, leaving any others
+  // untouched -- for a bulk action that partially fails, callers pass the
+  // ids that *succeeded* so the ones that failed stay selected and ready
+  // for an easy retry, instead of clear()'s all-or-nothing reset.
+  const clearIds = useCallback((idsToRemove) => {
+    setSelected((current) => {
+      const next = new Set(current)
+      idsToRemove.forEach((id) => next.delete(id))
+      return next
+    })
+  }, [])
+
+  const isAllSelected = useCallback(
+    (pageIds) => pageIds.length > 0 && pageIds.every((id) => selected.has(id)),
+    [selected]
+  )
+
+  return { selected, toggle, toggleAll, clear, clearIds, isAllSelected }
 }

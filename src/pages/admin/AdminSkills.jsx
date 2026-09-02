@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AdminLayout from './AdminLayout'
+import ConfirmDialog from '../../components/ConfirmDialog'
 import { listAllLibrarySkills, updateLibrarySkill, setLibrarySkillStatus } from '../../lib/admin/skills'
-import { useSortedPage } from '../../lib/useSortedPage'
-import { SortableTh, TablePagination } from '../../components/TableControls'
+import { useRowSelection, useSortedPage } from '../../lib/useSortedPage'
+import { BulkActionBar, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 
 const TYPE_LABELS = { global: 'Global', personal: 'Personal', provider: 'Provider' }
 
@@ -27,6 +28,8 @@ export default function AdminSkills() {
   const [editForm, setEditForm] = useState({ category: '', description: '' })
   const [saving, setSaving] = useState(false)
   const [actioningId, setActioningId] = useState(null)
+  const [bulkAction, setBulkAction] = useState(null)
+  const [bulkActing, setBulkActing] = useState(false)
 
   useEffect(() => {
     load()
@@ -79,11 +82,48 @@ export default function AdminSkills() {
     }
   }
 
+  async function handleBulkStatusChange() {
+    const { targets, status } = bulkAction
+    setBulkActing(true)
+    setError(null)
+    try {
+      const results = await Promise.allSettled(targets.map((skill) => setLibrarySkillStatus(skill.id, status)))
+      const failures = results
+        .map((result, index) => ({ result, skill: targets[index] }))
+        .filter(({ result }) => result.status === 'rejected')
+      const succeededIds = targets
+        .filter((_, index) => results[index].status === 'fulfilled')
+        .map((skill) => skill.id)
+      setBulkAction(null)
+      // Full success clears the whole selection; a partial failure keeps
+      // the still-unchanged skills selected so they're easy to retry.
+      if (failures.length > 0) selection.clearIds(succeededIds)
+      else selection.clear()
+      await load()
+      if (failures.length > 0) {
+        setError(
+          `${failures.length} of ${targets.length} skills couldn't be updated: ` +
+            failures.map(({ skill, result }) => `"${skill.name}" (${result.reason?.message ?? 'unknown error'})`).join('; ')
+        )
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBulkActing(false)
+    }
+  }
+
   const q = query.trim().toLowerCase()
   const filtered = q ? skills.filter((s) => s.name.toLowerCase().includes(q)) : skills
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
     useSortedPage(filtered, SKILL_SORT_ACCESSORS)
+  const selection = useRowSelection(filtered.map((s) => s.id))
+  const selectedSkills = useMemo(() => filtered.filter((s) => selection.selected.has(s.id)), [filtered, selection.selected])
+  const selectedToActivate = useMemo(() => selectedSkills.filter((s) => s.status !== 'active'), [selectedSkills])
+  const selectedToDeactivate = useMemo(() => selectedSkills.filter((s) => s.status === 'active'), [selectedSkills])
+  const pageIds = pageItems.map((s) => s.id)
+  const selectedOnPage = pageIds.filter((id) => selection.selected.has(id)).length
 
   return (
     <AdminLayout>
@@ -107,10 +147,37 @@ export default function AdminSkills() {
           </div>
         ) : (
           <div className="bg-card border border-hairline rounded-lg">
+            <div className="p-3 pb-0">
+              <BulkActionBar
+                count={selection.selected.size}
+                onClear={selection.clear}
+                busy={bulkActing}
+                actions={[
+                  {
+                    label: `Activate selected (${selectedToActivate.length})`,
+                    disabled: selectedToActivate.length === 0,
+                    title: selectedToActivate.length === 0 ? 'Every selected skill is already active' : undefined,
+                    onClick: () => setBulkAction({ targets: selectedToActivate, status: 'active' }),
+                  },
+                  {
+                    label: `Deactivate selected (${selectedToDeactivate.length})`,
+                    disabled: selectedToDeactivate.length === 0,
+                    title: selectedToDeactivate.length === 0 ? 'None of the selected skills are active' : undefined,
+                    onClick: () => setBulkAction({ targets: selectedToDeactivate, status: 'inactive' }),
+                  },
+                ]}
+              />
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-hairline text-left text-secondary">
+                    <SelectionTh
+                      idPrefix="admin-skills"
+                      checked={selection.isAllSelected(pageIds)}
+                      indeterminate={selectedOnPage > 0 && selectedOnPage < pageIds.length}
+                      onChange={() => selection.toggleAll(pageIds)}
+                    />
                     <SortableTh label="ID" columnKey="code" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                     <SortableTh label="Skill" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                     <SortableTh label="Category" columnKey="category" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
@@ -127,6 +194,8 @@ export default function AdminSkills() {
                     <SkillRow
                       key={skill.id}
                       skill={skill}
+                      selected={selection.selected.has(skill.id)}
+                      onToggleSelected={() => selection.toggle(skill.id)}
                       editing={editingId === skill.id}
                       editForm={editForm}
                       onEditFormChange={setEditForm}
@@ -145,14 +214,38 @@ export default function AdminSkills() {
           </div>
         )}
       </div>
+
+      {bulkAction && (
+        <ConfirmDialog
+          message={
+            bulkAction.status === 'active'
+              ? `Activate ${bulkAction.targets.length} ${bulkAction.targets.length === 1 ? 'skill' : 'skills'}?`
+              : `Deactivate ${bulkAction.targets.length} ${bulkAction.targets.length === 1 ? 'skill' : 'skills'}?`
+          }
+          confirmLabel={bulkAction.status === 'active' ? 'Activate' : 'Deactivate'}
+          confirming={bulkActing}
+          onConfirm={handleBulkStatusChange}
+          onCancel={() => setBulkAction(null)}
+        />
+      )}
     </AdminLayout>
   )
 }
 
-function SkillRow({ skill, editing, editForm, onEditFormChange, saving, actioning, onStartEdit, onCancelEdit, onSaveEdit, onToggleStatus }) {
+function SkillRow({ skill, selected, onToggleSelected, editing, editForm, onEditFormChange, saving, actioning, onStartEdit, onCancelEdit, onSaveEdit, onToggleStatus }) {
   return (
     <>
       <tr className="border-b border-hairline last:border-0">
+        <td className="px-4 py-3">
+          <label className="sr-only" htmlFor={`select-skill-${skill.id}`}>Select {skill.name}</label>
+          <input
+            id={`select-skill-${skill.id}`}
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelected}
+            className="rounded border-hairline accent-moss"
+          />
+        </td>
         <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{skill.skill_code}</td>
         <td className="px-4 py-3 text-ink font-medium whitespace-nowrap">
           <Link to={`/admin/skills/${skill.id}`} className="hover:text-moss hover:underline">
@@ -191,7 +284,7 @@ function SkillRow({ skill, editing, editForm, onEditFormChange, saving, actionin
       </tr>
       {editing && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={9} className="px-4 pb-4 pt-1">
+          <td colSpan={10} className="px-4 pb-4 pt-1">
             <div className="space-y-2 border-t border-hairline pt-3">
               <div>
                 <label className="block text-xs text-secondary mb-1">Category</label>

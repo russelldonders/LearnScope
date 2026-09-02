@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import AdminLayout from './AdminLayout'
+import ConfirmDialog from '../../components/ConfirmDialog'
 import { listAllTags, setTagBlacklisted } from '../../lib/admin/tags'
-import { useSortedPage } from '../../lib/useSortedPage'
-import { SortableTh, TablePagination } from '../../components/TableControls'
+import { useRowSelection, useSortedPage } from '../../lib/useSortedPage'
+import { BulkActionBar, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 
 const TAG_SORT_ACCESSORS = {
   id: (t) => t.id ?? '',
@@ -15,9 +16,17 @@ export default function AdminTags() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [actioningId, setActioningId] = useState(null)
+  const [bulkAction, setBulkAction] = useState(null)
+  const [bulkActing, setBulkActing] = useState(false)
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
     useSortedPage(tags, TAG_SORT_ACCESSORS)
+  const selection = useRowSelection(tags.map((t) => t.id))
+  const selectedTags = useMemo(() => tags.filter((t) => selection.selected.has(t.id)), [tags, selection.selected])
+  const selectedToBlacklist = useMemo(() => selectedTags.filter((t) => !t.is_blacklisted), [selectedTags])
+  const selectedToUnblacklist = useMemo(() => selectedTags.filter((t) => t.is_blacklisted), [selectedTags])
+  const pageIds = pageItems.map((t) => t.id)
+  const selectedOnPage = pageIds.filter((id) => selection.selected.has(id)).length
 
   useEffect(() => {
     load()
@@ -48,6 +57,37 @@ export default function AdminTags() {
     }
   }
 
+  async function handleBulkToggle() {
+    const { targets, blacklisted } = bulkAction
+    setBulkActing(true)
+    setError(null)
+    try {
+      const results = await Promise.allSettled(targets.map((tag) => setTagBlacklisted(tag.id, blacklisted)))
+      const failures = results
+        .map((result, index) => ({ result, tag: targets[index] }))
+        .filter(({ result }) => result.status === 'rejected')
+      const succeededIds = targets
+        .filter((_, index) => results[index].status === 'fulfilled')
+        .map((tag) => tag.id)
+      setBulkAction(null)
+      // Full success clears the whole selection; a partial failure keeps
+      // the still-unchanged tags selected so they're easy to retry.
+      if (failures.length > 0) selection.clearIds(succeededIds)
+      else selection.clear()
+      await load()
+      if (failures.length > 0) {
+        setError(
+          `${failures.length} of ${targets.length} tags couldn't be updated: ` +
+            failures.map(({ tag, result }) => `"${tag.name}" (${result.reason?.message ?? 'unknown error'})`).join('; ')
+        )
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBulkActing(false)
+    }
+  }
+
   return (
     <AdminLayout>
       <div className="space-y-4">
@@ -61,10 +101,37 @@ export default function AdminTags() {
           </div>
         ) : (
           <div className="bg-card border border-hairline rounded-lg">
+            <div className="p-3 pb-0">
+              <BulkActionBar
+                count={selection.selected.size}
+                onClear={selection.clear}
+                busy={bulkActing}
+                actions={[
+                  {
+                    label: `Blacklist selected (${selectedToBlacklist.length})`,
+                    disabled: selectedToBlacklist.length === 0,
+                    title: selectedToBlacklist.length === 0 ? 'Every selected tag is already blacklisted' : undefined,
+                    onClick: () => setBulkAction({ targets: selectedToBlacklist, blacklisted: true }),
+                  },
+                  {
+                    label: `Remove from blacklist (${selectedToUnblacklist.length})`,
+                    disabled: selectedToUnblacklist.length === 0,
+                    title: selectedToUnblacklist.length === 0 ? 'None of the selected tags are blacklisted' : undefined,
+                    onClick: () => setBulkAction({ targets: selectedToUnblacklist, blacklisted: false }),
+                  },
+                ]}
+              />
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-hairline text-left text-secondary">
+                    <SelectionTh
+                      idPrefix="admin-tags"
+                      checked={selection.isAllSelected(pageIds)}
+                      indeterminate={selectedOnPage > 0 && selectedOnPage < pageIds.length}
+                      onChange={() => selection.toggleAll(pageIds)}
+                    />
                     <SortableTh label="ID" columnKey="id" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                     <SortableTh label="Tag" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                     <SortableTh label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
@@ -74,6 +141,16 @@ export default function AdminTags() {
                 <tbody>
                   {pageItems.map((tag) => (
                     <tr key={tag.id} className="border-b border-hairline last:border-0">
+                      <td className="px-4 py-2.5">
+                        <label className="sr-only" htmlFor={`select-tag-${tag.id}`}>Select {tag.name}</label>
+                        <input
+                          id={`select-tag-${tag.id}`}
+                          type="checkbox"
+                          checked={selection.selected.has(tag.id)}
+                          onChange={() => selection.toggle(tag.id)}
+                          className="rounded border-hairline accent-moss"
+                        />
+                      </td>
                       <td className="px-4 py-2.5 font-mono text-xs text-secondary whitespace-nowrap">{tag.id.slice(0, 8)}</td>
                       <td className="px-4 py-2.5 text-ink whitespace-nowrap">{tag.name}</td>
                       <td className="px-4 py-2.5 whitespace-nowrap">
@@ -104,6 +181,20 @@ export default function AdminTags() {
           </div>
         )}
       </div>
+
+      {bulkAction && (
+        <ConfirmDialog
+          message={
+            bulkAction.blacklisted
+              ? `Blacklist ${bulkAction.targets.length} ${bulkAction.targets.length === 1 ? 'tag' : 'tags'}?`
+              : `Remove ${bulkAction.targets.length} ${bulkAction.targets.length === 1 ? 'tag' : 'tags'} from the blacklist?`
+          }
+          confirmLabel={bulkAction.blacklisted ? 'Blacklist' : 'Remove from blacklist'}
+          confirming={bulkActing}
+          onConfirm={handleBulkToggle}
+          onCancel={() => setBulkAction(null)}
+        />
+      )}
     </AdminLayout>
   )
 }

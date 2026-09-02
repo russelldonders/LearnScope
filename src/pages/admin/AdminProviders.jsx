@@ -11,8 +11,8 @@ import {
   removeOrganisationMember,
   inviteOrganisationStaff,
 } from '../../lib/admin/organisations'
-import { useSortedPage } from '../../lib/useSortedPage'
-import { SortableTh, TablePagination } from '../../components/TableControls'
+import { useRowSelection, useSortedPage } from '../../lib/useSortedPage'
+import { BulkActionBar, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 
 const ORG_SORT_ACCESSORS = {
   name: (o) => o.name?.toLowerCase() ?? '',
@@ -46,6 +46,17 @@ export default function AdminProviders() {
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
     useSortedPage(organisations, ORG_SORT_ACCESSORS)
+  const selection = useRowSelection(organisations.map((o) => o.id))
+  const selectedOrgs = useMemo(
+    () => organisations.filter((o) => selection.selected.has(o.id)),
+    [organisations, selection.selected]
+  )
+  const selectedToActivate = useMemo(() => selectedOrgs.filter((o) => o.status !== 'active'), [selectedOrgs])
+  const selectedToSuspend = useMemo(() => selectedOrgs.filter((o) => o.status === 'active'), [selectedOrgs])
+  const [bulkAction, setBulkAction] = useState(null)
+  const [bulkActing, setBulkActing] = useState(false)
+  const pageIds = pageItems.map((o) => o.id)
+  const selectedOnPage = pageIds.filter((id) => selection.selected.has(id)).length
 
   useEffect(() => {
     load()
@@ -87,6 +98,37 @@ export default function AdminProviders() {
       await load()
     } catch (err) {
       setError(err.message)
+    }
+  }
+
+  async function handleBulkStatusChange() {
+    const { targets, status } = bulkAction
+    setBulkActing(true)
+    setError(null)
+    try {
+      const results = await Promise.allSettled(targets.map((org) => setOrganisationStatus(org.id, status)))
+      const failures = results
+        .map((result, index) => ({ result, org: targets[index] }))
+        .filter(({ result }) => result.status === 'rejected')
+      const succeededIds = targets
+        .filter((_, index) => results[index].status === 'fulfilled')
+        .map((org) => org.id)
+      setBulkAction(null)
+      // Full success clears the whole selection; a partial failure keeps
+      // the still-unchanged organisations selected so they're easy to retry.
+      if (failures.length > 0) selection.clearIds(succeededIds)
+      else selection.clear()
+      await load()
+      if (failures.length > 0) {
+        setError(
+          `${failures.length} of ${targets.length} organisations couldn't be updated: ` +
+            failures.map(({ org, result }) => `"${org.name}" (${result.reason?.message ?? 'unknown error'})`).join('; ')
+        )
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBulkActing(false)
     }
   }
 
@@ -164,10 +206,37 @@ export default function AdminProviders() {
           </div>
         ) : (
           <div className="bg-card border border-hairline rounded-lg">
+            <div className="p-3 pb-0">
+              <BulkActionBar
+                count={selection.selected.size}
+                onClear={selection.clear}
+                busy={bulkActing}
+                actions={[
+                  {
+                    label: `Activate selected (${selectedToActivate.length})`,
+                    disabled: selectedToActivate.length === 0,
+                    title: selectedToActivate.length === 0 ? 'Every selected organisation is already active' : undefined,
+                    onClick: () => setBulkAction({ targets: selectedToActivate, status: 'active' }),
+                  },
+                  {
+                    label: `Suspend selected (${selectedToSuspend.length})`,
+                    disabled: selectedToSuspend.length === 0,
+                    title: selectedToSuspend.length === 0 ? 'None of the selected organisations are active' : undefined,
+                    onClick: () => setBulkAction({ targets: selectedToSuspend, status: 'inactive' }),
+                  },
+                ]}
+              />
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-hairline text-left text-secondary">
+                    <SelectionTh
+                      idPrefix="admin-providers"
+                      checked={selection.isAllSelected(pageIds)}
+                      indeterminate={selectedOnPage > 0 && selectedOnPage < pageIds.length}
+                      onChange={() => selection.toggleAll(pageIds)}
+                    />
                     <SortableTh label="ID" columnKey="org_code" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                     <SortableTh label="Organisation" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                     <SortableTh label="Website" columnKey="url" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
@@ -181,6 +250,8 @@ export default function AdminProviders() {
                     <OrganisationRow
                       key={org.id}
                       org={org}
+                      selected={selection.selected.has(org.id)}
+                      onToggleSelected={() => selection.toggle(org.id)}
                       editing={editingId === org.id}
                       editForm={editForm}
                       onEditFormChange={setEditForm}
@@ -200,12 +271,28 @@ export default function AdminProviders() {
           </div>
         )}
       </div>
+
+      {bulkAction && (
+        <ConfirmDialog
+          message={
+            bulkAction.status === 'active'
+              ? `Activate ${bulkAction.targets.length} ${bulkAction.targets.length === 1 ? 'organisation' : 'organisations'}? Their users regain access.`
+              : `Suspend ${bulkAction.targets.length} ${bulkAction.targets.length === 1 ? 'organisation' : 'organisations'}? Their users lose access until reactivated.`
+          }
+          confirmLabel={bulkAction.status === 'active' ? 'Activate' : 'Suspend'}
+          confirming={bulkActing}
+          onConfirm={handleBulkStatusChange}
+          onCancel={() => setBulkAction(null)}
+        />
+      )}
     </AdminLayout>
   )
 }
 
 function OrganisationRow({
   org,
+  selected,
+  onToggleSelected,
   editing,
   editForm,
   onEditFormChange,
@@ -220,6 +307,16 @@ function OrganisationRow({
   return (
     <>
       <tr className="border-b border-hairline last:border-0">
+        <td className="px-4 py-3">
+          <label className="sr-only" htmlFor={`select-org-${org.id}`}>Select {org.name}</label>
+          <input
+            id={`select-org-${org.id}`}
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelected}
+            className="rounded border-hairline accent-moss"
+          />
+        </td>
         <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{org.org_code}</td>
         <td className="px-4 py-3 text-ink font-medium whitespace-nowrap">{org.name}</td>
         <td className="px-4 py-3 truncate max-w-[200px]">
@@ -257,7 +354,7 @@ function OrganisationRow({
       </tr>
       {editing && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={6} className="px-4 pb-4 pt-1">
+          <td colSpan={7} className="px-4 pb-4 pt-1">
             <form onSubmit={onSaveEdit} className="space-y-3 border-t border-hairline pt-3">
               <div>
                 <label className="block text-sm text-secondary mb-1" htmlFor={`orgEditName-${org.id}`}>
@@ -298,7 +395,7 @@ function OrganisationRow({
       )}
       {expanded && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={6} className="px-4 pb-4 pt-1">
+          <td colSpan={7} className="px-4 pb-4 pt-1">
             <div className="border-t border-hairline pt-3">
               <OrganisationStaffPanel organisation={org} alwaysShowForm />
             </div>

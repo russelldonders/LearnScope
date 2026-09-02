@@ -12,12 +12,19 @@ import ProgressBar from '../../components/ProgressBar'
 import {
   createProviderCatalogue,
   deleteProviderCatalogue,
-  listProviderCatalogues,
+  listPublicationCatalogueOptions,
   updateProviderCatalogue,
 } from '../../lib/catalogues'
+// listProviderCatalogues specifically comes from admin/providerCatalogues.js,
+// not the same-named function in lib/catalogues.js -- only this version
+// attaches courseCount (course_catalogue_publications count) to each row,
+// which the bulk-delete confirmation below needs to warn accurately about
+// live courses. The lib/catalogues.js version returns a plain column
+// select with no aggregate counts.
+import { assignProviderCourseToCatalogue, listProviderCatalogues } from '../../lib/admin/providerCatalogues'
 import { listOrganisations, listOrganisationMembers } from '../../lib/admin/organisations'
-import { useSortedPage } from '../../lib/useSortedPage'
-import { SortableTh, TablePagination } from '../../components/TableControls'
+import { useRowSelection, useSortedPage } from '../../lib/useSortedPage'
+import { BulkActionBar, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 import {
   listOrganisationCatalogueCourses,
   createProviderCourse,
@@ -54,6 +61,27 @@ const CATALOGUE_SORT_ACCESSORS = {
   id: (c) => c.id ?? '',
   name: (c) => c.name?.toLowerCase() ?? '',
   description: (c) => c.description?.toLowerCase() ?? '',
+}
+
+// Mirrors the single-delete confirmation's own published-count warning
+// (see ProviderCataloguesSection's deleteTarget dialog) but built from the
+// courseCount field listProviderCatalogues already attaches to each row,
+// rather than the deleteTargetPublishedCount state that dialog never
+// actually populates.
+function buildBulkCatalogueDeleteMessage(targets) {
+  const label = targets.length === 1 ? 'catalogue' : 'catalogues'
+  const withCourses = targets.filter((c) => (c.courseCount ?? 0) > 0)
+  if (withCourses.length === 0) {
+    return `Delete ${targets.length} ${label}? Courses currently published there will no longer appear in it.`
+  }
+  const totalCourses = withCourses.reduce((sum, c) => sum + (c.courseCount ?? 0), 0)
+  return (
+    `Delete ${targets.length} ${label}? ${withCourses.length} of ${
+      targets.length === 1 ? 'it currently has' : 'them currently have'
+    } courses published there (${totalCourses} course${totalCourses === 1 ? '' : 's'} total) -- ${
+      totalCourses === 1 ? 'it' : 'they'
+    } will disappear from that catalogue, and may become invisible to learners entirely if this was its only destination.`
+  )
 }
 
 const SECTIONS = [
@@ -247,9 +275,14 @@ function ProviderCataloguesSection({ organisation, userId, canCreate }) {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleteTargetPublishedCount] = useState(0)
   const [deleting, setDeleting] = useState(false)
+  const [bulkDeleteTargets, setBulkDeleteTargets] = useState(null)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
     useSortedPage(catalogues, CATALOGUE_SORT_ACCESSORS)
+  const selection = useRowSelection(catalogues.map((c) => c.id))
+  const pageIds = pageItems.map((c) => c.id)
+  const selectedOnPage = pageIds.filter((id) => selection.selected.has(id)).length
 
   useEffect(() => {
     load()
@@ -298,6 +331,43 @@ function ProviderCataloguesSection({ organisation, userId, canCreate }) {
       setError(err.message)
     } finally {
       setDeleting(false)
+    }
+  }
+
+  async function handleBulkDelete() {
+    const targets = bulkDeleteTargets
+    setBulkDeleting(true)
+    setError(null)
+    try {
+      const results = await Promise.allSettled(targets.map((catalogue) => deleteProviderCatalogue(catalogue.id)))
+      const failures = results
+        .map((result, index) => ({ result, catalogue: targets[index] }))
+        .filter(({ result }) => result.status === 'rejected')
+      const succeededIds = targets
+        .filter((_, index) => results[index].status === 'fulfilled')
+        .map((catalogue) => catalogue.id)
+      // Only collapse the expanded approvers panel if its catalogue was
+      // actually deleted -- if that particular delete failed, the catalogue
+      // still exists and the panel should stay put.
+      if (expandedId && succeededIds.includes(expandedId)) setExpandedId(null)
+      setBulkDeleteTargets(null)
+      // Full success clears the whole selection; a partial failure keeps
+      // the still-undeleted catalogues selected so they're easy to retry.
+      if (failures.length > 0) selection.clearIds(succeededIds)
+      else selection.clear()
+      await load()
+      if (failures.length > 0) {
+        setError(
+          `${failures.length} of ${targets.length} catalogues couldn't be deleted: ` +
+            failures
+              .map(({ catalogue, result }) => `"${catalogue.name}" (${result.reason?.message ?? 'unknown error'})`)
+              .join('; ')
+        )
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBulkDeleting(false)
     }
   }
 
@@ -351,10 +421,30 @@ function ProviderCataloguesSection({ organisation, userId, canCreate }) {
         </div>
       ) : (
         <div className="bg-card border border-hairline rounded-lg">
+          <div className="p-3 pb-0">
+            <BulkActionBar
+              count={selection.selected.size}
+              onClear={selection.clear}
+              busy={bulkDeleting}
+              actions={[
+                {
+                  label: `Delete selected (${selection.selected.size})`,
+                  variant: 'danger',
+                  onClick: () => setBulkDeleteTargets(catalogues.filter((c) => selection.selected.has(c.id))),
+                },
+              ]}
+            />
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-hairline text-left text-secondary">
+                  <SelectionTh
+                    idPrefix="provider-catalogues"
+                    checked={selection.isAllSelected(pageIds)}
+                    indeterminate={selectedOnPage > 0 && selectedOnPage < pageIds.length}
+                    onChange={() => selection.toggleAll(pageIds)}
+                  />
                   <SortableTh label="ID" columnKey="id" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   <SortableTh label="Catalogue" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <SortableTh label="Description" columnKey="description" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
@@ -365,6 +455,16 @@ function ProviderCataloguesSection({ organisation, userId, canCreate }) {
                 {pageItems.map((catalogue) => (
                   <Fragment key={catalogue.id}>
                     <tr className="border-b border-hairline last:border-0">
+                      <td className="px-4 py-3">
+                        <label className="sr-only" htmlFor={`select-catalogue-${catalogue.id}`}>Select {catalogue.name}</label>
+                        <input
+                          id={`select-catalogue-${catalogue.id}`}
+                          type="checkbox"
+                          checked={selection.selected.has(catalogue.id)}
+                          onChange={() => selection.toggle(catalogue.id)}
+                          className="rounded border-hairline accent-moss"
+                        />
+                      </td>
                       <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{catalogue.id.slice(0, 8)}</td>
                       <td className="px-4 py-3 text-ink font-medium whitespace-nowrap">{catalogue.name}</td>
                       <td className="px-4 py-3 text-secondary truncate max-w-xs">{catalogue.description || '—'}</td>
@@ -376,7 +476,7 @@ function ProviderCataloguesSection({ organisation, userId, canCreate }) {
                     </tr>
                     {expandedId === catalogue.id && (
                       <tr className="border-b border-hairline last:border-0">
-                        <td colSpan={4} className="px-4 pb-3">
+                        <td colSpan={5} className="px-4 pb-3">
                           <CatalogueApproversPanel catalogueId={catalogue.id} organisationId={organisation.id} />
                         </td>
                       </tr>
@@ -404,6 +504,16 @@ function ProviderCataloguesSection({ organisation, userId, canCreate }) {
           onConfirm={handleDelete}
           onCancel={() => setDeleteTarget(null)}
           confirming={deleting}
+        />
+      )}
+
+      {bulkDeleteTargets && (
+        <ConfirmDialog
+          message={buildBulkCatalogueDeleteMessage(bulkDeleteTargets)}
+          confirmLabel="Delete"
+          onConfirm={handleBulkDelete}
+          onCancel={() => setBulkDeleteTargets(null)}
+          confirming={bulkDeleting}
         />
       )}
     </section>
@@ -507,6 +617,7 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
   const [creatingDraftCourseId, setCreatingDraftCourseId] = useState(null)
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [bulkPush, setBulkPush] = useState(null)
 
   useEffect(() => {
     load()
@@ -616,6 +727,21 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
     useSortedPage(filteredCourses, COURSE_SORT_ACCESSORS)
+  const selection = useRowSelection(filteredCourses.map((c) => c.id))
+  const coursePageIds = pageItems.map((c) => c.id)
+  const coursesSelectedOnPage = coursePageIds.filter((id) => selection.selected.has(id)).length
+  // Only an approved, currently-published version can be added to a
+  // catalogue (assign_course_to_catalogue RPC, 20260831124500) -- the same
+  // precondition the single-course "Push to catalogue" button already
+  // enforces by only showing itself once a course reaches that state.
+  const selectedEligibleCourses = useMemo(
+    () => courses.filter((c) => selection.selected.has(c.id) && c.status === 'approved' && c.is_current_published),
+    [courses, selection.selected]
+  )
+  const selectedIneligibleCourses = useMemo(
+    () => courses.filter((c) => selection.selected.has(c.id) && !(c.status === 'approved' && c.is_current_published)),
+    [courses, selection.selected]
+  )
 
   return (
     <div>
@@ -731,10 +857,37 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
         </div>
       ) : (
         <div className="bg-card border border-hairline rounded-lg">
+          <div className="p-3 pb-0">
+            <BulkActionBar
+              count={selection.selected.size}
+              onClear={selection.clear}
+              actions={[
+                {
+                  label: `Push to catalogue (${selectedEligibleCourses.length})`,
+                  disabled: selectedEligibleCourses.length === 0,
+                  title:
+                    selectedEligibleCourses.length === 0
+                      ? "None of the selected training is an approved, currently published version"
+                      : undefined,
+                  onClick: () =>
+                    setBulkPush({
+                      courses: selectedEligibleCourses,
+                      excludedCourses: selectedIneligibleCourses,
+                    }),
+                },
+              ]}
+            />
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-hairline text-left text-secondary">
+                  <SelectionTh
+                    idPrefix="provider-training"
+                    checked={selection.isAllSelected(coursePageIds)}
+                    indeterminate={coursesSelectedOnPage > 0 && coursesSelectedOnPage < coursePageIds.length}
+                    onChange={() => selection.toggleAll(coursePageIds)}
+                  />
                   <SortableTh label="ID" columnKey="course_code" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   <SortableTh label="Training" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <SortableTh label="Version" columnKey="version" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
@@ -749,6 +902,8 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
                   <CourseRow
                     key={course.id}
                     course={course}
+                    selected={selection.selected.has(course.id)}
+                    onToggleSelected={() => selection.toggle(course.id)}
                     canModerate={isApprover}
                     actioning={actioningId === course.id}
                     rejecting={rejectingId === course.id}
@@ -782,6 +937,28 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
       {historyCourse && (
         <CourseVersionHistoryDialog course={historyCourse} onClose={() => setHistoryCourse(null)} />
       )}
+      {bulkPush && (
+        <BulkPushToCatalogueDialog
+          organisationId={organisation.id}
+          courses={bulkPush.courses}
+          excludedCourses={bulkPush.excludedCourses}
+          onClose={() => setBulkPush(null)}
+          onDone={(succeededCourseIds, hadFailures) => {
+            // Called right after the push attempt settles, whether or not
+            // it fully succeeded -- a partial failure still means some
+            // courses actually got added, so this reloads and drops just
+            // the ones that succeeded from the selection, leaving the
+            // still-failed ones selected for an easy retry (the dialog
+            // itself stays open in that case to show which failed and
+            // why). A full success clears the whole selection, including
+            // any ineligible rows that were never attempted, and the
+            // dialog closes itself right after this callback returns.
+            if (hadFailures) selection.clearIds(succeededCourseIds)
+            else selection.clear()
+            load()
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -798,6 +975,8 @@ function ProviderTrainingSection({ organisation, userId, canViewParticipants }) 
 // name/code/status across many cards at once.
 function CourseRow({
   course,
+  selected,
+  onToggleSelected,
   canViewParticipants,
   onViewParticipants,
   onViewHistory,
@@ -819,6 +998,16 @@ function CourseRow({
   return (
     <>
       <tr className="border-b border-hairline last:border-0">
+        <td className="px-4 py-3">
+          <label className="sr-only" htmlFor={`select-course-${course.id}`}>Select {course.name}</label>
+          <input
+            id={`select-course-${course.id}`}
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelected}
+            className="rounded border-hairline accent-moss"
+          />
+        </td>
         <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{course.course_code || 'Not set'}</td>
         <td className="px-4 py-3 whitespace-nowrap">
           <Link to={`/provider/training/${course.id}`} className="text-ink font-medium hover:text-moss hover:underline">
@@ -902,7 +1091,7 @@ function CourseRow({
       </tr>
       {rejecting && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={7} className="px-4 pb-3">
+          <td colSpan={8} className="px-4 pb-3">
             <div className="flex flex-wrap items-end gap-2 border-t border-hairline pt-3">
               <div className="flex-1 min-w-[200px]">
                 <label className="block text-xs text-secondary mb-1">Rejection reason (optional)</label>
@@ -927,6 +1116,131 @@ function CourseRow({
         </tr>
       )}
     </>
+  )
+}
+
+// Bulk counterpart to ProviderCourseEditor's own PushToCatalogueDialog --
+// same assignProviderCourseToCatalogue call, looped once per selected
+// course, but only ever offers a single catalogue destination at a time
+// (the per-course dialog lets several be ticked because it's already
+// scoped to one course; picking several catalogues *and* several courses
+// at once would make the excluded/failed summary below unreadable). Courses
+// that didn't pass the eligibility check the caller already applied
+// (status !== 'approved' or not is_current_published) never reach here --
+// excludedCourses only reports which of those were dropped and why, so the
+// provider isn't left guessing why the count doesn't match their selection.
+function BulkPushToCatalogueDialog({ organisationId, courses, excludedCourses, onClose, onDone }) {
+  const [catalogues, setCatalogues] = useState([])
+  const [catalogueId, setCatalogueId] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    listPublicationCatalogueOptions(organisationId)
+      .then(setCatalogues)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false))
+  }, [organisationId])
+
+  async function handlePush() {
+    if (!catalogueId || courses.length === 0) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      const results = await Promise.allSettled(
+        courses.map((course) => assignProviderCourseToCatalogue(catalogueId, course.id))
+      )
+      const succeeded = courses.filter((_, index) => results[index].status === 'fulfilled')
+      const failures = results
+        .map((result, index) => ({ result, course: courses[index] }))
+        .filter(({ result }) => result.status === 'rejected')
+      // Reload/update the parent's selection regardless of outcome -- a
+      // partial failure still means some courses were actually added, so
+      // the caller shouldn't stay stale (or lose track of which succeeded)
+      // just because this dialog is staying open to show the failures.
+      onDone(succeeded.map((course) => course.id), failures.length > 0)
+      if (failures.length > 0) {
+        setError(
+          `${failures.length} of ${courses.length} courses couldn't be added: ` +
+            failures
+              .map(({ course, result }) => `"${course.name}" (${result.reason?.message ?? 'unknown error'})`)
+              .join('; ')
+        )
+        return
+      }
+      onClose()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <AccessibleDialog
+      labelledBy="bulk-push-catalogue-title"
+      describedBy="bulk-push-catalogue-description"
+      onClose={submitting ? undefined : onClose}
+      closeOnBackdrop={!submitting}
+      panelClassName="w-full max-w-lg rounded-xl bg-card border border-hairline p-5 shadow-xl"
+    >
+      <h2 id="bulk-push-catalogue-title" className="font-display text-lg text-ink">
+        Push {courses.length} {courses.length === 1 ? 'course' : 'courses'} to catalogue
+      </h2>
+      <p id="bulk-push-catalogue-description" className="text-sm text-secondary mt-1 mb-3">
+        Choose one catalogue to add the selected courses to. Each becomes visible there as soon as it's added -- a
+        platform admin still has to approve anything added to the global catalogue.
+      </p>
+      {excludedCourses.length > 0 && (
+        <p className="text-xs text-amber-700 mb-3">
+          {excludedCourses.length} of the selected {excludedCourses.length === 1 ? 'course isn’t' : 'courses aren’t'}{' '}
+          an approved, currently published version, so {excludedCourses.length === 1 ? "it won't" : "they won't"} be
+          included: {excludedCourses.map((course) => `"${course.name}"`).join(', ')}.
+        </p>
+      )}
+
+      {error && <p role="alert" className="text-sm text-red-700 mb-3">{error}</p>}
+      {loading ? (
+        <p role="status" className="text-sm text-secondary">Loading catalogues…</p>
+      ) : catalogues.length === 0 ? (
+        <p className="text-sm text-secondary">No publishing destinations are available.</p>
+      ) : (
+        <div className="divide-y divide-hairline border-y border-hairline">
+          {catalogues.map((catalogue) => (
+            <label key={catalogue.id} className="flex items-start gap-3 py-3 cursor-pointer">
+              <input
+                type="radio"
+                name="bulk-push-catalogue"
+                checked={catalogueId === catalogue.id}
+                onChange={() => setCatalogueId(catalogue.id)}
+                className="mt-0.5 h-4 w-4 accent-moss"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-ink">{catalogue.name}</span>
+                {catalogue.description && (
+                  <span className="block text-xs text-secondary mt-0.5">{catalogue.description}</span>
+                )}
+              </span>
+            </label>
+          ))}
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2 mt-5">
+        <button type="button" onClick={onClose} disabled={submitting} className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink hover:bg-paper disabled:opacity-50">
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handlePush}
+          disabled={submitting || loading || !catalogueId || courses.length === 0}
+          className="rounded-md bg-moss px-3 py-1.5 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-50"
+        >
+          {submitting ? 'Adding…' : 'Add to catalogue'}
+        </button>
+      </div>
+    </AccessibleDialog>
   )
 }
 
