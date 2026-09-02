@@ -51,7 +51,7 @@ const RESOURCE_SORT_ACCESSORS = {
 // (link) into however many courses need it from that course's own edit
 // view (see courseContent.js's course_content_links functions). This is
 // the "Manage resources" tab in the provider console.
-export default function ResourceLibrarySection({ organisationId, userId }) {
+export default function ResourceLibrarySection({ organisationId, userId, readOnly = false }) {
   const [resources, setResources] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -305,13 +305,15 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
     <div>
       <div className="flex items-center justify-between gap-3 mb-3">
         <h3 className="font-display text-lg text-ink">Resources</h3>
-        <button
-          type="button"
-          onClick={() => setShowUploadForm((v) => !v)}
-          className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 shrink-0"
-        >
-          {showUploadForm ? 'Cancel' : '+ Add resource'}
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => setShowUploadForm((v) => !v)}
+            className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 shrink-0"
+          >
+            {showUploadForm ? 'Cancel' : '+ Add resource'}
+          </button>
+        )}
       </div>
       <p className="text-sm text-secondary mb-4">
         Add media, links, learning packages, or build polished content pages here, then attach them to any training course from that
@@ -328,7 +330,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
         </select>
       </div>
 
-      {showUploadForm && (
+      {!readOnly && showUploadForm && (
         <div className="bg-card border border-hairline rounded-lg p-4 flex flex-wrap items-end gap-2 mb-4">
         <div>
           <label className="block text-xs text-secondary mb-1" htmlFor="resourceType">
@@ -476,30 +478,34 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
         </div>
       ) : (
         <div className="bg-card border border-hairline rounded-lg">
-          <div className="p-3 pb-0">
-            <BulkActionBar
-              count={selection.selected.size}
-              onClear={selection.clear}
-              busy={bulkDeleting}
-              actions={[
-                {
-                  label: `Remove selected (${selection.selected.size})`,
-                  variant: 'danger',
-                  onClick: () => setPendingBulkDelete(resources.filter((r) => selection.selected.has(r.id))),
-                },
-              ]}
-            />
-          </div>
+          {!readOnly && (
+            <div className="p-3 pb-0">
+              <BulkActionBar
+                count={selection.selected.size}
+                onClear={selection.clear}
+                busy={bulkDeleting}
+                actions={[
+                  {
+                    label: `Remove selected (${selection.selected.size})`,
+                    variant: 'danger',
+                    onClick: () => setPendingBulkDelete(resources.filter((r) => selection.selected.has(r.id))),
+                  },
+                ]}
+              />
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-hairline text-left text-secondary">
-                  <SelectionTh
-                    idPrefix="provider-resources"
-                    checked={selection.isAllSelected(resourcePageIds)}
-                    indeterminate={resourcesSelectedOnPage > 0 && resourcesSelectedOnPage < resourcePageIds.length}
-                    onChange={() => selection.toggleAll(resourcePageIds)}
-                  />
+                  {!readOnly && (
+                    <SelectionTh
+                      idPrefix="provider-resources"
+                      checked={selection.isAllSelected(resourcePageIds)}
+                      indeterminate={resourcesSelectedOnPage > 0 && resourcesSelectedOnPage < resourcePageIds.length}
+                      onChange={() => selection.toggleAll(resourcePageIds)}
+                    />
+                  )}
                   <SortableTh label="ID" columnKey="code" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   <SortableTh label="Resource" columnKey="title" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <SortableTh label="Type" columnKey="type" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
@@ -528,6 +534,7 @@ export default function ResourceLibrarySection({ organisationId, userId }) {
                     onCreateVersion={() => handleCreateVersion(resource)}
                     onPublishVersion={() => handlePublishVersion(resource)}
                     onRemove={() => setPendingDelete(resource)}
+                    readOnly={readOnly}
                   />
                 ))}
               </tbody>
@@ -623,21 +630,25 @@ function ResourceRow({
   onCreateVersion,
   onPublishVersion,
   onRemove,
+  readOnly,
 }) {
   const editable = EDITABLE_TYPES.has(resource.type)
+  const columnCount = readOnly ? 7 : 8
   return (
     <Fragment>
       <tr className="border-b border-hairline last:border-0">
-        <td className="px-4 py-3">
-          <label className="sr-only" htmlFor={`select-resource-${resource.id}`}>Select {resource.title}</label>
-          <input
-            id={`select-resource-${resource.id}`}
-            type="checkbox"
-            checked={selected}
-            onChange={onToggleSelected}
-            className="rounded border-hairline accent-moss"
-          />
-        </td>
+        {!readOnly && (
+          <td className="px-4 py-3">
+            <label className="sr-only" htmlFor={`select-resource-${resource.id}`}>Select {resource.title}</label>
+            <input
+              id={`select-resource-${resource.id}`}
+              type="checkbox"
+              checked={selected}
+              onChange={onToggleSelected}
+              className="rounded border-hairline accent-moss"
+            />
+          </td>
+        )}
         <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{resource.resource_code}</td>
         <td className="px-4 py-3 text-ink font-medium truncate max-w-[220px]">{resource.title}</td>
         <td className="px-4 py-3 text-secondary whitespace-nowrap">{TYPE_LABELS[resource.type]}</td>
@@ -673,7 +684,7 @@ function ResourceRow({
                 {previewing ? 'Hide preview' : 'Preview'}
               </button>
             )}
-            {editable && (
+            {!readOnly && editable && (
               <button
                 type="button"
                 onClick={onEdit}
@@ -684,7 +695,7 @@ function ResourceRow({
                 {editing ? 'Opening…' : 'Edit'}
               </button>
             )}
-            {!editable && resource.status === 'published' && resource.is_current_published && (
+            {!readOnly && !editable && resource.status === 'published' && resource.is_current_published && (
               <button
                 type="button"
                 onClick={onCreateVersion}
@@ -695,7 +706,7 @@ function ResourceRow({
                 Create new version
               </button>
             )}
-            {resource.status === 'draft' && (
+            {!readOnly && resource.status === 'draft' && (
               <button type="button" onClick={onPublishVersion} className="text-xs text-moss font-medium hover:underline whitespace-nowrap">
                 Publish version
               </button>
@@ -703,21 +714,23 @@ function ResourceRow({
             <button type="button" onClick={onToggleHistory} className="text-xs text-moss font-medium hover:underline whitespace-nowrap">
               {historyOpen ? 'Hide versions' : 'Version history'}
             </button>
-            <button
-              type="button"
-              onClick={onRemove}
-              disabled={disabledByBulk}
-              title={disabledByBulk ? 'This resource is already being removed' : undefined}
-              className="text-xs text-red-700 hover:underline whitespace-nowrap disabled:cursor-wait disabled:opacity-60"
-            >
-              Remove
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={onRemove}
+                disabled={disabledByBulk}
+                title={disabledByBulk ? 'This resource is already being removed' : undefined}
+                className="text-xs text-red-700 hover:underline whitespace-nowrap disabled:cursor-wait disabled:opacity-60"
+              >
+                Remove
+              </button>
+            )}
           </div>
         </td>
       </tr>
       {previewing && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={8} className="px-4 pb-3">
+          <td colSpan={columnCount} className="px-4 pb-3">
             {(resource.type === 'video' || resource.type === 'screen_recording') && (
               <EditedVideoPlayer resource={resource} className="w-full rounded-md bg-black" />
             )}
@@ -742,7 +755,7 @@ function ResourceRow({
       )}
       {historyOpen && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={8} className="px-4 pb-3">
+          <td colSpan={columnCount} className="px-4 pb-3">
             <p className="mb-2 text-xs font-medium text-ink">Version history</p>
             <ul className="space-y-1.5">
               {versionHistory.map((version) => (

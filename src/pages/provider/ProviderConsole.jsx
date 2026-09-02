@@ -268,7 +268,13 @@ export default function ProviderConsole() {
 // employer's own auto-provisioned attached provider organisation -- this
 // component only ever reads/writes off organisation.id, so no fork is
 // needed.
-export function ProviderCataloguesSection({ organisation, userId, canCreate }) {
+export function ProviderCataloguesSection({ organisation, userId, canCreate, readOnly = false }) {
+  // readOnly (employer console reuse) always wins over canCreate -- an
+  // employer admin genuinely has the provider org role canCreate is
+  // derived from, but authoring here is disabled regardless; see
+  // ProviderTrainingSection's identical canModerate/showCreateUI pattern
+  // below for the same reasoning.
+  const showCreateUI = canCreate && !readOnly
   const [catalogues, setCatalogues] = useState([])
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [form, setForm] = useState({ name: '', description: '' })
@@ -385,7 +391,7 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate }) {
             Organise published training into named collections. Your catalogues and the platform-managed Global catalogue are available whenever a course is submitted. Each catalogue can have its own approvers, picked from your organisation's own users, so training destined for it can be approved without a platform admin.
           </p>
         </div>
-        {canCreate && (
+        {showCreateUI && (
           <button
             type="button"
             onClick={() => setShowCreateForm((v) => !v)}
@@ -398,7 +404,7 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate }) {
 
       {error && <p role="alert" className="text-sm text-red-700 mb-4">{error}</p>}
 
-      {canCreate && (showCreateForm || editingId) && <form onSubmit={handleSubmit} className="bg-card border border-hairline rounded-lg p-4 mb-6">
+      {showCreateUI && (showCreateForm || editingId) && <form onSubmit={handleSubmit} className="bg-card border border-hairline rounded-lg p-4 mb-6">
         <h3 className="text-sm font-medium text-ink mb-3">{editingId ? 'Edit catalogue' : 'Create a catalogue'}</h3>
         <div className="grid sm:grid-cols-2 gap-3">
           <label className="text-xs text-secondary">
@@ -426,30 +432,34 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate }) {
         </div>
       ) : (
         <div className="bg-card border border-hairline rounded-lg">
-          <div className="p-3 pb-0">
-            <BulkActionBar
-              count={selection.selected.size}
-              onClear={selection.clear}
-              busy={bulkDeleting}
-              actions={[
-                {
-                  label: `Delete selected (${selection.selected.size})`,
-                  variant: 'danger',
-                  onClick: () => setBulkDeleteTargets(catalogues.filter((c) => selection.selected.has(c.id))),
-                },
-              ]}
-            />
-          </div>
+          {!readOnly && (
+            <div className="p-3 pb-0">
+              <BulkActionBar
+                count={selection.selected.size}
+                onClear={selection.clear}
+                busy={bulkDeleting}
+                actions={[
+                  {
+                    label: `Delete selected (${selection.selected.size})`,
+                    variant: 'danger',
+                    onClick: () => setBulkDeleteTargets(catalogues.filter((c) => selection.selected.has(c.id))),
+                  },
+                ]}
+              />
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-hairline text-left text-secondary">
-                  <SelectionTh
-                    idPrefix="provider-catalogues"
-                    checked={selection.isAllSelected(pageIds)}
-                    indeterminate={selectedOnPage > 0 && selectedOnPage < pageIds.length}
-                    onChange={() => selection.toggleAll(pageIds)}
-                  />
+                  {!readOnly && (
+                    <SelectionTh
+                      idPrefix="provider-catalogues"
+                      checked={selection.isAllSelected(pageIds)}
+                      indeterminate={selectedOnPage > 0 && selectedOnPage < pageIds.length}
+                      onChange={() => selection.toggleAll(pageIds)}
+                    />
+                  )}
                   <SortableTh label="ID" columnKey="id" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   <SortableTh label="Catalogue" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <SortableTh label="Description" columnKey="description" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
@@ -460,16 +470,18 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate }) {
                 {pageItems.map((catalogue) => (
                   <Fragment key={catalogue.id}>
                     <tr className="border-b border-hairline last:border-0">
-                      <td className="px-4 py-3">
-                        <label className="sr-only" htmlFor={`select-catalogue-${catalogue.id}`}>Select {catalogue.name}</label>
-                        <input
-                          id={`select-catalogue-${catalogue.id}`}
-                          type="checkbox"
-                          checked={selection.selected.has(catalogue.id)}
-                          onChange={() => selection.toggle(catalogue.id)}
-                          className="rounded border-hairline accent-moss"
-                        />
-                      </td>
+                      {!readOnly && (
+                        <td className="px-4 py-3">
+                          <label className="sr-only" htmlFor={`select-catalogue-${catalogue.id}`}>Select {catalogue.name}</label>
+                          <input
+                            id={`select-catalogue-${catalogue.id}`}
+                            type="checkbox"
+                            checked={selection.selected.has(catalogue.id)}
+                            onChange={() => selection.toggle(catalogue.id)}
+                            className="rounded border-hairline accent-moss"
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{catalogue.id.slice(0, 8)}</td>
                       <td className="px-4 py-3 text-ink font-medium whitespace-nowrap">{catalogue.name}</td>
                       <td className="px-4 py-3 text-secondary truncate max-w-xs">{catalogue.description || '—'}</td>
@@ -481,7 +493,7 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate }) {
                     </tr>
                     {expandedId === catalogue.id && (
                       <tr className="border-b border-hairline last:border-0">
-                        <td colSpan={5} className="px-4 pb-3">
+                        <td colSpan={readOnly ? 4 : 5} className="px-4 pb-3">
                           <CatalogueApproversPanel catalogueId={catalogue.id} organisationId={organisation.id} />
                         </td>
                       </tr>
@@ -607,7 +619,7 @@ function CatalogueApproversPanel({ catalogueId, organisationId }) {
 
 // Exported for the same reason as ProviderCataloguesSection above -- reused
 // verbatim by the employer console's Training tab.
-export function ProviderTrainingSection({ organisation, userId, canViewParticipants }) {
+export function ProviderTrainingSection({ organisation, userId, canViewParticipants, readOnly = false }) {
   const navigate = useNavigate()
   const [courses, setCourses] = useState([])
   const [isApprover, setIsApprover] = useState(false)
@@ -754,16 +766,18 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
     <div>
       <div className="flex items-center justify-between gap-3 mb-3">
         <h3 className="font-display text-lg text-ink">Training</h3>
-        <button
-          type="button"
-          onClick={() => setShowForm((v) => !v)}
-          className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
-        >
-          {showForm ? 'Cancel' : '+ Create training'}
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => setShowForm((v) => !v)}
+            className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
+          >
+            {showForm ? 'Cancel' : '+ Create training'}
+          </button>
+        )}
       </div>
 
-      {showForm && (
+      {!readOnly && showForm && (
         <form onSubmit={handleCreate} className="bg-card border border-hairline rounded-lg p-4 space-y-3 mb-4">
           <p className="text-xs text-secondary">
             Creates a draft you can keep building out before submitting it for approval.
@@ -864,37 +878,41 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
         </div>
       ) : (
         <div className="bg-card border border-hairline rounded-lg">
-          <div className="p-3 pb-0">
-            <BulkActionBar
-              count={selection.selected.size}
-              onClear={selection.clear}
-              actions={[
-                {
-                  label: `Push to catalogue (${selectedEligibleCourses.length})`,
-                  disabled: selectedEligibleCourses.length === 0,
-                  title:
-                    selectedEligibleCourses.length === 0
-                      ? "None of the selected training is an approved, currently published version"
-                      : undefined,
-                  onClick: () =>
-                    setBulkPush({
-                      courses: selectedEligibleCourses,
-                      excludedCourses: selectedIneligibleCourses,
-                    }),
-                },
-              ]}
-            />
-          </div>
+          {!readOnly && (
+            <div className="p-3 pb-0">
+              <BulkActionBar
+                count={selection.selected.size}
+                onClear={selection.clear}
+                actions={[
+                  {
+                    label: `Push to catalogue (${selectedEligibleCourses.length})`,
+                    disabled: selectedEligibleCourses.length === 0,
+                    title:
+                      selectedEligibleCourses.length === 0
+                        ? "None of the selected training is an approved, currently published version"
+                        : undefined,
+                    onClick: () =>
+                      setBulkPush({
+                        courses: selectedEligibleCourses,
+                        excludedCourses: selectedIneligibleCourses,
+                      }),
+                  },
+                ]}
+              />
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-hairline text-left text-secondary">
-                  <SelectionTh
-                    idPrefix="provider-training"
-                    checked={selection.isAllSelected(coursePageIds)}
-                    indeterminate={coursesSelectedOnPage > 0 && coursesSelectedOnPage < coursePageIds.length}
-                    onChange={() => selection.toggleAll(coursePageIds)}
-                  />
+                  {!readOnly && (
+                    <SelectionTh
+                      idPrefix="provider-training"
+                      checked={selection.isAllSelected(coursePageIds)}
+                      indeterminate={coursesSelectedOnPage > 0 && coursesSelectedOnPage < coursePageIds.length}
+                      onChange={() => selection.toggleAll(coursePageIds)}
+                    />
+                  )}
                   <SortableTh label="ID" columnKey="course_code" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   <SortableTh label="Training" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <SortableTh label="Version" columnKey="version" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
@@ -911,7 +929,8 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
                     course={course}
                     selected={selection.selected.has(course.id)}
                     onToggleSelected={() => selection.toggle(course.id)}
-                    canModerate={isApprover}
+                    canModerate={isApprover && !readOnly}
+                    readOnly={readOnly}
                     actioning={actioningId === course.id}
                     rejecting={rejectingId === course.id}
                     rejectionReason={rejectionReason}
@@ -999,22 +1018,26 @@ function CourseRow({
   onApprove,
   onReject,
   onDeactivate,
+  readOnly,
 }) {
   const editable = course.status === 'draft' || course.status === 'rejected'
-  const canStartEditing = editable || course.status === 'approved'
+  const canStartEditing = !readOnly && (editable || course.status === 'approved')
+  const columnCount = readOnly ? 7 : 8
   return (
     <>
       <tr className="border-b border-hairline last:border-0">
-        <td className="px-4 py-3">
-          <label className="sr-only" htmlFor={`select-course-${course.id}`}>Select {course.name}</label>
-          <input
-            id={`select-course-${course.id}`}
-            type="checkbox"
-            checked={selected}
-            onChange={onToggleSelected}
-            className="rounded border-hairline accent-moss"
-          />
-        </td>
+        {!readOnly && (
+          <td className="px-4 py-3">
+            <label className="sr-only" htmlFor={`select-course-${course.id}`}>Select {course.name}</label>
+            <input
+              id={`select-course-${course.id}`}
+              type="checkbox"
+              checked={selected}
+              onChange={onToggleSelected}
+              className="rounded border-hairline accent-moss"
+            />
+          </td>
+        )}
         <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{course.course_code || 'Not set'}</td>
         <td className="px-4 py-3 whitespace-nowrap">
           <Link to={`/provider/training/${course.id}`} className="text-ink font-medium hover:text-moss hover:underline">
@@ -1098,7 +1121,7 @@ function CourseRow({
       </tr>
       {rejecting && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={8} className="px-4 pb-3">
+          <td colSpan={columnCount} className="px-4 pb-3">
             <div className="flex flex-wrap items-end gap-2 border-t border-hairline pt-3">
               <div className="flex-1 min-w-[200px]">
                 <label className="block text-xs text-secondary mb-1">Rejection reason (optional)</label>

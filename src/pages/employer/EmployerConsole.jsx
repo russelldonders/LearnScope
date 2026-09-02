@@ -45,12 +45,17 @@ const ASSIGNMENT_STATUS_LABELS = {
 
 // Foundation console for an employer's own admin (employer_members
 // role = 'admin', gated by EmployerAdminRoute). Training reuses the
-// existing provider console components verbatim, scoped to the employer's
-// own auto-provisioned attached provider organisation (create_employer,
-// 20260902090000) -- no forked authoring UI. Learners is a separate, new
-// roster of the employer's own managed learners (employer_members), not
-// provider staff -- one-at-a-time add-by-email plus (Phase 2) bulk import;
-// course assignment and any learner-facing UI are still later phases.
+// existing provider console components verbatim (readOnly), scoped to the
+// employer's own auto-provisioned attached provider organisation
+// (create_employer, 20260902090000) -- no forked view-only UI. Authoring
+// (create/edit/delete/publish) only happens in the standalone Provider
+// console at /provider, where this employer admin's real organisation_
+// members role on that same org already grants it -- this tab is purely a
+// second, view-only window onto the same data, not a second place to
+// change it. Learners is a separate, new roster of the employer's own
+// managed learners (employer_members), not provider staff -- one-at-a-time
+// add-by-email plus (Phase 2) bulk import; course assignment and any
+// learner-facing UI are still later phases.
 export default function EmployerConsole() {
   const { user, employerMemberships, organisationMemberships } = useAuth()
   const [employers, setEmployers] = useState([])
@@ -152,30 +157,37 @@ export default function EmployerConsole() {
 
                 {activeSection === 'training' && (
                   <div className="space-y-10">
-                    {myProviderRole && (
-                      <p className="text-sm text-secondary">
-                        You're also a {myProviderRole} on this employer's provider organisation.{' '}
-                        <Link to="/provider" className="text-moss hover:underline">
-                          Open the full Provider console →
-                        </Link>
-                      </p>
-                    )}
+                    <p className="text-sm text-secondary">
+                      This view is read-only.{' '}
+                      {myProviderRole ? (
+                        <>
+                          Manage courses, catalogues, and resources from the full{' '}
+                          <Link to="/provider" className="text-moss hover:underline">
+                            Provider console →
+                          </Link>
+                        </>
+                      ) : (
+                        "Ask an admin of this employer's provider organisation to manage courses, catalogues, and resources there."
+                      )}
+                    </p>
                     <ProviderTrainingSection
                       key={`${selectedEmployer.id}-training`}
                       organisation={{ id: selectedEmployer.provider_organisation_id }}
                       userId={user.id}
                       canViewParticipants={myProviderRole === 'admin'}
+                      readOnly
                     />
                     <ProviderCataloguesSection
                       key={`${selectedEmployer.id}-catalogues`}
                       organisation={{ id: selectedEmployer.provider_organisation_id }}
                       userId={user.id}
-                      canCreate={myProviderRole === 'admin'}
+                      readOnly
                     />
                     <ResourceLibrarySection
                       key={`${selectedEmployer.id}-resources`}
                       organisationId={selectedEmployer.provider_organisation_id}
                       userId={user.id}
+                      readOnly
                     />
                   </div>
                 )}
