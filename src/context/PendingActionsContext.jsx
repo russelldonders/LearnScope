@@ -3,6 +3,8 @@ import { useAuth } from './AuthContext'
 import { supabase } from '../lib/supabaseClient'
 import { listIncomingRateInvites, listIncomingRecommendInvites } from '../lib/connections'
 import { listMyPendingOrgInvites } from '../lib/organisationInvites'
+import { listMyPendingEmployerInvites } from '../lib/admin/employers'
+import { listMyCourseAssignments } from '../lib/courseCatalogue'
 
 const PendingActionsContext = createContext(undefined)
 
@@ -16,31 +18,47 @@ export function PendingActionsProvider({ children }) {
 
   // Everything actually waiting on this learner to do something -- pending
   // connection requests, validation requests, organisation staff invites,
-  // and rate invites addressed to them -- not invites/requests they sent
-  // themselves, which are waiting on someone else instead.
+  // employer invites, pushed course assignments, and rate invites addressed
+  // to them -- not invites/requests they sent themselves, which are waiting
+  // on someone else instead.
   const refreshPendingActionCount = useCallback(async () => {
     if (!user) {
       setPendingActionCount(0)
       return
     }
-    const [{ count: requestCount }, { count: validationCount }, rateInvites, recommendInvites, orgInvites] =
-      await Promise.all([
-        supabase
-          .from('connection_requests')
-          .select('id', { count: 'exact', head: true })
-          .eq('recipient_id', user.id)
-          .eq('status', 'pending'),
-        supabase
-          .from('skill_validation_requests')
-          .select('id', { count: 'exact', head: true })
-          .eq('validator_id', user.id)
-          .eq('status', 'pending'),
-        listIncomingRateInvites(),
-        listIncomingRecommendInvites(),
-        listMyPendingOrgInvites(user.id),
-      ])
+    const [
+      { count: requestCount },
+      { count: validationCount },
+      rateInvites,
+      recommendInvites,
+      orgInvites,
+      employerInvites,
+      courseAssignments,
+    ] = await Promise.all([
+      supabase
+        .from('connection_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('recipient_id', user.id)
+        .eq('status', 'pending'),
+      supabase
+        .from('skill_validation_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('validator_id', user.id)
+        .eq('status', 'pending'),
+      listIncomingRateInvites(),
+      listIncomingRecommendInvites(),
+      listMyPendingOrgInvites(user.id),
+      listMyPendingEmployerInvites(user.id),
+      listMyCourseAssignments(user.id),
+    ])
     setPendingActionCount(
-      (requestCount ?? 0) + (validationCount ?? 0) + rateInvites.length + recommendInvites.length + orgInvites.length
+      (requestCount ?? 0) +
+        (validationCount ?? 0) +
+        rateInvites.length +
+        recommendInvites.length +
+        orgInvites.length +
+        employerInvites.length +
+        courseAssignments.length
     )
   }, [user])
 

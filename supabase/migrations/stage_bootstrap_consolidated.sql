@@ -9175,3 +9175,409 @@ grant execute on function create_employer(text) to authenticated;
 -- self-service renaming can reintroduce update access with a BEFORE UPDATE
 -- trigger guarding the immutable columns.
 drop policy "Employer admins can update their employer" on employers;
+
+-- Phase 2 of the employer domain concept (follows 20260902090000/
+-- 20260902150000): proper invite-with-consent semantics for employer_members,
+-- mirroring decide_org_invite (0070) exactly for the accept/decline
+-- mechanics -- runs as the invited user, checks auth.uid() against the row's
+-- user_id and that it's still 'pending', for update to avoid a races with a
+-- second concurrent decide call.
+--
+-- The one addition beyond decide_org_invite's shape: accepting an 'admin'
+-- employer_members invite also has to grant the matching organisation_members
+-- admin row on the employer's attached provider organisation -- this is the
+-- second half of Phase 1's eager grant (addEmployerMember,
+-- api/admin/actions.js), which this phase splits by consent state. An
+-- existing user hasn't agreed to anything at insert time (that's the whole
+-- point of landing them 'pending' instead of 'active'), so granting
+-- provider-console access then would let an employer admin hand out that
+-- access to someone who hasn't accepted anything -- the grant has to wait
+-- until they actually accept, here. (A brand-new account still gets the
+-- grant immediately at insert time in addEmployerMember, since clicking the
+-- Supabase invite email *is* their consent, same as the org-staff invite
+-- flow's own reasoning.) Security definer is what makes this possible: the
+-- function runs with the privileges to write organisation_members on the
+-- invited user's own behalf during their own accept action -- same trust
+-- boundary create_employer already relies on to provision cross-table
+-- resources on a caller's behalf after verifying who they are.
+create or replace function decide_employer_invite(p_member_id uuid, p_accept boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_member employer_members%rowtype;
+  v_provider_organisation_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select * into v_member from employer_members where id = p_member_id for update;
+  if not found then
+    raise exception 'Invitation not found';
+  end if;
+  if v_member.user_id != auth.uid() then
+    raise exception 'Not authorized';
+  end if;
+  if v_member.status != 'pending' then
+    raise exception 'This invitation has already been decided.';
+  end if;
+
+  if p_accept then
+    update employer_members set status = 'active' where id = p_member_id;
+
+    if v_member.role = 'admin' then
+      select provider_organisation_id into v_provider_organisation_id
+      from employers where id = v_member.employer_id;
+
+      -- Same on-conflict shape as addEmployerMember's own upsert (Phase 1):
+      -- never downgrade an existing organisation_members row for this
+      -- person -- admin is the top role there, so overwriting role/status
+      -- to admin/active on conflict is always a promotion or a no-op, never
+      -- a demotion.
+      insert into organisation_members (organisation_id, user_id, role, status, invited_by)
+      values (v_provider_organisation_id, v_member.user_id, 'admin', 'active', v_member.invited_by)
+      on conflict (organisation_id, user_id) do update
+        set role = 'admin', status = 'active', invited_by = excluded.invited_by;
+    end if;
+  else
+    delete from employer_members where id = p_member_id;
+  end if;
+end;
+$$;
+
+grant execute on function decide_employer_invite(uuid, boolean) to authenticated;
+
+-- CRITICAL security fix, found by security review of Phase 2 (employer
+-- invite-with-consent, 20260902160000).
+--
+-- is_employer_admin/is_employer_member (20260902090000) never filtered on
+-- employer_members.status -- unlike the org equivalents they were supposed
+-- to mirror, is_org_admin/is_org_member (0070), which explicitly require
+-- status = 'active' because "a pending row grants no access yet." That
+-- check never made it into the employer versions.
+--
+-- This was latent and harmless in Phase 1 (nothing created a 'pending'
+-- employer_members row back then -- addEmployerMember only ever inserted
+-- 'active' rows for an existing user). Phase 2's addEmployerMember
+-- existing-user branch now creates real, reachable 'pending' rows, so a
+-- user invited as role='admin' but who has NOT accepted anything already
+-- satisfied is_employer_admin -- meaning they could, via a direct
+-- supabase.from('employer_members') call bypassing the app UI entirely:
+-- read the full membership roster for that employer (is_employer_member
+-- also passed, so employers'/employer_members' SELECT policies passed
+-- too), UPDATE their own row to status='active' directly (skipping
+-- decide_employer_invite and its consent check), and INSERT/UPDATE/DELETE
+-- other members' rows (add an accomplice as admin, remove real admins).
+
+create or replace function is_employer_admin(p_employer_id uuid, check_user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from employer_members
+    where employer_id = p_employer_id and user_id = check_user_id and role = 'admin' and status = 'active'
+  ) or is_platform_admin(check_user_id)
+$$;
+
+create or replace function is_employer_member(p_employer_id uuid, check_user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from employer_members
+    where employer_id = p_employer_id and user_id = check_user_id and status = 'active'
+  ) or is_platform_admin(check_user_id)
+$$;
+
+-- Requiring status = 'active' above breaks a pending invitee's ability to
+-- see their OWN pending row -- both employer_members' own select policy and
+-- the /actions "Employer invitations" card (listMyPendingEmployerInvites)
+-- depend on is_employer_member, which no longer matches a pending row.
+-- Mirrors organisation_members' own equivalent fix (0070, "Users can view
+-- their own organisation membership rows") exactly: any user can always see
+-- their own membership row, whatever its status -- there's nothing private
+-- about a person seeing that they themselves are a pending invitee.
+create policy "Users can view their own employer_members rows"
+  on employer_members for select
+  to authenticated
+  using (auth.uid() = user_id);
+
+-- organisations' own SELECT policy is intentionally open to any
+-- authenticated user ("any authenticated user can view" -- providers are a
+-- public directory), which is why the equivalent problem never arose on the
+-- org side: listMyPendingOrgInvites' organisations(id, name) join always
+-- resolves regardless of membership status. employers is deliberately NOT
+-- open like that (private company entities, select scoped to members via
+-- is_employer_member) -- so tightening is_employer_member above would
+-- otherwise silently break listMyPendingEmployerInvites' own
+-- employers(id, name) join for a pending invitee (the employer row itself
+-- would no longer resolve, even though their own employer_members row
+-- still does via the policy just above). Narrow, explicit fix: let a user
+-- see the name of any employer they have ANY employer_members row for
+-- (pending or active) -- not employer membership generally, just enough to
+-- resolve the employer's own name/id for their invitation card. Platform
+-- admins and active members remain covered by the existing
+-- is_employer_member-gated "Employer members can view their employer"
+-- policy (its is_platform_admin bypass is unaffected by the status
+-- tightening above).
+create policy "Invitees can view the employer they're invited to"
+  on employers for select
+  to authenticated
+  using (
+    exists (
+      select 1 from employer_members
+      where employer_members.employer_id = employers.id
+        and employer_members.user_id = auth.uid()
+    )
+  );
+
+-- Phase 3 of the employer domain concept (follows 20260902090000/150000/
+-- 160000): lets an employer admin push/assign a course to specific
+-- employer_members, rather than 100% learner-initiated discovery via the
+-- catalogue browse page (courseCatalogue.js's listCatalogueCourses/
+-- enrolInCatalogueCourse, both left completely untouched by this phase).
+--
+-- Deliberately a lighter trust boundary than Phase 2's employer_members
+-- invite: assignment doesn't grant the employer any access to the learner's
+-- data and doesn't create anything on their profile by itself, so an admin
+-- can create a course_assignments row without the learner's prior consent
+-- -- that's the whole point of "push". What it must NOT do is silently
+-- enrol them: creating the real `courses` row that becomes part of the
+-- learner's own record stays an action only the learner takes (clicking
+-- "Start" on /actions, via respondToCourseAssignment ->
+-- enrolInCatalogueCourse, unchanged). This table only ever tracks the
+-- assignment's own lifecycle (assigned/enrolled/dismissed); it is never the
+-- thing that shows up on a learner's profile.
+create table course_assignments (
+  id uuid primary key default gen_random_uuid(),
+  employer_id uuid not null references employers(id) on delete cascade,
+  catalogue_course_id uuid not null references course_catalogue(id) on delete cascade,
+  assigned_to uuid not null references auth.users(id),
+  assigned_by uuid not null references auth.users(id),
+  status text not null default 'assigned' check (status in ('assigned', 'enrolled', 'dismissed')),
+  created_at timestamptz not null default now(),
+  unique (employer_id, catalogue_course_id, assigned_to)
+);
+
+create index course_assignments_assigned_to_idx on course_assignments (assigned_to);
+create index course_assignments_employer_idx on course_assignments (employer_id);
+
+alter table course_assignments enable row level security;
+
+-- A learner sees their own assignments (whatever their status); an employer
+-- admin sees every assignment they've made, for a roster/status view of
+-- who's started/dismissed/still pending across their own employer.
+create policy "Learners and employer admins can view course assignments"
+  on course_assignments for select
+  to authenticated
+  using (
+    assigned_to = (select auth.uid())
+    or is_employer_admin(employer_id, (select auth.uid()))
+  );
+
+-- No insert policy -- creation only happens through
+-- assign_course_to_employer_members() below (security definer, validates
+-- admin status and catalogue eligibility server-side), same reasoning as
+-- employers/employer_members having no open insert/creation path either.
+
+-- The learner transitions their own row's status: 'enrolled' once they've
+-- actually enrolled via the existing, unchanged enrolInCatalogueCourse flow
+-- (respondToCourseAssignment, src/lib/courseCatalogue.js), or 'dismissed' if
+-- they don't want it. Low-stakes self-service state on their own row, not a
+-- security boundary -- not worth a transition-validity trigger for e.g.
+-- dismissed -> assigned.
+create policy "Learners can update their own assignment status"
+  on course_assignments for update
+  to authenticated
+  using (assigned_to = (select auth.uid()))
+  with check (assigned_to = (select auth.uid()));
+
+-- Lets an admin retract an assignment (assigned the wrong course/person).
+create policy "Employer admins can delete course assignments"
+  on course_assignments for delete
+  to authenticated
+  using (is_employer_admin(employer_id, (select auth.uid())));
+
+grant select, update, delete on table course_assignments to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- assign_course_to_employer_members -- security definer, mirrors
+-- assign_course_to_catalogue's (20260831121500) validated-insert-with-
+-- on-conflict shape: check the caller's admin status and the course's
+-- eligibility server-side, then do the insert. Grant execute to
+-- authenticated (same convention as every other employer RPC) since the
+-- internal is_employer_admin check is what actually enforces admin-only.
+--
+-- Eligibility is deliberately narrower than the platform-wide browse
+-- catalogue (listCatalogueCourses): an employer admin may only assign a
+-- course that is actually published in a catalogue belonging to their own
+-- attached provider org (catalogues.organisation_id =
+-- employers.provider_organisation_id) -- their own org's training, not
+-- anything platform-wide approved elsewhere.
+--
+-- The insert/select/on-conflict is one statement doing double duty: it
+-- filters p_user_ids down to actual active employer_members of this
+-- employer (both roles -- admin or member -- assignable; nothing about
+-- being an employer admin excludes you from also being assigned training),
+-- and it dedupes against any existing assignment via the unique constraint.
+-- returns setof course_assignments so the caller can tell exactly which of
+-- the requested users actually got a new row, and report the rest as
+-- skipped rather than claiming a uniform success.
+create or replace function assign_course_to_employer_members(
+  p_employer_id uuid,
+  p_catalogue_course_id uuid,
+  p_user_ids uuid[]
+)
+returns setof course_assignments
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_caller uuid := (select auth.uid());
+  v_provider_organisation_id uuid;
+begin
+  if v_caller is null or not is_employer_admin(p_employer_id, v_caller) then
+    raise exception 'Not authorized';
+  end if;
+
+  select provider_organisation_id into v_provider_organisation_id
+  from employers
+  where id = p_employer_id;
+
+  if v_provider_organisation_id is null then
+    raise exception 'Employer not found';
+  end if;
+
+  if not exists (
+    select 1
+    from course_catalogue_publications pub
+    join catalogues c on c.id = pub.catalogue_id
+    where pub.course_id = p_catalogue_course_id
+      and pub.published_at is not null
+      and c.organisation_id = v_provider_organisation_id
+  ) then
+    raise exception 'This course is not published in your organisation''s own catalogue';
+  end if;
+
+  return query
+    insert into course_assignments (employer_id, catalogue_course_id, assigned_to, assigned_by)
+    select p_employer_id, p_catalogue_course_id, uid.user_id, v_caller
+    from unnest(p_user_ids) as uid(user_id)
+    where exists (
+      select 1 from employer_members
+      where employer_id = p_employer_id
+        and user_id = uid.user_id
+        and status = 'active'
+    )
+    on conflict (employer_id, catalogue_course_id, assigned_to) do nothing
+    returning *;
+end;
+$$;
+
+revoke all on function assign_course_to_employer_members(uuid, uuid, uuid[]) from public, anon, authenticated;
+grant execute on function assign_course_to_employer_members(uuid, uuid, uuid[]) to authenticated;
+
+-- Security-review follow-up on 20260902180000 (course assignment Phase 3).
+--
+-- 1. HIGH: course_assignments' UPDATE policy ("Learners can update their own
+-- assignment status") only pins assigned_to in USING/WITH CHECK -- RLS can't
+-- do column-grain checks (same bug class already found and fixed once in
+-- this same PR, see 20260902150000_employers_drop_update_policy.sql's own
+-- comment), and the table-wide `grant ... update ... to authenticated` let
+-- any user holding a legitimate course_assignments row rewrite that row's
+-- employer_id, catalogue_course_id, or assigned_by via a direct PostgREST
+-- call -- e.g. repointing employer_id to an employer they don't belong to
+-- and status to 'enrolled', polluting a different employer's roster with a
+-- fake "completed" assignment with no real courses enrolment behind it.
+-- Unlike employers' equivalent bug (dropped the policy entirely -- no
+-- legitimate self-service update existed there), course_assignments has a
+-- real, intended self-service update: the learner flipping their own row's
+-- status to 'enrolled'/'dismissed' (respondToCourseAssignment,
+-- src/lib/courseCatalogue.js, only ever sends {status}). Postgres enforces
+-- column-level UPDATE privileges independently of RLS, and PostgREST
+-- respects them, so narrowing the grant to just the one self-service column
+-- keeps the real flow working while closing the other three off entirely --
+-- no application code change needed.
+revoke update on table course_assignments from authenticated;
+grant update (status) on table course_assignments to authenticated;
+
+-- 2. MEDIUM: assign_course_to_employer_members' eligibility check only
+-- required course_catalogue_publications.published_at is not null plus
+-- catalogue-organisation ownership -- missing the course_catalogue.status =
+-- 'approved' and is_current_published = true filter every other reader of
+-- this data applies (listCatalogueCourses, listPublishedProviderCourses,
+-- is_course_published_to_catalogue, etc). deactivate_course_publication
+-- only flips those two flags and never clears published_at, so a
+-- deactivated/superseded course version stayed "eligible" per this RPC's
+-- own check indefinitely, even though the course-picker UI already filters
+-- correctly (listEmployerCatalogueCourses -> listPublishedProviderCourses)
+-- and so never surfaces one. The RPC is meant to be the actual authority on
+-- eligibility per its own comment -- this closes the gap so it actually is,
+-- matching listPublishedProviderCourses' filter exactly.
+create or replace function assign_course_to_employer_members(
+  p_employer_id uuid,
+  p_catalogue_course_id uuid,
+  p_user_ids uuid[]
+)
+returns setof course_assignments
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_caller uuid := (select auth.uid());
+  v_provider_organisation_id uuid;
+begin
+  if v_caller is null or not is_employer_admin(p_employer_id, v_caller) then
+    raise exception 'Not authorized';
+  end if;
+
+  select provider_organisation_id into v_provider_organisation_id
+  from employers
+  where id = p_employer_id;
+
+  if v_provider_organisation_id is null then
+    raise exception 'Employer not found';
+  end if;
+
+  if not exists (
+    select 1
+    from course_catalogue_publications pub
+    join catalogues c on c.id = pub.catalogue_id
+    join course_catalogue cc on cc.id = pub.course_id
+    where pub.course_id = p_catalogue_course_id
+      and pub.published_at is not null
+      and c.organisation_id = v_provider_organisation_id
+      and cc.status = 'approved'
+      and cc.is_current_published = true
+  ) then
+    raise exception 'This course is not published in your organisation''s own catalogue';
+  end if;
+
+  return query
+    insert into course_assignments (employer_id, catalogue_course_id, assigned_to, assigned_by)
+    select p_employer_id, p_catalogue_course_id, uid.user_id, v_caller
+    from unnest(p_user_ids) as uid(user_id)
+    where exists (
+      select 1 from employer_members
+      where employer_id = p_employer_id
+        and user_id = uid.user_id
+        and status = 'active'
+    )
+    on conflict (employer_id, catalogue_course_id, assigned_to) do nothing
+    returning *;
+end;
+$$;
+
+revoke all on function assign_course_to_employer_members(uuid, uuid, uuid[]) from public, anon, authenticated;
+grant execute on function assign_course_to_employer_members(uuid, uuid, uuid[]) to authenticated;

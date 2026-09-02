@@ -4,13 +4,22 @@ import AppHeader from '../../components/AppHeader'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import ResourceLibrarySection from '../../components/ResourceLibrarySection'
 import { ProviderTrainingSection, ProviderCataloguesSection } from '../provider/ProviderConsole'
-import { listEmployers, listEmployerMembers, addEmployerMember, removeEmployerMember } from '../../lib/admin/employers'
-import { useSortedPage } from '../../lib/useSortedPage'
-import { SortableTh, TablePagination } from '../../components/TableControls'
+import {
+  listEmployers,
+  listEmployerMembers,
+  addEmployerMember,
+  removeEmployerMember,
+  listEmployerCatalogueCourses,
+  assignCourseToEmployerMembers,
+  listEmployerCourseAssignments,
+} from '../../lib/admin/employers'
+import { useSortedPage, useRowSelection } from '../../lib/useSortedPage'
+import { SortableTh, TablePagination, SelectionTh, BulkActionBar } from '../../components/TableControls'
 
 const SECTIONS = [
   { key: 'training', label: 'Training' },
   { key: 'learners', label: 'Learners' },
+  { key: 'assign', label: 'Assign training' },
 ]
 
 const LEARNER_SORT_ACCESSORS = {
@@ -20,15 +29,27 @@ const LEARNER_SORT_ACCESSORS = {
   status: (m) => m.status ?? '',
 }
 
-// Phase 1 foundation console for an employer's own admin (employer_members
+const ASSIGNMENT_SORT_ACCESSORS = {
+  course: (a) => a.course_catalogue?.name?.toLowerCase() ?? '',
+  learner: (a) => (a.learnerEmail || '').toLowerCase(),
+  status: (a) => a.status ?? '',
+  created_at: (a) => a.created_at ?? '',
+}
+
+const ASSIGNMENT_STATUS_LABELS = {
+  assigned: 'Assigned',
+  enrolled: 'Started',
+  dismissed: 'Dismissed',
+}
+
+// Foundation console for an employer's own admin (employer_members
 // role = 'admin', gated by EmployerAdminRoute). Training reuses the
 // existing provider console components verbatim, scoped to the employer's
 // own auto-provisioned attached provider organisation (create_employer,
 // 20260902090000) -- no forked authoring UI. Learners is a separate, new
 // roster of the employer's own managed learners (employer_members), not
-// provider staff -- deliberately kept to one-at-a-time add-by-email here;
-// bulk import, course assignment and any learner-facing UI are explicitly
-// later phases.
+// provider staff -- one-at-a-time add-by-email plus (Phase 2) bulk import;
+// course assignment and any learner-facing UI are still later phases.
 export default function EmployerConsole() {
   const { user, employerMemberships, organisationMemberships } = useAuth()
   const [employers, setEmployers] = useState([])
@@ -152,6 +173,9 @@ export default function EmployerConsole() {
                 {activeSection === 'learners' && (
                   <EmployerLearnersPanel key={selectedEmployer.id} employer={selectedEmployer} />
                 )}
+                {activeSection === 'assign' && (
+                  <EmployerAssignTrainingPanel key={selectedEmployer.id} employer={selectedEmployer} />
+                )}
               </div>
             )}
           </>
@@ -172,6 +196,11 @@ function EmployerLearnersPanel({ employer }) {
   const [message, setMessage] = useState(null)
   const [removeTarget, setRemoveTarget] = useState(null)
   const [removing, setRemoving] = useState(false)
+
+  const [bulkEmails, setBulkEmails] = useState('')
+  const [bulkRole, setBulkRole] = useState('member')
+  const [bulkSubmitting, setBulkSubmitting] = useState(false)
+  const [bulkResults, setBulkResults] = useState(null)
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
     useSortedPage(members, LEARNER_SORT_ACCESSORS)
@@ -198,14 +227,61 @@ function EmployerLearnersPanel({ employer }) {
     setMessage(null)
     setError(null)
     try {
-      await addEmployerMember(employer.id, email.trim(), role)
-      setMessage(`${email.trim()} added.`)
+      const result = await addEmployerMember(employer.id, email.trim(), role)
+      setMessage(
+        result.alreadyExisted
+          ? `${email.trim()} added, pending their acceptance (see their Actions page).`
+          : `${email.trim()} invited. They'll get access once they accept the invite email.`
+      )
       setEmail('')
       await load()
     } catch (err) {
       setError(err.message)
     } finally {
       setAdding(false)
+    }
+  }
+
+  // Bulk-invite path alongside the one-at-a-time form above -- one
+  // addEmployerMember call per email via Promise.allSettled, same partial-
+  // failure shape as ProviderConsole.jsx's own bulk handlers (e.g.
+  // handleBulkDelete), just reporting per-row outcomes instead of only
+  // failures since a successful add here can mean either "invited" (new
+  // account) or "added, pending acceptance" (existing account) -- both
+  // worth surfacing distinctly, not just "succeeded".
+  async function handleBulkImport(e) {
+    e.preventDefault()
+    const emails = Array.from(new Set(bulkEmails.split(/[\n,]+/).map((entry) => entry.trim()).filter(Boolean)))
+    if (emails.length === 0) return
+
+    setBulkSubmitting(true)
+    setBulkResults(null)
+    setError(null)
+    try {
+      const results = await Promise.allSettled(emails.map((addr) => addEmployerMember(employer.id, addr, bulkRole)))
+      setBulkResults(
+        emails.map((addr, index) => {
+          const result = results[index]
+          if (result.status === 'fulfilled') {
+            return result.value.alreadyExisted
+              ? { email: addr, outcome: 'added', detail: 'Added -- pending their acceptance' }
+              : { email: addr, outcome: 'invited', detail: 'Invited -- new account created' }
+          }
+          const reason = result.reason?.message ?? 'Unknown error'
+          // addEmployerMember's own 409 message (api/admin/actions.js) --
+          // matched here only to give this one expected failure its own
+          // clearer label instead of lumping it in with unexpected ones.
+          return reason === 'This person is already a member of this employer.'
+            ? { email: addr, outcome: 'already-member', detail: 'Already a member' }
+            : { email: addr, outcome: 'failed', detail: `Failed -- ${reason}` }
+        })
+      )
+      setBulkEmails('')
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBulkSubmitting(false)
     }
   }
 
@@ -228,15 +304,15 @@ function EmployerLearnersPanel({ employer }) {
       <div className="mb-5">
         <h2 id="employer-learners-heading" className="font-display text-lg text-ink">Learners</h2>
         <p className="text-sm text-secondary mt-1 max-w-2xl">
-          People managed under {employer.name}. Add someone who already has a LearnScope account by email -- bulk
-          import isn't available yet.
+          People managed under {employer.name}. Invite someone by email below, or paste multiple emails to bulk
+          import learners at once.
         </p>
       </div>
 
       <form onSubmit={handleAdd} className="bg-card border border-hairline rounded-lg p-4 flex flex-wrap items-end gap-2 mb-4">
         <div className="flex-1 min-w-[180px]">
           <label className="block text-xs text-secondary mb-1" htmlFor="employerMemberEmail">
-            Add an existing user by email
+            Add or invite by email
           </label>
           <input
             id="employerMemberEmail"
@@ -272,6 +348,74 @@ function EmployerLearnersPanel({ employer }) {
 
       {message && <p className="text-xs text-moss mb-3">{message}</p>}
       {error && <p className="text-xs text-red-700 mb-3">{error}</p>}
+
+      <details className="bg-card border border-hairline rounded-lg p-4 mb-4">
+        <summary className="text-sm font-medium text-ink cursor-pointer">Bulk import learners</summary>
+        <form onSubmit={handleBulkImport} className="mt-3 space-y-3">
+          <div>
+            <label className="block text-xs text-secondary mb-1" htmlFor="employerBulkEmails">
+              Emails (one per line, or comma-separated)
+            </label>
+            <textarea
+              id="employerBulkEmails"
+              rows={4}
+              value={bulkEmails}
+              onChange={(e) => setBulkEmails(e.target.value)}
+              placeholder={'jane@example.com\njohn@example.com'}
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+            />
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <label className="block text-xs text-secondary mb-1" htmlFor="employerBulkRole">
+                Role
+              </label>
+              <select
+                id="employerBulkRole"
+                value={bulkRole}
+                onChange={(e) => setBulkRole(e.target.value)}
+                className="rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              >
+                <option value="member">Member</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <button
+              type="submit"
+              disabled={bulkSubmitting || !bulkEmails.trim()}
+              className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+            >
+              {bulkSubmitting ? 'Importing…' : 'Bulk import'}
+            </button>
+          </div>
+        </form>
+
+        {bulkResults && (
+          <div className="mt-3 border-t border-hairline pt-3">
+            <p className="text-xs text-secondary mb-2">
+              {bulkResults.length} {bulkResults.length === 1 ? 'result' : 'results'}:
+            </p>
+            <ul className="space-y-1">
+              {bulkResults.map((r) => (
+                <li key={r.email} className="text-xs flex flex-wrap gap-1">
+                  <span className="font-mono text-ink">{r.email}</span>
+                  <span
+                    className={
+                      r.outcome === 'failed'
+                        ? 'text-red-700'
+                        : r.outcome === 'already-member'
+                          ? 'text-secondary'
+                          : 'text-moss'
+                    }
+                  >
+                    {r.detail}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </details>
 
       {loading ? (
         <p className="text-xs text-secondary">Loading learners…</p>
@@ -320,6 +464,256 @@ function EmployerLearnersPanel({ employer }) {
           onCancel={() => setRemoveTarget(null)}
           confirming={removing}
         />
+      )}
+    </section>
+  )
+}
+
+// Phase 3: push training to specific learners rather than relying on 100%
+// learner-initiated browse/enrol (courseCatalogue.js's listCatalogueCourses/
+// enrolInCatalogueCourse, untouched by this phase). Course choices are
+// scoped to courses actually published in one of this employer's own
+// catalogues (listEmployerCatalogueCourses -- the RPC re-validates this
+// server-side regardless, this is only the picker's convenience list).
+// Assigning never enrols anyone by itself -- assign_course_to_employer_
+// members only creates a course_assignments row; the learner still has to
+// click "Start" on their own /actions page (respondToCourseAssignment) to
+// create the real enrolment. Member selection reuses the same
+// useRowSelection/SelectionTh/BulkActionBar primitives as ProviderConsole
+// .jsx's own bulk "Push to catalogue" table, for a consistent picker feel
+// across this console.
+function EmployerAssignTrainingPanel({ employer }) {
+  const [courses, setCourses] = useState([])
+  const [members, setMembers] = useState([])
+  const [assignments, setAssignments] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  const [selectedCourseId, setSelectedCourseId] = useState('')
+  const [assigning, setAssigning] = useState(false)
+  const [assignResult, setAssignResult] = useState(null)
+
+  useEffect(() => {
+    load()
+  }, [employer.id])
+
+  async function load() {
+    setLoading(true)
+    setError(null)
+    try {
+      const [coursesData, membersData, assignmentsData] = await Promise.all([
+        listEmployerCatalogueCourses(employer.provider_organisation_id),
+        listEmployerMembers(employer.id),
+        listEmployerCourseAssignments(employer.id),
+      ])
+      setCourses(coursesData)
+      setMembers(membersData)
+      setAssignments(assignmentsData)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Only an active employer_members row is assignable -- mirrors the RPC's
+  // own membership filter (status = 'active'), so the picker never offers a
+  // pending invitee it would just silently skip.
+  const activeMembers = useMemo(() => members.filter((m) => m.status === 'active'), [members])
+  const emailByUserId = useMemo(() => new Map(members.map((m) => [m.user_id, m.email || m.user_id])), [members])
+
+  const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
+    useSortedPage(activeMembers, LEARNER_SORT_ACCESSORS)
+  const selection = useRowSelection(activeMembers.map((m) => m.user_id))
+  const pageUserIds = pageItems.map((m) => m.user_id)
+  const selectedOnPage = pageUserIds.filter((id) => selection.selected.has(id)).length
+
+  const assignmentsWithEmail = useMemo(
+    () => assignments.map((a) => ({ ...a, learnerEmail: emailByUserId.get(a.assigned_to) })),
+    [assignments, emailByUserId]
+  )
+  const {
+    sortKey: aSortKey,
+    sortDir: aSortDir,
+    toggleSort: aToggleSort,
+    page: aPage,
+    setPage: aSetPage,
+    pageSize: aPageSize,
+    setPageSize: aSetPageSize,
+    pageItems: aPageItems,
+    totalItems: aTotalItems,
+  } = useSortedPage(assignmentsWithEmail, ASSIGNMENT_SORT_ACCESSORS, { defaultSortKey: 'created_at', defaultSortDir: 'desc' })
+
+  async function handleAssign() {
+    if (!selectedCourseId || selection.selected.size === 0) return
+    setAssigning(true)
+    setAssignResult(null)
+    setError(null)
+    try {
+      const requestedIds = Array.from(selection.selected)
+      const inserted = await assignCourseToEmployerMembers(employer.id, selectedCourseId, requestedIds)
+      const insertedIds = new Set(inserted.map((row) => row.assigned_to))
+      // The RPC silently skips anyone not an active member by the time it
+      // ran, or already assigned this course (on conflict do nothing) --
+      // report that explicitly rather than claiming every requested person
+      // was assigned.
+      const skippedEmails = requestedIds
+        .filter((id) => !insertedIds.has(id))
+        .map((id) => emailByUserId.get(id) || id)
+      setAssignResult({ assignedCount: inserted.length, skippedEmails })
+      selection.clear()
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setAssigning(false)
+    }
+  }
+
+  return (
+    <section aria-labelledby="employer-assign-training-heading">
+      <div className="mb-5">
+        <h2 id="employer-assign-training-heading" className="font-display text-lg text-ink">Assign training</h2>
+        <p className="text-sm text-secondary mt-1 max-w-2xl">
+          Push a course from {employer.name}'s own catalogue to specific learners. They'll see it on their Actions
+          page and choose whether to start it -- assigning doesn't enrol anyone automatically.
+        </p>
+      </div>
+
+      {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
+
+      {loading ? (
+        <p className="text-secondary">Loading…</p>
+      ) : (
+        <>
+          <div className="bg-card border border-hairline rounded-lg p-4 mb-4">
+            <label className="block text-xs text-secondary mb-1" htmlFor="employerAssignCourse">
+              Course
+            </label>
+            {courses.length === 0 ? (
+              <p className="text-xs text-secondary">
+                No published courses yet -- publish a course to one of this employer's own catalogues from the
+                Training tab first.
+              </p>
+            ) : (
+              <select
+                id="employerAssignCourse"
+                value={selectedCourseId}
+                onChange={(e) => setSelectedCourseId(e.target.value)}
+                className="w-full max-w-md rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              >
+                <option value="">Choose a course…</option>
+                {courses.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {assignResult && (
+            <div className="bg-card border border-hairline rounded-lg p-4 mb-4 text-xs">
+              <p className="text-moss">{assignResult.assignedCount} learner(s) assigned.</p>
+              {assignResult.skippedEmails.length > 0 && (
+                <p className="text-secondary mt-1">
+                  Skipped (not an active member, or already assigned this course): {assignResult.skippedEmails.join(', ')}
+                </p>
+              )}
+            </div>
+          )}
+
+          {activeMembers.length === 0 ? (
+            <div className="text-center py-12 border border-dashed border-hairline rounded-lg mb-8">
+              <p className="text-secondary">No active learners to assign training to yet.</p>
+            </div>
+          ) : (
+            <div className="bg-card border border-hairline rounded-lg mb-8">
+              <div className="p-3 pb-0">
+                <BulkActionBar
+                  count={selection.selected.size}
+                  onClear={selection.clear}
+                  busy={assigning}
+                  actions={[
+                    {
+                      label: assigning ? 'Assigning…' : `Assign course (${selection.selected.size})`,
+                      disabled: !selectedCourseId || selection.selected.size === 0,
+                      title: !selectedCourseId ? 'Choose a course above first' : undefined,
+                      onClick: handleAssign,
+                    },
+                  ]}
+                />
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-hairline text-left text-secondary">
+                      <SelectionTh
+                        idPrefix="employer-assign-members"
+                        checked={selection.isAllSelected(pageUserIds)}
+                        indeterminate={selectedOnPage > 0 && selectedOnPage < pageUserIds.length}
+                        onChange={() => selection.toggleAll(pageUserIds)}
+                      />
+                      <SortableTh label="Learner" columnKey="email" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                      <SortableTh label="Role" columnKey="role" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageItems.map((m) => (
+                      <tr key={m.user_id} className="border-b border-hairline last:border-0">
+                        <td className="px-4 py-2">
+                          <input
+                            type="checkbox"
+                            checked={selection.selected.has(m.user_id)}
+                            onChange={() => selection.toggle(m.user_id)}
+                            aria-label={`Select ${m.email || m.user_id}`}
+                            className="rounded border-hairline accent-moss"
+                          />
+                        </td>
+                        <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{m.email || m.user_id}</td>
+                        <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{m.role}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <TablePagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalItems={totalItems} idPrefix={`employer-assign-members-${employer.id}`} />
+            </div>
+          )}
+
+          <div>
+            <h3 className="font-display text-base text-ink mb-3">Assigned so far</h3>
+            {assignments.length === 0 ? (
+              <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
+                <p className="text-secondary">No training assigned yet.</p>
+              </div>
+            ) : (
+              <div className="bg-card border border-hairline rounded-lg">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-hairline text-left text-secondary">
+                        <SortableTh label="Course" columnKey="course" sortKey={aSortKey} sortDir={aSortDir} onSort={aToggleSort} />
+                        <SortableTh label="Learner" columnKey="learner" sortKey={aSortKey} sortDir={aSortDir} onSort={aToggleSort} />
+                        <SortableTh label="Status" columnKey="status" sortKey={aSortKey} sortDir={aSortDir} onSort={aToggleSort} className="whitespace-nowrap" />
+                        <SortableTh label="Assigned" columnKey="created_at" sortKey={aSortKey} sortDir={aSortDir} onSort={aToggleSort} className="whitespace-nowrap" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {aPageItems.map((a) => (
+                        <tr key={a.id} className="border-b border-hairline last:border-0">
+                          <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{a.course_catalogue?.name || 'Deleted course'}</td>
+                          <td className="px-4 py-2 text-secondary text-xs truncate max-w-[220px]">{a.learnerEmail || a.assigned_to}</td>
+                          <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{ASSIGNMENT_STATUS_LABELS[a.status] || a.status}</td>
+                          <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{new Date(a.created_at).toLocaleDateString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <TablePagination page={aPage} setPage={aSetPage} pageSize={aPageSize} setPageSize={aSetPageSize} totalItems={aTotalItems} idPrefix={`employer-assignments-${employer.id}`} />
+              </div>
+            )}
+          </div>
+        </>
       )}
     </section>
   )

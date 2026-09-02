@@ -758,11 +758,15 @@ async function listEmployerMembers(admin, caller, { employerId }, res) {
 
 const VALID_EMPLOYER_ROLES = ['admin', 'member']
 
-// "Add an existing user by email" only -- deliberately not an invite flow
-// like inviteOrgStaff above. Phase 1 foundation for the employer console
-// only supports adding people who already have a LearnScope account,
-// one at a time; bulk import and inviting brand-new accounts are explicitly
-// later phases (see the employers migration's own comment).
+// Phase 2: proper invite-with-consent semantics, mirroring inviteOrgStaff
+// above exactly. A brand-new user (no LearnScope account yet) gets an auth
+// invite email and lands as 'active' immediately -- employer_members.status
+// defaults to 'active' (20260902090000), and clicking the invite email is
+// their consent, same as the org-staff flow. An existing user hasn't agreed
+// to anything, so they land 'pending' explicitly; nothing changes for this
+// employer (or its attached provider org) until they explicitly accept via
+// decide_employer_invite (20260902160000), surfaced to them on /actions
+// (see PendingActionsContext, listMyPendingEmployerInvites).
 async function addEmployerMember(admin, caller, { employerId, email, role }, res) {
   if (!employerId || !email || !VALID_EMPLOYER_ROLES.includes(role)) {
     res.status(400).json({ error: 'Missing or invalid employerId, email, or role' })
@@ -771,22 +775,25 @@ async function addEmployerMember(admin, caller, { employerId, email, role }, res
 
   if (!(await requireEmployerAdmin(admin, caller, employerId, res))) return
 
-  const userId = await findUserIdByEmail(admin, email.trim())
+  const existingUserId = await findUserIdByEmail(admin, email.trim())
+  let userId = existingUserId
   if (!userId) {
-    res.status(404).json({ error: 'No LearnScope account found with that email.' })
-    return
+    const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email.trim(), inviteRedirectTo())
+    if (inviteError) throw inviteError
+    userId = invited.user.id
   }
 
   const { error: memberInsertError } = await admin.from('employer_members').insert({
     employer_id: employerId,
     user_id: userId,
     role,
-    status: 'active',
     invited_by: caller.id,
+    ...(existingUserId ? { status: 'pending' } : {}),
   })
   if (memberInsertError) {
     // unique_violation on (employer_id, user_id) -- they're already a
-    // member here, surface that plainly rather than a raw constraint error.
+    // member (or already invited) here, surface that plainly rather than a
+    // raw constraint error.
     if (memberInsertError.code === '23505') {
       res.status(409).json({ error: 'This person is already a member of this employer.' })
       return
@@ -804,7 +811,14 @@ async function addEmployerMember(admin, caller, { employerId, email, role }, res
   // onto the attached org. Upsert (not insert) so re-adding an existing
   // admin, or promoting someone who already has some other role there,
   // doesn't error or downgrade them.
-  if (role === 'admin') {
+  //
+  // Only done here for the brand-new-account path -- it lands 'active' with
+  // no separate accept step, so the grant has to happen now or never. An
+  // existing user lands 'pending' instead: granting Training-tab access
+  // before they've agreed to join would let an employer admin hand out
+  // provider-console access to someone who hasn't consented to anything.
+  // That grant moves to decide_employer_invite's own accept path instead.
+  if (role === 'admin' && !existingUserId) {
     const { data: employerRow, error: employerFetchError } = await admin
       .from('employers')
       .select('provider_organisation_id')
@@ -825,7 +839,17 @@ async function addEmployerMember(admin, caller, { employerId, email, role }, res
     if (orgMemberUpsertError) throw orgMemberUpsertError
   }
 
-  res.status(200).json({ ok: true, userId })
+  // An existing user gets no Supabase invite email (there's nothing to
+  // accept there -- they already have an account), so this is the only
+  // signal they get that an employer wants to add them. Best-effort: a
+  // failed notification shouldn't undo the pending row that already
+  // succeeded above -- they can still find and accept/decline it from
+  // /actions without ever seeing this email.
+  if (existingUserId) {
+    await notifyEmployerInvitePending(admin, email.trim(), employerId, role)
+  }
+
+  res.status(200).json({ ok: true, userId, alreadyExisted: Boolean(existingUserId) })
 }
 
 function escapeHtml(str) {
@@ -862,6 +886,39 @@ async function notifyOrgInvitePending(admin, email, organisationId, role) {
     }
   } catch (err) {
     console.error('Failed to send org-invite-pending notification email:', err)
+  }
+}
+
+// Mirrors notifyOrgInvitePending above exactly, scoped to employer_members
+// instead of organisation_members.
+async function notifyEmployerInvitePending(admin, email, employerId, role) {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) return
+
+  const { data: employer } = await admin.from('employers').select('name').eq('id', employerId).maybeSingle()
+  const employerName = employer?.name || 'an employer'
+  const roleLabel = role === 'admin' ? 'an admin' : 'a member'
+
+  try {
+    const resendRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'LearnScope <onboarding@resend.dev>',
+        to: email,
+        subject: `${employerName} wants to add you on LearnScope`,
+        html: `
+          <p><strong>${escapeHtml(employerName)}</strong> wants to add you as ${roleLabel} on LearnScope.</p>
+          <p>Sign in to your existing account and check your Actions page to accept or decline.</p>
+        `,
+      }),
+    })
+    if (!resendRes.ok) {
+      const detail = await resendRes.text()
+      console.error('notifyEmployerInvitePending: Resend error', resendRes.status, detail)
+    }
+  } catch (err) {
+    console.error('Failed to send employer-invite-pending notification email:', err)
   }
 }
 

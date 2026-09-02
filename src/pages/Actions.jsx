@@ -8,14 +8,15 @@ import { listIncomingRateInvites, listIncomingRecommendInvites, getProfiles } fr
 import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
 import { listIncomingConnectionRequests, respondToConnectionRequest } from '../lib/skillDiscovery'
 import { listMyPendingOrgInvites, decideOrgInvite } from '../lib/organisationInvites'
+import { listMyPendingEmployerInvites, decideEmployerInvite } from '../lib/admin/employers'
+import { listMyCourseAssignments, respondToCourseAssignment } from '../lib/courseCatalogue'
 
-// Everything actually waiting on this learner to act -- the same four
-// sources PendingActionsContext counts for the header badge, just rendered
-// in full here instead of as a number. Deliberately separate from
-// Connections.jsx, which is about the learner's network/history, not
-// open requests.
+// Everything actually waiting on this learner to act -- the same sources
+// PendingActionsContext counts for the header badge, just rendered in full
+// here instead of as a number. Deliberately separate from Connections.jsx,
+// which is about the learner's network/history, not open requests.
 export default function Actions() {
-  const { user, refreshOrganisationMemberships } = useAuth()
+  const { user, refreshOrganisationMemberships, refreshEmployerMemberships } = useAuth()
   const { refreshPendingActionCount } = usePendingActions()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -26,6 +27,12 @@ export default function Actions() {
   const [orgInvites, setOrgInvites] = useState([])
   const [orgInviteDecidingId, setOrgInviteDecidingId] = useState(null)
   const [orgInviteError, setOrgInviteError] = useState(null)
+  const [employerInvites, setEmployerInvites] = useState([])
+  const [employerInviteDecidingId, setEmployerInviteDecidingId] = useState(null)
+  const [employerInviteError, setEmployerInviteError] = useState(null)
+  const [courseAssignments, setCourseAssignments] = useState([])
+  const [assignmentActingId, setAssignmentActingId] = useState(null)
+  const [assignmentError, setAssignmentError] = useState(null)
   const [respondingId, setRespondingId] = useState(null)
   const [respondError, setRespondError] = useState(null)
   const [profiles, setProfiles] = useState({})
@@ -44,18 +51,24 @@ export default function Actions() {
         validationRequestsData,
         incomingRequestsData,
         orgInvitesData,
+        employerInvitesData,
+        courseAssignmentsData,
       ] = await Promise.all([
         listIncomingRateInvites(),
         listIncomingRecommendInvites(),
         listIncomingPendingValidationRequests(user.id),
         listIncomingConnectionRequests(user.id),
         listMyPendingOrgInvites(user.id),
+        listMyPendingEmployerInvites(user.id),
+        listMyCourseAssignments(user.id),
       ])
       setIncomingRateInvites(incomingRateInvitesData)
       setIncomingRecommendInvites(incomingRecommendInvitesData)
       setValidationRequests(validationRequestsData)
       setIncomingRequests(incomingRequestsData)
       setOrgInvites(orgInvitesData)
+      setEmployerInvites(employerInvitesData)
+      setCourseAssignments(courseAssignmentsData)
       const requesterIds = validationRequestsData.map((r) => r.requester_id)
       const requestSenderIds = incomingRequestsData.map((r) => r.requester_id)
       setProfiles(await getProfiles([...requesterIds, ...requestSenderIds]))
@@ -81,6 +94,49 @@ export default function Actions() {
     }
   }
 
+  async function handleEmployerInviteResponse(memberId, accept) {
+    setEmployerInviteError(null)
+    setEmployerInviteDecidingId(memberId)
+    try {
+      await decideEmployerInvite(memberId, accept)
+      setEmployerInvites((prev) => prev.filter((i) => i.id !== memberId))
+      refreshPendingActionCount()
+      // Accepting an 'admin' invite may have just granted org membership
+      // too (decide_employer_invite's own upsert onto the employer's
+      // attached provider org), so refresh both -- not just employer
+      // memberships -- same reasoning as addEmployerMember's own eager
+      // grant for the brand-new-account path.
+      if (accept) {
+        refreshEmployerMemberships()
+        refreshOrganisationMemberships()
+      }
+    } catch (err) {
+      setEmployerInviteError({ id: memberId, message: err.message })
+    } finally {
+      setEmployerInviteDecidingId(null)
+    }
+  }
+
+  // "Start" mirrors CourseCatalogue.jsx's own handleEnrol UX -- no
+  // navigation, no toast, just the card leaving the list once enrolled
+  // (same as accepting an invite above), since respondToCourseAssignment
+  // marks the row 'enrolled' and it no longer matches the 'assigned' filter
+  // listMyCourseAssignments queries on. "Dismiss" behaves identically minus
+  // the real enrolInCatalogueCourse call underneath.
+  async function handleAssignmentResponse(assignment, enrol) {
+    setAssignmentError(null)
+    setAssignmentActingId(assignment.id)
+    try {
+      await respondToCourseAssignment(user.id, assignment.id, { enrol, courseForEnrolment: assignment.course_catalogue })
+      setCourseAssignments((prev) => prev.filter((a) => a.id !== assignment.id))
+      refreshPendingActionCount()
+    } catch (err) {
+      setAssignmentError({ id: assignment.id, message: err.message })
+    } finally {
+      setAssignmentActingId(null)
+    }
+  }
+
   async function handleRequestResponse(requestId, accept) {
     setRespondError(null)
     setRespondingId(requestId)
@@ -101,6 +157,8 @@ export default function Actions() {
     incomingRecommendInvites.length === 0 &&
     incomingRequests.length === 0 &&
     orgInvites.length === 0 &&
+    employerInvites.length === 0 &&
+    courseAssignments.length === 0 &&
     validationRequests.length === 0
 
   return (
@@ -246,6 +304,86 @@ export default function Actions() {
                       className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
                     >
                       Decline
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {employerInvites.length > 0 && (
+          <div>
+            <h2 className="font-display text-xl text-ink mb-6">Employer invitations</h2>
+            <div className="space-y-3">
+              {employerInvites.map((invite) => (
+                <div key={invite.id} className="bg-card border border-hairline rounded-lg p-4">
+                  <p className="text-sm text-ink">
+                    <strong>{invite.employers?.name || 'An employer'}</strong> wants to add you as{' '}
+                    {invite.role === 'admin' ? 'an admin' : 'a member'}
+                  </p>
+                  <p className="font-mono text-xs text-secondary mt-1">
+                    {new Date(invite.created_at).toLocaleDateString()}
+                  </p>
+                  {employerInviteError?.id === invite.id && (
+                    <p className="text-xs text-red-700 mt-1">{employerInviteError.message}</p>
+                  )}
+                  <div className="flex items-center gap-2 mt-3">
+                    <button
+                      type="button"
+                      onClick={() => handleEmployerInviteResponse(invite.id, true)}
+                      disabled={employerInviteDecidingId === invite.id}
+                      className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleEmployerInviteResponse(invite.id, false)}
+                      disabled={employerInviteDecidingId === invite.id}
+                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {courseAssignments.length > 0 && (
+          <div>
+            <h2 className="font-display text-xl text-ink mb-6">Assigned training</h2>
+            <div className="space-y-3">
+              {courseAssignments.map((assignment) => (
+                <div key={assignment.id} className="bg-card border border-hairline rounded-lg p-4">
+                  <p className="text-sm text-ink">
+                    <strong>{assignment.employers?.name || 'An employer'}</strong> assigned you a course:{' '}
+                    <strong>{assignment.course_catalogue?.name}</strong>
+                  </p>
+                  <p className="font-mono text-xs text-secondary mt-1">
+                    {new Date(assignment.created_at).toLocaleDateString()}
+                  </p>
+                  {assignmentError?.id === assignment.id && (
+                    <p className="text-xs text-red-700 mt-1">{assignmentError.message}</p>
+                  )}
+                  <div className="flex items-center gap-2 mt-3">
+                    <button
+                      type="button"
+                      onClick={() => handleAssignmentResponse(assignment, true)}
+                      disabled={assignmentActingId === assignment.id}
+                      className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+                    >
+                      Start
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAssignmentResponse(assignment, false)}
+                      disabled={assignmentActingId === assignment.id}
+                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+                    >
+                      Dismiss
                     </button>
                   </div>
                 </div>

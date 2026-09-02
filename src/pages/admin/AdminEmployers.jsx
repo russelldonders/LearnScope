@@ -17,21 +17,24 @@ function formatDate(value) {
   return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value))
 }
 
-// Phase 1 foundation console for the "employer" domain concept
-// (20260902090000): a company running its own in-house LMS, distinct from
-// "organisations" (today, only ever training providers). Mirrors
-// AdminProviders.jsx's list/create shape -- platform-admin only, list plus a
-// simple create-by-name form. create_employer atomically provisions the
-// employer's own attached provider organisation, but grants nobody access to
-// either the employer or that org -- the per-row "Add admin" form below is
-// the only way to bootstrap the very first employer_members admin (nothing
-// else can reach EmployerConsole's own Learners tab, which itself requires
-// already being an employer admin). addEmployerMember also upserts a
-// matching organisation_members row for a new admin (api/admin/actions.js),
-// so that first admin gets working Training-tab access immediately too --
-// no separate trip to Providers -> Manage users needed for them personally,
-// though additional provider-only staff (not employer admins) still go
-// through that existing panel.
+// Foundation console for the "employer" domain concept (20260902090000): a
+// company running its own in-house LMS, distinct from "organisations"
+// (today, only ever training providers). Mirrors AdminProviders.jsx's
+// list/create shape -- platform-admin only, list plus a simple create-by-
+// name form. create_employer atomically provisions the employer's own
+// attached provider organisation, but grants nobody access to either the
+// employer or that org -- the per-row "Add admin" form below is the only
+// way to bootstrap the very first employer_members admin (nothing else can
+// reach EmployerConsole's own Learners tab, which itself requires already
+// being an employer admin). addEmployerMember (Phase 2, api/admin/
+// actions.js) invites a brand-new account or adds an existing user pending
+// their consent -- only the brand-new-account path also upserts a matching
+// organisation_members row immediately, giving that admin working Training-
+// tab access with no separate trip to Providers -> Manage users; an
+// existing user gets that same grant only once they accept the invite from
+// their Actions page (decide_employer_invite, 20260902160000). Additional
+// provider-only staff (not employer admins) still go through the existing
+// Providers -> Manage users panel.
 export default function AdminEmployers() {
   const [employers, setEmployers] = useState([])
   const [organisations, setOrganisations] = useState([])
@@ -100,8 +103,12 @@ export default function AdminEmployers() {
     setAddingAdmin(true)
     setError(null)
     try {
-      await addEmployerMember(employerId, adminEmail.trim(), 'admin')
-      setAddAdminMessage(`${adminEmail.trim()} added as an employer admin.`)
+      const result = await addEmployerMember(employerId, adminEmail.trim(), 'admin')
+      setAddAdminMessage(
+        result.alreadyExisted
+          ? `${adminEmail.trim()} added as an employer admin, pending their acceptance (see their Actions page).`
+          : `${adminEmail.trim()} invited as an employer admin. They'll get access once they accept the invite email.`
+      )
       setAdminEmail('')
     } catch (err) {
       setError(err.message)
@@ -153,8 +160,9 @@ export default function AdminEmployers() {
         )}
         <p className="text-xs text-secondary -mt-3">
           Creating an employer also provisions its own attached provider organisation, so it can author its own
-          training through the provider console. Use "Add admin" below to give an existing user access to the
-          employer console -- they'll also get working access to the Training tab automatically.
+          training through the provider console. Use "Add admin" below to invite someone (new or existing LearnScope
+          user) to the employer console. A brand-new account gets an invite email and working Training-tab access
+          right away; an existing user needs to accept the invite from their Actions page first.
         </p>
 
         {error && <p className="text-sm text-red-700">{error}</p>}
@@ -209,7 +217,7 @@ export default function AdminEmployers() {
                               <form onSubmit={(e) => handleAddAdmin(e, employer.id)} className="flex flex-wrap items-end gap-2 border-t border-hairline pt-3">
                                 <div className="flex-1 min-w-[220px]">
                                   <label className="block text-xs text-secondary mb-1" htmlFor={`employerAdminEmail-${employer.id}`}>
-                                    Add an existing user as an employer admin, by email
+                                    Invite an employer admin by email
                                   </label>
                                   <input
                                     id={`employerAdminEmail-${employer.id}`}

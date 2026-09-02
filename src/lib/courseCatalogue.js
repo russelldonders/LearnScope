@@ -144,3 +144,44 @@ export async function resumePendingEnrolment(userId, explicitCourseId = null) {
   if (!course) return null
   return enrolInCatalogueCourse(userId, course)
 }
+
+// Phase 3 employer course assignment ("push training" -- see
+// src/lib/admin/employers.js's assignCourseToEmployerMembers/
+// listEmployerCourseAssignments). course_assignments rows still 'assigned'
+// (not yet enrolled or dismissed) for the current user, joined to the
+// course's own details and the employer that assigned it -- mirrors
+// listMyPendingOrgInvites/listMyPendingEmployerInvites' join-shape, surfaced
+// on /actions the same way. Filters out any row whose course_catalogue join
+// came back null (RLS-invisible, e.g. later unpublished) -- same defensive
+// pattern as mapCatalogueCourse's own tag/skill filters above.
+export async function listMyCourseAssignments(userId) {
+  const { data, error } = await supabase
+    .from('course_assignments')
+    .select('id, catalogue_course_id, status, created_at, course_catalogue(id, name, provider, course_type, duration), employers(id, name)')
+    .eq('assigned_to', userId)
+    .eq('status', 'assigned')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).filter((a) => a.course_catalogue)
+}
+
+// The learner's own response to a pushed assignment -- never enrols them
+// silently. "Start" calls the existing, unchanged enrolInCatalogueCourse to
+// create the real courses row (that's still the only thing that puts
+// anything on their profile), then marks this assignment 'enrolled' purely
+// to drop it off their assigned-training list. "Dismiss" just marks it
+// 'dismissed' without ever touching courses. courseForEnrolment is the
+// joined course_catalogue row from listMyCourseAssignments (already has the
+// id/name/provider/course_type/duration enrolInCatalogueCourse needs).
+// userId is explicit (not read from the session internally) to match every
+// other function in this file, e.g. enrolInCatalogueCourse(userId, ...).
+export async function respondToCourseAssignment(userId, assignmentId, { enrol, courseForEnrolment, skillId = null } = {}) {
+  if (enrol) {
+    await enrolInCatalogueCourse(userId, courseForEnrolment, skillId)
+  }
+  const { error } = await supabase
+    .from('course_assignments')
+    .update({ status: enrol ? 'enrolled' : 'dismissed' })
+    .eq('id', assignmentId)
+  if (error) throw error
+}
