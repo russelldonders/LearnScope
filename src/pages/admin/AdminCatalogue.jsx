@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import AdminLayout from './AdminLayout'
 import {
   listAllCatalogueCourses,
@@ -8,10 +9,14 @@ import {
 } from '../../lib/admin/catalogue'
 import { formatCoursePrice } from '../../lib/courseCatalogue'
 import { COURSE_STATUS_LABELS } from '../../lib/statusLabels'
-import { useColumnPreferences, useSortedPage } from '../../lib/useSortedPage'
+import { useColumnPreferences, useSortedPage, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
 import { ColumnCustomizer, SortableTh, TablePagination } from '../../components/TableControls'
 import MutationFeedback from '../../components/MutationFeedback'
 
+// 'all' is this filter's default -- stable, simple values otherwise match the
+// database status column directly (see useSortedPage.js's ?status= param
+// below), since an upcoming Overview page will deep-link straight to e.g.
+// /admin/catalogue?status=pending_approval.
 const STATUS_FILTERS = ['all', 'draft', 'pending_approval', 'approved', 'rejected', 'inactive']
 
 const CATALOGUE_SORT_ACCESSORS = {
@@ -101,10 +106,19 @@ export default function AdminCatalogue() {
   const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [statusFilter, setStatusFilter] = useState('all')
   const [actioningId, setActioningId] = useState(null)
   const [rejectingId, setRejectingId] = useState(null)
   const [rejectionReason, setRejectionReason] = useState('')
+
+  // Search text, status filter, sort, page and pageSize all live in the URL
+  // together (?q=&status=&sort=&dir=&page=&pageSize=) via useSortedPage's
+  // urlSync option and useUrlParam -- refresh, browser Back/Forward, and a
+  // link from elsewhere (e.g. the upcoming Overview page linking straight to
+  // a status) all land on the same filtered/sorted/paged view. Mirrors
+  // AdminUsers.jsx's exact param-naming convention.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [query, setQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
+  const [statusFilter, setStatusFilter] = useUrlParam(searchParams, setSearchParams, 'status', 'all', { resetParams: ['page'] })
 
   useEffect(() => {
     load()
@@ -122,13 +136,24 @@ export default function AdminCatalogue() {
     }
   }
 
+  const q = query.trim().toLowerCase()
   const filtered = useMemo(
-    () => (statusFilter === 'all' ? courses : courses.filter((c) => c.status === statusFilter)),
-    [courses, statusFilter]
+    () =>
+      courses.filter((c) => {
+        if (statusFilter !== 'all' && c.status !== statusFilter) return false
+        if (q && !(c.name?.toLowerCase().includes(q) || c.course_code?.toLowerCase().includes(q))) return false
+        return true
+      }),
+    [courses, statusFilter, q]
   )
+  const filtersActive = query !== '' || statusFilter !== 'all'
+
+  function resetFilters() {
+    writeUrlParams(searchParams, setSearchParams, { q: null, status: null, page: null })
+  }
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
-    useSortedPage(filtered, CATALOGUE_SORT_ACCESSORS)
+    useSortedPage(filtered, CATALOGUE_SORT_ACCESSORS, { urlSync: { searchParams, setSearchParams } })
   const { columns, visibleColumns, toggleColumn, moveColumn, resetToDefault } =
     useColumnPreferences('admin-catalogue', CATALOGUE_COLUMNS)
 
@@ -182,6 +207,7 @@ export default function AdminCatalogue() {
               <button
                 key={s}
                 type="button"
+                aria-pressed={statusFilter === s}
                 onClick={() => setStatusFilter(s)}
                 className={`text-xs rounded-full px-3 py-1 border ${
                   statusFilter === s ? 'border-moss text-ink font-medium bg-moss/10' : 'border-hairline text-secondary hover:text-ink'
@@ -200,13 +226,35 @@ export default function AdminCatalogue() {
           />
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            aria-label="Search courses"
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by course name or code…"
+            className="flex-1 min-w-[220px] rounded-md border border-hairline bg-card px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+          />
+          {filtersActive && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="text-xs text-secondary hover:text-ink py-1.5 px-2 whitespace-nowrap"
+            >
+              Reset filters
+            </button>
+          )}
+        </div>
+
         <MutationFeedback status="error" message={error} />
 
         {loading ? (
           <p className="text-secondary">Loading…</p>
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
-            <p className="text-secondary">No courses match this filter.</p>
+            <p className="text-secondary">
+              {courses.length === 0 ? 'No courses yet.' : 'No courses match your search or filters.'}
+            </p>
           </div>
         ) : (
           <div className="bg-card border border-hairline rounded-lg">
