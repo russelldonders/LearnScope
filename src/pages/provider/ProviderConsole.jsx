@@ -24,7 +24,7 @@ import {
 import { assignProviderCourseToCatalogue, listProviderCatalogues } from '../../lib/admin/providerCatalogues'
 import { listOrganisations, listOrganisationMembers } from '../../lib/admin/organisations'
 import { listEmployers } from '../../lib/admin/employers'
-import { useRowSelection, useSortedPage } from '../../lib/useSortedPage'
+import { useRowSelection, useSortedPage, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
 import { handleTabListKeyDown } from '../../lib/tabsKeyboard'
 import { COURSE_STATUS_LABELS } from '../../lib/statusLabels'
 import { BulkActionBar, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
@@ -216,7 +216,7 @@ export default function ProviderConsole() {
                     key={org.id}
                     ref={(el) => { orgTabRefs.current[org.id] = el }}
                     id={`provider-org-tab-${org.id}`}
-                    to={`?${buildParams({ org: org.id }).toString()}`}
+                    to={`?${buildParams({ org: org.id, q: null, status: null, page: null }).toString()}`}
                     role="tab"
                     aria-selected={selectedOrgId === org.id}
                     aria-controls={`provider-org-panel-${org.id}`}
@@ -226,7 +226,12 @@ export default function ProviderConsole() {
                         keys: myOrgs.map((o) => o.id),
                         activeKey: selectedOrgId,
                         refs: orgTabRefs,
-                        onChange: (orgId) => setSearchParams(buildParams({ org: orgId })),
+                        // Clears the training list's own filters (q/status/page) on
+                        // an org switch -- otherwise a search/status filter that
+                        // matched the previous org's courses silently carries over
+                        // and can make the new org's list look empty/wrong rather
+                        // than just unfiltered.
+                        onChange: (orgId) => setSearchParams(buildParams({ org: orgId, q: null, status: null, page: null })),
                       })
                     }
                     className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
@@ -323,6 +328,8 @@ export default function ProviderConsole() {
                       organisation={selectedOrg}
                       userId={user.id}
                       canViewParticipants={myRole === 'admin'}
+                      searchParams={searchParams}
+                      setSearchParams={setSearchParams}
                     />
                   )}
                   {currentSection === 'skills' && (
@@ -713,7 +720,16 @@ function CatalogueApproversPanel({ catalogueId, organisationId }) {
 
 // Exported for the same reason as ProviderCataloguesSection above -- reused
 // verbatim by the employer console's Training tab.
-export function ProviderTrainingSection({ organisation, userId, canViewParticipants, readOnly = false }) {
+//
+// searchParams/setSearchParams are the caller's own single useSearchParams()
+// result (ProviderConsole.jsx's ?org=&section= pair, or EmployerConsole.jsx's
+// ?employer=&section= pair) -- passed down rather than calling
+// useSearchParams() again in here, since two independent useSearchParams()
+// instances on the same route can fight each other. This section's own
+// q/status/sort/dir/page/pageSize params land in that same URL alongside
+// whatever the caller already tracks; none of those keys collide with org/
+// section/employer.
+export function ProviderTrainingSection({ organisation, userId, canViewParticipants, readOnly = false, searchParams, setSearchParams }) {
   const navigate = useNavigate()
   const [courses, setCourses] = useState([])
   const [isApprover, setIsApprover] = useState(false)
@@ -728,8 +744,8 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
   const [participantCourse, setParticipantCourse] = useState(null)
   const [historyCourse, setHistoryCourse] = useState(null)
   const [creatingDraftCourseId, setCreatingDraftCourseId] = useState(null)
-  const [query, setQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [query, setQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
+  const [statusFilter, setStatusFilter] = useUrlParam(searchParams, setSearchParams, 'status', 'all', { resetParams: ['page'] })
   const [bulkPush, setBulkPush] = useState(null)
 
   useEffect(() => {
@@ -839,8 +855,14 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
   }, [courses, query, statusFilter])
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
-    useSortedPage(filteredCourses, COURSE_SORT_ACCESSORS)
+    useSortedPage(filteredCourses, COURSE_SORT_ACCESSORS, { urlSync: { searchParams, setSearchParams } })
   const selection = useRowSelection(filteredCourses.map((c) => c.id))
+  const filtersActive = query !== '' || statusFilter !== 'all'
+
+  function resetFilters() {
+    writeUrlParams(searchParams, setSearchParams, { q: null, status: null, page: null })
+  }
+
   const coursePageIds = pageItems.map((c) => c.id)
   const coursesSelectedOnPage = coursePageIds.filter((id) => selection.selected.has(id)).length
   // Only an approved, currently-published version can be added to a
@@ -948,14 +970,23 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
         </form>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_200px] gap-2 mb-4" role="search">
+      <div className="flex flex-wrap items-center gap-2 mb-4" role="search">
         <label className="sr-only" htmlFor="providerTrainingSearch">Search training</label>
-        <input id="providerTrainingSearch" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search training…" className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
+        <input id="providerTrainingSearch" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search training…" className="flex-1 min-w-[220px] rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
         <label className="sr-only" htmlFor="providerTrainingStatus">Filter training by status</label>
-        <select id="providerTrainingStatus" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss">
+        <select id="providerTrainingStatus" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-full sm:w-[200px] rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss">
           <option value="all">All statuses</option>
           {Object.entries(COURSE_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
+        {filtersActive && (
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="text-xs text-secondary hover:text-ink py-1.5 px-2 whitespace-nowrap"
+          >
+            Reset filters
+          </button>
+        )}
       </div>
 
       {error && <p className="text-sm text-red-700 mb-3">{error}</p>}

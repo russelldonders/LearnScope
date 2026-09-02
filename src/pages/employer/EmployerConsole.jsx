@@ -186,7 +186,7 @@ export default function EmployerConsole() {
                     key={employer.id}
                     ref={(el) => { employerTabRefs.current[employer.id] = el }}
                     id={`employer-tab-${employer.id}`}
-                    to={`?${buildParams({ employer: employer.id }).toString()}`}
+                    to={`?${buildParams({ employer: employer.id, q: null, status: null, page: null }).toString()}`}
                     role="tab"
                     aria-selected={selectedEmployerId === employer.id}
                     aria-controls={`employer-panel-${employer.id}`}
@@ -196,7 +196,11 @@ export default function EmployerConsole() {
                         keys: myEmployers.map((e) => e.id),
                         activeKey: selectedEmployerId,
                         refs: employerTabRefs,
-                        onChange: (employerId) => setSearchParams(buildParams({ employer: employerId })),
+                        // Clears the (read-only) training list's own filters on an
+                        // employer switch, same reasoning as ProviderConsole's org
+                        // switcher -- a stale q/status filter would otherwise carry
+                        // over and make the new employer's list look empty/wrong.
+                        onChange: (employerId) => setSearchParams(buildParams({ employer: employerId, q: null, status: null, page: null })),
                       })
                     }
                     className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
@@ -294,6 +298,8 @@ export default function EmployerConsole() {
                         organisation={{ id: selectedEmployer.provider_organisation_id }}
                         userId={user.id}
                         canViewParticipants={myProviderRole === 'admin'}
+                        searchParams={searchParams}
+                        setSearchParams={setSearchParams}
                         readOnly
                       />
                       <ProviderCataloguesSection
