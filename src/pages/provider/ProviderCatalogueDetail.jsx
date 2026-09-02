@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import AppHeader from '../../components/AppHeader'
 import { useAuth } from '../../context/AuthContext'
@@ -23,6 +23,7 @@ import {
   upsertProviderCatalogueMember,
 } from '../../lib/admin/providerCatalogues'
 import { COURSE_STATUS_LABELS, RESOURCE_TYPE_LABELS } from '../../lib/statusLabels'
+import { handleTabListKeyDown } from '../../lib/tabsKeyboard'
 
 const TABS = [
   { key: 'courses', label: 'Courses' },
@@ -49,6 +50,7 @@ export default function ProviderCatalogueDetail() {
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({ name: '', description: '' })
   const [saving, setSaving] = useState(false)
+  const tabRefs = useRef({})
 
   async function load() {
     setLoading(true)
@@ -161,16 +163,41 @@ export default function ProviderCatalogueDetail() {
 
       {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
 
-      <nav aria-label="Catalogue sections" className="mt-7 flex gap-1 border-b border-hairline">
+      <div role="tablist" aria-label="Catalogue sections" className="mt-7 flex gap-1 border-b border-hairline">
         {TABS.map((tab) => (
-          <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)} className={`-mb-px border-b-2 px-3 py-2 text-sm ${activeTab === tab.key ? 'border-moss font-medium text-ink' : 'border-transparent text-secondary hover:text-ink'}`}>
+          <button
+            key={tab.key}
+            ref={(el) => { tabRefs.current[tab.key] = el }}
+            id={`catalogue-tab-${tab.key}`}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.key}
+            aria-controls={`catalogue-panel-${tab.key}`}
+            tabIndex={activeTab === tab.key ? 0 : -1}
+            onClick={() => setActiveTab(tab.key)}
+            onKeyDown={(event) =>
+              handleTabListKeyDown(event, {
+                keys: TABS.map((t) => t.key),
+                activeKey: activeTab,
+                refs: tabRefs,
+                onChange: setActiveTab,
+              })
+            }
+            className={`-mb-px border-b-2 px-3 py-2 text-sm ${activeTab === tab.key ? 'border-moss font-medium text-ink' : 'border-transparent text-secondary hover:text-ink'}`}
+          >
             {tab.label}
             <span className="ml-2 tabular-nums text-xs text-secondary">{tab.key === 'courses' ? courses.length : tab.key === 'skills' ? skills.length : tab.key === 'resources' ? resources.length : members.length}</span>
           </button>
         ))}
-      </nav>
+      </div>
 
-      <div className="pt-6">
+      <div
+        id={`catalogue-panel-${activeTab}`}
+        role="tabpanel"
+        aria-labelledby={`catalogue-tab-${activeTab}`}
+        tabIndex={0}
+        className="pt-6"
+      >
         {activeTab === 'courses' && <CoursesTab catalogue={catalogue} courses={courses} organisationCourses={organisationCourses} canManage={canManage} canApprove={canApprove} onReload={load} onError={setError} />}
         {activeTab === 'skills' && <SkillsTab catalogueId={catalogue.id} skills={skills} offeredSkills={offeredSkills} canManage={canManage} userId={user.id} onReload={load} onError={setError} />}
         {activeTab === 'resources' && <ResourcesTab catalogueId={catalogue.id} resources={resources} organisationResources={organisationResources} canManage={canManage} userId={user.id} onReload={load} onError={setError} />}
@@ -309,7 +336,7 @@ function SectionHeading({ title, description, action }) {
 function EmptyState({ children }) { return <div className="border-y border-dashed border-hairline py-12 text-center text-sm text-secondary">{children}</div> }
 
 function CogMenu({ label, onEdit, href, options = [], destructiveLabel, onDestructive }) {
-  return <details className="relative"><summary aria-label={label} title={label} className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-md border border-hairline text-secondary hover:bg-card hover:text-ink [&::-webkit-details-marker]:hidden"><CogIcon /></summary><div className="absolute right-0 z-20 mt-2 w-48 overflow-hidden rounded-md border border-hairline bg-card py-1 shadow-lg">{onEdit && <button type="button" onClick={onEdit} className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper">Edit catalogue</button>}{href && <Link to={href} className="block px-3 py-2 text-sm text-ink hover:bg-paper">Open course editor</Link>}{options.map((option) => <button key={option.label} type="button" onClick={option.action} className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper">{option.label}</button>)}{destructiveLabel && <button type="button" onClick={onDestructive} className="block w-full px-3 py-2 text-left text-sm text-red-700 hover:bg-paper">{destructiveLabel}</button>}</div></details>
+  return <details className="relative"><summary aria-label={label} title={label} className="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-md border border-hairline text-secondary hover:bg-card hover:text-ink [&::-webkit-details-marker]:hidden"><CogIcon /></summary><div className="absolute right-0 z-20 mt-2 w-48 overflow-hidden rounded-md border border-hairline bg-card py-1 shadow-lg">{onEdit && <button type="button" onClick={onEdit} className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper">Edit catalogue</button>}{href && <Link to={href} className="block px-3 py-2 text-sm text-ink hover:bg-paper">Open course editor</Link>}{options.map((option) => <button key={option.label} type="button" onClick={option.action} className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper">{option.label}</button>)}{destructiveLabel && <button type="button" onClick={onDestructive} className="block w-full px-3 py-2 text-left text-sm text-red-700 hover:bg-paper">{destructiveLabel}</button>}</div></details>
 }
 
 function CogIcon() { return <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1A2 2 0 1 1 4.3 17l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1A2 2 0 1 1 7 4.3l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1A2 2 0 1 1 19.7 7l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1h.2a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg> }

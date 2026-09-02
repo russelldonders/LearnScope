@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
@@ -25,6 +25,7 @@ import { listOrganisations } from '../../lib/admin/organisations'
 import { listLibrarySkills } from '../../lib/skillLibrary'
 import { LEVELS, LEVEL_LABELS } from '../../lib/levels'
 import { useSortedPage, useRowSelection } from '../../lib/useSortedPage'
+import { handleTabListKeyDown } from '../../lib/tabsKeyboard'
 import { SortableTh, TablePagination, SelectionTh, BulkActionBar } from '../../components/TableControls'
 
 const SECTIONS = [
@@ -103,6 +104,8 @@ export default function EmployerConsole() {
   const [error, setError] = useState(null)
   const [selectedEmployerId, setSelectedEmployerId] = useState(location.state?.employerId ?? null)
   const [activeSection, setActiveSection] = useState('training')
+  const employerTabRefs = useRef({})
+  const sectionTabRefs = useRef({})
 
   const myEmployerIds = useMemo(
     () => (employerMemberships ?? []).filter((m) => m.role === 'admin').map((m) => m.employer_id),
@@ -158,12 +161,26 @@ export default function EmployerConsole() {
         ) : (
           <>
             {myEmployers.length > 1 && (
-              <div className="flex items-center flex-wrap gap-1 mb-4 border-b border-hairline">
+              <div role="tablist" aria-label="Employer" className="flex items-center flex-wrap gap-1 mb-4 border-b border-hairline">
                 {myEmployers.map((employer) => (
                   <button
                     key={employer.id}
+                    ref={(el) => { employerTabRefs.current[employer.id] = el }}
+                    id={`employer-tab-${employer.id}`}
                     type="button"
+                    role="tab"
+                    aria-selected={selectedEmployerId === employer.id}
+                    aria-controls={`employer-panel-${employer.id}`}
+                    tabIndex={selectedEmployerId === employer.id ? 0 : -1}
                     onClick={() => setSelectedEmployerId(employer.id)}
+                    onKeyDown={(event) =>
+                      handleTabListKeyDown(event, {
+                        keys: myEmployers.map((e) => e.id),
+                        activeKey: selectedEmployerId,
+                        refs: employerTabRefs,
+                        onChange: setSelectedEmployerId,
+                      })
+                    }
                     className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
                       selectedEmployerId === employer.id
                         ? 'border-moss text-ink font-medium'
@@ -177,22 +194,47 @@ export default function EmployerConsole() {
             )}
 
             {selectedEmployer && (
-              <div>
+              <div
+                {...(myEmployers.length > 1
+                  ? {
+                      role: 'tabpanel',
+                      id: `employer-panel-${selectedEmployer.id}`,
+                      'aria-labelledby': `employer-tab-${selectedEmployer.id}`,
+                      tabIndex: 0,
+                    }
+                  : {})}
+              >
                 <div className="flex items-center flex-wrap gap-x-1 gap-y-2 mb-1 border-b border-hairline">
-                  {SECTIONS.map((section) => (
-                    <button
-                      key={section.key}
-                      type="button"
-                      onClick={() => setActiveSection(section.key)}
-                      className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
-                        activeSection === section.key
-                          ? 'border-moss text-ink font-medium'
-                          : 'border-transparent text-secondary hover:text-ink'
-                      }`}
-                    >
-                      {section.label}
-                    </button>
-                  ))}
+                  <div role="tablist" aria-label="Console section" className="flex items-center flex-wrap gap-x-1 gap-y-2">
+                    {SECTIONS.map((section) => (
+                      <button
+                        key={section.key}
+                        ref={(el) => { sectionTabRefs.current[section.key] = el }}
+                        id={`employer-section-tab-${section.key}`}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeSection === section.key}
+                        aria-controls={`employer-section-panel-${section.key}`}
+                        tabIndex={activeSection === section.key ? 0 : -1}
+                        onClick={() => setActiveSection(section.key)}
+                        onKeyDown={(event) =>
+                          handleTabListKeyDown(event, {
+                            keys: SECTIONS.map((s) => s.key),
+                            activeKey: activeSection,
+                            refs: sectionTabRefs,
+                            onChange: setActiveSection,
+                          })
+                        }
+                        className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
+                          activeSection === section.key
+                            ? 'border-moss text-ink font-medium'
+                            : 'border-transparent text-secondary hover:text-ink'
+                        }`}
+                      >
+                        {section.label}
+                      </button>
+                    ))}
+                  </div>
                   {myProviderRole && (
                     <>
                       <span className="mx-1 h-5 w-px bg-hairline shrink-0" aria-hidden="true" />
@@ -217,47 +259,54 @@ export default function EmployerConsole() {
                   catalogues, and resources.
                 </p>
 
-                {activeSection === 'training' && (
-                  <div className="space-y-10">
-                    {!myProviderRole && (
-                      <p className="text-sm text-secondary">
-                        This view is read-only. Ask an admin of this employer's provider organisation to manage
-                        courses, catalogues, and resources there.
-                      </p>
-                    )}
-                    <ProviderTrainingSection
-                      key={`${selectedEmployer.id}-training`}
-                      organisation={{ id: selectedEmployer.provider_organisation_id }}
-                      userId={user.id}
-                      canViewParticipants={myProviderRole === 'admin'}
-                      readOnly
-                    />
-                    <ProviderCataloguesSection
-                      key={`${selectedEmployer.id}-catalogues`}
-                      organisation={{ id: selectedEmployer.provider_organisation_id }}
-                      userId={user.id}
-                      readOnly
-                    />
-                    <ResourceLibrarySection
-                      key={`${selectedEmployer.id}-resources`}
-                      organisationId={selectedEmployer.provider_organisation_id}
-                      userId={user.id}
-                      readOnly
-                    />
-                  </div>
-                )}
-                {activeSection === 'learners' && (
-                  <EmployerLearnersPanel key={selectedEmployer.id} employer={selectedEmployer} />
-                )}
-                {activeSection === 'assign' && (
-                  <EmployerAssignTrainingPanel key={selectedEmployer.id} employer={selectedEmployer} />
-                )}
-                {activeSection === 'suggest-skills' && (
-                  <EmployerSuggestSkillsPanel key={selectedEmployer.id} employer={selectedEmployer} />
-                )}
-                {activeSection === 'providers' && (
-                  <EmployerProvidersPanel key={selectedEmployer.id} employer={selectedEmployer} user={user} />
-                )}
+                <div
+                  id={`employer-section-panel-${activeSection}`}
+                  role="tabpanel"
+                  aria-labelledby={`employer-section-tab-${activeSection}`}
+                  tabIndex={0}
+                >
+                  {activeSection === 'training' && (
+                    <div className="space-y-10">
+                      {!myProviderRole && (
+                        <p className="text-sm text-secondary">
+                          This view is read-only. Ask an admin of this employer's provider organisation to manage
+                          courses, catalogues, and resources there.
+                        </p>
+                      )}
+                      <ProviderTrainingSection
+                        key={`${selectedEmployer.id}-training`}
+                        organisation={{ id: selectedEmployer.provider_organisation_id }}
+                        userId={user.id}
+                        canViewParticipants={myProviderRole === 'admin'}
+                        readOnly
+                      />
+                      <ProviderCataloguesSection
+                        key={`${selectedEmployer.id}-catalogues`}
+                        organisation={{ id: selectedEmployer.provider_organisation_id }}
+                        userId={user.id}
+                        readOnly
+                      />
+                      <ResourceLibrarySection
+                        key={`${selectedEmployer.id}-resources`}
+                        organisationId={selectedEmployer.provider_organisation_id}
+                        userId={user.id}
+                        readOnly
+                      />
+                    </div>
+                  )}
+                  {activeSection === 'learners' && (
+                    <EmployerLearnersPanel key={selectedEmployer.id} employer={selectedEmployer} />
+                  )}
+                  {activeSection === 'assign' && (
+                    <EmployerAssignTrainingPanel key={selectedEmployer.id} employer={selectedEmployer} />
+                  )}
+                  {activeSection === 'suggest-skills' && (
+                    <EmployerSuggestSkillsPanel key={selectedEmployer.id} employer={selectedEmployer} />
+                  )}
+                  {activeSection === 'providers' && (
+                    <EmployerProvidersPanel key={selectedEmployer.id} employer={selectedEmployer} user={user} />
+                  )}
+                </div>
               </div>
             )}
           </>

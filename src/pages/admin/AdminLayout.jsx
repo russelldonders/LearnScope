@@ -35,6 +35,7 @@ export default function AdminLayout({ children }) {
             <Link
               key={s.to}
               to={s.to}
+              aria-current={location.pathname === s.to ? 'page' : undefined}
               className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
                 location.pathname === s.to
                   ? 'border-moss text-ink font-medium'

@@ -51,11 +51,11 @@ export function TablePagination({ page, setPage, pageSize, setPageSize, totalIte
           </select>
         </label>
         <div className="flex items-center gap-1">
-          <button type="button" onClick={() => setPage(1)} disabled={page <= 1} className="rounded-md border border-hairline px-2 py-1 disabled:opacity-40 hover:bg-paper" aria-label="First page">«</button>
-          <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="rounded-md border border-hairline px-2 py-1 disabled:opacity-40 hover:bg-paper" aria-label="Previous page">‹</button>
+          <button type="button" onClick={() => setPage(1)} disabled={page <= 1} className="flex h-11 w-11 items-center justify-center rounded-md border border-hairline disabled:opacity-40 hover:bg-paper" aria-label="First page">«</button>
+          <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="flex h-11 w-11 items-center justify-center rounded-md border border-hairline disabled:opacity-40 hover:bg-paper" aria-label="Previous page">‹</button>
           <span className="px-1 tabular-nums">{page} / {totalPages}</span>
-          <button type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="rounded-md border border-hairline px-2 py-1 disabled:opacity-40 hover:bg-paper" aria-label="Next page">›</button>
-          <button type="button" onClick={() => setPage(totalPages)} disabled={page >= totalPages} className="rounded-md border border-hairline px-2 py-1 disabled:opacity-40 hover:bg-paper" aria-label="Last page">»</button>
+          <button type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="flex h-11 w-11 items-center justify-center rounded-md border border-hairline disabled:opacity-40 hover:bg-paper" aria-label="Next page">›</button>
+          <button type="button" onClick={() => setPage(totalPages)} disabled={page >= totalPages} className="flex h-11 w-11 items-center justify-center rounded-md border border-hairline disabled:opacity-40 hover:bg-paper" aria-label="Last page">»</button>
         </div>
       </div>
     </div>
@@ -215,14 +215,22 @@ export function ColumnCustomizer({ idPrefix, columns, onToggle, onMove, onReset 
                   <label htmlFor={`${idPrefix}-col-${column.key}`} className="flex-1 text-sm text-ink truncate">
                     {column.label}
                   </label>
+                  {/* Full 44x44 targets would roughly double this popover's width for
+                      two side-by-side buttons per row, in a list that can run to a
+                      dozen-plus columns -- not workable here. Instead this bumps
+                      each button to a 32x32 target (h-8 w-8, glyph kept small),
+                      which clears WCAG 2.2's 24x24 minimum (2.5.8) even though it
+                      falls short of the 44px best-practice target, and widens the
+                      gap between the two so the larger targets don't make
+                      mis-tapping the neighbouring button more likely. */}
                   {column.visible && (
-                    <div className="flex items-center gap-0.5">
+                    <div className="flex items-center gap-1.5">
                       <button
                         type="button"
                         onClick={() => onMove(column.key, 'up')}
                         disabled={isFirstVisible}
                         aria-label={`Move ${column.label} column earlier`}
-                        className="rounded border border-hairline text-secondary px-1 py-0.5 text-[10px] leading-none hover:text-ink disabled:opacity-30"
+                        className="flex h-8 w-8 items-center justify-center rounded border border-hairline text-secondary text-[10px] leading-none hover:text-ink disabled:opacity-30"
                       >
                         ▲
                       </button>
@@ -231,7 +239,7 @@ export function ColumnCustomizer({ idPrefix, columns, onToggle, onMove, onReset 
                         onClick={() => onMove(column.key, 'down')}
                         disabled={isLastVisible}
                         aria-label={`Move ${column.label} column later`}
-                        className="rounded border border-hairline text-secondary px-1 py-0.5 text-[10px] leading-none hover:text-ink disabled:opacity-30"
+                        className="flex h-8 w-8 items-center justify-center rounded border border-hairline text-secondary text-[10px] leading-none hover:text-ink disabled:opacity-30"
                       >
                         ▼
                       </button>

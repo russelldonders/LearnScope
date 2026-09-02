@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPageResource, removePageMediaAsset, updatePageResource, uploadPageMediaAsset } from '../lib/courseContent'
 import { EMPTY_PAGE_DOCUMENT, normalisePageDocument, sanitiseRichText } from '../lib/pageBuilder'
 import { PageMedia } from './PageContent'
+import AccessibleDialog from './AccessibleDialog'
 
 const BLOCK_LABELS = { heading: 'Heading', text: 'Text', image: 'Image', video: 'Video', callout: 'Callout', columns: 'Two columns', divider: 'Divider' }
 
@@ -101,12 +102,6 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
     onClose()
   }
 
-  useEffect(() => {
-    function handleKeyDown(event) { if (event.key === 'Escape') void closeEditor() }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  })
-
   function updateBlock(id, changes) {
     setPageDocument((current) => ({ ...current, blocks: current.blocks.map((block) => block.id === id ? { ...block, ...changes } : block) }))
   }
@@ -177,8 +172,13 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 p-0 sm:p-3" role="dialog" aria-modal="true" aria-label="Page editor">
-      <div className="page-builder-shell mx-auto flex h-full max-w-[1500px] flex-col overflow-hidden bg-paper sm:rounded-xl">
+    <AccessibleDialog
+      label="Page editor"
+      onClose={() => void closeEditor()}
+      closeOnBackdrop={false}
+      overlayClassName="!bg-black/60 !p-0 sm:!p-3"
+      panelClassName="page-builder-shell mx-auto flex h-full w-full max-w-[1500px] flex-col overflow-hidden bg-paper sm:rounded-xl"
+    >
         <header className="flex flex-wrap items-center gap-3 border-b border-hairline bg-card px-4 py-3 sm:px-5">
           <button type="button" onClick={() => void closeEditor()} className="text-sm font-medium text-secondary hover:text-ink">Close</button>
           <span className="h-5 w-px bg-hairline" aria-hidden="true" />
@@ -241,7 +241,6 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
             </article>
           </div>
         </main>
-      </div>
-    </div>
+    </AccessibleDialog>
   )
 }

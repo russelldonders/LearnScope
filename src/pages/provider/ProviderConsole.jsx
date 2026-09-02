@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
@@ -25,6 +25,7 @@ import { assignProviderCourseToCatalogue, listProviderCatalogues } from '../../l
 import { listOrganisations, listOrganisationMembers } from '../../lib/admin/organisations'
 import { listEmployers } from '../../lib/admin/employers'
 import { useRowSelection, useSortedPage } from '../../lib/useSortedPage'
+import { handleTabListKeyDown } from '../../lib/tabsKeyboard'
 import { COURSE_STATUS_LABELS } from '../../lib/statusLabels'
 import { BulkActionBar, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 import {
@@ -104,6 +105,8 @@ export default function ProviderConsole() {
   const [selectedOrgId, setSelectedOrgId] = useState(location.state?.organisationId ?? null)
   const [activeSection, setActiveSection] = useState(location.state?.providerSection ?? 'training')
   const [showSettings, setShowSettings] = useState(false)
+  const orgTabRefs = useRef({})
+  const sectionTabRefs = useRef({})
 
   const myOrgIds = useMemo(
     () => (organisationMemberships ?? []).map((m) => m.organisation_id),
@@ -183,12 +186,26 @@ export default function ProviderConsole() {
         ) : (
           <>
             {myOrgs.length > 1 && (
-              <div className="flex items-center flex-wrap gap-1 mb-4 border-b border-hairline">
+              <div role="tablist" aria-label="Organisation" className="flex items-center flex-wrap gap-1 mb-4 border-b border-hairline">
                 {myOrgs.map((org) => (
                   <button
                     key={org.id}
+                    ref={(el) => { orgTabRefs.current[org.id] = el }}
+                    id={`provider-org-tab-${org.id}`}
                     type="button"
+                    role="tab"
+                    aria-selected={selectedOrgId === org.id}
+                    aria-controls={`provider-org-panel-${org.id}`}
+                    tabIndex={selectedOrgId === org.id ? 0 : -1}
                     onClick={() => setSelectedOrgId(org.id)}
+                    onKeyDown={(event) =>
+                      handleTabListKeyDown(event, {
+                        keys: myOrgs.map((o) => o.id),
+                        activeKey: selectedOrgId,
+                        refs: orgTabRefs,
+                        onChange: setSelectedOrgId,
+                      })
+                    }
                     className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
                       selectedOrgId === org.id
                         ? 'border-moss text-ink font-medium'
@@ -202,23 +219,48 @@ export default function ProviderConsole() {
             )}
 
             {selectedOrg && (
-              <div>
+              <div
+                {...(myOrgs.length > 1
+                  ? {
+                      role: 'tabpanel',
+                      id: `provider-org-panel-${selectedOrg.id}`,
+                      'aria-labelledby': `provider-org-tab-${selectedOrg.id}`,
+                      tabIndex: 0,
+                    }
+                  : {})}
+              >
                 <div className="flex items-center justify-between gap-2 mb-6 border-b border-hairline">
                   <div className="flex items-center flex-wrap gap-1">
-                    {visibleSections.map((section) => (
-                      <button
-                        key={section.key}
-                        type="button"
-                        onClick={() => setActiveSection(section.key)}
-                        className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
-                          currentSection === section.key
-                            ? 'border-moss text-ink font-medium'
-                            : 'border-transparent text-secondary hover:text-ink'
-                        }`}
-                      >
-                        {section.label}
-                      </button>
-                    ))}
+                    <div role="tablist" aria-label="Console section" className="flex items-center flex-wrap gap-1">
+                      {visibleSections.map((section) => (
+                        <button
+                          key={section.key}
+                          ref={(el) => { sectionTabRefs.current[section.key] = el }}
+                          id={`provider-section-tab-${section.key}`}
+                          type="button"
+                          role="tab"
+                          aria-selected={currentSection === section.key}
+                          aria-controls={`provider-section-panel-${section.key}`}
+                          tabIndex={currentSection === section.key ? 0 : -1}
+                          onClick={() => setActiveSection(section.key)}
+                          onKeyDown={(event) =>
+                            handleTabListKeyDown(event, {
+                              keys: visibleSections.map((s) => s.key),
+                              activeKey: currentSection,
+                              refs: sectionTabRefs,
+                              onChange: setActiveSection,
+                            })
+                          }
+                          className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
+                            currentSection === section.key
+                              ? 'border-moss text-ink font-medium'
+                              : 'border-transparent text-secondary hover:text-ink'
+                          }`}
+                        >
+                          {section.label}
+                        </button>
+                      ))}
+                    </div>
                     {linkedEmployer && (
                       <>
                         <span className="mx-1 h-5 w-px bg-hairline shrink-0" aria-hidden="true" />
@@ -238,7 +280,7 @@ export default function ProviderConsole() {
                       onClick={() => setShowSettings(true)}
                       title="Organisation settings"
                       aria-label="Organisation settings"
-                      className="shrink-0 mb-2 w-8 h-8 rounded-md border border-hairline text-secondary hover:text-ink hover:bg-paper flex items-center justify-center"
+                      className="shrink-0 mb-2 w-11 h-11 rounded-md border border-hairline text-secondary hover:text-ink hover:bg-paper flex items-center justify-center"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <circle cx="12" cy="12" r="3" />
@@ -248,26 +290,33 @@ export default function ProviderConsole() {
                   )}
                 </div>
 
-                {currentSection === 'training' && (
-                  <ProviderTrainingSection
-                    key={selectedOrg.id}
-                    organisation={selectedOrg}
-                    userId={user.id}
-                    canViewParticipants={myRole === 'admin'}
-                  />
-                )}
-                {currentSection === 'skills' && (
-                  <ProviderSkillsSection key={selectedOrg.id} organisationId={selectedOrg.id} userId={user.id} />
-                )}
-                {currentSection === 'catalogues' && (
-                  <ProviderCataloguesSection key={selectedOrg.id} organisation={selectedOrg} userId={user.id} canCreate={myRole === 'admin'} />
-                )}
-                {currentSection === 'staff' && myRole === 'admin' && (
-                  <OrganisationStaffPanel key={selectedOrg.id} organisation={selectedOrg} />
-                )}
-                {currentSection === 'resources' && (
-                  <ResourceLibrarySection key={selectedOrg.id} organisationId={selectedOrg.id} userId={user.id} />
-                )}
+                <div
+                  id={`provider-section-panel-${currentSection}`}
+                  role="tabpanel"
+                  aria-labelledby={`provider-section-tab-${currentSection}`}
+                  tabIndex={0}
+                >
+                  {currentSection === 'training' && (
+                    <ProviderTrainingSection
+                      key={selectedOrg.id}
+                      organisation={selectedOrg}
+                      userId={user.id}
+                      canViewParticipants={myRole === 'admin'}
+                    />
+                  )}
+                  {currentSection === 'skills' && (
+                    <ProviderSkillsSection key={selectedOrg.id} organisationId={selectedOrg.id} userId={user.id} />
+                  )}
+                  {currentSection === 'catalogues' && (
+                    <ProviderCataloguesSection key={selectedOrg.id} organisation={selectedOrg} userId={user.id} canCreate={myRole === 'admin'} />
+                  )}
+                  {currentSection === 'staff' && myRole === 'admin' && (
+                    <OrganisationStaffPanel key={selectedOrg.id} organisation={selectedOrg} />
+                  )}
+                  {currentSection === 'resources' && (
+                    <ResourceLibrarySection key={selectedOrg.id} organisationId={selectedOrg.id} userId={user.id} />
+                  )}
+                </div>
               </div>
             )}
           </>
