@@ -2,14 +2,50 @@ import { useEffect, useMemo, useState } from 'react'
 import AdminLayout from './AdminLayout'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import { listAllTags, setTagBlacklisted } from '../../lib/admin/tags'
-import { useRowSelection, useSortedPage } from '../../lib/useSortedPage'
-import { BulkActionBar, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
+import { useColumnPreferences, useRowSelection, useSortedPage } from '../../lib/useSortedPage'
+import { BulkActionBar, ColumnCustomizer, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 
 const TAG_SORT_ACCESSORS = {
   id: (t) => t.tag_code ?? '',
   name: (t) => t.name?.toLowerCase() ?? '',
   status: (t) => (t.is_blacklisted ? 1 : 0),
 }
+
+// Customizable data columns only -- the selection checkbox (first) and the
+// per-row action button (last) stay pinned outside this list.
+const TAG_COLUMNS = [
+  {
+    key: 'id',
+    label: 'ID',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-2.5 font-mono text-xs text-secondary whitespace-nowrap',
+    renderCell: (t) => t.tag_code,
+  },
+  {
+    key: 'name',
+    label: 'Tag',
+    sortable: true,
+    cellClassName: 'px-4 py-2.5 text-ink whitespace-nowrap',
+    renderCell: (t) => t.name,
+  },
+  {
+    key: 'status',
+    label: 'Status',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-2.5 whitespace-nowrap',
+    renderCell: (t) => (
+      <span
+        className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border ${
+          t.is_blacklisted ? 'text-red-700 border-red-300' : 'text-secondary border-hairline'
+        }`}
+      >
+        {t.is_blacklisted ? 'Blacklisted' : 'Active'}
+      </span>
+    ),
+  },
+]
 
 export default function AdminTags() {
   const [tags, setTags] = useState([])
@@ -21,6 +57,8 @@ export default function AdminTags() {
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
     useSortedPage(tags, TAG_SORT_ACCESSORS)
+  const { columns, visibleColumns, toggleColumn, moveColumn, resetToDefault } =
+    useColumnPreferences('admin-tags', TAG_COLUMNS)
   const selection = useRowSelection(tags.map((t) => t.id))
   const selectedTags = useMemo(() => tags.filter((t) => selection.selected.has(t.id)), [tags, selection.selected])
   const selectedToBlacklist = useMemo(() => selectedTags.filter((t) => !t.is_blacklisted), [selectedTags])
@@ -101,6 +139,15 @@ export default function AdminTags() {
           </div>
         ) : (
           <div className="bg-card border border-hairline rounded-lg">
+            <div className="flex items-center justify-end p-3 pb-0">
+              <ColumnCustomizer
+                idPrefix="admin-tags"
+                columns={columns}
+                onToggle={toggleColumn}
+                onMove={moveColumn}
+                onReset={resetToDefault}
+              />
+            </div>
             <div className="p-3 pb-0">
               <BulkActionBar
                 count={selection.selected.size}
@@ -132,9 +179,13 @@ export default function AdminTags() {
                       indeterminate={selectedOnPage > 0 && selectedOnPage < pageIds.length}
                       onChange={() => selection.toggleAll(pageIds)}
                     />
-                    <SortableTh label="ID" columnKey="id" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                    <SortableTh label="Tag" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                    {visibleColumns.map((col) =>
+                      col.sortable ? (
+                        <SortableTh key={col.key} label={col.label} columnKey={col.key} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className={col.thClassName} />
+                      ) : (
+                        <th key={col.key} className={`px-4 py-2 font-medium ${col.thClassName || ''}`}>{col.label}</th>
+                      )
+                    )}
                     <th className="px-4 py-2 font-medium"></th>
                   </tr>
                 </thead>
@@ -151,17 +202,11 @@ export default function AdminTags() {
                           className="rounded border-hairline accent-moss"
                         />
                       </td>
-                      <td className="px-4 py-2.5 font-mono text-xs text-secondary whitespace-nowrap">{tag.tag_code}</td>
-                      <td className="px-4 py-2.5 text-ink whitespace-nowrap">{tag.name}</td>
-                      <td className="px-4 py-2.5 whitespace-nowrap">
-                        <span
-                          className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border ${
-                            tag.is_blacklisted ? 'text-red-700 border-red-300' : 'text-secondary border-hairline'
-                          }`}
-                        >
-                          {tag.is_blacklisted ? 'Blacklisted' : 'Active'}
-                        </span>
-                      </td>
+                      {visibleColumns.map((col) => (
+                        <td key={col.key} className={col.cellClassName}>
+                          {col.renderCell(tag)}
+                        </td>
+                      ))}
                       <td className="px-4 py-2.5 text-right">
                         <button
                           type="button"

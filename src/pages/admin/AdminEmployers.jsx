@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom'
 import AdminLayout from './AdminLayout'
 import { listEmployers, createEmployer, addEmployerMember } from '../../lib/admin/employers'
 import { listOrganisations } from '../../lib/admin/organisations'
-import { useSortedPage } from '../../lib/useSortedPage'
-import { SortableTh, TablePagination } from '../../components/TableControls'
+import { useColumnPreferences, useSortedPage } from '../../lib/useSortedPage'
+import { ColumnCustomizer, SortableTh, TablePagination } from '../../components/TableControls'
 
 const EMPLOYER_SORT_ACCESSORS = {
   name: (e) => e.name?.toLowerCase() ?? '',
@@ -15,6 +15,53 @@ const EMPLOYER_SORT_ACCESSORS = {
 function formatDate(value) {
   if (!value) return '—'
   return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value))
+}
+
+// Customizable data columns only -- the trailing "Add admin" actions column
+// stays pinned outside this list (this table has no bulk selection).
+// "Attached provider organisation" links out to Providers rather than
+// duplicating that org's own data here, so it's still a plain data column
+// like the others.
+function employerColumns(organisationById) {
+  return [
+    {
+      key: 'employer_code',
+      label: 'ID',
+      sortable: true,
+      thClassName: 'whitespace-nowrap',
+      cellClassName: 'px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap',
+      renderCell: (e) => e.employer_code,
+    },
+    {
+      key: 'name',
+      label: 'Employer',
+      sortable: true,
+      cellClassName: 'px-4 py-3 text-ink font-medium whitespace-nowrap',
+      renderCell: (e) => e.name,
+    },
+    {
+      key: 'created_at',
+      label: 'Created',
+      sortable: true,
+      thClassName: 'whitespace-nowrap',
+      cellClassName: 'px-4 py-3 text-secondary whitespace-nowrap',
+      renderCell: (e) => formatDate(e.created_at),
+    },
+    {
+      key: 'provider_organisation',
+      label: 'Attached provider organisation',
+      sortable: false,
+      cellClassName: 'px-4 py-3',
+      renderCell: (e) => {
+        const org = organisationById.get(e.provider_organisation_id)
+        return (
+          <Link to="/admin/providers" className="text-xs font-medium text-moss hover:underline whitespace-nowrap">
+            {org ? `${org.name} (${org.org_code})` : 'View in Providers'} →
+          </Link>
+        )
+      },
+    },
+  ]
 }
 
 // Foundation console for the "employer" domain concept (20260902090000): a
@@ -54,6 +101,9 @@ export default function AdminEmployers() {
     useSortedPage(employers, EMPLOYER_SORT_ACCESSORS)
 
   const organisationById = useMemo(() => new Map(organisations.map((o) => [o.id, o])), [organisations])
+  const EMPLOYER_COLUMNS = useMemo(() => employerColumns(organisationById), [organisationById])
+  const { columns, visibleColumns, toggleColumn, moveColumn, resetToDefault } =
+    useColumnPreferences('admin-employers', EMPLOYER_COLUMNS)
 
   useEffect(() => {
     load()
@@ -122,13 +172,22 @@ export default function AdminEmployers() {
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-display text-lg text-ink">Employers</h2>
-          <button
-            type="button"
-            onClick={() => setShowCreateForm((v) => !v)}
-            className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
-          >
-            {showCreateForm ? 'Cancel' : '+ Create employer'}
-          </button>
+          <div className="flex items-center gap-2">
+            <ColumnCustomizer
+              idPrefix="admin-employers"
+              columns={columns}
+              onToggle={toggleColumn}
+              onMove={moveColumn}
+              onReset={resetToDefault}
+            />
+            <button
+              type="button"
+              onClick={() => setShowCreateForm((v) => !v)}
+              className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
+            >
+              {showCreateForm ? 'Cancel' : '+ Create employer'}
+            </button>
+          </div>
         </div>
 
         {showCreateForm && (
@@ -179,28 +238,27 @@ export default function AdminEmployers() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-hairline text-left text-secondary">
-                    <SortableTh label="ID" columnKey="employer_code" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                    <SortableTh label="Employer" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh label="Created" columnKey="created_at" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                    <th className="px-4 py-2 font-medium">Attached provider organisation</th>
+                    {visibleColumns.map((col) =>
+                      col.sortable ? (
+                        <SortableTh key={col.key} label={col.label} columnKey={col.key} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className={col.thClassName} />
+                      ) : (
+                        <th key={col.key} className={`px-4 py-2 font-medium ${col.thClassName || ''}`}>{col.label}</th>
+                      )
+                    )}
                     <th className="px-4 py-2 font-medium"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {pageItems.map((employer) => {
-                    const org = organisationById.get(employer.provider_organisation_id)
                     const addingHere = addAdminId === employer.id
                     return (
                       <Fragment key={employer.id}>
                         <tr className="border-b border-hairline last:border-0">
-                          <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{employer.employer_code}</td>
-                          <td className="px-4 py-3 text-ink font-medium whitespace-nowrap">{employer.name}</td>
-                          <td className="px-4 py-3 text-secondary whitespace-nowrap">{formatDate(employer.created_at)}</td>
-                          <td className="px-4 py-3">
-                            <Link to="/admin/providers" className="text-xs font-medium text-moss hover:underline whitespace-nowrap">
-                              {org ? `${org.name} (${org.org_code})` : 'View in Providers'} →
-                            </Link>
-                          </td>
+                          {visibleColumns.map((col) => (
+                            <td key={col.key} className={col.cellClassName}>
+                              {col.renderCell(employer)}
+                            </td>
+                          ))}
                           <td className="px-4 py-3 text-right">
                             <button
                               type="button"
@@ -213,7 +271,7 @@ export default function AdminEmployers() {
                         </tr>
                         {addingHere && (
                           <tr className="border-b border-hairline last:border-0">
-                            <td colSpan={5} className="px-4 pb-4 pt-1">
+                            <td colSpan={visibleColumns.length + 1} className="px-4 pb-4 pt-1">
                               <form onSubmit={(e) => handleAddAdmin(e, employer.id)} className="flex flex-wrap items-end gap-2 border-t border-hairline pt-3">
                                 <div className="flex-1 min-w-[220px]">
                                   <label className="block text-xs text-secondary mb-1" htmlFor={`employerAdminEmail-${employer.id}`}>

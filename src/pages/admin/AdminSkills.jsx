@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom'
 import AdminLayout from './AdminLayout'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import { listAllLibrarySkills, updateLibrarySkill, setLibrarySkillStatus } from '../../lib/admin/skills'
-import { useRowSelection, useSortedPage } from '../../lib/useSortedPage'
-import { BulkActionBar, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
+import { useColumnPreferences, useRowSelection, useSortedPage } from '../../lib/useSortedPage'
+import { BulkActionBar, ColumnCustomizer, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 
 const TYPE_LABELS = { global: 'Global', personal: 'Personal', provider: 'Provider' }
 
@@ -18,6 +18,85 @@ const SKILL_SORT_ACCESSORS = {
   owner: (s) => s.ownerName?.toLowerCase() ?? '',
   status: (s) => s.status ?? '',
 }
+
+// Customizable data columns only -- the selection checkbox (first) and the
+// per-row action buttons (last) stay pinned outside this list.
+const SKILL_COLUMNS = [
+  {
+    key: 'code',
+    label: 'ID',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap',
+    renderCell: (s) => s.skill_code,
+  },
+  {
+    key: 'name',
+    label: 'Skill',
+    sortable: true,
+    cellClassName: 'px-4 py-3 text-ink font-medium whitespace-nowrap',
+    renderCell: (s) => (
+      <Link to={`/admin/skills/${s.id}`} className="hover:text-moss hover:underline">
+        {s.name}
+      </Link>
+    ),
+  },
+  {
+    key: 'category',
+    label: 'Category',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-3 text-secondary whitespace-nowrap',
+    renderCell: (s) => s.category || '—',
+  },
+  {
+    key: 'description',
+    label: 'Description',
+    sortable: true,
+    cellClassName: 'px-4 py-3 text-secondary truncate max-w-[220px]',
+    renderCell: (s) => s.description || '—',
+  },
+  {
+    key: 'visibility',
+    label: 'Visibility',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-3 text-secondary whitespace-nowrap',
+    renderCell: (s) => (s.is_private ? 'Private' : 'Public'),
+  },
+  {
+    key: 'type',
+    label: 'Type',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-3 text-secondary whitespace-nowrap',
+    renderCell: (s) => TYPE_LABELS[s.type],
+  },
+  {
+    key: 'owner',
+    label: 'Owner',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-3 text-secondary whitespace-nowrap',
+    renderCell: (s) => s.ownerName || '—',
+  },
+  {
+    key: 'status',
+    label: 'Status',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-3 whitespace-nowrap',
+    renderCell: (s) => (
+      <span
+        className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border ${
+          s.status === 'inactive' ? 'border-red-300 text-red-700' : 'border-hairline text-secondary'
+        }`}
+      >
+        {s.status}
+      </span>
+    ),
+  },
+]
 
 export default function AdminSkills() {
   const [skills, setSkills] = useState([])
@@ -118,6 +197,8 @@ export default function AdminSkills() {
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
     useSortedPage(filtered, SKILL_SORT_ACCESSORS)
+  const { columns, visibleColumns, toggleColumn, moveColumn, resetToDefault } =
+    useColumnPreferences('admin-skills', SKILL_COLUMNS)
   const selection = useRowSelection(filtered.map((s) => s.id))
   const selectedSkills = useMemo(() => filtered.filter((s) => selection.selected.has(s.id)), [filtered, selection.selected])
   const selectedToActivate = useMemo(() => selectedSkills.filter((s) => s.status !== 'active'), [selectedSkills])
@@ -128,14 +209,23 @@ export default function AdminSkills() {
   return (
     <AdminLayout>
       <div className="space-y-4">
-        <input
-          aria-label="Search skills"
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search skills…"
-          className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-        />
+        <div className="flex items-center gap-2">
+          <input
+            aria-label="Search skills"
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search skills…"
+            className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+          />
+          <ColumnCustomizer
+            idPrefix="admin-skills"
+            columns={columns}
+            onToggle={toggleColumn}
+            onMove={moveColumn}
+            onReset={resetToDefault}
+          />
+        </div>
 
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
@@ -178,14 +268,13 @@ export default function AdminSkills() {
                       indeterminate={selectedOnPage > 0 && selectedOnPage < pageIds.length}
                       onChange={() => selection.toggleAll(pageIds)}
                     />
-                    <SortableTh label="ID" columnKey="code" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                    <SortableTh label="Skill" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh label="Category" columnKey="category" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                    <SortableTh label="Description" columnKey="description" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh label="Visibility" columnKey="visibility" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                    <SortableTh label="Type" columnKey="type" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                    <SortableTh label="Owner" columnKey="owner" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                    <SortableTh label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                    {visibleColumns.map((col) =>
+                      col.sortable ? (
+                        <SortableTh key={col.key} label={col.label} columnKey={col.key} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className={col.thClassName} />
+                      ) : (
+                        <th key={col.key} className={`px-4 py-2 font-medium ${col.thClassName || ''}`}>{col.label}</th>
+                      )
+                    )}
                     <th className="px-4 py-2 font-medium"></th>
                   </tr>
                 </thead>
@@ -194,6 +283,7 @@ export default function AdminSkills() {
                     <SkillRow
                       key={skill.id}
                       skill={skill}
+                      visibleColumns={visibleColumns}
                       selected={selection.selected.has(skill.id)}
                       onToggleSelected={() => selection.toggle(skill.id)}
                       editing={editingId === skill.id}
@@ -232,7 +322,7 @@ export default function AdminSkills() {
   )
 }
 
-function SkillRow({ skill, selected, onToggleSelected, editing, editForm, onEditFormChange, saving, actioning, onStartEdit, onCancelEdit, onSaveEdit, onToggleStatus }) {
+function SkillRow({ skill, visibleColumns, selected, onToggleSelected, editing, editForm, onEditFormChange, saving, actioning, onStartEdit, onCancelEdit, onSaveEdit, onToggleStatus }) {
   return (
     <>
       <tr className="border-b border-hairline last:border-0">
@@ -246,26 +336,11 @@ function SkillRow({ skill, selected, onToggleSelected, editing, editForm, onEdit
             className="rounded border-hairline accent-moss"
           />
         </td>
-        <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{skill.skill_code}</td>
-        <td className="px-4 py-3 text-ink font-medium whitespace-nowrap">
-          <Link to={`/admin/skills/${skill.id}`} className="hover:text-moss hover:underline">
-            {skill.name}
-          </Link>
-        </td>
-        <td className="px-4 py-3 text-secondary whitespace-nowrap">{skill.category || '—'}</td>
-        <td className="px-4 py-3 text-secondary truncate max-w-[220px]">{skill.description || '—'}</td>
-        <td className="px-4 py-3 text-secondary whitespace-nowrap">{skill.is_private ? 'Private' : 'Public'}</td>
-        <td className="px-4 py-3 text-secondary whitespace-nowrap">{TYPE_LABELS[skill.type]}</td>
-        <td className="px-4 py-3 text-secondary whitespace-nowrap">{skill.ownerName || '—'}</td>
-        <td className="px-4 py-3 whitespace-nowrap">
-          <span
-            className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border ${
-              skill.status === 'inactive' ? 'border-red-300 text-red-700' : 'border-hairline text-secondary'
-            }`}
-          >
-            {skill.status}
-          </span>
-        </td>
+        {visibleColumns.map((col) => (
+          <td key={col.key} className={col.cellClassName}>
+            {col.renderCell(skill)}
+          </td>
+        ))}
         <td className="px-4 py-3">
           <div className="flex items-center gap-2 justify-end">
             <button type="button" onClick={onStartEdit} className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper whitespace-nowrap">
@@ -284,7 +359,7 @@ function SkillRow({ skill, selected, onToggleSelected, editing, editForm, onEdit
       </tr>
       {editing && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={10} className="px-4 pb-4 pt-1">
+          <td colSpan={visibleColumns.length + 2} className="px-4 pb-4 pt-1">
             <div className="space-y-2 border-t border-hairline pt-3">
               <div>
                 <label className="block text-xs text-secondary mb-1">Category</label>

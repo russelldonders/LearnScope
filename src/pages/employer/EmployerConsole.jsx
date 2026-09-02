@@ -199,7 +199,7 @@ export default function EmployerConsole() {
                           key={section.key}
                           to="/provider"
                           state={{ organisationId: selectedEmployer.provider_organisation_id, providerSection: section.key }}
-                          className="text-sm px-3 py-2 -mb-px border-b-2 border-transparent whitespace-nowrap text-amber-800 hover:text-amber-900 hover:border-amber-800"
+                          className="text-sm px-3 py-2 -mb-px border-b-2 border-transparent whitespace-nowrap text-gold hover:border-gold"
                         >
                           {section.label} →
                         </Link>
@@ -208,7 +208,7 @@ export default function EmployerConsole() {
                   )}
                 </div>
                 <p className="text-xs text-secondary mb-6">
-                  Amber tabs open the full Provider console, where you manage this employer's actual courses,
+                  Gold tabs open the full Provider console, where you manage this employer's actual courses,
                   catalogues, and resources.
                 </p>
 

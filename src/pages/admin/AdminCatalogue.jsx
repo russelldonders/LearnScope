@@ -6,8 +6,8 @@ import {
   rejectCatalogueCourse,
   deactivateCatalogueCourse,
 } from '../../lib/admin/catalogue'
-import { useSortedPage } from '../../lib/useSortedPage'
-import { SortableTh, TablePagination } from '../../components/TableControls'
+import { useColumnPreferences, useSortedPage } from '../../lib/useSortedPage'
+import { ColumnCustomizer, SortableTh, TablePagination } from '../../components/TableControls'
 
 const STATUS_FILTERS = ['all', 'draft', 'pending_approval', 'approved', 'rejected', 'inactive']
 
@@ -20,6 +20,70 @@ const CATALOGUE_SORT_ACCESSORS = {
   rejection_reason: (c) => c.rejection_reason?.toLowerCase() ?? '',
   destinations: (c) => (c.course_catalogue_publications ?? []).map((p) => p.catalogues?.name).filter(Boolean).join(', ').toLowerCase(),
 }
+
+// Customizable data columns only -- the trailing Approve/Reject/Deactivate
+// actions column stays pinned outside this list (this table has no bulk
+// selection, so there's no pinned checkbox column to worry about).
+const CATALOGUE_COLUMNS = [
+  {
+    key: 'course_code',
+    label: 'ID',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap',
+    renderCell: (c) => c.course_code || 'Not set',
+  },
+  {
+    key: 'name',
+    label: 'Course',
+    sortable: true,
+    cellClassName: 'px-4 py-3 text-ink font-medium whitespace-nowrap',
+    renderCell: (c) => c.name,
+  },
+  {
+    key: 'provider',
+    label: 'Provider',
+    sortable: true,
+    cellClassName: 'px-4 py-3 text-secondary whitespace-nowrap',
+    renderCell: (c) => c.organisations?.name || c.provider || '—',
+  },
+  {
+    key: 'version',
+    label: 'Version',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-3 whitespace-nowrap',
+    renderCell: (c) => <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{c.version_number}</span>,
+  },
+  {
+    key: 'status',
+    label: 'Status',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-3 whitespace-nowrap',
+    renderCell: (c) => <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{c.status.replace('_', ' ')}</span>,
+  },
+  {
+    key: 'rejection_reason',
+    label: 'Rejection reason',
+    sortable: true,
+    cellClassName: 'px-4 py-3 text-red-700 truncate max-w-[180px]',
+    renderCell: (c) => c.rejection_reason || '—',
+  },
+  {
+    key: 'destinations',
+    label: 'Destinations',
+    sortable: true,
+    cellClassName: 'px-4 py-3 text-secondary truncate max-w-[180px]',
+    cellProps: (c) => ({
+      title: (c.course_catalogue_publications ?? []).map((p) => p.catalogues?.name).filter(Boolean).join(', '),
+    }),
+    renderCell: (c) => {
+      const destinations = (c.course_catalogue_publications ?? []).map((p) => p.catalogues?.name).filter(Boolean)
+      return destinations.length > 0 ? destinations.join(', ') : '—'
+    },
+  },
+]
 
 export default function AdminCatalogue() {
   const [courses, setCourses] = useState([])
@@ -53,6 +117,8 @@ export default function AdminCatalogue() {
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
     useSortedPage(filtered, CATALOGUE_SORT_ACCESSORS)
+  const { columns, visibleColumns, toggleColumn, moveColumn, resetToDefault } =
+    useColumnPreferences('admin-catalogue', CATALOGUE_COLUMNS)
 
   async function handleApprove(course) {
     setActioningId(course.id)
@@ -113,6 +179,13 @@ export default function AdminCatalogue() {
               </button>
             ))}
           </div>
+          <ColumnCustomizer
+            idPrefix="admin-catalogue"
+            columns={columns}
+            onToggle={toggleColumn}
+            onMove={moveColumn}
+            onReset={resetToDefault}
+          />
         </div>
 
         {error && <p className="text-sm text-red-700">{error}</p>}
@@ -129,13 +202,13 @@ export default function AdminCatalogue() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-hairline text-left text-secondary">
-                    <SortableTh label="ID" columnKey="course_code" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                    <SortableTh label="Course" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh label="Provider" columnKey="provider" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh label="Version" columnKey="version" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                    <SortableTh label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                    <SortableTh label="Rejection reason" columnKey="rejection_reason" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh label="Destinations" columnKey="destinations" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    {visibleColumns.map((col) =>
+                      col.sortable ? (
+                        <SortableTh key={col.key} label={col.label} columnKey={col.key} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className={col.thClassName} />
+                      ) : (
+                        <th key={col.key} className={`px-4 py-2 font-medium ${col.thClassName || ''}`}>{col.label}</th>
+                      )
+                    )}
                     <th className="px-4 py-2 font-medium"></th>
                   </tr>
                 </thead>
@@ -144,6 +217,7 @@ export default function AdminCatalogue() {
                     <CatalogueRow
                       key={course.id}
                       course={course}
+                      visibleColumns={visibleColumns}
                       actioning={actioningId === course.id}
                       rejecting={rejectingId === course.id}
                       rejectionReason={rejectionReason}
@@ -171,6 +245,7 @@ export default function AdminCatalogue() {
 
 function CatalogueRow({
   course,
+  visibleColumns,
   actioning,
   rejecting,
   rejectionReason,
@@ -181,25 +256,14 @@ function CatalogueRow({
   onReject,
   onDeactivate,
 }) {
-  const destinations = (course.course_catalogue_publications ?? [])
-    .map((publication) => publication.catalogues?.name)
-    .filter(Boolean)
   return (
     <>
       <tr className="border-b border-hairline last:border-0">
-        <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{course.course_code || 'Not set'}</td>
-        <td className="px-4 py-3 text-ink font-medium whitespace-nowrap">{course.name}</td>
-        <td className="px-4 py-3 text-secondary whitespace-nowrap">{course.organisations?.name || course.provider || '—'}</td>
-        <td className="px-4 py-3 whitespace-nowrap">
-          <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{course.version_number}</span>
-        </td>
-        <td className="px-4 py-3 whitespace-nowrap">
-          <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{course.status.replace('_', ' ')}</span>
-        </td>
-        <td className="px-4 py-3 text-red-700 truncate max-w-[180px]">{course.rejection_reason || '—'}</td>
-        <td className="px-4 py-3 text-secondary truncate max-w-[180px]" title={destinations.join(', ')}>
-          {destinations.length > 0 ? destinations.join(', ') : '—'}
-        </td>
+        {visibleColumns.map((col) => (
+          <td key={col.key} className={col.cellClassName} {...(col.cellProps ? col.cellProps(course) : {})}>
+            {col.renderCell(course)}
+          </td>
+        ))}
         <td className="px-4 py-3">
           <div className="flex items-center gap-2 justify-end whitespace-nowrap">
             {(course.status === 'pending_approval' || course.status === 'draft') && (
@@ -247,7 +311,7 @@ function CatalogueRow({
       </tr>
       {rejecting && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={8} className="px-4 pb-3">
+          <td colSpan={visibleColumns.length + 1} className="px-4 pb-3">
             <div className="flex flex-wrap items-end gap-2 border-t border-hairline pt-3">
               <div className="flex-1 min-w-[200px]">
                 <label className="block text-xs text-secondary mb-1">Rejection reason (optional)</label>

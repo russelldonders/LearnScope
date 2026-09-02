@@ -4,8 +4,8 @@ import { useAuth } from '../../context/AuthContext'
 import AdminLayout from './AdminLayout'
 import { listUsers, inviteUser, setUserBlocked, getUserLinkages, deleteUser } from '../../lib/admin/users'
 import AccessibleDialog from '../../components/AccessibleDialog'
-import { useSortedPage } from '../../lib/useSortedPage'
-import { SortableTh, TablePagination } from '../../components/TableControls'
+import { useColumnPreferences, useSortedPage } from '../../lib/useSortedPage'
+import { ColumnCustomizer, SortableTh, TablePagination } from '../../components/TableControls'
 
 const USER_SORT_ACCESSORS = {
   userCode: (u) => u.userCode?.toLowerCase() ?? '',
@@ -13,6 +13,75 @@ const USER_SORT_ACCESSORS = {
   email: (u) => u.email?.toLowerCase() ?? '',
   accountStatus: (u) => u.accountStatus ?? '',
 }
+
+// Customizable data columns only -- the row-action buttons stay a fixed,
+// unlabelled trailing column outside this list (see AdminUsers' own render
+// below), so they can't be hidden or reordered.
+const USER_COLUMNS = [
+  {
+    key: 'userCode',
+    label: 'ID',
+    sortable: true,
+    cellClassName: 'px-4 py-2 text-secondary font-mono text-xs whitespace-nowrap',
+    renderCell: (u) => u.userCode || '—',
+  },
+  {
+    key: 'fullName',
+    label: 'Name',
+    sortable: true,
+    cellClassName: 'px-4 py-2 text-ink whitespace-nowrap',
+    renderCell: (u) => (
+      <Link to={`/admin/users/${u.id}`} className="hover:text-moss hover:underline">
+        {u.fullName || '—'}
+      </Link>
+    ),
+  },
+  {
+    key: 'email',
+    label: 'Email',
+    sortable: true,
+    cellClassName: 'px-4 py-2 text-ink',
+    renderCell: (u) => (
+      <Link to={`/admin/users/${u.id}`} className="hover:text-moss hover:underline">
+        {u.email}
+      </Link>
+    ),
+  },
+  {
+    key: 'accountStatus',
+    label: 'Status',
+    sortable: true,
+    cellClassName: 'px-4 py-2',
+    renderCell: (u) => (
+      <span
+        className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border whitespace-nowrap ${
+          u.accountStatus === 'blocked' ? 'border-red-300 text-red-700' : 'border-hairline text-secondary'
+        }`}
+      >
+        {u.accountStatus}
+      </span>
+    ),
+  },
+  {
+    key: 'isPlatformAdmin',
+    label: 'Platform admin',
+    sortable: false,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-2 text-secondary whitespace-nowrap',
+    renderCell: (u) => (u.isPlatformAdmin ? 'Yes' : '—'),
+  },
+  {
+    key: 'organisationMemberships',
+    label: 'Organisations',
+    sortable: false,
+    cellClassName: 'px-4 py-2 text-secondary truncate max-w-xs',
+    cellProps: (u) => ({ title: u.organisationMemberships.map((m) => `${m.organisationName} (${m.role})`).join(', ') }),
+    renderCell: (u) =>
+      u.organisationMemberships.length === 0
+        ? '—'
+        : u.organisationMemberships.map((m) => `${m.organisationName} (${m.role}${m.status === 'pending' ? ', pending' : ''})`).join(', '),
+  },
+]
 
 export default function AdminUsers() {
   const { user } = useAuth()
@@ -30,6 +99,8 @@ export default function AdminUsers() {
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
     useSortedPage(users, USER_SORT_ACCESSORS)
+  const { columns, visibleColumns, toggleColumn, moveColumn, resetToDefault } =
+    useColumnPreferences('admin-users', USER_COLUMNS)
 
   useEffect(() => {
     load()
@@ -83,13 +154,22 @@ export default function AdminUsers() {
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-display text-lg text-ink">Users</h2>
-          <button
-            type="button"
-            onClick={() => setShowInviteForm((v) => !v)}
-            className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
-          >
-            {showInviteForm ? 'Cancel' : '+ Invite user'}
-          </button>
+          <div className="flex items-center gap-2">
+            <ColumnCustomizer
+              idPrefix="admin-users"
+              columns={columns}
+              onToggle={toggleColumn}
+              onMove={moveColumn}
+              onReset={resetToDefault}
+            />
+            <button
+              type="button"
+              onClick={() => setShowInviteForm((v) => !v)}
+              className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
+            >
+              {showInviteForm ? 'Cancel' : '+ Invite user'}
+            </button>
+          </div>
         </div>
 
         {showInviteForm && (
@@ -131,46 +211,24 @@ export default function AdminUsers() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-hairline text-left text-secondary">
-                  <SortableTh label="ID" columnKey="userCode" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                  <SortableTh label="Name" columnKey="fullName" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                  <SortableTh label="Email" columnKey="email" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                  <SortableTh label="Status" columnKey="accountStatus" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                  <th className="px-4 py-2 font-medium whitespace-nowrap">Platform admin</th>
-                  <th className="px-4 py-2 font-medium">Organisations</th>
+                  {visibleColumns.map((col) =>
+                    col.sortable ? (
+                      <SortableTh key={col.key} label={col.label} columnKey={col.key} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className={col.thClassName} />
+                    ) : (
+                      <th key={col.key} className={`px-4 py-2 font-medium ${col.thClassName || ''}`}>{col.label}</th>
+                    )
+                  )}
                   <th className="px-4 py-2 font-medium"></th>
                 </tr>
               </thead>
               <tbody>
                 {pageItems.map((u) => (
                   <tr key={u.id} className="border-b border-hairline last:border-0">
-                    <td className="px-4 py-2 text-secondary font-mono text-xs whitespace-nowrap">{u.userCode || '—'}</td>
-                    <td className="px-4 py-2 text-ink whitespace-nowrap">
-                      <Link to={`/admin/users/${u.id}`} className="hover:text-moss hover:underline">
-                        {u.fullName || '—'}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2 text-ink">
-                      <Link to={`/admin/users/${u.id}`} className="hover:text-moss hover:underline">
-                        {u.email}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2">
-                      <span
-                        className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border whitespace-nowrap ${
-                          u.accountStatus === 'blocked'
-                            ? 'border-red-300 text-red-700'
-                            : 'border-hairline text-secondary'
-                        }`}
-                      >
-                        {u.accountStatus}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-secondary whitespace-nowrap">{u.isPlatformAdmin ? 'Yes' : '—'}</td>
-                    <td className="px-4 py-2 text-secondary truncate max-w-xs" title={u.organisationMemberships.map((m) => `${m.organisationName} (${m.role})`).join(', ')}>
-                      {u.organisationMemberships.length === 0
-                        ? '—'
-                        : u.organisationMemberships.map((m) => `${m.organisationName} (${m.role}${m.status === 'pending' ? ', pending' : ''})`).join(', ')}
-                    </td>
+                    {visibleColumns.map((col) => (
+                      <td key={col.key} className={col.cellClassName} {...(col.cellProps ? col.cellProps(u) : {})}>
+                        {col.renderCell(u)}
+                      </td>
+                    ))}
                     <td className="px-4 py-2 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
@@ -201,7 +259,7 @@ export default function AdminUsers() {
                 ))}
                 {users.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-6 text-center text-secondary">
+                    <td colSpan={visibleColumns.length + 1} className="px-4 py-6 text-center text-secondary">
                       No users yet.
                     </td>
                   </tr>

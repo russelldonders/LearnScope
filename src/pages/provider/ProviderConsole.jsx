@@ -232,7 +232,7 @@ export default function ProviderConsole() {
                         <Link
                           to="/employer"
                           state={{ employerId: linkedEmployer.id }}
-                          className="text-sm px-3 py-2 -mb-px border-b-2 border-transparent whitespace-nowrap text-amber-800 hover:text-amber-900 hover:border-amber-800"
+                          className="text-sm px-3 py-2 -mb-px border-b-2 border-transparent whitespace-nowrap text-gold hover:border-gold"
                         >
                           ← {linkedEmployer.name} employer console
                         </Link>

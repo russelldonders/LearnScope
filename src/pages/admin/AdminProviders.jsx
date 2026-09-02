@@ -11,8 +11,8 @@ import {
   removeOrganisationMember,
   inviteOrganisationStaff,
 } from '../../lib/admin/organisations'
-import { useRowSelection, useSortedPage } from '../../lib/useSortedPage'
-import { BulkActionBar, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
+import { useColumnPreferences, useRowSelection, useSortedPage } from '../../lib/useSortedPage'
+import { BulkActionBar, ColumnCustomizer, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 
 const ORG_SORT_ACCESSORS = {
   name: (o) => o.name?.toLowerCase() ?? '',
@@ -21,6 +21,67 @@ const ORG_SORT_ACCESSORS = {
   type: (o) => o.type ?? '',
   status: (o) => o.status ?? '',
 }
+
+// Customizable data columns only -- the selection checkbox (first) and the
+// per-row action buttons (last) stay pinned outside this list. Scoped to
+// this top-level organisations table -- the nested OrganisationStaffPanel
+// table (its own sortable/paginated staff list) is a separate concept and
+// stays out of the column-customization system.
+const ORG_COLUMNS = [
+  {
+    key: 'org_code',
+    label: 'ID',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap',
+    renderCell: (o) => o.org_code,
+  },
+  {
+    key: 'name',
+    label: 'Organisation',
+    sortable: true,
+    cellClassName: 'px-4 py-3 text-ink font-medium whitespace-nowrap',
+    renderCell: (o) => o.name,
+  },
+  {
+    key: 'url',
+    label: 'Website',
+    sortable: true,
+    cellClassName: 'px-4 py-3 truncate max-w-[200px]',
+    renderCell: (o) =>
+      o.url ? (
+        <a href={o.url} target="_blank" rel="noopener noreferrer" className="text-xs text-moss font-medium hover:underline">
+          {o.url}
+        </a>
+      ) : (
+        <span className="text-secondary">—</span>
+      ),
+  },
+  {
+    key: 'type',
+    label: 'Type',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-3 text-secondary whitespace-nowrap',
+    renderCell: (o) => o.type,
+  },
+  {
+    key: 'status',
+    label: 'Status',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-3 whitespace-nowrap',
+    renderCell: (o) => (
+      <span
+        className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border ${
+          o.status === 'active' ? 'border-hairline text-secondary' : 'border-red-300 text-red-700'
+        }`}
+      >
+        {o.status}
+      </span>
+    ),
+  },
+]
 
 const STAFF_SORT_ACCESSORS = {
   id: (m) => m.id ?? '',
@@ -46,6 +107,8 @@ export default function AdminProviders() {
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
     useSortedPage(organisations, ORG_SORT_ACCESSORS)
+  const { columns, visibleColumns, toggleColumn, moveColumn, resetToDefault } =
+    useColumnPreferences('admin-providers', ORG_COLUMNS)
   const selection = useRowSelection(organisations.map((o) => o.id))
   const selectedOrgs = useMemo(
     () => organisations.filter((o) => selection.selected.has(o.id)),
@@ -159,13 +222,22 @@ export default function AdminProviders() {
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-display text-lg text-ink">Providers</h2>
-          <button
-            type="button"
-            onClick={() => setShowCreateForm((v) => !v)}
-            className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
-          >
-            {showCreateForm ? 'Cancel' : '+ Create organisation'}
-          </button>
+          <div className="flex items-center gap-2">
+            <ColumnCustomizer
+              idPrefix="admin-providers"
+              columns={columns}
+              onToggle={toggleColumn}
+              onMove={moveColumn}
+              onReset={resetToDefault}
+            />
+            <button
+              type="button"
+              onClick={() => setShowCreateForm((v) => !v)}
+              className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
+            >
+              {showCreateForm ? 'Cancel' : '+ Create organisation'}
+            </button>
+          </div>
         </div>
 
         {showCreateForm && (
@@ -237,11 +309,13 @@ export default function AdminProviders() {
                       indeterminate={selectedOnPage > 0 && selectedOnPage < pageIds.length}
                       onChange={() => selection.toggleAll(pageIds)}
                     />
-                    <SortableTh label="ID" columnKey="org_code" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                    <SortableTh label="Organisation" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh label="Website" columnKey="url" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <SortableTh label="Type" columnKey="type" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                    <SortableTh label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                    {visibleColumns.map((col) =>
+                      col.sortable ? (
+                        <SortableTh key={col.key} label={col.label} columnKey={col.key} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className={col.thClassName} />
+                      ) : (
+                        <th key={col.key} className={`px-4 py-2 font-medium ${col.thClassName || ''}`}>{col.label}</th>
+                      )
+                    )}
                     <th className="px-4 py-2 font-medium"></th>
                   </tr>
                 </thead>
@@ -250,6 +324,7 @@ export default function AdminProviders() {
                     <OrganisationRow
                       key={org.id}
                       org={org}
+                      visibleColumns={visibleColumns}
                       selected={selection.selected.has(org.id)}
                       onToggleSelected={() => selection.toggle(org.id)}
                       editing={editingId === org.id}
@@ -291,6 +366,7 @@ export default function AdminProviders() {
 
 function OrganisationRow({
   org,
+  visibleColumns,
   selected,
   onToggleSelected,
   editing,
@@ -317,27 +393,11 @@ function OrganisationRow({
             className="rounded border-hairline accent-moss"
           />
         </td>
-        <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{org.org_code}</td>
-        <td className="px-4 py-3 text-ink font-medium whitespace-nowrap">{org.name}</td>
-        <td className="px-4 py-3 truncate max-w-[200px]">
-          {org.url ? (
-            <a href={org.url} target="_blank" rel="noopener noreferrer" className="text-xs text-moss font-medium hover:underline">
-              {org.url}
-            </a>
-          ) : (
-            <span className="text-secondary">—</span>
-          )}
-        </td>
-        <td className="px-4 py-3 text-secondary whitespace-nowrap">{org.type}</td>
-        <td className="px-4 py-3 whitespace-nowrap">
-          <span
-            className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border ${
-              org.status === 'active' ? 'border-hairline text-secondary' : 'border-red-300 text-red-700'
-            }`}
-          >
-            {org.status}
-          </span>
-        </td>
+        {visibleColumns.map((col) => (
+          <td key={col.key} className={col.cellClassName}>
+            {col.renderCell(org)}
+          </td>
+        ))}
         <td className="px-4 py-3">
           <div className="flex items-center gap-2 justify-end whitespace-nowrap">
             <button type="button" onClick={onStartEdit} className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper whitespace-nowrap">
@@ -354,7 +414,7 @@ function OrganisationRow({
       </tr>
       {editing && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={7} className="px-4 pb-4 pt-1">
+          <td colSpan={visibleColumns.length + 2} className="px-4 pb-4 pt-1">
             <form onSubmit={onSaveEdit} className="space-y-3 border-t border-hairline pt-3">
               <div>
                 <label className="block text-sm text-secondary mb-1" htmlFor={`orgEditName-${org.id}`}>
@@ -395,7 +455,7 @@ function OrganisationRow({
       )}
       {expanded && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={7} className="px-4 pb-4 pt-1">
+          <td colSpan={visibleColumns.length + 2} className="px-4 pb-4 pt-1">
             <div className="border-t border-hairline pt-3">
               <OrganisationStaffPanel organisation={org} alwaysShowForm />
             </div>

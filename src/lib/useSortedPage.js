@@ -128,3 +128,99 @@ export function useRowSelection(ids) {
 
   return { selected, toggle, toggleAll, clear, clearIds, isAllSelected }
 }
+
+const COLUMN_PREFS_STORAGE_PREFIX = 'learnscope:admin-table-columns:'
+
+// Show/hide + reorder preferences for a platform-admin data table's
+// customizable data columns (never the pinned selection/actions columns --
+// callers keep those out of `defaultColumns` entirely). Persists to
+// localStorage per tableKey; a blocked/unavailable localStorage (or garbage
+// left over from a previous shape) just falls back to the defaults instead
+// of crashing, and a column key no longer present in `defaultColumns` (the
+// table's own definition changed) is silently dropped rather than erroring.
+//
+// Order + visibility live together as one array of {key, visible} entries
+// covering every default column. moveColumn swaps a column with its nearest
+// *visible* neighbour in that array (skipping over hidden ones in between)
+// so "up"/"down" always reorders what's actually rendered, even when a
+// hidden column sits between two visible ones in storage.
+export function useColumnPreferences(tableKey, defaultColumns) {
+  const storageKey = `${COLUMN_PREFS_STORAGE_PREFIX}${tableKey}`
+  const defaultKeys = useMemo(() => defaultColumns.map((c) => c.key), [defaultColumns])
+
+  function defaultOrder() {
+    return defaultKeys.map((key) => ({ key, visible: true }))
+  }
+
+  const [order, setOrder] = useState(() => {
+    try {
+      const raw = localStorage.getItem(storageKey)
+      if (!raw) return defaultOrder()
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) return defaultOrder()
+      const known = new Set(defaultKeys)
+      const kept = parsed.filter((entry) => entry && typeof entry.key === 'string' && known.has(entry.key))
+      const seen = new Set(kept.map((entry) => entry.key))
+      const missing = defaultKeys.filter((key) => !seen.has(key)).map((key) => ({ key, visible: true }))
+      const result = [...kept, ...missing]
+      return result.length > 0 ? result : defaultOrder()
+    } catch {
+      return defaultOrder()
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(order))
+    } catch {
+      // Blocked/unavailable localStorage -- preferences just won't persist.
+    }
+  }, [order, storageKey])
+
+  const columnByKey = useMemo(() => new Map(defaultColumns.map((c) => [c.key, c])), [defaultColumns])
+
+  const columns = useMemo(
+    () =>
+      order
+        .map((entry) => {
+          const def = columnByKey.get(entry.key)
+          return def ? { ...def, visible: entry.visible } : null
+        })
+        .filter(Boolean),
+    [order, columnByKey]
+  )
+
+  const visibleColumns = useMemo(() => columns.filter((c) => c.visible), [columns])
+
+  const toggleColumn = useCallback((key) => {
+    setOrder((current) => {
+      const visibleCount = current.filter((entry) => entry.visible).length
+      const target = current.find((entry) => entry.key === key)
+      if (!target) return current
+      if (target.visible && visibleCount <= 1) return current // keep at least one column visible
+      return current.map((entry) => (entry.key === key ? { ...entry, visible: !entry.visible } : entry))
+    })
+  }, [])
+
+  const moveColumn = useCallback((key, direction) => {
+    setOrder((current) => {
+      const index = current.findIndex((entry) => entry.key === key)
+      if (index === -1 || !current[index].visible) return current
+      const step = direction === 'up' ? -1 : 1
+      let swapWith = index + step
+      while (swapWith >= 0 && swapWith < current.length && !current[swapWith].visible) {
+        swapWith += step
+      }
+      if (swapWith < 0 || swapWith >= current.length) return current
+      const next = [...current]
+      ;[next[index], next[swapWith]] = [next[swapWith], next[index]]
+      return next
+    })
+  }, [])
+
+  const resetToDefault = useCallback(() => {
+    setOrder(defaultKeys.map((key) => ({ key, visible: true })))
+  }, [defaultKeys])
+
+  return { columns, visibleColumns, toggleColumn, moveColumn, resetToDefault }
+}

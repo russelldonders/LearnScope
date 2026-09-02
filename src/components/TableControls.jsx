@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { PAGE_SIZE_OPTIONS } from '../lib/useSortedPage'
 
 // A <th> whose whole label is a button toggling sort on that column --
@@ -132,6 +132,122 @@ export function BulkActionBar({ count, onClear, actions, busy = false }) {
           Clear
         </button>
       </div>
+    </div>
+  )
+}
+
+// Button + popover for showing/hiding and reordering a table's customizable
+// data columns -- pass the `columns` array straight from
+// useColumnPreferences (each entry already carries a `visible` flag) plus
+// its toggleColumn/moveColumn/resetToDefault. Open/close (outside-click +
+// Escape) mirrors AppHeader.jsx's account menu, the existing anchored-
+// dropdown pattern in this codebase, rather than the full-screen
+// AccessibleDialog modal, which would be too heavy for a small per-table
+// settings panel.
+export function ColumnCustomizer({ idPrefix, columns, onToggle, onMove, onReset }) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handleOutside(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false)
+    }
+    function handleEscape(e) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', handleOutside)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handleOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [open])
+
+  const visibleKeys = columns.filter((c) => c.visible).map((c) => c.key)
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="true"
+        title="Customize columns"
+        className="flex items-center gap-1.5 rounded-md border border-hairline text-ink py-1.5 px-3 text-xs font-medium hover:bg-paper whitespace-nowrap"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="shrink-0"
+          aria-hidden="true"
+        >
+          <rect x="3" y="4" width="18" height="16" rx="1" />
+          <line x1="9" y1="4" x2="9" y2="20" />
+          <line x1="15" y1="4" x2="15" y2="20" />
+        </svg>
+        Columns
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-64 rounded-md border border-hairline bg-card shadow-lg py-2 z-20">
+          <p className="px-3 pb-1.5 text-[11px] uppercase tracking-wide text-secondary">Show &amp; reorder columns</p>
+          <ul>
+            {columns.map((column) => {
+              const visiblePos = visibleKeys.indexOf(column.key)
+              const isFirstVisible = visiblePos === 0
+              const isLastVisible = visiblePos === visibleKeys.length - 1
+              return (
+                <li key={column.key} className="flex items-center gap-2 px-3 py-1.5 hover:bg-paper">
+                  <input
+                    id={`${idPrefix}-col-${column.key}`}
+                    type="checkbox"
+                    checked={column.visible}
+                    disabled={column.visible && visibleKeys.length <= 1}
+                    onChange={() => onToggle(column.key)}
+                    className="rounded border-hairline accent-moss"
+                  />
+                  <label htmlFor={`${idPrefix}-col-${column.key}`} className="flex-1 text-sm text-ink truncate">
+                    {column.label}
+                  </label>
+                  {column.visible && (
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => onMove(column.key, 'up')}
+                        disabled={isFirstVisible}
+                        aria-label={`Move ${column.label} column earlier`}
+                        className="rounded border border-hairline text-secondary px-1 py-0.5 text-[10px] leading-none hover:text-ink disabled:opacity-30"
+                      >
+                        ▲
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onMove(column.key, 'down')}
+                        disabled={isLastVisible}
+                        aria-label={`Move ${column.label} column later`}
+                        className="rounded border border-hairline text-secondary px-1 py-0.5 text-[10px] leading-none hover:text-ink disabled:opacity-30"
+                      >
+                        ▼
+                      </button>
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+          <div className="border-t border-hairline mt-1 pt-1.5 px-3">
+            <button type="button" onClick={onReset} className="text-xs text-secondary hover:text-ink py-1">
+              Reset to default
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
