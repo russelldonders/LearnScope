@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
 import { OrganisationStaffPanel } from '../admin/AdminProviders'
@@ -97,13 +97,19 @@ const EMPTY_FORM = { name: '', courseCode: '', provider: '', courseType: '', dur
 // (organisation_id, user_id) constraint.
 export default function ProviderConsole() {
   const { user, organisationMemberships, employerMemberships } = useAuth()
-  const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [organisations, setOrganisations] = useState([])
   const [employers, setEmployers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [selectedOrgId, setSelectedOrgId] = useState(location.state?.organisationId ?? null)
-  const [activeSection, setActiveSection] = useState(location.state?.providerSection ?? 'training')
+  // org/section selection lives in the URL (?org=&section=) rather than
+  // component state, so refresh, browser Back/Forward, and a shared link
+  // all land on the same view -- see CLAUDE.md-linked Phase 1 Slice 3 nav
+  // audit. selectedOrgId/activeSection below are re-derived from
+  // searchParams on every render (not seeded once), so Back/Forward
+  // navigating between two ?org=/?section= values actually updates the view.
+  const selectedOrgId = searchParams.get('org')
+  const activeSection = searchParams.get('section') ?? 'training'
   const [showSettings, setShowSettings] = useState(false)
   const orgTabRefs = useRef({})
   const sectionTabRefs = useRef({})
@@ -152,13 +158,31 @@ export default function ProviderConsole() {
       .catch((err) => setError(err.message))
   }
 
+  // Defaults ?org= to the first available organisation whenever it's
+  // absent, or points at one this user no longer has active access to
+  // (e.g. a stale bookmark for a deactivated org) -- replace: true so this
+  // correction doesn't itself become a Back-button stop.
   useEffect(() => {
-    if (!selectedOrgId && myOrgs.length > 0) {
-      setSelectedOrgId(myOrgs[0].id)
+    if (myOrgs.length > 0 && !myOrgs.some((o) => o.id === selectedOrgId)) {
+      setSearchParams(buildParams({ org: myOrgs[0].id }), { replace: true })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myOrgs, selectedOrgId])
 
   const visibleSections = SECTIONS.filter((s) => !s.adminOnly || myRole === 'admin')
+
+  // Builds the next ?org=&section= query string, preserving whichever of
+  // the two isn't being changed -- shared by every tab Link and by the
+  // keyboard-nav onChange below so arrow-key and click navigation land on
+  // the exact same URL shape.
+  function buildParams(overrides) {
+    const next = new URLSearchParams(searchParams)
+    Object.entries(overrides).forEach(([key, value]) => {
+      if (value === null || value === undefined) next.delete(key)
+      else next.set(key, value)
+    })
+    return next
+  }
 
   return (
     <div className="min-h-screen bg-paper">
@@ -188,22 +212,21 @@ export default function ProviderConsole() {
             {myOrgs.length > 1 && (
               <div role="tablist" aria-label="Organisation" className="flex items-center flex-wrap gap-1 mb-4 border-b border-hairline">
                 {myOrgs.map((org) => (
-                  <button
+                  <Link
                     key={org.id}
                     ref={(el) => { orgTabRefs.current[org.id] = el }}
                     id={`provider-org-tab-${org.id}`}
-                    type="button"
+                    to={`?${buildParams({ org: org.id }).toString()}`}
                     role="tab"
                     aria-selected={selectedOrgId === org.id}
                     aria-controls={`provider-org-panel-${org.id}`}
                     tabIndex={selectedOrgId === org.id ? 0 : -1}
-                    onClick={() => setSelectedOrgId(org.id)}
                     onKeyDown={(event) =>
                       handleTabListKeyDown(event, {
                         keys: myOrgs.map((o) => o.id),
                         activeKey: selectedOrgId,
                         refs: orgTabRefs,
-                        onChange: setSelectedOrgId,
+                        onChange: (orgId) => setSearchParams(buildParams({ org: orgId })),
                       })
                     }
                     className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
@@ -213,7 +236,7 @@ export default function ProviderConsole() {
                     }`}
                   >
                     {org.name}
-                  </button>
+                  </Link>
                 ))}
               </div>
             )}
@@ -233,22 +256,21 @@ export default function ProviderConsole() {
                   <div className="flex items-center flex-wrap gap-1">
                     <div role="tablist" aria-label="Console section" className="flex items-center flex-wrap gap-1">
                       {visibleSections.map((section) => (
-                        <button
+                        <Link
                           key={section.key}
                           ref={(el) => { sectionTabRefs.current[section.key] = el }}
                           id={`provider-section-tab-${section.key}`}
-                          type="button"
+                          to={`?${buildParams({ section: section.key }).toString()}`}
                           role="tab"
                           aria-selected={currentSection === section.key}
                           aria-controls={`provider-section-panel-${section.key}`}
                           tabIndex={currentSection === section.key ? 0 : -1}
-                          onClick={() => setActiveSection(section.key)}
                           onKeyDown={(event) =>
                             handleTabListKeyDown(event, {
                               keys: visibleSections.map((s) => s.key),
                               activeKey: currentSection,
                               refs: sectionTabRefs,
-                              onChange: setActiveSection,
+                              onChange: (sectionKey) => setSearchParams(buildParams({ section: sectionKey })),
                             })
                           }
                           className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
@@ -258,15 +280,14 @@ export default function ProviderConsole() {
                           }`}
                         >
                           {section.label}
-                        </button>
+                        </Link>
                       ))}
                     </div>
                     {linkedEmployer && (
                       <>
                         <span className="mx-1 h-5 w-px bg-hairline shrink-0" aria-hidden="true" />
                         <Link
-                          to="/employer"
-                          state={{ employerId: linkedEmployer.id }}
+                          to={`/employer?employer=${linkedEmployer.id}`}
                           className="text-sm px-3 py-2 -mb-px border-b-2 border-transparent whitespace-nowrap text-gold hover:border-gold"
                         >
                           ← {linkedEmployer.name} employer console

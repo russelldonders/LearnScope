@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
 import ConfirmDialog from '../../components/ConfirmDialog'
@@ -39,9 +39,9 @@ const SECTIONS = [
 // Mirrors ProviderConsole.jsx's own (module-private) SECTIONS labels/keys --
 // not the actual provider tab content, just enough to render matching,
 // visually distinct nav buttons here that hand off to the real /provider
-// console (via its existing location.state.organisationId/providerSection
-// read) rather than re-authoring provider functionality a second time. Keep
-// in sync with ProviderConsole.jsx's SECTIONS if that ever changes.
+// console (via its ?org=&section= query params) rather than re-authoring
+// provider functionality a second time. Keep in sync with
+// ProviderConsole.jsx's SECTIONS if that ever changes.
 const PROVIDER_SECTIONS = [
   { key: 'training', label: 'Training' },
   { key: 'skills', label: 'Skills' },
@@ -98,14 +98,29 @@ const SKILL_SUGGESTION_STATUS_LABELS = {
 // learner-facing UI are still later phases.
 export default function EmployerConsole() {
   const { user, employerMemberships, organisationMemberships } = useAuth()
-  const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [employers, setEmployers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [selectedEmployerId, setSelectedEmployerId] = useState(location.state?.employerId ?? null)
-  const [activeSection, setActiveSection] = useState('training')
+  // employer/section selection lives in the URL (?employer=&section=), the
+  // same convention as ProviderConsole.jsx -- re-derived from searchParams
+  // on every render so refresh, Back/Forward, and a shared link all restore
+  // the same view.
+  const selectedEmployerId = searchParams.get('employer')
+  const activeSection = searchParams.get('section') ?? 'training'
   const employerTabRefs = useRef({})
   const sectionTabRefs = useRef({})
+
+  // Builds the next ?employer=&section= query string, preserving whichever
+  // of the two isn't being changed.
+  function buildParams(overrides) {
+    const next = new URLSearchParams(searchParams)
+    Object.entries(overrides).forEach(([key, value]) => {
+      if (value === null || value === undefined) next.delete(key)
+      else next.set(key, value)
+    })
+    return next
+  }
 
   const myEmployerIds = useMemo(
     () => (employerMemberships ?? []).filter((m) => m.role === 'admin').map((m) => m.employer_id),
@@ -135,10 +150,14 @@ export default function EmployerConsole() {
       .finally(() => setLoading(false))
   }, [])
 
+  // Defaults ?employer= to the first employer this user admins whenever
+  // it's absent or points at one they no longer admin -- replace: true so
+  // this correction doesn't itself become a Back-button stop.
   useEffect(() => {
-    if (!selectedEmployerId && myEmployers.length > 0) {
-      setSelectedEmployerId(myEmployers[0].id)
+    if (myEmployers.length > 0 && !myEmployers.some((e) => e.id === selectedEmployerId)) {
+      setSearchParams(buildParams({ employer: myEmployers[0].id }), { replace: true })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myEmployers, selectedEmployerId])
 
   return (
@@ -163,22 +182,21 @@ export default function EmployerConsole() {
             {myEmployers.length > 1 && (
               <div role="tablist" aria-label="Employer" className="flex items-center flex-wrap gap-1 mb-4 border-b border-hairline">
                 {myEmployers.map((employer) => (
-                  <button
+                  <Link
                     key={employer.id}
                     ref={(el) => { employerTabRefs.current[employer.id] = el }}
                     id={`employer-tab-${employer.id}`}
-                    type="button"
+                    to={`?${buildParams({ employer: employer.id }).toString()}`}
                     role="tab"
                     aria-selected={selectedEmployerId === employer.id}
                     aria-controls={`employer-panel-${employer.id}`}
                     tabIndex={selectedEmployerId === employer.id ? 0 : -1}
-                    onClick={() => setSelectedEmployerId(employer.id)}
                     onKeyDown={(event) =>
                       handleTabListKeyDown(event, {
                         keys: myEmployers.map((e) => e.id),
                         activeKey: selectedEmployerId,
                         refs: employerTabRefs,
-                        onChange: setSelectedEmployerId,
+                        onChange: (employerId) => setSearchParams(buildParams({ employer: employerId })),
                       })
                     }
                     className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
@@ -188,7 +206,7 @@ export default function EmployerConsole() {
                     }`}
                   >
                     {employer.name}
-                  </button>
+                  </Link>
                 ))}
               </div>
             )}
@@ -207,22 +225,21 @@ export default function EmployerConsole() {
                 <div className="flex items-center flex-wrap gap-x-1 gap-y-2 mb-1 border-b border-hairline">
                   <div role="tablist" aria-label="Console section" className="flex items-center flex-wrap gap-x-1 gap-y-2">
                     {SECTIONS.map((section) => (
-                      <button
+                      <Link
                         key={section.key}
                         ref={(el) => { sectionTabRefs.current[section.key] = el }}
                         id={`employer-section-tab-${section.key}`}
-                        type="button"
+                        to={`?${buildParams({ section: section.key }).toString()}`}
                         role="tab"
                         aria-selected={activeSection === section.key}
                         aria-controls={`employer-section-panel-${section.key}`}
                         tabIndex={activeSection === section.key ? 0 : -1}
-                        onClick={() => setActiveSection(section.key)}
                         onKeyDown={(event) =>
                           handleTabListKeyDown(event, {
                             keys: SECTIONS.map((s) => s.key),
                             activeKey: activeSection,
                             refs: sectionTabRefs,
-                            onChange: setActiveSection,
+                            onChange: (sectionKey) => setSearchParams(buildParams({ section: sectionKey })),
                           })
                         }
                         className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
@@ -232,7 +249,7 @@ export default function EmployerConsole() {
                         }`}
                       >
                         {section.label}
-                      </button>
+                      </Link>
                     ))}
                   </div>
                   {myProviderRole && (
@@ -244,8 +261,7 @@ export default function EmployerConsole() {
                       {PROVIDER_SECTIONS.filter((s) => !s.adminOnly || myProviderRole === 'admin').map((section) => (
                         <Link
                           key={section.key}
-                          to="/provider"
-                          state={{ organisationId: selectedEmployer.provider_organisation_id, providerSection: section.key }}
+                          to={`/provider?org=${selectedEmployer.provider_organisation_id}&section=${section.key}`}
                           className="text-sm px-3 py-2 -mb-px border-b-2 border-transparent whitespace-nowrap text-gold hover:border-gold"
                         >
                           {section.label} →

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import AppHeader from '../../components/AppHeader'
 import { useAuth } from '../../context/AuthContext'
 import { listOrganisationMembers } from '../../lib/admin/organisations'
@@ -35,6 +35,7 @@ const TABS = [
 export default function ProviderCatalogueDetail() {
   const { catalogueId } = useParams()
   const { user, organisationMemberships } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [catalogue, setCatalogue] = useState(null)
   const [courses, setCourses] = useState([])
   const [organisationCourses, setOrganisationCourses] = useState([])
@@ -44,7 +45,10 @@ export default function ProviderCatalogueDetail() {
   const [orgMembers, setOrgMembers] = useState([])
   const [offeredSkills, setOfferedSkills] = useState([])
   const [organisationResources, setOrganisationResources] = useState([])
-  const [activeTab, setActiveTab] = useState('courses')
+  // ?tab= (default 'courses') -- mirrors ProviderSkillDetail.jsx's own tab
+  // query param, so refresh/Back/Forward/a shared link all land on the
+  // same catalogue-detail tab instead of resetting to Courses.
+  const activeTab = TABS.some((t) => t.key === searchParams.get('tab')) ? searchParams.get('tab') : 'courses'
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [editing, setEditing] = useState(false)
@@ -131,9 +135,14 @@ export default function ProviderCatalogueDetail() {
     )
   }
 
+  // Reconstructed from the loaded catalogue itself, not passed-through
+  // navigation state -- so "All catalogues" always returns to the right
+  // organisation/section even after a refresh or a bookmarked link here.
+  const backToProviderConsole = `/provider?org=${catalogue.organisation_id}&section=catalogues`
+
   return (
     <ProviderPage>
-      <Link to="/provider" className="text-sm text-secondary hover:text-ink">← All catalogues</Link>
+      <Link to={backToProviderConsole} className="text-sm text-secondary hover:text-ink">← All catalogues</Link>
       <div className="mt-5 flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="font-display text-2xl text-ink">{catalogue.name}</h1>
@@ -165,29 +174,28 @@ export default function ProviderCatalogueDetail() {
 
       <div role="tablist" aria-label="Catalogue sections" className="mt-7 flex gap-1 border-b border-hairline">
         {TABS.map((tab) => (
-          <button
+          <Link
             key={tab.key}
             ref={(el) => { tabRefs.current[tab.key] = el }}
             id={`catalogue-tab-${tab.key}`}
-            type="button"
+            to={{ search: tab.key === 'courses' ? '' : `?tab=${tab.key}` }}
             role="tab"
             aria-selected={activeTab === tab.key}
             aria-controls={`catalogue-panel-${tab.key}`}
             tabIndex={activeTab === tab.key ? 0 : -1}
-            onClick={() => setActiveTab(tab.key)}
             onKeyDown={(event) =>
               handleTabListKeyDown(event, {
                 keys: TABS.map((t) => t.key),
                 activeKey: activeTab,
                 refs: tabRefs,
-                onChange: setActiveTab,
+                onChange: (tabKey) => setSearchParams(tabKey === 'courses' ? {} : { tab: tabKey }),
               })
             }
             className={`-mb-px border-b-2 px-3 py-2 text-sm ${activeTab === tab.key ? 'border-moss font-medium text-ink' : 'border-transparent text-secondary hover:text-ink'}`}
           >
             {tab.label}
             <span className="ml-2 tabular-nums text-xs text-secondary">{tab.key === 'courses' ? courses.length : tab.key === 'skills' ? skills.length : tab.key === 'resources' ? resources.length : members.length}</span>
-          </button>
+          </Link>
         ))}
       </div>
 

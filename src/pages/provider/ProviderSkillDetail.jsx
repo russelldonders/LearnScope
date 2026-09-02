@@ -116,7 +116,7 @@ export default function ProviderSkillDetail() {
     <div className="min-h-screen bg-paper">
       <AppHeader hideNavLinks />
       <main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 py-8">
-        <Link to="/provider" state={{ providerSection: 'skills', organisationId }} className="inline-flex items-center min-h-11 text-sm text-moss font-medium hover:underline underline-offset-2">← Back to skills</Link>
+        <Link to={`/provider?org=${organisationId}&section=skills`} className="inline-flex items-center min-h-11 text-sm text-moss font-medium hover:underline underline-offset-2">← Back to skills</Link>
         {loading ? <p className="text-secondary py-8">Loading skill…</p> : !skill ? (
           <div className="mt-4 rounded-lg border border-hairline bg-card p-5"><h1 className="font-display text-xl text-ink">Skill unavailable</h1><p className={`text-sm mt-2 ${error ? 'text-red-700' : 'text-secondary'}`}>{error || 'This skill is not offered by the selected organisation.'}</p></div>
         ) : (

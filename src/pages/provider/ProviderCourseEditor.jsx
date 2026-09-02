@@ -624,7 +624,16 @@ export default function ProviderCourseEditor() {
     <div className="min-h-screen bg-paper">
       <AppHeader hideNavLinks />
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
-        <Link to="/provider" className="text-sm text-secondary hover:text-ink mb-4 inline-block">
+        {/* Reconstructed from the loaded course itself (its organisation and
+            the Training section it's always reached from), not passed-through
+            navigation state -- so this always returns to the right
+            organisation/section even after a refresh or a bookmarked link
+            straight to this course. Falls back to a bare /provider before
+            the course has loaded. */}
+        <Link
+          to={course ? `/provider?org=${course.organisation_id}&section=training` : '/provider'}
+          className="text-sm text-secondary hover:text-ink mb-4 inline-block"
+        >
           ← Back to provider console
         </Link>
 
