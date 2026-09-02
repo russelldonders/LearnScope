@@ -28,10 +28,23 @@ export default function ExperienceSection() {
   )
   const [pendingJob, setPendingJob] = useState(null)
   const [existingCurrentJob, setExistingCurrentJob] = useState(null)
+  const [fullName, setFullName] = useState(null)
 
   useEffect(() => {
     loadExperience()
   }, [])
+
+  // Only needed for the printed/PDF title -- the on-screen page never shows
+  // the learner's name (AppHeader already identifies the account elsewhere).
+  useEffect(() => {
+    if (!user) return
+    supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => setFullName(data?.full_name ?? null))
+  }, [user])
 
   async function loadExperience() {
     setLoading(true)
@@ -145,14 +158,29 @@ export default function ExperienceSection() {
 
   return (
     <section>
-      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between mb-8">
+      {/* Printed/PDF-only title -- the interactive header below is hidden on
+          print so this is the only heading that reaches the page. */}
+      <div className="hidden print:block mb-8">
+        <h1 className="font-display text-3xl text-ink">
+          {fullName ? `${fullName} — Experience` : 'Experience'}
+        </h1>
+      </div>
+
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between mb-8 print:hidden">
         <div className="max-w-2xl">
           <h1 className="font-display text-3xl sm:text-4xl text-ink text-balance">Experience timeline</h1>
           <p className="text-secondary mt-2 text-pretty">
             Your employment, education, and other milestones, in order.
           </p>
         </div>
-        <div className="shrink-0 self-start">
+        <div className="flex items-center gap-2 shrink-0 self-start">
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="rounded-md border border-hairline text-ink py-2 px-3 text-sm font-medium hover:bg-paper"
+          >
+            Download as PDF
+          </button>
           <AddExperienceButton types={ADD_EXPERIENCE_TYPES} onSelect={setModalType} />
         </div>
       </div>

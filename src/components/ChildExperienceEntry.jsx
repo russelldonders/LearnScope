@@ -16,7 +16,7 @@ const CHILD_DOT_CLASS = {
 
 export default function ChildExperienceEntry({ child, isLast, onNavigate }) {
   return (
-    <div className="flex gap-3">
+    <div className="flex gap-3 print:break-inside-avoid">
       <div className="flex flex-col items-center w-12 shrink-0">
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 mt-1.5 ${CHILD_DOT_CLASS[child.type] ?? 'bg-secondary/40'}`} />
         {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}

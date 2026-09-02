@@ -5,7 +5,7 @@ import ChildExperienceEntry from './ChildExperienceEntry'
 
 export default function TimelineItem({ item, summary, childExperiences, onEdit, isLast }) {
   return (
-    <div className="flex gap-4">
+    <div className="flex gap-4 print:break-inside-avoid">
       <div className="flex flex-col items-center">
         <span
           className={`w-3 h-3 rounded-full mt-1.5 ${
