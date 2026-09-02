@@ -22,6 +22,7 @@ import {
   updateProviderCatalogue,
   upsertProviderCatalogueMember,
 } from '../../lib/admin/providerCatalogues'
+import { COURSE_STATUS_LABELS, RESOURCE_TYPE_LABELS } from '../../lib/statusLabels'
 
 const TABS = [
   { key: 'courses', label: 'Courses' },
@@ -29,24 +30,6 @@ const TABS = [
   { key: 'resources', label: 'Resources' },
   { key: 'users', label: 'Users' },
 ]
-
-const RESOURCE_TYPE_LABELS = {
-  video: 'Video',
-  screen_recording: 'Screen recording',
-  file: 'File',
-  scorm: 'SCORM package',
-  xapi: 'xAPI package',
-  external_video: 'External video',
-  web_url: 'Web link',
-}
-
-const COURSE_STATUS = {
-  draft: 'Draft',
-  pending_approval: 'Pending approval',
-  approved: 'Approved',
-  rejected: 'Rejected',
-  inactive: 'Inactive',
-}
 
 export default function ProviderCatalogueDetail() {
   const { catalogueId } = useParams()
@@ -238,7 +221,7 @@ function CoursesTab({ catalogue, courses, organisationCourses, canManage, canApp
           {courses.map((course) => (
             <li key={course.id} className="flex items-center justify-between gap-4 py-4">
               <div className="min-w-0"><Link to={`/provider/training/${course.id}`} className="font-medium text-ink hover:text-moss">{course.name}</Link><p className="mt-1 text-sm text-secondary">{course.course_type || 'Course'}{course.duration ? ` · ${course.duration}` : ''}</p></div>
-              <div className="flex items-center gap-3"><span className="text-xs text-secondary">{COURSE_STATUS[course.status] ?? course.status}</span>{(canManage || (canApprove && course.status === 'pending_approval')) && <CogMenu label={`Manage ${course.name}`} href={canManage ? `/provider/training/${course.id}` : null} options={canApprove && course.status === 'pending_approval' ? [{ label: 'Approve course', action: () => handleApprove(course.id) }] : []} />}</div>
+              <div className="flex items-center gap-3"><span className="text-xs text-secondary">{COURSE_STATUS_LABELS[course.status] ?? course.status}</span>{(canManage || (canApprove && course.status === 'pending_approval')) && <CogMenu label={`Manage ${course.name}`} href={canManage ? `/provider/training/${course.id}` : null} options={canApprove && course.status === 'pending_approval' ? [{ label: 'Approve course', action: () => handleApprove(course.id) }] : []} />}</div>
             </li>
           ))}
         </ul>

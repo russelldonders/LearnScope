@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import AdminLayout from './AdminLayout'
 import { listUsers, inviteUser, setUserBlocked, getUserLinkages, deleteUser } from '../../lib/admin/users'
 import AccessibleDialog from '../../components/AccessibleDialog'
+import StatusBadge from '../../components/StatusBadge'
 import { useColumnPreferences, useSortedPage } from '../../lib/useSortedPage'
 import { ColumnCustomizer, SortableTh, TablePagination } from '../../components/TableControls'
 
@@ -53,13 +54,7 @@ const USER_COLUMNS = [
     sortable: true,
     cellClassName: 'px-4 py-2',
     renderCell: (u) => (
-      <span
-        className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border whitespace-nowrap ${
-          u.accountStatus === 'blocked' ? 'border-red-300 text-red-700' : 'border-hairline text-secondary'
-        }`}
-      >
-        {u.accountStatus}
-      </span>
+      <StatusBadge label={u.accountStatus} tone={u.accountStatus === 'blocked' ? 'danger' : 'neutral'} />
     ),
   },
   {

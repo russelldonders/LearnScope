@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AdminLayout from './AdminLayout'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import StatusBadge from '../../components/StatusBadge'
 import { listAllLibrarySkills, updateLibrarySkill, setLibrarySkillStatus } from '../../lib/admin/skills'
+import { SKILL_TYPE_LABELS } from '../../lib/statusLabels'
 import { useColumnPreferences, useRowSelection, useSortedPage } from '../../lib/useSortedPage'
 import { BulkActionBar, ColumnCustomizer, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
-
-const TYPE_LABELS = { global: 'Global', personal: 'Personal', provider: 'Provider' }
 
 const SKILL_SORT_ACCESSORS = {
   code: (s) => s.skill_code?.toLowerCase() ?? '',
@@ -14,7 +14,7 @@ const SKILL_SORT_ACCESSORS = {
   category: (s) => s.category?.toLowerCase() ?? '',
   description: (s) => s.description?.toLowerCase() ?? '',
   visibility: (s) => (s.is_private ? 'Private' : 'Public'),
-  type: (s) => TYPE_LABELS[s.type] ?? s.type ?? '',
+  type: (s) => SKILL_TYPE_LABELS[s.type] ?? s.type ?? '',
   owner: (s) => s.ownerName?.toLowerCase() ?? '',
   status: (s) => s.status ?? '',
 }
@@ -70,7 +70,7 @@ const SKILL_COLUMNS = [
     sortable: true,
     thClassName: 'whitespace-nowrap',
     cellClassName: 'px-4 py-3 text-secondary whitespace-nowrap',
-    renderCell: (s) => TYPE_LABELS[s.type],
+    renderCell: (s) => SKILL_TYPE_LABELS[s.type],
   },
   {
     key: 'owner',
@@ -87,13 +87,7 @@ const SKILL_COLUMNS = [
     thClassName: 'whitespace-nowrap',
     cellClassName: 'px-4 py-3 whitespace-nowrap',
     renderCell: (s) => (
-      <span
-        className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border ${
-          s.status === 'inactive' ? 'border-red-300 text-red-700' : 'border-hairline text-secondary'
-        }`}
-      >
-        {s.status}
-      </span>
+      <StatusBadge label={s.status} tone={s.status === 'inactive' ? 'danger' : 'neutral'} />
     ),
   },
 ]

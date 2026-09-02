@@ -25,6 +25,7 @@ import { assignProviderCourseToCatalogue, listProviderCatalogues } from '../../l
 import { listOrganisations, listOrganisationMembers } from '../../lib/admin/organisations'
 import { listEmployers } from '../../lib/admin/employers'
 import { useRowSelection, useSortedPage } from '../../lib/useSortedPage'
+import { COURSE_STATUS_LABELS } from '../../lib/statusLabels'
 import { BulkActionBar, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 import {
   listOrganisationCatalogueCourses,
@@ -41,19 +42,11 @@ import {
   deactivateCatalogueCourse,
 } from '../../lib/admin/catalogue'
 
-const STATUS_LABELS = {
-  draft: 'Draft',
-  pending_approval: 'Pending approval',
-  approved: 'Approved',
-  rejected: 'Rejected',
-  inactive: 'Inactive',
-}
-
 const COURSE_SORT_ACCESSORS = {
   course_code: (c) => c.course_code?.toLowerCase() ?? '',
   name: (c) => c.name?.toLowerCase() ?? '',
   version: (c) => c.version_number ?? 0,
-  status: (c) => STATUS_LABELS[c.status] ?? c.status,
+  status: (c) => COURSE_STATUS_LABELS[c.status] ?? c.status,
   rejection_reason: (c) => c.rejection_reason?.toLowerCase() ?? '',
   synopsis: (c) => c.synopsis?.toLowerCase() ?? '',
 }
@@ -891,7 +884,7 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
         <label className="sr-only" htmlFor="providerTrainingStatus">Filter training by status</label>
         <select id="providerTrainingStatus" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss">
           <option value="all">All statuses</option>
-          {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          {Object.entries(COURSE_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
       </div>
 
@@ -1079,7 +1072,7 @@ function CourseRow({
           <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{course.version_number}</span>
         </td>
         <td className="px-4 py-3 whitespace-nowrap">
-          <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{STATUS_LABELS[course.status] ?? course.status}</span>
+          <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{COURSE_STATUS_LABELS[course.status] ?? course.status}</span>
         </td>
         <td className="px-4 py-3 text-red-700 truncate max-w-[180px]">{course.rejection_reason || '—'}</td>
         <td className="px-4 py-3 text-secondary truncate max-w-xs">{course.synopsis || '—'}</td>
@@ -1344,7 +1337,7 @@ function CourseVersionHistoryDialog({ course, onClose }) {
             <li key={version.id} className="grid gap-3 py-4 sm:grid-cols-[90px_1fr_1fr] sm:items-center">
               <div>
                 <p className="font-medium text-ink">Version {version.version_number}</p>
-                <p className="mt-0.5 text-xs text-secondary">{STATUS_LABELS[version.status] ?? version.status}</p>
+                <p className="mt-0.5 text-xs text-secondary">{COURSE_STATUS_LABELS[version.status] ?? version.status}</p>
               </div>
               <div>
                 <p className="text-xs text-secondary">Published</p>

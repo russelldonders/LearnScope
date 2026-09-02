@@ -7,6 +7,7 @@ import {
   deactivateCatalogueCourse,
 } from '../../lib/admin/catalogue'
 import { formatCoursePrice } from '../../lib/courseCatalogue'
+import { COURSE_STATUS_LABELS } from '../../lib/statusLabels'
 import { useColumnPreferences, useSortedPage } from '../../lib/useSortedPage'
 import { ColumnCustomizer, SortableTh, TablePagination } from '../../components/TableControls'
 
@@ -63,7 +64,7 @@ const CATALOGUE_COLUMNS = [
     sortable: true,
     thClassName: 'whitespace-nowrap',
     cellClassName: 'px-4 py-3 whitespace-nowrap',
-    renderCell: (c) => <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{c.status.replace('_', ' ')}</span>,
+    renderCell: (c) => <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{COURSE_STATUS_LABELS[c.status] ?? c.status}</span>,
   },
   {
     key: 'rejection_reason',

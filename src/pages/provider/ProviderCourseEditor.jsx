@@ -54,24 +54,8 @@ import {
 } from '../../lib/courseContent'
 import { optimizeCourseImage, COURSE_IMAGE_MAX_INPUT_BYTES } from '../../lib/optimizeImage'
 import { useIsDesktop } from '../../lib/device'
+import { COURSE_STATUS_LABELS, RESOURCE_TYPE_LABELS } from '../../lib/statusLabels'
 
-const TYPE_LABELS = {
-  video: 'Video',
-  screen_recording: 'Screen recording',
-  file: 'File',
-  scorm: 'SCORM package',
-  xapi: 'xAPI package',
-  external_video: 'External video',
-  web_url: 'Web link',
-  page: 'Page',
-}
-const STATUS_LABELS = {
-  draft: 'Draft',
-  pending_approval: 'Pending approval',
-  approved: 'Approved',
-  rejected: 'Rejected',
-  inactive: 'Inactive',
-}
 const MAX_IMAGE_BYTES = COURSE_IMAGE_MAX_INPUT_BYTES
 
 // `side` picks the insertion point relative to a target: 'before' the
@@ -748,7 +732,7 @@ function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCre
       <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
         <h1 className="font-display text-xl text-ink">{course.name}</h1>
         <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
-          Version {course.version_number} · {STATUS_LABELS[course.status] ?? course.status}
+          Version {course.version_number} · {COURSE_STATUS_LABELS[course.status] ?? course.status}
         </span>
       </div>
 
@@ -1494,7 +1478,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                             {!isDesktop && previewingItem?.linkId === item.linkId && (
                               <div className="mt-1 mb-1 bg-card border border-hairline rounded-lg p-4">
                                 <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1 block">
-                                  {TYPE_LABELS[item.type]}
+                                  {RESOURCE_TYPE_LABELS[item.type]}
                                 </span>
                                 <ItemPreviewBody
                                   item={item}
@@ -1643,7 +1627,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                         {!isDesktop && previewingItem?.linkId === item.linkId && (
                           <div className="mt-1 mb-1 bg-card border border-hairline rounded-lg p-4">
                             <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1 block">
-                              {TYPE_LABELS[item.type]}
+                              {RESOURCE_TYPE_LABELS[item.type]}
                             </span>
                             <ItemPreviewBody
                               item={item}
@@ -2054,7 +2038,7 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
                 </option>
                 {availableResources.map((resource) => (
                   <option key={resource.id} value={resource.id}>
-                    {resource.title} ({TYPE_LABELS[resource.type]})
+                    {resource.title} ({RESOURCE_TYPE_LABELS[resource.type]})
                   </option>
                 ))}
               </select>
@@ -2306,7 +2290,7 @@ function ItemPreviewPane({ item, userId, canEdit, onChanged }) {
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
       <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1 block">
-        {TYPE_LABELS[item.type]}
+        {RESOURCE_TYPE_LABELS[item.type]}
       </span>
       <h3 className="font-display text-xl text-ink mb-4">{item.title}</h3>
       <ItemPreviewBody item={item} userId={userId} canEdit={canEdit} onChanged={onChanged} />

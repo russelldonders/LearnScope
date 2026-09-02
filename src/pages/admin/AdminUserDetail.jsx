@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import AdminLayout from './AdminLayout'
+import StatusBadge from '../../components/StatusBadge'
 import { getUserProfile } from '../../lib/admin/users'
 import { formatMonthYear } from '../../lib/dates'
 
@@ -47,28 +48,18 @@ export default function AdminUserDetail() {
               <p className="font-mono text-xs text-secondary">{data.profile.userCode}</p>
               <p className="text-sm text-secondary mb-3">{data.profile.email}</p>
               <div className="flex flex-wrap gap-2 text-xs">
-                <span
-                  className={`font-mono uppercase tracking-wide rounded-full px-2 py-0.5 border ${
-                    data.profile.accountStatus === 'blocked'
-                      ? 'border-red-300 text-red-700'
-                      : 'border-hairline text-secondary'
-                  }`}
-                >
-                  {data.profile.accountStatus}
-                </span>
-                {data.isPlatformAdmin && (
-                  <span className="font-mono uppercase tracking-wide rounded-full px-2 py-0.5 border border-hairline text-secondary">
-                    Platform admin
-                  </span>
-                )}
+                <StatusBadge
+                  size="inherit"
+                  label={data.profile.accountStatus}
+                  tone={data.profile.accountStatus === 'blocked' ? 'danger' : 'neutral'}
+                />
+                {data.isPlatformAdmin && <StatusBadge size="inherit" label="Platform admin" />}
                 {data.organisationMemberships.map((m, i) => (
-                  <span
+                  <StatusBadge
                     key={i}
-                    className="font-mono uppercase tracking-wide rounded-full px-2 py-0.5 border border-hairline text-secondary"
-                  >
-                    {m.organisationName} · {m.role}
-                    {m.status === 'pending' ? ' · pending' : ''}
-                  </span>
+                    size="inherit"
+                    label={`${m.organisationName} · ${m.role}${m.status === 'pending' ? ' · pending' : ''}`}
+                  />
                 ))}
               </div>
               <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 text-xs text-secondary">

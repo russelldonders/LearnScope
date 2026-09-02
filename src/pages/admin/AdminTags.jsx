@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import AdminLayout from './AdminLayout'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import StatusBadge from '../../components/StatusBadge'
 import { listAllTags, setTagBlacklisted } from '../../lib/admin/tags'
 import { useColumnPreferences, useRowSelection, useSortedPage } from '../../lib/useSortedPage'
 import { BulkActionBar, ColumnCustomizer, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
@@ -36,13 +37,7 @@ const TAG_COLUMNS = [
     thClassName: 'whitespace-nowrap',
     cellClassName: 'px-4 py-2.5 whitespace-nowrap',
     renderCell: (t) => (
-      <span
-        className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border ${
-          t.is_blacklisted ? 'text-red-700 border-red-300' : 'text-secondary border-hairline'
-        }`}
-      >
-        {t.is_blacklisted ? 'Blacklisted' : 'Active'}
-      </span>
+      <StatusBadge label={t.is_blacklisted ? 'Blacklisted' : 'Active'} tone={t.is_blacklisted ? 'danger' : 'neutral'} />
     ),
   },
 ]

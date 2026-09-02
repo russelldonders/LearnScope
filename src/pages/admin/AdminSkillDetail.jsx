@@ -9,9 +9,9 @@ import {
   getSkillKnowledgeLevelSourceStats,
 } from '../../lib/skillStats'
 import { LEVEL_LABELS, LEVEL_DESCRIPTIONS, KNOWLEDGE_LEVEL_LABELS, LEVELS } from '../../lib/levels'
+import { SKILL_TYPE_LABELS } from '../../lib/statusLabels'
 import SkillTestQuestionsModal from '../../components/SkillTestQuestionsModal'
-
-const TYPE_LABELS = { global: 'Global', personal: 'Personal', provider: 'Provider' }
+import StatusBadge from '../../components/StatusBadge'
 
 // Read-only overview for a platform admin drilling into one skill_library
 // entry -- who owns it, how many people track it at each ability level (with
@@ -89,26 +89,14 @@ export default function AdminSkillDetail() {
               <p className="font-mono text-xs text-secondary">{skill.skill_code}</p>
               {skill.description && <p className="text-sm text-secondary mb-3">{skill.description}</p>}
               <div className="flex flex-wrap gap-2 text-xs">
-                <span className="font-mono uppercase tracking-wide rounded-full px-2 py-0.5 border border-hairline text-secondary">
-                  {TYPE_LABELS[skill.type]}
-                </span>
-                {skill.ownerName && (
-                  <span className="font-mono uppercase tracking-wide rounded-full px-2 py-0.5 border border-hairline text-secondary">
-                    {skill.ownerName}
-                  </span>
-                )}
-                {skill.category && (
-                  <span className="font-mono uppercase tracking-wide rounded-full px-2 py-0.5 border border-hairline text-secondary">
-                    {skill.category}
-                  </span>
-                )}
-                <span
-                  className={`font-mono uppercase tracking-wide rounded-full px-2 py-0.5 border ${
-                    skill.status === 'inactive' ? 'border-red-300 text-red-700' : 'border-hairline text-secondary'
-                  }`}
-                >
-                  {skill.status}
-                </span>
+                <StatusBadge size="inherit" label={SKILL_TYPE_LABELS[skill.type]} />
+                {skill.ownerName && <StatusBadge size="inherit" label={skill.ownerName} />}
+                {skill.category && <StatusBadge size="inherit" label={skill.category} />}
+                <StatusBadge
+                  size="inherit"
+                  label={skill.status}
+                  tone={skill.status === 'inactive' ? 'danger' : 'neutral'}
+                />
               </div>
             </div>
 

@@ -24,24 +24,14 @@ import PageBuilderModal from './PageBuilderModal'
 import PageContent from './PageContent'
 import { useRowSelection, useSortedPage } from '../lib/useSortedPage'
 import { BulkActionBar, SelectionTh, SortableTh, TablePagination } from './TableControls'
-
-const TYPE_LABELS = {
-  video: 'Video',
-  screen_recording: 'Screen recording',
-  file: 'File',
-  scorm: 'SCORM package',
-  xapi: 'xAPI package',
-  external_video: 'External video',
-  web_url: 'Web link',
-  page: 'Page',
-}
+import { RESOURCE_TYPE_LABELS } from '../lib/statusLabels'
 
 const STATUS_LABELS = { draft: 'Draft', inactive: 'Previous version', published: 'Published' }
 
 const RESOURCE_SORT_ACCESSORS = {
   code: (r) => r.resource_code?.toLowerCase() ?? '',
   title: (r) => r.title?.toLowerCase() ?? '',
-  type: (r) => TYPE_LABELS[r.type] ?? r.type ?? '',
+  type: (r) => RESOURCE_TYPE_LABELS[r.type] ?? r.type ?? '',
   version: (r) => r.version_number ?? 1,
   status: (r) => STATUS_LABELS[r.status] ?? r.status ?? '',
   live: (r) => (r.is_current_published ? 1 : r.publishedVersionNumber ? 1 : 0),
@@ -651,7 +641,7 @@ function ResourceRow({
         )}
         <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{resource.resource_code}</td>
         <td className="px-4 py-3 text-ink font-medium truncate max-w-[220px]">{resource.title}</td>
-        <td className="px-4 py-3 text-secondary whitespace-nowrap">{TYPE_LABELS[resource.type]}</td>
+        <td className="px-4 py-3 text-secondary whitespace-nowrap">{RESOURCE_TYPE_LABELS[resource.type]}</td>
         <td className="px-4 py-3 whitespace-nowrap">
           <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{resource.version_number ?? 1}</span>
         </td>

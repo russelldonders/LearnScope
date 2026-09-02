@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import AdminLayout from './AdminLayout'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import StatusBadge from '../../components/StatusBadge'
 import {
   listOrganisations,
   createOrganisation,
@@ -72,13 +73,7 @@ const ORG_COLUMNS = [
     thClassName: 'whitespace-nowrap',
     cellClassName: 'px-4 py-3 whitespace-nowrap',
     renderCell: (o) => (
-      <span
-        className={`font-mono text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border ${
-          o.status === 'active' ? 'border-hairline text-secondary' : 'border-red-300 text-red-700'
-        }`}
-      >
-        {o.status}
-      </span>
+      <StatusBadge label={o.status} tone={o.status === 'active' ? 'neutral' : 'danger'} />
     ),
   },
 ]
