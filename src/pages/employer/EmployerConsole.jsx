@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
 import ConfirmDialog from '../../components/ConfirmDialog'
@@ -151,6 +152,14 @@ export default function EmployerConsole() {
 
                 {activeSection === 'training' && (
                   <div className="space-y-10">
+                    {myProviderRole && (
+                      <p className="text-sm text-secondary">
+                        You're also a {myProviderRole} on this employer's provider organisation.{' '}
+                        <Link to="/provider" className="text-moss hover:underline">
+                          Open the full Provider console →
+                        </Link>
+                      </p>
+                    )}
                     <ProviderTrainingSection
                       key={`${selectedEmployer.id}-training`}
                       organisation={{ id: selectedEmployer.provider_organisation_id }}
