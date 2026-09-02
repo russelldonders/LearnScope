@@ -227,3 +227,166 @@ export async function listMyAssignedCourseEmployers(userId) {
   }
   return map
 }
+
+// Cohorts (20260902270000): a specific scheduled run of a catalogue course
+// (e.g. "Jan 2026 intake"), with its own live sessions. Purely additive --
+// a course with no cohorts enrols exactly as before via
+// enrolInCatalogueCourse above, untouched. These functions are read by both
+// the provider-management view (ProviderCourseEditor.jsx's Cohorts tab) and
+// the learner-facing cohort picker (CourseCatalogue.jsx/ProviderProfile.jsx/
+// Actions.jsx), so they live here rather than split across
+// lib/admin/catalogue.js -- RLS already scopes what each caller can see or
+// manage, the same as every other function in this file.
+function mapCohort(cohort, enrolledCount) {
+  const sessions = (cohort.course_cohort_sessions ?? [])
+    .slice()
+    .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))
+  return {
+    ...cohort,
+    sessions,
+    enrolledCount,
+    seatsRemaining: cohort.capacity == null ? null : Math.max(0, cohort.capacity - enrolledCount),
+  }
+}
+
+// Cohorts + their sessions + a seats-remaining count, for one course.
+// Enrolled counts come from the get_cohort_seat_counts RPC rather than a
+// plain count against `courses` -- courses' own RLS only lets a caller see
+// their own rows, so a client-side count here would silently undercount
+// for anyone but a provider admin of this course. enrolled_count comes
+// back from Postgres as a bigint (serialized as a string by supabase-js),
+// hence the explicit Number() below.
+export async function listCourseCohorts(courseCatalogueId) {
+  const { data, error } = await supabase
+    .from('course_cohorts')
+    .select('*, course_cohort_sessions(*)')
+    .eq('course_catalogue_id', courseCatalogueId)
+    .order('start_date', { ascending: true, nullsFirst: false })
+  if (error) throw error
+  const cohorts = data ?? []
+  if (cohorts.length === 0) return []
+
+  const { data: counts, error: countError } = await supabase.rpc('get_cohort_seat_counts', {
+    p_cohort_ids: cohorts.map((c) => c.id),
+  })
+  if (countError) throw countError
+  const countByCohortId = new Map((counts ?? []).map((row) => [row.cohort_id, Number(row.enrolled_count)]))
+
+  return cohorts.map((cohort) => mapCohort(cohort, countByCohortId.get(cohort.id) ?? 0))
+}
+
+// One cohort's own name/schedule -- used by CourseLearn.jsx to show an
+// already-enrolled learner when their cohort's live sessions actually are.
+// No seats-remaining count here (unlike listCourseCohorts above): a
+// learner viewing their own enrolled course doesn't need capacity info,
+// just the schedule.
+export async function getCourseCohort(cohortId) {
+  const { data, error } = await supabase
+    .from('course_cohorts')
+    .select('*, course_cohort_sessions(*)')
+    .eq('id', cohortId)
+    .maybeSingle()
+  if (error) throw error
+  return data ? mapCohort(data, 0) : null
+}
+
+export async function createCourseCohort(courseCatalogueId, { name, startDate, capacity }) {
+  const { data, error } = await supabase
+    .from('course_cohorts')
+    .insert({
+      course_catalogue_id: courseCatalogueId,
+      name: name.trim(),
+      start_date: startDate || null,
+      capacity: capacity === '' || capacity === null || capacity === undefined ? null : Number(capacity),
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function updateCourseCohort(cohortId, { name, startDate, capacity, enrolmentOpen }) {
+  const { error } = await supabase
+    .from('course_cohorts')
+    .update({
+      name: name.trim(),
+      start_date: startDate || null,
+      capacity: capacity === '' || capacity === null || capacity === undefined ? null : Number(capacity),
+      enrolment_open: enrolmentOpen,
+    })
+    .eq('id', cohortId)
+  if (error) throw error
+}
+
+// Deletes the cohort and its sessions (course_cohort_sessions is "on delete
+// cascade") -- any learner already enrolled into it keeps their own
+// `courses` row (cohort_id is "on delete set null"), they just lose the
+// specific-cohort link, not their record of having taken the course.
+export async function deleteCourseCohort(cohortId) {
+  const { error } = await supabase.from('course_cohorts').delete().eq('id', cohortId)
+  if (error) throw error
+}
+
+export async function addCohortSession(cohortId, { title, startsAt, endsAt, locationOrLink }) {
+  const { data, error } = await supabase
+    .from('course_cohort_sessions')
+    .insert({
+      cohort_id: cohortId,
+      title: title?.trim() || null,
+      starts_at: startsAt,
+      ends_at: endsAt || null,
+      location_or_link: locationOrLink?.trim() || null,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function updateCohortSession(sessionId, { title, startsAt, endsAt, locationOrLink }) {
+  const { error } = await supabase
+    .from('course_cohort_sessions')
+    .update({
+      title: title?.trim() || null,
+      starts_at: startsAt,
+      ends_at: endsAt || null,
+      location_or_link: locationOrLink?.trim() || null,
+    })
+    .eq('id', sessionId)
+  if (error) throw error
+}
+
+export async function deleteCohortSession(sessionId) {
+  const { error } = await supabase.from('course_cohort_sessions').delete().eq('id', sessionId)
+  if (error) throw error
+}
+
+// Capacity-safe enrolment into a specific cohort -- routed through the
+// enrol_in_course_cohort RPC (20260902270000) rather than a plain insert
+// like enrolInCatalogueCourse above, since it needs to lock the cohort row
+// and check capacity/enrolment_open atomically (a plain client insert can't
+// serialize against a concurrent enrolment into the same cohort the way a
+// security-definer function holding a row lock can). Returns the created
+// `courses` row, same shape enrolInCatalogueCourse returns.
+export async function enrolInCourseCohort(cohortId, skillId = null) {
+  const { data, error } = await supabase.rpc('enrol_in_course_cohort', {
+    p_cohort_id: cohortId,
+    p_skill_id: skillId,
+  })
+  if (error) throw error
+  return data
+}
+
+// Cohort equivalent of respondToCourseAssignment's "Start" branch -- same
+// two-step shape (create the real `courses` row, then mark this assignment
+// 'enrolled' so it drops off Actions.jsx's assigned-training list), just
+// enrolling into a specific cohort of the assigned course instead of the
+// abstract course itself.
+export async function respondToCourseAssignmentWithCohort(assignmentId, cohortId, skillId = null) {
+  await enrolInCourseCohort(cohortId, skillId)
+  const { error } = await supabase
+    .from('course_assignments')
+    .update({ status: 'enrolled' })
+    .eq('id', assignmentId)
+  if (error) throw error
+}

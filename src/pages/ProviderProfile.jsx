@@ -5,7 +5,14 @@ import AppHeader from '../components/AppHeader'
 import CourseThumbnail from '../components/CourseThumbnail'
 import { LEVEL_LABELS } from '../lib/levels'
 import { getProviderProfile } from '../lib/providerProfile'
-import { listEnrolledCatalogueIds, enrolInCatalogueCourse, setPendingEnrolCourseId } from '../lib/courseCatalogue'
+import {
+  listEnrolledCatalogueIds,
+  enrolInCatalogueCourse,
+  setPendingEnrolCourseId,
+  listCourseCohorts,
+  enrolInCourseCohort,
+} from '../lib/courseCatalogue'
+import CohortPickerModal from '../components/CohortPickerModal'
 
 // Public provider profile -- reachable logged out (0090's get_provider_profile
 // RPC is anon-safe), so unlike every other content page this can't assume
@@ -21,6 +28,11 @@ export default function ProviderProfile() {
   const [enrolledIds, setEnrolledIds] = useState(new Map())
   const [enrollingId, setEnrollingId] = useState(null)
   const [enrolError, setEnrolError] = useState(null)
+  // Set once a course with at least one cohort is about to be enrolled into
+  // -- mirrors CourseCatalogue.jsx's own cohortPicker state.
+  const [cohortPicker, setCohortPicker] = useState(null)
+  const [cohortEnrolling, setCohortEnrolling] = useState(false)
+  const [cohortError, setCohortError] = useState(null)
 
   useEffect(() => {
     setProfile(undefined)
@@ -44,6 +56,16 @@ export default function ProviderProfile() {
     setEnrolError(null)
     setEnrollingId(course.id)
     try {
+      // A course with any cohorts defined enrols via a specific one instead
+      // of the plain catalogue insert below -- purely additive, see
+      // CourseCatalogue.jsx's own handleEnrol for the same branching.
+      const cohorts = await listCourseCohorts(course.id)
+      if (cohorts.length > 0) {
+        setCohortError(null)
+        setCohortPicker({ course, cohorts })
+        return
+      }
+
       const enrolled = await enrolInCatalogueCourse(user.id, {
         id: course.id,
         name: course.name,
@@ -56,6 +78,21 @@ export default function ProviderProfile() {
       setEnrolError({ id: course.id, message: err.message })
     } finally {
       setEnrollingId(null)
+    }
+  }
+
+  async function handleCohortEnrol(cohortId) {
+    const { course } = cohortPicker
+    setCohortError(null)
+    setCohortEnrolling(true)
+    try {
+      const enrolled = await enrolInCourseCohort(cohortId)
+      setEnrolledIds((prev) => new Map(prev).set(course.id, { id: enrolled.id, completedDate: enrolled.completed_date }))
+      setCohortPicker(null)
+    } catch (err) {
+      setCohortError(err.message)
+    } finally {
+      setCohortEnrolling(false)
     }
   }
 
@@ -203,6 +240,17 @@ export default function ProviderProfile() {
           </>
         )}
       </main>
+
+      {cohortPicker && (
+        <CohortPickerModal
+          courseName={cohortPicker.course.name}
+          cohorts={cohortPicker.cohorts ?? []}
+          enrolling={cohortEnrolling}
+          error={cohortError}
+          onEnrol={handleCohortEnrol}
+          onClose={() => setCohortPicker(null)}
+        />
+      )}
     </div>
   )
 }

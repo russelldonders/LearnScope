@@ -10,6 +10,7 @@ import {
   markContentComplete,
   contentFileUrl,
 } from '../lib/courseContent'
+import { getCourseCohort } from '../lib/courseCatalogue'
 import ScormPlayer from '../components/ScormPlayer'
 import XapiPlayer from '../components/XapiPlayer'
 import EditedVideoPlayer from '../components/EditedVideoPlayer'
@@ -197,6 +198,10 @@ export default function CourseLearn() {
   // screen; collapsing it brings the outline back.
   const [openSectionKeys, setOpenSectionKeys] = useState(() => new Set())
   const isDesktop = useIsDesktop()
+  // Only set when this enrolment is linked to a specific cohort
+  // (courses.cohort_id, 20260902270000) -- shows that cohort's own schedule
+  // so an enrolled learner can see when their live sessions actually are.
+  const [cohort, setCohort] = useState(null)
 
   useEffect(() => {
     load()
@@ -230,6 +235,8 @@ export default function CourseLearn() {
       setCurrentItemId((prev) => prev ?? firstItem?.id ?? null)
       setOpenSectionKeys((prev) => (prev.size > 0 ? prev : new Set([...sectionRows.map((s) => s.id), 'ungrouped'])))
     }
+
+    setCohort(data.cohort_id ? await getCourseCohort(data.cohort_id) : null)
     setLoading(false)
   }
 
@@ -421,6 +428,38 @@ export default function CourseLearn() {
                 </button>
               )}
             </div>
+          </div>
+        )}
+
+        {cohort && (
+          <div className="bg-card border border-hairline rounded-lg p-4 mb-6">
+            <p className="text-sm font-medium text-ink">{cohort.name}</p>
+            <p className="text-xs text-secondary mt-0.5">
+              {cohort.start_date
+                ? `Started ${new Date(cohort.start_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`
+                : 'Start date to be confirmed'}
+            </p>
+            {cohort.sessions.length > 0 ? (
+              <ul className="mt-3 space-y-1.5">
+                {cohort.sessions.map((session) => (
+                  <li key={session.id} className="text-sm text-ink">
+                    {new Date(session.starts_at).toLocaleString(undefined, {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                    {session.title ? ` · ${session.title}` : ''}
+                    {session.location_or_link && (
+                      <span className="block text-xs text-secondary mt-0.5 break-words">{session.location_or_link}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-secondary mt-2">No sessions scheduled yet.</p>
+            )}
           </div>
         )}
 

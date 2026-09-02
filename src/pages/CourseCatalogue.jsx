@@ -2,12 +2,20 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
-import { listCatalogueCourses, listEnrolledCatalogueIds, enrolInCatalogueCourse, formatCoursePrice } from '../lib/courseCatalogue'
+import {
+  listCatalogueCourses,
+  listEnrolledCatalogueIds,
+  enrolInCatalogueCourse,
+  formatCoursePrice,
+  listCourseCohorts,
+  enrolInCourseCohort,
+} from '../lib/courseCatalogue'
 import { LEVEL_LABELS } from '../lib/levels'
 import AppHeader from '../components/AppHeader'
 import FilterRow from '../components/FilterRow'
 import CourseThumbnail from '../components/CourseThumbnail'
 import AccessibleDialog from '../components/AccessibleDialog'
+import CohortPickerModal from '../components/CohortPickerModal'
 
 export default function CourseCatalogue() {
   const { user } = useAuth()
@@ -38,6 +46,13 @@ export default function CourseCatalogue() {
   // expanded by default.
   const [showFilters, setShowFilters] = useState(false)
   const [selectedCourse, setSelectedCourse] = useState(null)
+  // Set once a course with at least one cohort is about to be enrolled into
+  // -- shows CohortPickerModal instead of enrolling directly. null means no
+  // picker is open (either the course has no cohorts, so enrolment already
+  // went straight through, or nothing is in flight).
+  const [cohortPicker, setCohortPicker] = useState(null)
+  const [cohortEnrolling, setCohortEnrolling] = useState(false)
+  const [cohortError, setCohortError] = useState(null)
 
   useEffect(() => {
     load()
@@ -77,6 +92,18 @@ export default function CourseCatalogue() {
       const matchesScopedSkill =
         scope?.librarySkillId && course.skillEntries.some((e) => e.skillId === scope.librarySkillId)
       const linkSkillId = matchesScopedSkill ? scope.skillId : null
+
+      // A course with any cohorts defined enrols via a specific one instead
+      // of the plain catalogue insert below -- purely additive, a course
+      // with no cohorts (the overwhelming majority) falls straight through
+      // to the unchanged enrolInCatalogueCourse path.
+      const cohorts = await listCourseCohorts(course.id)
+      if (cohorts.length > 0) {
+        setCohortError(null)
+        setCohortPicker({ course, linkSkillId, cohorts })
+        return
+      }
+
       const enrolled = await enrolInCatalogueCourse(user.id, course, linkSkillId)
       setEnrolledIds((prev) => new Map(prev).set(course.id, { id: enrolled.id, completedDate: enrolled.completed_date }))
       if (linkSkillId && scope?.backTo) {
@@ -87,6 +114,24 @@ export default function CourseCatalogue() {
       setError(err.message)
     } finally {
       setEnrollingId(null)
+    }
+  }
+
+  async function handleCohortEnrol(cohortId) {
+    const { course, linkSkillId } = cohortPicker
+    setCohortError(null)
+    setCohortEnrolling(true)
+    try {
+      const enrolled = await enrolInCourseCohort(cohortId, linkSkillId)
+      setEnrolledIds((prev) => new Map(prev).set(course.id, { id: enrolled.id, completedDate: enrolled.completed_date }))
+      setCohortPicker(null)
+      if (linkSkillId && scope?.backTo) {
+        navigate(scope.backTo)
+      }
+    } catch (err) {
+      setCohortError(err.message)
+    } finally {
+      setCohortEnrolling(false)
     }
   }
 
@@ -342,6 +387,17 @@ export default function CourseCatalogue() {
           enrolling={enrollingId === selectedCourse.id}
           onEnrol={() => handleEnrol(selectedCourse)}
           onClose={() => setSelectedCourse(null)}
+        />
+      )}
+
+      {cohortPicker && (
+        <CohortPickerModal
+          courseName={cohortPicker.course.name}
+          cohorts={cohortPicker.cohorts}
+          enrolling={cohortEnrolling}
+          error={cohortError}
+          onEnrol={handleCohortEnrol}
+          onClose={() => setCohortPicker(null)}
         />
       )}
     </div>

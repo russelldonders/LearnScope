@@ -9,10 +9,16 @@ import { listIncomingPendingValidationRequests } from '../lib/skillValidationReq
 import { listIncomingConnectionRequests, respondToConnectionRequest } from '../lib/skillDiscovery'
 import { listMyPendingOrgInvites, decideOrgInvite } from '../lib/organisationInvites'
 import { listMyPendingEmployerInvites, decideEmployerInvite, listMyPendingDataAccessRequests, decideEmployerDataAccessRequest } from '../lib/admin/employers'
-import { listMyCourseAssignments, respondToCourseAssignment } from '../lib/courseCatalogue'
+import {
+  listMyCourseAssignments,
+  respondToCourseAssignment,
+  listCourseCohorts,
+  respondToCourseAssignmentWithCohort,
+} from '../lib/courseCatalogue'
 import { listMySkillSuggestions, adoptSkillSuggestion, dismissSkillSuggestion } from '../lib/skillSuggestions'
 import { supabase } from '../lib/supabaseClient'
 import ShareSkillsModal from '../components/ShareSkillsModal'
+import CohortPickerModal from '../components/CohortPickerModal'
 
 // Everything actually waiting on this learner to act -- the same sources
 // PendingActionsContext counts for the header badge, just rendered in full
@@ -41,6 +47,12 @@ export default function Actions() {
   const [courseAssignments, setCourseAssignments] = useState([])
   const [assignmentActingId, setAssignmentActingId] = useState(null)
   const [assignmentError, setAssignmentError] = useState(null)
+  // Set once an assigned course with at least one cohort is about to be
+  // started -- mirrors CourseCatalogue.jsx/ProviderProfile.jsx's own
+  // cohortPicker state.
+  const [cohortPicker, setCohortPicker] = useState(null)
+  const [cohortEnrolling, setCohortEnrolling] = useState(false)
+  const [cohortError, setCohortError] = useState(null)
   const [skillSuggestions, setSkillSuggestions] = useState([])
   const [adoptingSuggestion, setAdoptingSuggestion] = useState(null)
   const [adoptForm, setAdoptForm] = useState({ setTarget: false, targetLevel: 3, targetDate: '', comments: '' })
@@ -187,6 +199,29 @@ export default function Actions() {
   // the real enrolInCatalogueCourse call underneath.
   async function handleAssignmentResponse(assignment, enrol) {
     setAssignmentError(null)
+
+    // "Start" on a course with any cohorts defined enrols via a specific
+    // one instead of the plain enrolInCatalogueCourse path below -- purely
+    // additive, same branching as CourseCatalogue.jsx/ProviderProfile.jsx's
+    // own handleEnrol. "Dismiss" (enrol === false) never touches cohorts.
+    if (enrol) {
+      setAssignmentActingId(assignment.id)
+      let cohorts
+      try {
+        cohorts = await listCourseCohorts(assignment.course_catalogue.id)
+      } catch (err) {
+        setAssignmentError({ id: assignment.id, message: err.message })
+        setAssignmentActingId(null)
+        return
+      }
+      setAssignmentActingId(null)
+      if (cohorts.length > 0) {
+        setCohortError(null)
+        setCohortPicker({ assignment, cohorts })
+        return
+      }
+    }
+
     setAssignmentActingId(assignment.id)
     try {
       await respondToCourseAssignment(user.id, assignment.id, { enrol, courseForEnrolment: assignment.course_catalogue })
@@ -196,6 +231,22 @@ export default function Actions() {
       setAssignmentError({ id: assignment.id, message: err.message })
     } finally {
       setAssignmentActingId(null)
+    }
+  }
+
+  async function handleAssignmentCohortEnrol(cohortId) {
+    const { assignment } = cohortPicker
+    setCohortError(null)
+    setCohortEnrolling(true)
+    try {
+      await respondToCourseAssignmentWithCohort(assignment.id, cohortId)
+      setCourseAssignments((prev) => prev.filter((a) => a.id !== assignment.id))
+      refreshPendingActionCount()
+      setCohortPicker(null)
+    } catch (err) {
+      setCohortError(err.message)
+    } finally {
+      setCohortEnrolling(false)
     }
   }
 
@@ -717,6 +768,17 @@ export default function Actions() {
           confirmLabel="Accept and share"
           onConfirm={handleConfirmAcceptDataAccess}
           onClose={() => setAcceptingDataAccessRequest(null)}
+        />
+      )}
+
+      {cohortPicker && (
+        <CohortPickerModal
+          courseName={cohortPicker.assignment.course_catalogue?.name}
+          cohorts={cohortPicker.cohorts}
+          enrolling={cohortEnrolling}
+          error={cohortError}
+          onEnrol={handleAssignmentCohortEnrol}
+          onClose={() => setCohortPicker(null)}
         />
       )}
     </div>
