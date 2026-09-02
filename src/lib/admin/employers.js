@@ -303,3 +303,37 @@ export async function listEmployerSkillSuggestions(employerId) {
   if (error) throw error
   return data ?? []
 }
+
+// Providers tab (20260902310000): purely a listing/linking mechanism for
+// additional provider organisations beyond the employer's one auto-
+// provisioned attached provider org (employers.provider_organisation_id) --
+// linking has no functional effect elsewhere yet (doesn't widen course-
+// assignment eligibility, grants no access, needs no consent from the
+// linked org). RLS alone (is_employer_member for select, is_employer_admin
+// for insert/delete) fully expresses this, so these are plain table calls,
+// no RPC needed. Joined to organisations(id, name, org_code) for display --
+// mirrors listEmployerCourseAssignments' join-for-display shape.
+export async function listEmployerLinkedProviders(employerId) {
+  const { data, error } = await supabase
+    .from('employer_linked_providers')
+    .select('id, provider_organisation_id, linked_by, created_at, organisations(id, name, org_code)')
+    .eq('employer_id', employerId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function linkProviderToEmployer(employerId, providerOrganisationId, linkedBy) {
+  const { data, error } = await supabase
+    .from('employer_linked_providers')
+    .insert({ employer_id: employerId, provider_organisation_id: providerOrganisationId, linked_by: linkedBy })
+    .select('id, provider_organisation_id, linked_by, created_at, organisations(id, name, org_code)')
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function unlinkProviderFromEmployer(linkId) {
+  const { error } = await supabase.from('employer_linked_providers').delete().eq('id', linkId)
+  if (error) throw error
+}
