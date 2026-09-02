@@ -10,6 +10,7 @@ import { formatCoursePrice } from '../../lib/courseCatalogue'
 import { COURSE_STATUS_LABELS } from '../../lib/statusLabels'
 import { useColumnPreferences, useSortedPage } from '../../lib/useSortedPage'
 import { ColumnCustomizer, SortableTh, TablePagination } from '../../components/TableControls'
+import MutationFeedback from '../../components/MutationFeedback'
 
 const STATUS_FILTERS = ['all', 'draft', 'pending_approval', 'approved', 'rejected', 'inactive']
 
@@ -115,7 +116,7 @@ export default function AdminCatalogue() {
     try {
       setCourses(await listAllCatalogueCourses())
     } catch (err) {
-      setError(err.message)
+      setError(`Couldn't load courses: ${err.message}`)
     } finally {
       setLoading(false)
     }
@@ -138,7 +139,7 @@ export default function AdminCatalogue() {
       await approveCatalogueCourse(course.id)
       await load()
     } catch (err) {
-      setError(err.message)
+      setError(`Couldn't approve this course: ${err.message}`)
     } finally {
       setActioningId(null)
     }
@@ -153,7 +154,7 @@ export default function AdminCatalogue() {
       setRejectionReason('')
       await load()
     } catch (err) {
-      setError(err.message)
+      setError(`Couldn't reject this course: ${err.message}`)
     } finally {
       setActioningId(null)
     }
@@ -166,7 +167,7 @@ export default function AdminCatalogue() {
       await deactivateCatalogueCourse(course.id)
       await load()
     } catch (err) {
-      setError(err.message)
+      setError(`Couldn't deactivate this course: ${err.message}`)
     } finally {
       setActioningId(null)
     }
@@ -199,7 +200,7 @@ export default function AdminCatalogue() {
           />
         </div>
 
-        {error && <p className="text-sm text-red-700">{error}</p>}
+        <MutationFeedback status="error" message={error} />
 
         {loading ? (
           <p className="text-secondary">Loading…</p>

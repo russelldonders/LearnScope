@@ -5,6 +5,7 @@ import { listEmployers, createEmployer, addEmployerMember } from '../../lib/admi
 import { listOrganisations } from '../../lib/admin/organisations'
 import { useColumnPreferences, useSortedPage } from '../../lib/useSortedPage'
 import { ColumnCustomizer, SortableTh, TablePagination } from '../../components/TableControls'
+import MutationFeedback from '../../components/MutationFeedback'
 
 const EMPLOYER_SORT_ACCESSORS = {
   name: (e) => e.name?.toLowerCase() ?? '',
@@ -117,7 +118,7 @@ export default function AdminEmployers() {
       setEmployers(employerList)
       setOrganisations(organisationList)
     } catch (err) {
-      setError(err.message)
+      setError(`Couldn't load employers: ${err.message}`)
     } finally {
       setLoading(false)
     }
@@ -134,7 +135,7 @@ export default function AdminEmployers() {
       setShowCreateForm(false)
       await load()
     } catch (err) {
-      setError(err.message)
+      setError(`Couldn't create this employer: ${err.message}`)
     } finally {
       setCreating(false)
     }
@@ -161,7 +162,7 @@ export default function AdminEmployers() {
       )
       setAdminEmail('')
     } catch (err) {
-      setError(err.message)
+      setError(`Couldn't add this admin: ${err.message}`)
     } finally {
       setAddingAdmin(false)
     }
@@ -224,7 +225,7 @@ export default function AdminEmployers() {
           right away; an existing user needs to accept the invite from their Actions page first.
         </p>
 
-        {error && <p className="text-sm text-red-700">{error}</p>}
+        <MutationFeedback status="error" message={error} />
 
         {loading ? (
           <p className="text-secondary">Loading…</p>

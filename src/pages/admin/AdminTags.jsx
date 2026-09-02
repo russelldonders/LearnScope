@@ -5,6 +5,7 @@ import StatusBadge from '../../components/StatusBadge'
 import { listAllTags, setTagBlacklisted } from '../../lib/admin/tags'
 import { useColumnPreferences, useRowSelection, useSortedPage } from '../../lib/useSortedPage'
 import { BulkActionBar, ColumnCustomizer, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
+import MutationFeedback from '../../components/MutationFeedback'
 
 const TAG_SORT_ACCESSORS = {
   id: (t) => t.tag_code ?? '',
@@ -71,7 +72,7 @@ export default function AdminTags() {
     try {
       setTags(await listAllTags())
     } catch (err) {
-      setError(err.message)
+      setError(`Couldn't load tags: ${err.message}`)
     } finally {
       setLoading(false)
     }
@@ -84,7 +85,7 @@ export default function AdminTags() {
       await setTagBlacklisted(tag.id, !tag.is_blacklisted)
       await load()
     } catch (err) {
-      setError(err.message)
+      setError(`Couldn't update this tag: ${err.message}`)
     } finally {
       setActioningId(null)
     }
@@ -115,7 +116,7 @@ export default function AdminTags() {
         )
       }
     } catch (err) {
-      setError(err.message)
+      setError(`Couldn't update tags: ${err.message}`)
     } finally {
       setBulkActing(false)
     }
@@ -124,7 +125,7 @@ export default function AdminTags() {
   return (
     <AdminLayout>
       <div className="space-y-4">
-        {error && <p className="text-sm text-red-700">{error}</p>}
+        <MutationFeedback status="error" message={error} />
 
         {loading ? (
           <p className="text-secondary">Loading…</p>

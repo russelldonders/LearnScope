@@ -14,6 +14,7 @@ import {
 } from '../../lib/admin/organisations'
 import { useColumnPreferences, useRowSelection, useSortedPage } from '../../lib/useSortedPage'
 import { BulkActionBar, ColumnCustomizer, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
+import MutationFeedback from '../../components/MutationFeedback'
 
 const ORG_SORT_ACCESSORS = {
   name: (o) => o.name?.toLowerCase() ?? '',
@@ -126,7 +127,7 @@ export default function AdminProviders() {
     try {
       setOrganisations(await listOrganisations())
     } catch (err) {
-      setError(err.message)
+      setError(`Couldn't load providers: ${err.message}`)
     } finally {
       setLoading(false)
     }
@@ -143,7 +144,7 @@ export default function AdminProviders() {
       setShowCreateForm(false)
       await load()
     } catch (err) {
-      setError(err.message)
+      setError(`Couldn't create this organisation: ${err.message}`)
     } finally {
       setCreating(false)
     }
@@ -155,7 +156,7 @@ export default function AdminProviders() {
       await setOrganisationStatus(org.id, org.status === 'active' ? 'inactive' : 'active')
       await load()
     } catch (err) {
-      setError(err.message)
+      setError(`Couldn't update this organisation's status: ${err.message}`)
     }
   }
 
@@ -184,7 +185,7 @@ export default function AdminProviders() {
         )
       }
     } catch (err) {
-      setError(err.message)
+      setError(`Couldn't update organisations: ${err.message}`)
     } finally {
       setBulkActing(false)
     }
@@ -206,7 +207,7 @@ export default function AdminProviders() {
       setEditingId(null)
       await load()
     } catch (err) {
-      setError(err.message)
+      setError(`Couldn't save changes to this organisation: ${err.message}`)
     } finally {
       setSaving(false)
     }
@@ -263,7 +264,7 @@ export default function AdminProviders() {
           </form>
         )}
 
-        {error && <p className="text-sm text-red-700">{error}</p>}
+        <MutationFeedback status="error" message={error} />
 
         {loading ? (
           <p className="text-secondary">Loading…</p>
@@ -494,7 +495,7 @@ export function OrganisationStaffPanel({ organisation, alwaysShowForm = false })
     try {
       setMembers(await listOrganisationMembers(organisation.id))
     } catch (err) {
-      setError(err.message)
+      setError(`Couldn't load users: ${err.message}`)
     } finally {
       setLoading(false)
     }
@@ -516,7 +517,7 @@ export function OrganisationStaffPanel({ organisation, alwaysShowForm = false })
       if (!alwaysShowForm) setShowInviteForm(false)
       await load()
     } catch (err) {
-      setError(err.message)
+      setError(`Couldn't send this invite: ${err.message}`)
     } finally {
       setInviting(false)
     }
@@ -530,7 +531,7 @@ export function OrganisationStaffPanel({ organisation, alwaysShowForm = false })
       setRemoveTarget(null)
       await load()
     } catch (err) {
-      setError(err.message)
+      setError(`Couldn't remove this user: ${err.message}`)
     } finally {
       setRemoving(false)
     }
@@ -627,8 +628,8 @@ export function OrganisationStaffPanel({ organisation, alwaysShowForm = false })
         </div>
       )}
 
-      {message && <p className="text-xs text-moss">{message}</p>}
-      {error && <p className="text-xs text-red-700">{error}</p>}
+      <MutationFeedback status="success" message={message} size="xs" />
+      <MutationFeedback status="error" message={error} size="xs" />
 
       {loading ? (
         <p className="text-xs text-secondary">Loading users…</p>
