@@ -27,6 +27,7 @@ import ProfileImport from './pages/ProfileImport'
 import ProfileExport from './pages/ProfileExport'
 import Rate from './pages/Rate'
 import Recommend from './pages/Recommend'
+import SharedProfile from './pages/SharedProfile'
 import ProviderProfile from './pages/ProviderProfile'
 import Connections from './pages/Connections'
 import Actions from './pages/Actions'
@@ -69,6 +70,7 @@ function App() {
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/rate/:code" element={<Rate />} />
           <Route path="/recommend/:code" element={<Recommend />} />
+          <Route path="/shared/:token" element={<SharedProfile />} />
           <Route path="/providers/:slug" element={<ProviderProfile />} />
           <Route
             path="/onboarding"

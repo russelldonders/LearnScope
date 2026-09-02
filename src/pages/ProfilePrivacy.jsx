@@ -16,7 +16,38 @@ import {
   updateSharedEmployerSkills,
   listSharedEmployerSkillIds,
 } from '../lib/admin/employers'
+import {
+  createProfileShareLink,
+  listMyProfileShareLinks,
+  revokeProfileShareLink,
+  profileShareLinkUrl,
+} from '../lib/profileShareLinks'
+import { formatAbsoluteDate } from '../lib/dates'
 import ShareSkillsModal from '../components/ShareSkillsModal'
+
+// Presets shown in the "Share via link" duration select -- deliberately
+// short-lived options only; create_profile_share_link still enforces a hard
+// 90-day server-side cap regardless of what a client sends.
+const SHARE_LINK_DURATIONS = [
+  { value: '1', label: '1 day' },
+  { value: '3', label: '3 days' },
+  { value: '7', label: '7 days' },
+  { value: '30', label: '30 days' },
+]
+
+function shareLinkStatus(link) {
+  if (link.revoked_at) return 'revoked'
+  if (new Date(link.expires_at) <= new Date()) return 'expired'
+  return 'active'
+}
+
+function shareLinkDescription(link) {
+  if (link.label) return link.label
+  if (link.share_skills && link.share_experience) return 'Skills + Experience'
+  if (link.share_skills) return 'Skills'
+  if (link.share_experience) return 'Experience'
+  return 'Shared profile'
+}
 
 const VISIBILITY_OPTIONS = [
   {
@@ -63,6 +94,23 @@ export default function ProfilePrivacy() {
   const [mySkills, setMySkills] = useState([])
   const [skillShareModal, setSkillShareModal] = useState(null)
 
+  // "Share via link" -- proactive, token-based, no-account-required share
+  // links (20260902300000_profile_share_links.sql), independent of the
+  // employer data-access flow above.
+  const [shareLinks, setShareLinks] = useState([])
+  const [shareLinksLoading, setShareLinksLoading] = useState(true)
+  const [shareLinkError, setShareLinkError] = useState(null)
+  const [newLinkSkills, setNewLinkSkills] = useState(false)
+  const [newLinkExperience, setNewLinkExperience] = useState(false)
+  const [newLinkSkillIds, setNewLinkSkillIds] = useState(new Set())
+  const [newLinkDuration, setNewLinkDuration] = useState(SHARE_LINK_DURATIONS[2].value)
+  const [newLinkLabel, setNewLinkLabel] = useState('')
+  const [creatingLink, setCreatingLink] = useState(false)
+  const [createdLinkUrl, setCreatedLinkUrl] = useState(null)
+  const [skillPickerForLinkOpen, setSkillPickerForLinkOpen] = useState(false)
+  const [revokingLinkId, setRevokingLinkId] = useState(null)
+  const [copiedLinkId, setCopiedLinkId] = useState(null)
+
   const activeEmployerIds = useMemo(
     () => (employerMemberships ?? []).map((m) => m.employer_id),
     [employerMemberships]
@@ -75,6 +123,22 @@ export default function ProfilePrivacy() {
   useEffect(() => {
     loadEmployerDataAccess()
   }, [activeEmployerIds.join(',')])
+
+  useEffect(() => {
+    loadShareLinks()
+  }, [])
+
+  async function loadShareLinks() {
+    setShareLinksLoading(true)
+    try {
+      const rows = await listMyProfileShareLinks()
+      setShareLinks(rows)
+    } catch (err) {
+      setShareLinkError(err.message)
+    } finally {
+      setShareLinksLoading(false)
+    }
+  }
 
   async function load() {
     try {
@@ -196,6 +260,64 @@ export default function ProfilePrivacy() {
       setDataAccessError({ id: employerId, message: err.message })
     } finally {
       setDataAccessActingId(null)
+    }
+  }
+
+  async function handleCreateShareLink(e) {
+    e.preventDefault()
+    setShareLinkError(null)
+    if (!newLinkSkills && !newLinkExperience) {
+      setShareLinkError('Choose at least one thing to share.')
+      return
+    }
+    setCreatingLink(true)
+    try {
+      const days = Number(newLinkDuration)
+      const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
+      const row = await createProfileShareLink({
+        shareSkills: newLinkSkills,
+        shareExperience: newLinkExperience,
+        skillIds: newLinkSkills ? [...newLinkSkillIds] : [],
+        expiresAt,
+        label: newLinkLabel.trim(),
+      })
+      setShareLinks((prev) => [row, ...prev])
+      setCreatedLinkUrl(profileShareLinkUrl(row.token))
+      setNewLinkSkills(false)
+      setNewLinkExperience(false)
+      setNewLinkSkillIds(new Set())
+      setNewLinkLabel('')
+      setNewLinkDuration(SHARE_LINK_DURATIONS[2].value)
+    } catch (err) {
+      setShareLinkError(err.message)
+    } finally {
+      setCreatingLink(false)
+    }
+  }
+
+  async function handleRevokeShareLink(linkId) {
+    setShareLinkError(null)
+    setRevokingLinkId(linkId)
+    try {
+      await revokeProfileShareLink(linkId)
+      setShareLinks((prev) =>
+        prev.map((l) => (l.id === linkId ? { ...l, revoked_at: new Date().toISOString() } : l))
+      )
+    } catch (err) {
+      setShareLinkError(err.message)
+    } finally {
+      setRevokingLinkId(null)
+    }
+  }
+
+  async function handleCopyShareLink(linkId, token) {
+    try {
+      await navigator.clipboard.writeText(profileShareLinkUrl(token))
+      setCopiedLinkId(linkId)
+      setTimeout(() => setCopiedLinkId((current) => (current === linkId ? null : current)), 2000)
+    } catch {
+      // Clipboard API may be unavailable (e.g. insecure context) -- the URL
+      // is still visible/selectable in the UI, so this is a soft failure.
     }
   }
 
@@ -462,6 +584,162 @@ export default function ProfilePrivacy() {
               </div>
             )}
 
+            <div className="bg-card border border-hairline rounded-lg p-6">
+              <h3 className="font-display text-lg text-ink mb-1">Share via link</h3>
+              <p className="text-sm text-secondary mb-4">
+                Generate a link you can send to anyone — they don't need a LearnScope account to
+                view it. Links expire automatically and you can revoke one at any time.
+              </p>
+
+              <form onSubmit={handleCreateShareLink} className="space-y-3">
+                <div className="space-y-2">
+                  <label className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={newLinkSkills}
+                      disabled={creatingLink}
+                      onChange={(e) => setNewLinkSkills(e.target.checked)}
+                      className="rounded border-hairline"
+                    />
+                    <span className="text-sm text-ink">Skills</span>
+                  </label>
+                  {newLinkSkills && (
+                    <div className="ml-7">
+                      <button
+                        type="button"
+                        onClick={() => setSkillPickerForLinkOpen(true)}
+                        disabled={creatingLink}
+                        className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper disabled:opacity-60"
+                      >
+                        {newLinkSkillIds.size > 0
+                          ? `${newLinkSkillIds.size} skill${newLinkSkillIds.size === 1 ? '' : 's'} selected`
+                          : 'Choose skills…'}
+                      </button>
+                    </div>
+                  )}
+                  <label className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={newLinkExperience}
+                      disabled={creatingLink}
+                      onChange={(e) => setNewLinkExperience(e.target.checked)}
+                      className="rounded border-hairline"
+                    />
+                    <span className="text-sm text-ink">Experience</span>
+                  </label>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex-1">
+                    <label className="block text-xs text-secondary mb-1" htmlFor="share-link-duration">
+                      Expires after
+                    </label>
+                    <select
+                      id="share-link-duration"
+                      value={newLinkDuration}
+                      disabled={creatingLink}
+                      onChange={(e) => setNewLinkDuration(e.target.value)}
+                      className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                    >
+                      {SHARE_LINK_DURATIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs text-secondary mb-1" htmlFor="share-link-label">
+                      Label (optional)
+                    </label>
+                    <input
+                      id="share-link-label"
+                      type="text"
+                      value={newLinkLabel}
+                      disabled={creatingLink}
+                      onChange={(e) => setNewLinkLabel(e.target.value)}
+                      placeholder="e.g. For Acme Corp interview"
+                      className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                    />
+                  </div>
+                </div>
+
+                {shareLinkError && <p className="text-sm text-red-700">{shareLinkError}</p>}
+
+                <button
+                  type="submit"
+                  disabled={creatingLink}
+                  className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+                >
+                  {creatingLink ? 'Creating…' : 'Create link'}
+                </button>
+              </form>
+
+              {createdLinkUrl && (
+                <div className="mt-4 pt-4 border-t border-hairline">
+                  <p className="text-xs text-secondary mb-1">Share this link:</p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      readOnly
+                      value={createdLinkUrl}
+                      onFocus={(e) => e.target.select()}
+                      className="flex-1 min-w-0 rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => navigator.clipboard?.writeText(createdLinkUrl)}
+                      className="shrink-0 rounded-md border border-hairline text-ink py-2 px-3 text-sm font-medium hover:bg-paper"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!shareLinksLoading && shareLinks.length > 0 && (
+                <ul className="mt-4 pt-4 border-t border-hairline space-y-3">
+                  {shareLinks.map((link) => {
+                    const status = shareLinkStatus(link)
+                    const acting = revokingLinkId === link.id
+                    return (
+                      <li
+                        key={link.id}
+                        className="flex items-center justify-between gap-3 pt-3 border-t border-hairline first:border-0 first:pt-0"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm text-ink truncate">{shareLinkDescription(link)}</p>
+                          <p className="text-xs text-secondary">
+                            {status === 'active' && `Expires ${formatAbsoluteDate(link.expires_at)}`}
+                            {status === 'expired' && `Expired ${formatAbsoluteDate(link.expires_at)}`}
+                            {status === 'revoked' && 'Revoked'}
+                          </p>
+                        </div>
+                        {status === 'active' && (
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleCopyShareLink(link.id, link.token)}
+                              className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper whitespace-nowrap"
+                            >
+                              {copiedLinkId === link.id ? 'Copied!' : 'Copy link'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRevokeShareLink(link.id)}
+                              disabled={acting}
+                              className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60 whitespace-nowrap"
+                            >
+                              {acting ? 'Revoking…' : 'Revoke'}
+                            </button>
+                          </div>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+
             {privacyError && <p className="text-sm text-red-700">{privacyError}</p>}
           </>
         )}
@@ -482,6 +760,21 @@ export default function ProfilePrivacy() {
           confirmLabel={skillShareModal.requestId ? 'Save' : 'Share'}
           onConfirm={handleConfirmSkillShare}
           onClose={() => setSkillShareModal(null)}
+        />
+      )}
+
+      {skillPickerForLinkOpen && (
+        <ShareSkillsModal
+          skills={mySkills}
+          initiallySelectedIds={[...newLinkSkillIds]}
+          title="Choose skills to share"
+          description="Pick which of your skills this link's viewer can see."
+          confirmLabel="Confirm"
+          onConfirm={(ids) => {
+            setNewLinkSkillIds(new Set(ids))
+            setSkillPickerForLinkOpen(false)
+          }}
+          onClose={() => setSkillPickerForLinkOpen(false)}
         />
       )}
     </div>
