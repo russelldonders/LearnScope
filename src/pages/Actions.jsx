@@ -503,7 +503,7 @@ export default function Actions() {
                       disabled={dataAccessDecidingId === request.id}
                       className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
                     >
-                      Accept
+                      Select which skills to share
                     </button>
                     <button
                       type="button"
