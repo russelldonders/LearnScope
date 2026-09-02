@@ -482,7 +482,7 @@ function PushToCatalogueDialog({ organisationId, courseId, alreadyPublishedIds, 
   )
 }
 
-// Info (name/code/type/duration/synopsis/image and save/publish) and
+// Info (name/code/type/duration/price/synopsis/image and save/publish) and
 // Content (sections/resources) used to sit stacked on one long page --
 // split into tabs since the two are edited at different times (details
 // first, content once the basics are settled) and content on its own can
@@ -550,6 +550,8 @@ export default function ProviderCourseEditor() {
             courseType: data.course_type ?? '',
             duration: data.duration ?? '',
             synopsis: data.synopsis ?? '',
+            priceAmount: data.price_amount ?? '',
+            priceCurrency: data.price_currency ?? '',
           })
         }
         if (data.status === 'draft' || data.status === 'rejected') {
@@ -823,6 +825,35 @@ function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCre
                 value={form.duration}
                 onChange={(e) => setForm((f) => ({ ...f, duration: e.target.value }))}
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-secondary mb-1" htmlFor="coursePriceAmount">
+                Price
+              </label>
+              <input
+                id="coursePriceAmount"
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                value={form.priceAmount}
+                onChange={(e) => setForm((f) => ({ ...f, priceAmount: e.target.value }))}
+                placeholder="Leave blank if not specified, 0 if free"
+                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-secondary mb-1" htmlFor="coursePriceCurrency">
+                Currency
+              </label>
+              <input
+                id="coursePriceCurrency"
+                value={form.priceCurrency}
+                onChange={(e) => setForm((f) => ({ ...f, priceCurrency: e.target.value }))}
+                placeholder="e.g. USD, GBP, EUR"
+                maxLength={3}
+                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink uppercase focus:outline-none focus:ring-2 focus:ring-moss"
               />
             </div>
             <div className="sm:col-span-2">

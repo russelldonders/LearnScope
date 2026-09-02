@@ -10330,7 +10330,6 @@ $$;
 revoke all on function suggest_skill_to_employer_members(uuid, uuid, text, uuid[], int, date, text) from public, anon, authenticated;
 grant execute on function suggest_skill_to_employer_members(uuid, uuid, text, uuid[], int, date, text) to authenticated;
 
-
 -- CRITICAL security fixes, found by independent security review of
 -- 20260902220000 (per-skill employer data sharing) and 20260902230000
 -- (employer skill suggestions), both already live on Staging before this
@@ -10465,3 +10464,116 @@ update tags set tag_code = generate_tag_code() where tag_code is null;
 alter table tags alter column tag_code set not null;
 
 create unique index tags_tag_code_unique_idx on tags (tag_code);
+
+-- Informational course pricing (0113): a provider admin can record what a
+-- course costs so it can be displayed to learners browsing the catalogue.
+-- This is purely informational -- LearnScope has no payment/checkout
+-- mechanism anywhere today and this doesn't add one. price_amount null
+-- means "not specified"; 0 means free; anything higher is an actual price.
+-- price_currency is only meaningful once price_amount is set. Deliberately
+-- a free 3-letter ISO 4217-shaped code rather than a fixed-list check
+-- constraint -- actual payment processing (and any currency validation it
+-- would need) is a future concern, not this one.
+alter table course_catalogue add column price_amount numeric(10,2);
+alter table course_catalogue add column price_currency text;
+
+-- Keep create_course_draft_version (0107, last redefined 0108) in sync so a
+-- new draft version carries its price forward instead of silently resetting
+-- it to null, matching how duration/synopsis already carry forward.
+create or replace function create_course_draft_version(p_course_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_source course_catalogue%rowtype;
+  v_existing_id uuid;
+  v_new_id uuid := gen_random_uuid();
+  v_new_version integer;
+  v_section record;
+  v_new_section_id uuid;
+begin
+  select * into v_source
+  from course_catalogue
+  where id = p_course_id and status = 'approved';
+
+  if not found then
+    raise exception 'Only an approved course can be versioned';
+  end if;
+
+  if not (
+    is_platform_admin((select auth.uid()))
+    or (
+      v_source.organisation_id is not null
+      and is_org_member(v_source.organisation_id, (select auth.uid()))
+    )
+  ) then
+    raise exception 'Not authorized';
+  end if;
+
+  select id into v_existing_id
+  from course_catalogue
+  where version_group_id = v_source.version_group_id
+    and status in ('draft', 'pending_approval', 'rejected')
+  order by version_number desc
+  limit 1;
+
+  if v_existing_id is not null then
+    return v_existing_id;
+  end if;
+
+  select coalesce(max(version_number), 0) + 1 into v_new_version
+  from course_catalogue
+  where version_group_id = v_source.version_group_id;
+
+  insert into course_catalogue (
+    id, name, provider, course_type, duration, synopsis, organisation_id,
+    status, created_by, image_url, course_code, version_group_id,
+    version_number, is_current_published, price_amount, price_currency
+  ) values (
+    v_new_id, v_source.name, v_source.provider, v_source.course_type,
+    v_source.duration, v_source.synopsis, v_source.organisation_id,
+    'draft', (select auth.uid()), v_source.image_url, v_source.course_code,
+    v_source.version_group_id, v_new_version, false,
+    v_source.price_amount, v_source.price_currency
+  );
+
+  insert into course_catalogue_skills (course_catalogue_id, skill_library_id, level)
+  select v_new_id, skill_library_id, level
+  from course_catalogue_skills
+  where course_catalogue_id = p_course_id;
+
+  insert into course_catalogue_tags (course_catalogue_id, tag_id)
+  select v_new_id, tag_id
+  from course_catalogue_tags
+  where course_catalogue_id = p_course_id;
+
+  for v_section in
+    select id, title, instructions, position
+    from course_sections
+    where course_id = p_course_id
+    order by position, created_at
+  loop
+    v_new_section_id := gen_random_uuid();
+    insert into course_sections (id, course_id, title, instructions, position)
+    values (v_new_section_id, v_new_id, v_section.title, v_section.instructions, v_section.position);
+
+    insert into course_content_links (course_id, resource_id, position, section_id)
+    select v_new_id, resource_id, position, v_new_section_id
+    from course_content_links
+    where course_id = p_course_id and section_id = v_section.id;
+  end loop;
+
+  insert into course_content_links (course_id, resource_id, position, section_id)
+  select v_new_id, resource_id, position, null
+  from course_content_links
+  where course_id = p_course_id and section_id is null;
+
+  return v_new_id;
+end;
+$$;
+
+revoke all on function create_course_draft_version(uuid) from public;
+grant execute on function create_course_draft_version(uuid) to authenticated;
+

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
-import { listCatalogueCourses, listEnrolledCatalogueIds, enrolInCatalogueCourse } from '../lib/courseCatalogue'
+import { listCatalogueCourses, listEnrolledCatalogueIds, enrolInCatalogueCourse, formatCoursePrice } from '../lib/courseCatalogue'
 import { LEVEL_LABELS } from '../lib/levels'
 import AppHeader from '../components/AppHeader'
 import FilterRow from '../components/FilterRow'
@@ -286,8 +286,8 @@ export default function CourseCatalogue() {
                       ) : (
                         course.provider
                       ))}
-                    {course.provider && (course.course_type || course.duration) && ' · '}
-                    {[course.course_type, course.duration].filter(Boolean).join(' · ')}
+                    {course.provider && (course.course_type || course.duration || formatCoursePrice(course)) && ' · '}
+                    {[course.course_type, course.duration, formatCoursePrice(course)].filter(Boolean).join(' · ')}
                   </p>
                   {course.synopsis && <p className="text-sm text-secondary mt-2 flex-1">{course.synopsis}</p>}
                   {(course.skillEntries.length > 0 || course.tags.length > 0) && (
@@ -370,8 +370,8 @@ function CourseDetailModal({ course, enrolled, completed, enrolling, onEnrol, on
             ) : (
               course.provider
             ))}
-          {course.provider && (course.course_type || course.duration) && ' · '}
-          {[course.course_type, course.duration].filter(Boolean).join(' · ')}
+          {course.provider && (course.course_type || course.duration || formatCoursePrice(course)) && ' · '}
+          {[course.course_type, course.duration, formatCoursePrice(course)].filter(Boolean).join(' · ')}
         </p>
         {course.synopsis && <p className="text-sm text-ink mb-4">{course.synopsis}</p>}
         {(course.skillEntries.length > 0 || course.tags.length > 0) && (

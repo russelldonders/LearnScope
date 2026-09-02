@@ -73,7 +73,7 @@ export async function createProviderCourse(userId, organisationId, { name, cours
 // for the org-members update policy), matching what the provider console UI
 // exposes an edit affordance for -- pending_approval/approved rows are
 // read-only from here regardless.
-export async function updateProviderCourse(id, { name, courseCode, provider, courseType, duration, synopsis }) {
+export async function updateProviderCourse(id, { name, courseCode, provider, courseType, duration, synopsis, priceAmount, priceCurrency }) {
   const { error } = await supabase
     .from('course_catalogue')
     .update({
@@ -83,6 +83,11 @@ export async function updateProviderCourse(id, { name, courseCode, provider, cou
       course_type: courseType?.trim() || null,
       duration: duration?.trim() || null,
       synopsis: synopsis?.trim() || null,
+      // '' means "not specified" (null), distinct from an entered 0 which
+      // means free -- priceAmount arrives as a string from the number
+      // input, so only an actually-blank value should collapse to null.
+      price_amount: priceAmount === '' || priceAmount === null || priceAmount === undefined ? null : Number(priceAmount),
+      price_currency: priceCurrency?.trim() ? priceCurrency.trim().toUpperCase() : null,
     })
     .eq('id', id)
   if (error) throw error

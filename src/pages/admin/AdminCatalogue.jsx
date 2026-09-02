@@ -6,6 +6,7 @@ import {
   rejectCatalogueCourse,
   deactivateCatalogueCourse,
 } from '../../lib/admin/catalogue'
+import { formatCoursePrice } from '../../lib/courseCatalogue'
 import { useColumnPreferences, useSortedPage } from '../../lib/useSortedPage'
 import { ColumnCustomizer, SortableTh, TablePagination } from '../../components/TableControls'
 
@@ -19,6 +20,7 @@ const CATALOGUE_SORT_ACCESSORS = {
   status: (c) => c.status ?? '',
   rejection_reason: (c) => c.rejection_reason?.toLowerCase() ?? '',
   destinations: (c) => (c.course_catalogue_publications ?? []).map((p) => p.catalogues?.name).filter(Boolean).join(', ').toLowerCase(),
+  price: (c) => (c.price_amount === null || c.price_amount === undefined ? -1 : Number(c.price_amount)),
 }
 
 // Customizable data columns only -- the trailing Approve/Reject/Deactivate
@@ -69,6 +71,14 @@ const CATALOGUE_COLUMNS = [
     sortable: true,
     cellClassName: 'px-4 py-3 text-red-700 truncate max-w-[180px]',
     renderCell: (c) => c.rejection_reason || '—',
+  },
+  {
+    key: 'price',
+    label: 'Price',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-3 text-secondary whitespace-nowrap',
+    renderCell: (c) => formatCoursePrice(c) ?? '—',
   },
   {
     key: 'destinations',

@@ -1,5 +1,25 @@
 import { supabase } from './supabaseClient'
 
+// Informational only -- LearnScope has no payment/checkout mechanism, this
+// just displays what the provider recorded (0113). null means "not
+// specified" (nothing shown); 0 means free; price_currency has no fixed-list
+// constraint (a future payments feature would add real validation), so an
+// unrecognised ISO code falls back to a plain "amount CODE" string instead
+// of letting Intl.NumberFormat throw.
+export function formatCoursePrice(course) {
+  if (course.price_amount === null || course.price_amount === undefined) return null
+  const amount = Number(course.price_amount)
+  if (amount === 0) return 'Free'
+  if (course.price_currency) {
+    try {
+      return new Intl.NumberFormat(undefined, { style: 'currency', currency: course.price_currency }).format(amount)
+    } catch {
+      return `${amount.toFixed(2)} ${course.price_currency}`
+    }
+  }
+  return amount.toFixed(2)
+}
+
 const CATALOGUE_SELECT = `*,
   course_catalogue_skills(id, level, skill_library(id, name)),
   course_catalogue_tags(id, tags(id, name)),
