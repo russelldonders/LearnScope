@@ -33,7 +33,7 @@ export default function AdminUserDetail() {
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <Link to="/admin" className="text-sm text-moss font-medium">
+        <Link to="/admin/users" className="text-sm text-moss font-medium">
           ← Back to users
         </Link>
 

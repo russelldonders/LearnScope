@@ -2,7 +2,8 @@ import { Link, useLocation } from 'react-router-dom'
 import AppHeader from '../../components/AppHeader'
 
 const SECTIONS = [
-  { to: '/admin', label: 'Users' },
+  { to: '/admin', label: 'Overview' },
+  { to: '/admin/users', label: 'Users' },
   { to: '/admin/providers', label: 'Providers' },
   { to: '/admin/employers', label: 'Employers' },
   { to: '/admin/catalogue', label: 'Course catalogue' },
