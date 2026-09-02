@@ -21,7 +21,7 @@ const MENU_ITEMS = [
 ]
 
 export default function AppHeader({ hideNavLinks = false }) {
-  const { signOut, user, isPlatformAdmin, organisationMemberships } = useAuth()
+  const { signOut, user, isPlatformAdmin, organisationMemberships, employerMemberships } = useAuth()
   const { pendingActionCount } = usePendingActions()
   const { navVisibility } = useNavVisibility()
   const location = useLocation()
@@ -156,6 +156,15 @@ export default function AppHeader({ hideNavLinks = false }) {
                       className="block px-4 py-2 text-sm text-ink hover:bg-paper"
                     >
                       {location.pathname.startsWith('/provider') ? 'Switch to learner mode' : 'Provider console'}
+                    </Link>
+                  )}
+                  {employerMemberships?.some((m) => m.role === 'admin') && (
+                    <Link
+                      to={location.pathname.startsWith('/employer') ? '/dashboard' : '/employer'}
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-4 py-2 text-sm text-ink hover:bg-paper"
+                    >
+                      {location.pathname.startsWith('/employer') ? 'Switch to learner mode' : 'Employer console'}
                     </Link>
                   )}
                   <div className="my-1 border-t border-hairline" />
