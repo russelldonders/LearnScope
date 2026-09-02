@@ -2,6 +2,52 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 export const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 500]
 
+// Conventional short query-param names for a URL-synced collection's own
+// sort/page state -- shared by every list table so far (see useUrlParam
+// below for the matching convention on search/filter fields: q, status,
+// ...). Override via urlSync.paramNames only if a page ever needs two
+// independent url-synced collections at once.
+const DEFAULT_SORT_PARAM_NAMES = { sort: 'sort', dir: 'dir', page: 'page', pageSize: 'pageSize' }
+
+// Merges `overrides` into a copy of `searchParams` (deleting a key whenever
+// its override is null/undefined/''), then commits with `setSearchParams`.
+// Mirrors the buildParams() helper ProviderConsole.jsx/
+// ProviderCatalogueDetail.jsx already use for their own ?org=&section=/
+// ?tab= state, so every url-synced piece of UI in the app builds the next
+// URL the same way. `replace: true` by default -- collection state (a
+// keystroke in a search box, a sort click, a page turn) is exactly the kind
+// of frequent, transient edit that shouldn't spam browser history the way a
+// deliberate navigation should; pass replace: false for a case that does
+// want its own Back-button stop.
+export function writeUrlParams(searchParams, setSearchParams, overrides, { replace = true } = {}) {
+  const next = new URLSearchParams(searchParams)
+  Object.entries(overrides).forEach(([key, value]) => {
+    if (value === null || value === undefined || value === '') next.delete(key)
+    else next.set(key, value)
+  })
+  setSearchParams(next, { replace })
+}
+
+// One URL-synced value (search text, a status filter, ...) that a page
+// composes alongside useSortedPage's own `urlSync` option -- pass the same
+// searchParams/setSearchParams pair from the page's single useSearchParams()
+// call to both, so every param (q, status, sort, dir, page, pageSize) lands
+// together in one URL. `resetParams` clears other params (typically
+// ['page']) whenever this value changes, since a new search/filter
+// invalidates whatever page number was in view. Always replace:true, per
+// writeUrlParams' default above.
+export function useUrlParam(searchParams, setSearchParams, key, defaultValue = '', { resetParams = [] } = {}) {
+  const value = searchParams.get(key) ?? defaultValue
+  function setValue(next) {
+    const overrides = { [key]: next === defaultValue ? null : next }
+    resetParams.forEach((param) => {
+      overrides[param] = null
+    })
+    writeUrlParams(searchParams, setSearchParams, overrides)
+  }
+  return [value, setValue]
+}
+
 // Client-side sort + page over an already-filtered array, shared by every
 // admin/provider console list table. sortAccessors maps a column key to a
 // function extracting a comparable value from a row; sort falls back to
@@ -10,26 +56,75 @@ export const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 500]
 // dependency array -- callers pass a fresh object literal every render, and
 // the memo body always closes over the latest one regardless, so adding it
 // would only invalidate the cache on every render for no benefit.
+//
+// Pass `urlSync: { searchParams, setSearchParams, paramNames? }` (the page's
+// own useSearchParams() result) to keep sort/page/pageSize in the URL
+// instead of local state -- everything else about the hook's return value
+// and behaviour (toggleSort resets to page 1, setPageSize resets to page 1,
+// TablePagination's functional setPage((p) => ...) calls) stays identical
+// either way, so existing callers are unaffected by leaving urlSync unset.
 // oxlint-disable-next-line react-hooks/exhaustive-deps
-export function useSortedPage(items, sortAccessors, { defaultSortKey = null, defaultSortDir = 'asc', pageSize: initialPageSize = 20 } = {}) {
-  const [sortKey, setSortKey] = useState(defaultSortKey)
-  const [sortDir, setSortDir] = useState(defaultSortDir)
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSizeState] = useState(initialPageSize)
+export function useSortedPage(items, sortAccessors, { defaultSortKey = null, defaultSortDir = 'asc', pageSize: initialPageSize = 20, urlSync = null } = {}) {
+  const paramNames = urlSync?.paramNames ? { ...DEFAULT_SORT_PARAM_NAMES, ...urlSync.paramNames } : DEFAULT_SORT_PARAM_NAMES
+
+  // Local fallback state -- always declared (rules of hooks), but only ever
+  // read from/written to when urlSync isn't passed.
+  const [localSortKey, setLocalSortKey] = useState(defaultSortKey)
+  const [localSortDir, setLocalSortDir] = useState(defaultSortDir)
+  const [localPage, setLocalPage] = useState(1)
+  const [localPageSize, setLocalPageSizeState] = useState(initialPageSize)
+
+  let sortKey, sortDir, page, pageSize
+  if (urlSync) {
+    const params = urlSync.searchParams
+    sortKey = params.get(paramNames.sort) ?? defaultSortKey
+    const rawDir = params.get(paramNames.dir)
+    sortDir = rawDir === 'asc' || rawDir === 'desc' ? rawDir : defaultSortDir
+    const rawPage = Number(params.get(paramNames.page))
+    page = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1
+    const rawPageSize = Number(params.get(paramNames.pageSize))
+    pageSize = Number.isInteger(rawPageSize) && rawPageSize > 0 ? rawPageSize : initialPageSize
+  } else {
+    sortKey = localSortKey
+    sortDir = localSortDir
+    page = localPage
+    pageSize = localPageSize
+  }
 
   function toggleSort(key) {
-    if (sortKey === key) {
-      setSortDir((dir) => (dir === 'asc' ? 'desc' : 'asc'))
+    const nextDir = sortKey === key ? (sortDir === 'asc' ? 'desc' : 'asc') : 'asc'
+    if (urlSync) {
+      writeUrlParams(urlSync.searchParams, urlSync.setSearchParams, {
+        [paramNames.sort]: key === defaultSortKey ? null : key,
+        [paramNames.dir]: key === defaultSortKey && nextDir === defaultSortDir ? null : nextDir,
+        [paramNames.page]: null,
+      })
     } else {
-      setSortKey(key)
-      setSortDir('asc')
+      setLocalSortKey(key)
+      setLocalSortDir(nextDir)
+      setLocalPage(1)
     }
-    setPage(1)
+  }
+
+  function setPage(next) {
+    if (urlSync) {
+      const resolved = typeof next === 'function' ? next(page) : next
+      writeUrlParams(urlSync.searchParams, urlSync.setSearchParams, { [paramNames.page]: resolved === 1 ? null : resolved })
+    } else {
+      setLocalPage(next)
+    }
   }
 
   function setPageSize(size) {
-    setPageSizeState(size)
-    setPage(1)
+    if (urlSync) {
+      writeUrlParams(urlSync.searchParams, urlSync.setSearchParams, {
+        [paramNames.pageSize]: size === initialPageSize ? null : size,
+        [paramNames.page]: null,
+      })
+    } else {
+      setLocalPageSizeState(size)
+      setLocalPage(1)
+    }
   }
 
   const sorted = useMemo(() => {

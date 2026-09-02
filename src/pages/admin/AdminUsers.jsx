@@ -1,12 +1,18 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AdminLayout from './AdminLayout'
 import { listUsers, inviteUser, setUserBlocked, getUserLinkages, deleteUser } from '../../lib/admin/users'
 import AccessibleDialog from '../../components/AccessibleDialog'
 import StatusBadge from '../../components/StatusBadge'
-import { useColumnPreferences, useSortedPage } from '../../lib/useSortedPage'
+import { useColumnPreferences, useSortedPage, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
 import { ColumnCustomizer, SortableTh, TablePagination } from '../../components/TableControls'
+
+const STATUS_FILTERS = [
+  { value: '', label: 'All' },
+  { value: 'active', label: 'Active' },
+  { value: 'blocked', label: 'Blocked' },
+]
 
 const USER_SORT_ACCESSORS = {
   userCode: (u) => u.userCode?.toLowerCase() ?? '',
@@ -92,8 +98,31 @@ export default function AdminUsers() {
   const [actioningId, setActioningId] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
 
+  // Search text, status filter, sort, page and pageSize all live in the URL
+  // together (?q=&status=&sort=&dir=&page=&pageSize=) via useSortedPage's
+  // urlSync option and useUrlParam -- refresh, browser Back/Forward, and a
+  // shared link all land on the same filtered/sorted/paged view. One
+  // useSearchParams() call feeds both, matching the single-searchParams-call
+  // convention ProviderConsole.jsx/ProviderCatalogueDetail.jsx already use
+  // for their own ?org=&section=/?tab= state.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [query, setQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
+  const [statusFilter, setStatusFilter] = useUrlParam(searchParams, setSearchParams, 'status', '', { resetParams: ['page'] })
+
+  const q = query.trim().toLowerCase()
+  const filteredUsers = users.filter((u) => {
+    if (statusFilter && u.accountStatus !== statusFilter) return false
+    if (q && !(u.fullName?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q))) return false
+    return true
+  })
+  const filtersActive = query !== '' || statusFilter !== ''
+
+  function resetFilters() {
+    writeUrlParams(searchParams, setSearchParams, { q: null, status: null, page: null })
+  }
+
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
-    useSortedPage(users, USER_SORT_ACCESSORS)
+    useSortedPage(filteredUsers, USER_SORT_ACCESSORS, { urlSync: { searchParams, setSearchParams } })
   const { columns, visibleColumns, toggleColumn, moveColumn, resetToDefault } =
     useColumnPreferences('admin-users', USER_COLUMNS)
 
@@ -198,6 +227,41 @@ export default function AdminUsers() {
         {inviteMessage && <p role="status" className="text-sm text-moss">{inviteMessage}</p>}
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            aria-label="Search users"
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by name or email…"
+            className="flex-1 min-w-[220px] rounded-md border border-hairline bg-card px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+          />
+          <div role="group" aria-label="Filter by account status" className="flex items-center gap-1.5">
+            {STATUS_FILTERS.map((s) => (
+              <button
+                key={s.value || 'all'}
+                type="button"
+                aria-pressed={statusFilter === s.value}
+                onClick={() => setStatusFilter(s.value)}
+                className={`text-xs rounded-full px-3 py-1.5 border whitespace-nowrap ${
+                  statusFilter === s.value ? 'border-moss text-ink font-medium bg-moss/10' : 'border-hairline text-secondary hover:text-ink'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+          {filtersActive && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="text-xs text-secondary hover:text-ink py-1.5 px-2 whitespace-nowrap"
+            >
+              Reset filters
+            </button>
+          )}
+        </div>
+
         {loading ? (
           <p className="text-secondary">Loading…</p>
         ) : (
@@ -252,10 +316,10 @@ export default function AdminUsers() {
                     </td>
                   </tr>
                 ))}
-                {users.length === 0 && (
+                {filteredUsers.length === 0 && (
                   <tr>
                     <td colSpan={visibleColumns.length + 1} className="px-4 py-6 text-center text-secondary">
-                      No users yet.
+                      {users.length === 0 ? 'No users yet.' : 'No users match your search or filter.'}
                     </td>
                   </tr>
                 )}
