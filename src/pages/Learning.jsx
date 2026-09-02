@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { listCourseProgressByCatalogueId } from '../lib/courseContent'
+import { listMyAssignedCourseEmployers } from '../lib/courseCatalogue'
 import AppHeader from '../components/AppHeader'
 import CourseThumbnail from '../components/CourseThumbnail'
 import ProgressBar from '../components/ProgressBar'
@@ -12,6 +13,7 @@ export default function Learning() {
   const [courses, setCourses] = useState([])
   const [skillsByCourse, setSkillsByCourse] = useState(new Map())
   const [progressByCatalogueId, setProgressByCatalogueId] = useState({})
+  const [assignedByCatalogueId, setAssignedByCatalogueId] = useState(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -52,6 +54,7 @@ export default function Learning() {
 
     const catalogueIds = (data ?? []).map((c) => c.catalogue_course_id)
     setProgressByCatalogueId(await listCourseProgressByCatalogueId(catalogueIds, user.id))
+    setAssignedByCatalogueId(await listMyAssignedCourseEmployers(user.id))
     setLoading(false)
   }
 
@@ -89,14 +92,24 @@ export default function Learning() {
         {inProgress.length > 0 && (
           <div className="mb-8">
             <h3 className="font-display text-base text-ink mb-4">In progress</h3>
-            <CourseGrid courses={inProgress} skillsByCourse={skillsByCourse} progressByCatalogueId={progressByCatalogueId} />
+            <CourseGrid
+              courses={inProgress}
+              skillsByCourse={skillsByCourse}
+              progressByCatalogueId={progressByCatalogueId}
+              assignedByCatalogueId={assignedByCatalogueId}
+            />
           </div>
         )}
 
         {completed.length > 0 && (
           <div>
             <h3 className="font-display text-base text-ink mb-4">Completed</h3>
-            <CourseGrid courses={completed} skillsByCourse={skillsByCourse} progressByCatalogueId={progressByCatalogueId} />
+            <CourseGrid
+              courses={completed}
+              skillsByCourse={skillsByCourse}
+              progressByCatalogueId={progressByCatalogueId}
+              assignedByCatalogueId={assignedByCatalogueId}
+            />
           </div>
         )}
       </main>
@@ -104,13 +117,14 @@ export default function Learning() {
   )
 }
 
-function CourseGrid({ courses, skillsByCourse, progressByCatalogueId }) {
+function CourseGrid({ courses, skillsByCourse, progressByCatalogueId, assignedByCatalogueId }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       {courses.map((course) => {
         const skills = skillsByCourse.get(course.id) ?? []
         const progress = progressByCatalogueId[course.catalogue_course_id]
         const percent = progress?.total ? Math.round((progress.completed / progress.total) * 100) : null
+        const assignedByEmployer = assignedByCatalogueId?.get(course.catalogue_course_id)
         return (
           <Link
             key={course.id}
@@ -126,6 +140,15 @@ function CourseGrid({ courses, skillsByCourse, progressByCatalogueId }) {
               className="h-24 w-full shrink-0"
             />
             <div className="p-4 flex flex-col flex-1">
+              {assignedByEmployer ? (
+                <span className="self-start font-mono text-[10px] uppercase tracking-wide text-paper bg-moss rounded-full px-2 py-0.5 mb-1.5">
+                  Assigned by {assignedByEmployer}
+                </span>
+              ) : (
+                <span className="self-start font-mono text-[10px] uppercase tracking-wide text-secondary mb-1.5">
+                  Personal
+                </span>
+              )}
               <h3 className="font-display text-lg text-ink">{course.name}</h3>
               <p className="font-mono text-xs text-secondary mt-0.5">
                 {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ')}

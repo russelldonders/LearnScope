@@ -185,3 +185,25 @@ export async function respondToCourseAssignment(userId, assignmentId, { enrol, c
     .eq('id', assignmentId)
   if (error) throw error
 }
+
+// Phase 6: powers the "Assigned by X" badge on Learning.jsx/Dashboard.jsx,
+// distinguishing a learner's organisation-assigned training from their own
+// personal enrolments. Distinct from listMyCourseAssignments above (which
+// only surfaces still-pending 'assigned' rows for the /actions card) --
+// this is the 'enrolled' ones, where respondToCourseAssignment has already
+// created the real courses row. Keyed by catalogue_course_id -> employer
+// name so a courses list can badge each card with a single Map lookup
+// instead of a per-course query.
+export async function listMyAssignedCourseEmployers(userId) {
+  const { data, error } = await supabase
+    .from('course_assignments')
+    .select('catalogue_course_id, employers(name)')
+    .eq('assigned_to', userId)
+    .eq('status', 'enrolled')
+  if (error) throw error
+  const map = new Map()
+  for (const row of data ?? []) {
+    if (row.employers?.name) map.set(row.catalogue_course_id, row.employers.name)
+  }
+  return map
+}

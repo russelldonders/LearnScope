@@ -11,6 +11,7 @@ import {
   getProfiles,
 } from '../lib/connections'
 import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
+import { listMyAssignedCourseEmployers } from '../lib/courseCatalogue'
 import AppHeader from '../components/AppHeader'
 import RecordActivitySection from '../components/RecordActivitySection'
 import RecordActivityModal from '../components/RecordActivityModal'
@@ -65,7 +66,7 @@ async function countRows(table, userId) {
 async function loadCurrentLearning(userId) {
   const { data, error } = await supabase
     .from('courses')
-    .select('id, name, provider, course_type, duration, course_catalogue(image_url, organisations(logo_url))')
+    .select('id, name, provider, course_type, duration, catalogue_course_id, course_catalogue(image_url, organisations(logo_url))')
     .eq('user_id', userId)
     .is('completed_date', null)
     .order('created_at', { ascending: false })
@@ -336,6 +337,7 @@ export default function Dashboard() {
   const [recentGrowth, setRecentGrowth] = useState([])
   const [upNext, setUpNext] = useState([])
   const [currentLearning, setCurrentLearning] = useState([])
+  const [assignedByCatalogueId, setAssignedByCatalogueId] = useState(new Map())
   const [connectionsActivity, setConnectionsActivity] = useState([])
   const [connectionsActivityError, setConnectionsActivityError] = useState(null)
   const [upcomingSelfAssessments, setUpcomingSelfAssessments] = useState([])
@@ -363,6 +365,7 @@ export default function Dashboard() {
       targetsDue,
       reviewTasks,
       importBannerState,
+      assignedCourseEmployers,
     ] = await Promise.all([
       countRows('skills', user.id),
       countRows('courses', user.id),
@@ -376,11 +379,13 @@ export default function Dashboard() {
       loadUpcomingTargets(user.id),
       loadPendingReviewTasks(user.id),
       loadImportBannerState(user.id),
+      listMyAssignedCourseEmployers(user.id),
     ])
     setCounts({ skills, courses, experience, connections })
     setRecentGrowth(growth)
     setUpNext(upNextRecommendations)
     setCurrentLearning(learning)
+    setAssignedByCatalogueId(assignedCourseEmployers)
     setConnectionsActivity(activityResult.data)
     setConnectionsActivityError(activityResult.error)
     setUpcomingSelfAssessments(selfAssessmentsDue)
@@ -547,7 +552,7 @@ export default function Dashboard() {
         {!loading && currentLearning.length > 0 && (
           <div>
             <h2 className="font-display text-xl text-ink mb-6">Current learning</h2>
-            <CurrentLearningPanel courses={currentLearning} />
+            <CurrentLearningPanel courses={currentLearning} assignedByCatalogueId={assignedByCatalogueId} />
           </div>
         )}
 
@@ -1102,31 +1107,39 @@ function ActionSkillsButton({ label, recs, onActionComplete }) {
   )
 }
 
-function CurrentLearningPanel({ courses }) {
+function CurrentLearningPanel({ courses, assignedByCatalogueId }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-      {courses.map((course) => (
-        <Link
-          key={course.id}
-          to={`/courses/${course.id}/learn`}
-          state={{ backTo: '/dashboard', backLabel: 'Dashboard' }}
-          className="bg-card border border-hairline rounded-lg overflow-hidden hover:border-moss transition-colors"
-        >
-          <CourseThumbnail
-            name={course.name}
-            provider={course.provider}
-            imageUrl={course.course_catalogue?.image_url}
-            logoUrl={course.course_catalogue?.organisations?.logo_url}
-            className="h-20 w-full"
-          />
-          <div className="p-3">
-            <h3 className="font-display text-base text-ink truncate">{course.name}</h3>
-            <p className="font-mono text-xs text-secondary mt-1 truncate">
-              {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ') || 'In progress'}
-            </p>
-          </div>
-        </Link>
-      ))}
+      {courses.map((course) => {
+        const assignedByEmployer = assignedByCatalogueId?.get(course.catalogue_course_id)
+        return (
+          <Link
+            key={course.id}
+            to={`/courses/${course.id}/learn`}
+            state={{ backTo: '/dashboard', backLabel: 'Dashboard' }}
+            className="bg-card border border-hairline rounded-lg overflow-hidden hover:border-moss transition-colors"
+          >
+            <CourseThumbnail
+              name={course.name}
+              provider={course.provider}
+              imageUrl={course.course_catalogue?.image_url}
+              logoUrl={course.course_catalogue?.organisations?.logo_url}
+              className="h-20 w-full"
+            />
+            <div className="p-3">
+              {assignedByEmployer && (
+                <span className="inline-block font-mono text-[10px] uppercase tracking-wide text-paper bg-moss rounded-full px-2 py-0.5 mb-1">
+                  Assigned by {assignedByEmployer}
+                </span>
+              )}
+              <h3 className="font-display text-base text-ink truncate">{course.name}</h3>
+              <p className="font-mono text-xs text-secondary mt-1 truncate">
+                {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ') || 'In progress'}
+              </p>
+            </div>
+          </Link>
+        )
+      })}
     </div>
   )
 }
