@@ -30,7 +30,7 @@ const LEARNER_SORT_ACCESSORS = {
 // bulk import, course assignment and any learner-facing UI are explicitly
 // later phases.
 export default function EmployerConsole() {
-  const { user, employerMemberships } = useAuth()
+  const { user, employerMemberships, organisationMemberships } = useAuth()
   const [employers, setEmployers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -46,6 +46,17 @@ export default function EmployerConsole() {
     [employers, myEmployerIds]
   )
   const selectedEmployer = myEmployers.find((e) => e.id === selectedEmployerId)
+  // Training-tab authoring is gated by organisation_members on the
+  // attached provider org (is_org_admin/is_org_member RLS), which is a
+  // separate relationship from employer_members -- mirrors ProviderConsole
+  // .jsx's own myRole, derived the same way from a real membership row
+  // rather than assumed. addEmployerMember (api/admin/actions.js) upserts
+  // this row whenever an employer admin is added, so in practice it's
+  // present for every employer admin, but it's still the actual source of
+  // truth for what they're allowed to do in the reused provider components.
+  const myProviderRole = (organisationMemberships ?? []).find(
+    (m) => m.organisation_id === selectedEmployer?.provider_organisation_id
+  )?.role
 
   useEffect(() => {
     listEmployers()
@@ -123,13 +134,13 @@ export default function EmployerConsole() {
                       key={`${selectedEmployer.id}-training`}
                       organisation={{ id: selectedEmployer.provider_organisation_id }}
                       userId={user.id}
-                      canViewParticipants
+                      canViewParticipants={myProviderRole === 'admin'}
                     />
                     <ProviderCataloguesSection
                       key={`${selectedEmployer.id}-catalogues`}
                       organisation={{ id: selectedEmployer.provider_organisation_id }}
                       userId={user.id}
-                      canCreate
+                      canCreate={myProviderRole === 'admin'}
                     />
                     <ResourceLibrarySection
                       key={`${selectedEmployer.id}-resources`}

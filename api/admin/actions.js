@@ -794,6 +794,37 @@ async function addEmployerMember(admin, caller, { employerId, email, role }, res
     throw memberInsertError
   }
 
+  // An employer admin needs to actually author training through the
+  // reused provider console components (ProviderTrainingSection/
+  // ProviderCataloguesSection/ResourceLibrarySection), which gate every
+  // read/write off organisation_members via is_org_admin/is_org_member --
+  // a completely separate table from employer_members. Without this, a
+  // brand-new employer admin would see an empty/broken Training tab and
+  // hit RLS violations on any write, with no other path to get staffed
+  // onto the attached org. Upsert (not insert) so re-adding an existing
+  // admin, or promoting someone who already has some other role there,
+  // doesn't error or downgrade them.
+  if (role === 'admin') {
+    const { data: employerRow, error: employerFetchError } = await admin
+      .from('employers')
+      .select('provider_organisation_id')
+      .eq('id', employerId)
+      .single()
+    if (employerFetchError) throw employerFetchError
+
+    const { error: orgMemberUpsertError } = await admin.from('organisation_members').upsert(
+      {
+        organisation_id: employerRow.provider_organisation_id,
+        user_id: userId,
+        role: 'admin',
+        status: 'active',
+        invited_by: caller.id,
+      },
+      { onConflict: 'organisation_id,user_id' }
+    )
+    if (orgMemberUpsertError) throw orgMemberUpsertError
+  }
+
   res.status(200).json({ ok: true, userId })
 }
 

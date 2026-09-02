@@ -1,0 +1,16 @@
+-- Security-review follow-up on 20260902090000 (employer Phase 1 foundation).
+--
+-- employers' UPDATE policy ("Employer admins can update their employer")
+-- had no column-grain restriction, so an employer admin could repoint
+-- provider_organisation_id (or overwrite employer_code/created_by) via a
+-- direct client update -- even though the schema treats the employer <->
+-- attached-provider-org attachment as set-once-at-creation (there's a
+-- unique index on provider_organisation_id, and create_employer is the only
+-- intended way to establish it). RLS can't do column-grain checks, and
+-- there's no legitimate "rename my employer" UI in this feature yet to
+-- preserve, so simplest correct fix for Phase 1 is to drop the policy
+-- entirely -- mirrors organisations, which also has no self-service update
+-- policy today (only a platform-admin-gated one). A future phase that wants
+-- self-service renaming can reintroduce update access with a BEFORE UPDATE
+-- trigger guarding the immutable columns.
+drop policy "Employer admins can update their employer" on employers;
