@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
@@ -9,6 +9,11 @@ import {
   listSearchableSkillIds,
   setSkillSearchable,
 } from '../lib/skillDiscovery'
+import {
+  listMyEmployerDataAccessStatus,
+  shareDataWithEmployer,
+  revokeEmployerDataAccess,
+} from '../lib/admin/employers'
 
 const VISIBILITY_OPTIONS = [
   {
@@ -29,7 +34,7 @@ const VISIBILITY_OPTIONS = [
 ]
 
 export default function ProfilePrivacy() {
-  const { user } = useAuth()
+  const { user, employerMemberships } = useAuth()
   const [skillsProfileVisible, setSkillsProfileVisible] = useState(false)
   const [activityFeedVisible, setActivityFeedVisible] = useState(false)
   const [profileVisibleToMatches, setProfileVisibleToMatches] = useState(false)
@@ -40,9 +45,25 @@ export default function ProfilePrivacy() {
   const [privacyError, setPrivacyError] = useState(null)
   const [pickerOpen, setPickerOpen] = useState(false)
 
+  // Phase 5: employer data-access sharing state, loaded alongside the rest
+  // of this page's privacy settings.
+  const [employers, setEmployers] = useState([])
+  const [dataAccessByEmployer, setDataAccessByEmployer] = useState({})
+  const [dataAccessActingId, setDataAccessActingId] = useState(null)
+  const [dataAccessError, setDataAccessError] = useState(null)
+
+  const activeEmployerIds = useMemo(
+    () => (employerMemberships ?? []).map((m) => m.employer_id),
+    [employerMemberships]
+  )
+
   useEffect(() => {
     load()
   }, [])
+
+  useEffect(() => {
+    loadEmployerDataAccess()
+  }, [activeEmployerIds.join(',')])
 
   async function load() {
     try {
@@ -59,6 +80,57 @@ export default function ProfilePrivacy() {
       setPrivacyError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Every employer the learner is currently an active member of, joined to
+  // their current data-access status with that employer (if any request or
+  // share has ever happened). employerMemberships (useAuth) only carries
+  // employer_id/role, not the employer's name, so that's fetched separately
+  // here -- scoped by "Employer members can view their employer" RLS, same
+  // as listEmployers relies on elsewhere.
+  async function loadEmployerDataAccess() {
+    if (activeEmployerIds.length === 0) {
+      setEmployers([])
+      setDataAccessByEmployer({})
+      return
+    }
+    try {
+      const [{ data: employersData, error: employersError }, statusRows] = await Promise.all([
+        supabase.from('employers').select('id, name').in('id', activeEmployerIds),
+        listMyEmployerDataAccessStatus(user.id),
+      ])
+      if (employersError) throw employersError
+      setEmployers(employersData ?? [])
+      setDataAccessByEmployer(Object.fromEntries(statusRows.map((r) => [r.employer_id, r])))
+    } catch (err) {
+      setDataAccessError({ id: null, message: err.message })
+    }
+  }
+
+  async function handleShare(employerId) {
+    setDataAccessError(null)
+    setDataAccessActingId(employerId)
+    try {
+      const row = await shareDataWithEmployer(employerId)
+      setDataAccessByEmployer((prev) => ({ ...prev, [employerId]: row }))
+    } catch (err) {
+      setDataAccessError({ id: employerId, message: err.message })
+    } finally {
+      setDataAccessActingId(null)
+    }
+  }
+
+  async function handleRevoke(employerId, requestId) {
+    setDataAccessError(null)
+    setDataAccessActingId(employerId)
+    try {
+      await revokeEmployerDataAccess(requestId)
+      setDataAccessByEmployer((prev) => ({ ...prev, [employerId]: { ...prev[employerId], status: 'revoked' } }))
+    } catch (err) {
+      setDataAccessError({ id: employerId, message: err.message })
+    } finally {
+      setDataAccessActingId(null)
     }
   }
 
@@ -250,6 +322,64 @@ export default function ProfilePrivacy() {
                 </div>
               )}
             </div>
+
+            {employers.length > 0 && (
+              <div className="bg-card border border-hairline rounded-lg p-6">
+                <h3 className="font-display text-lg text-ink mb-1">Employers</h3>
+                <p className="text-sm text-secondary mb-4">
+                  Control whether an employer you belong to can view your skills profile. This is
+                  separate from any training they've assigned you — sharing here also lets their
+                  admins see your skills and the evidence behind them. You can revoke access at
+                  any time.
+                </p>
+                <ul className="space-y-3">
+                  {employers.map((employer) => {
+                    const access = dataAccessByEmployer[employer.id]
+                    const isShared = access?.status === 'approved'
+                    const acting = dataAccessActingId === employer.id
+                    return (
+                      <li
+                        key={employer.id}
+                        className="flex items-center justify-between gap-3 pt-3 border-t border-hairline first:border-0 first:pt-0"
+                      >
+                        <div>
+                          <p className="text-sm text-ink">{employer.name}</p>
+                          <p className="text-xs text-secondary">
+                            {isShared
+                              ? 'Shared — this employer can view your skills profile'
+                              : access?.status === 'pending'
+                                ? 'This employer has requested access — respond from your Actions page, or share directly below'
+                                : 'Not shared'}
+                          </p>
+                          {dataAccessError?.id === employer.id && (
+                            <p className="text-xs text-red-700 mt-1">{dataAccessError.message}</p>
+                          )}
+                        </div>
+                        {isShared ? (
+                          <button
+                            type="button"
+                            onClick={() => handleRevoke(employer.id, access.id)}
+                            disabled={acting}
+                            className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60 whitespace-nowrap"
+                          >
+                            {acting ? 'Revoking…' : 'Revoke access'}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleShare(employer.id)}
+                            disabled={acting}
+                            className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60 whitespace-nowrap"
+                          >
+                            {acting ? 'Sharing…' : 'Share my skills profile'}
+                          </button>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            )}
 
             {privacyError && <p className="text-sm text-red-700">{privacyError}</p>}
           </>

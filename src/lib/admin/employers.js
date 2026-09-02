@@ -130,3 +130,92 @@ export async function listEmployerCourseAssignments(employerId) {
   if (error) throw error
   return data ?? []
 }
+
+// Phase 5: explicit, learner-controlled consent for an employer admin to see
+// a member's skills profile beyond whatever the employer's own training
+// already exposes automatically (is_course_provider_admin, 0105 -- untouched
+// by this phase). request_employer_data_access (20260902200000) is security
+// definer: checks the caller is an admin of p_employerId and that
+// p_learnerId is an active member of it, then upserts the (employer, learner)
+// row -- idempotent for an existing pending/approved row, resets a declined/
+// revoked one back to pending.
+export async function requestEmployerDataAccess(employerId, learnerId) {
+  const { data, error } = await supabase.rpc('request_employer_data_access', {
+    p_employer_id: employerId,
+    p_learner_id: learnerId,
+  })
+  if (error) throw error
+  return data
+}
+
+// Mirrors decideEmployerInvite's shape -- decide_employer_data_access_request
+// (20260902200000) is security definer, runs as the learner being asked,
+// checked against auth.uid() and the row's 'pending' status server-side.
+export async function decideEmployerDataAccessRequest(requestId, accept) {
+  const { error } = await supabase.rpc('decide_employer_data_access_request', {
+    p_request_id: requestId,
+    p_accept: accept,
+  })
+  if (error) throw error
+}
+
+// Learner-initiated proactive share, no request needed -- caller must
+// already be an active member of the employer they're sharing with
+// (share_data_with_employer checks this server-side).
+export async function shareDataWithEmployer(employerId) {
+  const { data, error } = await supabase.rpc('share_data_with_employer', { p_employer_id: employerId })
+  if (error) throw error
+  return data
+}
+
+// Learner revokes a live grant (from either an accepted request or a
+// proactive share) at any time.
+export async function revokeEmployerDataAccess(requestId) {
+  const { error } = await supabase.rpc('revoke_employer_data_access', { p_request_id: requestId })
+  if (error) throw error
+}
+
+// Admin-side roster/status view: every data access row this employer has,
+// whatever its status -- mirrors listEmployerCourseAssignments's shape (a
+// direct scoped table query, relying on the employer-admin SELECT policy on
+// employer_data_access_requests rather than a dedicated RPC, since this is
+// read-only). Doesn't resolve the learner's email -- callers already have
+// that from listEmployerMembers (keyed by user_id).
+export async function listEmployerDataAccessRequests(employerId) {
+  const { data, error } = await supabase
+    .from('employer_data_access_requests')
+    .select('id, learner_id, status, requested_by, created_at, decided_at')
+    .eq('employer_id', employerId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+// Pending data access requests addressed to the current learner -- an
+// employer admin asked, and they haven't accepted or declined yet. Mirrors
+// listMyPendingEmployerInvites exactly, joined to employers instead.
+export async function listMyPendingDataAccessRequests(userId) {
+  const { data, error } = await supabase
+    .from('employer_data_access_requests')
+    .select('id, employer_id, created_at, employers(id, name)')
+    .eq('learner_id', userId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+// Every one of the current user's data access rows, whatever their status --
+// for ProfilePrivacy.jsx's "here's your sharing status with each employer
+// you belong to" view. Employers with no row at all (never requested or
+// shared) simply won't appear here; callers cross-reference against the
+// learner's active employer memberships to show those too.
+export async function listMyEmployerDataAccessStatus(userId) {
+  const { data, error } = await supabase
+    .from('employer_data_access_requests')
+    .select('id, employer_id, status, requested_by, created_at, decided_at, employers(id, name)')
+    .eq('learner_id', userId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}

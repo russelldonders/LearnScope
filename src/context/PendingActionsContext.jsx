@@ -3,7 +3,7 @@ import { useAuth } from './AuthContext'
 import { supabase } from '../lib/supabaseClient'
 import { listIncomingRateInvites, listIncomingRecommendInvites } from '../lib/connections'
 import { listMyPendingOrgInvites } from '../lib/organisationInvites'
-import { listMyPendingEmployerInvites } from '../lib/admin/employers'
+import { listMyPendingEmployerInvites, listMyPendingDataAccessRequests } from '../lib/admin/employers'
 import { listMyCourseAssignments } from '../lib/courseCatalogue'
 
 const PendingActionsContext = createContext(undefined)
@@ -18,9 +18,9 @@ export function PendingActionsProvider({ children }) {
 
   // Everything actually waiting on this learner to do something -- pending
   // connection requests, validation requests, organisation staff invites,
-  // employer invites, pushed course assignments, and rate invites addressed
-  // to them -- not invites/requests they sent themselves, which are waiting
-  // on someone else instead.
+  // employer invites, employer data access requests, pushed course
+  // assignments, and rate invites addressed to them -- not invites/requests
+  // they sent themselves, which are waiting on someone else instead.
   const refreshPendingActionCount = useCallback(async () => {
     if (!user) {
       setPendingActionCount(0)
@@ -33,6 +33,7 @@ export function PendingActionsProvider({ children }) {
       recommendInvites,
       orgInvites,
       employerInvites,
+      dataAccessRequests,
       courseAssignments,
     ] = await Promise.all([
       supabase
@@ -49,6 +50,7 @@ export function PendingActionsProvider({ children }) {
       listIncomingRecommendInvites(),
       listMyPendingOrgInvites(user.id),
       listMyPendingEmployerInvites(user.id),
+      listMyPendingDataAccessRequests(user.id),
       listMyCourseAssignments(user.id),
     ])
     setPendingActionCount(
@@ -58,6 +60,7 @@ export function PendingActionsProvider({ children }) {
         recommendInvites.length +
         orgInvites.length +
         employerInvites.length +
+        dataAccessRequests.length +
         courseAssignments.length
     )
   }, [user])

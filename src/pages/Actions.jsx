@@ -8,7 +8,7 @@ import { listIncomingRateInvites, listIncomingRecommendInvites, getProfiles } fr
 import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
 import { listIncomingConnectionRequests, respondToConnectionRequest } from '../lib/skillDiscovery'
 import { listMyPendingOrgInvites, decideOrgInvite } from '../lib/organisationInvites'
-import { listMyPendingEmployerInvites, decideEmployerInvite } from '../lib/admin/employers'
+import { listMyPendingEmployerInvites, decideEmployerInvite, listMyPendingDataAccessRequests, decideEmployerDataAccessRequest } from '../lib/admin/employers'
 import { listMyCourseAssignments, respondToCourseAssignment } from '../lib/courseCatalogue'
 
 // Everything actually waiting on this learner to act -- the same sources
@@ -30,6 +30,9 @@ export default function Actions() {
   const [employerInvites, setEmployerInvites] = useState([])
   const [employerInviteDecidingId, setEmployerInviteDecidingId] = useState(null)
   const [employerInviteError, setEmployerInviteError] = useState(null)
+  const [dataAccessRequests, setDataAccessRequests] = useState([])
+  const [dataAccessDecidingId, setDataAccessDecidingId] = useState(null)
+  const [dataAccessError, setDataAccessError] = useState(null)
   const [courseAssignments, setCourseAssignments] = useState([])
   const [assignmentActingId, setAssignmentActingId] = useState(null)
   const [assignmentError, setAssignmentError] = useState(null)
@@ -52,6 +55,7 @@ export default function Actions() {
         incomingRequestsData,
         orgInvitesData,
         employerInvitesData,
+        dataAccessRequestsData,
         courseAssignmentsData,
       ] = await Promise.all([
         listIncomingRateInvites(),
@@ -60,6 +64,7 @@ export default function Actions() {
         listIncomingConnectionRequests(user.id),
         listMyPendingOrgInvites(user.id),
         listMyPendingEmployerInvites(user.id),
+        listMyPendingDataAccessRequests(user.id),
         listMyCourseAssignments(user.id),
       ])
       setIncomingRateInvites(incomingRateInvitesData)
@@ -68,6 +73,7 @@ export default function Actions() {
       setIncomingRequests(incomingRequestsData)
       setOrgInvites(orgInvitesData)
       setEmployerInvites(employerInvitesData)
+      setDataAccessRequests(dataAccessRequestsData)
       setCourseAssignments(courseAssignmentsData)
       const requesterIds = validationRequestsData.map((r) => r.requester_id)
       const requestSenderIds = incomingRequestsData.map((r) => r.requester_id)
@@ -117,6 +123,20 @@ export default function Actions() {
     }
   }
 
+  async function handleDataAccessResponse(requestId, accept) {
+    setDataAccessError(null)
+    setDataAccessDecidingId(requestId)
+    try {
+      await decideEmployerDataAccessRequest(requestId, accept)
+      setDataAccessRequests((prev) => prev.filter((r) => r.id !== requestId))
+      refreshPendingActionCount()
+    } catch (err) {
+      setDataAccessError({ id: requestId, message: err.message })
+    } finally {
+      setDataAccessDecidingId(null)
+    }
+  }
+
   // "Start" mirrors CourseCatalogue.jsx's own handleEnrol UX -- no
   // navigation, no toast, just the card leaving the list once enrolled
   // (same as accepting an invite above), since respondToCourseAssignment
@@ -158,6 +178,7 @@ export default function Actions() {
     incomingRequests.length === 0 &&
     orgInvites.length === 0 &&
     employerInvites.length === 0 &&
+    dataAccessRequests.length === 0 &&
     courseAssignments.length === 0 &&
     validationRequests.length === 0
 
@@ -341,6 +362,46 @@ export default function Actions() {
                       type="button"
                       onClick={() => handleEmployerInviteResponse(invite.id, false)}
                       disabled={employerInviteDecidingId === invite.id}
+                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {dataAccessRequests.length > 0 && (
+          <div>
+            <h2 className="font-display text-xl text-ink mb-6">Data access requests</h2>
+            <div className="space-y-3">
+              {dataAccessRequests.map((request) => (
+                <div key={request.id} className="bg-card border border-hairline rounded-lg p-4">
+                  <p className="text-sm text-ink">
+                    <strong>{request.employers?.name || 'An employer'}</strong> would like access to view your
+                    skills profile
+                  </p>
+                  <p className="font-mono text-xs text-secondary mt-1">
+                    {new Date(request.created_at).toLocaleDateString()}
+                  </p>
+                  {dataAccessError?.id === request.id && (
+                    <p className="text-xs text-red-700 mt-1">{dataAccessError.message}</p>
+                  )}
+                  <div className="flex items-center gap-2 mt-3">
+                    <button
+                      type="button"
+                      onClick={() => handleDataAccessResponse(request.id, true)}
+                      disabled={dataAccessDecidingId === request.id}
+                      className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDataAccessResponse(request.id, false)}
+                      disabled={dataAccessDecidingId === request.id}
                       className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
                     >
                       Decline

@@ -13,6 +13,8 @@ import {
   listEmployerCatalogueCourses,
   assignCourseToEmployerMembers,
   listEmployerCourseAssignments,
+  requestEmployerDataAccess,
+  listEmployerDataAccessRequests,
 } from '../../lib/admin/employers'
 import { useSortedPage, useRowSelection } from '../../lib/useSortedPage'
 import { SortableTh, TablePagination, SelectionTh, BulkActionBar } from '../../components/TableControls'
@@ -206,6 +208,13 @@ export default function EmployerConsole() {
   )
 }
 
+const DATA_ACCESS_STATUS_LABELS = {
+  pending: 'Access requested',
+  approved: 'Access granted',
+  declined: 'Access declined',
+  revoked: 'Access revoked',
+}
+
 function EmployerLearnersPanel({ employer }) {
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -223,6 +232,13 @@ function EmployerLearnersPanel({ employer }) {
   const [bulkSubmitting, setBulkSubmitting] = useState(false)
   const [bulkResults, setBulkResults] = useState(null)
 
+  // Phase 5: employer-side view of each member's data-access consent state.
+  // Keyed by learner_id -- there's at most one row per (employer, learner)
+  // pair (unique constraint), so a plain map is enough.
+  const [dataAccessByLearner, setDataAccessByLearner] = useState({})
+  const [dataAccessRequestingId, setDataAccessRequestingId] = useState(null)
+  const [dataAccessError, setDataAccessError] = useState(null)
+
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
     useSortedPage(members, LEARNER_SORT_ACCESSORS)
 
@@ -234,11 +250,29 @@ function EmployerLearnersPanel({ employer }) {
     setLoading(true)
     setError(null)
     try {
-      setMembers(await listEmployerMembers(employer.id))
+      const [membersData, dataAccessData] = await Promise.all([
+        listEmployerMembers(employer.id),
+        listEmployerDataAccessRequests(employer.id),
+      ])
+      setMembers(membersData)
+      setDataAccessByLearner(Object.fromEntries(dataAccessData.map((r) => [r.learner_id, r])))
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleRequestDataAccess(member) {
+    setDataAccessError(null)
+    setDataAccessRequestingId(member.user_id)
+    try {
+      const row = await requestEmployerDataAccess(employer.id, member.user_id)
+      setDataAccessByLearner((prev) => ({ ...prev, [member.user_id]: row }))
+    } catch (err) {
+      setDataAccessError({ id: member.user_id, message: err.message })
+    } finally {
+      setDataAccessRequestingId(null)
     }
   }
 
@@ -454,23 +488,48 @@ function EmployerLearnersPanel({ employer }) {
                   <SortableTh label="Learner" columnKey="email" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <SortableTh label="Role" columnKey="role" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   <SortableTh label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                  <th className="px-4 py-2 font-medium whitespace-nowrap">Data access</th>
                   <th className="px-4 py-2 font-medium"></th>
                 </tr>
               </thead>
               <tbody>
-                {pageItems.map((m) => (
-                  <tr key={m.id} className="border-b border-hairline last:border-0">
-                    <td className="px-4 py-2 font-mono text-[10px] text-secondary whitespace-nowrap">{m.id.slice(0, 8)}</td>
-                    <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{m.email || m.user_id}</td>
-                    <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{m.role}</td>
-                    <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{m.status === 'pending' ? 'Pending' : 'Active'}</td>
-                    <td className="px-4 py-2 text-right">
-                      <button type="button" onClick={() => setRemoveTarget(m)} className="text-xs text-red-700 hover:underline whitespace-nowrap">
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {pageItems.map((m) => {
+                  const dataAccess = dataAccessByLearner[m.user_id]
+                  const canRequest = m.status === 'active' && (!dataAccess || dataAccess.status === 'declined' || dataAccess.status === 'revoked')
+                  return (
+                    <tr key={m.id} className="border-b border-hairline last:border-0">
+                      <td className="px-4 py-2 font-mono text-[10px] text-secondary whitespace-nowrap">{m.id.slice(0, 8)}</td>
+                      <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{m.email || m.user_id}</td>
+                      <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{m.role}</td>
+                      <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{m.status === 'pending' ? 'Pending' : 'Active'}</td>
+                      <td className="px-4 py-2 text-xs whitespace-nowrap">
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className="text-secondary">
+                            {dataAccess ? DATA_ACCESS_STATUS_LABELS[dataAccess.status] : 'No request yet'}
+                          </span>
+                          {canRequest && (
+                            <button
+                              type="button"
+                              onClick={() => handleRequestDataAccess(m)}
+                              disabled={dataAccessRequestingId === m.user_id}
+                              className="text-moss hover:underline disabled:opacity-60"
+                            >
+                              {dataAccessRequestingId === m.user_id ? 'Requesting…' : 'Request data access'}
+                            </button>
+                          )}
+                          {dataAccessError?.id === m.user_id && (
+                            <span className="text-red-700">{dataAccessError.message}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <button type="button" onClick={() => setRemoveTarget(m)} className="text-xs text-red-700 hover:underline whitespace-nowrap">
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
