@@ -4,6 +4,7 @@ import AppHeader from '../../components/AppHeader'
 const SECTIONS = [
   { to: '/admin', label: 'Users' },
   { to: '/admin/providers', label: 'Providers' },
+  { to: '/admin/employers', label: 'Employers' },
   { to: '/admin/catalogue', label: 'Course catalogue' },
   { to: '/admin/skills', label: 'Skill library' },
   { to: '/admin/tags', label: 'Tags' },

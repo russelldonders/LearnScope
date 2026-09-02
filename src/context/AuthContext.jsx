@@ -25,6 +25,12 @@ export function AuthProvider({ children }) {
   // needs to tell "not yet checked" apart from "checked, no memberships",
   // since an empty array would otherwise look identical to both.
   const [organisationMemberships, setOrganisationMemberships] = useState(null)
+  // Same null-until-known pattern, for EmployerAdminRoute -- employer_members
+  // (20260902090000) is a separate membership concept from
+  // organisation_members: it's an employer's own managed-learner roster, not
+  // provider staff, so it's tracked independently rather than folded into
+  // organisationMemberships above.
+  const [employerMemberships, setEmployerMemberships] = useState(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -84,10 +90,21 @@ export function AuthProvider({ children }) {
       .then(({ data, error }) => setOrganisationMemberships(!error && data ? data : []))
   }, [userId])
 
+  const refreshEmployerMemberships = useCallback(() => {
+    if (!userId) return
+    supabase
+      .from('employer_members')
+      .select('employer_id, role')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .then(({ data, error }) => setEmployerMemberships(!error && data ? data : []))
+  }, [userId])
+
   useEffect(() => {
     if (!userId) {
       setIsPlatformAdmin(null)
       setOrganisationMemberships(null)
+      setEmployerMemberships(null)
       return
     }
     supabase
@@ -97,6 +114,7 @@ export function AuthProvider({ children }) {
       .maybeSingle()
       .then(({ data, error }) => setIsPlatformAdmin(!error && Boolean(data)))
     refreshOrganisationMemberships()
+    refreshEmployerMemberships()
   }, [userId])
 
   async function markOnboardingComplete() {
@@ -118,6 +136,8 @@ export function AuthProvider({ children }) {
     isPlatformAdmin,
     organisationMemberships,
     refreshOrganisationMemberships,
+    employerMemberships,
+    refreshEmployerMemberships,
     refreshNeedsName,
     markOnboardingComplete,
     // Carries a pending rate-invite code (and/or a pending course

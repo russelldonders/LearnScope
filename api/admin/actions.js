@@ -74,6 +74,12 @@ export default async function handler(req, res) {
       case 'listOrgMembers':
         await listOrgMembers(admin, caller, payload, res)
         return
+      case 'listEmployerMembers':
+        await listEmployerMembers(admin, caller, payload, res)
+        return
+      case 'addEmployerMember':
+        await addEmployerMember(admin, caller, payload, res)
+        return
       default:
         res.status(400).json({ error: 'Unknown action' })
     }
@@ -698,6 +704,97 @@ async function listOrgMembers(admin, caller, { organisationId }, res) {
   )
 
   res.status(200).json({ members: details })
+}
+
+// Platform admin, or an 'admin' member of this specific employer -- mirrors
+// requireOrgAdmin above exactly, scoped to employer_members instead of
+// organisation_members. Employer membership is a separate concept from
+// organisation_members (that governs who can author training in the
+// employer's attached provider org) -- this only governs who can manage the
+// employer's own roster of managed learners.
+async function requireEmployerAdmin(admin, caller, employerId, res) {
+  if (await isPlatformAdmin(admin, caller.id)) return true
+  const { data: memberRow, error: memberCheckError } = await admin
+    .from('employer_members')
+    .select('role, status')
+    .eq('employer_id', employerId)
+    .eq('user_id', caller.id)
+    .maybeSingle()
+  if (memberCheckError) throw memberCheckError
+  if (!memberRow || memberRow.role !== 'admin' || memberRow.status !== 'active') {
+    res.status(403).json({ error: 'Employer admin access required' })
+    return false
+  }
+  return true
+}
+
+// employer_members only stores user_id -- same reasoning as listOrgMembers
+// above, profiles has no email column so the roster needs a service-role
+// lookup to show something more useful than a raw uuid.
+async function listEmployerMembers(admin, caller, { employerId }, res) {
+  if (!employerId) {
+    res.status(400).json({ error: 'Missing employerId' })
+    return
+  }
+
+  if (!(await requireEmployerAdmin(admin, caller, employerId, res))) return
+
+  const { data: members, error: membersError } = await admin
+    .from('employer_members')
+    .select('id, user_id, role, status, created_at')
+    .eq('employer_id', employerId)
+    .order('created_at')
+  if (membersError) throw membersError
+
+  const details = await Promise.all(
+    members.map(async (m) => {
+      const { data, error } = await admin.auth.admin.getUserById(m.user_id)
+      return { ...m, email: error ? null : (data?.user?.email ?? null) }
+    })
+  )
+
+  res.status(200).json({ members: details })
+}
+
+const VALID_EMPLOYER_ROLES = ['admin', 'member']
+
+// "Add an existing user by email" only -- deliberately not an invite flow
+// like inviteOrgStaff above. Phase 1 foundation for the employer console
+// only supports adding people who already have a LearnScope account,
+// one at a time; bulk import and inviting brand-new accounts are explicitly
+// later phases (see the employers migration's own comment).
+async function addEmployerMember(admin, caller, { employerId, email, role }, res) {
+  if (!employerId || !email || !VALID_EMPLOYER_ROLES.includes(role)) {
+    res.status(400).json({ error: 'Missing or invalid employerId, email, or role' })
+    return
+  }
+
+  if (!(await requireEmployerAdmin(admin, caller, employerId, res))) return
+
+  const userId = await findUserIdByEmail(admin, email.trim())
+  if (!userId) {
+    res.status(404).json({ error: 'No LearnScope account found with that email.' })
+    return
+  }
+
+  const { error: memberInsertError } = await admin.from('employer_members').insert({
+    employer_id: employerId,
+    user_id: userId,
+    role,
+    status: 'active',
+    invited_by: caller.id,
+  })
+  if (memberInsertError) {
+    // unique_violation on (employer_id, user_id) -- they're already a
+    // member here, surface that plainly rather than a raw constraint error.
+    if (memberInsertError.code === '23505') {
+      res.status(409).json({ error: 'This person is already a member of this employer.' })
+      return
+    }
+    throw memberInsertError
+  }
+
+  res.status(200).json({ ok: true, userId })
 }
 
 function escapeHtml(str) {

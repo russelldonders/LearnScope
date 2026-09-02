@@ -6,6 +6,7 @@ import { NavVisibilityProvider } from './context/NavVisibilityContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import PlatformAdminRoute from './components/PlatformAdminRoute'
 import ProviderAdminRoute from './components/ProviderAdminRoute'
+import EmployerAdminRoute from './components/EmployerAdminRoute'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
@@ -38,12 +39,14 @@ import ValidateRequest from './pages/ValidateRequest'
 import AdminUsers from './pages/admin/AdminUsers'
 import AdminUserDetail from './pages/admin/AdminUserDetail'
 import AdminProviders from './pages/admin/AdminProviders'
+import AdminEmployers from './pages/admin/AdminEmployers'
 import AdminCatalogue from './pages/admin/AdminCatalogue'
 import AdminSkills from './pages/admin/AdminSkills'
 import AdminSkillDetail from './pages/admin/AdminSkillDetail'
 import AdminTags from './pages/admin/AdminTags'
 import AdminOnboarding from './pages/admin/AdminOnboarding'
 import ProviderConsole from './pages/provider/ProviderConsole'
+import EmployerConsole from './pages/employer/EmployerConsole'
 import ProviderCourseEditor from './pages/provider/ProviderCourseEditor'
 import ProviderCatalogueDetail from './pages/provider/ProviderCatalogueDetail'
 import ProviderSkillDetail from './pages/provider/ProviderSkillDetail'
@@ -281,6 +284,22 @@ function App() {
               <PlatformAdminRoute>
                 <AdminProviders />
               </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/employers"
+            element={
+              <PlatformAdminRoute>
+                <AdminEmployers />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/employer"
+            element={
+              <EmployerAdminRoute>
+                <EmployerConsole />
+              </EmployerAdminRoute>
             }
           />
           <Route

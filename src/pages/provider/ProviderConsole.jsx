@@ -263,7 +263,12 @@ export default function ProviderConsole() {
   )
 }
 
-function ProviderCataloguesSection({ organisation, userId, canCreate }) {
+// Exported so the employer console (src/pages/employer/EmployerConsole.jsx)
+// can reuse the same catalogue-authoring UI verbatim, scoped to the
+// employer's own auto-provisioned attached provider organisation -- this
+// component only ever reads/writes off organisation.id, so no fork is
+// needed.
+export function ProviderCataloguesSection({ organisation, userId, canCreate }) {
   const [catalogues, setCatalogues] = useState([])
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [form, setForm] = useState({ name: '', description: '' })
@@ -600,7 +605,9 @@ function CatalogueApproversPanel({ catalogueId, organisationId }) {
   )
 }
 
-function ProviderTrainingSection({ organisation, userId, canViewParticipants }) {
+// Exported for the same reason as ProviderCataloguesSection above -- reused
+// verbatim by the employer console's Training tab.
+export function ProviderTrainingSection({ organisation, userId, canViewParticipants }) {
   const navigate = useNavigate()
   const [courses, setCourses] = useState([])
   const [isApprover, setIsApprover] = useState(false)
