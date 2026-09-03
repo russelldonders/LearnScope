@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import AdminLayout from './AdminLayout'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import StatusBadge from '../../components/StatusBadge'
 import { listAllLibrarySkills, updateLibrarySkill, setLibrarySkillStatus } from '../../lib/admin/skills'
 import { SKILL_TYPE_LABELS } from '../../lib/statusLabels'
-import { useColumnPreferences, useRowSelection, useSortedPage } from '../../lib/useSortedPage'
+import { useColumnPreferences, useRowSelection, useSortedPage, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
 import { BulkActionBar, ColumnCustomizer, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 
 const SKILL_SORT_ACCESSORS = {
@@ -96,7 +96,13 @@ export default function AdminSkills() {
   const [skills, setSkills] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [query, setQuery] = useState('')
+
+  // Search text, sort, page and pageSize all live in the URL together
+  // (?q=&sort=&dir=&page=&pageSize=) via useSortedPage's urlSync option and
+  // useUrlParam -- same convention as AdminUsers.jsx/AdminCatalogue.jsx. No
+  // status/type filter here -- this table has no such filter UI to url-sync.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [query, setQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({ category: '', description: '' })
   const [saving, setSaving] = useState(false)
@@ -188,9 +194,14 @@ export default function AdminSkills() {
 
   const q = query.trim().toLowerCase()
   const filtered = q ? skills.filter((s) => s.name.toLowerCase().includes(q)) : skills
+  const filtersActive = query !== ''
+
+  function resetFilters() {
+    writeUrlParams(searchParams, setSearchParams, { q: null, page: null })
+  }
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
-    useSortedPage(filtered, SKILL_SORT_ACCESSORS)
+    useSortedPage(filtered, SKILL_SORT_ACCESSORS, { urlSync: { searchParams, setSearchParams } })
   const { columns, visibleColumns, toggleColumn, moveColumn, resetToDefault } =
     useColumnPreferences('admin-skills', SKILL_COLUMNS)
   const selection = useRowSelection(filtered.map((s) => s.id))
@@ -203,15 +214,24 @@ export default function AdminSkills() {
   return (
     <AdminLayout>
       <div className="space-y-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <input
             aria-label="Search skills"
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search skills…"
-            className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+            className="flex-1 min-w-[220px] rounded-md border border-hairline bg-card px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
           />
+          {filtersActive && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="text-xs text-secondary hover:text-ink py-1.5 px-2 whitespace-nowrap"
+            >
+              Reset filters
+            </button>
+          )}
           <ColumnCustomizer
             idPrefix="admin-skills"
             columns={columns}
@@ -227,7 +247,9 @@ export default function AdminSkills() {
           <p role="status" className="text-secondary">Loading…</p>
         ) : filtered.length === 0 ? (
           <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
-            <p className="text-secondary">No skills match.</p>
+            <p className="text-secondary">
+              {skills.length === 0 ? 'No skills yet.' : 'No skills match your search.'}
+            </p>
           </div>
         ) : (
           <div className="bg-card border border-hairline rounded-lg">

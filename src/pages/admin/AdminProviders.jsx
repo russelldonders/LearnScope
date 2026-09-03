@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AdminLayout from './AdminLayout'
 import ConfirmDialog from '../../components/ConfirmDialog'
@@ -12,9 +13,18 @@ import {
   removeOrganisationMember,
   inviteOrganisationStaff,
 } from '../../lib/admin/organisations'
-import { useColumnPreferences, useRowSelection, useSortedPage } from '../../lib/useSortedPage'
+import { useColumnPreferences, useRowSelection, useSortedPage, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
 import { BulkActionBar, ColumnCustomizer, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 import MutationFeedback from '../../components/MutationFeedback'
+
+// organisations.status is a plain 'active'/'inactive' toggle (0065_platform_
+// roles_and_organisations.sql) -- same shape as AdminUsers.jsx's account
+// status filter, so this mirrors that STATUS_FILTERS/param convention.
+const STATUS_FILTERS = [
+  { value: '', label: 'All' },
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+]
 
 const ORG_SORT_ACCESSORS = {
   name: (o) => o.name?.toLowerCase() ?? '',
@@ -101,14 +111,39 @@ export default function AdminProviders() {
   const [editForm, setEditForm] = useState({ name: '', url: '' })
   const [saving, setSaving] = useState(false)
 
+  // Search text, status filter, sort, page and pageSize all live in the URL
+  // together (?q=&status=&sort=&dir=&page=&pageSize=) via useSortedPage's
+  // urlSync option and useUrlParam -- same convention as AdminUsers.jsx/
+  // AdminCatalogue.jsx. The platform-admin Overview page's "Inactive
+  // provider organisations" tile can now deep-link to ?status=inactive.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [query, setQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
+  const [statusFilter, setStatusFilter] = useUrlParam(searchParams, setSearchParams, 'status', '', { resetParams: ['page'] })
+
+  const q = query.trim().toLowerCase()
+  const filtered = useMemo(
+    () =>
+      organisations.filter((o) => {
+        if (statusFilter && o.status !== statusFilter) return false
+        if (q && !(o.name?.toLowerCase().includes(q) || o.org_code?.toLowerCase().includes(q))) return false
+        return true
+      }),
+    [organisations, statusFilter, q]
+  )
+  const filtersActive = query !== '' || statusFilter !== ''
+
+  function resetFilters() {
+    writeUrlParams(searchParams, setSearchParams, { q: null, status: null, page: null })
+  }
+
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
-    useSortedPage(organisations, ORG_SORT_ACCESSORS)
+    useSortedPage(filtered, ORG_SORT_ACCESSORS, { urlSync: { searchParams, setSearchParams } })
   const { columns, visibleColumns, toggleColumn, moveColumn, resetToDefault } =
     useColumnPreferences('admin-providers', ORG_COLUMNS)
-  const selection = useRowSelection(organisations.map((o) => o.id))
+  const selection = useRowSelection(filtered.map((o) => o.id))
   const selectedOrgs = useMemo(
-    () => organisations.filter((o) => selection.selected.has(o.id)),
-    [organisations, selection.selected]
+    () => filtered.filter((o) => selection.selected.has(o.id)),
+    [filtered, selection.selected]
   )
   const selectedToActivate = useMemo(() => selectedOrgs.filter((o) => o.status !== 'active'), [selectedOrgs])
   const selectedToSuspend = useMemo(() => selectedOrgs.filter((o) => o.status === 'active'), [selectedOrgs])
@@ -264,13 +299,50 @@ export default function AdminProviders() {
           </form>
         )}
 
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            aria-label="Search organisations"
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by name or ID…"
+            className="flex-1 min-w-[220px] rounded-md border border-hairline bg-card px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+          />
+          <div role="group" aria-label="Filter by organisation status" className="flex items-center gap-1.5">
+            {STATUS_FILTERS.map((s) => (
+              <button
+                key={s.value || 'all'}
+                type="button"
+                aria-pressed={statusFilter === s.value}
+                onClick={() => setStatusFilter(s.value)}
+                className={`text-xs rounded-full px-3 py-1.5 border whitespace-nowrap ${
+                  statusFilter === s.value ? 'border-moss text-ink font-medium bg-moss/10' : 'border-hairline text-secondary hover:text-ink'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+          {filtersActive && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="text-xs text-secondary hover:text-ink py-1.5 px-2 whitespace-nowrap"
+            >
+              Reset filters
+            </button>
+          )}
+        </div>
+
         <MutationFeedback status="error" message={error} />
 
         {loading ? (
           <p className="text-secondary">Loading…</p>
-        ) : organisations.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
-            <p className="text-secondary">No provider organisations yet.</p>
+            <p className="text-secondary">
+              {organisations.length === 0 ? 'No provider organisations yet.' : 'No provider organisations match your search or filter.'}
+            </p>
           </div>
         ) : (
           <div className="bg-card border border-hairline rounded-lg">
