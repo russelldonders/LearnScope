@@ -10,6 +10,8 @@ const {
   inviteConnectionToManagerTeam,
   inviteConnectionToManagerTeamByEmail,
   listManagerTeamMemberSummaries,
+  listMyManagerTeamRelationships,
+  leaveManagerTeam,
   setManagerTeamSharedSkills,
 } = await import('./managerTeams')
 
@@ -68,5 +70,24 @@ describe('manager team service', () => {
       p_team_id: 'team-1', p_title: 'Goal', p_note: 'Practise together',
       p_membership_ids: ['membership-1'],
     })
+  })
+
+  it('maps only the current learner manager-team relationships', async () => {
+    rpc.mockResolvedValue({ data: [{
+      id: 'membership-1', status: 'active', team_id: 'team-1', team_name: 'My team',
+      manager_name: 'Morgan', invited_at: '2026-09-01', joined_at: '2026-09-02',
+      shared_skill_ids: ['skill-1'],
+    }], error: null })
+    await expect(listMyManagerTeamRelationships()).resolves.toEqual([{
+      id: 'membership-1', status: 'active', teamId: 'team-1', teamName: 'My team',
+      managerName: 'Morgan', invitedAt: '2026-09-01', joinedAt: '2026-09-02',
+      sharedSkillIds: ['skill-1'],
+    }])
+  })
+
+  it('leaves a team through the learner-authorised RPC', async () => {
+    rpc.mockResolvedValue({ error: null })
+    await leaveManagerTeam('membership-1')
+    expect(rpc).toHaveBeenCalledWith('leave_manager_team', { p_membership_id: 'membership-1' })
   })
 })

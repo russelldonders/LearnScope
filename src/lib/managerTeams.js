@@ -25,13 +25,23 @@ export async function listManagerTeams(workspaceId) {
 }
 
 export async function listMyManagerTeamInvites() {
-  const { data, error } = await supabase
-    .from('manager_team_memberships')
-    .select('id, team_id, role, status, invited_at, manager_teams(id, name, workspace_id)')
-    .eq('status', 'pending')
-    .order('invited_at', { ascending: false })
+  const relationships = await listMyManagerTeamRelationships()
+  return relationships.filter((relationship) => relationship.status === 'pending')
+}
+
+export async function listMyManagerTeamRelationships() {
+  const { data, error } = await supabase.rpc('list_my_manager_team_relationships')
   if (error) throw error
-  return data ?? []
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    status: row.status,
+    teamId: row.team_id,
+    teamName: row.team_name,
+    managerName: row.manager_name,
+    invitedAt: row.invited_at,
+    joinedAt: row.joined_at,
+    sharedSkillIds: row.shared_skill_ids ?? [],
+  }))
 }
 
 export async function listPendingManagerTeamInvites(teamId) {
@@ -63,6 +73,33 @@ export async function decideManagerTeamInvite(membershipId, accept) {
     p_membership_id: membershipId, p_accept: accept,
   })
   if (error) throw error
+}
+
+export async function leaveManagerTeam(membershipId) {
+  const { error } = await supabase.rpc('leave_manager_team', { p_membership_id: membershipId })
+  if (error) throw error
+}
+
+export async function listMyManagerShareableSkills(userId) {
+  const [{ data: skills, error: skillsError }, { data: assessments, error: assessmentsError }] = await Promise.all([
+    supabase.from('skills').select('id, name, level').eq('user_id', userId).order('name'),
+    supabase.from('skill_assessments').select('skill_id, evidence_paths').eq('user_id', userId),
+  ])
+  if (skillsError) throw skillsError
+  if (assessmentsError) throw assessmentsError
+  const evidenceBySkill = new Map()
+  for (const assessment of assessments ?? []) {
+    evidenceBySkill.set(
+      assessment.skill_id,
+      (evidenceBySkill.get(assessment.skill_id) ?? 0) + (assessment.evidence_paths?.length ?? 0)
+    )
+  }
+  return (skills ?? []).map((skill) => ({
+    id: skill.id,
+    name: skill.name,
+    level: skill.level,
+    evidenceCount: evidenceBySkill.get(skill.id) ?? 0,
+  }))
 }
 
 export async function listManagerTeamMembers(teamId) {

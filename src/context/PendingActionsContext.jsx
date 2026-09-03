@@ -6,6 +6,7 @@ import { listMyPendingOrgInvites } from '../lib/organisationInvites'
 import { listMyPendingEmployerInvites, listMyPendingDataAccessRequests } from '../lib/admin/employers'
 import { listMyCourseAssignments } from '../lib/courseCatalogue'
 import { listMySkillSuggestions } from '../lib/skillSuggestions'
+import { listMyManagerTeamInvites } from '../lib/managerTeams'
 
 const PendingActionsContext = createContext(undefined)
 
@@ -38,6 +39,7 @@ export function PendingActionsProvider({ children }) {
       dataAccessRequests,
       courseAssignments,
       skillSuggestions,
+      managerTeamInvites,
     ] = await Promise.all([
       supabase
         .from('connection_requests')
@@ -56,6 +58,7 @@ export function PendingActionsProvider({ children }) {
       listMyPendingDataAccessRequests(user.id),
       listMyCourseAssignments(user.id),
       listMySkillSuggestions(user.id),
+      listMyManagerTeamInvites(),
     ])
     setPendingActionCount(
       (requestCount ?? 0) +
@@ -66,7 +69,8 @@ export function PendingActionsProvider({ children }) {
         employerInvites.length +
         dataAccessRequests.length +
         courseAssignments.length +
-        skillSuggestions.length
+        skillSuggestions.length +
+        managerTeamInvites.length
     )
   }, [user])
 

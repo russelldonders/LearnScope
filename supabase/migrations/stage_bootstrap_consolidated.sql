@@ -1,3 +1,7 @@
+-- =============================================================================
+-- 0001_init.sql
+-- =============================================================================
+
 create table skills (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) not null,
@@ -16,6 +20,12 @@ create policy "Users manage their own skills"
   with check (auth.uid() = user_id);
 
 create index skills_user_id_idx on skills (user_id);
+
+
+
+-- =============================================================================
+-- 0002_profiles.sql
+-- =============================================================================
 
 create table profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -52,6 +62,12 @@ create trigger on_auth_user_created
 insert into public.profiles (id)
 select id from auth.users
 on conflict (id) do nothing;
+
+
+
+-- =============================================================================
+-- 0003_courses_experience.sql
+-- =============================================================================
 
 create table courses (
   id uuid primary key default gen_random_uuid(),
@@ -93,6 +109,12 @@ create policy "Users manage their own experience"
 
 create index experience_user_id_idx on experience (user_id);
 
+
+
+-- =============================================================================
+-- 0004_avatar_and_current_role.sql
+-- =============================================================================
+
 alter table profiles add column avatar_url text;
 
 alter table skills add column is_current_role boolean not null default false;
@@ -116,6 +138,12 @@ create policy "Users can update their own avatar"
 create policy "Users can delete their own avatar"
   on storage.objects for delete
   using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+
+
+-- =============================================================================
+-- 0005_skill_assessments.sql
+-- =============================================================================
 
 create table skill_assessments (
   id uuid primary key default gen_random_uuid(),
@@ -153,7 +181,19 @@ create policy "Users manage their own skill evidence files"
   using (bucket_id = 'skill-evidence' and (storage.foldername(name))[1] = auth.uid()::text)
   with check (bucket_id = 'skill-evidence' and (storage.foldername(name))[1] = auth.uid()::text);
 
+
+
+-- =============================================================================
+-- 0006_nullable_skill_level.sql
+-- =============================================================================
+
 alter table skills alter column level drop not null;
+
+
+
+-- =============================================================================
+-- 0007_tracking_reason_and_multi_evidence.sql
+-- =============================================================================
 
 alter table skills add column tracking_reason text
   check (tracking_reason in ('lifestyle', 'work', 'personal_interest', 'career_development'));
@@ -164,9 +204,21 @@ update skill_assessments
 set evidence_paths = array[evidence_path]
 where evidence_path is not null and evidence_paths is null;
 
+
+
+-- =============================================================================
+-- 0008_skill_source.sql
+-- =============================================================================
+
 alter table skills add column source text
   not null default 'manual'
   check (source in ('manual', 'cv_import'));
+
+
+
+-- =============================================================================
+-- 0009_course_skill_link.sql
+-- =============================================================================
 
 alter table skill_assessments add column source text not null default 'self'
   check (source in ('self', 'course'));
@@ -175,6 +227,12 @@ alter table skill_assessments add column course_id uuid
   references courses(id) on delete set null;
 
 create index skill_assessments_course_id_idx on skill_assessments (course_id);
+
+
+
+-- =============================================================================
+-- 0010_connections.sql
+-- =============================================================================
 
 -- Let any logged-in user see another user's display name/avatar (needed to
 -- show who rated a skill, and who a connection is, across accounts). Insert/
@@ -337,6 +395,12 @@ $$;
 
 grant execute on function accept_invite_and_rate(text, int, text) to authenticated;
 
+
+
+-- =============================================================================
+-- 0011_peer_rating_owner_email.sql
+-- =============================================================================
+
 -- Snapshot the skill owner's email too (mirrors rater_email), so a user can
 -- resolve the email of a connection regardless of which direction the
 -- rating went — needed to let the invite flow offer "invite an existing
@@ -413,6 +477,12 @@ $$;
 
 grant execute on function accept_invite_and_rate(text, int, text) to authenticated;
 
+
+
+-- =============================================================================
+-- 0012_experience_learning_links.sql
+-- =============================================================================
+
 -- Link courses to the job/study period during which they were completed.
 -- Many-to-many: a course may relate to more than one experience. Deleting a
 -- link row removes only the association, never the course or experience.
@@ -478,6 +548,12 @@ alter table skill_assessments add column experience_id uuid
 
 create index skill_assessments_experience_id_idx on skill_assessments (experience_id);
 
+
+
+-- =============================================================================
+-- 0013_skill_library.sql
+-- =============================================================================
+
 -- Central, cross-user skill catalog. Unlike every other table in this
 -- schema, this one is intentionally NOT scoped to a single user: the whole
 -- point is that skill *names* are shared/reusable so people don't each
@@ -533,6 +609,12 @@ from skill_library l
 where lower(l.name) = lower(s.name)
   and s.library_skill_id is null;
 
+
+
+-- =============================================================================
+-- 0014_skill_lifecycle_stage.sql
+-- =============================================================================
+
 -- Lifecycle stage: where a tracked skill currently sits in its own
 -- progression, distinct from its proficiency level (which stays on
 -- skill_assessments history). Selected once when the skill is added;
@@ -550,6 +632,12 @@ alter table skills add column lifecycle_stage text
     'at_risk',
     'archived'
   ));
+
+
+
+-- =============================================================================
+-- 0015_xapi_statements.sql
+-- =============================================================================
 
 -- Day-to-day experience log, distinct from the `experience` table (work
 -- history / education). Each row holds a full xAPI-shaped statement
@@ -574,6 +662,12 @@ create policy "Users manage their own xapi statements"
 
 create index xapi_statements_user_id_idx on xapi_statements (user_id);
 create index xapi_statements_recorded_at_idx on xapi_statements (recorded_at desc);
+
+
+
+-- =============================================================================
+-- 0016_skills_profile_privacy.sql
+-- =============================================================================
 
 -- Privacy setting: whether a learner's skills profile can be viewed by
 -- people they're connected with (i.e. have exchanged a peer rating with),
@@ -605,6 +699,12 @@ create policy "Connections can view visible skills profiles"
     )
   );
 
+
+
+-- =============================================================================
+-- 0017_fix_skill_peer_ratings_rls_recursion.sql
+-- =============================================================================
+
 -- 0016 added a `skills` SELECT policy that subqueries skill_peer_ratings.
 -- That collided with the existing "Skill owners can view ratings on their
 -- skills" policy on skill_peer_ratings, which subqueried `skills` in the
@@ -620,6 +720,12 @@ drop policy "Skill owners can view ratings on their skills" on skill_peer_rating
 create policy "Skill owners can view ratings on their skills"
   on skill_peer_ratings for select
   using (auth.uid() = skill_owner_id);
+
+
+
+-- =============================================================================
+-- 0018_skill_course_links.sql
+-- =============================================================================
 
 -- Relationship between a skill and a course, mirroring
 -- skill_experience_links exactly. A skill can carry more than one
@@ -653,6 +759,12 @@ create policy "Users manage their own skill-course links"
 create index skill_course_links_skill_id_idx on skill_course_links (skill_id);
 create index skill_course_links_course_id_idx on skill_course_links (course_id);
 
+
+
+-- =============================================================================
+-- 0019_course_duration_and_type.sql
+-- =============================================================================
+
 -- Free-text duration ("6 weeks", "40 hours", "3 years"...) rather than a
 -- structured value+unit pair -- durations for courses are reported in
 -- wildly different units and a single text field keeps the form simple.
@@ -664,6 +776,12 @@ alter table courses add column duration text;
 -- already used for skill categories.
 alter table courses add column course_type text;
 
+
+
+-- =============================================================================
+-- 0020_xapi_statements_course_id.sql
+-- =============================================================================
+
 -- Let a recorded experience (xAPI statement) reference the course it
 -- happened during, for the course's own Experiences tab. Set null on
 -- delete so the statement survives if the course is later removed --
@@ -672,6 +790,12 @@ alter table xapi_statements add column course_id uuid
   references courses(id) on delete set null;
 
 create index xapi_statements_course_id_idx on xapi_statements (course_id);
+
+
+
+-- =============================================================================
+-- 0021_xapi_statements_skill_id.sql
+-- =============================================================================
 
 -- Let a recorded experience (xAPI statement) reference a specific skill
 -- directly, mirroring course_id (0020), for the skill's own Experiences
@@ -691,6 +815,12 @@ update xapi_statements
 set skill_id = (statement #>> '{context,extensions,https://learnscope.app/xapi/extensions/skill,id}')::uuid
 where statement #>> '{context,extensions,https://learnscope.app/xapi/extensions/skill,id}' is not null
   and skill_id is null;
+
+
+
+-- =============================================================================
+-- 0022_skill_visible_on_profile.sql
+-- =============================================================================
 
 -- Per-skill visibility on the skills profile (0016), on top of the
 -- existing account-level opt-in (profiles.skills_profile_visible).
@@ -718,11 +848,23 @@ create policy "Connections can view visible skills profiles"
     )
   );
 
+
+
+-- =============================================================================
+-- 0023_skills_unique_name.sql
+-- =============================================================================
+
 -- Prevent adding the same skill twice: at most one skill row per learner
 -- per name, case-insensitive. Checked for and cleaned up any pre-existing
 -- duplicates in the live data before writing this migration, so this
 -- should apply cleanly.
 create unique index skills_user_id_name_lower_idx on skills (user_id, lower(name));
+
+
+
+-- =============================================================================
+-- 0024_skill_tags.sql
+-- =============================================================================
 
 -- Tags replace category as the way a skill is labeled: a skill can now
 -- carry zero or more tags instead of exactly one required category.
@@ -815,6 +957,12 @@ join tags t on lower(t.name) = lower(s.category)
 where s.category is not null
 on conflict (skill_id, tag_id) do nothing;
 
+
+
+-- =============================================================================
+-- 0025_connection_invites_dedup.sql
+-- =============================================================================
+
 -- Revoke pre-existing duplicate pending invites (same skill + email, more
 -- than one still pending) before adding the constraint below, keeping the
 -- oldest of each group. Revoking rather than deleting preserves the row for
@@ -840,6 +988,12 @@ where ci.status = 'pending'
 create unique index connection_invites_unique_pending_idx
   on connection_invites (skill_id, lower(invitee_email))
   where status = 'pending' and invitee_email is not null;
+
+
+
+-- =============================================================================
+-- 0026_drop_skill_experience_relationship.sql
+-- =============================================================================
 
 -- Drop the skill/experience "relationship" distinction (first_acquired /
 -- developed / applied / demonstrated). A skill is either associated with an
@@ -868,11 +1022,23 @@ alter table skill_experience_links drop column relationship cascade;
 alter table skill_experience_links
   add constraint skill_experience_links_skill_id_experience_id_key unique (skill_id, experience_id);
 
+
+
+-- =============================================================================
+-- 0027_skill_peer_ratings_category_nullable.sql
+-- =============================================================================
+
 -- skills.category became nullable back in 0024 (replaced by tags), but this
 -- snapshot column was never updated to match -- accept_invite_and_rate()
 -- inserts v_skill.category directly, so rating any skill added since 0024
 -- (which has no category at all) violates this NOT NULL constraint.
 alter table skill_peer_ratings alter column skill_category drop not null;
+
+
+
+-- =============================================================================
+-- 0028_skill_library_privacy.sql
+-- =============================================================================
 
 -- Support the new "Find skill" / "Create skill" split: searching the shared
 -- library now only surfaces public entries plus the searcher's own private
@@ -903,6 +1069,12 @@ create unique index skill_library_private_name_lower_idx
   on skill_library (created_by, lower(name))
   where is_private;
 
+
+
+-- =============================================================================
+-- 0029_skill_baseline_quizzes.sql
+-- =============================================================================
+
 -- Records a completed AI-generated baseline quiz: the questions asked (with
 -- the learner's chosen answer embedded in each question object) and the
 -- resulting score. Historical record, not an editable form -- no update or
@@ -932,6 +1104,12 @@ create policy "Users can record their own baseline quizzes"
   );
 
 create index skill_baseline_quizzes_skill_id_idx on skill_baseline_quizzes (skill_id);
+
+
+
+-- =============================================================================
+-- 0030_ai_baseline_assessment.sql
+-- =============================================================================
 
 -- Recognizes an AI-synthesized baseline assessment as a third assessment
 -- source alongside the existing self/course, so it lands in the same
@@ -975,6 +1153,12 @@ $$;
 
 grant execute on function get_peer_rater_progress(uuid) to authenticated;
 
+
+
+-- =============================================================================
+-- 0031_skill_targets.sql
+-- =============================================================================
+
 -- Records a skill target set while a skill is baseline_assessed: the level
 -- the learner is aiming for, a target date, and why. Setting one advances
 -- the skill to the target_set lifecycle stage. History-preserving like
@@ -998,6 +1182,12 @@ create policy "Users manage their own skill targets"
 
 create index skill_targets_skill_id_idx on skill_targets (skill_id);
 
+
+
+-- =============================================================================
+-- 0032_revoke_invite.sql
+-- =============================================================================
+
 -- Lets an inviter revoke their own pending connection invite. Previously
 -- only accept_invite_and_rate() could change status (for the invitee's
 -- accept flow); this adds the one narrow transition an inviter is allowed
@@ -1006,6 +1196,12 @@ create policy "Inviters can revoke their own pending invites"
   on connection_invites for update
   using (auth.uid() = inviter_id and status = 'pending')
   with check (auth.uid() = inviter_id and status = 'revoked');
+
+
+
+-- =============================================================================
+-- 0033_peer_rating_no_autolevel.sql
+-- =============================================================================
 
 -- Peer ratings collected via an invite no longer silently roll the skill's
 -- level forward -- ratings are informational history now; only an explicit
@@ -1065,12 +1261,24 @@ $$;
 
 grant execute on function accept_invite_and_rate(text, int, text) to authenticated;
 
+
+
+-- =============================================================================
+-- 0034_skill_evaluation_source.sql
+-- =============================================================================
+
 -- Recognizes "Evaluate Skill" (an always-available AI re-assessment,
 -- distinct from the one-time "Assess baseline" done while identified) as
 -- another skill_assessments source.
 alter table skill_assessments drop constraint skill_assessments_source_check;
 alter table skill_assessments add constraint skill_assessments_source_check
   check (source in ('self', 'course', 'ai_baseline', 'ai_evaluation'));
+
+
+
+-- =============================================================================
+-- 0035_course_catalogue.sql
+-- =============================================================================
 
 -- Central, shared catalogue of available courses and learning objects that
 -- learners can browse and enrol into -- distinct from the personal
@@ -1111,6 +1319,12 @@ insert into course_catalogue (name, provider, course_type, duration, synopsis) v
   ('Data Analysis with Python', 'CodeCraft', 'Online', '8 weeks', 'Get hands-on with pandas, visualisation and statistics to turn raw data into decisions.'),
   ('Interior Space Planning', 'Design Academy', 'Blended', '4 weeks', 'Explore layout, flow and function to design interior spaces that work for the people who use them.'),
   ('Effective Public Speaking', 'Communication Hub', 'Workshop', '1 day', 'Build confidence and structure for presenting clearly to any audience, in person or online.');
+
+
+
+-- =============================================================================
+-- 0036_course_catalogue_skills_and_tags.sql
+-- =============================================================================
 
 -- Which skills (and the proficiency level a course helps a learner reach)
 -- each catalogue course is associated with. References the shared
@@ -1197,6 +1411,12 @@ join course_catalogue cc on cc.name = v.course_name
 join tags t on lower(t.name) = lower(v.tag_name)
 on conflict (course_catalogue_id, tag_id) do nothing;
 
+
+
+-- =============================================================================
+-- 0037_experience_types_and_org_url.sql
+-- =============================================================================
+
 -- Broaden the experience timeline beyond employment/education to also
 -- cover projects, volunteer positions, and other experience -- these are
 -- all "chapters" in the learner's development the same way a job is, just
@@ -1210,6 +1430,12 @@ alter table experience add constraint experience_type_check
 -- to backfill here).
 alter table experience add column organization_url text;
 
+
+
+-- =============================================================================
+-- 0038_experience_course_type.sql
+-- =============================================================================
+
 -- Add "Course / Training" as its own experience type, alongside
 -- employment/education/project/volunteer/other. This is a separate,
 -- lighter-weight way to note a course as a timeline chapter using the
@@ -1222,12 +1448,24 @@ alter table experience drop constraint experience_type_check;
 alter table experience add constraint experience_type_check
   check (type in ('education', 'employment', 'project', 'volunteer', 'other', 'course'));
 
+
+
+-- =============================================================================
+-- 0039_experience_organization_nullable.sql
+-- =============================================================================
+
 -- The Project, Other Experience, and Course/Training experience types all
 -- treat organization as optional at the app layer (not every project or
 -- course has a formal organization behind it), but the column was still
 -- `not null` from the original employment/education-only schema. Relax it
 -- to match.
 alter table experience alter column organization drop not null;
+
+
+
+-- =============================================================================
+-- 0040_experience_parent_link.sql
+-- =============================================================================
 
 -- Lets a Project or Course/Training Record be recorded as part of a Job or
 -- Volunteer Position, rather than as an unrelated top-level chapter. A
@@ -1239,6 +1477,12 @@ alter table experience alter column organization drop not null;
 alter table experience add column parent_experience_id uuid references experience(id) on delete set null;
 
 create index experience_parent_experience_id_idx on experience (parent_experience_id);
+
+
+
+-- =============================================================================
+-- 0041_skill_validation.sql
+-- =============================================================================
 
 -- Per-skill opt-in to being asked to validate someone else's claim to have
 -- reached their target level on this same skill. Deliberately narrower and
@@ -1515,6 +1759,12 @@ $$;
 
 grant execute on function get_validation_request_contact(uuid) to authenticated;
 
+
+
+-- =============================================================================
+-- 0042_validator_discovery_visibility.sql
+-- =============================================================================
+
 -- validator_directory (0041) is security_invoker, so it only ever returns
 -- rows the querying user is independently allowed to SELECT from `skills`.
 -- No existing policy covered that case -- only the owner, or a connection
@@ -1540,6 +1790,12 @@ create policy "Skills open to being asked to validate are discoverable"
       )
     )
   );
+
+
+
+-- =============================================================================
+-- 0043_fix_validation_contact_type.sql
+-- =============================================================================
 
 -- auth.users.email is varchar(255), not text, so the function declared in
 -- 0041 failed at call time with "structure of query does not match function
@@ -1568,6 +1824,12 @@ begin
 end;
 $$;
 
+
+
+-- =============================================================================
+-- 0044_validator_course_visibility.sql
+-- =============================================================================
+
 -- 0041 granted validators SELECT on skill_course_links (the join row) for
 -- skills they're validating, but never on courses itself -- so the embedded
 -- `skill_course_links.select('courses(name, completed_date)')` join used by
@@ -1587,6 +1849,12 @@ create policy "Validators can view courses linked to skills they're validating"
         and svr.validator_id = auth.uid()
     )
   );
+
+
+
+-- =============================================================================
+-- 0045_skill_highest_lifecycle_stage.sql
+-- =============================================================================
 
 -- Tracks the furthest a skill has ever gotten through its lifecycle,
 -- separate from `lifecycle_stage` (the current/active stage), now that a
@@ -1663,6 +1931,12 @@ create trigger skills_sync_highest_lifecycle_stage
   for each row
   execute function sync_skill_highest_lifecycle_stage();
 
+
+
+-- =============================================================================
+-- 0046_skill_knowledge_axis.sql
+-- =============================================================================
+
 -- Splits the single proficiency scale into two parallel axes: the existing
 -- skills.level (kept for practical/demonstrated ability) and a new
 -- skills.knowledge_level (theoretical understanding). skill_assessments now
@@ -1673,11 +1947,23 @@ alter table skill_assessments add column axis text not null default 'practical'
 
 alter table skills add column knowledge_level int check (knowledge_level between 1 and 5);
 
+
+
+-- =============================================================================
+-- 0047_skill_knowledge_level_guide.sql
+-- =============================================================================
+
 -- Caches the AI-generated per-level knowledge guidance (5 statements, one
 -- per level) so opening the knowledge self-assessment doesn't call the LLM
 -- every time -- generated once (at skill creation, or lazily the first time
 -- it's needed) and reused after that.
 alter table skills add column knowledge_level_guide jsonb;
+
+
+
+-- =============================================================================
+-- 0048_confirming_baseline_lifecycle_stage.sql
+-- =============================================================================
 
 -- Inserts a new lifecycle stage, "Confirming Baseline", between
 -- "Establishing Baseline" (identified) and "Target Setting"
@@ -1748,6 +2034,12 @@ begin
 end;
 $$;
 
+
+
+-- =============================================================================
+-- 0049_skill_diagnostic_content.sql
+-- =============================================================================
+
 -- Shared, reusable diagnostic content (e.g. a level-calibrated quiz question
 -- bank) -- the xAPI-Activity-Definition-shaped "what to ask", generated once
 -- per skill+level+axis and reused by every learner doing that same check,
@@ -1785,6 +2077,12 @@ create policy "Authenticated users can view diagnostic content"
   to authenticated
   using (true);
 
+
+
+-- =============================================================================
+-- 0050_diagnostic_confirmed_assessment_source.sql
+-- =============================================================================
+
 -- Recognizes the Confirming Baseline knowledge-check quiz's confirm step as
 -- another skill_assessments source, distinct from 'ai_baseline' (a
 -- multi-source AI synthesis) since this is a single, MCQ-based, explicitly
@@ -1792,6 +2090,12 @@ create policy "Authenticated users can view diagnostic content"
 alter table skill_assessments drop constraint skill_assessments_source_check;
 alter table skill_assessments add constraint skill_assessments_source_check
   check (source in ('self', 'course', 'ai_baseline', 'ai_evaluation', 'diagnostic_confirmed'));
+
+
+
+-- =============================================================================
+-- 0051_rls_helper_functions.sql
+-- =============================================================================
 
 -- Centralizes two RLS checks that were duplicated verbatim across several
 -- policies (a real drift risk -- a future policy could easily get the
@@ -1981,6 +2285,12 @@ where s.lifecycle_stage in ('validated', 'maintained')
 
 grant select on validator_directory to authenticated;
 
+
+
+-- =============================================================================
+-- 0052_fix_skill_course_links_courses_rls_recursion.sql
+-- =============================================================================
+
 -- skill_course_links' base policy ("Users manage their own skill-course
 -- links", 0018) checks `exists (select 1 from courses where courses.id =
 -- course_id and courses.user_id = auth.uid())` as part of its WITH CHECK.
@@ -2019,6 +2329,12 @@ create policy "Validators can view courses linked to skills they're validating"
   on courses for select
   using (is_course_linked_to_validating_skill(courses.id, auth.uid()));
 
+
+
+-- =============================================================================
+-- 0053_skill_tracker_count.sql
+-- =============================================================================
+
 -- Anonymous, count-only lookup for "how many people (across all users, not
 -- just connections) track this same skill" -- used by the new statistics
 -- section on the skill page. Deliberately returns only an integer, never
@@ -2041,6 +2357,12 @@ as $$
 $$;
 
 grant execute on function count_skill_trackers(uuid) to authenticated;
+
+
+
+-- =============================================================================
+-- 0054_signup_names_and_onboarding.sql
+-- =============================================================================
 
 -- Signup now collects first/last name; rather than adding first_name/
 -- last_name columns alongside the existing full_name (a competing
@@ -2078,6 +2400,12 @@ $$;
 alter table profiles add column onboarding_completed_at timestamptz;
 
 update profiles set onboarding_completed_at = now() where onboarding_completed_at is null;
+
+
+
+-- =============================================================================
+-- 0055_skill_library_tags.sql
+-- =============================================================================
 
 -- Lets the shared skill_library be filtered by the same shared `tags`
 -- vocabulary already used for personal skills (0024) and course catalogue
@@ -2124,6 +2452,12 @@ from skill_library sl
 join tags t on lower(t.name) = lower(sl.category)
 where sl.category is not null
 on conflict (skill_library_id, tag_id) do nothing;
+
+
+
+-- =============================================================================
+-- 0056_split_profile_name.sql
+-- =============================================================================
 
 -- Splits the single full_name field into first_name/last_name so the
 -- profile edit form (and CV import) can work with them separately,
@@ -2227,11 +2561,23 @@ begin
 end;
 $$;
 
+
+
+-- =============================================================================
+-- 0057_skill_practical_level_guide.sql
+-- =============================================================================
+
 -- Caches the AI-generated per-level practical-ability guidance (5
 -- statements, one per level) for the practical axis, the same way
 -- 0047 caches knowledge_level_guide for the knowledge axis -- generated
 -- once (lazily, the first time it's needed) and reused after that.
 alter table skills add column practical_level_guide jsonb;
+
+
+
+-- =============================================================================
+-- 0058_skill_discovery_and_connections.sql
+-- =============================================================================
 
 -- ============================================================================
 -- Skill discovery + direct connections
@@ -2532,6 +2878,12 @@ create policy "Skill-search matches can view opted-in profiles"
     )
   );
 
+
+
+-- =============================================================================
+-- 0059_fix_skill_search_matches_rls_recursion.sql
+-- =============================================================================
+
 -- 0058's "Skill-search matches can view opted-in profiles" policy on
 -- skills checks `exists (select 1 from skills my_skills where
 -- my_skills.user_id = auth.uid() and my_skills.library_skill_id =
@@ -2571,6 +2923,12 @@ create policy "Skill-search matches can view opted-in profiles"
     and skills.library_skill_id is not null
     and has_matching_library_skill(auth.uid(), skills.library_skill_id)
   );
+
+
+
+-- =============================================================================
+-- 0060_fix_connection_request_and_skill_search_gaps.sql
+-- =============================================================================
 
 -- Security review of 0058 found three real gaps, fixed here:
 --
@@ -2701,6 +3059,12 @@ create policy "Skill-search matches can view opted-in profiles"
 -- which checks actual search opt-in rather than just a shared library id.
 drop function has_matching_library_skill(uuid, uuid);
 
+
+
+-- =============================================================================
+-- 0061_incoming_rate_invites.sql
+-- =============================================================================
+
 -- Surfaces pending rate invites addressed to the current user's own email,
 -- for the Connections page -- today connection_invites' only SELECT policy
 -- is "Inviters can view their own invites" (0010), so an invitee has no way
@@ -2738,6 +3102,12 @@ $$;
 
 grant execute on function list_incoming_rate_invites() to authenticated;
 
+
+
+-- =============================================================================
+-- 0062_backfill_cv_import_defaults.sql
+-- =============================================================================
+
 -- CV-imported skills never had lifecycle_stage or tracking_reason set
 -- (unlike FindSkillModal's manual add path, which always sets both), so
 -- every imported skill fell through every branch of computeUpNextItems and
@@ -2754,6 +3124,12 @@ update skills
 set tracking_reason = 'work'
 where source = 'cv_import'
   and tracking_reason is null;
+
+
+
+-- =============================================================================
+-- 0063_connections_activity_feed.sql
+-- =============================================================================
 
 -- "What your connections are up to": an opt-in feed of recent milestones
 -- from people the learner is connected to. Off by default, single global
@@ -2915,6 +3291,12 @@ $$;
 
 grant execute on function list_connections_activity(int) to authenticated;
 
+
+
+-- =============================================================================
+-- 0064_account_deletion_cascades.sql
+-- =============================================================================
+
 -- Makes account deletion (auth.admin.deleteUser) actually work. Today only
 -- profiles.id cascades from auth.users -- every other FK to auth.users(id)
 -- has no ON DELETE action, which blocks deletion outright. This migration
@@ -3060,6 +3442,12 @@ end;
 $$;
 
 grant execute on function delete_own_account_scrub() to authenticated;
+
+
+
+-- =============================================================================
+-- 0065_platform_roles_and_organisations.sql
+-- =============================================================================
 
 -- Foundational role/permission system: a flat platform_admins allowlist
 -- (full platform-owner console access -- a table rather than a single flag
@@ -3246,6 +3634,12 @@ create trigger prevent_self_account_status_change_trigger
   before update on profiles
   for each row execute procedure prevent_self_account_status_change();
 
+
+
+-- =============================================================================
+-- 0066_provider_catalogue_and_moderation.sql
+-- =============================================================================
+
 -- Extends the shared course_catalogue with provider ownership and an
 -- approval workflow (platform admins can create/curate directly, or
 -- approve/reject/deactivate entries submitted by an organisation's own
@@ -3339,6 +3733,12 @@ create policy "Platform admins can update tags"
   using (is_platform_admin(auth.uid()))
   with check (is_platform_admin(auth.uid()));
 
+
+
+-- =============================================================================
+-- 0067_prevent_last_platform_admin_removal.sql
+-- =============================================================================
+
 -- Guards against removing the platform's only remaining admin. 0065's RLS
 -- on platform_admins only restricts *who* may delete a row (any platform
 -- admin) -- it says nothing about how many would be left afterwards, so as
@@ -3363,11 +3763,23 @@ create trigger prevent_last_platform_admin_removal_trigger
   before delete on platform_admins
   for each row execute procedure prevent_last_platform_admin_removal();
 
+
+
+-- =============================================================================
+-- 0068_organisation_url.sql
+-- =============================================================================
+
 -- Adds a website URL to organisations, for the platform-admin provider edit
 -- form and the (now built) provider-facing console. Nullable/additive --
 -- existing organisations simply have no url until edited.
 
 alter table organisations add column url text;
+
+
+
+-- =============================================================================
+-- 0069_deactivated_org_revokes_access.sql
+-- =============================================================================
 
 -- Deactivating a provider organisation (organisations.status = 'inactive')
 -- previously had no effect on its staff's actual access -- is_org_admin/
@@ -3412,6 +3824,12 @@ as $$
       and organisations.status = 'active'
   ) or is_platform_admin(check_user_id)
 $$;
+
+
+
+-- =============================================================================
+-- 0070_organisation_member_pending_status.sql
+-- =============================================================================
 
 -- Inviting an *existing* LearnScope user as org staff (api/admin/actions.js
 -- inviteOrgStaff) previously granted access the moment the row was
@@ -3515,6 +3933,12 @@ end;
 $$;
 
 grant execute on function decide_org_invite(uuid, boolean) to authenticated;
+
+
+
+-- =============================================================================
+-- 0071_course_content.sql
+-- =============================================================================
 
 -- Course content: what a provider actually attaches inside a course they're
 -- building (video, downloadable files, SCORM packages) -- distinct from
@@ -3639,6 +4063,12 @@ create policy "Users manage their own content progress"
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
+
+
+-- =============================================================================
+-- 0072_course_content_storage_policies.sql
+-- =============================================================================
+
 -- 0071 created the course-content bucket but never added storage.objects
 -- policies for it (every other bucket in this schema has explicit ones --
 -- 0004 avatars, 0005 skill-evidence, 0041 skill-evidence-for-validators).
@@ -3701,6 +4131,12 @@ create policy "Org members can remove content for their own editable courses"
 alter table course_content_items
   add constraint course_content_items_storage_path_scoped
   check (storage_path like course_id::text || '/%');
+
+
+
+-- =============================================================================
+-- 0073_content_resource_library.sql
+-- =============================================================================
 
 -- Content (video/file/SCORM) moves from "belongs to one course" to "belongs
 -- to an organisation, reusable across courses" -- a provider uploads a
@@ -3885,6 +4321,12 @@ create policy "Org members can remove their own organisation's resources"
     )
   );
 
+
+
+-- =============================================================================
+-- 0074_fix_content_resources_rls_recursion.sql
+-- =============================================================================
+
 -- 0073's "View own org's resources, or linked into an approved course" policy
 -- on content_resources joins into course_content_links to check for an
 -- approved-course link. Evaluating that join requires Postgres to also check
@@ -3949,6 +4391,12 @@ create policy "Org members manage links for their own editable courses"
     and can_manage_content_resource(course_content_links.resource_id, auth.uid())
   );
 
+
+
+-- =============================================================================
+-- 0075_lock_platform_admin_removal_check.sql
+-- =============================================================================
+
 -- prevent_last_platform_admin_removal (0067) reads `count(*) from
 -- platform_admins` with no locking before deciding whether to allow the
 -- delete. Two concurrent deletes targeting different admins (e.g. two of
@@ -3979,6 +4427,12 @@ begin
   return old;
 end;
 $$;
+
+
+
+-- =============================================================================
+-- 0076_provider_skills_and_admin_visibility.sql
+-- =============================================================================
 
 -- Provider-specific skills: extends skill_library with a third scope
 -- alongside "public" and "private to one user" (0028) -- an organisation's
@@ -4091,6 +4545,12 @@ $$;
 
 grant execute on function skill_level_stats(uuid) to authenticated;
 
+
+
+-- =============================================================================
+-- 0077_offered_skills_check_ownership.sql
+-- =============================================================================
+
 -- 0076's organisation_offered_skills policy only checked the offered row's
 -- own organisation_id against is_org_member -- it never confirmed the
 -- referenced skill_library_id is actually one that organisation is allowed
@@ -4114,6 +4574,12 @@ create policy "Org members and platform admins manage their organisation's offer
         and (sl.organisation_id is null or sl.organisation_id = organisation_offered_skills.organisation_id)
     )
   );
+
+
+
+-- =============================================================================
+-- 0078_course_sections.sql
+-- =============================================================================
 
 -- Named, ordered groups of content within one course_catalogue entry --
 -- content_resources/course_content_links (0073) stay flat and reusable
@@ -4253,6 +4719,12 @@ create policy "Org members manage links for their own editable courses"
     )
   );
 
+
+
+-- =============================================================================
+-- 0079_xapi_resources.sql
+-- =============================================================================
+
 -- xAPI (Tin Can) content packages as a fourth content_resources type,
 -- alongside video/file/scorm (0071) -- uploaded/attached the same way as a
 -- SCORM package, but launched via a URL + query-string launch payload
@@ -4313,6 +4785,12 @@ create policy "Users create and view their own xapi launch sessions"
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
+
+
+-- =============================================================================
+-- 0080_xapi_launch_session_hardening.sql
+-- =============================================================================
+
 -- 0079's "for all" policy on xapi_launch_sessions had two gaps: (1) it
 -- covered UPDATE with no restriction beyond "still my row", so a learner
 -- could repoint their own session's resource_id/course_id to anything with
@@ -4370,6 +4848,12 @@ create policy "Users delete their own xapi launch sessions"
 alter table xapi_launch_sessions
   add constraint xapi_launch_sessions_expiry_bounded
   check (expires_at <= created_at + interval '4 hours');
+
+
+
+-- =============================================================================
+-- 0081_organisation_self_service_settings.sql
+-- =============================================================================
 
 -- Provider self-service org settings: a logo and an "about us" blurb, plus
 -- genuine self-service editing of the website url (0068) -- previously
@@ -4468,6 +4952,12 @@ create policy "Org admins can remove their own organisation's logo"
     )
   );
 
+
+
+-- =============================================================================
+-- 0082_organisation_guard_created_by.sql
+-- =============================================================================
+
 -- 0081's identity-change trigger guarded name/status/type but missed
 -- created_by -- an audit-only field (not used in any RLS/authorization
 -- check, per this schema's convention), but an org admin could still
@@ -4492,6 +4982,12 @@ begin
   return new;
 end;
 $$;
+
+
+
+-- =============================================================================
+-- 0083_skill_level_guide_sample.sql
+-- =============================================================================
 
 -- Skill-specific level guide text (practical_level_guide/knowledge_level_
 -- guide, 0047/0057) is cached per learner instance on `skills`, not shared
@@ -4522,6 +5018,12 @@ $$;
 
 grant execute on function skill_level_guide_sample(uuid) to authenticated;
 
+
+
+-- =============================================================================
+-- 0084_external_video_resources.sql
+-- =============================================================================
+
 -- External video (YouTube/Vimeo) as a fifth content_resources type, alongside
 -- video/file/scorm/xapi (0071, 0079) -- a link the provider pastes, not a
 -- file they upload, so there's nothing to put in storage_path. Reuses the
@@ -4545,6 +5047,12 @@ alter table content_resources add constraint content_resources_storage_or_extern
     (type = 'external_video' and storage_path is null and external_url is not null)
     or (type <> 'external_video' and storage_path is not null and external_url is null)
   );
+
+
+
+-- =============================================================================
+-- 0085_fix_storage_policy_name_shadowing.sql
+-- =============================================================================
 
 -- 0073's and 0081's storage.objects policies for course-content and
 -- org-logos each run `select 1 from organisations o where o.id::text =
@@ -4634,12 +5142,24 @@ create policy "Org admins can remove their own organisation's logo"
     )
   );
 
+
+
+-- =============================================================================
+-- 0086_profile_theme_preference.sql
+-- =============================================================================
+
 -- Lets a learner set light/dark/system appearance from their profile
 -- settings, mirroring the existing language/country self-service fields on
 -- this table. 'system' (follow the OS/browser) is the default so nobody's
 -- display flips unexpectedly on first load after this ships.
 alter table profiles add column theme_preference text not null default 'system'
   check (theme_preference in ('light', 'dark', 'system'));
+
+
+
+-- =============================================================================
+-- 0087_video_edit_overlays.sql
+-- =============================================================================
 
 -- Non-destructive video editing (trim/filter/speed + text & sticker
 -- overlays) for provider training videos: the edit is stored as data and
@@ -4651,6 +5171,12 @@ alter table profiles add column theme_preference text not null default 'system'
 -- table's existing RLS ("Org members manage their own organisation's
 -- resources") with no policy changes needed.
 alter table content_resources add column video_edit jsonb;
+
+
+
+-- =============================================================================
+-- 0088_provider_unpublish_approved_course.sql
+-- =============================================================================
 
 -- Providers previously had no way back into an approved course at all --
 -- every provider-facing UPDATE policy (course_catalogue's own edit policy,
@@ -4786,6 +5312,12 @@ create policy "Users create their own xapi launch sessions"
     and (course_id is null or exists (select 1 from courses c where c.id = xapi_launch_sessions.course_id and c.user_id = auth.uid()))
   );
 
+
+
+-- =============================================================================
+-- 0089_shared_skill_library_level_guides.sql
+-- =============================================================================
+
 -- AI-generated level guide text (knowledge_level_guide/practical_level_guide,
 -- 0047/0057) only ever depends on the skill *name*, so it was wasteful to
 -- cache it per learner instance on `skills` -- every learner tracking, say,
@@ -4831,6 +5363,12 @@ end;
 $$;
 
 grant execute on function set_skill_library_level_guide(uuid, text, jsonb) to authenticated;
+
+
+
+-- =============================================================================
+-- 0090_provider_public_profile.sql
+-- =============================================================================
 
 -- Public provider profile pages: an opt-in, anonymously-readable page at
 -- /providers/:slug listing an organisation's offered skills and approved
@@ -4962,6 +5500,12 @@ $$;
 
 grant execute on function get_provider_profile(text) to anon, authenticated;
 
+
+
+-- =============================================================================
+-- 0091_provider_profile_course_details.sql
+-- =============================================================================
+
 -- The public provider page's course tiles should look like the catalogue's
 -- own browse card (same skill/tag chips), not a stripped-down summary --
 -- replace get_provider_profile's courses branch to also aggregate
@@ -5033,6 +5577,12 @@ $$;
 
 grant execute on function get_provider_profile(text) to anon, authenticated;
 
+
+
+-- =============================================================================
+-- 0092_skill_knowledge_level_source_stats.sql
+-- =============================================================================
+
 -- Per-knowledge-level breakdown of self-rated vs assessed trackers, for the
 -- platform admin skill detail page's new "assessment stats" view. Same
 -- anonymous, count-only shape as skill_level_stats (0076)/count_skill_trackers
@@ -5073,6 +5623,12 @@ as $$
 $$;
 
 grant execute on function skill_knowledge_level_source_stats(uuid) to authenticated;
+
+
+
+-- =============================================================================
+-- 0093_course_catalogue_image.sql
+-- =============================================================================
 
 -- Course cover image, overtaking CourseThumbnail's generated gradient
 -- placeholder once set. Distinct from organisations.logo_url (0081), which
@@ -5169,6 +5725,12 @@ create policy "Course editors can remove their course's image"
     )
   );
 
+
+
+-- =============================================================================
+-- 0094_provider_profile_course_image.sql
+-- =============================================================================
+
 -- The public provider page (0091) built its course tiles before 0093 added
 -- course_catalogue.image_url -- surface it here too, the same way 0091
 -- added skill/tag chips, so an uploaded course image replaces
@@ -5241,6 +5803,12 @@ as $$
 $$;
 
 grant execute on function get_provider_profile(text) to anon, authenticated;
+
+
+
+-- =============================================================================
+-- 0095_recommend_skill_invites.sql
+-- =============================================================================
 
 -- "Recommend this skill" reuses the exact same connection_invites/share_code
 -- mechanism as the existing invite-to-rate flow, rather than a parallel
@@ -5491,6 +6059,12 @@ $$;
 
 grant execute on function list_incoming_rate_invites() to authenticated;
 
+
+
+-- =============================================================================
+-- 0096_decline_invite.sql
+-- =============================================================================
+
 -- Lets an invitee dismiss a pending invite addressed to their own verified
 -- email, for either invite_type. Needed most for 'recommend' invites: unlike
 -- a rating (which always succeeds), accept_invite_and_recommend can fail
@@ -5533,6 +6107,12 @@ end;
 $$;
 
 grant execute on function decline_invite(text) to authenticated;
+
+
+
+-- =============================================================================
+-- 0097_fix_course_image_storage_policy.sql
+-- =============================================================================
 
 -- 0093's policies accidentally bind `name` to course_catalogue.name instead
 -- of the storage object's path, so every UUID-folder check fails.
@@ -5609,11 +6189,23 @@ create policy "Course editors can remove their course's image"
     )
   );
 
+
+
+-- =============================================================================
+-- 0098_screen_recording_resource_type.sql
+-- =============================================================================
+
 -- Screen recordings share the existing secure video storage and playback
 -- pipeline, but remain a distinct resource kind throughout the product.
 alter table content_resources drop constraint content_resources_type_check;
 alter table content_resources add constraint content_resources_type_check
   check (type in ('video', 'screen_recording', 'file', 'scorm', 'xapi', 'external_video'));
+
+
+
+-- =============================================================================
+-- 0099_web_url_resource_type.sql
+-- =============================================================================
 
 -- Generic web links are stored resources, distinct from canonicalized
 -- YouTube/Vimeo embeds. Both URL-backed types carry external_url and no
@@ -5633,6 +6225,12 @@ alter table content_resources add constraint content_resources_storage_or_extern
     )
     or (type not in ('external_video', 'web_url') and storage_path is not null and external_url is null)
   );
+
+
+
+-- =============================================================================
+-- 0101_share_skills_by_default.sql
+-- =============================================================================
 
 -- Flips skills-profile sharing from opt-in to opt-out, per explicit product
 -- decision: new accounts (and new skills) now start shared with connections
@@ -5656,6 +6254,12 @@ update profiles set skills_profile_visible = true where skills_profile_visible =
 
 alter table skills alter column visible_on_profile set default true;
 update skills set visible_on_profile = true where visible_on_profile = false;
+
+
+
+-- =============================================================================
+-- 0102_scoped_connection_activity.sql
+-- =============================================================================
 
 -- Lets list_connections_activity (0063) be scoped to a single connection
 -- instead of always aggregating across all of them -- needed so
@@ -5804,6 +6408,12 @@ $$;
 
 grant execute on function list_connections_activity(int, uuid) to authenticated;
 
+
+
+-- =============================================================================
+-- 0103_connection_profile_growth_and_member_since.sql
+-- =============================================================================
+
 -- Backs two additions to SkillsProfile.jsx: a "member since" date in the
 -- header, and a "recent growth" panel replacing the plain activity feed.
 
@@ -5888,6 +6498,12 @@ $$;
 
 grant execute on function list_connection_recent_growth(uuid, int) to authenticated;
 
+
+
+-- =============================================================================
+-- 0104_share_activity_and_search_by_default.sql
+-- =============================================================================
+
 -- Same opt-in-to-opt-out flip as 0101 (skills profile sharing), applied to
 -- the two remaining cross-user visibility defaults: connections seeing your
 -- activity feed, and being discoverable in skill search by anyone tracking
@@ -5902,6 +6518,12 @@ update profiles set activity_feed_visible = true where activity_feed_visible = f
 
 alter table profiles alter column skill_search_visibility set default 'all';
 update profiles set skill_search_visibility = 'all' where skill_search_visibility = 'hidden';
+
+
+
+-- =============================================================================
+-- 0105_provider_course_participants.sql
+-- =============================================================================
 
 -- Provider-admin participant reporting for catalogue courses.
 
@@ -5956,6 +6578,12 @@ create policy "Provider admins can view participant progress"
         and is_course_provider_admin(ccl.course_id, (select auth.uid()))
     )
   );
+
+
+
+-- =============================================================================
+-- 0106_fix_course_image_storage_authorization.sql
+-- =============================================================================
 
 -- 0097 still bound the path expression inside its course_catalogue
 -- subquery to course_catalogue.name. Pass the storage object path into a
@@ -6025,6 +6653,12 @@ create policy "Course editors can remove their course's image"
     bucket_id = 'course-catalogue-images'
     and can_manage_course_catalogue_image(name)
   );
+
+
+
+-- =============================================================================
+-- 0107_course_versioning_and_code.sql
+-- =============================================================================
 
 -- Immutable published course versions. Providers edit a cloned draft while
 -- the currently approved version remains live for learners.
@@ -6243,6 +6877,12 @@ $$;
 
 grant execute on function get_provider_profile(text) to anon, authenticated;
 
+
+
+-- =============================================================================
+-- 0108_course_section_instructions.sql
+-- =============================================================================
+
 -- Optional learner-facing guidance for each course section. Keep version
 -- cloning in sync so a provider's instructions carry into the next draft.
 
@@ -6345,6 +6985,12 @@ $$;
 revoke all on function create_course_draft_version(uuid) from public;
 grant execute on function create_course_draft_version(uuid) to authenticated;
 
+
+
+-- =============================================================================
+-- 0109_onboarding_wizard_steps.sql
+-- =============================================================================
+
 -- Platform-admin-configurable first-login wizard: each row is one of the
 -- steps Onboarding.jsx already knows how to render (CV/history import,
 -- skills to learn), toggleable on/off from /admin/onboarding. `key` stays
@@ -6377,6 +7023,12 @@ create policy "Platform admins can update onboarding steps"
   using (is_platform_admin(auth.uid()))
   with check (is_platform_admin(auth.uid()));
 
+
+
+-- =============================================================================
+-- 0110_profile_import_banner.sql
+-- =============================================================================
+
 -- Drives the "import your CV/history" banner on the dashboard: shown until
 -- the learner has actually run an import once, or explicitly dismissed it.
 -- Kept as its own flag rather than inferring from skills.source='cv_import'
@@ -6384,6 +7036,12 @@ create policy "Platform admins can update onboarding steps"
 -- all, which that column alone wouldn't catch.
 alter table profiles add column cv_imported_at timestamptz;
 alter table profiles add column cv_import_banner_dismissed_at timestamptz;
+
+
+
+-- =============================================================================
+-- 0111_provider_catalogues.sql
+-- =============================================================================
 
 -- Provider-owned catalogue destinations plus the platform-managed global
 -- catalogue. Publication choices belong to a specific immutable course
@@ -6711,6 +7369,12 @@ create policy "View published courses, your own organisation's, as a platform ad
     )
   );
 
+
+
+-- =============================================================================
+-- 0112_catalogue_approvers.sql
+-- =============================================================================
+
 -- Redesigned against 0111's real per-catalogue model (a provider can own
 -- several named catalogues, plus the platform-managed Global catalogue) --
 -- an org admin designates specific active members of their own org as
@@ -7032,6 +7696,12 @@ $$;
 revoke all on function deactivate_course_publication(uuid) from public;
 grant execute on function deactivate_course_publication(uuid) to authenticated;
 
+
+
+-- =============================================================================
+-- 0113_unique_reference_codes.sql
+-- =============================================================================
+
 -- Prefixed sequential reference codes (CRS-00001, ORG-00001, USR-00001,
 -- SKL-00001) for courses, providers, users and shared-library skills --
 -- admin-facing identifiers for support/reference conversations, distinct
@@ -7213,6 +7883,12 @@ update skill_library set skill_code = generate_skill_code() where skill_code is 
 alter table skill_library alter column skill_code set not null;
 create unique index skill_library_skill_code_unique_idx on skill_library (skill_code);
 
+
+
+-- =============================================================================
+-- 20260830101243_education_subject_experiences.sql
+-- =============================================================================
+
 -- Subjects are experience records nested beneath an Education experience.
 -- Reusing the existing parent relationship means they automatically appear
 -- in the education timeline and can carry their own dates, description and
@@ -7283,6 +7959,12 @@ before insert or update of type, parent_experience_id, user_id
 on public.experience
 for each row execute function public.validate_experience_parent_type();
 
+
+
+-- =============================================================================
+-- 20260830104823_optional_subject_dates_and_duration.sql
+-- =============================================================================
+
 -- Subjects may be recorded with exact dates, a human-readable study
 -- duration, or both. Other experience types retain the app's required-date
 -- behaviour even though the column must become nullable for subjects.
@@ -7304,6 +7986,12 @@ alter table public.experience
       and study_duration is null
     )
   );
+
+
+
+-- =============================================================================
+-- 20260830110158_structured_subject_duration.sql
+-- =============================================================================
 
 -- Replace free-text duration entry with a queryable number and fixed unit.
 -- Keep the old text column as a legacy fallback so any duration entered
@@ -7436,6 +8124,12 @@ after update of organization, organization_url
 on public.experience
 for each row execute function public.sync_subject_organization_from_parent();
 
+
+
+-- =============================================================================
+-- 20260830125114_enforce_child_experience_date_bounds.sql
+-- =============================================================================
+
 -- Keep nested experiences within their parent's period at the database
 -- boundary, including writes made outside the web client.
 
@@ -7524,6 +8218,12 @@ before insert or update of type, parent_experience_id, user_id, organization,
 on public.experience
 for each row execute function public.validate_experience_parent_type();
 
+
+
+-- =============================================================================
+-- 20260830131618_link_skill_activity_to_experience.sql
+-- =============================================================================
+
 -- A logged skill activity can optionally happen within a specific work,
 -- education, subject, project, or other experience. The xAPI statement keeps
 -- the portable context extension; this column is its queryable mirror.
@@ -7567,6 +8267,12 @@ before insert or update of user_id, skill_id, experience_id
 on public.xapi_statements
 for each row execute function public.validate_xapi_statement_context_ownership();
 
+
+
+-- =============================================================================
+-- 20260831090444_xapi_statement_evidence.sql
+-- =============================================================================
+
 -- A logged skill activity can now carry evidence, the same shape
 -- skill_assessments has had since 0007 (a link plus uploaded files) --
 -- reuses the existing skill-evidence storage bucket and its RLS policy
@@ -7574,6 +8280,12 @@ for each row execute function public.validate_xapi_statement_context_ownership()
 -- storage/policy changes are needed here.
 alter table xapi_statements add column evidence_url text;
 alter table xapi_statements add column evidence_paths text[];
+
+
+
+-- =============================================================================
+-- 20260831113000_provider_catalogue_workspace.sql
+-- =============================================================================
 
 -- Expand provider catalogues into scoped workspaces with skills and role-based users.
 alter table catalogue_approvers
@@ -7679,6 +8391,12 @@ create policy "Catalogue admins manage catalogue skills"
     )
   );
 
+
+
+-- =============================================================================
+-- 20260831114500_provider_admin_catalogue_inheritance.sql
+-- =============================================================================
+
 -- Organisation provider admins automatically administer every catalogue
 -- owned by their organisation; explicit catalogue-admin grants remain for
 -- non-admin provider users.
@@ -7708,6 +8426,12 @@ $$;
 
 revoke all on function is_catalogue_admin(uuid, uuid) from public;
 grant execute on function is_catalogue_admin(uuid, uuid) to authenticated;
+
+
+
+-- =============================================================================
+-- 20260831120000_catalogue_resources.sql
+-- =============================================================================
 
 -- Allow an organisation resource to be assigned to one or more catalogues
 -- without duplicating or transferring ownership of the underlying resource.
@@ -7756,6 +8480,12 @@ create policy "Catalogue admins can assign resources"
 create policy "Catalogue admins can unassign resources"
   on catalogue_resources for delete to authenticated
   using (is_catalogue_admin(catalogue_resources.catalogue_id, (select auth.uid())));
+
+
+
+-- =============================================================================
+-- 20260831121500_assign_existing_course_to_catalogue.sql
+-- =============================================================================
 
 -- Catalogue admins can assign an existing course owned by the catalogue's
 -- organisation. Approved current versions are published immediately;
@@ -7824,6 +8554,12 @@ $$;
 revoke all on function assign_course_to_catalogue(uuid, uuid) from public, anon, authenticated;
 grant execute on function assign_course_to_catalogue(uuid, uuid) to authenticated;
 
+
+
+-- =============================================================================
+-- 20260831123000_require_published_catalogue_courses.sql
+-- =============================================================================
+
 -- Tighten catalogue assignment: only a current course version that has
 -- already been approved and published to at least one catalogue may be
 -- added from inside another catalogue.
@@ -7881,6 +8617,12 @@ $$;
 revoke all on function assign_course_to_catalogue(uuid, uuid) from public, anon, authenticated;
 grant execute on function assign_course_to_catalogue(uuid, uuid) to authenticated;
 
+
+
+-- =============================================================================
+-- 20260831124500_allow_first_catalogue_publication.sql
+-- =============================================================================
+
 -- A current approved course may receive its first catalogue destination;
 -- it does not need to have a pre-existing publication row.
 create or replace function assign_course_to_catalogue(p_catalogue_id uuid, p_course_id uuid)
@@ -7934,6 +8676,12 @@ $$;
 
 revoke all on function assign_course_to_catalogue(uuid, uuid) from public, anon, authenticated;
 grant execute on function assign_course_to_catalogue(uuid, uuid) to authenticated;
+
+
+
+-- =============================================================================
+-- 20260831130759_resource_versioning.sql
+-- =============================================================================
 
 -- Immutable resource version families. Existing rows remain live as
 -- published v1, preserving every course and catalogue link.
@@ -8161,6 +8909,12 @@ create policy "Catalogue admins can assign resources"
     )
   );
 
+
+
+-- =============================================================================
+-- 20260831150000_content_page_resources.sql
+-- =============================================================================
+
 -- Authored content pages are reusable organisation resources, attached to
 -- courses through the existing course_content_links relationship. Their
 -- versioned block document lives on the resource row; unlike uploaded media
@@ -8189,6 +8943,12 @@ alter table content_resources add constraint content_resources_page_content_chec
       and jsonb_array_length(page_content->'blocks') <= 100
     )
   );
+
+
+
+-- =============================================================================
+-- 20260831153000_allow_project_under_education.sql
+-- =============================================================================
 
 -- Education entries can now also contain "project" children, not just
 -- subjects (e.g. a dissertation or capstone project completed during a
@@ -8280,6 +9040,12 @@ before insert or update of type, parent_experience_id, user_id, organization,
 on public.experience
 for each row execute function public.validate_experience_parent_type();
 
+
+
+-- =============================================================================
+-- 20260831160000_external_connections.sql
+-- =============================================================================
+
 -- External data source connections (OAuth), starting with Strava. This is
 -- deliberately a different concept from "connections" (0058, learner-to-
 -- learner social relationships) -- an external_connection links a learner
@@ -8336,6 +9102,12 @@ $$;
 revoke all on function get_my_external_connections() from public;
 grant execute on function get_my_external_connections() to authenticated;
 
+
+
+-- =============================================================================
+-- 20260831160500_skill_source_external_import.sql
+-- =============================================================================
+
 -- A skill created from reviewing synced activity (e.g. importing "Running"
 -- the first time a Strava run is reviewed) is a new source distinct from
 -- 'cv_import' -- generic across providers rather than 'strava_import', so a
@@ -8344,6 +9116,12 @@ grant execute on function get_my_external_connections() to authenticated;
 alter table skills drop constraint skills_source_check;
 alter table skills add constraint skills_source_check
   check (source in ('manual', 'cv_import', 'recommend', 'external_import'));
+
+
+
+-- =============================================================================
+-- 20260831170000_provider_skill_alignment.sql
+-- =============================================================================
 
 -- Provider-managed alignment between an offered skill and the organisation's
 -- reusable resources. The resource remains the source record; removing an
@@ -8465,6 +9243,12 @@ create policy "Org members remove skills from editable training"
     )
   );
 
+
+
+-- =============================================================================
+-- 20260831180000_published_provider_skill_alignment.sql
+-- =============================================================================
+
 -- Skill alignment is catalogue metadata managed from the provider skill
 -- workspace. Providers choose from current published training rather than
 -- editing course content, so allow alignment rows on the current approved
@@ -8530,16 +9314,34 @@ create policy "Org members remove skills from published training"
     )
   );
 
+
+
+-- =============================================================================
+-- 20260831190000_current_role_banner_dismissal.sql
+-- =============================================================================
+
 -- Drives dismissal of the "Add your current role" banner on the dashboard,
 -- shown when the learner has skills/courses/connections but no experience
 -- entries yet. Same pattern as cv_import_banner_dismissed_at (0110).
 alter table profiles add column current_role_banner_dismissed_at timestamptz;
+
+
+
+-- =============================================================================
+-- 20260831200000_experience_other_type.sql
+-- =============================================================================
 
 -- Free-text label for what kind of experience an "Other Experience" entry
 -- is (e.g. "Hackathon", "Open source contribution") -- the fixed type enum
 -- only says "other", which isn't enough to distinguish entries from one
 -- another on the learner's timeline.
 alter table experience add column other_type text;
+
+
+
+-- =============================================================================
+-- 20260901090000_xapi_statement_skills.sql
+-- =============================================================================
 
 -- Lets one logged activity relate to more than one skill. xapi_statements
 -- keeps its skill_id column as the "primary" skill (first one picked when
@@ -8594,6 +9396,12 @@ create index xapi_statement_skills_skill_id_idx on xapi_statement_skills (skill_
 -- this table.
 insert into xapi_statement_skills (statement_id, skill_id, user_id)
 select id, skill_id, user_id from xapi_statements where skill_id is not null;
+
+
+
+-- =============================================================================
+-- 20260901100000_decouple_publish_from_catalogue.sql
+-- =============================================================================
 
 -- Separate "publish" (make this version the org's current live version)
 -- from "push to catalogue" (make it discoverable through a specific
@@ -8747,6 +9555,12 @@ $$;
 revoke all on function deactivate_course_publication(uuid) from public;
 grant execute on function deactivate_course_publication(uuid) to authenticated;
 
+
+
+-- =============================================================================
+-- 20260901120000_fix_resource_draft_version_page_content.sql
+-- =============================================================================
+
 -- create_resource_draft_version (20260831130759) predates page_content
 -- (20260831150000) and never copied it into the new draft row, so
 -- creating a new version of a 'page' resource always violated
@@ -8809,6 +9623,12 @@ $$;
 
 revoke all on function create_resource_draft_version(uuid) from public, anon, authenticated;
 grant execute on function create_resource_draft_version(uuid) to authenticated;
+
+
+
+-- =============================================================================
+-- 20260901130000_content_resource_codes.sql
+-- =============================================================================
 
 -- Prefixed reference code for org resource-library items (RES-00001),
 -- matching the CRS-/ORG-/USR-/SKL- codes already established (0113) for
@@ -8945,6 +9765,12 @@ $$;
 
 revoke all on function create_resource_draft_version(uuid) from public, anon, authenticated;
 grant execute on function create_resource_draft_version(uuid) to authenticated;
+
+
+
+-- =============================================================================
+-- 20260902090000_employers.sql
+-- =============================================================================
 
 -- Phase 1 foundation for the "employer" domain concept (CLAUDE.md future-
 -- direction section): a company running its own in-house LMS, distinct from
@@ -9159,6 +9985,12 @@ $$;
 
 grant execute on function create_employer(text) to authenticated;
 
+
+
+-- =============================================================================
+-- 20260902150000_employers_drop_update_policy.sql
+-- =============================================================================
+
 -- Security-review follow-up on 20260902090000 (employer Phase 1 foundation).
 --
 -- employers' UPDATE policy ("Employer admins can update their employer")
@@ -9175,6 +10007,12 @@ grant execute on function create_employer(text) to authenticated;
 -- self-service renaming can reintroduce update access with a BEFORE UPDATE
 -- trigger guarding the immutable columns.
 drop policy "Employer admins can update their employer" on employers;
+
+
+
+-- =============================================================================
+-- 20260902160000_decide_employer_invite.sql
+-- =============================================================================
 
 -- Phase 2 of the employer domain concept (follows 20260902090000/
 -- 20260902150000): proper invite-with-consent semantics for employer_members,
@@ -9249,6 +10087,12 @@ end;
 $$;
 
 grant execute on function decide_employer_invite(uuid, boolean) to authenticated;
+
+
+
+-- =============================================================================
+-- 20260902170000_fix_employer_membership_status_check.sql
+-- =============================================================================
 
 -- CRITICAL security fix, found by security review of Phase 2 (employer
 -- invite-with-consent, 20260902160000).
@@ -9339,6 +10183,12 @@ create policy "Invitees can view the employer they're invited to"
         and employer_members.user_id = auth.uid()
     )
   );
+
+
+
+-- =============================================================================
+-- 20260902180000_course_assignments.sql
+-- =============================================================================
 
 -- Phase 3 of the employer domain concept (follows 20260902090000/150000/
 -- 160000): lets an employer admin push/assign a course to specific
@@ -9487,6 +10337,12 @@ $$;
 revoke all on function assign_course_to_employer_members(uuid, uuid, uuid[]) from public, anon, authenticated;
 grant execute on function assign_course_to_employer_members(uuid, uuid, uuid[]) to authenticated;
 
+
+
+-- =============================================================================
+-- 20260902190000_course_assignment_security_fixes.sql
+-- =============================================================================
+
 -- Security-review follow-up on 20260902180000 (course assignment Phase 3).
 --
 -- 1. HIGH: course_assignments' UPDATE policy ("Learners can update their own
@@ -9581,6 +10437,12 @@ $$;
 
 revoke all on function assign_course_to_employer_members(uuid, uuid, uuid[]) from public, anon, authenticated;
 grant execute on function assign_course_to_employer_members(uuid, uuid, uuid[]) to authenticated;
+
+
+
+-- =============================================================================
+-- 20260902200000_employer_data_access_requests.sql
+-- =============================================================================
 
 -- Phase 5 of the employer domain concept: explicit, learner-controlled
 -- consent for an employer admin to see a member's skills profile, beyond
@@ -9831,6 +10693,12 @@ create policy "Employers with granted access can view skill assessments"
   on skill_assessments for select
   using (has_employer_data_access(skill_assessments.user_id, auth.uid()));
 
+
+
+-- =============================================================================
+-- 20260902210000_fix_has_employer_data_access_membership.sql
+-- =============================================================================
+
 -- Security fix found by review of Phase 5 (employer_data_access_requests,
 -- 20260902200000): has_employer_data_access only checked that the request
 -- row was 'approved' and that the checking user was an active admin of that
@@ -9865,6 +10733,12 @@ as $$
       and is_employer_member(r.employer_id, r.learner_id)
   )
 $$;
+
+
+
+-- =============================================================================
+-- 20260902220000_employer_data_access_shared_skills.sql
+-- =============================================================================
 
 -- Refines Phase 5 (employer_data_access_requests, 20260902200000/210000) from
 -- an all-or-nothing grant to per-skill sharing. Previously, once a request
@@ -10155,6 +11029,12 @@ create policy "Employers with granted access can view skill assessments"
 
 drop function if exists has_employer_data_access(uuid, uuid);
 
+
+
+-- =============================================================================
+-- 20260902230000_employer_skill_suggestions.sql
+-- =============================================================================
+
 -- Phase 4 of the employer domain concept (follows 20260902090000/150000/
 -- 160000/170000, and Phase 3's 20260902180000/190000 course_assignments):
 -- lets an employer admin push/suggest a skill (with an optional target
@@ -10330,6 +11210,12 @@ $$;
 revoke all on function suggest_skill_to_employer_members(uuid, uuid, text, uuid[], int, date, text) from public, anon, authenticated;
 grant execute on function suggest_skill_to_employer_members(uuid, uuid, text, uuid[], int, date, text) to authenticated;
 
+
+
+-- =============================================================================
+-- 20260902240000_critical_employer_grant_fixes.sql
+-- =============================================================================
+
 -- CRITICAL security fixes, found by independent security review of
 -- 20260902220000 (per-skill employer data sharing) and 20260902230000
 -- (employer skill suggestions), both already live on Staging before this
@@ -10422,6 +11308,12 @@ grant execute on function revoke_employer_data_access(uuid) to authenticated;
 revoke all on function is_skill_shared_with_employer(uuid, uuid) from public, anon, authenticated;
 grant execute on function is_skill_shared_with_employer(uuid, uuid) to authenticated;
 
+
+
+-- =============================================================================
+-- 20260902250000_tag_codes.sql
+-- =============================================================================
+
 -- Tags never got the admin-facing reference code every other shared
 -- object has (ORG-00001/SKL-00001/CRS-00001/USR-00001/RES-00001/
 -- EMP-00001, all via 0113_unique_reference_codes.sql and its later
@@ -10464,6 +11356,12 @@ update tags set tag_code = generate_tag_code() where tag_code is null;
 alter table tags alter column tag_code set not null;
 
 create unique index tags_tag_code_unique_idx on tags (tag_code);
+
+
+
+-- =============================================================================
+-- 20260902260000_course_catalogue_price.sql
+-- =============================================================================
 
 -- Informational course pricing (0113): a provider admin can record what a
 -- course costs so it can be displayed to learners browsing the catalogue.
@@ -10576,6 +11474,12 @@ $$;
 
 revoke all on function create_course_draft_version(uuid) from public;
 grant execute on function create_course_draft_version(uuid) to authenticated;
+
+
+
+-- =============================================================================
+-- 20260902270000_course_cohorts.sql
+-- =============================================================================
 
 -- Cohorts: a specific scheduled run of a course_catalogue entry (e.g. "Jan
 -- 2026 intake"), with one or more live sessions of its own. Purely additive
@@ -10798,6 +11702,12 @@ $$;
 revoke all on function enrol_in_course_cohort(uuid, uuid) from public, anon, authenticated;
 grant execute on function enrol_in_course_cohort(uuid, uuid) to authenticated;
 
+
+
+-- =============================================================================
+-- 20260902280000_course_cohort_seat_counts.sql
+-- =============================================================================
+
 -- Seats-remaining needs an aggregate count of `courses` rows per cohort,
 -- but courses' own RLS restricts a learner to their own rows only (0003) --
 -- a provider org admin already sees every row for their own catalogue
@@ -10837,6 +11747,12 @@ $$;
 
 revoke all on function get_cohort_seat_counts(uuid[]) from public, anon, authenticated;
 grant execute on function get_cohort_seat_counts(uuid[]) to authenticated;
+
+
+
+-- =============================================================================
+-- 20260902290000_course_cohort_security_fixes.sql
+-- =============================================================================
 
 -- Security review fixes for the cohorts feature (20260902270000,
 -- 20260902280000), before it ships. Three issues:
@@ -11042,6 +11958,12 @@ $$;
 
 revoke all on function enrol_in_course_cohort(uuid, uuid) from public, anon, authenticated;
 grant execute on function enrol_in_course_cohort(uuid, uuid) to authenticated;
+
+
+
+-- =============================================================================
+-- 20260902300000_profile_share_links.sql
+-- =============================================================================
 
 -- Learner-initiated, short-lived, token-based profile share link -- lets a
 -- learner proactively generate a URL (/shared/:token) they can send to
@@ -11309,6 +12231,12 @@ $$;
 revoke all on function get_shared_profile(text) from public, anon, authenticated;
 grant execute on function get_shared_profile(text) to anon, authenticated;
 
+
+
+-- =============================================================================
+-- 20260902310000_employer_linked_providers.sql
+-- =============================================================================
+
 -- Employer console "Providers" tab (foundation only): lets an employer admin
 -- record additional provider organisations linked to their employer, beyond
 -- the one auto-provisioned/attached provider org every employer already gets
@@ -11368,6 +12296,12 @@ create policy "Employer admins can unlink providers"
   using (is_employer_admin(employer_id, (select auth.uid())));
 
 grant select, insert, delete on table employer_linked_providers to authenticated;
+
+
+
+-- =============================================================================
+-- 20260903090000_admin_activity_log.sql
+-- =============================================================================
 
 -- ----------------------------------------------------------------------------
 -- Console overhaul Phase 5 ("Guidance and activity history"): a curated
@@ -11968,6 +12902,12 @@ create trigger log_employer_member_removed_trigger
   after delete on employer_members
   for each row execute procedure log_employer_member_removed();
 
+
+
+-- =============================================================================
+-- 20260903100000_tighten_admin_activity_log_grants.sql
+-- =============================================================================
+
 -- Hygiene follow-up, not a live vulnerability fix: 20260903090000 only ever
 -- added `grant select on admin_activity_log to authenticated`, never
 -- explicitly revoking Supabase's default GRANT ALL to anon/authenticated
@@ -11982,6 +12922,12 @@ create trigger log_employer_member_removed_trigger
 -- grant to create a real gap.
 revoke all on admin_activity_log from anon, authenticated;
 grant select on admin_activity_log to authenticated;
+
+
+
+-- =============================================================================
+-- 20260903110000_person_account_workspace_foundation.sql
+-- =============================================================================
 
 -- Additive identity/workspace foundation for multi-context accounts.
 --
@@ -12251,6 +13197,13 @@ create policy "Authentication accounts can view accessible workspaces"
     )
   );
 
+
+
+
+-- =============================================================================
+-- 20260903120000_distinct_workspace_types.sql
+-- =============================================================================
+
 -- Clarify that workspace is an access/navigation abstraction above the
 -- existing employer and provider domains. `organisations` continues to mean
 -- training-provider organisations; `employers` continues to mean company LMS
@@ -12305,3 +13258,554 @@ alter table workspaces
 create index workspaces_provider_organisation_idx
   on workspaces (provider_organisation_id, status)
   where provider_organisation_id is not null;
+
+
+
+
+-- =============================================================================
+-- 20260903130000_manager_team_foundation.sql
+-- =============================================================================
+
+-- Independent manager workspaces and consent-based collaborative teams.
+--
+-- A manager is an individual, not an employer tenant. Membership never grants
+-- access to a learner's profile tables. The only learner-owned data exposed to
+-- the manager domain is the explicit skill allow-list projected by
+-- list_manager_team_shared_skills().
+
+create table manager_teams (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references workspaces(id) on delete cascade,
+  name text not null check (char_length(trim(name)) between 1 and 120),
+  description text,
+  status text not null default 'active' check (status in ('active', 'archived')),
+  created_by uuid not null references auth.users(id) on delete restrict,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index manager_teams_workspace_idx on manager_teams (workspace_id, status);
+
+create table manager_team_memberships (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid not null references manager_teams(id) on delete cascade,
+  member_user_id uuid not null references auth.users(id) on delete cascade,
+  role text not null default 'member' check (role in ('manager', 'member')),
+  status text not null default 'pending' check (status in ('pending', 'active', 'declined', 'left', 'removed')),
+  invited_by uuid references auth.users(id) on delete set null,
+  invited_at timestamptz not null default now(),
+  decided_at timestamptz,
+  unique (team_id, member_user_id)
+);
+
+create index manager_team_memberships_user_idx
+  on manager_team_memberships (member_user_id, status);
+
+create table manager_team_shared_skills (
+  membership_id uuid not null references manager_team_memberships(id) on delete cascade,
+  skill_id uuid not null references skills(id) on delete cascade,
+  shared_at timestamptz not null default now(),
+  primary key (membership_id, skill_id)
+);
+
+create table manager_team_learning_activities (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid not null references manager_teams(id) on delete cascade,
+  catalogue_course_id uuid references course_catalogue(id) on delete restrict,
+  title text not null check (char_length(trim(title)) between 1 and 160),
+  instructions text,
+  due_at timestamptz,
+  status text not null default 'active' check (status in ('active', 'closed', 'cancelled')),
+  created_by uuid not null references auth.users(id) on delete restrict,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index manager_team_learning_activities_team_idx
+  on manager_team_learning_activities (team_id, status);
+
+create table manager_team_activity_participants (
+  activity_id uuid not null references manager_team_learning_activities(id) on delete cascade,
+  membership_id uuid not null references manager_team_memberships(id) on delete cascade,
+  status text not null default 'invited'
+    check (status in ('invited', 'accepted', 'started', 'completed', 'declined')),
+  updated_at timestamptz not null default now(),
+  primary key (activity_id, membership_id)
+);
+
+create schema if not exists private;
+grant usage on schema private to authenticated;
+
+create or replace function private.can_manage_manager_workspace(p_workspace_id uuid, p_user_id uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1
+    from public.workspace_access wa
+    join public.person_auth_accounts paa on paa.id = wa.auth_account_id
+    join public.workspaces w on w.id = wa.workspace_id
+    where wa.workspace_id = p_workspace_id
+      and paa.auth_user_id = p_user_id
+      and paa.status = 'active' and wa.status = 'active'
+      and wa.access_role in ('owner', 'manager')
+      and w.workspace_type = 'manager' and w.status = 'active'
+  )
+$$;
+
+create or replace function private.can_manage_manager_team(p_team_id uuid, p_user_id uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1 from public.manager_teams mt
+    where mt.id = p_team_id
+      and private.can_manage_manager_workspace(mt.workspace_id, p_user_id)
+  )
+$$;
+
+revoke all on function private.can_manage_manager_workspace(uuid, uuid) from public;
+revoke all on function private.can_manage_manager_team(uuid, uuid) from public;
+grant execute on function private.can_manage_manager_workspace(uuid, uuid) to authenticated;
+grant execute on function private.can_manage_manager_team(uuid, uuid) to authenticated;
+
+create or replace function create_manager_workspace(p_name text default 'My manager workspace')
+returns uuid language plpgsql security definer set search_path = '' as $$
+declare v_person_id uuid; v_account_id uuid; v_workspace_id uuid;
+begin
+  if nullif(trim(p_name), '') is null then raise exception 'Workspace name is required'; end if;
+  select paa.person_id, paa.id into v_person_id, v_account_id
+  from public.person_auth_accounts paa
+  where paa.auth_user_id = auth.uid() and paa.status = 'active';
+  if v_person_id is null then raise exception 'No active person account'; end if;
+
+  select id into v_workspace_id from public.workspaces
+  where workspace_type = 'manager' and owner_person_id = v_person_id and status = 'active'
+  order by created_at limit 1;
+  if v_workspace_id is not null then return v_workspace_id; end if;
+
+  insert into public.workspaces (workspace_type, name, owner_person_id)
+  values ('manager', trim(p_name), v_person_id) returning id into v_workspace_id;
+  insert into public.workspace_access (workspace_id, auth_account_id, access_role, granted_by)
+  values (v_workspace_id, v_account_id, 'owner', auth.uid());
+  return v_workspace_id;
+end $$;
+
+create or replace function create_manager_team(p_workspace_id uuid, p_name text, p_description text default null)
+returns uuid language plpgsql security definer set search_path = '' as $$
+declare v_team_id uuid;
+begin
+  if not private.can_manage_manager_workspace(p_workspace_id, auth.uid()) then raise exception 'Not authorised'; end if;
+  insert into public.manager_teams (workspace_id, name, description, created_by)
+  values (p_workspace_id, trim(p_name), nullif(trim(p_description), ''), auth.uid()) returning id into v_team_id;
+  insert into public.manager_team_memberships (team_id, member_user_id, role, status, invited_by, decided_at)
+  values (v_team_id, auth.uid(), 'manager', 'active', auth.uid(), now());
+  return v_team_id;
+end $$;
+
+create or replace function invite_connection_to_manager_team(p_team_id uuid, p_member_user_id uuid)
+returns uuid language plpgsql security definer set search_path = '' as $$
+declare v_membership_id uuid;
+begin
+  if not private.can_manage_manager_team(p_team_id, auth.uid()) then raise exception 'Not authorised'; end if;
+  if p_member_user_id = auth.uid() or not exists (
+    select 1 from public.connections c
+    where c.user_a_id = least(auth.uid(), p_member_user_id)
+      and c.user_b_id = greatest(auth.uid(), p_member_user_id)
+  ) then
+    raise exception 'Team invitations are limited to existing connections';
+  end if;
+  insert into public.manager_team_memberships (team_id, member_user_id, invited_by)
+  values (p_team_id, p_member_user_id, auth.uid())
+  on conflict (team_id, member_user_id) do update
+    set status = 'pending', role = 'member', invited_by = auth.uid(), invited_at = now(), decided_at = null
+    where manager_team_memberships.status in ('declined', 'left', 'removed')
+  returning id into v_membership_id;
+  if v_membership_id is null then raise exception 'This person already has a live team membership'; end if;
+  return v_membership_id;
+end $$;
+
+create or replace function decide_manager_team_invite(p_membership_id uuid, p_accept boolean)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  update public.manager_team_memberships
+  set status = case when p_accept then 'active' else 'declined' end, decided_at = now()
+  where id = p_membership_id and member_user_id = auth.uid() and role = 'member' and status = 'pending';
+  if not found then raise exception 'Pending invitation not found'; end if;
+end $$;
+
+create or replace function set_manager_team_shared_skills(p_membership_id uuid, p_skill_ids uuid[] default '{}')
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  if not exists (select 1 from public.manager_team_memberships m where m.id = p_membership_id and m.member_user_id = auth.uid() and m.status = 'active') then
+    raise exception 'Active membership not found';
+  end if;
+  if exists (select 1 from unnest(p_skill_ids) x where not exists (select 1 from public.skills s where s.id = x and s.user_id = auth.uid())) then
+    raise exception 'Only your own skills can be shared';
+  end if;
+  delete from public.manager_team_shared_skills where membership_id = p_membership_id;
+  insert into public.manager_team_shared_skills (membership_id, skill_id)
+  select p_membership_id, x from unnest(p_skill_ids) x on conflict do nothing;
+end $$;
+
+create or replace function create_manager_team_activity(
+  p_team_id uuid, p_title text, p_catalogue_course_id uuid default null,
+  p_instructions text default null, p_due_at timestamptz default null, p_membership_ids uuid[] default '{}'
+) returns uuid language plpgsql security definer set search_path = '' as $$
+declare v_activity_id uuid;
+begin
+  if not private.can_manage_manager_team(p_team_id, auth.uid()) then raise exception 'Not authorised'; end if;
+  insert into public.manager_team_learning_activities (team_id, catalogue_course_id, title, instructions, due_at, created_by)
+  values (p_team_id, p_catalogue_course_id, trim(p_title), nullif(trim(p_instructions), ''), p_due_at, auth.uid()) returning id into v_activity_id;
+  insert into public.manager_team_activity_participants (activity_id, membership_id)
+  select v_activity_id, m.id from public.manager_team_memberships m
+  where m.team_id = p_team_id and m.status = 'active' and m.id = any(p_membership_ids)
+  on conflict do nothing;
+  return v_activity_id;
+end $$;
+
+create or replace function list_manager_team_shared_skills(p_team_id uuid)
+returns table (membership_id uuid, member_user_id uuid, skill_id uuid, name text, category text, practical_level integer, knowledge_level integer)
+language sql stable security definer set search_path = '' as $$
+  select m.id, m.member_user_id, s.id, s.name, s.category, s.level, s.knowledge_level
+  from public.manager_team_memberships m
+  join public.manager_team_shared_skills ss on ss.membership_id = m.id
+  join public.skills s on s.id = ss.skill_id and s.user_id = m.member_user_id
+  where m.team_id = p_team_id and m.status = 'active'
+    and (m.member_user_id = auth.uid() or private.can_manage_manager_team(p_team_id, auth.uid()))
+$$;
+
+revoke all on function create_manager_workspace(text), create_manager_team(uuid,text,text), invite_connection_to_manager_team(uuid,uuid), decide_manager_team_invite(uuid,boolean), set_manager_team_shared_skills(uuid,uuid[]), create_manager_team_activity(uuid,text,uuid,text,timestamptz,uuid[]), list_manager_team_shared_skills(uuid) from public, anon;
+grant execute on function create_manager_workspace(text), create_manager_team(uuid,text,text), invite_connection_to_manager_team(uuid,uuid), decide_manager_team_invite(uuid,boolean), set_manager_team_shared_skills(uuid,uuid[]), create_manager_team_activity(uuid,text,uuid,text,timestamptz,uuid[]), list_manager_team_shared_skills(uuid) to authenticated;
+
+grant select on manager_teams, manager_team_memberships, manager_team_shared_skills, manager_team_learning_activities, manager_team_activity_participants to authenticated;
+alter table manager_teams enable row level security;
+alter table manager_team_memberships enable row level security;
+alter table manager_team_shared_skills enable row level security;
+alter table manager_team_learning_activities enable row level security;
+alter table manager_team_activity_participants enable row level security;
+
+create policy "Managers and invited members can view teams" on manager_teams for select to authenticated using (
+  private.can_manage_manager_workspace(workspace_id, (select auth.uid())) or exists (
+    select 1 from manager_team_memberships m where m.team_id = manager_teams.id and m.member_user_id = (select auth.uid()) and m.status in ('pending','active')
+  )
+);
+create policy "Managers and members can view scoped memberships" on manager_team_memberships for select to authenticated using (
+  member_user_id = (select auth.uid()) or private.can_manage_manager_team(team_id, (select auth.uid()))
+);
+create policy "Owners and team managers can view shared skill links" on manager_team_shared_skills for select to authenticated using (
+  exists (select 1 from manager_team_memberships m where m.id = membership_id and (m.member_user_id = (select auth.uid()) or private.can_manage_manager_team(m.team_id, (select auth.uid()))))
+);
+create policy "Active team participants can view collaborative activities" on manager_team_learning_activities for select to authenticated using (
+  private.can_manage_manager_team(team_id, (select auth.uid())) or exists (select 1 from manager_team_memberships m where m.team_id = manager_team_learning_activities.team_id and m.member_user_id = (select auth.uid()) and m.status = 'active')
+);
+create policy "Participants can view team activity invitations" on manager_team_activity_participants for select to authenticated using (
+  exists (select 1 from manager_team_memberships m join manager_team_learning_activities a on a.team_id = m.team_id where m.id = membership_id and a.id = activity_id and (m.member_user_id = (select auth.uid()) or private.can_manage_manager_team(a.team_id, (select auth.uid()))))
+);
+
+
+
+-- =============================================================================
+-- 20260903140000_manager_console_integration.sql
+-- =============================================================================
+
+-- Complete the manager console's read model and manager-authored records.
+
+alter table manager_team_memberships add column invited_email text;
+
+update manager_team_memberships m
+set invited_email = lower(u.email)
+from auth.users u
+where u.id = m.member_user_id;
+
+create table manager_collaboration_records (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid not null references manager_teams(id) on delete cascade,
+  title text not null check (char_length(trim(title)) between 1 and 160),
+  note text not null check (char_length(trim(note)) between 1 and 5000),
+  created_by uuid not null references auth.users(id) on delete restrict,
+  created_at timestamptz not null default now()
+);
+
+create index manager_collaboration_records_team_idx
+  on manager_collaboration_records (team_id, created_at desc);
+
+create table manager_collaboration_record_members (
+  record_id uuid not null references manager_collaboration_records(id) on delete cascade,
+  membership_id uuid not null references manager_team_memberships(id) on delete cascade,
+  primary key (record_id, membership_id)
+);
+
+create index manager_collaboration_record_members_membership_idx
+  on manager_collaboration_record_members (membership_id);
+
+grant select on manager_collaboration_records, manager_collaboration_record_members to authenticated;
+alter table manager_collaboration_records enable row level security;
+alter table manager_collaboration_record_members enable row level security;
+
+create policy "Managers can view their collaboration records"
+  on manager_collaboration_records for select to authenticated
+  using (private.can_manage_manager_team(team_id, (select auth.uid())));
+
+create policy "Managers can view collaboration record members"
+  on manager_collaboration_record_members for select to authenticated
+  using (
+    exists (
+      select 1
+      from manager_collaboration_records r
+      where r.id = record_id
+        and private.can_manage_manager_team(r.team_id, (select auth.uid()))
+    )
+  );
+
+create or replace function invite_connection_to_manager_team_by_email(p_team_id uuid, p_email text)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_member_user_id uuid;
+  v_membership_id uuid;
+  v_email text := lower(trim(p_email));
+begin
+  if not private.can_manage_manager_team(p_team_id, auth.uid()) then
+    raise exception 'Not authorised';
+  end if;
+  if v_email = '' then raise exception 'Email is required'; end if;
+
+  select u.id into v_member_user_id
+  from auth.users u
+  where lower(u.email) = v_email;
+
+  if v_member_user_id is null or v_member_user_id = auth.uid() or not exists (
+    select 1 from public.connections c
+    where c.user_a_id = least(auth.uid(), v_member_user_id)
+      and c.user_b_id = greatest(auth.uid(), v_member_user_id)
+  ) then
+    -- Deliberately identical for unknown and non-connected addresses.
+    raise exception 'No existing connection was found for that email';
+  end if;
+
+  insert into public.manager_team_memberships
+    (team_id, member_user_id, invited_email, invited_by)
+  values (p_team_id, v_member_user_id, v_email, auth.uid())
+  on conflict (team_id, member_user_id) do update
+    set status = 'pending', role = 'member', invited_email = excluded.invited_email,
+        invited_by = auth.uid(), invited_at = now(), decided_at = null
+    where manager_team_memberships.status in ('declined', 'left', 'removed')
+  returning id into v_membership_id;
+
+  if v_membership_id is null then
+    raise exception 'This person already has a live team membership';
+  end if;
+  return v_membership_id;
+end
+$$;
+
+create or replace function create_manager_collaboration_record(
+  p_team_id uuid,
+  p_title text,
+  p_note text,
+  p_membership_ids uuid[]
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare v_record_id uuid;
+begin
+  if not private.can_manage_manager_team(p_team_id, auth.uid()) then
+    raise exception 'Not authorised';
+  end if;
+  if coalesce(array_length(p_membership_ids, 1), 0) = 0 then
+    raise exception 'Choose at least one team member';
+  end if;
+  if exists (
+    select 1 from unnest(p_membership_ids) id
+    where not exists (
+      select 1 from public.manager_team_memberships m
+      where m.id = id and m.team_id = p_team_id
+        and m.role = 'member' and m.status = 'active'
+    )
+  ) then raise exception 'Every selected person must be an active team member'; end if;
+
+  insert into public.manager_collaboration_records (team_id, title, note, created_by)
+  values (p_team_id, trim(p_title), trim(p_note), auth.uid())
+  returning id into v_record_id;
+
+  insert into public.manager_collaboration_record_members (record_id, membership_id)
+  select v_record_id, id from unnest(p_membership_ids) id;
+  return v_record_id;
+end
+$$;
+
+create or replace function list_manager_team_member_summaries(p_team_id uuid)
+returns table (
+  id uuid, name text, avatar_url text, team_since timestamptz,
+  shared_skills jsonb, collaborative_learning_count bigint
+)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select
+    m.id,
+    coalesce(nullif(trim(p.full_name), ''), 'Team member'),
+    p.avatar_url,
+    coalesce(m.decided_at, m.invited_at),
+    coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', s.id, 'name', s.name, 'level', s.level,
+        'sharedAt', ss.shared_at,
+        'evidenceCount', coalesce((
+          select sum(coalesce(cardinality(sa.evidence_paths), 0))
+          from public.skill_assessments sa where sa.skill_id = s.id
+        ), 0)
+      ) order by s.name)
+      from public.manager_team_shared_skills ss
+      join public.skills s on s.id = ss.skill_id and s.user_id = m.member_user_id
+      where ss.membership_id = m.id
+    ), '[]'::jsonb),
+    (select count(*) from public.manager_team_activity_participants ap where ap.membership_id = m.id)
+  from public.manager_team_memberships m
+  join public.profiles p on p.id = m.member_user_id
+  where m.team_id = p_team_id and m.role = 'member' and m.status = 'active'
+    and private.can_manage_manager_team(p_team_id, auth.uid())
+  order by p.full_name nulls last, m.invited_at
+$$;
+
+create or replace function list_manager_team_learning_records(p_team_id uuid)
+returns table (
+  id uuid, title text, kind text, status text,
+  member_ids uuid[], member_names text[], occurred_at timestamptz
+)
+language sql stable security definer set search_path = '' as $$
+  select a.id, a.title,
+    case when a.catalogue_course_id is null then 'session' else 'course' end,
+    case a.status when 'active' then 'in_progress' else 'completed' end,
+    coalesce(array_agg(m.id order by p.full_name) filter (where m.role = 'member'), '{}'),
+    coalesce(array_agg(coalesce(nullif(trim(p.full_name), ''), 'Team member') order by p.full_name) filter (where m.role = 'member'), '{}'),
+    coalesce(a.due_at, a.created_at)
+  from public.manager_team_learning_activities a
+  left join public.manager_team_activity_participants ap on ap.activity_id = a.id
+  left join public.manager_team_memberships m on m.id = ap.membership_id
+  left join public.profiles p on p.id = m.member_user_id
+  where a.team_id = p_team_id and a.status <> 'cancelled'
+    and private.can_manage_manager_team(p_team_id, auth.uid())
+  group by a.id
+  order by coalesce(a.due_at, a.created_at) desc
+$$;
+
+create or replace function list_manager_collaboration_records(p_team_id uuid)
+returns table (
+  id uuid, title text, note text, member_ids uuid[],
+  member_names text[], created_at timestamptz
+)
+language sql stable security definer set search_path = '' as $$
+  select r.id, r.title, r.note,
+    array_agg(m.id order by p.full_name),
+    array_agg(coalesce(nullif(trim(p.full_name), ''), 'Team member') order by p.full_name),
+    r.created_at
+  from public.manager_collaboration_records r
+  join public.manager_collaboration_record_members rm on rm.record_id = r.id
+  join public.manager_team_memberships m on m.id = rm.membership_id
+  join public.profiles p on p.id = m.member_user_id
+  where r.team_id = p_team_id
+    and private.can_manage_manager_team(p_team_id, auth.uid())
+  group by r.id
+  order by r.created_at desc
+$$;
+
+revoke all on function invite_connection_to_manager_team_by_email(uuid,text),
+  create_manager_collaboration_record(uuid,text,text,uuid[]),
+  list_manager_team_member_summaries(uuid),
+  list_manager_team_learning_records(uuid),
+  list_manager_collaboration_records(uuid)
+from public, anon;
+
+grant execute on function invite_connection_to_manager_team_by_email(uuid,text),
+  create_manager_collaboration_record(uuid,text,text,uuid[]),
+  list_manager_team_member_summaries(uuid),
+  list_manager_team_learning_records(uuid),
+  list_manager_collaboration_records(uuid)
+to authenticated;
+
+
+
+-- =============================================================================
+-- 20260903150000_manager_learner_consent.sql
+-- =============================================================================
+
+-- Learner-facing consent lifecycle for independent manager teams.
+-- These APIs expose only the caller's own memberships and explicit shared-
+-- skill ids. Leaving a team removes the share links immediately while
+-- retaining the historical membership row as ended relationship metadata.
+
+create or replace function list_my_manager_team_relationships()
+returns table (
+  id uuid,
+  status text,
+  team_id uuid,
+  team_name text,
+  manager_name text,
+  invited_at timestamptz,
+  joined_at timestamptz,
+  shared_skill_ids uuid[]
+)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select
+    m.id,
+    m.status,
+    t.id,
+    t.name,
+    coalesce(nullif(trim(manager_profile.full_name), ''), 'Your manager'),
+    m.invited_at,
+    m.decided_at,
+    coalesce(array_agg(ss.skill_id order by ss.shared_at)
+      filter (where ss.skill_id is not null), '{}')
+  from public.manager_team_memberships m
+  join public.manager_teams t on t.id = m.team_id
+  join public.profiles manager_profile on manager_profile.id = t.created_by
+  left join public.manager_team_shared_skills ss on ss.membership_id = m.id
+  where m.member_user_id = auth.uid()
+    and m.role = 'member'
+    and m.status in ('pending', 'active')
+    and t.status = 'active'
+  group by m.id, t.id, manager_profile.full_name
+  order by m.invited_at desc
+$$;
+
+create or replace function leave_manager_team(p_membership_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not exists (
+    select 1
+    from public.manager_team_memberships m
+    where m.id = p_membership_id
+      and m.member_user_id = auth.uid()
+      and m.role = 'member'
+      and m.status = 'active'
+  ) then
+    raise exception 'Active team membership not found';
+  end if;
+
+  delete from public.manager_team_shared_skills
+  where membership_id = p_membership_id;
+
+  update public.manager_team_memberships
+  set status = 'left', decided_at = now()
+  where id = p_membership_id;
+end
+$$;
+
+revoke all on function list_my_manager_team_relationships(), leave_manager_team(uuid)
+from public, anon;
+grant execute on function list_my_manager_team_relationships(), leave_manager_team(uuid)
+to authenticated;
