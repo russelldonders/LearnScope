@@ -50,6 +50,34 @@ begin
 end
 $$;
 
+create temporary table profile_preview_test_result as
+select public.request_profile_transfer_preview(link_id) as preview_id
+from account_link_test_result;
+
+do $$
+begin
+  perform public.get_profile_transfer_comparison((select preview_id from profile_preview_test_result));
+  raise exception 'comparison was visible before both accounts approved';
+exception
+  when others then
+    if sqlerrm not like '%Approved transfer preview not found%' then raise; end if;
+end
+$$;
+
+select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select public.approve_profile_transfer_preview(preview_id) from profile_preview_test_result;
+
+do $$
+declare v_comparison jsonb;
+begin
+  select public.get_profile_transfer_comparison(preview_id)
+  into v_comparison from profile_preview_test_result;
+  if jsonb_array_length(v_comparison -> 'profiles') <> 2 then
+    raise exception 'approved comparison did not return both profiles';
+  end if;
+end
+$$;
+
 select public.revoke_verified_account_link(link_id) from account_link_test_result;
 
 reset role;
