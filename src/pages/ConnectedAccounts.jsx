@@ -9,6 +9,8 @@ import { buildStravaAuthorizeUrl, connectStrava, disconnectStrava, getMyExternal
 import { formatRelativeDate } from '../lib/dates'
 import AccountLinkingSection from './account-linking/AccountLinkingSection'
 import RedeemInvitationPanel from './account-linking/RedeemInvitationPanel'
+import TransferPreviewConsentPanel from './account-linking/transfer/TransferPreviewConsentPanel'
+import TransferPreviewPanel from './account-linking/transfer/TransferPreviewPanel'
 import {
   buildAccountLinkUrl,
   createAccountLinkInvitation,
@@ -17,6 +19,13 @@ import {
   redeemAccountLinkInvitation,
   revokeVerifiedAccountLink,
 } from '../lib/accountLinks'
+import {
+  approveProfileTransferPreview,
+  cancelProfileTransferPreview,
+  getProfileTransferComparison,
+  listProfileTransferPreviews,
+  requestProfileTransferPreview,
+} from '../lib/profileTransferPreviews'
 
 const OAUTH_STATE_KEY = 'stravaOAuthState'
 
@@ -42,11 +51,17 @@ export default function ConnectedAccounts() {
   const [redeemingLink, setRedeemingLink] = useState(false)
   const [linkRedeemed, setLinkRedeemed] = useState(false)
   const [redeemLinkError, setRedeemLinkError] = useState(null)
+  const [transferPreviews, setTransferPreviews] = useState([])
+  const [transferBusyId, setTransferBusyId] = useState(null)
+  const [transferError, setTransferError] = useState(null)
+  const [transferComparison, setTransferComparison] = useState(null)
+  const [durableProfileId, setDurableProfileId] = useState(null)
 
   useEffect(() => {
     handleOAuthReturn()
     load()
     loadAccountLinks()
+    loadTransferPreviews()
   }, [])
 
   async function load() {
@@ -58,6 +73,42 @@ export default function ConnectedAccounts() {
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadTransferPreviews() {
+    try {
+      setTransferPreviews(await listProfileTransferPreviews())
+    } catch (err) {
+      setTransferError(err.message)
+    }
+  }
+
+  async function runTransferAction(id, action) {
+    setTransferBusyId(id)
+    setTransferError(null)
+    try {
+      await action()
+      await loadTransferPreviews()
+      setTransferComparison(null)
+      setDurableProfileId(null)
+    } catch (err) {
+      setTransferError(err.message)
+    } finally {
+      setTransferBusyId(null)
+    }
+  }
+
+  async function handleOpenTransferPreview(previewId) {
+    setTransferBusyId(previewId)
+    setTransferError(null)
+    try {
+      setTransferComparison(await getProfileTransferComparison(previewId))
+      setDurableProfileId(null)
+    } catch (err) {
+      setTransferError(err.message)
+    } finally {
+      setTransferBusyId(null)
     }
   }
 
@@ -243,6 +294,23 @@ export default function ConnectedAccounts() {
             onDismissInvitation={() => setActiveInvitation(null)}
             onRevoke={handleRevokeAccountLink}
           />
+          <TransferPreviewConsentPanel
+            linkedAccounts={accountLinks}
+            previews={transferPreviews}
+            busyId={transferBusyId}
+            error={transferError}
+            onRequest={(linkId) => runTransferAction(linkId, () => requestProfileTransferPreview(linkId))}
+            onApprove={(previewId) => runTransferAction(previewId, () => approveProfileTransferPreview(previewId))}
+            onCancel={(previewId) => runTransferAction(previewId, () => cancelProfileTransferPreview(previewId))}
+            onOpen={handleOpenTransferPreview}
+          />
+          {transferComparison && (
+            <TransferPreviewPanel
+              preview={transferComparison}
+              durableProfileId={durableProfileId}
+              onSelectDurableProfile={setDurableProfileId}
+            />
+          )}
         </section>
 
         <div className="bg-card border border-hairline rounded-lg p-6">

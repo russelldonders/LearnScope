@@ -34,5 +34,19 @@ export async function listProfileTransferPreviews() {
 export async function getProfileTransferComparison(previewId) {
   const { data, error } = await supabase.rpc('get_profile_transfer_comparison', { p_preview_id: previewId })
   if (error) throw error
-  return data
+  const accountTypeLabels = {
+    personal: 'Personal account',
+    work_sso: 'Work SSO account',
+    work_managed: 'Work-managed account',
+  }
+  const profiles = data?.profiles ?? []
+  return {
+    accountA: profiles[0] ? { ...profiles[0], id: profiles[0].profileId, accountType: accountTypeLabels[profiles[0].accountType] ?? profiles[0].accountType, countsError: null } : null,
+    accountB: profiles[1] ? { ...profiles[1], id: profiles[1].profileId, accountType: accountTypeLabels[profiles[1].accountType] ?? profiles[1].accountType, countsError: null } : null,
+    conflicts: {
+      duplicateSkills: data?.conflicts?.skills ?? [],
+      overlappingCourses: data?.conflicts?.courses ?? [],
+      possibleDuplicateExperience: data?.conflicts?.experience ?? [],
+    },
+  }
 }

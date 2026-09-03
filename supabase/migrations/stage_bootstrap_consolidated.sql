@@ -14836,9 +14836,43 @@ begin
       private.profile_transfer_summary(v_user_b)
     ),
     'conflicts', jsonb_build_object(
-      'skills', coalesce((select jsonb_agg(a.name order by a.name) from public.skills a join public.skills b on lower(trim(a.name)) = lower(trim(b.name)) where a.user_id = v_user_a and b.user_id = v_user_b), '[]'::jsonb),
-      'courses', coalesce((select jsonb_agg(a.name order by a.name) from public.courses a join public.courses b on lower(trim(a.name)) = lower(trim(b.name)) where a.user_id = v_user_a and b.user_id = v_user_b), '[]'::jsonb),
-      'experience', coalesce((select jsonb_agg(a.title order by a.title) from public.experience a join public.experience b on lower(trim(a.title)) = lower(trim(b.title)) and lower(trim(coalesce(a.organization, ''))) = lower(trim(coalesce(b.organization, ''))) where a.user_id = v_user_a and b.user_id = v_user_b), '[]'::jsonb)
+      'skills', coalesce((
+        select jsonb_agg(jsonb_build_object('name', pairs.name, 'levelA', pairs.level_a, 'levelB', pairs.level_b) order by pairs.name)
+        from (
+          select distinct on (lower(trim(a.name))) a.name, a.level as level_a, b.level as level_b
+          from public.skills a
+          join public.skills b on lower(trim(a.name)) = lower(trim(b.name))
+          where a.user_id = v_user_a and b.user_id = v_user_b
+          order by lower(trim(a.name)), a.date_added desc, b.date_added desc
+        ) pairs
+      ), '[]'::jsonb),
+      'courses', coalesce((
+        select jsonb_agg(jsonb_build_object('title', pairs.name) order by pairs.name)
+        from (
+          select distinct on (lower(trim(a.name))) a.name
+          from public.courses a
+          join public.courses b on lower(trim(a.name)) = lower(trim(b.name))
+          where a.user_id = v_user_a and b.user_id = v_user_b
+          order by lower(trim(a.name)), a.created_at desc, b.created_at desc
+        ) pairs
+      ), '[]'::jsonb),
+      'experience', coalesce((
+        select jsonb_agg(jsonb_build_object(
+          'titleA', pairs.title_a, 'organizationA', pairs.organization_a,
+          'titleB', pairs.title_b, 'organizationB', pairs.organization_b
+        ) order by pairs.title_a)
+        from (
+          select distinct on (lower(trim(a.title)), lower(trim(coalesce(a.organization, ''))))
+            a.title as title_a, a.organization as organization_a,
+            b.title as title_b, b.organization as organization_b
+          from public.experience a
+          join public.experience b
+            on lower(trim(a.title)) = lower(trim(b.title))
+           and lower(trim(coalesce(a.organization, ''))) = lower(trim(coalesce(b.organization, '')))
+          where a.user_id = v_user_a and b.user_id = v_user_b
+          order by lower(trim(a.title)), lower(trim(coalesce(a.organization, ''))), a.start_date desc, b.start_date desc
+        ) pairs
+      ), '[]'::jsonb)
     )
   );
 end

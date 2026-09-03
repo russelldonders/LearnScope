@@ -22,7 +22,7 @@ describe('profile transfer preview service', () => {
   })
 
   it('uses narrow approval, cancellation and comparison RPCs', async () => {
-    rpc.mockResolvedValue({ data: null, error: null })
+    rpc.mockResolvedValue({ data: {}, error: null })
     await service.approveProfileTransferPreview('preview-1')
     await service.cancelProfileTransferPreview('preview-1')
     await service.getProfileTransferComparison('preview-1')
@@ -31,5 +31,20 @@ describe('profile transfer preview service', () => {
       ['cancel_profile_transfer_preview', { p_preview_id: 'preview-1' }],
       ['get_profile_transfer_comparison', { p_preview_id: 'preview-1' }],
     ])
+  })
+
+  it('adapts the comparison projection to the controlled UI contract', async () => {
+    rpc.mockResolvedValue({ data: {
+      profiles: [
+        { profileId: 'profile-a', email: 'a@example.com', accountType: 'personal', counts: { skills: 2 } },
+        { profileId: 'profile-b', email: 'b@example.com', accountType: 'work_sso', counts: { skills: 1 } },
+      ],
+      conflicts: { skills: [{ name: 'Coaching', levelA: 4, levelB: 3 }], courses: [{ title: 'Safety' }], experience: [] },
+    }, error: null })
+    await expect(service.getProfileTransferComparison('preview-1')).resolves.toMatchObject({
+      accountA: { id: 'profile-a', accountType: 'Personal account' },
+      accountB: { id: 'profile-b', accountType: 'Work SSO account' },
+      conflicts: { duplicateSkills: [{ name: 'Coaching', levelA: 4, levelB: 3 }], overlappingCourses: [{ title: 'Safety' }] },
+    })
   })
 })
