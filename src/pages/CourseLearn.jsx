@@ -11,6 +11,7 @@ import {
   contentFileUrl,
 } from '../lib/courseContent'
 import { getCourseCohort } from '../lib/courseCatalogue'
+import { RESOURCE_TYPE_LABELS } from '../lib/statusLabels'
 import ScormPlayer from '../components/ScormPlayer'
 import XapiPlayer from '../components/XapiPlayer'
 import EditedVideoPlayer from '../components/EditedVideoPlayer'
@@ -18,17 +19,6 @@ import AppHeader from '../components/AppHeader'
 import ProgressBar from '../components/ProgressBar'
 import CourseModal from '../components/CourseModal'
 import PageContent from '../components/PageContent'
-
-const TYPE_LABELS = {
-  video: 'Video',
-  screen_recording: 'Screen recording',
-  file: 'File',
-  scorm: 'SCORM package',
-  xapi: 'xAPI package',
-  external_video: 'External video',
-  web_url: 'Web link',
-  page: 'Page',
-}
 
 // Items come back ordered by their own `position`, which only resets to 0
 // within each section (see courseContent.js's nextLinkPosition) -- sorting
@@ -373,7 +363,7 @@ export default function CourseLearn() {
               <p className="mb-4 whitespace-pre-wrap text-sm leading-relaxed text-secondary">{currentSection.instructions}</p>
             )}
             <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1 block">
-              {TYPE_LABELS[item.type]}
+              {RESOURCE_TYPE_LABELS[item.type]}
             </span>
             <CourseItemPlayer
               item={item}
@@ -521,7 +511,7 @@ export default function CourseLearn() {
                     </p>
                   )}
                   <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1 block">
-                    {TYPE_LABELS[currentItem.type]}
+                    {RESOURCE_TYPE_LABELS[currentItem.type]}
                   </span>
                   <h3 className="font-display text-xl text-ink mb-4">{currentItem.title}</h3>
                   <CourseItemPlayer
