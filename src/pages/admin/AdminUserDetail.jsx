@@ -13,6 +13,17 @@ const EXPERIENCE_TYPE_LABELS = { employment: 'Employment', education: 'Education
 // bypassing via getUserProfile rather than the client-side query
 // SkillsProfile.jsx uses, since that page only shows what the *viewed* user
 // has opted into sharing with others -- an admin needs the whole record.
+//
+// Skills below link to AdminSkillDetail.jsx only when library_skill_id is
+// set -- that's a real FK to the shared skill_library (0013), the same
+// table that page shows; a skill with no library_skill_id is this learner's
+// own custom entry with no shared/admin-visible counterpart. Courses and
+// experience stay plain text: courses only carry a copied name/provider (no
+// stable course_code) and this personal `courses` row can outlive the
+// specific catalogue version it came from, so a text-search link risks
+// landing on the wrong version or nothing at all; experience has no
+// platform-admin detail page to link to at all. Both are safer left
+// unlinked than forced into a misleading destination.
 export default function AdminUserDetail() {
   const { userId } = useParams()
   const [data, setData] = useState(null)
@@ -95,7 +106,13 @@ export default function AdminUserDetail() {
                 <ul className="divide-y divide-hairline">
                   {data.skills.map((s) => (
                     <li key={s.id} className="px-4 py-2 text-sm flex items-center justify-between gap-2">
-                      <span className="text-ink">{s.name}</span>
+                      {s.library_skill_id ? (
+                        <Link to={`/admin/skills/${s.library_skill_id}`} className="text-moss font-medium hover:underline">
+                          {s.name}
+                        </Link>
+                      ) : (
+                        <span className="text-ink">{s.name}</span>
+                      )}
                       <span className="text-secondary text-xs">
                         {[s.category, `Level ${s.level}`].filter(Boolean).join(' · ')}
                       </span>

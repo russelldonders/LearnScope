@@ -414,7 +414,7 @@ async function getUserProfile(admin, caller, { userId }, res) {
 
   const { data: skills, error: skillsError } = await admin
     .from('skills')
-    .select('id, name, category, level')
+    .select('id, name, category, level, library_skill_id')
     .eq('user_id', userId)
     .order('name')
   if (skillsError) throw skillsError

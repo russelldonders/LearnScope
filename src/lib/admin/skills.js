@@ -67,6 +67,26 @@ export async function getLibrarySkill(id) {
   return withOwner
 }
 
+// Courses that reference this skill via course_catalogue_skills (0036) --
+// a single join query (no N+1), scoped to each course's currently-published
+// version so a skill page doesn't list every superseded draft/rejected
+// version of the same course alongside it. Table RLS ("Authenticated users
+// can view course catalogue skills") and course_catalogue's own admin-sees-
+// everything RLS both already allow a platform admin to read this directly,
+// same as listAllCatalogueCourses.
+export async function listCoursesForSkill(skillLibraryId) {
+  const { data, error } = await supabase
+    .from('course_catalogue_skills')
+    .select('level, course_catalogue:course_catalogue_id!inner(id, name, status, is_current_published)')
+    .eq('skill_library_id', skillLibraryId)
+    .eq('course_catalogue.is_current_published', true)
+    .order('name', { referencedTable: 'course_catalogue' })
+  if (error) throw error
+  return (data ?? [])
+    .filter((r) => r.course_catalogue)
+    .map((r) => ({ id: r.course_catalogue.id, name: r.course_catalogue.name, status: r.course_catalogue.status, level: r.level }))
+}
+
 export async function updateLibrarySkill(id, fields) {
   const { error } = await supabase.from('skill_library').update(fields).eq('id', id)
   if (error) throw error

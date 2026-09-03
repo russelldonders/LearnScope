@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import AdminLayout from './AdminLayout'
-import { getLibrarySkill } from '../../lib/admin/skills'
+import { getLibrarySkill, listCoursesForSkill } from '../../lib/admin/skills'
 import {
   countSkillTrackers,
   getSkillLevelStats,
@@ -30,6 +30,7 @@ export default function AdminSkillDetail() {
   const [levelStats, setLevelStats] = useState([])
   const [knowledgeStats, setKnowledgeStats] = useState([])
   const [guideSample, setGuideSample] = useState(null)
+  const [relatedCourses, setRelatedCourses] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [openAbilityLevel, setOpenAbilityLevel] = useState(null)
@@ -44,13 +45,15 @@ export default function AdminSkillDetail() {
       getSkillLevelStats(skillId),
       getSkillKnowledgeLevelSourceStats(skillId),
       getSkillLevelGuideSample(skillId),
+      listCoursesForSkill(skillId),
     ])
-      .then(([skillData, total, stats, knowledgeSourceStats, sample]) => {
+      .then(([skillData, total, stats, knowledgeSourceStats, sample, courses]) => {
         setSkill(skillData)
         setTotalTrackers(total)
         setLevelStats(stats)
         setKnowledgeStats(knowledgeSourceStats)
         setGuideSample(sample)
+        setRelatedCourses(courses)
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
@@ -144,6 +147,28 @@ export default function AdminSkillDetail() {
                     )
                   })}
                 </ul>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-display text-lg text-ink mb-2">
+                Related courses ({relatedCourses.length})
+              </h3>
+              <div className="bg-card border border-hairline rounded-lg overflow-hidden">
+                {relatedCourses.length === 0 ? (
+                  <p className="px-4 py-6 text-center text-sm text-secondary">No courses reference this skill yet.</p>
+                ) : (
+                  <ul className="divide-y divide-hairline">
+                    {relatedCourses.map((c) => (
+                      <li key={c.id} className="px-4 py-2 text-sm flex items-center justify-between gap-2">
+                        <Link to={`/admin/catalogue?q=${encodeURIComponent(c.name)}`} className="text-moss font-medium hover:underline">
+                          {c.name}
+                        </Link>
+                        <span className="text-secondary text-xs shrink-0">Targets {LEVEL_LABELS[c.level]}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
 

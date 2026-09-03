@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import AdminLayout from './AdminLayout'
 import {
   listAllCatalogueCourses,
@@ -54,7 +54,14 @@ const CATALOGUE_COLUMNS = [
     label: 'Provider',
     sortable: true,
     cellClassName: 'px-4 py-3 text-secondary whitespace-nowrap',
-    renderCell: (c) => c.organisations?.name || c.provider || '—',
+    renderCell: (c) =>
+      c.organisations?.name ? (
+        <Link to={`/admin/providers?q=${encodeURIComponent(c.organisations.name)}`} className="text-moss font-medium hover:underline">
+          {c.organisations.name}
+        </Link>
+      ) : (
+        c.provider || '—'
+      ),
   },
   {
     key: 'version',
@@ -116,9 +123,17 @@ export default function AdminCatalogue() {
   // link from elsewhere (e.g. the upcoming Overview page linking straight to
   // a status) all land on the same filtered/sorted/paged view. Mirrors
   // AdminUsers.jsx's exact param-naming convention.
+  //
+  // `org` (an organisations.id) is the same pattern applied to one more
+  // relationship: AdminProviders.jsx links a provider row straight to
+  // "this organisation's courses" via ?org=<id>, precise by id rather than
+  // name-text-matching since organisation_id is a real FK on course_
+  // catalogue. No visible filter control for it (unlike status) -- it's
+  // reached only by that incoming link, cleared the same way as the others.
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
   const [statusFilter, setStatusFilter] = useUrlParam(searchParams, setSearchParams, 'status', 'all', { resetParams: ['page'] })
+  const [orgFilter, setOrgFilter] = useUrlParam(searchParams, setSearchParams, 'org', '', { resetParams: ['page'] })
 
   useEffect(() => {
     load()
@@ -141,15 +156,20 @@ export default function AdminCatalogue() {
     () =>
       courses.filter((c) => {
         if (statusFilter !== 'all' && c.status !== statusFilter) return false
+        if (orgFilter && c.organisation_id !== orgFilter) return false
         if (q && !(c.name?.toLowerCase().includes(q) || c.course_code?.toLowerCase().includes(q))) return false
         return true
       }),
-    [courses, statusFilter, q]
+    [courses, statusFilter, orgFilter, q]
   )
-  const filtersActive = query !== '' || statusFilter !== 'all'
+  const filtersActive = query !== '' || statusFilter !== 'all' || orgFilter !== ''
+  // For the "Showing courses for <org>" banner below -- looked up from the
+  // unfiltered list (not `filtered`) so the name still shows even when the
+  // org filter combined with the other filters yields zero rows.
+  const orgFilterName = orgFilter ? courses.find((c) => c.organisation_id === orgFilter)?.organisations?.name : null
 
   function resetFilters() {
-    writeUrlParams(searchParams, setSearchParams, { q: null, status: null, page: null })
+    writeUrlParams(searchParams, setSearchParams, { q: null, status: null, org: null, page: null })
   }
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
@@ -206,6 +226,17 @@ export default function AdminCatalogue() {
   return (
     <AdminLayout>
       <div className="space-y-6">
+        {orgFilter && (
+          <div className="flex items-center gap-2 text-xs text-secondary bg-moss/10 border border-moss/30 rounded-md px-3 py-2">
+            <span>
+              Showing courses for <span className="text-ink font-medium">{orgFilterName ?? 'this organisation'}</span>.
+            </span>
+            <button type="button" onClick={() => setOrgFilter('')} className="text-moss font-medium hover:underline">
+              Clear
+            </button>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 flex-wrap">
             {STATUS_FILTERS.map((s) => (

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AdminLayout from './AdminLayout'
 import ConfirmDialog from '../../components/ConfirmDialog'
@@ -471,6 +471,12 @@ function OrganisationRow({
             <button type="button" onClick={onStartEdit} className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper whitespace-nowrap">
               Edit
             </button>
+            <Link
+              to={`/admin/catalogue?org=${org.id}`}
+              className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper whitespace-nowrap"
+            >
+              View courses
+            </Link>
             <button type="button" onClick={onToggleExpanded} className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper whitespace-nowrap">
               {expanded ? 'Hide users' : 'Manage users'}
             </button>
