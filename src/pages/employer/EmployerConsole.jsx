@@ -24,9 +24,11 @@ import {
 import { listOrganisations } from '../../lib/admin/organisations'
 import { listLibrarySkills } from '../../lib/skillLibrary'
 import { LEVELS, LEVEL_LABELS } from '../../lib/levels'
-import { useSortedPage, useRowSelection } from '../../lib/useSortedPage'
+import { useSortedPage, useRowSelection, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
 import { handleTabListKeyDown } from '../../lib/tabsKeyboard'
 import { SortableTh, TablePagination, SelectionTh, BulkActionBar } from '../../components/TableControls'
+import MutationFeedback from '../../components/MutationFeedback'
+import StatusBadge from '../../components/StatusBadge'
 
 const SECTIONS = [
   { key: 'training', label: 'Training' },
@@ -82,6 +84,28 @@ const SKILL_SUGGESTION_STATUS_LABELS = {
   adopted: 'Added by learner',
   dismissed: 'Dismissed',
 }
+
+const LINKED_PROVIDER_SORT_ACCESSORS = {
+  name: (p) => p.organisations?.name?.toLowerCase() ?? '',
+  org_code: (p) => p.organisations?.org_code?.toLowerCase() ?? '',
+  created_at: (p) => p.created_at ?? '',
+}
+
+// Every panel below (Learners, Assign training, Suggest skills, Providers)
+// keeps its own search/sort/page state in the URL, same convention as the
+// Training tab's ProviderTrainingSection. Each panel's "primary" table uses
+// the plain q/status/sort/dir/page/pageSize names (safe -- only one section
+// is ever mounted at a time, so there's no runtime collision, mirroring
+// ProviderConsole.jsx's org switcher); a panel with a second, simultaneously-
+// visible table (Assign training's assignment roster, Suggest skills'
+// suggestion roster) prefixes its own names (aq/aSort/..., sq/sSort/...) to
+// avoid colliding with the first. Used to reset all of them together on
+// both an employer switch and a section switch, so a stale filter/page from
+// one view never carries over and makes the newly-selected view look empty
+// (or, since several sections now share the plain q/status/page names,
+// silently pre-filtered by a search typed into a different section) --
+// mirrors the pre-existing q/status/page reset for the Training tab.
+const EMPLOYER_FILTER_RESET = { q: null, status: null, page: null, aq: null, aPage: null, sq: null, sPage: null }
 
 // Foundation console for an employer's own admin (employer_members
 // role = 'admin', gated by EmployerAdminRoute). Training reuses the
@@ -171,7 +195,7 @@ export default function EmployerConsole() {
           Build out your organisation's own training and manage the people it covers.
         </p>
 
-        {error && <p className="text-sm text-red-700 mb-4">{error}</p>}
+        <MutationFeedback status="error" message={error} className="mb-4" />
 
         {loading ? (
           <p className="text-secondary">Loading…</p>
@@ -186,7 +210,7 @@ export default function EmployerConsole() {
                     key={employer.id}
                     ref={(el) => { employerTabRefs.current[employer.id] = el }}
                     id={`employer-tab-${employer.id}`}
-                    to={`?${buildParams({ employer: employer.id, q: null, status: null, page: null }).toString()}`}
+                    to={`?${buildParams({ employer: employer.id, ...EMPLOYER_FILTER_RESET }).toString()}`}
                     role="tab"
                     aria-selected={selectedEmployerId === employer.id}
                     aria-controls={`employer-panel-${employer.id}`}
@@ -200,7 +224,7 @@ export default function EmployerConsole() {
                         // employer switch, same reasoning as ProviderConsole's org
                         // switcher -- a stale q/status filter would otherwise carry
                         // over and make the new employer's list look empty/wrong.
-                        onChange: (employerId) => setSearchParams(buildParams({ employer: employerId, q: null, status: null, page: null })),
+                        onChange: (employerId) => setSearchParams(buildParams({ employer: employerId, ...EMPLOYER_FILTER_RESET })),
                       })
                     }
                     className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
@@ -233,7 +257,7 @@ export default function EmployerConsole() {
                         key={section.key}
                         ref={(el) => { sectionTabRefs.current[section.key] = el }}
                         id={`employer-section-tab-${section.key}`}
-                        to={`?${buildParams({ section: section.key }).toString()}`}
+                        to={`?${buildParams({ section: section.key, ...EMPLOYER_FILTER_RESET }).toString()}`}
                         role="tab"
                         aria-selected={activeSection === section.key}
                         aria-controls={`employer-section-panel-${section.key}`}
@@ -243,7 +267,14 @@ export default function EmployerConsole() {
                             keys: SECTIONS.map((s) => s.key),
                             activeKey: activeSection,
                             refs: sectionTabRefs,
-                            onChange: (sectionKey) => setSearchParams(buildParams({ section: sectionKey })),
+                            // Several sections now share the same plain q/status/page
+                            // param names for their own "primary" table (only one
+                            // section is ever mounted at a time, so there's no runtime
+                            // collision) -- clearing them on a section switch too, not
+                            // just an employer switch, stops a search typed into one
+                            // section's box from silently pre-filtering the next
+                            // section's unrelated table.
+                            onChange: (sectionKey) => setSearchParams(buildParams({ section: sectionKey, ...EMPLOYER_FILTER_RESET })),
                           })
                         }
                         className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
@@ -317,16 +348,37 @@ export default function EmployerConsole() {
                     </div>
                   )}
                   {activeSection === 'learners' && (
-                    <EmployerLearnersPanel key={selectedEmployer.id} employer={selectedEmployer} />
+                    <EmployerLearnersPanel
+                      key={selectedEmployer.id}
+                      employer={selectedEmployer}
+                      searchParams={searchParams}
+                      setSearchParams={setSearchParams}
+                    />
                   )}
                   {activeSection === 'assign' && (
-                    <EmployerAssignTrainingPanel key={selectedEmployer.id} employer={selectedEmployer} />
+                    <EmployerAssignTrainingPanel
+                      key={selectedEmployer.id}
+                      employer={selectedEmployer}
+                      searchParams={searchParams}
+                      setSearchParams={setSearchParams}
+                    />
                   )}
                   {activeSection === 'suggest-skills' && (
-                    <EmployerSuggestSkillsPanel key={selectedEmployer.id} employer={selectedEmployer} />
+                    <EmployerSuggestSkillsPanel
+                      key={selectedEmployer.id}
+                      employer={selectedEmployer}
+                      searchParams={searchParams}
+                      setSearchParams={setSearchParams}
+                    />
                   )}
                   {activeSection === 'providers' && (
-                    <EmployerProvidersPanel key={selectedEmployer.id} employer={selectedEmployer} user={user} />
+                    <EmployerProvidersPanel
+                      key={selectedEmployer.id}
+                      employer={selectedEmployer}
+                      user={user}
+                      searchParams={searchParams}
+                      setSearchParams={setSearchParams}
+                    />
                   )}
                 </div>
               </div>
@@ -345,7 +397,7 @@ const DATA_ACCESS_STATUS_LABELS = {
   revoked: 'Access revoked',
 }
 
-function EmployerLearnersPanel({ employer }) {
+function EmployerLearnersPanel({ employer, searchParams, setSearchParams }) {
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -369,8 +421,23 @@ function EmployerLearnersPanel({ employer }) {
   const [dataAccessRequestingId, setDataAccessRequestingId] = useState(null)
   const [dataAccessError, setDataAccessError] = useState(null)
 
+  // Search/sort/page all live in the URL (?q=&sort=&dir=&page=&pageSize=),
+  // same convention as AdminCatalogue.jsx/AdminTags.jsx -- this is this
+  // panel's own "primary" table, so it uses the plain param names.
+  const [query, setQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
+  const q = query.trim().toLowerCase()
+  const filteredMembers = useMemo(
+    () => (q ? members.filter((m) => (m.email || m.user_id || '').toLowerCase().includes(q)) : members),
+    [members, q]
+  )
+  const filtersActive = query !== ''
+
+  function resetFilters() {
+    writeUrlParams(searchParams, setSearchParams, { q: null, page: null })
+  }
+
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
-    useSortedPage(members, LEARNER_SORT_ACCESSORS)
+    useSortedPage(filteredMembers, LEARNER_SORT_ACCESSORS, { urlSync: { searchParams, setSearchParams } })
 
   useEffect(() => {
     load()
@@ -531,8 +598,8 @@ function EmployerLearnersPanel({ employer }) {
         </button>
       </form>
 
-      {message && <p className="text-xs text-moss mb-3">{message}</p>}
-      {error && <p className="text-xs text-red-700 mb-3">{error}</p>}
+      <MutationFeedback status="success" message={message} size="xs" className="mb-3" />
+      <MutationFeedback status="error" message={error} size="xs" className="mb-3" />
 
       <details className="bg-card border border-hairline rounded-lg p-4 mb-4">
         <summary className="text-sm font-medium text-ink cursor-pointer">Bulk import learners</summary>
@@ -602,11 +669,31 @@ function EmployerLearnersPanel({ employer }) {
         )}
       </details>
 
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <input
+          aria-label="Search learners"
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by email…"
+          className="flex-1 min-w-[220px] rounded-md border border-hairline bg-card px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+        />
+        {filtersActive && (
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="text-xs text-secondary hover:text-ink py-1.5 px-2 whitespace-nowrap"
+          >
+            Reset filters
+          </button>
+        )}
+      </div>
+
       {loading ? (
         <p className="text-xs text-secondary">Loading learners…</p>
-      ) : members.length === 0 ? (
+      ) : filteredMembers.length === 0 ? (
         <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
-          <p className="text-secondary">No learners yet.</p>
+          <p className="text-secondary">{members.length === 0 ? 'No learners yet.' : 'No learners match your search.'}</p>
         </div>
       ) : (
         <div className="bg-card border border-hairline rounded-lg">
@@ -630,13 +717,18 @@ function EmployerLearnersPanel({ employer }) {
                     <tr key={m.id} className="border-b border-hairline last:border-0">
                       <td className="px-4 py-2 font-mono text-[10px] text-secondary whitespace-nowrap">{m.id.slice(0, 8)}</td>
                       <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{m.email || m.user_id}</td>
-                      <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{m.role}</td>
-                      <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{m.status === 'pending' ? 'Pending' : 'Active'}</td>
+                      <td className="px-4 py-2 whitespace-nowrap">
+                        <StatusBadge label={m.role === 'admin' ? 'Admin' : 'Member'} tone="neutral" />
+                      </td>
+                      <td className="px-4 py-2 whitespace-nowrap">
+                        <StatusBadge label={m.status === 'pending' ? 'Pending' : 'Active'} tone="neutral" />
+                      </td>
                       <td className="px-4 py-2 text-xs whitespace-nowrap">
                         <div className="flex flex-col gap-1 items-start">
-                          <span className="text-secondary">
-                            {dataAccess ? DATA_ACCESS_STATUS_LABELS[dataAccess.status] : 'No request yet'}
-                          </span>
+                          <StatusBadge
+                            label={dataAccess ? DATA_ACCESS_STATUS_LABELS[dataAccess.status] : 'No request yet'}
+                            tone={dataAccess?.status === 'declined' || dataAccess?.status === 'revoked' ? 'danger' : 'neutral'}
+                          />
                           {canRequest && (
                             <button
                               type="button"
@@ -648,7 +740,7 @@ function EmployerLearnersPanel({ employer }) {
                             </button>
                           )}
                           {dataAccessError?.id === m.user_id && (
-                            <span className="text-red-700">{dataAccessError.message}</span>
+                            <MutationFeedback status="error" message={dataAccessError.message} size="xs" />
                           )}
                         </div>
                       </td>
@@ -692,7 +784,7 @@ function EmployerLearnersPanel({ employer }) {
 // useRowSelection/SelectionTh/BulkActionBar primitives as ProviderConsole
 // .jsx's own bulk "Push to catalogue" table, for a consistent picker feel
 // across this console.
-function EmployerAssignTrainingPanel({ employer }) {
+function EmployerAssignTrainingPanel({ employer, searchParams, setSearchParams }) {
   const [courses, setCourses] = useState([])
   const [members, setMembers] = useState([])
   const [assignments, setAssignments] = useState([])
@@ -732,9 +824,23 @@ function EmployerAssignTrainingPanel({ employer }) {
   const activeMembers = useMemo(() => members.filter((m) => m.status === 'active'), [members])
   const emailByUserId = useMemo(() => new Map(members.map((m) => [m.user_id, m.email || m.user_id])), [members])
 
+  // Member picker's own search/sort/page -- this panel's "primary" table, so
+  // it uses the plain q/sort/dir/page/pageSize param names.
+  const [memberQuery, setMemberQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
+  const memberQ = memberQuery.trim().toLowerCase()
+  const filteredMembers = useMemo(
+    () => (memberQ ? activeMembers.filter((m) => (m.email || m.user_id || '').toLowerCase().includes(memberQ)) : activeMembers),
+    [activeMembers, memberQ]
+  )
+  const memberFiltersActive = memberQuery !== ''
+
+  function resetMemberFilters() {
+    writeUrlParams(searchParams, setSearchParams, { q: null, page: null })
+  }
+
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
-    useSortedPage(activeMembers, LEARNER_SORT_ACCESSORS)
-  const selection = useRowSelection(activeMembers.map((m) => m.user_id))
+    useSortedPage(filteredMembers, LEARNER_SORT_ACCESSORS, { urlSync: { searchParams, setSearchParams } })
+  const selection = useRowSelection(filteredMembers.map((m) => m.user_id))
   const pageUserIds = pageItems.map((m) => m.user_id)
   const selectedOnPage = pageUserIds.filter((id) => selection.selected.has(id)).length
 
@@ -742,6 +848,26 @@ function EmployerAssignTrainingPanel({ employer }) {
     () => assignments.map((a) => ({ ...a, learnerEmail: emailByUserId.get(a.assigned_to) })),
     [assignments, emailByUserId]
   )
+  // Assignment roster's own search/sort/page -- prefixed (aq/aSort/...)
+  // since it's visible on screen at the same time as the member picker
+  // above, and would otherwise collide with its plain param names.
+  const [assignmentQuery, setAssignmentQuery] = useUrlParam(searchParams, setSearchParams, 'aq', '', { resetParams: ['aPage'] })
+  const aq = assignmentQuery.trim().toLowerCase()
+  const filteredAssignments = useMemo(
+    () =>
+      aq
+        ? assignmentsWithEmail.filter(
+            (a) => a.course_catalogue?.name?.toLowerCase().includes(aq) || (a.learnerEmail || '').toLowerCase().includes(aq)
+          )
+        : assignmentsWithEmail,
+    [assignmentsWithEmail, aq]
+  )
+  const assignmentFiltersActive = assignmentQuery !== ''
+
+  function resetAssignmentFilters() {
+    writeUrlParams(searchParams, setSearchParams, { aq: null, aPage: null })
+  }
+
   const {
     sortKey: aSortKey,
     sortDir: aSortDir,
@@ -752,7 +878,11 @@ function EmployerAssignTrainingPanel({ employer }) {
     setPageSize: aSetPageSize,
     pageItems: aPageItems,
     totalItems: aTotalItems,
-  } = useSortedPage(assignmentsWithEmail, ASSIGNMENT_SORT_ACCESSORS, { defaultSortKey: 'created_at', defaultSortDir: 'desc' })
+  } = useSortedPage(filteredAssignments, ASSIGNMENT_SORT_ACCESSORS, {
+    defaultSortKey: 'created_at',
+    defaultSortDir: 'desc',
+    urlSync: { searchParams, setSearchParams, paramNames: { sort: 'aSort', dir: 'aDir', page: 'aPage', pageSize: 'aPageSize' } },
+  })
 
   async function handleAssign() {
     if (!selectedCourseId || selection.selected.size === 0) return
@@ -790,7 +920,7 @@ function EmployerAssignTrainingPanel({ employer }) {
         </p>
       </div>
 
-      {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
+      <MutationFeedback status="error" message={error} className="mb-3" />
 
       {loading ? (
         <p className="text-secondary">Loading…</p>
@@ -821,10 +951,10 @@ function EmployerAssignTrainingPanel({ employer }) {
           </div>
 
           {assignResult && (
-            <div className="bg-card border border-hairline rounded-lg p-4 mb-4 text-xs">
-              <p className="text-moss">{assignResult.assignedCount} learner(s) assigned.</p>
+            <div className="bg-card border border-hairline rounded-lg p-4 mb-4">
+              <MutationFeedback status="success" message={`${assignResult.assignedCount} learner(s) assigned.`} size="xs" />
               {assignResult.skippedEmails.length > 0 && (
-                <p className="text-secondary mt-1">
+                <p className="text-xs text-secondary mt-1">
                   Skipped (not an active member, or already assigned this course): {assignResult.skippedEmails.join(', ')}
                 </p>
               )}
@@ -837,6 +967,25 @@ function EmployerAssignTrainingPanel({ employer }) {
             </div>
           ) : (
             <div className="bg-card border border-hairline rounded-lg mb-8">
+              <div className="flex flex-wrap items-center gap-2 p-3 pb-0">
+                <input
+                  aria-label="Search learners"
+                  type="text"
+                  value={memberQuery}
+                  onChange={(e) => setMemberQuery(e.target.value)}
+                  placeholder="Search by email…"
+                  className="flex-1 min-w-[220px] rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+                />
+                {memberFiltersActive && (
+                  <button
+                    type="button"
+                    onClick={resetMemberFilters}
+                    className="text-xs text-secondary hover:text-ink py-1.5 px-2 whitespace-nowrap"
+                  >
+                    Reset filters
+                  </button>
+                )}
+              </div>
               <div className="p-3 pb-0">
                 <BulkActionBar
                   count={selection.selected.size}
@@ -852,6 +1001,10 @@ function EmployerAssignTrainingPanel({ employer }) {
                   ]}
                 />
               </div>
+              {filteredMembers.length === 0 ? (
+                <p className="text-center text-xs text-secondary py-8">No learners match your search.</p>
+              ) : (
+              <>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -879,13 +1032,17 @@ function EmployerAssignTrainingPanel({ employer }) {
                           />
                         </td>
                         <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{m.email || m.user_id}</td>
-                        <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{m.role}</td>
+                        <td className="px-4 py-2 whitespace-nowrap">
+                          <StatusBadge label={m.role === 'admin' ? 'Admin' : 'Member'} tone="neutral" />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
               <TablePagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalItems={totalItems} idPrefix={`employer-assign-members-${employer.id}`} />
+              </>
+              )}
             </div>
           )}
 
@@ -897,6 +1054,29 @@ function EmployerAssignTrainingPanel({ employer }) {
               </div>
             ) : (
               <div className="bg-card border border-hairline rounded-lg">
+                <div className="flex flex-wrap items-center gap-2 p-3">
+                  <input
+                    aria-label="Search assignments"
+                    type="text"
+                    value={assignmentQuery}
+                    onChange={(e) => setAssignmentQuery(e.target.value)}
+                    placeholder="Search by course or learner…"
+                    className="flex-1 min-w-[220px] rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+                  />
+                  {assignmentFiltersActive && (
+                    <button
+                      type="button"
+                      onClick={resetAssignmentFilters}
+                      className="text-xs text-secondary hover:text-ink py-1.5 px-2 whitespace-nowrap"
+                    >
+                      Reset filters
+                    </button>
+                  )}
+                </div>
+                {filteredAssignments.length === 0 ? (
+                  <p className="text-center text-xs text-secondary py-8">No assignments match your search.</p>
+                ) : (
+                <>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -912,7 +1092,9 @@ function EmployerAssignTrainingPanel({ employer }) {
                         <tr key={a.id} className="border-b border-hairline last:border-0">
                           <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{a.course_catalogue?.name || 'Deleted course'}</td>
                           <td className="px-4 py-2 text-secondary text-xs truncate max-w-[220px]">{a.learnerEmail || a.assigned_to}</td>
-                          <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{ASSIGNMENT_STATUS_LABELS[a.status] || a.status}</td>
+                          <td className="px-4 py-2 whitespace-nowrap">
+                            <StatusBadge label={ASSIGNMENT_STATUS_LABELS[a.status] || a.status} tone={a.status === 'dismissed' ? 'danger' : 'neutral'} />
+                          </td>
                           <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{new Date(a.created_at).toLocaleDateString()}</td>
                         </tr>
                       ))}
@@ -920,6 +1102,8 @@ function EmployerAssignTrainingPanel({ employer }) {
                   </table>
                 </div>
                 <TablePagination page={aPage} setPage={aSetPage} pageSize={aPageSize} setPageSize={aSetPageSize} totalItems={aTotalItems} idPrefix={`employer-assignments-${employer.id}`} />
+                </>
+                )}
               </div>
             )}
           </div>
@@ -945,7 +1129,7 @@ function EmployerAssignTrainingPanel({ employer }) {
 // pulls in owner-identity fields that have no place in this picker. Member
 // selection reuses the same useRowSelection/SelectionTh/BulkActionBar
 // primitives as the Assign training tab above, for a consistent picker feel.
-function EmployerSuggestSkillsPanel({ employer }) {
+function EmployerSuggestSkillsPanel({ employer, searchParams, setSearchParams }) {
   const [librarySkills, setLibrarySkills] = useState([])
   const [members, setMembers] = useState([])
   const [suggestions, setSuggestions] = useState([])
@@ -986,9 +1170,23 @@ function EmployerSuggestSkillsPanel({ employer }) {
   const activeMembers = useMemo(() => members.filter((m) => m.status === 'active'), [members])
   const emailByUserId = useMemo(() => new Map(members.map((m) => [m.user_id, m.email || m.user_id])), [members])
 
+  // Member picker's own search/sort/page -- this panel's "primary" table, so
+  // it uses the plain q/sort/dir/page/pageSize param names.
+  const [memberQuery, setMemberQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
+  const memberQ = memberQuery.trim().toLowerCase()
+  const filteredMembers = useMemo(
+    () => (memberQ ? activeMembers.filter((m) => (m.email || m.user_id || '').toLowerCase().includes(memberQ)) : activeMembers),
+    [activeMembers, memberQ]
+  )
+  const memberFiltersActive = memberQuery !== ''
+
+  function resetMemberFilters() {
+    writeUrlParams(searchParams, setSearchParams, { q: null, page: null })
+  }
+
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
-    useSortedPage(activeMembers, LEARNER_SORT_ACCESSORS)
-  const selection = useRowSelection(activeMembers.map((m) => m.user_id))
+    useSortedPage(filteredMembers, LEARNER_SORT_ACCESSORS, { urlSync: { searchParams, setSearchParams } })
+  const selection = useRowSelection(filteredMembers.map((m) => m.user_id))
   const pageUserIds = pageItems.map((m) => m.user_id)
   const selectedOnPage = pageUserIds.filter((id) => selection.selected.has(id)).length
 
@@ -1002,6 +1200,26 @@ function EmployerSuggestSkillsPanel({ employer }) {
     () => suggestions.map((s) => ({ ...s, learnerEmail: emailByUserId.get(s.learner_id) })),
     [suggestions, emailByUserId]
   )
+  // Suggestions roster's own search/sort/page -- prefixed (sq/sSort/...)
+  // since it's visible on screen at the same time as the member picker
+  // above, and would otherwise collide with its plain param names.
+  const [suggestionQuery, setSuggestionQuery] = useUrlParam(searchParams, setSearchParams, 'sq', '', { resetParams: ['sPage'] })
+  const sq = suggestionQuery.trim().toLowerCase()
+  const filteredSuggestions = useMemo(
+    () =>
+      sq
+        ? suggestionsWithEmail.filter(
+            (s) => s.skill_name?.toLowerCase().includes(sq) || (s.learnerEmail || '').toLowerCase().includes(sq)
+          )
+        : suggestionsWithEmail,
+    [suggestionsWithEmail, sq]
+  )
+  const suggestionFiltersActive = suggestionQuery !== ''
+
+  function resetSuggestionFilters() {
+    writeUrlParams(searchParams, setSearchParams, { sq: null, sPage: null })
+  }
+
   const {
     sortKey: sSortKey,
     sortDir: sSortDir,
@@ -1012,7 +1230,11 @@ function EmployerSuggestSkillsPanel({ employer }) {
     setPageSize: sSetPageSize,
     pageItems: sPageItems,
     totalItems: sTotalItems,
-  } = useSortedPage(suggestionsWithEmail, SKILL_SUGGESTION_SORT_ACCESSORS, { defaultSortKey: 'created_at', defaultSortDir: 'desc' })
+  } = useSortedPage(filteredSuggestions, SKILL_SUGGESTION_SORT_ACCESSORS, {
+    defaultSortKey: 'created_at',
+    defaultSortDir: 'desc',
+    urlSync: { searchParams, setSearchParams, paramNames: { sort: 'sSort', dir: 'sDir', page: 'sPage', pageSize: 'sPageSize' } },
+  })
 
   function chooseSkill(skill) {
     setSelectedSkill(skill)
@@ -1075,7 +1297,7 @@ function EmployerSuggestSkillsPanel({ employer }) {
         </p>
       </div>
 
-      {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
+      <MutationFeedback status="error" message={error} className="mb-3" />
 
       {loading ? (
         <p className="text-secondary">Loading…</p>
@@ -1173,10 +1395,10 @@ function EmployerSuggestSkillsPanel({ employer }) {
           </div>
 
           {suggestResult && (
-            <div className="bg-card border border-hairline rounded-lg p-4 mb-4 text-xs">
-              <p className="text-moss">{suggestResult.suggestedCount} learner(s) suggested this skill.</p>
+            <div className="bg-card border border-hairline rounded-lg p-4 mb-4">
+              <MutationFeedback status="success" message={`${suggestResult.suggestedCount} learner(s) suggested this skill.`} size="xs" />
               {suggestResult.skippedEmails.length > 0 && (
-                <p className="text-secondary mt-1">
+                <p className="text-xs text-secondary mt-1">
                   Skipped (not an active member, or already have a live suggestion for this skill): {suggestResult.skippedEmails.join(', ')}
                 </p>
               )}
@@ -1189,6 +1411,25 @@ function EmployerSuggestSkillsPanel({ employer }) {
             </div>
           ) : (
             <div className="bg-card border border-hairline rounded-lg mb-8">
+              <div className="flex flex-wrap items-center gap-2 p-3 pb-0">
+                <input
+                  aria-label="Search learners"
+                  type="text"
+                  value={memberQuery}
+                  onChange={(e) => setMemberQuery(e.target.value)}
+                  placeholder="Search by email…"
+                  className="flex-1 min-w-[220px] rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+                />
+                {memberFiltersActive && (
+                  <button
+                    type="button"
+                    onClick={resetMemberFilters}
+                    className="text-xs text-secondary hover:text-ink py-1.5 px-2 whitespace-nowrap"
+                  >
+                    Reset filters
+                  </button>
+                )}
+              </div>
               <div className="p-3 pb-0">
                 <BulkActionBar
                   count={selection.selected.size}
@@ -1204,6 +1445,10 @@ function EmployerSuggestSkillsPanel({ employer }) {
                   ]}
                 />
               </div>
+              {filteredMembers.length === 0 ? (
+                <p className="text-center text-xs text-secondary py-8">No learners match your search.</p>
+              ) : (
+              <>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -1231,13 +1476,17 @@ function EmployerSuggestSkillsPanel({ employer }) {
                           />
                         </td>
                         <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{m.email || m.user_id}</td>
-                        <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{m.role}</td>
+                        <td className="px-4 py-2 whitespace-nowrap">
+                          <StatusBadge label={m.role === 'admin' ? 'Admin' : 'Member'} tone="neutral" />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
               <TablePagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalItems={totalItems} idPrefix={`employer-suggest-members-${employer.id}`} />
+              </>
+              )}
             </div>
           )}
 
@@ -1249,6 +1498,29 @@ function EmployerSuggestSkillsPanel({ employer }) {
               </div>
             ) : (
               <div className="bg-card border border-hairline rounded-lg">
+                <div className="flex flex-wrap items-center gap-2 p-3">
+                  <input
+                    aria-label="Search suggestions"
+                    type="text"
+                    value={suggestionQuery}
+                    onChange={(e) => setSuggestionQuery(e.target.value)}
+                    placeholder="Search by skill or learner…"
+                    className="flex-1 min-w-[220px] rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+                  />
+                  {suggestionFiltersActive && (
+                    <button
+                      type="button"
+                      onClick={resetSuggestionFilters}
+                      className="text-xs text-secondary hover:text-ink py-1.5 px-2 whitespace-nowrap"
+                    >
+                      Reset filters
+                    </button>
+                  )}
+                </div>
+                {filteredSuggestions.length === 0 ? (
+                  <p className="text-center text-xs text-secondary py-8">No suggestions match your search.</p>
+                ) : (
+                <>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -1269,7 +1541,9 @@ function EmployerSuggestSkillsPanel({ employer }) {
                             {s.suggested_target_level ? LEVEL_LABELS[s.suggested_target_level] : '—'}
                             {s.target_date ? ` by ${new Date(`${s.target_date}T00:00:00`).toLocaleDateString()}` : ''}
                           </td>
-                          <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{SKILL_SUGGESTION_STATUS_LABELS[s.status] || s.status}</td>
+                          <td className="px-4 py-2 whitespace-nowrap">
+                            <StatusBadge label={SKILL_SUGGESTION_STATUS_LABELS[s.status] || s.status} tone={s.status === 'dismissed' ? 'danger' : 'neutral'} />
+                          </td>
                           <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{new Date(s.created_at).toLocaleDateString()}</td>
                         </tr>
                       ))}
@@ -1277,6 +1551,8 @@ function EmployerSuggestSkillsPanel({ employer }) {
                   </table>
                 </div>
                 <TablePagination page={sPage} setPage={sSetPage} pageSize={sPageSize} setPageSize={sSetPageSize} totalItems={sTotalItems} idPrefix={`employer-skill-suggestions-${employer.id}`} />
+                </>
+                )}
               </div>
             )}
           </div>
@@ -1300,16 +1576,43 @@ function EmployerSuggestSkillsPanel({ employer }) {
 // than a new platform-admin-gated listing. A later phase can build real
 // functionality on top of employer_linked_providers without changing its
 // shape.
-function EmployerProvidersPanel({ employer, user }) {
+function EmployerProvidersPanel({ employer, user, searchParams, setSearchParams }) {
   const [linkedProviders, setLinkedProviders] = useState([])
   const [allOrganisations, setAllOrganisations] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // Transient "search all organisations to link" widget -- not a listing of
+  // this panel's own persisted data (mirrors the Suggest-skills tab's
+  // skillQuery autocomplete, also left as local state rather than
+  // URL-synced).
   const [query, setQuery] = useState('')
   const [linkingId, setLinkingId] = useState(null)
   const [unlinkTarget, setUnlinkTarget] = useState(null)
   const [unlinking, setUnlinking] = useState(false)
+
+  // The already-linked-providers roster below is this panel's own URL-synced
+  // collection (?q=&sort=&dir=&page=&pageSize=), same convention as every
+  // other panel's primary table.
+  const [rosterQuery, setRosterQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
+  const rq = rosterQuery.trim().toLowerCase()
+  const filteredLinkedProviders = useMemo(
+    () =>
+      rq
+        ? linkedProviders.filter(
+            (p) => p.organisations?.name?.toLowerCase().includes(rq) || (p.organisations?.org_code || '').toLowerCase().includes(rq)
+          )
+        : linkedProviders,
+    [linkedProviders, rq]
+  )
+  const rosterFiltersActive = rosterQuery !== ''
+
+  function resetRosterFilters() {
+    writeUrlParams(searchParams, setSearchParams, { q: null, page: null })
+  }
+
+  const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
+    useSortedPage(filteredLinkedProviders, LINKED_PROVIDER_SORT_ACCESSORS, { urlSync: { searchParams, setSearchParams } })
 
   useEffect(() => {
     load()
@@ -1381,7 +1684,7 @@ function EmployerProvidersPanel({ employer, user }) {
         </p>
       </div>
 
-      {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
+      <MutationFeedback status="error" message={error} className="mb-3" />
 
       {loading ? (
         <p className="text-secondary">Loading…</p>
@@ -1434,18 +1737,41 @@ function EmployerProvidersPanel({ employer, user }) {
             </div>
           ) : (
             <div className="bg-card border border-hairline rounded-lg">
+              <div className="flex flex-wrap items-center gap-2 p-3">
+                <input
+                  aria-label="Search linked providers"
+                  type="text"
+                  value={rosterQuery}
+                  onChange={(e) => setRosterQuery(e.target.value)}
+                  placeholder="Search by name or code…"
+                  className="flex-1 min-w-[220px] rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+                />
+                {rosterFiltersActive && (
+                  <button
+                    type="button"
+                    onClick={resetRosterFilters}
+                    className="text-xs text-secondary hover:text-ink py-1.5 px-2 whitespace-nowrap"
+                  >
+                    Reset filters
+                  </button>
+                )}
+              </div>
+              {filteredLinkedProviders.length === 0 ? (
+                <p className="text-center text-xs text-secondary py-8">No linked providers match your search.</p>
+              ) : (
+              <>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-hairline text-left text-secondary">
-                      <th className="px-4 py-2 font-medium">Provider</th>
-                      <th className="px-4 py-2 font-medium whitespace-nowrap">Code</th>
-                      <th className="px-4 py-2 font-medium whitespace-nowrap">Linked</th>
+                      <SortableTh label="Provider" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                      <SortableTh label="Code" columnKey="org_code" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                      <SortableTh label="Linked" columnKey="created_at" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                       <th className="px-4 py-2 font-medium"></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {linkedProviders.map((p) => (
+                    {pageItems.map((p) => (
                       <tr key={p.id} className="border-b border-hairline last:border-0">
                         <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">
                           {p.organisations?.name || 'Deleted organisation'}
@@ -1470,6 +1796,9 @@ function EmployerProvidersPanel({ employer, user }) {
                   </tbody>
                 </table>
               </div>
+              <TablePagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalItems={totalItems} idPrefix={`employer-linked-providers-${employer.id}`} />
+              </>
+              )}
             </div>
           )}
         </>
