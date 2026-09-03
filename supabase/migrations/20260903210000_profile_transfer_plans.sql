@@ -389,21 +389,44 @@ $$;
 
 create or replace function public.get_profile_transfer_plan(p_plan_id uuid)
 returns jsonb language plpgsql stable security definer set search_path = '' as $$
-declare v_plan public.profile_transfer_plans;
+declare
+  v_plan public.profile_transfer_plans;
+  v_current_account_id uuid;
+  v_current_profile_id uuid;
+  v_source_user_id uuid;
+  v_durable_user_id uuid;
 begin
   select * into v_plan from public.profile_transfer_plans where id = p_plan_id;
-  if v_plan.id is null or private.current_link_account(v_plan.verified_account_link_id) is null then
+  v_current_account_id := private.current_link_account(v_plan.verified_account_link_id);
+  if v_plan.id is null or v_current_account_id is null then
     raise exception 'Transfer plan not found';
   end if;
+  select legacy_user_id into v_source_user_id from public.learning_profiles where id = v_plan.source_profile_id;
+  select legacy_user_id into v_durable_user_id from public.learning_profiles where id = v_plan.durable_profile_id;
+  select profile.id into v_current_profile_id
+  from public.person_auth_accounts account
+  join public.learning_profiles profile on profile.legacy_user_id = account.auth_user_id
+  where account.id = v_current_account_id;
   return jsonb_build_object(
     'id', v_plan.id, 'status', case when v_plan.status in ('draft', 'pending_approval', 'approved') and v_plan.expires_at <= now() then 'expired' else v_plan.status end,
     'versionHash', v_plan.version_hash, 'sourceProfileId', v_plan.source_profile_id,
     'durableProfileId', v_plan.durable_profile_id, 'expiresAt', v_plan.expires_at,
+    'currentProfileId', v_current_profile_id,
+    'sourceSummary', private.profile_transfer_summary(v_source_user_id),
+    'durableSummary', private.profile_transfer_summary(v_durable_user_id),
     'approvedByMe', exists (select 1 from public.profile_transfer_plan_approvals approval
       where approval.plan_id = v_plan.id and approval.auth_account_id = private.current_link_account(v_plan.verified_account_link_id)
         and approval.version_hash = v_plan.version_hash),
     'approvalCount', (select count(*) from public.profile_transfer_plan_approvals approval
       where approval.plan_id = v_plan.id and approval.version_hash = v_plan.version_hash),
+    'approvals', coalesce((select jsonb_agg(jsonb_build_object(
+      'profileId', profile.id, 'approvedAt', approval.approved_at,
+      'versionHash', approval.version_hash
+    ) order by approval.approved_at)
+      from public.profile_transfer_plan_approvals approval
+      join public.person_auth_accounts account on account.id = approval.auth_account_id
+      join public.learning_profiles profile on profile.legacy_user_id = account.auth_user_id
+      where approval.plan_id = v_plan.id), '[]'::jsonb),
     'items', coalesce((select jsonb_agg(jsonb_build_object(
       'id', item.id, 'domain', item.domain, 'sourceRecordId', item.source_record_id,
       'durableRecordId', item.durable_record_id, 'label', item.record_label,

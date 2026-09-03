@@ -56,6 +56,71 @@ export async function listProfileTransferPlans() {
   }))
 }
 
-export function getProfileTransferPlan(planId) {
-  return call('get_profile_transfer_plan', { p_plan_id: planId })
+const ACCOUNT_TYPE_LABELS = {
+  personal: 'Personal account',
+  work_sso: 'Work SSO account',
+  work_managed: 'Work-managed account',
+}
+
+const CATEGORY_LABELS = {
+  skills: 'Skills',
+  experience: 'Experience',
+  courses: 'Courses & training',
+  evidence: 'Evidence',
+  connections: 'Connections',
+  integrations: 'External integrations',
+}
+
+function accountFromSummary(summary) {
+  return {
+    id: summary.profileId,
+    email: summary.email,
+    accountType: ACCOUNT_TYPE_LABELS[summary.accountType] ?? summary.accountType,
+  }
+}
+
+function conflictDescription(item) {
+  if (item.domain === 'skills') return `“${item.label}” is tracked on both accounts.`
+  if (item.domain === 'courses') return `“${item.label}” appears on both accounts.`
+  return `“${item.label}” may describe the same experience on both accounts.`
+}
+
+export async function getProfileTransferPlan(planId) {
+  const plan = await call('get_profile_transfer_plan', { p_plan_id: planId })
+  const source = plan.sourceSummary
+  const durable = plan.durableSummary
+  const version = plan.versionHash ?? 'draft'
+  return {
+    id: plan.id,
+    version,
+    versionHash: plan.versionHash,
+    status: plan.status === 'pending_approval' || plan.status === 'draft' ? 'pending' : plan.status,
+    rawStatus: plan.status,
+    expiresAt: plan.expiresAt,
+    sourceAccount: accountFromSummary(source),
+    durableAccount: accountFromSummary(durable),
+    currentAccountId: plan.currentProfileId,
+    categories: Object.entries(CATEGORY_LABELS).map(([key, label]) => ({
+      key,
+      label,
+      sourceCount: source.counts?.[key] ?? null,
+      durableCount: durable.counts?.[key] ?? null,
+    })),
+    conflicts: (plan.items ?? []).filter((item) => item.durableRecordId).map((item) => ({
+      id: item.id,
+      category: item.domain,
+      description: conflictDescription(item),
+      options: [
+        { value: 'keep_durable', label: `Keep the durable account’s ${item.domain === 'skills' ? 'level' : 'record'}` },
+        { value: 'use_source', label: `Use the source account’s ${item.domain === 'skills' ? 'level' : 'record'}` },
+      ],
+      resolution: item.action === 'unresolved' ? null : item.action,
+    })),
+    approvals: (plan.approvals ?? []).map((approval) => ({
+      accountId: approval.profileId,
+      approvedAt: approval.approvedAt,
+      approvedVersion: approval.versionHash,
+    })),
+    events: plan.events ?? [],
+  }
 }

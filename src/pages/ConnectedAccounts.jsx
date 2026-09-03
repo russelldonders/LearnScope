@@ -11,6 +11,7 @@ import AccountLinkingSection from './account-linking/AccountLinkingSection'
 import RedeemInvitationPanel from './account-linking/RedeemInvitationPanel'
 import TransferPreviewConsentPanel from './account-linking/transfer/TransferPreviewConsentPanel'
 import TransferPreviewPanel from './account-linking/transfer/TransferPreviewPanel'
+import TransferPlanReviewPanel from './account-linking/transfer-plan/TransferPlanReviewPanel'
 import {
   buildAccountLinkUrl,
   createAccountLinkInvitation,
@@ -26,6 +27,15 @@ import {
   listProfileTransferPreviews,
   requestProfileTransferPreview,
 } from '../lib/profileTransferPreviews'
+import {
+  approveProfileTransferPlan,
+  createProfileTransferPlan,
+  getProfileTransferPlan,
+  listProfileTransferPlans,
+  resolveProfileTransferPlanItem,
+  submitProfileTransferPlan,
+  withdrawProfileTransferPlanApproval,
+} from '../lib/profileTransferPlans'
 
 const OAUTH_STATE_KEY = 'stravaOAuthState'
 
@@ -55,13 +65,20 @@ export default function ConnectedAccounts() {
   const [transferBusyId, setTransferBusyId] = useState(null)
   const [transferError, setTransferError] = useState(null)
   const [transferComparison, setTransferComparison] = useState(null)
+  const [transferComparisonPreviewId, setTransferComparisonPreviewId] = useState(null)
   const [durableProfileId, setDurableProfileId] = useState(null)
+  const [transferPlan, setTransferPlan] = useState(null)
+  const [planBusyAction, setPlanBusyAction] = useState(null)
+  const [planError, setPlanError] = useState(null)
+  const [planResolutionError, setPlanResolutionError] = useState(null)
+  const [planApprovalError, setPlanApprovalError] = useState(null)
 
   useEffect(() => {
     handleOAuthReturn()
     load()
     loadAccountLinks()
     loadTransferPreviews()
+    loadTransferPlan()
   }, [])
 
   async function load() {
@@ -91,6 +108,7 @@ export default function ConnectedAccounts() {
       await action()
       await loadTransferPreviews()
       setTransferComparison(null)
+      setTransferComparisonPreviewId(null)
       setDurableProfileId(null)
     } catch (err) {
       setTransferError(err.message)
@@ -104,11 +122,84 @@ export default function ConnectedAccounts() {
     setTransferError(null)
     try {
       setTransferComparison(await getProfileTransferComparison(previewId))
+      setTransferComparisonPreviewId(previewId)
       setDurableProfileId(null)
     } catch (err) {
       setTransferError(err.message)
     } finally {
       setTransferBusyId(null)
+    }
+  }
+
+  async function loadTransferPlan(planId = null) {
+    try {
+      const targetId = planId ?? (await listProfileTransferPlans()).find((plan) =>
+        ['draft', 'pending_approval', 'approved'].includes(plan.status)
+      )?.id
+      setTransferPlan(targetId ? await getProfileTransferPlan(targetId) : null)
+      setPlanError(null)
+    } catch (err) {
+      setPlanError(err.message)
+    }
+  }
+
+  async function handleCreateTransferPlan() {
+    if (!transferComparisonPreviewId || !durableProfileId) return
+    setPlanBusyAction('create')
+    setPlanError(null)
+    try {
+      const planId = await createProfileTransferPlan(transferComparisonPreviewId, durableProfileId)
+      await loadTransferPlan(planId)
+    } catch (err) {
+      setPlanError(err.message)
+    } finally {
+      setPlanBusyAction(null)
+    }
+  }
+
+  async function handleResolveTransferConflict(itemId, action) {
+    if (!transferPlan) return
+    setPlanBusyAction('resolve')
+    setPlanResolutionError(null)
+    try {
+      await resolveProfileTransferPlanItem(transferPlan.id, itemId, action)
+      await loadTransferPlan(transferPlan.id)
+    } catch (err) {
+      setPlanResolutionError(err.message)
+    } finally {
+      setPlanBusyAction(null)
+    }
+  }
+
+  async function handleApproveTransferPlan() {
+    if (!transferPlan) return
+    setPlanBusyAction('approve')
+    setPlanApprovalError(null)
+    try {
+      if (transferPlan.rawStatus === 'draft') {
+        await submitProfileTransferPlan(transferPlan.id)
+      } else {
+        await approveProfileTransferPlan(transferPlan.id, transferPlan.versionHash)
+      }
+      await loadTransferPlan(transferPlan.id)
+    } catch (err) {
+      setPlanApprovalError(err.message)
+    } finally {
+      setPlanBusyAction(null)
+    }
+  }
+
+  async function handleWithdrawTransferApproval() {
+    if (!transferPlan) return
+    setPlanBusyAction('withdraw')
+    setPlanApprovalError(null)
+    try {
+      await withdrawProfileTransferPlanApproval(transferPlan.id)
+      await loadTransferPlan(transferPlan.id)
+    } catch (err) {
+      setPlanApprovalError(err.message)
+    } finally {
+      setPlanBusyAction(null)
     }
   }
 
@@ -308,7 +399,24 @@ export default function ConnectedAccounts() {
             <TransferPreviewPanel
               preview={transferComparison}
               durableProfileId={durableProfileId}
+              continueAvailable={!transferPlan}
               onSelectDurableProfile={setDurableProfileId}
+              onContinue={handleCreateTransferPlan}
+            />
+          )}
+          {planError && <p role="alert" className="text-sm text-red-700">{planError}</p>}
+          {transferPlan && (
+            <TransferPlanReviewPanel
+              plan={transferPlan}
+              currentAccountId={transferPlan.currentAccountId}
+              resolving={planBusyAction === 'resolve'}
+              resolutionError={planResolutionError}
+              approving={planBusyAction === 'approve'}
+              withdrawing={planBusyAction === 'withdraw'}
+              approvalError={planApprovalError}
+              onSelectResolution={handleResolveTransferConflict}
+              onApprove={handleApproveTransferPlan}
+              onWithdrawApproval={handleWithdrawTransferApproval}
             />
           )}
         </section>

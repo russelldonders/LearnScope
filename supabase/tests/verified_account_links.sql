@@ -97,6 +97,17 @@ select public.create_profile_transfer_plan(
 ) as plan_id from profile_preview_test_result;
 
 do $$
+declare v_plan jsonb;
+begin
+  select public.get_profile_transfer_plan(plan_id) into v_plan from transfer_plan_test_result;
+  if v_plan ->> 'currentProfileId' <> '20000000-0000-0000-0000-000000000002'
+     or jsonb_array_length(v_plan -> 'items') <> 2 then
+    raise exception 'transfer plan review projection is incomplete';
+  end if;
+end
+$$;
+
+do $$
 begin
   perform public.submit_profile_transfer_plan((select plan_id from transfer_plan_test_result));
   raise exception 'plan with unresolved conflicts unexpectedly submitted';

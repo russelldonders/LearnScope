@@ -50,4 +50,25 @@ describe('profile transfer plan service', () => {
     rpc.mockResolvedValue({ data: null, error: new Error('Transfer plan not found') })
     await expect(service.getProfileTransferPlan('other-plan')).rejects.toThrow('Transfer plan not found')
   })
+
+  it('adapts a database plan to the controlled review UI contract', async () => {
+    rpc.mockResolvedValue({ data: {
+      id: 'plan-1', status: 'pending_approval', versionHash: 'hash-1', expiresAt: 'later',
+      currentProfileId: 'durable',
+      sourceSummary: { profileId: 'source', email: 'work@example.com', accountType: 'work_sso', counts: { skills: 2, courses: 1 } },
+      durableSummary: { profileId: 'durable', email: 'personal@example.com', accountType: 'personal', counts: { skills: 4, courses: 3 } },
+      items: [{ id: 'item-1', domain: 'skills', label: 'SQL', durableRecordId: 'skill-2', action: 'use_source' }],
+      approvals: [{ profileId: 'source', approvedAt: 'today', versionHash: 'hash-1' }],
+      events: [{ type: 'submitted' }],
+    }, error: null })
+
+    await expect(service.getProfileTransferPlan('plan-1')).resolves.toMatchObject({
+      id: 'plan-1', version: 'hash-1', rawStatus: 'pending_approval', status: 'pending',
+      currentAccountId: 'durable',
+      sourceAccount: { id: 'source', accountType: 'Work SSO account' },
+      durableAccount: { id: 'durable', accountType: 'Personal account' },
+      conflicts: [{ id: 'item-1', resolution: 'use_source' }],
+      approvals: [{ accountId: 'source', approvedVersion: 'hash-1' }],
+    })
+  })
 })
