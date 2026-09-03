@@ -13,7 +13,7 @@ const personal = {
 
 const employer = {
   id: 'employer',
-  kind: 'organisation',
+  kind: 'employer',
   status: 'active',
   allowedActions: ['workspace:enter'],
 }
@@ -25,15 +25,17 @@ describe('toWorkspaceViewModel', () => {
       status: 'active',
       workspaces: {
         id: 'workspace-id',
-        workspace_type: 'organisation',
+        workspace_type: 'employer',
         employer_id: 'employer-id',
+        provider_organisation_id: null,
         name: 'Acme',
         status: 'active',
       },
     })).toEqual({
       id: 'workspace-id',
-      kind: 'organisation',
-      organisationId: 'employer-id',
+      kind: 'employer',
+      employerId: 'employer-id',
+      providerOrganisationId: null,
       name: 'Acme',
       role: 'employee',
       status: 'active',

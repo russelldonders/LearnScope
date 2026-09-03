@@ -3,7 +3,9 @@ import { supabase } from './supabaseClient'
 export const WORKSPACE_TYPES = Object.freeze({
   PERSONAL: 'personal',
   MANAGER: 'manager',
-  ORGANISATION: 'organisation',
+  EMPLOYER: 'employer',
+  PROVIDER: 'provider',
+  PLATFORM_ADMIN: 'platform_admin',
 })
 
 export const WORKSPACE_ACCESS_ROLES = Object.freeze({
@@ -21,7 +23,8 @@ export function toWorkspaceViewModel(accessRow) {
   return {
     id: workspace.id,
     kind: workspace.workspace_type,
-    organisationId: workspace.employer_id ?? null,
+    employerId: workspace.employer_id ?? null,
+    providerOrganisationId: workspace.provider_organisation_id ?? null,
     name: workspace.name,
     role: accessRow.access_role,
     status: workspace.status,
@@ -44,11 +47,10 @@ export function chooseActiveWorkspace(workspaces, preferredId = null) {
 export async function listAvailableWorkspaces() {
   const { data, error } = await supabase
     .from('workspace_access')
-    .select('id, access_role, status, workspaces(id, workspace_type, name, employer_id, status)')
+    .select('id, access_role, status, workspaces(id, workspace_type, name, employer_id, provider_organisation_id, status)')
     .eq('status', 'active')
     .order('granted_at')
 
   if (error) throw error
   return (data ?? []).map(toWorkspaceViewModel).filter(Boolean)
 }
-

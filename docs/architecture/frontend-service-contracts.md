@@ -13,8 +13,9 @@ buttons.
 ```js
 {
   id: 'uuid',
-  kind: 'personal' | 'manager' | 'organisation',
-  organisationId: 'uuid' | null,
+  kind: 'personal' | 'manager' | 'employer' | 'provider' | 'platform_admin',
+  employerId: 'uuid' | null,
+  providerOrganisationId: 'uuid' | null,
   name: 'My personal profile',
   role: 'owner' | 'employee' | 'manager' | 'lms_admin' | 'provider',
   status: 'active' | 'suspended' | 'ended',
@@ -171,4 +172,3 @@ Services return or throw stable domain codes that the UI may map to copy:
 
 Raw Postgres, PostgREST and identity-provider messages are not user-facing
 contracts.
-

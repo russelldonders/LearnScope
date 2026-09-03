@@ -20,9 +20,10 @@ after control of both accounts has been proven.
   authorisation boundary and contains no organisation role.
 - **Authentication account**: one Supabase user used to prove identity. It is
   classified as personal, work SSO or company-managed.
-- **Workspace**: the context in which an action takes place: personal,
-  independent manager, organisation employee, organisation manager, LMS admin
-  or training provider.
+- **Workspace**: the access/navigation context in which an action takes place:
+  personal, independent manager, employer, provider or platform administration.
+  It sits above rather than replaces the distinct `employers` and
+  `organisations` domain entities.
 - **Profile**: skills, experience and learning records owned within a personal
   or organisation context.
 - **Workspace access**: the explicit relationship authorising an authentication
@@ -80,4 +81,3 @@ The employer can see only whether continuity is configured, not the personal
 address. Offboarding revokes organisation workspace access and the work login;
 it does not delete the person, personal profile or portable records already
 accepted into it.
-
