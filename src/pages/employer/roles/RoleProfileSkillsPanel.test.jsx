@@ -1,9 +1,11 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import RoleProfileSkillsPanel from './RoleProfileSkillsPanel'
-import { FIXTURE_REQUIRED_SKILLS, FIXTURE_SKILL_CATALOGUE } from './roleProfileFixtures'
+import { FIXTURE_ROLE_PROFILES, FIXTURE_SKILL_CATALOGUE } from './roleProfileFixtures'
 
 afterEach(cleanup)
+
+const FIXTURE_REQUIRED_SKILLS = FIXTURE_ROLE_PROFILES[0].requiredSkills
 
 describe('RoleProfileSkillsPanel', () => {
   it('lists each required skill with its target level', () => {

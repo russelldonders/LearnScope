@@ -9,11 +9,13 @@ const REQUIREMENT_LABELS = {
   recommended: 'Recommended',
 }
 
-// Bidirectional alignment view for a linked role profile -- read-only
-// except for disconnecting the link entirely. Everything under "Employer
+// Bidirectional alignment view for an accepted role assignment -- read-only
+// except for disconnecting it entirely. Everything under "Employer
 // requirements" is owned and edited by the employer (see
 // src/pages/employer/roles/); this component never lets the learner edit
-// those values, only see how their own skills compare.
+// those values, only see how their own skills compare. `aligned`/`gaps` are
+// pre-calculated by the caller (see roleAlignment.js's computeRoleAlignment)
+// -- this component doesn't compute them itself.
 //
 // `disconnecting`/`error` are owned by the caller, same contract as
 // ManagerTeamSharingPanel's onLeaveTeam: this reacts to `disconnecting`
@@ -21,7 +23,7 @@ const REQUIREMENT_LABELS = {
 // so a failed attempt leaves it open with the error visible instead of
 // silently closing or getting lost behind the dialog.
 export default function RoleAlignmentSummary({
-  linkedRoleProfile,
+  assignment,
   aligned,
   gaps,
   training,
@@ -39,10 +41,12 @@ export default function RoleAlignmentSummary({
     wasDisconnecting.current = disconnecting
   }, [disconnecting, error])
 
+  const { roleProfile } = assignment
+
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-1">
-        <h3 className="font-display text-lg text-ink">{linkedRoleProfile.name}</h3>
+        <h3 className="font-display text-lg text-ink">{roleProfile.name}</h3>
         <button
           type="button"
           onClick={() => setConfirmOpen(true)}
@@ -52,12 +56,11 @@ export default function RoleAlignmentSummary({
         </button>
       </div>
       <p className="text-sm text-secondary mb-4">
-        Linked to {linkedRoleProfile.employerName}'s role profile · since{' '}
-        {formatAbsoluteDate(linkedRoleProfile.linkedAt)}
+        Linked to {assignment.employerName}'s role profile · since {formatAbsoluteDate(assignment.linkedAt)}
       </p>
 
       <p className="text-xs font-medium text-secondary uppercase tracking-wide mb-2">
-        Employer requirements -- managed by {linkedRoleProfile.employerName}
+        Employer requirements -- managed by {assignment.employerName}
       </p>
 
       <div className="space-y-4">
@@ -102,7 +105,7 @@ export default function RoleAlignmentSummary({
           ) : (
             <ul className="text-sm text-ink space-y-1">
               {training.map((item) => (
-                <li key={item.id}>
+                <li key={item.courseId}>
                   {item.title}{' '}
                   <span className="text-secondary">({REQUIREMENT_LABELS[item.requirement] ?? item.requirement})</span>
                 </li>
@@ -118,7 +121,7 @@ export default function RoleAlignmentSummary({
         <ConfirmDialog
           message={
             <>
-              {`Disconnect from ${linkedRoleProfile.name}? You'll stop seeing this alignment view. Your current role and skill history stay exactly as they are -- nothing is deleted.`}
+              {`Disconnect from ${roleProfile.name}? You'll stop seeing this alignment view. Your current role and skill history stay exactly as they are -- nothing is deleted.`}
               {error && (
                 <span role="alert" className="block mt-2 text-red-700">
                   {error}

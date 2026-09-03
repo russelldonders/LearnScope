@@ -11,6 +11,12 @@ const REQUIREMENT_LABELS = {
 // ProviderConsole/ProviderTrainingSection) plus whether it's required or
 // only recommended for a linked employee. Doesn't create or edit courses
 // themselves -- only which of the existing ones apply to this role.
+//
+// Keyed by courseId rather than a separate training id: a role profile can
+// only assign a given course once, so courseId is already a natural unique
+// key and there's nothing to mint client-side for an entry that doesn't
+// exist until the caller's onAddTraining/onUpdateRequirement/onRemoveTraining
+// actually persists it.
 export default function RoleProfileTrainingPanel({
   training,
   availableCourses = [],
@@ -45,7 +51,7 @@ export default function RoleProfileTrainingPanel({
       ) : (
         <ul className="divide-y divide-hairline mb-4">
           {training.map((item) => (
-            <li key={item.id} className="flex flex-wrap items-center gap-2 py-2">
+            <li key={item.courseId} className="flex flex-wrap items-center gap-2 py-2">
               <span className="text-sm text-ink flex-1 min-w-[8rem] truncate" title={item.title}>
                 {item.title}
               </span>
@@ -53,7 +59,7 @@ export default function RoleProfileTrainingPanel({
                 aria-label={`Requirement for ${item.title}`}
                 value={item.requirement}
                 disabled={saving}
-                onChange={(e) => onUpdateRequirement?.(item.id, e.target.value)}
+                onChange={(e) => onUpdateRequirement?.(item.courseId, e.target.value)}
                 className="rounded-md border border-hairline bg-paper px-2 py-1 text-sm text-ink"
               >
                 {Object.entries(REQUIREMENT_LABELS).map(([value, label]) => (
@@ -64,7 +70,7 @@ export default function RoleProfileTrainingPanel({
               </select>
               <button
                 type="button"
-                onClick={() => onRemoveTraining?.(item.id)}
+                onClick={() => onRemoveTraining?.(item.courseId)}
                 disabled={saving}
                 className="text-xs font-medium text-red-700 hover:underline disabled:opacity-60"
               >
