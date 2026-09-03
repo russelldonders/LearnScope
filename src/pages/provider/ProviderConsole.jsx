@@ -792,6 +792,11 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
   }
 
   async function handleReject(course) {
+    // The Confirm reject button is already disabled while the reason is
+    // blank -- this mirrors that so a rejection can't slip through some
+    // other path (e.g. the underlying reject_course_submission RPC itself
+    // accepts a null reason with no server-side check).
+    if (!rejectionReason.trim()) return
     setActioningId(course.id)
     setError(null)
     try {
@@ -1195,7 +1200,7 @@ function CourseRow({
                 disabled={creatingDraft}
                 className="text-xs font-medium text-moss hover:underline disabled:cursor-wait disabled:opacity-60 whitespace-nowrap"
               >
-                {creatingDraft ? 'Creating new version…' : 'Edit course'}
+                {creatingDraft ? 'Creating new version…' : course.status === 'rejected' ? 'Revise and resubmit' : 'Edit course'}
               </button>
             ) : (
               <Link to={`/provider/training/${course.id}`} className="text-xs font-medium text-moss hover:underline whitespace-nowrap">
@@ -1258,8 +1263,11 @@ function CourseRow({
           <td colSpan={columnCount} className="px-4 pb-3">
             <div className="flex flex-wrap items-end gap-2 border-t border-hairline pt-3">
               <div className="flex-1 min-w-[200px]">
-                <label className="block text-xs text-secondary mb-1">Rejection reason (optional)</label>
+                <label className="block text-xs text-secondary mb-1" htmlFor={`reject-reason-${course.id}`}>Rejection reason (required)</label>
                 <input
+                  id={`reject-reason-${course.id}`}
+                  required
+                  aria-required="true"
                   value={rejectionReason}
                   onChange={(e) => onRejectionReasonChange(e.target.value)}
                   className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
@@ -1268,7 +1276,8 @@ function CourseRow({
               <button
                 type="button"
                 onClick={onReject}
-                className="rounded-md bg-red-700 text-white py-1.5 px-3 text-sm font-medium hover:bg-red-800"
+                disabled={actioning || !rejectionReason.trim()}
+                className="rounded-md bg-red-700 text-white py-1.5 px-3 text-sm font-medium hover:bg-red-800 disabled:opacity-50"
               >
                 Confirm reject
               </button>
@@ -1444,21 +1453,28 @@ function CourseVersionHistoryDialog({ course, onClose }) {
       {!loading && !error && versions.length > 0 && (
         <ol className="mt-5 divide-y divide-hairline border-y border-hairline">
           {versions.map((version) => (
-            <li key={version.id} className="grid gap-3 py-4 sm:grid-cols-[90px_1fr_1fr] sm:items-center">
-              <div>
-                <p className="font-medium text-ink">Version {version.version_number}</p>
-                <p className="mt-0.5 text-xs text-secondary">{COURSE_STATUS_LABELS[version.status] ?? version.status}</p>
+            <li key={version.id} className="py-4">
+              <div className="grid gap-3 sm:grid-cols-[90px_1fr_1fr] sm:items-center">
+                <div>
+                  <p className="font-medium text-ink">Version {version.version_number}</p>
+                  <p className="mt-0.5 text-xs text-secondary">{COURSE_STATUS_LABELS[version.status] ?? version.status}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-secondary">Published</p>
+                  <p className="mt-0.5 text-sm text-ink">
+                    {version.approved_at ? formatParticipantDate(version.approved_at) : 'Not published'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-secondary">Created by</p>
+                  <p className="mt-0.5 text-sm text-ink">{version.creator?.full_name || 'Unknown user'}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-secondary">Published</p>
-                <p className="mt-0.5 text-sm text-ink">
-                  {version.approved_at ? formatParticipantDate(version.approved_at) : 'Not published'}
+              {version.status === 'rejected' && (
+                <p className="mt-2 text-xs text-red-700">
+                  Rejected: {version.rejection_reason || 'No reason was given.'}
                 </p>
-              </div>
-              <div>
-                <p className="text-xs text-secondary">Created by</p>
-                <p className="mt-0.5 text-sm text-ink">{version.creator?.full_name || 'Unknown user'}</p>
-              </div>
+              )}
             </li>
           ))}
         </ol>

@@ -643,6 +643,28 @@ export default function ProviderCourseEditor() {
 
         {course && form && (
           <div className="space-y-6">
+            {/* Rendered above the tabs (rather than inside the Info-tab-only
+                CourseHeader below) so a provider lands on this notice no
+                matter which tab the editor opens on -- Content is the
+                default tab, so a rejection notice that only lived inside
+                CourseHeader was easy to miss entirely. rejection_reason
+                itself is untouched -- this only changes where it's shown. */}
+            {course.status === 'rejected' && (
+              <div role="alert" className="rounded-lg border border-red-700 bg-red-50 p-4">
+                <p className="text-sm font-medium text-red-800">
+                  This course was rejected{course.rejection_reason ? ':' : '.'}
+                </p>
+                <p className="text-sm text-red-700 mt-1">
+                  {course.rejection_reason || 'No reason was given.'}
+                </p>
+                {canEdit && (
+                  <p className="text-sm text-red-700 mt-2">
+                    Revise the course below, then resubmit it for approval.
+                  </p>
+                )}
+              </div>
+            )}
+
             {canEdit && (
               <div className="space-y-2">
                 {saveError && <p className="text-sm text-red-700">{saveError}</p>}
@@ -661,7 +683,7 @@ export default function ProviderCourseEditor() {
                     disabled={saving || submitting}
                     className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
                   >
-                    Publish
+                    {course.status === 'rejected' ? 'Resubmit for approval' : 'Publish'}
                   </button>
                 </div>
               </div>
@@ -744,10 +766,6 @@ function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCre
           Version {course.version_number} · {COURSE_STATUS_LABELS[course.status] ?? course.status}
         </span>
       </div>
-
-      {course.status === 'rejected' && course.rejection_reason && (
-        <p className="text-sm text-red-700 mb-4">Rejected: {course.rejection_reason}</p>
-      )}
 
       <CourseImageUpload course={course} canEdit={canEdit} onUpdated={onSaved} />
 

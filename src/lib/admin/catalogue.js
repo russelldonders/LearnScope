@@ -199,7 +199,7 @@ export async function listCourseVersionHistory(courseId) {
 
   const { data: versions, error: versionError } = await supabase
     .from('course_catalogue')
-    .select('id, version_number, status, is_current_published, created_at, created_by, approved_at')
+    .select('id, version_number, status, is_current_published, created_at, created_by, approved_at, rejection_reason')
     .eq('version_group_id', selectedCourse.version_group_id)
     .order('version_number', { ascending: false })
   if (versionError) throw versionError

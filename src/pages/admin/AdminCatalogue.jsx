@@ -171,6 +171,11 @@ export default function AdminCatalogue() {
   }
 
   async function handleReject(course) {
+    // The Confirm reject button is already disabled while the reason is
+    // blank -- this mirrors that so a rejection can't slip through some
+    // other path (e.g. the underlying reject_course_submission RPC itself
+    // accepts a null reason with no server-side check).
+    if (!rejectionReason.trim()) return
     setActioningId(course.id)
     setError(null)
     try {
@@ -374,8 +379,11 @@ function CatalogueRow({
           <td colSpan={visibleColumns.length + 1} className="px-4 pb-3">
             <div className="flex flex-wrap items-end gap-2 border-t border-hairline pt-3">
               <div className="flex-1 min-w-[200px]">
-                <label className="block text-xs text-secondary mb-1">Rejection reason (optional)</label>
+                <label className="block text-xs text-secondary mb-1" htmlFor={`reject-reason-${course.id}`}>Rejection reason (required)</label>
                 <input
+                  id={`reject-reason-${course.id}`}
+                  required
+                  aria-required="true"
                   value={rejectionReason}
                   onChange={(e) => onRejectionReasonChange(e.target.value)}
                   className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
@@ -384,7 +392,8 @@ function CatalogueRow({
               <button
                 type="button"
                 onClick={onReject}
-                className="rounded-md bg-red-700 text-white py-1.5 px-3 text-sm font-medium hover:bg-red-800"
+                disabled={actioning || !rejectionReason.trim()}
+                className="rounded-md bg-red-700 text-white py-1.5 px-3 text-sm font-medium hover:bg-red-800 disabled:opacity-50"
               >
                 Confirm reject
               </button>
