@@ -4,7 +4,14 @@ const rpc = vi.fn()
 const from = vi.fn()
 vi.mock('./supabaseClient', () => ({ supabase: { rpc, from } }))
 
-const { createManagerTeam, inviteConnectionToManagerTeam, setManagerTeamSharedSkills } = await import('./managerTeams')
+const {
+  createManagerCollaborationRecord,
+  createManagerTeam,
+  inviteConnectionToManagerTeam,
+  inviteConnectionToManagerTeamByEmail,
+  listManagerTeamMemberSummaries,
+  setManagerTeamSharedSkills,
+} = await import('./managerTeams')
 
 describe('manager team service', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -30,6 +37,36 @@ describe('manager team service', () => {
     await setManagerTeamSharedSkills('membership-1', ['skill-1'])
     expect(rpc).toHaveBeenCalledWith('set_manager_team_shared_skills', {
       p_membership_id: 'membership-1', p_skill_ids: ['skill-1'],
+    })
+  })
+
+  it('resolves email invitations only through the connection-gated RPC', async () => {
+    rpc.mockResolvedValue({ data: 'membership-2', error: null })
+    await inviteConnectionToManagerTeamByEmail('team-1', 'person@example.com')
+    expect(rpc).toHaveBeenCalledWith('invite_connection_to_manager_team_by_email', {
+      p_team_id: 'team-1', p_email: 'person@example.com',
+    })
+  })
+
+  it('maps the narrow member summary projection to the console model', async () => {
+    rpc.mockResolvedValue({ data: [{
+      id: 'membership-1', name: 'Taylor', avatar_url: null, team_since: '2026-09-03',
+      shared_skills: [{ id: 'skill-1' }], collaborative_learning_count: 2,
+    }], error: null })
+    await expect(listManagerTeamMemberSummaries('team-1')).resolves.toEqual([{
+      id: 'membership-1', name: 'Taylor', avatarUrl: null, teamSince: '2026-09-03',
+      sharedSkills: [{ id: 'skill-1' }], collaborativeLearningCount: 2,
+    }])
+  })
+
+  it('creates collaboration records with membership ids, not learner profile ids', async () => {
+    rpc.mockResolvedValue({ data: 'record-1', error: null })
+    await createManagerCollaborationRecord('team-1', {
+      title: 'Goal', note: 'Practise together', memberIds: ['membership-1'],
+    })
+    expect(rpc).toHaveBeenCalledWith('create_manager_collaboration_record', {
+      p_team_id: 'team-1', p_title: 'Goal', p_note: 'Practise together',
+      p_membership_ids: ['membership-1'],
     })
   })
 })

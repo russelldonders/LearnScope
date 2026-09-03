@@ -91,6 +91,7 @@ function NewRecordDialog({ teamOptions, onClose, onCreateRecord }) {
   const [note, setNote] = useState('')
   const [memberIds, setMemberIds] = useState([])
   const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState(null)
   const initialFocusRef = useRef(null)
 
   function toggleMember(id) {
@@ -104,9 +105,12 @@ function NewRecordDialog({ teamOptions, onClose, onCreateRecord }) {
       return
     }
     setSubmitting(true)
+    setSubmitError(null)
     try {
       await onCreateRecord({ title: title.trim(), note: note.trim(), memberIds })
       onClose()
+    } catch (error) {
+      setSubmitError(error.message || 'Could not save the record. Try again.')
     } finally {
       setSubmitting(false)
     }
@@ -130,6 +134,7 @@ function NewRecordDialog({ teamOptions, onClose, onCreateRecord }) {
           id="manager-record-title"
           type="text"
           required
+          maxLength={160}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           data-dialog-initial-focus
@@ -142,10 +147,14 @@ function NewRecordDialog({ teamOptions, onClose, onCreateRecord }) {
         <textarea
           id="manager-record-note"
           rows={4}
+          required
+          maxLength={5000}
           value={note}
           onChange={(e) => setNote(e.target.value)}
           className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss mb-4"
         />
+
+        <MutationFeedback status="error" message={submitError} className="mb-4" />
 
         <fieldset className="mb-5">
           <legend className="block text-sm font-medium text-ink mb-1.5">Team members</legend>
@@ -175,7 +184,7 @@ function NewRecordDialog({ teamOptions, onClose, onCreateRecord }) {
           </button>
           <button
             type="submit"
-            disabled={submitting || !title.trim()}
+            disabled={submitting || !title.trim() || !note.trim() || memberIds.length === 0}
             className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
           >
             {submitting ? 'Saving…' : 'Save record'}

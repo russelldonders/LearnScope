@@ -167,6 +167,13 @@ export default function AppHeader({ hideNavLinks = false }) {
                       {location.pathname.startsWith('/employer') ? 'Switch to learner mode' : 'Employer console'}
                     </Link>
                   )}
+                  <Link
+                    to={location.pathname.startsWith('/manager') ? '/dashboard' : '/manager'}
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-4 py-2 text-sm text-ink hover:bg-paper"
+                  >
+                    {location.pathname.startsWith('/manager') ? 'Switch to learner mode' : 'Manager console'}
+                  </Link>
                   <div className="my-1 border-t border-hairline" />
                   <button
                     type="button"

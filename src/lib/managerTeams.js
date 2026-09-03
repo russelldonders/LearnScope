@@ -34,9 +34,25 @@ export async function listMyManagerTeamInvites() {
   return data ?? []
 }
 
+export async function listPendingManagerTeamInvites(teamId) {
+  const { data, error } = await supabase.from('manager_team_memberships')
+    .select('id, invited_email, invited_at').eq('team_id', teamId)
+    .eq('role', 'member').eq('status', 'pending').order('invited_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map((row) => ({ id: row.id, email: row.invited_email, sentAt: row.invited_at }))
+}
+
 export async function inviteConnectionToManagerTeam(teamId, memberUserId) {
   const { data, error } = await supabase.rpc('invite_connection_to_manager_team', {
     p_team_id: teamId, p_member_user_id: memberUserId,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function inviteConnectionToManagerTeamByEmail(teamId, email) {
+  const { data, error } = await supabase.rpc('invite_connection_to_manager_team_by_email', {
+    p_team_id: teamId, p_email: email,
   })
   if (error) throw error
   return data
@@ -72,6 +88,16 @@ export async function listManagerTeamSharedSkills(teamId) {
   return data ?? []
 }
 
+export async function listManagerTeamMemberSummaries(teamId) {
+  const { data, error } = await supabase.rpc('list_manager_team_member_summaries', { p_team_id: teamId })
+  if (error) throw error
+  return (data ?? []).map((row) => ({
+    id: row.id, name: row.name, avatarUrl: row.avatar_url, teamSince: row.team_since,
+    sharedSkills: row.shared_skills ?? [],
+    collaborativeLearningCount: Number(row.collaborative_learning_count ?? 0),
+  }))
+}
+
 export async function createManagerTeamActivity(teamId, activity) {
   const { data, error } = await supabase.rpc('create_manager_team_activity', {
     p_team_id: teamId,
@@ -93,4 +119,30 @@ export async function listManagerTeamActivities(teamId) {
     .order('created_at', { ascending: false })
   if (error) throw error
   return data ?? []
+}
+
+export async function listManagerTeamLearningRecords(teamId) {
+  const { data, error } = await supabase.rpc('list_manager_team_learning_records', { p_team_id: teamId })
+  if (error) throw error
+  return (data ?? []).map((row) => ({
+    id: row.id, title: row.title, kind: row.kind, status: row.status,
+    memberIds: row.member_ids ?? [], memberNames: row.member_names ?? [], occurredAt: row.occurred_at,
+  }))
+}
+
+export async function createManagerCollaborationRecord(teamId, { title, note, memberIds }) {
+  const { data, error } = await supabase.rpc('create_manager_collaboration_record', {
+    p_team_id: teamId, p_title: title, p_note: note, p_membership_ids: memberIds,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function listManagerCollaborationRecords(teamId) {
+  const { data, error } = await supabase.rpc('list_manager_collaboration_records', { p_team_id: teamId })
+  if (error) throw error
+  return (data ?? []).map((row) => ({
+    id: row.id, title: row.title, note: row.note,
+    memberIds: row.member_ids ?? [], memberNames: row.member_names ?? [], createdAt: row.created_at,
+  }))
 }

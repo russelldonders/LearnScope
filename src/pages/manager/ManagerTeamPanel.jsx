@@ -106,8 +106,9 @@ export default function ManagerTeamPanel({ members = [], loading = false, error 
                             >
                               {skill.name} · {LEVEL_LABELS[skill.level]}
                               {skill.evidenceCount > 0 && (
-                                <span aria-label={`${skill.evidenceCount} evidence item${skill.evidenceCount === 1 ? '' : 's'}`}>
-                                  📎{skill.evidenceCount}
+                                <span className="inline-flex items-center gap-0.5" aria-label={`${skill.evidenceCount} evidence item${skill.evidenceCount === 1 ? '' : 's'}`}>
+                                  <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21.4 11.6-8.9 8.9a6 6 0 0 1-8.5-8.5l9.6-9.6a4 4 0 0 1 5.7 5.7l-9.6 9.6a2 2 0 0 1-2.8-2.8l8.9-8.9" /></svg>
+                                  {skill.evidenceCount}
                                 </span>
                               )}
                             </span>
@@ -149,6 +150,7 @@ export default function ManagerTeamPanel({ members = [], loading = false, error 
 function InviteToTeamDialog({ onClose, onInvite }) {
   const [email, setEmail] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState(null)
   const initialFocusRef = useRef(null)
 
   async function handleSubmit(e) {
@@ -158,9 +160,12 @@ function InviteToTeamDialog({ onClose, onInvite }) {
       return
     }
     setSubmitting(true)
+    setSubmitError(null)
     try {
       await onInvite(email.trim())
       onClose()
+    } catch (error) {
+      setSubmitError(error.message || 'Could not send the invitation. Try again.')
     } finally {
       setSubmitting(false)
     }
@@ -187,11 +192,13 @@ function InviteToTeamDialog({ onClose, onInvite }) {
           id="manager-team-invite-email"
           type="email"
           required
+          maxLength={320}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           data-dialog-initial-focus
-          className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss mb-5"
+          className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss mb-2"
         />
+        <MutationFeedback status="error" message={submitError} className="mb-4" />
         <div className="flex justify-end gap-2">
           <button
             type="button"
