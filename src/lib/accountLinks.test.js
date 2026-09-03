@@ -8,6 +8,8 @@ const {
   redeemAccountLinkInvitation,
   revokeVerifiedAccountLink,
   listVerifiedAccountLinks,
+  buildAccountLinkUrl,
+  readAccountLinkToken,
 } = await import('./accountLinks')
 
 describe('account links service', () => {
@@ -43,5 +45,12 @@ describe('account links service', () => {
     await expect(listVerifiedAccountLinks()).resolves.toEqual([{
       id: 'link-1', email: 'work@example.com', accountType: 'work_sso', status: 'active', verifiedAt: 'today',
     }])
+  })
+
+  it('keeps one-time tokens in the URL fragment', () => {
+    expect(buildAccountLinkUrl('token with spaces', 'https://learnscope.example')).toBe(
+      'https://learnscope.example/profile/connected-accounts#account-link=token+with+spaces'
+    )
+    expect(readAccountLinkToken('#account-link=token+with+spaces')).toBe('token with spaces')
   })
 })

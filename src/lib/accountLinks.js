@@ -1,5 +1,17 @@
 import { supabase } from './supabaseClient'
 
+const ACCOUNT_LINK_FRAGMENT_KEY = 'account-link'
+
+export function buildAccountLinkUrl(token, origin = window.location.origin) {
+  const fragment = new URLSearchParams({ [ACCOUNT_LINK_FRAGMENT_KEY]: token })
+  return `${origin}/profile/connected-accounts#${fragment.toString()}`
+}
+
+export function readAccountLinkToken(hash = window.location.hash) {
+  const fragment = hash.startsWith('#') ? hash.slice(1) : hash
+  return new URLSearchParams(fragment).get(ACCOUNT_LINK_FRAGMENT_KEY)
+}
+
 export async function createAccountLinkInvitation(targetEmail) {
   const { data, error } = await supabase.rpc('create_account_link_invitation', {
     p_target_email: targetEmail,
