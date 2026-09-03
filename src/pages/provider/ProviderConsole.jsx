@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
 import { OrganisationStaffPanel } from '../admin/AdminProviders'
+import ProviderOverviewPanel from './ProviderOverviewPanel'
 import ResourceLibrarySection from '../../components/ResourceLibrarySection'
 import ProviderSkillsSection from '../../components/ProviderSkillsSection'
 import OrganisationSettingsModal from '../../components/OrganisationSettingsModal'
@@ -80,6 +81,7 @@ function buildBulkCatalogueDeleteMessage(targets) {
 }
 
 const SECTIONS = [
+  { key: 'overview', label: 'Overview' },
   { key: 'training', label: 'Training' },
   { key: 'skills', label: 'Skills' },
   { key: 'catalogues', label: 'Catalogues' },
@@ -109,7 +111,11 @@ export default function ProviderConsole() {
   // searchParams on every render (not seeded once), so Back/Forward
   // navigating between two ?org=/?section= values actually updates the view.
   const selectedOrgId = searchParams.get('org')
-  const activeSection = searchParams.get('section') ?? 'training'
+  // Defaults to Overview, mirroring the platform-admin console's own
+  // /admin route landing on AdminOverview -- a provider's work queue is the
+  // more useful first thing to see than a bare training list, especially
+  // once there's more than one organisation to switch between.
+  const activeSection = searchParams.get('section') ?? 'overview'
   const [showSettings, setShowSettings] = useState(false)
   const orgTabRefs = useRef({})
   const sectionTabRefs = useRef({})
@@ -322,6 +328,9 @@ export default function ProviderConsole() {
                   aria-labelledby={`provider-section-tab-${currentSection}`}
                   tabIndex={0}
                 >
+                  {currentSection === 'overview' && (
+                    <ProviderOverviewPanel key={selectedOrg.id} organisation={selectedOrg} role={myRole} />
+                  )}
                   {currentSection === 'training' && (
                     <ProviderTrainingSection
                       key={selectedOrg.id}
