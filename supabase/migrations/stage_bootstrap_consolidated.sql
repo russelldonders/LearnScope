@@ -14553,6 +14553,7 @@ returns table (
   link_id uuid,
   other_email text,
   other_account_type text,
+  direction text,
   status text,
   verified_at timestamptz
 )
@@ -14569,6 +14570,10 @@ as $$
     link.id,
     other_user.email,
     other_account.account_type,
+    case
+      when invitation.requesting_auth_account_id = mine.id then 'sent'
+      else 'received'
+    end,
     link.status,
     link.verified_at
   from public.verified_account_links link
@@ -14579,6 +14584,7 @@ as $$
       else link.auth_account_a_id
     end
   join auth.users other_user on other_user.id = other_account.auth_user_id
+  left join public.account_link_invitations invitation on invitation.id = link.created_from_invitation_id
   order by link.verified_at desc
 $$;
 

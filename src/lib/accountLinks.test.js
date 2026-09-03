@@ -41,9 +41,9 @@ describe('account links service', () => {
   })
 
   it('maps verified links without exposing auth internals', async () => {
-    rpc.mockResolvedValue({ data: [{ link_id: 'link-1', other_email: 'work@example.com', other_account_type: 'work_sso', status: 'active', verified_at: 'today' }], error: null })
+    rpc.mockResolvedValue({ data: [{ link_id: 'link-1', other_email: 'work@example.com', other_account_type: 'work_sso', direction: 'received', status: 'active', verified_at: 'today' }], error: null })
     await expect(listVerifiedAccountLinks()).resolves.toEqual([{
-      id: 'link-1', email: 'work@example.com', accountType: 'work_sso', status: 'active', verifiedAt: 'today',
+      id: 'link-1', email: 'work@example.com', accountType: 'work_sso', direction: 'received', status: 'active', verifiedAt: 'today',
     }])
   })
 

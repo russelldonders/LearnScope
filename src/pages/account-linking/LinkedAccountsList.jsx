@@ -12,6 +12,12 @@ const STATUS_LABELS = {
   revoked: 'Revoked',
 }
 
+const ACCOUNT_TYPE_LABELS = {
+  personal: 'Personal login',
+  work_sso: 'Work SSO',
+  work_managed: 'Work-managed login',
+}
+
 // List of this learner's verified linked accounts. Revoking is the only
 // mutation here (confirmed first, same ConfirmDialog pattern as
 // ManagerTeamSharingPanel's "Leave team") -- a revoked link never deletes
@@ -54,6 +60,7 @@ export default function LinkedAccountsList({ linkedAccounts, revokingId = null, 
                   {account.email}
                 </p>
                 <p className="text-xs text-secondary">
+                  {ACCOUNT_TYPE_LABELS[account.accountType] ?? account.accountType} ·{' '}
                   {DIRECTION_LABELS[account.direction] ?? account.direction} · verified{' '}
                   {formatAbsoluteDate(account.verifiedAt)} · {STATUS_LABELS[account.status] ?? account.status}
                 </p>

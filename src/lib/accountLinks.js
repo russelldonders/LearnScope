@@ -48,6 +48,7 @@ export async function listVerifiedAccountLinks() {
     id: row.link_id,
     email: row.other_email,
     accountType: row.other_account_type,
+    direction: row.direction,
     status: row.status,
     verifiedAt: row.verified_at,
   }))

@@ -7,6 +7,16 @@ import StravaIcon from '../components/StravaIcon'
 import StravaActivityReviewModal from '../components/StravaActivityReviewModal'
 import { buildStravaAuthorizeUrl, connectStrava, disconnectStrava, getMyExternalConnections, syncStrava } from '../lib/strava'
 import { formatRelativeDate } from '../lib/dates'
+import AccountLinkingSection from './account-linking/AccountLinkingSection'
+import RedeemInvitationPanel from './account-linking/RedeemInvitationPanel'
+import {
+  buildAccountLinkUrl,
+  createAccountLinkInvitation,
+  listVerifiedAccountLinks,
+  readAccountLinkToken,
+  redeemAccountLinkInvitation,
+  revokeVerifiedAccountLink,
+} from '../lib/accountLinks'
 
 const OAUTH_STATE_KEY = 'stravaOAuthState'
 
@@ -22,10 +32,21 @@ export default function ConnectedAccounts() {
   const [reviewActivities, setReviewActivities] = useState(null)
   const [error, setError] = useState(null)
   const [successMessage, setSuccessMessage] = useState(null)
+  const [accountLinks, setAccountLinks] = useState([])
+  const [activeInvitation, setActiveInvitation] = useState(null)
+  const [creatingInvitation, setCreatingInvitation] = useState(false)
+  const [createLinkError, setCreateLinkError] = useState(null)
+  const [revokingLinkId, setRevokingLinkId] = useState(null)
+  const [revokeLinkError, setRevokeLinkError] = useState(null)
+  const [linkToken] = useState(() => readAccountLinkToken())
+  const [redeemingLink, setRedeemingLink] = useState(false)
+  const [linkRedeemed, setLinkRedeemed] = useState(false)
+  const [redeemLinkError, setRedeemLinkError] = useState(null)
 
   useEffect(() => {
     handleOAuthReturn()
     load()
+    loadAccountLinks()
   }, [])
 
   async function load() {
@@ -37,6 +58,59 @@ export default function ConnectedAccounts() {
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadAccountLinks() {
+    try {
+      setAccountLinks(await listVerifiedAccountLinks())
+    } catch (err) {
+      setCreateLinkError(err.message)
+    }
+  }
+
+  async function handleCreateAccountInvitation(email) {
+    setCreatingInvitation(true)
+    setCreateLinkError(null)
+    try {
+      const invitation = await createAccountLinkInvitation(email)
+      setActiveInvitation({
+        invitedEmail: email,
+        expiresAt: invitation.expiresAt,
+        url: buildAccountLinkUrl(invitation.token),
+      })
+    } catch (err) {
+      setCreateLinkError(err.message)
+    } finally {
+      setCreatingInvitation(false)
+    }
+  }
+
+  async function handleRedeemAccountInvitation(token) {
+    setRedeemingLink(true)
+    setRedeemLinkError(null)
+    try {
+      await redeemAccountLinkInvitation(token)
+      setLinkRedeemed(true)
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+      await loadAccountLinks()
+    } catch (err) {
+      setRedeemLinkError(err.message)
+    } finally {
+      setRedeemingLink(false)
+    }
+  }
+
+  async function handleRevokeAccountLink(linkId) {
+    setRevokingLinkId(linkId)
+    setRevokeLinkError(null)
+    try {
+      await revokeVerifiedAccountLink(linkId)
+      await loadAccountLinks()
+    } catch (err) {
+      setRevokeLinkError(err.message)
+    } finally {
+      setRevokingLinkId(null)
     }
   }
 
@@ -130,7 +204,7 @@ export default function ConnectedAccounts() {
       <AppHeader />
       <main id="main-content" tabIndex={-1} className="max-w-2xl mx-auto px-4 py-8 space-y-6">
         <div>
-          <h1 className="font-display text-2xl text-ink">Connected apps</h1>
+          <h1 className="font-display text-2xl text-ink">Connected accounts and apps</h1>
           <p className="text-secondary mt-1 text-sm">
             Bring in activity from other services so it can count as skill evidence, without typing it in by
             hand. You choose what gets imported and which skill it counts toward — nothing is added
@@ -140,6 +214,36 @@ export default function ConnectedAccounts() {
 
         {error && <p className="text-sm text-red-700">{error}</p>}
         {successMessage && <p className="text-sm text-moss">{successMessage}</p>}
+
+        {linkToken && (
+          <RedeemInvitationPanel
+            token={linkToken}
+            redeeming={redeemingLink}
+            redeemed={linkRedeemed}
+            error={redeemLinkError}
+            onRedeem={handleRedeemAccountInvitation}
+          />
+        )}
+
+        <section aria-labelledby="account-linking-heading" className="space-y-4">
+          <div>
+            <h2 id="account-linking-heading" className="font-display text-xl text-ink">Your LearnScope logins</h2>
+            <p className="text-sm text-secondary mt-1">
+              Verify personal and work logins that belong to you while keeping their profiles and permissions separate.
+            </p>
+          </div>
+          <AccountLinkingSection
+            activeInvitation={activeInvitation}
+            linkedAccounts={accountLinks}
+            creating={creatingInvitation}
+            createError={createLinkError}
+            revokingId={revokingLinkId}
+            revokeError={revokeLinkError}
+            onCreateInvitation={handleCreateAccountInvitation}
+            onDismissInvitation={() => setActiveInvitation(null)}
+            onRevoke={handleRevokeAccountLink}
+          />
+        </section>
 
         <div className="bg-card border border-hairline rounded-lg p-6">
           <h3 className="flex items-center gap-2 font-display text-lg text-ink mb-1">
