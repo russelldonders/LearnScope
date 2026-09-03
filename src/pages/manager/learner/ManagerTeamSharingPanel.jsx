@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import AccessibleDialog from '../../../components/AccessibleDialog'
 import ConfirmDialog from '../../../components/ConfirmDialog'
 import MutationFeedback from '../../../components/MutationFeedback'
@@ -63,13 +63,13 @@ export default function ManagerTeamSharingPanel({
         change your selection or leave the team at any time.
       </p>
 
-      <div className="flex items-center justify-between gap-3 pt-3 border-t border-hairline">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-3 border-t border-hairline">
         <p className="text-sm text-ink">
           {sharedSkills.length === 0
             ? 'No skills shared yet'
             : `Sharing ${sharedSkills.length} skill${sharedSkills.length === 1 ? '' : 's'}`}
         </p>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setEditOpen(true)}
@@ -102,7 +102,16 @@ export default function ManagerTeamSharingPanel({
 
       {leaveConfirmOpen && (
         <ConfirmDialog
-          message={`Leave ${membership.teamName}? ${membership.managerName} will no longer see any skills or evidence you've shared, and you'll stop appearing on their team.`}
+          message={
+            <>
+              {`Leave ${membership.teamName}? ${membership.managerName} will no longer see any skills or evidence you've shared, and you'll stop appearing on their team.`}
+              {error && (
+                <span role="alert" className="block mt-2 text-red-700">
+                  {error}
+                </span>
+              )}
+            </>
+          }
           confirmLabel="Leave team"
           confirming={saving}
           onConfirm={() => onLeaveTeam?.()}
@@ -115,6 +124,11 @@ export default function ManagerTeamSharingPanel({
 
 function EditSharedSkillsDialog({ availableSkills, initiallySelectedIds, saving, error, onSave, onClose }) {
   const [selected, setSelected] = useState(() => new Set(initiallySelectedIds))
+  // A learner can belong to more than one manager team, so this dialog can
+  // mount more than once on the same page -- a hardcoded id would collide
+  // and break aria-labelledby if a second one is ever open at the same time
+  // (AccessibleDialog's stack already anticipates that).
+  const titleId = useId()
 
   function toggle(skillId) {
     setSelected((current) => {
@@ -127,12 +141,12 @@ function EditSharedSkillsDialog({ availableSkills, initiallySelectedIds, saving,
 
   return (
     <AccessibleDialog
-      labelledBy="manager-shared-skills-dialog-title"
+      labelledBy={titleId}
       onClose={saving ? undefined : onClose}
       closeOnBackdrop={!saving}
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
-      <h2 id="manager-shared-skills-dialog-title" className="font-display text-xl text-ink mb-1">
+      <h2 id={titleId} className="font-display text-xl text-ink mb-1">
         Choose skills to share
       </h2>
       <p className="text-sm text-secondary mb-4">
@@ -144,7 +158,7 @@ function EditSharedSkillsDialog({ availableSkills, initiallySelectedIds, saving,
         <p className="text-sm text-secondary py-2">You haven't added any skills yet.</p>
       ) : (
         <>
-          <div className="flex items-center gap-3 mb-1">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
             <button
               type="button"
               onClick={() => setSelected(new Set(availableSkills.map((s) => s.id)))}
@@ -174,7 +188,9 @@ function EditSharedSkillsDialog({ availableSkills, initiallySelectedIds, saving,
                   onChange={() => toggle(skill.id)}
                   className="size-4 accent-moss shrink-0"
                 />
-                <span className="text-sm text-ink truncate min-w-0 flex-1">{skill.name}</span>
+                <span className="text-sm text-ink truncate min-w-0 flex-1" title={skill.name}>
+                  {skill.name}
+                </span>
                 <span className="text-xs text-secondary shrink-0">
                   {LEVEL_LABELS[skill.level] ?? skill.level}
                   {skill.evidenceCount > 0
@@ -202,6 +218,7 @@ function EditSharedSkillsDialog({ availableSkills, initiallySelectedIds, saving,
           type="button"
           onClick={onClose}
           disabled={saving}
+          data-dialog-initial-focus
           className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper disabled:opacity-60"
         >
           Cancel
