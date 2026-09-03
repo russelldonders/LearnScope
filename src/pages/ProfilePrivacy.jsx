@@ -24,6 +24,13 @@ import {
 } from '../lib/profileShareLinks'
 import { formatAbsoluteDate } from '../lib/dates'
 import ShareSkillsModal from '../components/ShareSkillsModal'
+import ManagerTeamSharingPanel from './manager/learner/ManagerTeamSharingPanel'
+import {
+  leaveManagerTeam,
+  listMyManagerShareableSkills,
+  listMyManagerTeamRelationships,
+  setManagerTeamSharedSkills,
+} from '../lib/managerTeams'
 
 // Presets shown in the "Share via link" duration select -- deliberately
 // short-lived options only; create_profile_share_link still enforces a hard
@@ -93,6 +100,9 @@ export default function ProfilePrivacy() {
   const [sharedSkillCountByRequest, setSharedSkillCountByRequest] = useState({})
   const [mySkills, setMySkills] = useState([])
   const [skillShareModal, setSkillShareModal] = useState(null)
+  const [managerTeams, setManagerTeams] = useState([])
+  const [managerTeamSavingId, setManagerTeamSavingId] = useState(null)
+  const [managerTeamError, setManagerTeamError] = useState(null)
 
   // "Share via link" -- proactive, token-based, no-account-required share
   // links (20260902300000_profile_share_links.sql), independent of the
@@ -142,18 +152,19 @@ export default function ProfilePrivacy() {
 
   async function load() {
     try {
-      const [{ data }, searchSettings, { data: skillsData, error: skillsError }] = await Promise.all([
+      const [{ data }, searchSettings, skillsData, managerRelationships] = await Promise.all([
         supabase.from('profiles').select('skills_profile_visible').eq('id', user.id).single(),
         getSearchPrivacySettings(user.id),
-        supabase.from('skills').select('id, name').eq('user_id', user.id).order('name', { ascending: true }),
+        listMyManagerShareableSkills(user.id),
+        listMyManagerTeamRelationships(),
       ])
-      if (skillsError) throw skillsError
       setSkillsProfileVisible(data?.skills_profile_visible ?? false)
       setActivityFeedVisible(searchSettings?.activity_feed_visible ?? false)
       setProfileVisibleToMatches(searchSettings?.profile_visible_to_skill_matches ?? false)
       setSearchVisibility(searchSettings?.skill_search_visibility ?? 'hidden')
       setAutoIncludeNewSkills(searchSettings?.auto_include_new_skills_in_search ?? false)
-      setMySkills(skillsData ?? [])
+      setMySkills(skillsData)
+      setManagerTeams(managerRelationships.filter((relationship) => relationship.status === 'active'))
     } catch (err) {
       setPrivacyError(err.message)
     } finally {
@@ -384,6 +395,34 @@ export default function ProfilePrivacy() {
     setPrivacySaving(false)
   }
 
+  async function handleManagerTeamShare(membershipId, skillIds) {
+    setManagerTeamError(null)
+    setManagerTeamSavingId(membershipId)
+    try {
+      await setManagerTeamSharedSkills(membershipId, skillIds)
+      setManagerTeams((current) => current.map((membership) =>
+        membership.id === membershipId ? { ...membership, sharedSkillIds: skillIds } : membership
+      ))
+    } catch (err) {
+      setManagerTeamError({ id: membershipId, message: err.message })
+    } finally {
+      setManagerTeamSavingId(null)
+    }
+  }
+
+  async function handleLeaveManagerTeam(membershipId) {
+    setManagerTeamError(null)
+    setManagerTeamSavingId(membershipId)
+    try {
+      await leaveManagerTeam(membershipId)
+      setManagerTeams((current) => current.filter((membership) => membership.id !== membershipId))
+    } catch (err) {
+      setManagerTeamError({ id: membershipId, message: err.message })
+    } finally {
+      setManagerTeamSavingId(null)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
@@ -582,6 +621,31 @@ export default function ProfilePrivacy() {
                   })}
                 </ul>
               </div>
+            )}
+
+            {managerTeams.length > 0 && (
+              <section aria-labelledby="manager-team-sharing-heading" className="space-y-3">
+                <div>
+                  <h2 id="manager-team-sharing-heading" className="font-display text-lg text-ink">
+                    Manager teams
+                  </h2>
+                  <p className="text-sm text-secondary mt-1">
+                    Choose exactly which skills each independent manager can see.
+                  </p>
+                </div>
+                {managerTeams.map((membership) => (
+                  <ManagerTeamSharingPanel
+                    key={membership.id}
+                    membership={membership}
+                    availableSkills={mySkills}
+                    sharedSkillIds={membership.sharedSkillIds}
+                    saving={managerTeamSavingId === membership.id}
+                    error={managerTeamError?.id === membership.id ? managerTeamError.message : null}
+                    onSave={(skillIds) => handleManagerTeamShare(membership.id, skillIds)}
+                    onLeaveTeam={() => handleLeaveManagerTeam(membership.id)}
+                  />
+                ))}
+              </section>
             )}
 
             <div className="bg-card border border-hairline rounded-lg p-6">

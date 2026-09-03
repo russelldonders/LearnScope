@@ -19,6 +19,8 @@ import { listMySkillSuggestions, adoptSkillSuggestion, dismissSkillSuggestion } 
 import { supabase } from '../lib/supabaseClient'
 import ShareSkillsModal from '../components/ShareSkillsModal'
 import CohortPickerModal from '../components/CohortPickerModal'
+import ManagerTeamInviteCard from './manager/learner/ManagerTeamInviteCard'
+import { decideManagerTeamInvite, listMyManagerTeamInvites } from '../lib/managerTeams'
 
 // Everything actually waiting on this learner to act -- the same sources
 // PendingActionsContext counts for the header badge, just rendered in full
@@ -39,6 +41,9 @@ export default function Actions() {
   const [employerInvites, setEmployerInvites] = useState([])
   const [employerInviteDecidingId, setEmployerInviteDecidingId] = useState(null)
   const [employerInviteError, setEmployerInviteError] = useState(null)
+  const [managerTeamInvites, setManagerTeamInvites] = useState([])
+  const [managerInviteDecidingId, setManagerInviteDecidingId] = useState(null)
+  const [managerInviteError, setManagerInviteError] = useState(null)
   const [dataAccessRequests, setDataAccessRequests] = useState([])
   const [dataAccessDecidingId, setDataAccessDecidingId] = useState(null)
   const [dataAccessError, setDataAccessError] = useState(null)
@@ -77,6 +82,7 @@ export default function Actions() {
         incomingRequestsData,
         orgInvitesData,
         employerInvitesData,
+        managerTeamInvitesData,
         dataAccessRequestsData,
         courseAssignmentsData,
         skillSuggestionsData,
@@ -88,6 +94,7 @@ export default function Actions() {
         listIncomingConnectionRequests(user.id),
         listMyPendingOrgInvites(user.id),
         listMyPendingEmployerInvites(user.id),
+        listMyManagerTeamInvites(),
         listMyPendingDataAccessRequests(user.id),
         listMyCourseAssignments(user.id),
         listMySkillSuggestions(user.id),
@@ -100,6 +107,7 @@ export default function Actions() {
       setIncomingRequests(incomingRequestsData)
       setOrgInvites(orgInvitesData)
       setEmployerInvites(employerInvitesData)
+      setManagerTeamInvites(managerTeamInvitesData)
       setDataAccessRequests(dataAccessRequestsData)
       setCourseAssignments(courseAssignmentsData)
       setSkillSuggestions(skillSuggestionsData)
@@ -149,6 +157,20 @@ export default function Actions() {
       setEmployerInviteError({ id: memberId, message: err.message })
     } finally {
       setEmployerInviteDecidingId(null)
+    }
+  }
+
+  async function handleManagerTeamInviteResponse(membershipId, accept) {
+    setManagerInviteError(null)
+    setManagerInviteDecidingId(membershipId)
+    try {
+      await decideManagerTeamInvite(membershipId, accept)
+      setManagerTeamInvites((current) => current.filter((invite) => invite.id !== membershipId))
+      refreshPendingActionCount()
+    } catch (err) {
+      setManagerInviteError({ id: membershipId, message: err.message })
+    } finally {
+      setManagerInviteDecidingId(null)
     }
   }
 
@@ -335,6 +357,7 @@ export default function Actions() {
     incomingRequests.length === 0 &&
     orgInvites.length === 0 &&
     employerInvites.length === 0 &&
+    managerTeamInvites.length === 0 &&
     dataAccessRequests.length === 0 &&
     courseAssignments.length === 0 &&
     skillSuggestions.length === 0 &&
@@ -529,6 +552,26 @@ export default function Actions() {
               ))}
             </div>
           </div>
+        )}
+
+        {managerTeamInvites.length > 0 && (
+          <section aria-labelledby="manager-team-invitations-heading">
+            <h2 id="manager-team-invitations-heading" className="font-display text-xl text-ink mb-6">
+              Manager team invitations
+            </h2>
+            <div className="space-y-3">
+              {managerTeamInvites.map((invite) => (
+                <ManagerTeamInviteCard
+                  key={invite.id}
+                  invite={invite}
+                  submitting={managerInviteDecidingId === invite.id}
+                  error={managerInviteError?.id === invite.id ? managerInviteError.message : null}
+                  onAccept={() => handleManagerTeamInviteResponse(invite.id, true)}
+                  onDecline={() => handleManagerTeamInviteResponse(invite.id, false)}
+                />
+              ))}
+            </div>
+          </section>
         )}
 
         {dataAccessRequests.length > 0 && (
