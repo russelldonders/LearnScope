@@ -1,24 +1,25 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import RoleAlignmentSummary from './RoleAlignmentSummary'
-import { FIXTURE_LINKED_ROLE_PROFILE } from './roleAlignmentFixtures'
+import { FIXTURE_LINKED_ASSIGNMENTS } from './roleAlignmentFixtures'
 import { computeRoleAlignment } from './roleAlignment'
 
 afterEach(cleanup)
 
+const assignment = FIXTURE_LINKED_ASSIGNMENTS[0]
 const learnerSkills = [
   { skillId: 'skill-1', name: 'Facilitation', level: 4 },
   { skillId: 'skill-2', name: 'Stakeholder communication', level: 2 },
 ]
-const { aligned, gaps } = computeRoleAlignment(learnerSkills, FIXTURE_LINKED_ROLE_PROFILE.requiredSkills)
+const { aligned, gaps } = computeRoleAlignment(learnerSkills, assignment.roleProfile.requiredSkills)
 
 function renderSummary(props = {}) {
   return render(
     <RoleAlignmentSummary
-      linkedRoleProfile={FIXTURE_LINKED_ROLE_PROFILE}
+      assignment={assignment}
       aligned={aligned}
       gaps={gaps}
-      training={FIXTURE_LINKED_ROLE_PROFILE.training}
+      training={assignment.roleProfile.training}
       {...props}
     />
   )
@@ -35,7 +36,7 @@ describe('RoleAlignmentSummary', () => {
     expect(screen.getByText(/Incident response -- requires Capable, you haven't tracked this skill yet/)).toBeInTheDocument()
   })
 
-  it('shows employer training with its requirement', () => {
+  it('shows employer training keyed by course, with its requirement', () => {
     renderSummary()
     expect(screen.getByText(/De-escalation fundamentals/)).toHaveTextContent('(Required)')
     expect(screen.getByText(/Advanced troubleshooting/)).toHaveTextContent('(Recommended)')
@@ -46,7 +47,7 @@ describe('RoleAlignmentSummary', () => {
     expect(screen.getByText(/Employer requirements -- managed by Acme Corp/)).toBeInTheDocument()
   })
 
-  it('opens a confirm dialog before disconnecting, and calls onDisconnect', () => {
+  it('opens a confirm dialog before disconnecting, and calls onDisconnect with no arguments', () => {
     const onDisconnect = vi.fn()
     renderSummary({ onDisconnect })
     fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }))
@@ -70,10 +71,10 @@ describe('RoleAlignmentSummary', () => {
 
     rerender(
       <RoleAlignmentSummary
-        linkedRoleProfile={FIXTURE_LINKED_ROLE_PROFILE}
+        assignment={assignment}
         aligned={aligned}
         gaps={gaps}
-        training={FIXTURE_LINKED_ROLE_PROFILE.training}
+        training={assignment.roleProfile.training}
         disconnecting={false}
         error={null}
       />

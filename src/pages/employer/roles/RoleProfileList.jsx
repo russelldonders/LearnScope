@@ -4,6 +4,11 @@ import { formatAbsoluteDate } from '../../../lib/dates'
 // deliberately name/description/summary-counts only here; a role profile's
 // required skills, training and linked employees are edited on its own
 // panel once selected (see RoleProfileSkillsPanel etc.), not inline here.
+// Skill/training counts are derived from the profile's own requiredSkills/
+// training arrays rather than a separate count field, so there's one
+// source of truth for "how many" instead of a number that could drift from
+// the actual list; linkedEmployeeCount stays a summary-only field since the
+// full per-employee list is only ever fetched for the selected profile.
 export default function RoleProfileList({
   roleProfiles,
   selectedId = null,
@@ -55,8 +60,8 @@ export default function RoleProfileList({
                   <p className="text-sm font-medium text-ink">{profile.name}</p>
                   {profile.description && <p className="text-sm text-secondary mt-0.5">{profile.description}</p>}
                   <p className="text-xs text-secondary mt-1">
-                    {profile.requiredSkillCount} skill{profile.requiredSkillCount === 1 ? '' : 's'} ·{' '}
-                    {profile.trainingCount} training item{profile.trainingCount === 1 ? '' : 's'} ·{' '}
+                    {profile.requiredSkills.length} skill{profile.requiredSkills.length === 1 ? '' : 's'} ·{' '}
+                    {profile.training.length} training item{profile.training.length === 1 ? '' : 's'} ·{' '}
                     {profile.linkedEmployeeCount} employee{profile.linkedEmployeeCount === 1 ? '' : 's'} linked
                     {profile.updatedAt && <> · updated {formatAbsoluteDate(profile.updatedAt)}</>}
                   </p>
