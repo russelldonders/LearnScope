@@ -12,12 +12,13 @@ import {
 import { listAllOnboardingSteps } from '../../lib/admin/onboardingSteps'
 
 // The work-queue tiles proper -- each a single efficient count query (see
-// overview.js) plus a link using AdminUsers.jsx/AdminCatalogue.jsx's exact
-// ?status= param scheme so a click lands straight on the actionable filtered
-// view, not just the general list. "Inactive provider organisations" and
-// "Pending staff invitations" both link to the plain /admin/providers list
-// (no ?status= support there yet -- a later slice) rather than a filtered
-// view; still an actionable destination, just a less sharp one.
+// overview.js) plus a link using AdminUsers.jsx/AdminCatalogue.jsx/
+// AdminProviders.jsx's exact ?status= param scheme so a click lands
+// straight on the actionable filtered view, not just the general list.
+// "Pending staff invitations" still links to the plain /admin/providers
+// list -- that data isn't a column AdminProviders filters on, so there's
+// no equivalent ?status= value for it; still an actionable destination,
+// just a less sharp one.
 const QUEUE_TILES = [
   {
     key: 'pendingApprovals',
@@ -43,7 +44,7 @@ const QUEUE_TILES = [
   {
     key: 'inactiveProviders',
     heading: 'Inactive provider organisations',
-    to: '/admin/providers',
+    to: '/admin/providers?status=inactive',
     load: countInactiveProviders,
     describe: (n) => `${n} provider organisation${n === 1 ? '' : 's'} marked inactive`,
   },
