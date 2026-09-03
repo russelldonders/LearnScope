@@ -21,6 +21,7 @@ import ShareSkillsModal from '../components/ShareSkillsModal'
 import CohortPickerModal from '../components/CohortPickerModal'
 import ManagerTeamInviteCard from './manager/learner/ManagerTeamInviteCard'
 import { decideManagerTeamInvite, listMyManagerTeamInvites } from '../lib/managerTeams'
+import { loadActionSources } from '../lib/actionLoading'
 
 // Everything actually waiting on this learner to act -- the same sources
 // PendingActionsContext counts for the header badge, just rendered in full
@@ -75,32 +76,42 @@ export default function Actions() {
     setLoading(true)
     setError(null)
     try {
-      const [
-        incomingRateInvitesData,
-        incomingRecommendInvitesData,
-        validationRequestsData,
-        incomingRequestsData,
-        orgInvitesData,
-        employerInvitesData,
-        managerTeamInvitesData,
-        dataAccessRequestsData,
-        courseAssignmentsData,
-        skillSuggestionsData,
-        { data: mySkillsData, error: mySkillsError },
-      ] = await Promise.all([
-        listIncomingRateInvites(),
-        listIncomingRecommendInvites(),
-        listIncomingPendingValidationRequests(user.id),
-        listIncomingConnectionRequests(user.id),
-        listMyPendingOrgInvites(user.id),
-        listMyPendingEmployerInvites(user.id),
-        listMyManagerTeamInvites(),
-        listMyPendingDataAccessRequests(user.id),
-        listMyCourseAssignments(user.id),
-        listMySkillSuggestions(user.id),
-        supabase.from('skills').select('id, name').eq('user_id', user.id).order('name', { ascending: true }),
+      const { values, failures } = await loadActionSources([
+        { key: 'rateInvites', label: 'rating invitations', fallback: [], load: listIncomingRateInvites },
+        { key: 'recommendInvites', label: 'skill recommendations', fallback: [], load: listIncomingRecommendInvites },
+        { key: 'validationRequests', label: 'validation requests', fallback: [], load: () => listIncomingPendingValidationRequests(user.id) },
+        { key: 'connectionRequests', label: 'connection requests', fallback: [], load: () => listIncomingConnectionRequests(user.id) },
+        { key: 'organisationInvites', label: 'organisation invitations', fallback: [], load: () => listMyPendingOrgInvites(user.id) },
+        { key: 'employerInvites', label: 'employer invitations', fallback: [], load: () => listMyPendingEmployerInvites(user.id) },
+        { key: 'managerInvites', label: 'manager-team invitations', fallback: [], load: listMyManagerTeamInvites },
+        { key: 'dataAccessRequests', label: 'employer data-access requests', fallback: [], load: () => listMyPendingDataAccessRequests(user.id) },
+        { key: 'courseAssignments', label: 'course assignments', fallback: [], load: () => listMyCourseAssignments(user.id) },
+        { key: 'skillSuggestions', label: 'skill suggestions', fallback: [], load: () => listMySkillSuggestions(user.id) },
+        {
+          key: 'skills',
+          label: 'skills available to share',
+          fallback: [],
+          load: async () => {
+            const { data, error: skillsError } = await supabase
+              .from('skills')
+              .select('id, name')
+              .eq('user_id', user.id)
+              .order('name', { ascending: true })
+            if (skillsError) throw skillsError
+            return data ?? []
+          },
+        },
       ])
-      if (mySkillsError) throw mySkillsError
+      const incomingRateInvitesData = values.rateInvites
+      const incomingRecommendInvitesData = values.recommendInvites
+      const validationRequestsData = values.validationRequests
+      const incomingRequestsData = values.connectionRequests
+      const orgInvitesData = values.organisationInvites
+      const employerInvitesData = values.employerInvites
+      const managerTeamInvitesData = values.managerInvites
+      const dataAccessRequestsData = values.dataAccessRequests
+      const courseAssignmentsData = values.courseAssignments
+      const skillSuggestionsData = values.skillSuggestions
       setIncomingRateInvites(incomingRateInvitesData)
       setIncomingRecommendInvites(incomingRecommendInvitesData)
       setValidationRequests(validationRequestsData)
@@ -111,10 +122,18 @@ export default function Actions() {
       setDataAccessRequests(dataAccessRequestsData)
       setCourseAssignments(courseAssignmentsData)
       setSkillSuggestions(skillSuggestionsData)
-      setMySkills(mySkillsData ?? [])
+      setMySkills(values.skills)
+      if (failures.length > 0) {
+        setError(`Some actions could not be loaded (${failures.map(({ label }) => label).join(', ')}). Other actions are shown below.`)
+      }
       const requesterIds = validationRequestsData.map((r) => r.requester_id)
       const requestSenderIds = incomingRequestsData.map((r) => r.requester_id)
-      setProfiles(await getProfiles([...requesterIds, ...requestSenderIds]))
+      try {
+        setProfiles(await getProfiles([...requesterIds, ...requestSenderIds]))
+      } catch {
+        setProfiles({})
+        setError((current) => current ?? 'Some profile names could not be loaded. Other actions are shown below.')
+      }
     } catch (err) {
       setError(err.message)
     } finally {
@@ -352,6 +371,7 @@ export default function Actions() {
 
   const hasNothingPending =
     !loading &&
+    !error &&
     incomingRateInvites.length === 0 &&
     incomingRecommendInvites.length === 0 &&
     incomingRequests.length === 0 &&
@@ -371,7 +391,14 @@ export default function Actions() {
         <h1 className="font-display text-2xl text-ink">Actions</h1>
 
         {loading && <p className="text-secondary">Loading…</p>}
-        {error && <p className="text-red-700 text-sm">{error}</p>}
+        {error && (
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <p>{error}</p>
+            <button type="button" onClick={load} className="font-medium underline underline-offset-2 hover:no-underline">
+              Try again
+            </button>
+          </div>
+        )}
 
         {hasNothingPending && (
           <div className="text-center py-16 border border-dashed border-hairline rounded-lg">

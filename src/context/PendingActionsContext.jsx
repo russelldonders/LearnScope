@@ -7,6 +7,7 @@ import { listMyPendingEmployerInvites, listMyPendingDataAccessRequests } from '.
 import { listMyCourseAssignments } from '../lib/courseCatalogue'
 import { listMySkillSuggestions } from '../lib/skillSuggestions'
 import { listMyManagerTeamInvites } from '../lib/managerTeams'
+import { loadActionSources } from '../lib/actionLoading'
 
 const PendingActionsContext = createContext(undefined)
 
@@ -29,48 +30,40 @@ export function PendingActionsProvider({ children }) {
       setPendingActionCount(0)
       return
     }
-    const [
-      { count: requestCount },
-      { count: validationCount },
-      rateInvites,
-      recommendInvites,
-      orgInvites,
-      employerInvites,
-      dataAccessRequests,
-      courseAssignments,
-      skillSuggestions,
-      managerTeamInvites,
-    ] = await Promise.all([
-      supabase
-        .from('connection_requests')
-        .select('id', { count: 'exact', head: true })
-        .eq('recipient_id', user.id)
-        .eq('status', 'pending'),
-      supabase
-        .from('skill_validation_requests')
-        .select('id', { count: 'exact', head: true })
-        .eq('validator_id', user.id)
-        .eq('status', 'pending'),
-      listIncomingRateInvites(),
-      listIncomingRecommendInvites(),
-      listMyPendingOrgInvites(user.id),
-      listMyPendingEmployerInvites(user.id),
-      listMyPendingDataAccessRequests(user.id),
-      listMyCourseAssignments(user.id),
-      listMySkillSuggestions(user.id),
-      listMyManagerTeamInvites(),
+    const loadCount = async (query) => {
+      const { count, error } = await query
+      if (error) throw error
+      return count ?? 0
+    }
+    const { values } = await loadActionSources([
+      {
+        key: 'requests', label: 'connection requests', fallback: 0,
+        load: () => loadCount(supabase.from('connection_requests').select('id', { count: 'exact', head: true }).eq('recipient_id', user.id).eq('status', 'pending')),
+      },
+      {
+        key: 'validations', label: 'validation requests', fallback: 0,
+        load: () => loadCount(supabase.from('skill_validation_requests').select('id', { count: 'exact', head: true }).eq('validator_id', user.id).eq('status', 'pending')),
+      },
+      { key: 'rateInvites', label: 'rating invitations', fallback: [], load: listIncomingRateInvites },
+      { key: 'recommendInvites', label: 'skill recommendations', fallback: [], load: listIncomingRecommendInvites },
+      { key: 'orgInvites', label: 'organisation invitations', fallback: [], load: () => listMyPendingOrgInvites(user.id) },
+      { key: 'employerInvites', label: 'employer invitations', fallback: [], load: () => listMyPendingEmployerInvites(user.id) },
+      { key: 'dataAccessRequests', label: 'data-access requests', fallback: [], load: () => listMyPendingDataAccessRequests(user.id) },
+      { key: 'courseAssignments', label: 'course assignments', fallback: [], load: () => listMyCourseAssignments(user.id) },
+      { key: 'skillSuggestions', label: 'skill suggestions', fallback: [], load: () => listMySkillSuggestions(user.id) },
+      { key: 'managerTeamInvites', label: 'manager-team invitations', fallback: [], load: listMyManagerTeamInvites },
     ])
     setPendingActionCount(
-      (requestCount ?? 0) +
-        (validationCount ?? 0) +
-        rateInvites.length +
-        recommendInvites.length +
-        orgInvites.length +
-        employerInvites.length +
-        dataAccessRequests.length +
-        courseAssignments.length +
-        skillSuggestions.length +
-        managerTeamInvites.length
+      values.requests +
+        values.validations +
+        values.rateInvites.length +
+        values.recommendInvites.length +
+        values.orgInvites.length +
+        values.employerInvites.length +
+        values.dataAccessRequests.length +
+        values.courseAssignments.length +
+        values.skillSuggestions.length +
+        values.managerTeamInvites.length
     )
   }, [user])
 
