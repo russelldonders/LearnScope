@@ -78,6 +78,100 @@ begin
 end
 $$;
 
+-- Build an exact transfer plan. A duplicate must be resolved before the plan
+-- can be frozen, and the second account must approve that exact hash.
+reset role;
+insert into public.skills (user_id, name, category, level)
+values
+  ('10000000-0000-0000-0000-000000000001', 'SQL', 'Technical', 4),
+  ('20000000-0000-0000-0000-000000000002', 'SQL', 'Technical', 3),
+  ('20000000-0000-0000-0000-000000000002', 'Facilitation', 'Leadership', 4);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '20000000-0000-0000-0000-000000000002', true);
+
+create temporary table transfer_plan_test_result as
+select public.create_profile_transfer_plan(
+  preview_id,
+  '10000000-0000-0000-0000-000000000001'
+) as plan_id from profile_preview_test_result;
+
+do $$
+begin
+  perform public.submit_profile_transfer_plan((select plan_id from transfer_plan_test_result));
+  raise exception 'plan with unresolved conflicts unexpectedly submitted';
+exception
+  when others then
+    if sqlerrm not like '%Resolve every conflict%' then raise; end if;
+end
+$$;
+
+select public.resolve_profile_transfer_plan_item(
+  plan_id,
+  (select id from public.profile_transfer_plan_items
+   where plan_id = transfer_plan_test_result.plan_id and action = 'unresolved' limit 1),
+  'use_source'
+) from transfer_plan_test_result;
+
+create temporary table transfer_plan_hash_result as
+select public.submit_profile_transfer_plan(plan_id) as version_hash
+from transfer_plan_test_result;
+
+select set_config('request.jwt.claim.sub', '30000000-0000-0000-0000-000000000003', true);
+do $$
+begin
+  perform public.get_profile_transfer_plan((select plan_id from transfer_plan_test_result));
+  raise exception 'unlinked account unexpectedly viewed transfer plan';
+exception
+  when others then
+    if sqlerrm not like '%Transfer plan not found%' then raise; end if;
+end
+$$;
+
+select set_config('request.jwt.claim.sub', '20000000-0000-0000-0000-000000000002', true);
+
+do $$
+begin
+  perform public.resolve_profile_transfer_plan_item(
+    (select plan_id from transfer_plan_test_result),
+    (select id from public.profile_transfer_plan_items where plan_id = (select plan_id from transfer_plan_test_result) limit 1),
+    'keep_durable'
+  );
+  raise exception 'submitted plan unexpectedly remained editable';
+exception
+  when others then
+    if sqlerrm not like '%Editable transfer plan not found%' then raise; end if;
+end
+$$;
+
+select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+do $$
+begin
+  perform public.approve_profile_transfer_plan((select plan_id from transfer_plan_test_result), 'wrong-version');
+  raise exception 'wrong plan version unexpectedly approved';
+exception
+  when others then
+    if sqlerrm not like '%version has changed%' then raise; end if;
+end
+$$;
+
+select public.approve_profile_transfer_plan(plan_id, version_hash)
+from transfer_plan_test_result cross join transfer_plan_hash_result;
+
+do $$
+begin
+  if not exists (
+    select 1 from public.profile_transfer_plans
+    where id = (select plan_id from transfer_plan_test_result)
+      and status = 'approved' and approved_at is not null
+  ) then raise exception 'two-party plan approval did not complete'; end if;
+  if (select count(*) from public.profile_transfer_plan_events
+      where plan_id = (select plan_id from transfer_plan_test_result)) <> 4 then
+    raise exception 'transfer plan audit trail is incomplete';
+  end if;
+end
+$$;
+
 select public.revoke_verified_account_link(link_id) from account_link_test_result;
 
 reset role;
