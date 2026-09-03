@@ -9,6 +9,7 @@ const SECTIONS = [
   { to: '/admin/catalogue', label: 'Course catalogue' },
   { to: '/admin/skills', label: 'Skill library' },
   { to: '/admin/tags', label: 'Tags' },
+  { to: '/admin/activity', label: 'Activity log' },
   { to: '/admin/onboarding', label: 'Settings' },
 ]
 

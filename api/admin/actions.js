@@ -130,6 +130,47 @@ async function isPlatformAdmin(admin, userId) {
   return Boolean(data)
 }
 
+// Console overhaul Phase 5 (see migration 20260903090000_admin_activity_
+// log.sql for the full design rationale): writes into admin_activity_log
+// using the service-role client, same as every other write in this file --
+// RLS on that table grants `authenticated` select only, so this is the
+// only way this handler could write a row regardless. Denormalizes
+// actor/entity labels at write time (profiles.full_name, falling back to
+// the id) so an entry stays readable even after the account/record it
+// names is later changed or deleted -- same snapshot-before-loss reasoning
+// as skill_peer_ratings.rater_name (0064). Called only from the specific
+// handlers below whose write happens via this service-role client (where a
+// DB trigger would have no auth.uid() to attribute the entry to) --
+// setUserBlocked, deleteUser, addEmployerMember. Every other curated
+// action in the migration's list is instrumented at the DB layer instead
+// (inside its own security-definer RPC, or via an AFTER trigger on a plain
+// RLS-gated table write) -- this is not a general-purpose hook fired for
+// every admin API call.
+async function logAdminActivity(admin, { actorId, action, entityType, entityId, entityLabel, reason }) {
+  const [{ data: actorProfile }, targetLabel] = await Promise.all([
+    admin.from('profiles').select('full_name').eq('id', actorId).maybeSingle(),
+    entityLabel !== undefined
+      ? Promise.resolve(entityLabel)
+      : admin
+          .from('profiles')
+          .select('full_name')
+          .eq('id', entityId)
+          .maybeSingle()
+          .then(({ data }) => data?.full_name ?? null),
+  ])
+
+  const { error } = await admin.from('admin_activity_log').insert({
+    actor_id: actorId,
+    actor_label: actorProfile?.full_name || actorId,
+    action,
+    entity_type: entityType,
+    entity_id: entityId,
+    entity_label: targetLabel,
+    reason: reason ?? null,
+  })
+  if (error) throw error
+}
+
 // profiles has no email column (email lives on auth.users only), and the
 // client can't call auth.admin.listUsers itself -- so this listing has to
 // happen server-side either way. Doing the profiles/platform_admins join
@@ -284,6 +325,13 @@ async function setUserBlocked(admin, caller, { userId, blocked }, res) {
     .update({ account_status: blocked ? 'blocked' : 'active' })
     .eq('id', userId)
   if (statusError) throw statusError
+
+  await logAdminActivity(admin, {
+    actorId: caller.id,
+    action: blocked ? 'user.blocked' : 'user.unblocked',
+    entityType: 'profile',
+    entityId: userId,
+  })
 
   res.status(200).json({ ok: true })
 }
@@ -592,6 +640,28 @@ async function deleteUser(admin, caller, { userId }, res) {
 
     const { error: deleteError } = await admin.auth.admin.deleteUser(userId)
     if (deleteError) throw deleteError
+
+    // Logged only after auth.admin.deleteUser actually succeeds -- logging
+    // beforehand would leave a permanent false "deleted" entry (7-year
+    // retention) if the delete itself then failed, e.g. employer_members.
+    // user_id has no ON DELETE CASCADE/SET NULL (unlike organisation_
+    // members.user_id, which does cascade -- see 20260902090000), so
+    // deleting anyone who's ever been added as an employer member fails
+    // here with an FK violation; that's a separate pre-existing gap, not
+    // fixed by this migration, but it's exactly the kind of failure this
+    // ordering has to survive without mislogging. entity_label uses the
+    // email already fetched via getUserById above (not a post-hoc profiles
+    // lookup, which would find nothing -- profiles.id cascades from
+    // auth.users per 0064) -- nothing about the log entry depended on
+    // post-delete state, so there was no reason to log first.
+    await logAdminActivity(admin, {
+      actorId: caller.id,
+      action: 'user.deleted',
+      entityType: 'profile',
+      entityId: userId,
+      entityLabel: targetUser.user.email,
+      reason: null,
+    })
   } catch (err) {
     console.error(`admin deleteUser PARTIAL FAILURE for user ${userId}: scrub already committed, account NOT deleted -`, err)
     res.status(500).json({ error: 'Failed to delete account.' })
@@ -783,13 +853,17 @@ async function addEmployerMember(admin, caller, { employerId, email, role }, res
     userId = invited.user.id
   }
 
-  const { error: memberInsertError } = await admin.from('employer_members').insert({
-    employer_id: employerId,
-    user_id: userId,
-    role,
-    invited_by: caller.id,
-    ...(existingUserId ? { status: 'pending' } : {}),
-  })
+  const { data: insertedMember, error: memberInsertError } = await admin
+    .from('employer_members')
+    .insert({
+      employer_id: employerId,
+      user_id: userId,
+      role,
+      invited_by: caller.id,
+      ...(existingUserId ? { status: 'pending' } : {}),
+    })
+    .select('id')
+    .single()
   if (memberInsertError) {
     // unique_violation on (employer_id, user_id) -- they're already a
     // member (or already invited) here, surface that plainly rather than a
@@ -800,6 +874,22 @@ async function addEmployerMember(admin, caller, { employerId, email, role }, res
     }
     throw memberInsertError
   }
+
+  // employer_member.removed (the delete side) is logged by a DB trigger
+  // (log_employer_member_removed_trigger) instead, since that delete runs
+  // through the caller's own authenticated session where auth.uid() is
+  // available -- see the trigger's comment in the migration for why the
+  // add side can't use the same mechanism (this insert runs via the
+  // service-role client, with no auth.uid() for a trigger to attribute it
+  // to).
+  await logAdminActivity(admin, {
+    actorId: caller.id,
+    action: 'employer_member.added',
+    entityType: 'employer_member',
+    entityId: insertedMember.id,
+    entityLabel: email.trim(),
+    reason: null,
+  })
 
   // An employer admin needs to actually author training through the
   // reused provider console components (ProviderTrainingSection/
