@@ -31,6 +31,7 @@ import { handleTabListKeyDown } from '../../lib/tabsKeyboard'
 import { SortableTh, TablePagination, SelectionTh, BulkActionBar } from '../../components/TableControls'
 import MutationFeedback from '../../components/MutationFeedback'
 import StatusBadge from '../../components/StatusBadge'
+import EmployerRoleProfilesSection from './EmployerRoleProfilesSection'
 
 // Skills/Users are the attached provider organisation's own tabs (same
 // components ProviderConsole.jsx mounts for its own Skills/Users sections),
@@ -43,6 +44,7 @@ const SECTIONS = [
   { key: 'skills', label: 'Skills', providerOnly: true },
   { key: 'staff', label: 'Users', providerOnly: true, adminOnly: true },
   { key: 'learners', label: 'Learners' },
+  { key: 'roles', label: 'Roles' },
   { key: 'assign', label: 'Assign training' },
   { key: 'suggest-skills', label: 'Suggest skills' },
   { key: 'providers', label: 'Providers' },
@@ -367,6 +369,13 @@ export default function EmployerConsole() {
                       employer={selectedEmployer}
                       searchParams={searchParams}
                       setSearchParams={setSearchParams}
+                    />
+                  )}
+                  {currentSection === 'roles' && (
+                    <EmployerRoleProfilesSection
+                      key={selectedEmployer.id}
+                      employer={selectedEmployer}
+                      user={user}
                     />
                   )}
                   {currentSection === 'assign' && (

@@ -7,13 +7,14 @@ export function isCurrentEmployment(experience) {
 // Every ongoing (no end date) job on the learner's Experience timeline --
 // the candidate targets for "part of my current role".
 export async function listCurrentRoleExperiences(userId) {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('experience')
-    .select('id, title, organization')
+    .select('id, title, organization, start_date')
     .eq('user_id', userId)
     .eq('type', 'employment')
     .is('end_date', null)
     .order('start_date', { ascending: false })
+  if (error) throw error
   return data ?? []
 }
 
