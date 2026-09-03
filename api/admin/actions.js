@@ -671,20 +671,27 @@ async function deleteUser(admin, caller, { userId }, res) {
   res.status(200).json({ ok: true })
 }
 
-// Platform admin, or an 'admin' member of this specific organisation --
-// never trust the client's claim about who they are. Shared by every
-// org-scoped action below; sends the 403 itself so callers can just
-// `if (!(await requireOrgAdmin(...))) return`.
+// Platform admin, or an 'admin' member of this specific *active*
+// organisation -- never trust the client's claim about who they are.
+// Shared by every org-scoped action below; sends the 403 itself so callers
+// can just `if (!(await requireOrgAdmin(...))) return`. The active-status
+// requirement mirrors is_org_admin's RLS (0069_deactivated_org_revokes_
+// access.sql): a deactivated org's own admin can no longer author training
+// there via RLS, but this service-role staff-invite/list path doesn't run
+// under RLS at all, so it has to re-check status itself or that admin could
+// still invite/list staff into an org that's supposed to be shut down. The
+// isPlatformAdmin fallback stays unconditional on status, same as RLS, so
+// platform admins can still manage/inspect an inactive org.
 async function requireOrgAdmin(admin, caller, organisationId, res) {
   if (await isPlatformAdmin(admin, caller.id)) return true
   const { data: memberRow, error: memberCheckError } = await admin
     .from('organisation_members')
-    .select('role')
+    .select('role, organisations(status)')
     .eq('organisation_id', organisationId)
     .eq('user_id', caller.id)
     .maybeSingle()
   if (memberCheckError) throw memberCheckError
-  if (!memberRow || memberRow.role !== 'admin') {
+  if (!memberRow || memberRow.role !== 'admin' || memberRow.organisations?.status !== 'active') {
     res.status(403).json({ error: 'Organisation admin access required' })
     return false
   }

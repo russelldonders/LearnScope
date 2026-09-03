@@ -4,7 +4,9 @@ import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import ResourceLibrarySection from '../../components/ResourceLibrarySection'
+import ProviderSkillsSection from '../../components/ProviderSkillsSection'
 import { ProviderTrainingSection, ProviderCataloguesSection } from '../provider/ProviderConsole'
+import { OrganisationStaffPanel } from '../admin/AdminProviders'
 import {
   listEmployers,
   listEmployerMembers,
@@ -30,26 +32,20 @@ import { SortableTh, TablePagination, SelectionTh, BulkActionBar } from '../../c
 import MutationFeedback from '../../components/MutationFeedback'
 import StatusBadge from '../../components/StatusBadge'
 
+// Skills/Users are the attached provider organisation's own tabs (same
+// components ProviderConsole.jsx mounts for its own Skills/Users sections),
+// folded into this single tab bar instead of handing off to a separate
+// /provider page. providerOnly/adminOnly are resolved against myProviderRole
+// (below) into visibleSections, so they only appear once the employer's
+// attached org actually grants that role.
 const SECTIONS = [
   { key: 'training', label: 'Training' },
+  { key: 'skills', label: 'Skills', providerOnly: true },
+  { key: 'staff', label: 'Users', providerOnly: true, adminOnly: true },
   { key: 'learners', label: 'Learners' },
   { key: 'assign', label: 'Assign training' },
   { key: 'suggest-skills', label: 'Suggest skills' },
   { key: 'providers', label: 'Providers' },
-]
-
-// Mirrors ProviderConsole.jsx's own (module-private) SECTIONS labels/keys --
-// not the actual provider tab content, just enough to render matching,
-// visually distinct nav buttons here that hand off to the real /provider
-// console (via its ?org=&section= query params) rather than re-authoring
-// provider functionality a second time. Keep in sync with
-// ProviderConsole.jsx's SECTIONS if that ever changes.
-const PROVIDER_SECTIONS = [
-  { key: 'training', label: 'Training' },
-  { key: 'skills', label: 'Skills' },
-  { key: 'catalogues', label: 'Catalogues' },
-  { key: 'staff', label: 'Users', adminOnly: true },
-  { key: 'resources', label: 'Resources' },
 ]
 
 const LEARNER_SORT_ACCESSORS = {
@@ -108,22 +104,25 @@ const LINKED_PROVIDER_SORT_ACCESSORS = {
 const EMPLOYER_FILTER_RESET = { q: null, status: null, page: null, aq: null, aPage: null, sq: null, sPage: null }
 
 // Foundation console for an employer's own admin (employer_members
-// role = 'admin', gated by EmployerAdminRoute). Training reuses the
-// existing provider console components verbatim (readOnly), scoped to the
+// role = 'admin', gated by EmployerAdminRoute). Training/Skills/Users reuse
+// the existing provider console components verbatim, scoped to the
 // employer's own auto-provisioned attached provider organisation
-// (create_employer, 20260902090000) -- no forked view-only UI. Authoring
-// (create/edit/delete/publish) only happens in the standalone Provider
-// console at /provider, where this employer admin's real organisation_
-// members role on that same org already grants it -- this tab is purely a
-// second, view-only window onto the same data, not a second place to
-// change it. Learners is a separate, new roster of the employer's own
-// managed learners (employer_members), not provider staff -- one-at-a-time
-// add-by-email plus (Phase 2) bulk import; course assignment and any
-// learner-facing UI are still later phases.
+// (create_employer, 20260902090000) -- no forked UI. Authoring there is
+// enabled/disabled by this same employer admin's real organisation_members
+// role on that attached org (myProviderRole below), exactly as it would be
+// in the standalone Provider console -- this stays the *only* place an
+// employer admin manages that org's training, so there's no separate
+// /provider hand-off to a second page (and no exposure to any *other*
+// provider organisation they might separately belong to). Learners is a
+// separate, new roster of the employer's own managed learners
+// (employer_members), not provider staff -- one-at-a-time add-by-email plus
+// (Phase 2) bulk import; course assignment and any learner-facing UI are
+// still later phases.
 export default function EmployerConsole() {
   const { user, employerMemberships, organisationMemberships } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [employers, setEmployers] = useState([])
+  const [organisations, setOrganisations] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   // employer/section selection lives in the URL (?employer=&section=), the
@@ -155,6 +154,18 @@ export default function EmployerConsole() {
     [employers, myEmployerIds]
   )
   const selectedEmployer = myEmployers.find((e) => e.id === selectedEmployerId)
+  // The attached provider org, required to actually be active -- mirrors
+  // ProviderConsole.jsx's own myOrgs filter ("Deactivating an organisation
+  // revokes its staff's actual access (RLS, 0069) -- filter to active orgs
+  // ... so a staff member doesn't see a tab for an org that can no longer
+  // create training or manage staff"). Without this check here, a
+  // deactivated org's former admin could still reach the inline Users tab
+  // below and invite new staff into it via the service-role staff-invite
+  // API, which (unlike the RLS-gated writes) doesn't itself re-check
+  // organisation status.
+  const attachedProviderOrg = organisations.find(
+    (o) => o.id === selectedEmployer?.provider_organisation_id && o.status === 'active'
+  )
   // Training-tab authoring is gated by organisation_members on the
   // attached provider org (is_org_admin/is_org_member RLS), which is a
   // separate relationship from employer_members -- mirrors ProviderConsole
@@ -163,13 +174,26 @@ export default function EmployerConsole() {
   // this row whenever an employer admin is added, so in practice it's
   // present for every employer admin, but it's still the actual source of
   // truth for what they're allowed to do in the reused provider components.
-  const myProviderRole = (organisationMemberships ?? []).find(
-    (m) => m.organisation_id === selectedEmployer?.provider_organisation_id
-  )?.role
+  const myProviderRole = attachedProviderOrg
+    ? (organisationMemberships ?? []).find((m) => m.organisation_id === attachedProviderOrg.id)?.role
+    : undefined
+  const visibleSections = SECTIONS.filter((s) => {
+    if (s.adminOnly) return myProviderRole === 'admin'
+    if (s.providerOnly) return !!myProviderRole
+    return true
+  })
+  // Guards against a stale Users tab surviving a switch to an employer (or a
+  // role change) where this admin no longer has organisation_members admin
+  // on the attached provider org -- mirrors ProviderConsole.jsx's own
+  // currentSection guard for its Staff tab.
+  const currentSection = activeSection === 'staff' && myProviderRole !== 'admin' ? 'training' : activeSection
 
   useEffect(() => {
-    listEmployers()
-      .then(setEmployers)
+    Promise.all([listEmployers(), listOrganisations()])
+      .then(([employersData, organisationsData]) => {
+        setEmployers(employersData)
+        setOrganisations(organisationsData)
+      })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }, [])
@@ -250,22 +274,22 @@ export default function EmployerConsole() {
                     }
                   : {})}
               >
-                <div className="flex items-center flex-wrap gap-x-1 gap-y-2 mb-1 border-b border-hairline">
+                <div className="flex items-center flex-wrap gap-x-1 gap-y-2 mb-6 border-b border-hairline">
                   <div role="tablist" aria-label="Console section" className="flex items-center flex-wrap gap-x-1 gap-y-2">
-                    {SECTIONS.map((section) => (
+                    {visibleSections.map((section) => (
                       <Link
                         key={section.key}
                         ref={(el) => { sectionTabRefs.current[section.key] = el }}
                         id={`employer-section-tab-${section.key}`}
                         to={`?${buildParams({ section: section.key, ...EMPLOYER_FILTER_RESET }).toString()}`}
                         role="tab"
-                        aria-selected={activeSection === section.key}
+                        aria-selected={currentSection === section.key}
                         aria-controls={`employer-section-panel-${section.key}`}
-                        tabIndex={activeSection === section.key ? 0 : -1}
+                        tabIndex={currentSection === section.key ? 0 : -1}
                         onKeyDown={(event) =>
                           handleTabListKeyDown(event, {
-                            keys: SECTIONS.map((s) => s.key),
-                            activeKey: activeSection,
+                            keys: visibleSections.map((s) => s.key),
+                            activeKey: currentSection,
                             refs: sectionTabRefs,
                             // Several sections now share the same plain q/status/page
                             // param names for their own "primary" table (only one
@@ -278,7 +302,7 @@ export default function EmployerConsole() {
                           })
                         }
                         className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
-                          activeSection === section.key
+                          currentSection === section.key
                             ? 'border-moss text-ink font-medium'
                             : 'border-transparent text-secondary hover:text-ink'
                         }`}
@@ -287,36 +311,15 @@ export default function EmployerConsole() {
                       </Link>
                     ))}
                   </div>
-                  {myProviderRole && (
-                    <>
-                      <span className="mx-1 h-5 w-px bg-hairline shrink-0" aria-hidden="true" />
-                      <span className="font-mono text-[10px] uppercase tracking-wide text-secondary self-center mr-1">
-                        Provider
-                      </span>
-                      {PROVIDER_SECTIONS.filter((s) => !s.adminOnly || myProviderRole === 'admin').map((section) => (
-                        <Link
-                          key={section.key}
-                          to={`/provider?org=${selectedEmployer.provider_organisation_id}&section=${section.key}`}
-                          className="text-sm px-3 py-2 -mb-px border-b-2 border-transparent whitespace-nowrap text-gold hover:border-gold"
-                        >
-                          {section.label} →
-                        </Link>
-                      ))}
-                    </>
-                  )}
                 </div>
-                <p className="text-xs text-secondary mb-6">
-                  Gold tabs open the full Provider console, where you manage this employer's actual courses,
-                  catalogues, and resources.
-                </p>
 
                 <div
-                  id={`employer-section-panel-${activeSection}`}
+                  id={`employer-section-panel-${currentSection}`}
                   role="tabpanel"
-                  aria-labelledby={`employer-section-tab-${activeSection}`}
+                  aria-labelledby={`employer-section-tab-${currentSection}`}
                   tabIndex={0}
                 >
-                  {activeSection === 'training' && (
+                  {currentSection === 'training' && (
                     <div className="space-y-10">
                       {!myProviderRole && (
                         <p className="text-sm text-secondary">
@@ -331,23 +334,34 @@ export default function EmployerConsole() {
                         canViewParticipants={myProviderRole === 'admin'}
                         searchParams={searchParams}
                         setSearchParams={setSearchParams}
-                        readOnly
+                        readOnly={!myProviderRole}
                       />
                       <ProviderCataloguesSection
                         key={`${selectedEmployer.id}-catalogues`}
                         organisation={{ id: selectedEmployer.provider_organisation_id }}
                         userId={user.id}
-                        readOnly
+                        canCreate={myProviderRole === 'admin'}
+                        readOnly={!myProviderRole}
                       />
                       <ResourceLibrarySection
                         key={`${selectedEmployer.id}-resources`}
                         organisationId={selectedEmployer.provider_organisation_id}
                         userId={user.id}
-                        readOnly
+                        readOnly={!myProviderRole}
                       />
                     </div>
                   )}
-                  {activeSection === 'learners' && (
+                  {currentSection === 'skills' && myProviderRole && (
+                    <ProviderSkillsSection
+                      key={`${selectedEmployer.id}-skills`}
+                      organisationId={selectedEmployer.provider_organisation_id}
+                      userId={user.id}
+                    />
+                  )}
+                  {currentSection === 'staff' && myProviderRole === 'admin' && (
+                    <OrganisationStaffPanel key={`${selectedEmployer.id}-staff`} organisation={attachedProviderOrg} />
+                  )}
+                  {currentSection === 'learners' && (
                     <EmployerLearnersPanel
                       key={selectedEmployer.id}
                       employer={selectedEmployer}
@@ -355,7 +369,7 @@ export default function EmployerConsole() {
                       setSearchParams={setSearchParams}
                     />
                   )}
-                  {activeSection === 'assign' && (
+                  {currentSection === 'assign' && (
                     <EmployerAssignTrainingPanel
                       key={selectedEmployer.id}
                       employer={selectedEmployer}
@@ -363,7 +377,7 @@ export default function EmployerConsole() {
                       setSearchParams={setSearchParams}
                     />
                   )}
-                  {activeSection === 'suggest-skills' && (
+                  {currentSection === 'suggest-skills' && (
                     <EmployerSuggestSkillsPanel
                       key={selectedEmployer.id}
                       employer={selectedEmployer}
@@ -371,7 +385,7 @@ export default function EmployerConsole() {
                       setSearchParams={setSearchParams}
                     />
                   )}
-                  {activeSection === 'providers' && (
+                  {currentSection === 'providers' && (
                     <EmployerProvidersPanel
                       key={selectedEmployer.id}
                       employer={selectedEmployer}
