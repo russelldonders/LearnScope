@@ -316,7 +316,7 @@ export default function ResourceLibrarySection({ organisationId, userId, readOnl
         <label className="sr-only" htmlFor="providerResourceType">Filter resources by type</label>
         <select id="providerResourceType" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss">
           <option value="all">All resource types</option>
-          {Object.entries(TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          {Object.entries(RESOURCE_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
       </div>
 
