@@ -74,37 +74,25 @@ export async function updateEmployerRoleProfile(profileId, changes) {
 }
 
 export async function replaceEmployerRoleSkillRequirements(profileId, requirements) {
-  const { error: deleteError } = await supabase
-    .from('employer_role_profile_skills')
-    .delete()
-    .eq('role_profile_id', profileId)
-  if (deleteError) throw deleteError
-  if (requirements.length === 0) return
-  const { error } = await supabase.from('employer_role_profile_skills').insert(
-    requirements.map((item) => ({
-      role_profile_id: profileId,
-      library_skill_id: item.skillId,
-      target_level: item.targetLevel,
+  const { error } = await supabase.rpc('replace_employer_role_profile_skills', {
+    p_role_profile_id: profileId,
+    p_requirements: requirements.map((item) => ({
+      skillId: item.skillId,
+      targetLevel: item.targetLevel,
       requirement: item.requirement ?? 'required',
-    }))
-  )
+    })),
+  })
   if (error) throw error
 }
 
 export async function replaceEmployerRoleTrainingRequirements(profileId, requirements) {
-  const { error: deleteError } = await supabase
-    .from('employer_role_profile_training')
-    .delete()
-    .eq('role_profile_id', profileId)
-  if (deleteError) throw deleteError
-  if (requirements.length === 0) return
-  const { error } = await supabase.from('employer_role_profile_training').insert(
-    requirements.map((item) => ({
-      role_profile_id: profileId,
-      catalogue_course_id: item.courseId,
+  const { error } = await supabase.rpc('replace_employer_role_profile_training', {
+    p_role_profile_id: profileId,
+    p_requirements: requirements.map((item) => ({
+      courseId: item.courseId,
       requirement: item.requirement ?? 'required',
-    }))
-  )
+    })),
+  })
   if (error) throw error
 }
 
@@ -138,6 +126,27 @@ export async function withdrawEmployerRoleAssignment(assignmentId) {
     p_assignment_id: assignmentId,
   })
   if (error) throw error
+}
+
+export async function listEmployerRoleAssignments(profileId) {
+  const { data, error } = await supabase.rpc('list_employer_role_assignments', {
+    p_role_profile_id: profileId,
+  })
+  if (error) throw error
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    memberId: row.employer_member_id,
+    userId: row.learner_user_id,
+    name: row.learner_name,
+    status: row.status,
+    proposedAt: row.proposed_at,
+    linkedAt: row.decided_at,
+    currentRole: row.learner_experience_id ? {
+      id: row.learner_experience_id,
+      title: row.current_role_title,
+      organization: row.current_role_organization,
+    } : null,
+  }))
 }
 
 export async function listMyEmployerRoleAssignments(userId) {

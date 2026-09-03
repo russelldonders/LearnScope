@@ -9,7 +9,10 @@ const {
   buildLearnerRoleAlignment,
   decideEmployerRoleAssignment,
   disconnectEmployerRoleAssignment,
+  listEmployerRoleAssignments,
   mapRoleProfile,
+  replaceEmployerRoleSkillRequirements,
+  replaceEmployerRoleTrainingRequirements,
 } = await import('./employerRoleProfiles')
 
 describe('employer role profile service', () => {
@@ -54,6 +57,42 @@ describe('employer role profile service', () => {
     await disconnectEmployerRoleAssignment('assignment-1')
     expect(rpc).toHaveBeenCalledWith('disconnect_employer_role_assignment', {
       p_assignment_id: 'assignment-1',
+    })
+  })
+
+  it('replaces skill requirements through one atomic RPC', async () => {
+    rpc.mockResolvedValue({ error: null })
+    await replaceEmployerRoleSkillRequirements('role-1', [{
+      skillId: 'library-1', targetLevel: 4, requirement: 'required',
+    }])
+    expect(rpc).toHaveBeenCalledWith('replace_employer_role_profile_skills', {
+      p_role_profile_id: 'role-1',
+      p_requirements: [{ skillId: 'library-1', targetLevel: 4, requirement: 'required' }],
+    })
+  })
+
+  it('can atomically clear all training requirements', async () => {
+    rpc.mockResolvedValue({ error: null })
+    await replaceEmployerRoleTrainingRequirements('role-1', [])
+    expect(rpc).toHaveBeenCalledWith('replace_employer_role_profile_training', {
+      p_role_profile_id: 'role-1', p_requirements: [],
+    })
+  })
+
+  it('maps only the narrow employer assignment projection', async () => {
+    rpc.mockResolvedValue({ data: [{
+      id: 'assignment-1', employer_member_id: 'member-1', learner_user_id: 'user-1',
+      learner_name: 'Taylor', status: 'linked', proposed_at: '2026-09-01',
+      decided_at: '2026-09-02', learner_experience_id: 'experience-1',
+      current_role_title: 'Designer', current_role_organization: 'Acme',
+    }], error: null })
+    await expect(listEmployerRoleAssignments('role-1')).resolves.toEqual([{
+      id: 'assignment-1', memberId: 'member-1', userId: 'user-1', name: 'Taylor',
+      status: 'linked', proposedAt: '2026-09-01', linkedAt: '2026-09-02',
+      currentRole: { id: 'experience-1', title: 'Designer', organization: 'Acme' },
+    }])
+    expect(rpc).toHaveBeenCalledWith('list_employer_role_assignments', {
+      p_role_profile_id: 'role-1',
     })
   })
 
