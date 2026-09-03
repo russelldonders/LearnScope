@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { supabase } from '../lib/supabaseClient'
 import { getPendingInviteCode } from '../lib/connections'
 import { getPendingEnrolCourseId } from '../lib/courseCatalogue'
+import { chooseActiveWorkspace, listAvailableWorkspaces } from '../lib/workspaces'
 
 const AuthContext = createContext(undefined)
 
@@ -31,6 +32,13 @@ export function AuthProvider({ children }) {
   // provider staff, so it's tracked independently rather than folded into
   // organisationMemberships above.
   const [employerMemberships, setEmployerMemberships] = useState(null)
+  // Workspaces are an additive context layer. Existing learner pages continue
+  // to use user.id until their domains are migrated deliberately; exposing the
+  // resolved personal workspace here lets new UI integrate without changing
+  // the ownership of any existing record.
+  const [workspaces, setWorkspaces] = useState(null)
+  const [activeWorkspace, setActiveWorkspace] = useState(null)
+  const [workspaceError, setWorkspaceError] = useState(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -100,11 +108,37 @@ export function AuthProvider({ children }) {
       .then(({ data, error }) => setEmployerMemberships(!error && data ? data : []))
   }, [userId])
 
+  const refreshWorkspaces = useCallback(async () => {
+    if (!userId) return []
+    try {
+      const available = await listAvailableWorkspaces()
+      setWorkspaces(available)
+      setWorkspaceError(null)
+      setActiveWorkspace((current) => chooseActiveWorkspace(available, current?.id))
+      return available
+    } catch (error) {
+      setWorkspaces([])
+      setActiveWorkspace(null)
+      setWorkspaceError(error)
+      return []
+    }
+  }, [userId])
+
+  const selectWorkspace = useCallback((workspaceId) => {
+    const selected = chooseActiveWorkspace(workspaces, workspaceId)
+    if (!selected || selected.id !== workspaceId) return false
+    setActiveWorkspace(selected)
+    return true
+  }, [workspaces])
+
   useEffect(() => {
     if (!userId) {
       setIsPlatformAdmin(null)
       setOrganisationMemberships(null)
       setEmployerMemberships(null)
+      setWorkspaces(null)
+      setActiveWorkspace(null)
+      setWorkspaceError(null)
       return
     }
     supabase
@@ -115,7 +149,8 @@ export function AuthProvider({ children }) {
       .then(({ data, error }) => setIsPlatformAdmin(!error && Boolean(data)))
     refreshOrganisationMemberships()
     refreshEmployerMemberships()
-  }, [userId])
+    refreshWorkspaces()
+  }, [userId, refreshOrganisationMemberships, refreshEmployerMemberships, refreshWorkspaces])
 
   async function markOnboardingComplete() {
     if (!userId) return { error: null }
@@ -138,6 +173,11 @@ export function AuthProvider({ children }) {
     refreshOrganisationMemberships,
     employerMemberships,
     refreshEmployerMemberships,
+    workspaces,
+    activeWorkspace,
+    workspaceError,
+    refreshWorkspaces,
+    selectWorkspace,
     refreshNeedsName,
     markOnboardingComplete,
     // Carries a pending rate-invite code (and/or a pending course
