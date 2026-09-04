@@ -9,6 +9,7 @@ import { buildStravaAuthorizeUrl, connectStrava, disconnectStrava, getMyExternal
 import { formatRelativeDate } from '../lib/dates'
 import AccountLinkingSection from './account-linking/AccountLinkingSection'
 import RedeemInvitationPanel from './account-linking/RedeemInvitationPanel'
+import LinkedWorkspaceAccessPanel from './account-linking/LinkedWorkspaceAccessPanel'
 import TransferPreviewConsentPanel from './account-linking/transfer/TransferPreviewConsentPanel'
 import TransferPreviewPanel from './account-linking/transfer/TransferPreviewPanel'
 import TransferPlanReviewPanel from './account-linking/transfer-plan/TransferPlanReviewPanel'
@@ -20,6 +21,16 @@ import {
   redeemAccountLinkInvitation,
   revokeVerifiedAccountLink,
 } from '../lib/accountLinks'
+import {
+  acceptLinkedWorkspaceAccess,
+  cancelLinkedWorkspaceAccessRequest,
+  declineLinkedWorkspaceAccess,
+  listLinkedWorkspaceAccessGrants,
+  listLinkedWorkspaceAccessRequests,
+  renounceLinkedWorkspaceAccess,
+  requestLinkedWorkspaceAccess,
+  revokeGrantedWorkspaceAccess,
+} from '../lib/linkedWorkspaceAccess'
 import {
   approveProfileTransferPreview,
   cancelProfileTransferPreview,
@@ -57,6 +68,14 @@ export default function ConnectedAccounts() {
   const [createLinkError, setCreateLinkError] = useState(null)
   const [revokingLinkId, setRevokingLinkId] = useState(null)
   const [revokeLinkError, setRevokeLinkError] = useState(null)
+  const [workspaceAccessRequests, setWorkspaceAccessRequests] = useState([])
+  const [workspaceAccessGrants, setWorkspaceAccessGrants] = useState([])
+  const [workspaceAccessBusyKey, setWorkspaceAccessBusyKey] = useState(null)
+  // Keyed the same way as workspaceAccessBusyKey (e.g. "revoke:<linkId>") so
+  // each row/action shows its own failure instead of one banner shared
+  // across every linked account and action type -- same reasoning as
+  // LinkedAccountsList's per-dialog error display.
+  const [workspaceAccessErrors, setWorkspaceAccessErrors] = useState({})
   const [linkToken] = useState(() => readAccountLinkToken())
   const [redeemingLink, setRedeemingLink] = useState(false)
   const [linkRedeemed, setLinkRedeemed] = useState(false)
@@ -77,6 +96,7 @@ export default function ConnectedAccounts() {
     handleOAuthReturn()
     load()
     loadAccountLinks()
+    loadWorkspaceAccess()
     loadTransferPreviews()
     loadTransferPlan()
   }, [])
@@ -248,11 +268,50 @@ export default function ConnectedAccounts() {
     setRevokeLinkError(null)
     try {
       await revokeVerifiedAccountLink(linkId)
-      await loadAccountLinks()
+      // Revoking the link now also cascades to revoke any workspace access
+      // granted through it (see revoke_verified_account_link in
+      // 20260904140000_revoke_link_cascades_workspace_access.sql), so that
+      // list must be refreshed too, not just the links themselves.
+      await Promise.all([loadAccountLinks(), loadWorkspaceAccess()])
     } catch (err) {
       setRevokeLinkError(err.message)
     } finally {
       setRevokingLinkId(null)
+    }
+  }
+
+  async function loadWorkspaceAccess() {
+    try {
+      const [requests, grants] = await Promise.all([
+        listLinkedWorkspaceAccessRequests(),
+        listLinkedWorkspaceAccessGrants(),
+      ])
+      setWorkspaceAccessRequests(requests)
+      setWorkspaceAccessGrants(grants)
+    } catch (err) {
+      setWorkspaceAccessErrors((prev) => ({ ...prev, load: err.message }))
+    }
+  }
+
+  // Always refreshes the list, on success AND failure -- a failure here
+  // often means the RPC-level state has already moved (e.g. someone else
+  // already accepted/declined the same request from another tab), so the
+  // stale button that triggered the error must not keep being shown as
+  // still actionable. Same reasoning as handleSync's refresh-on-failure.
+  async function runWorkspaceAccessAction(busyKey, action) {
+    setWorkspaceAccessBusyKey(busyKey)
+    setWorkspaceAccessErrors((prev) => {
+      const next = { ...prev }
+      delete next[busyKey]
+      return next
+    })
+    try {
+      await action()
+    } catch (err) {
+      setWorkspaceAccessErrors((prev) => ({ ...prev, [busyKey]: err.message }))
+    } finally {
+      await loadWorkspaceAccess()
+      setWorkspaceAccessBusyKey(null)
     }
   }
 
@@ -384,6 +443,19 @@ export default function ConnectedAccounts() {
             onCreateInvitation={handleCreateAccountInvitation}
             onDismissInvitation={() => setActiveInvitation(null)}
             onRevoke={handleRevokeAccountLink}
+          />
+          <LinkedWorkspaceAccessPanel
+            linkedAccounts={accountLinks}
+            requests={workspaceAccessRequests}
+            grants={workspaceAccessGrants}
+            busyKey={workspaceAccessBusyKey}
+            errors={workspaceAccessErrors}
+            onRequest={(linkId) => runWorkspaceAccessAction(`request:${linkId}`, () => requestLinkedWorkspaceAccess(linkId))}
+            onAccept={(requestId) => runWorkspaceAccessAction(`accept:${requestId}`, () => acceptLinkedWorkspaceAccess(requestId))}
+            onDecline={(requestId) => runWorkspaceAccessAction(`decline:${requestId}`, () => declineLinkedWorkspaceAccess(requestId))}
+            onCancelRequest={(requestId) => runWorkspaceAccessAction(`cancel:${requestId}`, () => cancelLinkedWorkspaceAccessRequest(requestId))}
+            onRevoke={(linkId) => runWorkspaceAccessAction(`revoke:${linkId}`, () => revokeGrantedWorkspaceAccess(linkId))}
+            onRenounce={(linkId) => runWorkspaceAccessAction(`renounce:${linkId}`, () => renounceLinkedWorkspaceAccess(linkId))}
           />
           <TransferPreviewConsentPanel
             linkedAccounts={accountLinks}

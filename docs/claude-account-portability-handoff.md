@@ -325,6 +325,111 @@ tests across 49 files, exactly matching the count already on record at
 `49628af`. Did not touch the worktree directories themselves -- they may be
 other sessions' in-progress work.
 
+## Session update: grant controlled cross-account access (2026-09-04, continued)
+
+Fourth increment, same session, and a change in kind: everything before this
+built read-only RLS gated on `workspace_access` rows that only ever existed
+because a SQL test seeded them directly. This is the first RPC surface that
+actually creates one. Added in `20260904130000_linked_workspace_access_
+grants.sql` and `20260904140000_revoke_link_cascades_workspace_access.sql`,
+with frontend in `src/lib/linkedWorkspaceAccess.js`, `src/pages/account-
+linking/LinkedWorkspaceAccessPanel.jsx` (+ fixtures/test), and new wiring in
+`src/pages/ConnectedAccounts.jsx`.
+
+**Design**: a two-step request/accept flow, not a unilateral grant, even
+though a `verified_account_links` row proves the two accounts belong to the
+same person -- the receiving account (e.g. a monitored work SSO login) may
+not want the owner's data made newly visible through it, so it must
+explicitly accept. New table `linked_workspace_access_requests`
+(pending/accepted/declined/cancelled). RPCs: `request_linked_workspace_
+access(p_link_id)` (owner-only; derives their own workspace from `auth.uid()`,
+never takes a workspace_id param), `accept_linked_workspace_access
+(p_request_id)` / `decline_linked_workspace_access(p_request_id)`
+(target-only), `cancel_linked_workspace_access_request(p_request_id)`
+(requester-only), `revoke_granted_workspace_access(p_link_id)` (owner tears
+down what they gave), `renounce_linked_workspace_access(p_link_id)` (grantee
+voluntarily gives up what they hold), and two list RPCs. Granted access
+always uses `access_role = 'owner'` -- the same role `private.
+can_view_learning_profile` requires -- so accepting a request is the only
+way today for that helper to ever return true for a second, distinct auth
+account. All SECURITY DEFINER, `search_path=''`, fully qualified, revoked
+from public/anon, granted only to authenticated.
+
+**Two independent reviews (security + regression/behavioral) both ran, and
+both converged on the same core gap**, which was fixed before commit:
+revoking a `verified_account_link` (pre-existing RPC, `20260903190000_
+verified_account_links.sql`, not edited) only ever flipped the link's own
+status -- it never touched any `workspace_access` row granted through it.
+Since `redeem_account_link_invitation` reactivates the *same link row* on a
+later re-verification of the same two accounts, a revoked-but-dangling grant
+would silently go live again with no fresh accept -- directly undermining
+this migration's own "must explicitly accept" design goal and CLAUDE.md's
+"don't silently... share... material learner information." Fixed with
+`20260904140000_revoke_link_cascades_workspace_access.sql`: a new migration
+(not an edit to the immutable original) that redefines `revoke_verified_
+account_link` to also cascade-revoke any active `workspace_access` between
+exactly the link's two accounts and cancel any pending request between them.
+Proven by a new scenario 8 in `supabase/tests/linked_workspace_access_
+grants.sql`: grant access, revoke the *link* (not the grant), confirm the
+cascade revoked it too, then reactivate the same link row and confirm access
+is *not* silently restored.
+
+**Other findings fixed before commit**:
+- `granted_by` on the accept-time upsert was recording the *accepting*
+  account's own `auth.uid()` (self-referential, misleading for any future
+  audit use) instead of the requesting owner who actually offered access --
+  fixed to look up the requester's `auth_user_id`.
+- `list_my_linked_workspace_access_grants` didn't filter workspace `status`,
+  unlike `private.can_view_learning_profile` itself -- added `w.status =
+  'active'` to both CTEs so the list RPC can't show a grant the access-check
+  helper would actually deny once workspace suspension exists.
+- `runWorkspaceAccessAction` (ConnectedAccounts.jsx) only refreshed the
+  request/grant lists on success. On failure -- e.g. two tabs both showing
+  the same pending request, one accepts, the other's now-stale Accept/
+  Decline buttons throw "Pending request not found" -- the UI never
+  resynced, leaving the same broken buttons clickable indefinitely. Fixed to
+  always refresh in `finally`, matching this same file's existing
+  `handleSync` precedent ("a reauth-required error has already flipped the
+  connection's status server-side").
+- The panel showed one error banner shared across every linked account and
+  all six action types, diverging from `LinkedAccountsList.jsx`'s documented
+  per-row/per-dialog convention. Changed to a `{errors}` map keyed the same
+  way as `busyKey` (e.g. `"revoke:<linkId>"`), rendered inline next to the
+  specific row/action it came from.
+- `onRevoke`/`onRenounce` fired immediately with no confirmation, unlike
+  `LinkedAccountsList`'s confirm-before-revoke pattern and CLAUDE.md's
+  "require clear confirmation for destructive actions." Added `ConfirmDialog`
+  for both, auto-closing once the action finishes without an error (same
+  pattern as `LinkedAccountsList`'s `wasRevoking` ref).
+- Handling a link revocation from `LinkedAccountsList` now also refreshes
+  the workspace-access lists (`handleRevokeAccountLink` in
+  `ConnectedAccounts.jsx`), since the new cascade means a link revoke can
+  silently change what the sharing panel should show.
+- Added a test for the fully-bidirectional case (A shares with B and B
+  shares with A simultaneously) that both reviews flagged as untested and
+  visually easy to misread; the panel now labels each line "Your profile:"
+  / "Their profile:" rather than relying on wording alone.
+
+**Deliberately not fixed this session (documented, not forgotten)**:
+- No feedback to a requester when their request is *declined* --
+  `list_my_linked_workspace_access_requests` only returns `pending` rows, so
+  a declined request just silently reverts to "not shared" on next reload.
+  Fixing this well needs a "seen/dismiss" interaction, not just a query
+  change, and was judged out of scope for this session.
+- `granted_at` is overwritten (not preserved as history) on a revoke-then-
+  re-accept cycle. Acceptable for now given there's no audit table for this
+  relationship yet, consistent with how simple `verified_account_links`
+  itself already is.
+- The "Share your profile with them" button is always rendered even for a
+  caller with no personal workspace to share (organisation-only accounts);
+  clicking it surfaces `request_linked_workspace_access`'s own "You have no
+  personal workspace to share" error, now inline on that row per the fix
+  above, rather than being hidden proactively.
+
+Verified: npm run lint/build/test:run (313 tests, up from 302 -- 11 new
+component tests), supabase db reset --local, supabase db lint --local
+--level error, and all three supabase/tests/*.sql suites, all clean.
+
 ## Remaining product and engineering work
 
 ### 1. Replace login-ID ownership with profile ownership
