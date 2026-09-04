@@ -22,6 +22,7 @@ create policy "Users manage their own skills"
 create index skills_user_id_idx on skills (user_id);
 
 
+
 -- =============================================================================
 -- 0002_profiles.sql
 -- =============================================================================
@@ -61,6 +62,7 @@ create trigger on_auth_user_created
 insert into public.profiles (id)
 select id from auth.users
 on conflict (id) do nothing;
+
 
 
 -- =============================================================================
@@ -108,6 +110,7 @@ create policy "Users manage their own experience"
 create index experience_user_id_idx on experience (user_id);
 
 
+
 -- =============================================================================
 -- 0004_avatar_and_current_role.sql
 -- =============================================================================
@@ -135,6 +138,7 @@ create policy "Users can update their own avatar"
 create policy "Users can delete their own avatar"
   on storage.objects for delete
   using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
 
 
 -- =============================================================================
@@ -178,11 +182,13 @@ create policy "Users manage their own skill evidence files"
   with check (bucket_id = 'skill-evidence' and (storage.foldername(name))[1] = auth.uid()::text);
 
 
+
 -- =============================================================================
 -- 0006_nullable_skill_level.sql
 -- =============================================================================
 
 alter table skills alter column level drop not null;
+
 
 
 -- =============================================================================
@@ -199,6 +205,7 @@ set evidence_paths = array[evidence_path]
 where evidence_path is not null and evidence_paths is null;
 
 
+
 -- =============================================================================
 -- 0008_skill_source.sql
 -- =============================================================================
@@ -206,6 +213,7 @@ where evidence_path is not null and evidence_paths is null;
 alter table skills add column source text
   not null default 'manual'
   check (source in ('manual', 'cv_import'));
+
 
 
 -- =============================================================================
@@ -219,6 +227,7 @@ alter table skill_assessments add column course_id uuid
   references courses(id) on delete set null;
 
 create index skill_assessments_course_id_idx on skill_assessments (course_id);
+
 
 
 -- =============================================================================
@@ -387,6 +396,7 @@ $$;
 grant execute on function accept_invite_and_rate(text, int, text) to authenticated;
 
 
+
 -- =============================================================================
 -- 0011_peer_rating_owner_email.sql
 -- =============================================================================
@@ -468,6 +478,7 @@ $$;
 grant execute on function accept_invite_and_rate(text, int, text) to authenticated;
 
 
+
 -- =============================================================================
 -- 0012_experience_learning_links.sql
 -- =============================================================================
@@ -538,6 +549,7 @@ alter table skill_assessments add column experience_id uuid
 create index skill_assessments_experience_id_idx on skill_assessments (experience_id);
 
 
+
 -- =============================================================================
 -- 0013_skill_library.sql
 -- =============================================================================
@@ -598,6 +610,7 @@ where lower(l.name) = lower(s.name)
   and s.library_skill_id is null;
 
 
+
 -- =============================================================================
 -- 0014_skill_lifecycle_stage.sql
 -- =============================================================================
@@ -619,6 +632,7 @@ alter table skills add column lifecycle_stage text
     'at_risk',
     'archived'
   ));
+
 
 
 -- =============================================================================
@@ -648,6 +662,7 @@ create policy "Users manage their own xapi statements"
 
 create index xapi_statements_user_id_idx on xapi_statements (user_id);
 create index xapi_statements_recorded_at_idx on xapi_statements (recorded_at desc);
+
 
 
 -- =============================================================================
@@ -685,6 +700,7 @@ create policy "Connections can view visible skills profiles"
   );
 
 
+
 -- =============================================================================
 -- 0017_fix_skill_peer_ratings_rls_recursion.sql
 -- =============================================================================
@@ -704,6 +720,7 @@ drop policy "Skill owners can view ratings on their skills" on skill_peer_rating
 create policy "Skill owners can view ratings on their skills"
   on skill_peer_ratings for select
   using (auth.uid() = skill_owner_id);
+
 
 
 -- =============================================================================
@@ -743,6 +760,7 @@ create index skill_course_links_skill_id_idx on skill_course_links (skill_id);
 create index skill_course_links_course_id_idx on skill_course_links (course_id);
 
 
+
 -- =============================================================================
 -- 0019_course_duration_and_type.sql
 -- =============================================================================
@@ -759,6 +777,7 @@ alter table courses add column duration text;
 alter table courses add column course_type text;
 
 
+
 -- =============================================================================
 -- 0020_xapi_statements_course_id.sql
 -- =============================================================================
@@ -771,6 +790,7 @@ alter table xapi_statements add column course_id uuid
   references courses(id) on delete set null;
 
 create index xapi_statements_course_id_idx on xapi_statements (course_id);
+
 
 
 -- =============================================================================
@@ -795,6 +815,7 @@ update xapi_statements
 set skill_id = (statement #>> '{context,extensions,https://learnscope.app/xapi/extensions/skill,id}')::uuid
 where statement #>> '{context,extensions,https://learnscope.app/xapi/extensions/skill,id}' is not null
   and skill_id is null;
+
 
 
 -- =============================================================================
@@ -828,6 +849,7 @@ create policy "Connections can view visible skills profiles"
   );
 
 
+
 -- =============================================================================
 -- 0023_skills_unique_name.sql
 -- =============================================================================
@@ -837,6 +859,7 @@ create policy "Connections can view visible skills profiles"
 -- duplicates in the live data before writing this migration, so this
 -- should apply cleanly.
 create unique index skills_user_id_name_lower_idx on skills (user_id, lower(name));
+
 
 
 -- =============================================================================
@@ -935,6 +958,7 @@ where s.category is not null
 on conflict (skill_id, tag_id) do nothing;
 
 
+
 -- =============================================================================
 -- 0025_connection_invites_dedup.sql
 -- =============================================================================
@@ -964,6 +988,7 @@ where ci.status = 'pending'
 create unique index connection_invites_unique_pending_idx
   on connection_invites (skill_id, lower(invitee_email))
   where status = 'pending' and invitee_email is not null;
+
 
 
 -- =============================================================================
@@ -998,6 +1023,7 @@ alter table skill_experience_links
   add constraint skill_experience_links_skill_id_experience_id_key unique (skill_id, experience_id);
 
 
+
 -- =============================================================================
 -- 0027_skill_peer_ratings_category_nullable.sql
 -- =============================================================================
@@ -1007,6 +1033,7 @@ alter table skill_experience_links
 -- inserts v_skill.category directly, so rating any skill added since 0024
 -- (which has no category at all) violates this NOT NULL constraint.
 alter table skill_peer_ratings alter column skill_category drop not null;
+
 
 
 -- =============================================================================
@@ -1043,6 +1070,7 @@ create unique index skill_library_private_name_lower_idx
   where is_private;
 
 
+
 -- =============================================================================
 -- 0029_skill_baseline_quizzes.sql
 -- =============================================================================
@@ -1076,6 +1104,7 @@ create policy "Users can record their own baseline quizzes"
   );
 
 create index skill_baseline_quizzes_skill_id_idx on skill_baseline_quizzes (skill_id);
+
 
 
 -- =============================================================================
@@ -1125,6 +1154,7 @@ $$;
 grant execute on function get_peer_rater_progress(uuid) to authenticated;
 
 
+
 -- =============================================================================
 -- 0031_skill_targets.sql
 -- =============================================================================
@@ -1153,6 +1183,7 @@ create policy "Users manage their own skill targets"
 create index skill_targets_skill_id_idx on skill_targets (skill_id);
 
 
+
 -- =============================================================================
 -- 0032_revoke_invite.sql
 -- =============================================================================
@@ -1165,6 +1196,7 @@ create policy "Inviters can revoke their own pending invites"
   on connection_invites for update
   using (auth.uid() = inviter_id and status = 'pending')
   with check (auth.uid() = inviter_id and status = 'revoked');
+
 
 
 -- =============================================================================
@@ -1230,6 +1262,7 @@ $$;
 grant execute on function accept_invite_and_rate(text, int, text) to authenticated;
 
 
+
 -- =============================================================================
 -- 0034_skill_evaluation_source.sql
 -- =============================================================================
@@ -1240,6 +1273,7 @@ grant execute on function accept_invite_and_rate(text, int, text) to authenticat
 alter table skill_assessments drop constraint skill_assessments_source_check;
 alter table skill_assessments add constraint skill_assessments_source_check
   check (source in ('self', 'course', 'ai_baseline', 'ai_evaluation'));
+
 
 
 -- =============================================================================
@@ -1285,6 +1319,7 @@ insert into course_catalogue (name, provider, course_type, duration, synopsis) v
   ('Data Analysis with Python', 'CodeCraft', 'Online', '8 weeks', 'Get hands-on with pandas, visualisation and statistics to turn raw data into decisions.'),
   ('Interior Space Planning', 'Design Academy', 'Blended', '4 weeks', 'Explore layout, flow and function to design interior spaces that work for the people who use them.'),
   ('Effective Public Speaking', 'Communication Hub', 'Workshop', '1 day', 'Build confidence and structure for presenting clearly to any audience, in person or online.');
+
 
 
 -- =============================================================================
@@ -1377,6 +1412,7 @@ join tags t on lower(t.name) = lower(v.tag_name)
 on conflict (course_catalogue_id, tag_id) do nothing;
 
 
+
 -- =============================================================================
 -- 0037_experience_types_and_org_url.sql
 -- =============================================================================
@@ -1393,6 +1429,7 @@ alter table experience add constraint experience_type_check
 -- the organization name (looked up client-side from the domain -- nothing
 -- to backfill here).
 alter table experience add column organization_url text;
+
 
 
 -- =============================================================================
@@ -1412,6 +1449,7 @@ alter table experience add constraint experience_type_check
   check (type in ('education', 'employment', 'project', 'volunteer', 'other', 'course'));
 
 
+
 -- =============================================================================
 -- 0039_experience_organization_nullable.sql
 -- =============================================================================
@@ -1422,6 +1460,7 @@ alter table experience add constraint experience_type_check
 -- `not null` from the original employment/education-only schema. Relax it
 -- to match.
 alter table experience alter column organization drop not null;
+
 
 
 -- =============================================================================
@@ -1438,6 +1477,7 @@ alter table experience alter column organization drop not null;
 alter table experience add column parent_experience_id uuid references experience(id) on delete set null;
 
 create index experience_parent_experience_id_idx on experience (parent_experience_id);
+
 
 
 -- =============================================================================
@@ -1720,6 +1760,7 @@ $$;
 grant execute on function get_validation_request_contact(uuid) to authenticated;
 
 
+
 -- =============================================================================
 -- 0042_validator_discovery_visibility.sql
 -- =============================================================================
@@ -1749,6 +1790,7 @@ create policy "Skills open to being asked to validate are discoverable"
       )
     )
   );
+
 
 
 -- =============================================================================
@@ -1783,6 +1825,7 @@ end;
 $$;
 
 
+
 -- =============================================================================
 -- 0044_validator_course_visibility.sql
 -- =============================================================================
@@ -1806,6 +1849,7 @@ create policy "Validators can view courses linked to skills they're validating"
         and svr.validator_id = auth.uid()
     )
   );
+
 
 
 -- =============================================================================
@@ -1888,6 +1932,7 @@ create trigger skills_sync_highest_lifecycle_stage
   execute function sync_skill_highest_lifecycle_stage();
 
 
+
 -- =============================================================================
 -- 0046_skill_knowledge_axis.sql
 -- =============================================================================
@@ -1903,6 +1948,7 @@ alter table skill_assessments add column axis text not null default 'practical'
 alter table skills add column knowledge_level int check (knowledge_level between 1 and 5);
 
 
+
 -- =============================================================================
 -- 0047_skill_knowledge_level_guide.sql
 -- =============================================================================
@@ -1912,6 +1958,7 @@ alter table skills add column knowledge_level int check (knowledge_level between
 -- every time -- generated once (at skill creation, or lazily the first time
 -- it's needed) and reused after that.
 alter table skills add column knowledge_level_guide jsonb;
+
 
 
 -- =============================================================================
@@ -1988,6 +2035,7 @@ end;
 $$;
 
 
+
 -- =============================================================================
 -- 0049_skill_diagnostic_content.sql
 -- =============================================================================
@@ -2030,6 +2078,7 @@ create policy "Authenticated users can view diagnostic content"
   using (true);
 
 
+
 -- =============================================================================
 -- 0050_diagnostic_confirmed_assessment_source.sql
 -- =============================================================================
@@ -2041,6 +2090,7 @@ create policy "Authenticated users can view diagnostic content"
 alter table skill_assessments drop constraint skill_assessments_source_check;
 alter table skill_assessments add constraint skill_assessments_source_check
   check (source in ('self', 'course', 'ai_baseline', 'ai_evaluation', 'diagnostic_confirmed'));
+
 
 
 -- =============================================================================
@@ -2236,6 +2286,7 @@ where s.lifecycle_stage in ('validated', 'maintained')
 grant select on validator_directory to authenticated;
 
 
+
 -- =============================================================================
 -- 0052_fix_skill_course_links_courses_rls_recursion.sql
 -- =============================================================================
@@ -2279,6 +2330,7 @@ create policy "Validators can view courses linked to skills they're validating"
   using (is_course_linked_to_validating_skill(courses.id, auth.uid()));
 
 
+
 -- =============================================================================
 -- 0053_skill_tracker_count.sql
 -- =============================================================================
@@ -2305,6 +2357,7 @@ as $$
 $$;
 
 grant execute on function count_skill_trackers(uuid) to authenticated;
+
 
 
 -- =============================================================================
@@ -2347,6 +2400,7 @@ $$;
 alter table profiles add column onboarding_completed_at timestamptz;
 
 update profiles set onboarding_completed_at = now() where onboarding_completed_at is null;
+
 
 
 -- =============================================================================
@@ -2398,6 +2452,7 @@ from skill_library sl
 join tags t on lower(t.name) = lower(sl.category)
 where sl.category is not null
 on conflict (skill_library_id, tag_id) do nothing;
+
 
 
 -- =============================================================================
@@ -2507,6 +2562,7 @@ end;
 $$;
 
 
+
 -- =============================================================================
 -- 0057_skill_practical_level_guide.sql
 -- =============================================================================
@@ -2516,6 +2572,7 @@ $$;
 -- 0047 caches knowledge_level_guide for the knowledge axis -- generated
 -- once (lazily, the first time it's needed) and reused after that.
 alter table skills add column practical_level_guide jsonb;
+
 
 
 -- =============================================================================
@@ -2822,6 +2879,7 @@ create policy "Skill-search matches can view opted-in profiles"
   );
 
 
+
 -- =============================================================================
 -- 0059_fix_skill_search_matches_rls_recursion.sql
 -- =============================================================================
@@ -2865,6 +2923,7 @@ create policy "Skill-search matches can view opted-in profiles"
     and skills.library_skill_id is not null
     and has_matching_library_skill(auth.uid(), skills.library_skill_id)
   );
+
 
 
 -- =============================================================================
@@ -3001,6 +3060,7 @@ create policy "Skill-search matches can view opted-in profiles"
 drop function has_matching_library_skill(uuid, uuid);
 
 
+
 -- =============================================================================
 -- 0061_incoming_rate_invites.sql
 -- =============================================================================
@@ -3043,6 +3103,7 @@ $$;
 grant execute on function list_incoming_rate_invites() to authenticated;
 
 
+
 -- =============================================================================
 -- 0062_backfill_cv_import_defaults.sql
 -- =============================================================================
@@ -3063,6 +3124,7 @@ update skills
 set tracking_reason = 'work'
 where source = 'cv_import'
   and tracking_reason is null;
+
 
 
 -- =============================================================================
@@ -3230,6 +3292,7 @@ $$;
 grant execute on function list_connections_activity(int) to authenticated;
 
 
+
 -- =============================================================================
 -- 0064_account_deletion_cascades.sql
 -- =============================================================================
@@ -3379,6 +3442,7 @@ end;
 $$;
 
 grant execute on function delete_own_account_scrub() to authenticated;
+
 
 
 -- =============================================================================
@@ -3571,6 +3635,7 @@ create trigger prevent_self_account_status_change_trigger
   for each row execute procedure prevent_self_account_status_change();
 
 
+
 -- =============================================================================
 -- 0066_provider_catalogue_and_moderation.sql
 -- =============================================================================
@@ -3669,6 +3734,7 @@ create policy "Platform admins can update tags"
   with check (is_platform_admin(auth.uid()));
 
 
+
 -- =============================================================================
 -- 0067_prevent_last_platform_admin_removal.sql
 -- =============================================================================
@@ -3698,6 +3764,7 @@ create trigger prevent_last_platform_admin_removal_trigger
   for each row execute procedure prevent_last_platform_admin_removal();
 
 
+
 -- =============================================================================
 -- 0068_organisation_url.sql
 -- =============================================================================
@@ -3707,6 +3774,7 @@ create trigger prevent_last_platform_admin_removal_trigger
 -- existing organisations simply have no url until edited.
 
 alter table organisations add column url text;
+
 
 
 -- =============================================================================
@@ -3756,6 +3824,7 @@ as $$
       and organisations.status = 'active'
   ) or is_platform_admin(check_user_id)
 $$;
+
 
 
 -- =============================================================================
@@ -3864,6 +3933,7 @@ end;
 $$;
 
 grant execute on function decide_org_invite(uuid, boolean) to authenticated;
+
 
 
 -- =============================================================================
@@ -3994,6 +4064,7 @@ create policy "Users manage their own content progress"
   with check (auth.uid() = user_id);
 
 
+
 -- =============================================================================
 -- 0072_course_content_storage_policies.sql
 -- =============================================================================
@@ -4060,6 +4131,7 @@ create policy "Org members can remove content for their own editable courses"
 alter table course_content_items
   add constraint course_content_items_storage_path_scoped
   check (storage_path like course_id::text || '/%');
+
 
 
 -- =============================================================================
@@ -4250,6 +4322,7 @@ create policy "Org members can remove their own organisation's resources"
   );
 
 
+
 -- =============================================================================
 -- 0074_fix_content_resources_rls_recursion.sql
 -- =============================================================================
@@ -4319,6 +4392,7 @@ create policy "Org members manage links for their own editable courses"
   );
 
 
+
 -- =============================================================================
 -- 0075_lock_platform_admin_removal_check.sql
 -- =============================================================================
@@ -4353,6 +4427,7 @@ begin
   return old;
 end;
 $$;
+
 
 
 -- =============================================================================
@@ -4471,6 +4546,7 @@ $$;
 grant execute on function skill_level_stats(uuid) to authenticated;
 
 
+
 -- =============================================================================
 -- 0077_offered_skills_check_ownership.sql
 -- =============================================================================
@@ -4498,6 +4574,7 @@ create policy "Org members and platform admins manage their organisation's offer
         and (sl.organisation_id is null or sl.organisation_id = organisation_offered_skills.organisation_id)
     )
   );
+
 
 
 -- =============================================================================
@@ -4643,6 +4720,7 @@ create policy "Org members manage links for their own editable courses"
   );
 
 
+
 -- =============================================================================
 -- 0079_xapi_resources.sql
 -- =============================================================================
@@ -4708,6 +4786,7 @@ create policy "Users create and view their own xapi launch sessions"
   with check (auth.uid() = user_id);
 
 
+
 -- =============================================================================
 -- 0080_xapi_launch_session_hardening.sql
 -- =============================================================================
@@ -4769,6 +4848,7 @@ create policy "Users delete their own xapi launch sessions"
 alter table xapi_launch_sessions
   add constraint xapi_launch_sessions_expiry_bounded
   check (expires_at <= created_at + interval '4 hours');
+
 
 
 -- =============================================================================
@@ -4873,6 +4953,7 @@ create policy "Org admins can remove their own organisation's logo"
   );
 
 
+
 -- =============================================================================
 -- 0082_organisation_guard_created_by.sql
 -- =============================================================================
@@ -4901,6 +4982,7 @@ begin
   return new;
 end;
 $$;
+
 
 
 -- =============================================================================
@@ -4937,6 +5019,7 @@ $$;
 grant execute on function skill_level_guide_sample(uuid) to authenticated;
 
 
+
 -- =============================================================================
 -- 0084_external_video_resources.sql
 -- =============================================================================
@@ -4964,6 +5047,7 @@ alter table content_resources add constraint content_resources_storage_or_extern
     (type = 'external_video' and storage_path is null and external_url is not null)
     or (type <> 'external_video' and storage_path is not null and external_url is null)
   );
+
 
 
 -- =============================================================================
@@ -5059,6 +5143,7 @@ create policy "Org admins can remove their own organisation's logo"
   );
 
 
+
 -- =============================================================================
 -- 0086_profile_theme_preference.sql
 -- =============================================================================
@@ -5069,6 +5154,7 @@ create policy "Org admins can remove their own organisation's logo"
 -- display flips unexpectedly on first load after this ships.
 alter table profiles add column theme_preference text not null default 'system'
   check (theme_preference in ('light', 'dark', 'system'));
+
 
 
 -- =============================================================================
@@ -5085,6 +5171,7 @@ alter table profiles add column theme_preference text not null default 'system'
 -- table's existing RLS ("Org members manage their own organisation's
 -- resources") with no policy changes needed.
 alter table content_resources add column video_edit jsonb;
+
 
 
 -- =============================================================================
@@ -5226,6 +5313,7 @@ create policy "Users create their own xapi launch sessions"
   );
 
 
+
 -- =============================================================================
 -- 0089_shared_skill_library_level_guides.sql
 -- =============================================================================
@@ -5275,6 +5363,7 @@ end;
 $$;
 
 grant execute on function set_skill_library_level_guide(uuid, text, jsonb) to authenticated;
+
 
 
 -- =============================================================================
@@ -5412,6 +5501,7 @@ $$;
 grant execute on function get_provider_profile(text) to anon, authenticated;
 
 
+
 -- =============================================================================
 -- 0091_provider_profile_course_details.sql
 -- =============================================================================
@@ -5488,6 +5578,7 @@ $$;
 grant execute on function get_provider_profile(text) to anon, authenticated;
 
 
+
 -- =============================================================================
 -- 0092_skill_knowledge_level_source_stats.sql
 -- =============================================================================
@@ -5532,6 +5623,7 @@ as $$
 $$;
 
 grant execute on function skill_knowledge_level_source_stats(uuid) to authenticated;
+
 
 
 -- =============================================================================
@@ -5634,6 +5726,7 @@ create policy "Course editors can remove their course's image"
   );
 
 
+
 -- =============================================================================
 -- 0094_provider_profile_course_image.sql
 -- =============================================================================
@@ -5710,6 +5803,7 @@ as $$
 $$;
 
 grant execute on function get_provider_profile(text) to anon, authenticated;
+
 
 
 -- =============================================================================
@@ -5966,6 +6060,7 @@ $$;
 grant execute on function list_incoming_rate_invites() to authenticated;
 
 
+
 -- =============================================================================
 -- 0096_decline_invite.sql
 -- =============================================================================
@@ -6012,6 +6107,7 @@ end;
 $$;
 
 grant execute on function decline_invite(text) to authenticated;
+
 
 
 -- =============================================================================
@@ -6094,6 +6190,7 @@ create policy "Course editors can remove their course's image"
   );
 
 
+
 -- =============================================================================
 -- 0098_screen_recording_resource_type.sql
 -- =============================================================================
@@ -6103,6 +6200,7 @@ create policy "Course editors can remove their course's image"
 alter table content_resources drop constraint content_resources_type_check;
 alter table content_resources add constraint content_resources_type_check
   check (type in ('video', 'screen_recording', 'file', 'scorm', 'xapi', 'external_video'));
+
 
 
 -- =============================================================================
@@ -6127,6 +6225,7 @@ alter table content_resources add constraint content_resources_storage_or_extern
     )
     or (type not in ('external_video', 'web_url') and storage_path is not null and external_url is null)
   );
+
 
 
 -- =============================================================================
@@ -6155,6 +6254,7 @@ update profiles set skills_profile_visible = true where skills_profile_visible =
 
 alter table skills alter column visible_on_profile set default true;
 update skills set visible_on_profile = true where visible_on_profile = false;
+
 
 
 -- =============================================================================
@@ -6309,6 +6409,7 @@ $$;
 grant execute on function list_connections_activity(int, uuid) to authenticated;
 
 
+
 -- =============================================================================
 -- 0103_connection_profile_growth_and_member_since.sql
 -- =============================================================================
@@ -6398,6 +6499,7 @@ $$;
 grant execute on function list_connection_recent_growth(uuid, int) to authenticated;
 
 
+
 -- =============================================================================
 -- 0104_share_activity_and_search_by_default.sql
 -- =============================================================================
@@ -6416,6 +6518,7 @@ update profiles set activity_feed_visible = true where activity_feed_visible = f
 
 alter table profiles alter column skill_search_visibility set default 'all';
 update profiles set skill_search_visibility = 'all' where skill_search_visibility = 'hidden';
+
 
 
 -- =============================================================================
@@ -6475,6 +6578,7 @@ create policy "Provider admins can view participant progress"
         and is_course_provider_admin(ccl.course_id, (select auth.uid()))
     )
   );
+
 
 
 -- =============================================================================
@@ -6549,6 +6653,7 @@ create policy "Course editors can remove their course's image"
     bucket_id = 'course-catalogue-images'
     and can_manage_course_catalogue_image(name)
   );
+
 
 
 -- =============================================================================
@@ -6773,6 +6878,7 @@ $$;
 grant execute on function get_provider_profile(text) to anon, authenticated;
 
 
+
 -- =============================================================================
 -- 0108_course_section_instructions.sql
 -- =============================================================================
@@ -6880,6 +6986,7 @@ revoke all on function create_course_draft_version(uuid) from public;
 grant execute on function create_course_draft_version(uuid) to authenticated;
 
 
+
 -- =============================================================================
 -- 0109_onboarding_wizard_steps.sql
 -- =============================================================================
@@ -6917,6 +7024,7 @@ create policy "Platform admins can update onboarding steps"
   with check (is_platform_admin(auth.uid()));
 
 
+
 -- =============================================================================
 -- 0110_profile_import_banner.sql
 -- =============================================================================
@@ -6928,6 +7036,7 @@ create policy "Platform admins can update onboarding steps"
 -- all, which that column alone wouldn't catch.
 alter table profiles add column cv_imported_at timestamptz;
 alter table profiles add column cv_import_banner_dismissed_at timestamptz;
+
 
 
 -- =============================================================================
@@ -7261,6 +7370,7 @@ create policy "View published courses, your own organisation's, as a platform ad
   );
 
 
+
 -- =============================================================================
 -- 0112_catalogue_approvers.sql
 -- =============================================================================
@@ -7587,6 +7697,7 @@ revoke all on function deactivate_course_publication(uuid) from public;
 grant execute on function deactivate_course_publication(uuid) to authenticated;
 
 
+
 -- =============================================================================
 -- 0113_unique_reference_codes.sql
 -- =============================================================================
@@ -7773,6 +7884,7 @@ alter table skill_library alter column skill_code set not null;
 create unique index skill_library_skill_code_unique_idx on skill_library (skill_code);
 
 
+
 -- =============================================================================
 -- 20260830101243_education_subject_experiences.sql
 -- =============================================================================
@@ -7848,6 +7960,7 @@ on public.experience
 for each row execute function public.validate_experience_parent_type();
 
 
+
 -- =============================================================================
 -- 20260830104823_optional_subject_dates_and_duration.sql
 -- =============================================================================
@@ -7873,6 +7986,7 @@ alter table public.experience
       and study_duration is null
     )
   );
+
 
 
 -- =============================================================================
@@ -8011,6 +8125,7 @@ on public.experience
 for each row execute function public.sync_subject_organization_from_parent();
 
 
+
 -- =============================================================================
 -- 20260830125114_enforce_child_experience_date_bounds.sql
 -- =============================================================================
@@ -8104,6 +8219,7 @@ on public.experience
 for each row execute function public.validate_experience_parent_type();
 
 
+
 -- =============================================================================
 -- 20260830131618_link_skill_activity_to_experience.sql
 -- =============================================================================
@@ -8152,6 +8268,7 @@ on public.xapi_statements
 for each row execute function public.validate_xapi_statement_context_ownership();
 
 
+
 -- =============================================================================
 -- 20260831090444_xapi_statement_evidence.sql
 -- =============================================================================
@@ -8163,6 +8280,7 @@ for each row execute function public.validate_xapi_statement_context_ownership()
 -- storage/policy changes are needed here.
 alter table xapi_statements add column evidence_url text;
 alter table xapi_statements add column evidence_paths text[];
+
 
 
 -- =============================================================================
@@ -8274,6 +8392,7 @@ create policy "Catalogue admins manage catalogue skills"
   );
 
 
+
 -- =============================================================================
 -- 20260831114500_provider_admin_catalogue_inheritance.sql
 -- =============================================================================
@@ -8307,6 +8426,7 @@ $$;
 
 revoke all on function is_catalogue_admin(uuid, uuid) from public;
 grant execute on function is_catalogue_admin(uuid, uuid) to authenticated;
+
 
 
 -- =============================================================================
@@ -8360,6 +8480,7 @@ create policy "Catalogue admins can assign resources"
 create policy "Catalogue admins can unassign resources"
   on catalogue_resources for delete to authenticated
   using (is_catalogue_admin(catalogue_resources.catalogue_id, (select auth.uid())));
+
 
 
 -- =============================================================================
@@ -8434,6 +8555,7 @@ revoke all on function assign_course_to_catalogue(uuid, uuid) from public, anon,
 grant execute on function assign_course_to_catalogue(uuid, uuid) to authenticated;
 
 
+
 -- =============================================================================
 -- 20260831123000_require_published_catalogue_courses.sql
 -- =============================================================================
@@ -8496,6 +8618,7 @@ revoke all on function assign_course_to_catalogue(uuid, uuid) from public, anon,
 grant execute on function assign_course_to_catalogue(uuid, uuid) to authenticated;
 
 
+
 -- =============================================================================
 -- 20260831124500_allow_first_catalogue_publication.sql
 -- =============================================================================
@@ -8553,6 +8676,7 @@ $$;
 
 revoke all on function assign_course_to_catalogue(uuid, uuid) from public, anon, authenticated;
 grant execute on function assign_course_to_catalogue(uuid, uuid) to authenticated;
+
 
 
 -- =============================================================================
@@ -8786,6 +8910,7 @@ create policy "Catalogue admins can assign resources"
   );
 
 
+
 -- =============================================================================
 -- 20260831150000_content_page_resources.sql
 -- =============================================================================
@@ -8818,6 +8943,7 @@ alter table content_resources add constraint content_resources_page_content_chec
       and jsonb_array_length(page_content->'blocks') <= 100
     )
   );
+
 
 
 -- =============================================================================
@@ -8915,6 +9041,7 @@ on public.experience
 for each row execute function public.validate_experience_parent_type();
 
 
+
 -- =============================================================================
 -- 20260831160000_external_connections.sql
 -- =============================================================================
@@ -8976,6 +9103,7 @@ revoke all on function get_my_external_connections() from public;
 grant execute on function get_my_external_connections() to authenticated;
 
 
+
 -- =============================================================================
 -- 20260831160500_skill_source_external_import.sql
 -- =============================================================================
@@ -8988,6 +9116,7 @@ grant execute on function get_my_external_connections() to authenticated;
 alter table skills drop constraint skills_source_check;
 alter table skills add constraint skills_source_check
   check (source in ('manual', 'cv_import', 'recommend', 'external_import'));
+
 
 
 -- =============================================================================
@@ -9115,6 +9244,7 @@ create policy "Org members remove skills from editable training"
   );
 
 
+
 -- =============================================================================
 -- 20260831180000_published_provider_skill_alignment.sql
 -- =============================================================================
@@ -9185,6 +9315,7 @@ create policy "Org members remove skills from published training"
   );
 
 
+
 -- =============================================================================
 -- 20260831190000_current_role_banner_dismissal.sql
 -- =============================================================================
@@ -9193,6 +9324,7 @@ create policy "Org members remove skills from published training"
 -- shown when the learner has skills/courses/connections but no experience
 -- entries yet. Same pattern as cv_import_banner_dismissed_at (0110).
 alter table profiles add column current_role_banner_dismissed_at timestamptz;
+
 
 
 -- =============================================================================
@@ -9204,6 +9336,7 @@ alter table profiles add column current_role_banner_dismissed_at timestamptz;
 -- only says "other", which isn't enough to distinguish entries from one
 -- another on the learner's timeline.
 alter table experience add column other_type text;
+
 
 
 -- =============================================================================
@@ -9263,6 +9396,7 @@ create index xapi_statement_skills_skill_id_idx on xapi_statement_skills (skill_
 -- this table.
 insert into xapi_statement_skills (statement_id, skill_id, user_id)
 select id, skill_id, user_id from xapi_statements where skill_id is not null;
+
 
 
 -- =============================================================================
@@ -9422,6 +9556,7 @@ revoke all on function deactivate_course_publication(uuid) from public;
 grant execute on function deactivate_course_publication(uuid) to authenticated;
 
 
+
 -- =============================================================================
 -- 20260901120000_fix_resource_draft_version_page_content.sql
 -- =============================================================================
@@ -9488,6 +9623,7 @@ $$;
 
 revoke all on function create_resource_draft_version(uuid) from public, anon, authenticated;
 grant execute on function create_resource_draft_version(uuid) to authenticated;
+
 
 
 -- =============================================================================
@@ -9629,6 +9765,7 @@ $$;
 
 revoke all on function create_resource_draft_version(uuid) from public, anon, authenticated;
 grant execute on function create_resource_draft_version(uuid) to authenticated;
+
 
 
 -- =============================================================================
@@ -9849,6 +9986,7 @@ $$;
 grant execute on function create_employer(text) to authenticated;
 
 
+
 -- =============================================================================
 -- 20260902150000_employers_drop_update_policy.sql
 -- =============================================================================
@@ -9869,6 +10007,7 @@ grant execute on function create_employer(text) to authenticated;
 -- self-service renaming can reintroduce update access with a BEFORE UPDATE
 -- trigger guarding the immutable columns.
 drop policy "Employer admins can update their employer" on employers;
+
 
 
 -- =============================================================================
@@ -9948,6 +10087,7 @@ end;
 $$;
 
 grant execute on function decide_employer_invite(uuid, boolean) to authenticated;
+
 
 
 -- =============================================================================
@@ -10043,6 +10183,7 @@ create policy "Invitees can view the employer they're invited to"
         and employer_members.user_id = auth.uid()
     )
   );
+
 
 
 -- =============================================================================
@@ -10197,6 +10338,7 @@ revoke all on function assign_course_to_employer_members(uuid, uuid, uuid[]) fro
 grant execute on function assign_course_to_employer_members(uuid, uuid, uuid[]) to authenticated;
 
 
+
 -- =============================================================================
 -- 20260902190000_course_assignment_security_fixes.sql
 -- =============================================================================
@@ -10295,6 +10437,7 @@ $$;
 
 revoke all on function assign_course_to_employer_members(uuid, uuid, uuid[]) from public, anon, authenticated;
 grant execute on function assign_course_to_employer_members(uuid, uuid, uuid[]) to authenticated;
+
 
 
 -- =============================================================================
@@ -10551,6 +10694,7 @@ create policy "Employers with granted access can view skill assessments"
   using (has_employer_data_access(skill_assessments.user_id, auth.uid()));
 
 
+
 -- =============================================================================
 -- 20260902210000_fix_has_employer_data_access_membership.sql
 -- =============================================================================
@@ -10589,6 +10733,7 @@ as $$
       and is_employer_member(r.employer_id, r.learner_id)
   )
 $$;
+
 
 
 -- =============================================================================
@@ -10885,6 +11030,7 @@ create policy "Employers with granted access can view skill assessments"
 drop function if exists has_employer_data_access(uuid, uuid);
 
 
+
 -- =============================================================================
 -- 20260902230000_employer_skill_suggestions.sql
 -- =============================================================================
@@ -11065,6 +11211,7 @@ revoke all on function suggest_skill_to_employer_members(uuid, uuid, text, uuid[
 grant execute on function suggest_skill_to_employer_members(uuid, uuid, text, uuid[], int, date, text) to authenticated;
 
 
+
 -- =============================================================================
 -- 20260902240000_critical_employer_grant_fixes.sql
 -- =============================================================================
@@ -11162,6 +11309,7 @@ revoke all on function is_skill_shared_with_employer(uuid, uuid) from public, an
 grant execute on function is_skill_shared_with_employer(uuid, uuid) to authenticated;
 
 
+
 -- =============================================================================
 -- 20260902250000_tag_codes.sql
 -- =============================================================================
@@ -11208,6 +11356,7 @@ update tags set tag_code = generate_tag_code() where tag_code is null;
 alter table tags alter column tag_code set not null;
 
 create unique index tags_tag_code_unique_idx on tags (tag_code);
+
 
 
 -- =============================================================================
@@ -11325,6 +11474,7 @@ $$;
 
 revoke all on function create_course_draft_version(uuid) from public;
 grant execute on function create_course_draft_version(uuid) to authenticated;
+
 
 
 -- =============================================================================
@@ -11553,6 +11703,7 @@ revoke all on function enrol_in_course_cohort(uuid, uuid) from public, anon, aut
 grant execute on function enrol_in_course_cohort(uuid, uuid) to authenticated;
 
 
+
 -- =============================================================================
 -- 20260902280000_course_cohort_seat_counts.sql
 -- =============================================================================
@@ -11596,6 +11747,7 @@ $$;
 
 revoke all on function get_cohort_seat_counts(uuid[]) from public, anon, authenticated;
 grant execute on function get_cohort_seat_counts(uuid[]) to authenticated;
+
 
 
 -- =============================================================================
@@ -11806,6 +11958,7 @@ $$;
 
 revoke all on function enrol_in_course_cohort(uuid, uuid) from public, anon, authenticated;
 grant execute on function enrol_in_course_cohort(uuid, uuid) to authenticated;
+
 
 
 -- =============================================================================
@@ -12079,6 +12232,7 @@ revoke all on function get_shared_profile(text) from public, anon, authenticated
 grant execute on function get_shared_profile(text) to anon, authenticated;
 
 
+
 -- =============================================================================
 -- 20260902310000_employer_linked_providers.sql
 -- =============================================================================
@@ -12142,6 +12296,7 @@ create policy "Employer admins can unlink providers"
   using (is_employer_admin(employer_id, (select auth.uid())));
 
 grant select, insert, delete on table employer_linked_providers to authenticated;
+
 
 
 -- =============================================================================
@@ -12748,6 +12903,7 @@ create trigger log_employer_member_removed_trigger
   for each row execute procedure log_employer_member_removed();
 
 
+
 -- =============================================================================
 -- 20260903100000_tighten_admin_activity_log_grants.sql
 -- =============================================================================
@@ -12766,6 +12922,7 @@ create trigger log_employer_member_removed_trigger
 -- grant to create a real gap.
 revoke all on admin_activity_log from anon, authenticated;
 grant select on admin_activity_log to authenticated;
+
 
 
 -- =============================================================================
@@ -13341,6 +13498,7 @@ create policy "Participants can view team activity invitations" on manager_team_
 );
 
 
+
 -- =============================================================================
 -- 20260903140000_manager_console_integration.sql
 -- =============================================================================
@@ -13570,6 +13728,7 @@ grant execute on function invite_connection_to_manager_team_by_email(uuid,text),
 to authenticated;
 
 
+
 -- =============================================================================
 -- 20260903150000_manager_learner_consent.sql
 -- =============================================================================
@@ -13650,6 +13809,7 @@ grant execute on function list_my_manager_team_relationships(), leave_manager_te
 to authenticated;
 
 
+
 -- =============================================================================
 -- 20260903160000_restore_learner_action_read_grants.sql
 -- =============================================================================
@@ -13672,6 +13832,7 @@ grant select on table
   public.profiles,
   public.skills
 to authenticated;
+
 
 
 -- =============================================================================
@@ -14037,6 +14198,7 @@ grant execute on function public.assign_employer_role_profile(uuid, uuid),
 to authenticated;
 
 
+
 -- =============================================================================
 -- 20260903180000_atomic_role_profile_requirements.sql
 -- =============================================================================
@@ -14176,6 +14338,7 @@ $$;
 
 revoke all on function public.list_employer_role_assignments(uuid) from public, anon;
 grant execute on function public.list_employer_role_assignments(uuid) to authenticated;
+
 
 
 -- =============================================================================
@@ -14433,6 +14596,7 @@ grant execute on function public.create_account_link_invitation(text),
   public.redeem_account_link_invitation(text), public.revoke_verified_account_link(uuid),
   public.list_my_verified_account_links()
 to authenticated;
+
 
 
 -- =============================================================================
@@ -14749,6 +14913,7 @@ grant execute on function public.request_profile_transfer_preview(uuid),
   public.approve_profile_transfer_preview(uuid), public.cancel_profile_transfer_preview(uuid),
   public.list_my_profile_transfer_previews(), public.get_profile_transfer_comparison(uuid)
 to authenticated;
+
 
 
 -- =============================================================================
@@ -15208,6 +15373,7 @@ grant execute on function public.create_profile_transfer_plan(uuid, uuid),
   public.get_profile_transfer_plan(uuid) to authenticated;
 
 
+
 -- =============================================================================
 -- 20260904090000_learning_profile_access_helper.sql
 -- =============================================================================
@@ -15349,6 +15515,7 @@ create policy "Linked accounts can view accessible skills"
   using (private.can_view_learning_profile(user_id));
 
 
+
 -- =============================================================================
 -- 20260904100000_grant_connections_select.sql
 -- =============================================================================
@@ -15381,6 +15548,7 @@ create policy "Linked accounts can view accessible skills"
 -- own connections, so this grant is safe regardless of environment.
 
 grant select on public.connections to authenticated;
+
 
 
 -- =============================================================================
@@ -15418,6 +15586,7 @@ create policy "Linked accounts can view accessible experience"
   using (private.can_view_learning_profile(user_id));
 
 
+
 -- =============================================================================
 -- 20260904111500_grant_courses_select.sql
 -- =============================================================================
@@ -15447,6 +15616,7 @@ create policy "Linked accounts can view accessible experience"
 -- correctly, so this grant is safe regardless of environment.
 
 grant select on public.courses to authenticated;
+
 
 
 -- =============================================================================
@@ -15547,6 +15717,7 @@ create policy "Linked accounts can view accessible xapi statement-skill links"
   using (private.can_view_learning_profile(user_id));
 
 
+
 -- =============================================================================
 -- 20260904121500_grant_skills_courses_experience_dependents_select.sql
 -- =============================================================================
@@ -15587,6 +15758,7 @@ grant select on
   public.xapi_statement_skills,
   public.xapi_statements
 to authenticated;
+
 
 
 -- =============================================================================
@@ -16026,6 +16198,7 @@ grant execute on function
 to authenticated;
 
 
+
 -- =============================================================================
 -- 20260904140000_revoke_link_cascades_workspace_access.sql
 -- =============================================================================
@@ -16109,6 +16282,7 @@ end
 $$;
 
 
+
 -- =============================================================================
 -- 20260904150000_connections_access_helper.sql
 -- =============================================================================
@@ -16147,6 +16321,7 @@ create policy "Linked accounts can view accessible connections"
     private.can_view_learning_profile(user_a_id)
     or private.can_view_learning_profile(user_b_id)
   );
+
 
 
 -- =============================================================================
@@ -16190,6 +16365,7 @@ create policy "Linked accounts can view accessible manager team memberships"
   on manager_team_memberships for select
   to authenticated
   using (private.can_view_learning_profile(member_user_id));
+
 
 
 -- =============================================================================
@@ -16264,6 +16440,7 @@ create policy "Linked accounts can view accessible team activity invitations"
   );
 
 
+
 -- =============================================================================
 -- 20260904180000_connection_requests_invites_access_helper.sql
 -- =============================================================================
@@ -16314,6 +16491,7 @@ create policy "Linked accounts can view accessible connection invites"
   using (private.can_view_learning_profile(inviter_id));
 
 
+
 -- =============================================================================
 -- 20260904181500_grant_connection_invites_select.sql
 -- =============================================================================
@@ -16346,6 +16524,7 @@ create policy "Linked accounts can view accessible connection invites"
 -- grant is safe regardless of environment.
 
 grant select on public.connection_invites to authenticated;
+
 
 
 -- =============================================================================
@@ -16422,6 +16601,7 @@ create policy "Linked accounts can view accessible shared skill records"
   );
 
 
+
 -- =============================================================================
 -- 20260904191500_grant_employer_data_access_shared_skills_select.sql
 -- =============================================================================
@@ -16453,6 +16633,7 @@ create policy "Linked accounts can view accessible shared skill records"
 -- environment.
 
 grant select on public.employer_data_access_shared_skills to authenticated;
+
 
 
 -- =============================================================================
@@ -16507,6 +16688,7 @@ create policy "Linked accounts can view accessible validation requests"
   );
 
 
+
 -- =============================================================================
 -- 20260904201500_grant_skill_peer_ratings_select.sql
 -- =============================================================================
@@ -16534,6 +16716,7 @@ create policy "Linked accounts can view accessible validation requests"
 -- linked accounts, so this grant is safe regardless of environment.
 
 grant select on public.skill_peer_ratings to authenticated;
+
 
 
 -- =============================================================================
@@ -16611,6 +16794,7 @@ create policy "Linked accounts can view accessible share link skills"
   );
 
 
+
 -- =============================================================================
 -- 20260904211500_grant_searchable_and_share_link_skills_select.sql
 -- =============================================================================
@@ -16637,6 +16821,7 @@ create policy "Linked accounts can view accessible share link skills"
 -- these grants are safe regardless of environment.
 
 grant select on public.profile_searchable_skills, public.profile_share_links, public.profile_share_link_skills to authenticated;
+
 
 
 -- =============================================================================
@@ -16713,6 +16898,7 @@ create policy "Linked accounts can view accessible role assignments"
       private.employer_member_user_id(employer_member_id)
     )
   );
+
 
 
 -- =============================================================================
@@ -16866,6 +17052,7 @@ end
 $$;
 
 
+
 -- =============================================================================
 -- 20260904230000_transfer_plan_conflict_guards.sql
 -- =============================================================================
@@ -16992,6 +17179,7 @@ begin
     jsonb_build_object('itemId', p_item_id, 'action', p_action));
 end
 $$;
+
 
 
 -- =============================================================================
@@ -17418,6 +17606,7 @@ revoke all on function public.execute_profile_transfer_plan(uuid, uuid) from pub
 grant execute on function public.execute_profile_transfer_plan(uuid, uuid) to authenticated;
 
 
+
 -- =============================================================================
 -- 20260905090000_system_provider_global_catalogue.sql
 -- =============================================================================
@@ -17610,6 +17799,7 @@ create policy "View public, personal, own organisation's, catalogued, or platfor
 
 comment on column public.organisations.is_system is
   'True only for ORG-00001, the permanent provider that owns the Global catalogue used by learner-facing discovery.';
+
 
 
 -- =============================================================================
@@ -18032,6 +18222,79 @@ comment on table public.skill_composite_definitions is
   'Versioned definitions that compose independently reusable library skills into a broader skill.';
 comment on column public.skill_composite_components.contribution_weight is
   'Relative weight reserved for derived-progress calculations; phase one displays component coverage only.';
+
+
+
+-- =============================================================================
+-- 20260905110000_employer_admin_provider_access_permanent.sql
+-- =============================================================================
+
+-- An employer admin already gets a real organisation_members admin row on
+-- their employer's auto-provisioned attached provider organisation the
+-- moment their employer_members admin role becomes active (addEmployerMember
+-- for a brand-new account, decide_employer_invite's accept path for an
+-- existing one -- 20260902090000/20260902160000). That grant is meant to be
+-- an automatic, permanent consequence of being this employer's admin, not an
+-- independently manage-able provider-staff relationship: nothing should be
+-- able to remove it through the ordinary "remove organisation member" path
+-- (OrganisationStaffPanel, reused verbatim inside the employer console's
+-- Users tab) while they remain an active employer admin, since that would
+-- silently break their access to the Training/Skills/Catalogues/Resources
+-- tabs the employer console surfaces for them, with no employer-side sign
+-- that anything changed.
+--
+-- Enforced with a BEFORE DELETE trigger rather than only a UI guard, so it
+-- holds regardless of caller (the reused staff panel, a future admin tool,
+-- or a direct client call) -- an RLS USING clause on DELETE can only make
+-- the row invisible to remove, not explain why, and this needs a clear
+-- error message. Removing the person's employer-admin role itself (via
+-- removeEmployerMember, or a future demotion path) is unaffected by this
+-- trigger and remains the correct way to end their employer-admin status;
+-- it does not itself revoke this provider grant today, which stays a known,
+-- separate limitation.
+
+-- Deliberately does NOT fire when auth.users no longer has this user_id:
+-- organisation_members.user_id references auth.users(id) ON DELETE CASCADE,
+-- so deleting an account that still holds an active employer-admin role
+-- would otherwise cascade into this same trigger and abort the whole
+-- account deletion with this function's own exception. Once the user row
+-- is gone there is nothing left to protect.
+create or replace function prevent_employer_admin_provider_removal()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if exists (select 1 from auth.users where id = old.user_id)
+    and exists (
+      select 1
+      from employer_members em
+      join employers e on e.id = em.employer_id
+      where em.user_id = old.user_id
+        and em.role = 'admin'
+        and em.status = 'active'
+        and e.provider_organisation_id = old.organisation_id
+    )
+  then
+    raise exception 'This access is automatic while they are an admin of the linked employer. Remove their employer admin role instead.';
+  end if;
+  return old;
+end;
+$$;
+
+-- Not practically callable outside trigger context anyway (Postgres refuses
+-- direct invocation of a `returns trigger` function), but every comparable
+-- trigger function elsewhere in this codebase explicitly revokes the
+-- default PUBLIC execute grant too (e.g. validate_experience_parent_type,
+-- sync_subject_organization_from_parent) -- matching that here rather than
+-- relying solely on the `returns trigger` restriction.
+revoke all on function prevent_employer_admin_provider_removal() from public, anon, authenticated;
+
+create trigger prevent_employer_admin_provider_removal_trigger
+  before delete on organisation_members
+  for each row execute procedure prevent_employer_admin_provider_removal();
+
 
 
 -- =============================================================================

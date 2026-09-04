@@ -52,6 +52,19 @@ export async function listPendingManagerTeamInvites(teamId) {
   return (data ?? []).map((row) => ({ id: row.id, email: row.invited_email, sentAt: row.invited_at }))
 }
 
+// Any learner can freely become a manager (create_manager_workspace is
+// idempotent and open to any authenticated user, not a granted role), so
+// callers outside the manager console itself -- e.g. "also invite them to
+// your team" from a skill recommendation -- can resolve a target team
+// without the user ever having visited it. Mirrors ManagerConsolePage.jsx's
+// own load() exactly: reuse the first existing team, or create "My team" if
+// there isn't one yet.
+export async function getOrCreateMyDefaultManagerTeam() {
+  const workspaceId = await createManagerWorkspace()
+  const teams = await listManagerTeams(workspaceId)
+  return teams[0]?.id ?? (await createManagerTeam(workspaceId, { name: 'My team' }))
+}
+
 export async function inviteConnectionToManagerTeam(teamId, memberUserId) {
   const { data, error } = await supabase.rpc('invite_connection_to_manager_team', {
     p_team_id: teamId, p_member_user_id: memberUserId,
