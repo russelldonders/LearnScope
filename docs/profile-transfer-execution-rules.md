@@ -180,27 +180,21 @@ all.
 
 - `move`: reassign `experience.user_id`. Reassign dependents' own
   `user_id`: `skill_experience_links`, `course_experience_links`.
-  `parent_experience_id` is self-referential on `experience` itself -- no
-  separate reassignment needed; a moved parent and a moved child both carry
-  their own `user_id` reassignment independently since both are `experience`
-  rows in the same plan item set (or, if only the parent moves and the
-  child doesn't, the self-reference now points across profiles, which
-  Open question 1 below flags as a case needing an explicit rule, not a
-  silent allow).
+  `parent_experience_id` is self-referential on `experience` itself; per
+  Decision 1 below, a parent and every child pointing at it are always the
+  same plan item action, so both carry their own `user_id` reassignment
+  together and the self-reference never crosses profiles.
 - `employer_role_assignments.learner_experience_id`: set by the learner
   themselves via `decide_employer_role_assignment`, but the *assignment
   row* is out of scope per principle 7 (gated through `employer_members`).
   If the linked `experience` row moves, this FK still resolves to the same
   experience id (principle 3), now owned by the durable login -- consistent,
-  requires no change, but is a cross-domain edge case worth flagging (see
-  Open questions).
+  requires no change.
 - `keep_durable`/`use_source`: retire/promote the experience plus its
-  exclusive dependents. A source experience with children whose
-  `parent_experience_id` points at it, where those children are *not*
-  independently in the plan as `move`, is the same cross-profile self-
-  reference problem noted above -- must be resolved before `keep_durable`/
-  `use_source` can run for that item, not silently orphaned or
-  cross-profile-linked.
+  exclusive dependents, subject to Decision 2 below (refuses if exclusive
+  dependents exist -- forces a renamed `move` instead). Per Decision 1, a
+  source experience with children is always grouped with them, so this
+  action applies to the whole parent+children set together.
 
 ## Domains not yet in `profile_transfer_plan_items` (need new domain values + item generation)
 
@@ -284,31 +278,46 @@ same shape already established for skills/courses/experience.
    row, not a blanket `on conflict do nothing` that could silently swallow
    a real bug elsewhere in the same statement.
 
-## Open questions (need a decision before the executor can be built)
+## Decisions (resolved 2026-09-04)
 
-1. **Cross-profile `parent_experience_id`** (experience section above): if
-   a parent experience moves/retires but a child does not (or vice versa),
-   what happens? Options: (a) require the plan generator to always group a
-   parent with all its children as one atomic sub-decision, never letting
-   them diverge; (b) allow divergence and null out `parent_experience_id`
-   across profiles at execution time, with a plan-time warning. This
-   document does not pick one -- it needs a product decision, not an
-   engineering default.
-2. **`keep_durable`/`use_source` when the source side has exclusive
-   dependents the durable side lacks** (e.g. a source skill with assessment
-   evidence, being discarded because the durable profile already has a
-   same-named skill): principle 4 says this can't happen silently, but the
-   current plan UI (`docs/claude-account-portability-handoff.md`'s
-   "Immutable transfer-plan review" phase) has no re-parenting interaction
-   for "move this evidence onto the durable skill instead of losing it."
-   That UI needs to exist before `keep_durable`/`use_source` can be a safe
-   default anywhere dependents exist, or the executor needs to refuse the
-   action and force `move`-with-rename instead.
-3. **Connections/xAPI/employer/manager domains have no plan-item UI yet**
-   (this document only defines their execution rule, not their preview/
-   conflict-resolution UI, which does not exist). Building the executor
-   for these domains before that UI exists means the mutual-approval
-   review a learner sees before executing would not actually show what's
-   about to happen to their connections or xAPI history -- a gap against
-   `docs/account-portability.md` invariant 7 ("Any future profile transfer
-   must show a conflict preview").
+These were open questions in the first draft of this document; the project
+owner decided all three the same session it was written.
+
+1. **Cross-profile `parent_experience_id`: always group parent with
+   children.** A parent experience and every child whose `parent_
+   experience_id` points at it are one atomic sub-decision in the plan
+   generator -- they always share the same action (`move` together,
+   `keep_durable` together, `use_source` together). The plan generator must
+   refuse to let them diverge rather than allow a cross-profile self-
+   reference or a silent null-out. This replaces the divergence-allowed
+   option entirely; there is no execution-time null-out path to implement.
+2. **`keep_durable`/`use_source` refuses when exclusive dependents exist;
+   forces a renamed `move` instead.** If a source skill/course/experience
+   item has any exclusive dependent (assessment evidence, a validation
+   request, a completed course assessment, etc. -- the same list principle
+   4 already names), `keep_durable` and `use_source` are not offered as
+   resolutions for that item at all. The only legal resolution is `move`,
+   with the source record's name suffixed/de-duplicated so it coexists
+   with the durable profile's same-named record rather than merging into
+   it. This means some transfers end up with duplicate-looking records the
+   learner can manually clean up afterward, which is the accepted
+   trade-off for never silently discarding evidence -- no re-parenting UI
+   is being built for this. `create_profile_transfer_plan`'s conflict
+   detection needs to compute "has exclusive dependents" per source item
+   and pass that through to `resolve_profile_transfer_plan_item`, which
+   must reject `keep_durable`/`use_source` for any item where it's true.
+3. **Plan-item preview support for connections/xAPI/employer/manager
+   domains must be built before the executor acts on them.** This is a new
+   prerequisite item between this document and the executor (§3) --
+   `profile_transfer_plan_items.domain` needs the new domain values, `create_
+   profile_transfer_plan` needs matching item-generation queries for each
+   (duplicate detection where it applies, e.g. connections' existing-
+   relationship collapse; pure inventory listing where "duplicate" doesn't
+   apply, e.g. xAPI statements), and the review UI
+   (`src/pages/account-linking/transfer-plan/`) needs to render them. The
+   executor must not be extended to a domain before that domain has real
+   plan-item preview coverage a learner can actually review and approve --
+   matches `docs/account-portability.md` invariant 7 verbatim. Until this
+   exists, the executor can only be built for skills/courses/experience
+   (the three domains `profile_transfer_plan_items` already models), not
+   the full table list in this document.

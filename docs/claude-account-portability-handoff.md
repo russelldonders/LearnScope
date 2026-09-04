@@ -924,19 +924,32 @@ sharing have different access semantics.
 
 ### 2. Define domain-specific execution rules
 
-**Status (2026-09-04): specified, not implemented.** See
+**Status (2026-09-04): specified and decided, not implemented.** See
 `docs/profile-transfer-execution-rules.md` for the full, reviewed
 move/keep_durable/use_source rule set per table, built directly from item
 1's completed table-by-table inventory (more precise than the summary
 below, which predates that inventory and undercounts/miscategorizes a few
 tables -- e.g. "employer role alignment references" turned out to need no
-transfer rule at all, not a dependency to handle). That document also
-records three open questions -- cross-profile `parent_experience_id`,
-re-parenting dependents on `keep_durable`/`use_source`, and missing
-plan-item UI for connections/xAPI/employer/manager domains -- that need a
-decision before item 3 (the executor) can be built safely. Original
-dependency catalog kept below for context; superseded by the new document
-where they differ.
+transfer rule at all, not a dependency to handle). Its three open questions
+were decided the same session (project owner's call, all three the
+recommended option):
+
+1. A parent experience and its children are always one atomic plan-item
+   decision -- never allowed to diverge across profiles.
+2. `keep_durable`/`use_source` refuses when the source item has exclusive
+   dependents (evidence, validation history, etc.); the only legal
+   resolution then is a renamed `move`, accepting some duplicate-looking
+   records over ever silently discarding evidence. No re-parenting UI will
+   be built.
+3. **New prerequisite before item 3**: connections/xAPI/employer/manager
+   domains need real `profile_transfer_plan_items` preview coverage (new
+   `domain` values, item-generation queries, review-UI rendering) before
+   the executor can touch them -- until that exists, the executor's first
+   buildable scope is skills/courses/experience only, the three domains
+   already modeled today.
+
+Original dependency catalog kept below for context; superseded by the new
+document where they differ.
 
 The executor must handle roots and every dependent foreign key in one database
 transaction. The local catalog identified these dependencies:
