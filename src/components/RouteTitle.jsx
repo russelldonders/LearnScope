@@ -30,7 +30,7 @@ const TITLES = [
   [/^\/provider$/, 'Provider console'],
   [/^\/admin\/users\/[^/]+$/, 'Admin user details'],
   [/^\/admin\/providers$/, 'Admin providers'],
-  [/^\/admin\/catalogue$/, 'Admin course catalogue'],
+  [/^\/admin\/catalogue$/, 'Admin courses'],
   [/^\/admin\/skills\/[^/]+$/, 'Admin skill details'],
   [/^\/admin\/skills$/, 'Admin skills'],
   [/^\/admin\/tags$/, 'Admin tags'],

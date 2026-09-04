@@ -140,16 +140,16 @@ export default function AdminProviders() {
     useSortedPage(filtered, ORG_SORT_ACCESSORS, { urlSync: { searchParams, setSearchParams } })
   const { columns, visibleColumns, toggleColumn, moveColumn, resetToDefault } =
     useColumnPreferences('admin-providers', ORG_COLUMNS)
-  const selection = useRowSelection(filtered.map((o) => o.id))
+  const selection = useRowSelection(filtered.filter((o) => !o.is_system).map((o) => o.id))
   const selectedOrgs = useMemo(
     () => filtered.filter((o) => selection.selected.has(o.id)),
     [filtered, selection.selected]
   )
   const selectedToActivate = useMemo(() => selectedOrgs.filter((o) => o.status !== 'active'), [selectedOrgs])
-  const selectedToSuspend = useMemo(() => selectedOrgs.filter((o) => o.status === 'active'), [selectedOrgs])
+  const selectedToSuspend = useMemo(() => selectedOrgs.filter((o) => o.status === 'active' && !o.is_system), [selectedOrgs])
   const [bulkAction, setBulkAction] = useState(null)
   const [bulkActing, setBulkActing] = useState(false)
-  const pageIds = pageItems.map((o) => o.id)
+  const pageIds = pageItems.filter((o) => !o.is_system).map((o) => o.id)
   const selectedOnPage = pageIds.filter((id) => selection.selected.has(id)).length
 
   useEffect(() => {
@@ -458,6 +458,7 @@ function OrganisationRow({
             type="checkbox"
             checked={selected}
             onChange={onToggleSelected}
+            disabled={org.is_system}
             className="rounded border-hairline accent-moss"
           />
         </td>
@@ -480,9 +481,13 @@ function OrganisationRow({
             <button type="button" onClick={onToggleExpanded} className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper whitespace-nowrap">
               {expanded ? 'Hide users' : 'Manage users'}
             </button>
-            <button type="button" onClick={onToggleStatus} className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper whitespace-nowrap">
-              {org.status === 'active' ? 'Deactivate' : 'Reactivate'}
-            </button>
+            {org.is_system ? (
+              <span className="rounded-full bg-moss/10 px-2.5 py-1 text-xs font-medium text-moss">System provider</span>
+            ) : (
+              <button type="button" onClick={onToggleStatus} className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper whitespace-nowrap">
+                {org.status === 'active' ? 'Deactivate' : 'Reactivate'}
+              </button>
+            )}
           </div>
         </td>
       </tr>

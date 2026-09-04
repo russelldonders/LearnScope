@@ -23,7 +23,7 @@ export function formatCoursePrice(course) {
 const CATALOGUE_SELECT = `*,
   course_catalogue_skills(id, level, skill_library(id, name)),
   course_catalogue_tags(id, tags(id, name)),
-  course_catalogue_publications!inner(published_at, catalogues(id, name, is_global)),
+  course_catalogue_publications!inner(published_at, catalogues!inner(id, name, is_global)),
   organisations(logo_url, slug, public_profile_enabled)`
 
 function mapCatalogueCourse(course) {
@@ -60,6 +60,7 @@ export async function listCatalogueCourses() {
     .select(CATALOGUE_SELECT)
     .eq('status', 'approved')
     .eq('is_current_published', true)
+    .eq('course_catalogue_publications.catalogues.is_global', true)
     .not('course_catalogue_publications.published_at', 'is', null)
     .order('name')
   if (error) throw error
@@ -75,7 +76,13 @@ export async function getCatalogueCourse(id, { currentOnly = true } = {}) {
     .from('course_catalogue')
     .select(CATALOGUE_SELECT)
     .eq('id', id)
-  if (currentOnly) query = query.eq('status', 'approved').eq('is_current_published', true)
+  if (currentOnly) {
+    query = query
+      .eq('status', 'approved')
+      .eq('is_current_published', true)
+      .eq('course_catalogue_publications.catalogues.is_global', true)
+      .not('course_catalogue_publications.published_at', 'is', null)
+  }
   const { data, error } = await query.maybeSingle()
   if (error) throw error
   return data ? mapCatalogueCourse(data) : null

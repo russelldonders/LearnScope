@@ -6,7 +6,7 @@ const SECTIONS = [
   { to: '/admin/users', label: 'Users' },
   { to: '/admin/providers', label: 'Providers' },
   { to: '/admin/employers', label: 'Employers' },
-  { to: '/admin/catalogue', label: 'Course catalogue' },
+  { to: '/admin/catalogue', label: 'Courses' },
   { to: '/admin/skills', label: 'Skill library' },
   { to: '/admin/tags', label: 'Tags' },
   { to: '/admin/activity', label: 'Activity log' },
@@ -28,7 +28,7 @@ export default function AdminLayout({ children }) {
       <main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 py-8">
         <h1 className="font-display text-xl text-ink mb-1">Platform console</h1>
         <p className="text-sm text-secondary mb-6">
-          Manage users, provider organisations, and the shared course catalogue, skill library and
+          Manage users, provider organisations, and the shared courses, skill library and
           tags.
         </p>
 

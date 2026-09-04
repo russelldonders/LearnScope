@@ -3,7 +3,6 @@ import { Link, useSearchParams } from 'react-router-dom'
 import AdminLayout from './AdminLayout'
 import {
   listAllCatalogueCourses,
-  approveCatalogueCourse,
   rejectCatalogueCourse,
   deactivateCatalogueCourse,
 } from '../../lib/admin/catalogue'
@@ -30,7 +29,7 @@ const CATALOGUE_SORT_ACCESSORS = {
   price: (c) => (c.price_amount === null || c.price_amount === undefined ? -1 : Number(c.price_amount)),
 }
 
-// Customizable data columns only -- the trailing Approve/Reject/Deactivate
+// Customizable data columns only -- the trailing Reject/Deactivate
 // actions column stays pinned outside this list (this table has no bulk
 // selection, so there's no pinned checkbox column to worry about).
 const CATALOGUE_COLUMNS = [
@@ -124,12 +123,8 @@ export default function AdminCatalogue() {
   // a status) all land on the same filtered/sorted/paged view. Mirrors
   // AdminUsers.jsx's exact param-naming convention.
   //
-  // `org` (an organisations.id) is the same pattern applied to one more
-  // relationship: AdminProviders.jsx links a provider row straight to
-  // "this organisation's courses" via ?org=<id>, precise by id rather than
-  // name-text-matching since organisation_id is a real FK on course_
-  // catalogue. No visible filter control for it (unlike status) -- it's
-  // reached only by that incoming link, cleared the same way as the others.
+  // `org` is an organisations.id. AdminProviders links directly into this
+  // filter, and the select below also makes the all-provider scope explicit.
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
   const [statusFilter, setStatusFilter] = useUrlParam(searchParams, setSearchParams, 'status', 'all', { resetParams: ['page'] })
@@ -167,6 +162,17 @@ export default function AdminCatalogue() {
   // unfiltered list (not `filtered`) so the name still shows even when the
   // org filter combined with the other filters yields zero rows.
   const orgFilterName = orgFilter ? courses.find((c) => c.organisation_id === orgFilter)?.organisations?.name : null
+  const providers = useMemo(() => {
+    const byId = new Map()
+    for (const course of courses) {
+      if (course.organisation_id && course.organisations?.name) {
+        byId.set(course.organisation_id, course.organisations.name)
+      }
+    }
+    return [...byId.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [courses])
 
   function resetFilters() {
     writeUrlParams(searchParams, setSearchParams, { q: null, status: null, org: null, page: null })
@@ -176,19 +182,6 @@ export default function AdminCatalogue() {
     useSortedPage(filtered, CATALOGUE_SORT_ACCESSORS, { urlSync: { searchParams, setSearchParams } })
   const { columns, visibleColumns, toggleColumn, moveColumn, resetToDefault } =
     useColumnPreferences('admin-catalogue', CATALOGUE_COLUMNS)
-
-  async function handleApprove(course) {
-    setActioningId(course.id)
-    setError(null)
-    try {
-      await approveCatalogueCourse(course.id)
-      await load()
-    } catch (err) {
-      setError(`Couldn't approve this course: ${err.message}`)
-    } finally {
-      setActioningId(null)
-    }
-  }
 
   async function handleReject(course) {
     // The Confirm reject button is already disabled while the reason is
@@ -226,6 +219,10 @@ export default function AdminCatalogue() {
   return (
     <AdminLayout>
       <div className="space-y-6">
+        <div>
+          <h2 className="font-display text-lg text-ink">Courses</h2>
+          <p className="mt-1 text-sm text-secondary">All courses across every provider.</p>
+        </div>
         {orgFilter && (
           <div className="flex items-center gap-2 text-xs text-secondary bg-moss/10 border border-moss/30 rounded-md px-3 py-2">
             <span>
@@ -271,6 +268,18 @@ export default function AdminCatalogue() {
             placeholder="Search by course name or code…"
             className="flex-1 min-w-[220px] rounded-md border border-hairline bg-card px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
           />
+          <label className="sr-only" htmlFor="admin-course-provider-filter">Filter courses by provider</label>
+          <select
+            id="admin-course-provider-filter"
+            value={orgFilter}
+            onChange={(e) => setOrgFilter(e.target.value)}
+            className="min-w-[180px] rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+          >
+            <option value="">All providers</option>
+            {providers.map((provider) => (
+              <option key={provider.id} value={provider.id}>{provider.name}</option>
+            ))}
+          </select>
           {filtersActive && (
             <button
               type="button"
@@ -323,7 +332,6 @@ export default function AdminCatalogue() {
                         setRejectingId(null)
                         setRejectionReason('')
                       }}
-                      onApprove={() => handleApprove(course)}
                       onReject={() => handleReject(course)}
                       onDeactivate={() => handleDeactivate(course)}
                     />
@@ -348,7 +356,6 @@ function CatalogueRow({
   onRejectionReasonChange,
   onStartReject,
   onCancelReject,
-  onApprove,
   onReject,
   onDeactivate,
 }) {
@@ -363,15 +370,6 @@ function CatalogueRow({
         <td className="px-4 py-3">
           <div className="flex items-center gap-2 justify-end whitespace-nowrap">
             {(course.status === 'pending_approval' || course.status === 'draft') && (
-              <>
-                <button
-                  type="button"
-                  disabled={actioning}
-                  onClick={onApprove}
-                  className="rounded-md bg-moss text-paper py-1 px-3 text-xs font-medium hover:opacity-90 disabled:opacity-50"
-                >
-                  Approve
-                </button>
                 <button
                   type="button"
                   disabled={actioning}
@@ -380,7 +378,6 @@ function CatalogueRow({
                 >
                   Reject
                 </button>
-              </>
             )}
             {course.status === 'approved' && (
               <button
@@ -390,16 +387,6 @@ function CatalogueRow({
                 className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper disabled:opacity-50"
               >
                 Deactivate
-              </button>
-            )}
-            {(course.status === 'inactive' || course.status === 'rejected') && (
-              <button
-                type="button"
-                disabled={actioning}
-                onClick={onApprove}
-                className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper disabled:opacity-50"
-              >
-                Reactivate (approve)
               </button>
             )}
           </div>

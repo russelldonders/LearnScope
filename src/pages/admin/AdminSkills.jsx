@@ -16,12 +16,21 @@ const SKILL_SORT_ACCESSORS = {
   visibility: (s) => (s.is_private ? 'Private' : 'Public'),
   type: (s) => SKILL_TYPE_LABELS[s.type] ?? s.type ?? '',
   owner: (s) => s.ownerName?.toLowerCase() ?? '',
+  provider: (s) => s.providerName?.toLowerCase() ?? '',
   status: (s) => s.status ?? '',
 }
 
 // Customizable data columns only -- the selection checkbox (first) and the
 // per-row action buttons (last) stay pinned outside this list.
 const SKILL_COLUMNS = [
+  {
+    key: 'provider',
+    label: 'Provider',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-3 text-secondary whitespace-nowrap',
+    renderCell: (s) => s.providerName || '—',
+  },
   {
     key: 'code',
     label: 'ID',
@@ -99,10 +108,11 @@ export default function AdminSkills() {
 
   // Search text, sort, page and pageSize all live in the URL together
   // (?q=&sort=&dir=&page=&pageSize=) via useSortedPage's urlSync option and
-  // useUrlParam -- same convention as AdminUsers.jsx/AdminCatalogue.jsx. No
-  // status/type filter here -- this table has no such filter UI to url-sync.
+  // useUrlParam -- same convention as AdminUsers.jsx/AdminCatalogue.jsx.
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
+  const [providerFilter, setProviderFilter] = useUrlParam(searchParams, setSearchParams, 'provider', '', { resetParams: ['page'] })
+  const [typeFilter, setTypeFilter] = useUrlParam(searchParams, setSearchParams, 'type', '', { resetParams: ['page'] })
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({ category: '', description: '' })
   const [saving, setSaving] = useState(false)
@@ -193,11 +203,23 @@ export default function AdminSkills() {
   }
 
   const q = query.trim().toLowerCase()
-  const filtered = q ? skills.filter((s) => s.name.toLowerCase().includes(q)) : skills
-  const filtersActive = query !== ''
+  const filtered = skills.filter((skill) => {
+    if (q && !skill.name.toLowerCase().includes(q)) return false
+    if (providerFilter && skill.providerId !== providerFilter) return false
+    if (typeFilter && skill.type !== typeFilter) return false
+    return true
+  })
+  const providers = useMemo(() => {
+    const byId = new Map()
+    for (const skill of skills) {
+      if (skill.providerId && skill.providerName) byId.set(skill.providerId, skill.providerName)
+    }
+    return [...byId.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
+  }, [skills])
+  const filtersActive = query !== '' || providerFilter !== '' || typeFilter !== ''
 
   function resetFilters() {
-    writeUrlParams(searchParams, setSearchParams, { q: null, page: null })
+    writeUrlParams(searchParams, setSearchParams, { q: null, provider: null, type: null, page: null })
   }
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
@@ -223,6 +245,28 @@ export default function AdminSkills() {
             placeholder="Search skills…"
             className="flex-1 min-w-[220px] rounded-md border border-hairline bg-card px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
           />
+          <label className="sr-only" htmlFor="admin-skill-provider-filter">Filter skills by provider</label>
+          <select
+            id="admin-skill-provider-filter"
+            value={providerFilter}
+            onChange={(e) => setProviderFilter(e.target.value)}
+            className="min-w-[170px] rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+          >
+            <option value="">All providers</option>
+            {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
+          </select>
+          <label className="sr-only" htmlFor="admin-skill-type-filter">Filter skills by type</label>
+          <select
+            id="admin-skill-type-filter"
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="min-w-[140px] rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+          >
+            <option value="">All types</option>
+            <option value="global">Global</option>
+            <option value="provider">Provider</option>
+            <option value="personal">Personal</option>
+          </select>
           {filtersActive && (
             <button
               type="button"

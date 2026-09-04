@@ -14,21 +14,24 @@ async function attachOwnerInfo(skills) {
   const userIds = [...new Set(skills.map((s) => s.created_by).filter(Boolean))]
   const orgIds = [...new Set(skills.map((s) => s.organisation_id).filter(Boolean))]
 
-  const [profilesResult, orgsResult] = await Promise.all([
+  const [profilesResult, orgsResult, systemOrgResult] = await Promise.all([
     userIds.length
       ? supabase.from('profiles').select('id, first_name, last_name').in('id', userIds)
       : Promise.resolve({ data: [] }),
     orgIds.length
       ? supabase.from('organisations').select('id, name').in('id', orgIds)
       : Promise.resolve({ data: [] }),
+    supabase.from('organisations').select('id, name').eq('is_system', true).maybeSingle(),
   ])
   if (profilesResult.error) throw profilesResult.error
   if (orgsResult.error) throw orgsResult.error
+  if (systemOrgResult.error) throw systemOrgResult.error
 
   const nameByUserId = new Map(
     (profilesResult.data ?? []).map((p) => [p.id, [p.first_name, p.last_name].filter(Boolean).join(' ') || null])
   )
   const orgNameById = new Map((orgsResult.data ?? []).map((o) => [o.id, o.name]))
+  const systemOrg = systemOrgResult.data ?? null
 
   return skills.map((s) => ({
     ...s,
@@ -37,6 +40,10 @@ async function attachOwnerInfo(skills) {
     // global (shared, public), personal (one learner's private entry), or
     // provider (a specific organisation's own).
     type: s.organisation_id ? 'provider' : s.is_private ? 'personal' : 'global',
+    providerId: s.organisation_id ?? (!s.is_private ? systemOrg?.id ?? null : null),
+    providerName: s.organisation_id
+      ? (orgNameById.get(s.organisation_id) ?? 'Unknown organisation')
+      : (!s.is_private ? systemOrg?.name ?? 'Global provider' : null),
     ownerName: s.organisation_id
       ? (orgNameById.get(s.organisation_id) ?? 'Unknown organisation')
       : (nameByUserId.get(s.created_by) ?? null),

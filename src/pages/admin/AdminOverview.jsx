@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AdminLayout from './AdminLayout'
 import {
-  countPendingCourseApprovals,
   countRejectedCourses,
   countBlockedUsers,
   countInactiveProviders,
@@ -20,13 +19,6 @@ import { listAllOnboardingSteps } from '../../lib/admin/onboardingSteps'
 // no equivalent ?status= value for it; still an actionable destination,
 // just a less sharp one.
 const QUEUE_TILES = [
-  {
-    key: 'pendingApprovals',
-    heading: 'Pending course approvals',
-    to: '/admin/catalogue?status=pending_approval',
-    load: countPendingCourseApprovals,
-    describe: (n) => `${n} course${n === 1 ? '' : 's'} waiting for a decision`,
-  },
   {
     key: 'rejectedCourses',
     heading: 'Rejected courses awaiting revision',
@@ -113,7 +105,7 @@ export default function AdminOverview() {
         ) : zeroAttention ? (
           <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
             <p className="text-ink font-medium mb-1">Nothing needs your attention right now.</p>
-            <p className="text-sm text-secondary">No pending approvals, blocked users, or outstanding invitations.</p>
+            <p className="text-sm text-secondary">No blocked users, rejected courses, or outstanding invitations.</p>
           </div>
         ) : (
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -180,7 +172,7 @@ export default function AdminOverview() {
               className="block rounded-lg border border-hairline bg-card p-4 hover:border-moss transition-colors max-w-md"
             >
               <p className="text-sm text-ink">
-                {recentSubmissions} course{recentSubmissions === 1 ? '' : 's'} submitted to the catalogue in the last 7 days
+                {recentSubmissions} course{recentSubmissions === 1 ? '' : 's'} submitted in the last 7 days
               </p>
             </Link>
           </div>
