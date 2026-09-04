@@ -29,7 +29,13 @@ export default async function handler(req, res) {
       global: { headers: { Authorization: `Bearer ${accessToken}` } },
     })
     const { error: scrubError } = await asUser.rpc('delete_own_account_scrub')
-    if (scrubError) throw scrubError
+    if (scrubError) {
+      if (scrubError.code === 'LS001') {
+        res.status(409).json({ error: scrubError.message })
+        return
+      }
+      throw scrubError
+    }
 
     // From here on, the pre-deletion scrub has already committed (PII
     // stripped from other learners' records). If anything below fails, the
