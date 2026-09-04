@@ -1,0 +1,27 @@
+-- Found while adding SQL allow/deny tests for
+-- 20260904190000_employer_sharing_access_helper.sql: a fresh local
+-- `supabase db reset` leaves `authenticated` without SELECT on
+-- `employer_data_access_shared_skills`
+-- (20260902220000_employer_data_access_shared_skills.sql enabled RLS and
+-- added a correctly-scoped "Parties to a data access request can view its
+-- shared skills" policy, but no migration ever granted the table-level
+-- privilege), confirmed via `information_schema.role_table_grants` against
+-- a fresh local reset: authenticated has TRUNCATE/REFERENCES/TRIGGER on this
+-- table but not SELECT/INSERT/UPDATE/DELETE.
+--
+-- Same root cause and same verdict as every prior instance of this gap
+-- (connections, courses, skills' dependents, connection_invites): Staging's
+-- Postgres instance has an ambient default ACL (not captured in any
+-- migration) that grants `authenticated` full table privileges on new
+-- tables automatically, so this is not currently broken for real users on
+-- Staging. The fix still matters for local dev and for
+-- `stage_bootstrap_consolidated.sql`'s "bootstrap a brand-new Staging
+-- project from empty" use case (CLAUDE.md #17), which would not inherit
+-- Staging's undocumented default.
+--
+-- The RLS policy on employer_data_access_shared_skills already scopes
+-- visible rows to the request's two parties (and, as of this transition,
+-- the learner's linked accounts), so this grant is safe regardless of
+-- environment.
+
+grant select on public.employer_data_access_shared_skills to authenticated;

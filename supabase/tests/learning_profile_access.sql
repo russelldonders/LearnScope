@@ -7,9 +7,12 @@
 -- manager_team_memberships in
 -- 20260904160000_manager_team_memberships_access_helper.sql, to its
 -- dependents in 20260904170000_manager_team_dependents_access_helper.sql,
--- and to connection_requests/connection_invites in
--- 20260904180000_connection_requests_invites_access_helper.sql. Run against
--- a local database only; the script rolls back everything it does.
+-- to connection_requests/connection_invites in
+-- 20260904180000_connection_requests_invites_access_helper.sql, and to
+-- employer_data_access_requests/employer_data_access_shared_skills/
+-- employer_skill_suggestions/course_assignments in
+-- 20260904190000_employer_sharing_access_helper.sql. Run against a local
+-- database only; the script rolls back everything it does.
 --
 -- Proves the full scenario matrix for skills, courses, and experience, and
 -- (since all eleven dependent tables share the exact same policy shape and
@@ -475,5 +478,88 @@ end
 $$;
 
 select pg_temp.assert_sees_connection_request('60000000-0000-0000-0000-000000000006', true, 'request: recipient login');
+
+-- ----------------------------------------------------------------------------
+-- employer sharing: employer_data_access_requests, employer_data_access_
+-- shared_skills, employer_skill_suggestions, course_assignments
+-- (20260904190000_employer_sharing_access_helper.sql). Reuses owner a
+-- (...004) and its already-active linked account (...005).
+-- ----------------------------------------------------------------------------
+
+insert into public.organisations (id, name, type)
+values ('d0000000-0000-0000-0000-00000000000d', 'Test Provider Org', 'provider');
+
+insert into public.employers (id, name, provider_organisation_id)
+values ('d0000000-0000-0000-0000-0000000000d1', 'Test Employer', 'd0000000-0000-0000-0000-00000000000d');
+
+insert into public.employer_data_access_requests (id, employer_id, learner_id, status)
+values ('d0000000-0000-0000-0000-0000000000d2', 'd0000000-0000-0000-0000-0000000000d1', '40000000-0000-0000-0000-000000000004', 'approved');
+
+insert into public.employer_data_access_shared_skills (request_id, skill_id)
+values ('d0000000-0000-0000-0000-0000000000d2', '40000000-0000-0000-0000-00000000aaaa');
+
+insert into public.skill_library (id, name)
+values ('d0000000-0000-0000-0000-0000000000d3', 'Test Library Skill');
+
+insert into public.employer_skill_suggestions (id, employer_id, learner_id, skill_library_id, skill_name)
+values ('d0000000-0000-0000-0000-0000000000d4', 'd0000000-0000-0000-0000-0000000000d1', '40000000-0000-0000-0000-000000000004', 'd0000000-0000-0000-0000-0000000000d3', 'Test Library Skill');
+
+insert into public.course_catalogue (id, name, version_group_id)
+values ('d0000000-0000-0000-0000-0000000000d5', 'Test Catalogue Course', 'd0000000-0000-0000-0000-0000000000d5');
+
+insert into public.course_assignments (id, employer_id, catalogue_course_id, assigned_to, assigned_by)
+values ('d0000000-0000-0000-0000-0000000000d6', 'd0000000-0000-0000-0000-0000000000d1', 'd0000000-0000-0000-0000-0000000000d5', '40000000-0000-0000-0000-000000000004', '40000000-0000-0000-0000-000000000004');
+
+create or replace function pg_temp.assert_sees_employer_sharing(p_as_user uuid, p_expect_visible boolean, p_label text)
+returns void
+language plpgsql
+as $$
+declare
+  v_sees_request boolean;
+  v_sees_shared_skill boolean;
+  v_sees_suggestion boolean;
+  v_sees_assignment boolean;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', p_as_user::text, true);
+
+  select exists (select 1 from public.employer_data_access_requests where id = 'd0000000-0000-0000-0000-0000000000d2') into v_sees_request;
+  select exists (select 1 from public.employer_data_access_shared_skills where request_id = 'd0000000-0000-0000-0000-0000000000d2') into v_sees_shared_skill;
+  select exists (select 1 from public.employer_skill_suggestions where id = 'd0000000-0000-0000-0000-0000000000d4') into v_sees_suggestion;
+  select exists (select 1 from public.course_assignments where id = 'd0000000-0000-0000-0000-0000000000d6') into v_sees_assignment;
+
+  reset role;
+
+  if v_sees_request is distinct from p_expect_visible then
+    raise exception '% : expected data-access-request visibility=%, got %', p_label, p_expect_visible, v_sees_request;
+  end if;
+  if v_sees_shared_skill is distinct from p_expect_visible then
+    raise exception '% : expected shared-skill visibility=%, got %', p_label, p_expect_visible, v_sees_shared_skill;
+  end if;
+  if v_sees_suggestion is distinct from p_expect_visible then
+    raise exception '% : expected suggestion visibility=%, got %', p_label, p_expect_visible, v_sees_suggestion;
+  end if;
+  if v_sees_assignment is distinct from p_expect_visible then
+    raise exception '% : expected course-assignment visibility=%, got %', p_label, p_expect_visible, v_sees_assignment;
+  end if;
+end
+$$;
+
+-- 1. The learner's own login is unaffected.
+select pg_temp.assert_sees_employer_sharing('40000000-0000-0000-0000-000000000004', true, 'employer sharing: learner login');
+
+-- 2. Unrelated login is denied.
+select pg_temp.assert_sees_employer_sharing('c0000000-0000-0000-0000-00000000000c', false, 'employer sharing: unrelated login');
+
+-- 3. Linked account (already active) sees all four.
+select pg_temp.assert_sees_employer_sharing('50000000-0000-0000-0000-000000000005', true, 'employer sharing: linked login with active link and grant');
+
+-- 4. Revoking the workspace_access grant denies the linked login again.
+update public.workspace_access
+set status = 'revoked', revoked_at = now()
+where workspace_id = '40000000-0000-0000-0000-000000000004'
+  and auth_account_id = '50000000-0000-0000-0000-000000000005';
+
+select pg_temp.assert_sees_employer_sharing('50000000-0000-0000-0000-000000000005', false, 'employer sharing: linked login after workspace_access revoked');
 
 rollback;

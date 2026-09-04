@@ -646,6 +646,60 @@ Verified: same full suite as prior increments (`db reset --local
 psql`, `npm run lint` exit 0, `npm run build`, `npm run test:run` 313 tests
 / 50 files unchanged).
 
+## Session update: employer sharing access helper (2026-09-04, continued)
+
+Ninth domain-by-domain increment, same session, starting the "employer
+sharing" domain. Added in `20260904190000_employer_sharing_access_helper.sql`
+and `20260904191500_grant_employer_data_access_shared_skills_select.sql`:
+
+- Converted four tables whose shape already matched an established pattern:
+  `employer_data_access_requests` and `employer_skill_suggestions`
+  (single-owner via `learner_id`, same shape as skills/courses/experience),
+  `course_assignments` (single-owner via `assigned_to` -- same principle,
+  different column name), and `employer_data_access_shared_skills`
+  (dependent, joins via `request_id` to `employer_data_access_requests.
+  learner_id` -- same pattern as `manager_team_shared_skills` joining via
+  `membership_id`). None of this changes an employer admin's own
+  `is_employer_admin`-gated visibility.
+- Checked first: all four tables have exactly the SELECT policies already
+  on record, all permissive, none with `using (true)`.
+  `employer_data_access_requests`, `employer_skill_suggestions`, and
+  `course_assignments` already had `grant select ... to authenticated` from
+  `20260903160000_restore_learner_action_read_grants.sql`.
+  `employer_data_access_shared_skills` did not -- the fourth instance of
+  this transition's now-familiar local/Staging grant gap, confirmed via
+  `information_schema.role_table_grants` against a fresh local reset and
+  fixed the same way as the prior three instances.
+- Deliberately NOT included: `employer_role_profiles`/`employer_role_
+  assignments` -- a materially different, mutual-consent role-alignment
+  shape (no direct learner column; joins through `employer_members`, and
+  represents a two-sided proposal/accept relationship rather than plain
+  learner-owned content) that needs its own dedicated review rather than a
+  mechanical reuse of this pattern. `employer_members`/`organisation_
+  members`/`profile_share_links` remain out of scope for the same
+  membership/account-setting reasoning as before.
+- Extended `supabase/tests/learning_profile_access.sql` with fixtures across
+  all four tables (organisation, employer, data-access request, shared
+  skill, skill-library suggestion, catalogue course assignment), proving
+  learner/unrelated/linked-active/linked-after-grant-revoked across all four
+  together.
+- Regenerated `stage_bootstrap_consolidated.sql`; diff-verified against the
+  prior bundle contains only these two migrations' content.
+
+Still unconverted: `employer_role_profiles`, `employer_role_assignments`,
+`employer_members`, `organisation_members`, `profile_share_links`, and
+every table named in the earlier "still unconverted" notes above (peer
+ratings, validation requests, searchable skills, employer/manager-shared
+skills, public share-link skills, parent/child experience links). The
+executor remains out of scope until those are addressed or explicitly
+judged out of scope one by one.
+
+Verified: same full suite as prior increments (`db reset --local
+--no-seed`, `db lint --local --level error`, all three
+`supabase/tests/*.sql` suites via `docker exec supabase_db_learnscope
+psql`, `npm run lint` exit 0, `npm run build`, `npm run test:run` 313 tests
+/ 50 files unchanged).
+
 ## Remaining product and engineering work
 
 ### 1. Replace login-ID ownership with profile ownership
