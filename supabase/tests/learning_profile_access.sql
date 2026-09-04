@@ -11,8 +11,10 @@
 -- 20260904180000_connection_requests_invites_access_helper.sql, and to
 -- employer_data_access_requests/employer_data_access_shared_skills/
 -- employer_skill_suggestions/course_assignments in
--- 20260904190000_employer_sharing_access_helper.sql. Run against a local
--- database only; the script rolls back everything it does.
+-- 20260904190000_employer_sharing_access_helper.sql, and to
+-- skill_peer_ratings/skill_validation_requests in
+-- 20260904200000_peer_ratings_validation_requests_access_helper.sql. Run
+-- against a local database only; the script rolls back everything it does.
 --
 -- Proves the full scenario matrix for skills, courses, and experience, and
 -- (since all eleven dependent tables share the exact same policy shape and
@@ -561,5 +563,68 @@ where workspace_id = '40000000-0000-0000-0000-000000000004'
   and auth_account_id = '50000000-0000-0000-0000-000000000005';
 
 select pg_temp.assert_sees_employer_sharing('50000000-0000-0000-0000-000000000005', false, 'employer sharing: linked login after workspace_access revoked');
+
+-- ----------------------------------------------------------------------------
+-- skill_peer_ratings and skill_validation_requests
+-- (20260904200000_peer_ratings_validation_requests_access_helper.sql).
+-- Reuses owner a (...004) and its linked account (...005), currently
+-- revoked from the employer-sharing scenario above -- reactivated first.
+-- ----------------------------------------------------------------------------
+
+update public.workspace_access
+set status = 'active', revoked_at = null
+where workspace_id = '40000000-0000-0000-0000-000000000004'
+  and auth_account_id = '50000000-0000-0000-0000-000000000005';
+
+insert into auth.users (id, email, email_confirmed_at)
+values ('e0000000-0000-0000-0000-00000000000e', 'validator@example.com', now());
+
+insert into public.skill_peer_ratings (id, skill_id, skill_name, skill_category, skill_owner_id, rater_id, level)
+values ('e0000000-0000-0000-0000-0000000000e1', '40000000-0000-0000-0000-00000000aaaa', 'SQL', 'Technical', '40000000-0000-0000-0000-000000000004', 'e0000000-0000-0000-0000-00000000000e', 4);
+
+insert into public.skill_validation_requests (id, skill_id, requester_id, validator_id, target_level)
+values ('e0000000-0000-0000-0000-0000000000e2', '40000000-0000-0000-0000-00000000aaaa', '40000000-0000-0000-0000-000000000004', 'e0000000-0000-0000-0000-00000000000e', 4);
+
+create or replace function pg_temp.assert_sees_ratings_and_validation(p_as_user uuid, p_expect_visible boolean, p_label text)
+returns void
+language plpgsql
+as $$
+declare
+  v_sees_rating boolean;
+  v_sees_validation boolean;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', p_as_user::text, true);
+
+  select exists (select 1 from public.skill_peer_ratings where id = 'e0000000-0000-0000-0000-0000000000e1') into v_sees_rating;
+  select exists (select 1 from public.skill_validation_requests where id = 'e0000000-0000-0000-0000-0000000000e2') into v_sees_validation;
+
+  reset role;
+
+  if v_sees_rating is distinct from p_expect_visible then
+    raise exception '% : expected peer-rating visibility=%, got %', p_label, p_expect_visible, v_sees_rating;
+  end if;
+  if v_sees_validation is distinct from p_expect_visible then
+    raise exception '% : expected validation-request visibility=%, got %', p_label, p_expect_visible, v_sees_validation;
+  end if;
+end
+$$;
+
+-- 1. The skill owner/requester's own login is unaffected.
+select pg_temp.assert_sees_ratings_and_validation('40000000-0000-0000-0000-000000000004', true, 'ratings/validation: owner login');
+
+-- 2. Unrelated login is denied.
+select pg_temp.assert_sees_ratings_and_validation('60000000-0000-0000-0000-000000000006', false, 'ratings/validation: unrelated login');
+
+-- 3. Linked account (reactivated above) sees both.
+select pg_temp.assert_sees_ratings_and_validation('50000000-0000-0000-0000-000000000005', true, 'ratings/validation: linked login with active link and grant');
+
+-- 4. Revoking the workspace_access grant denies the linked login again.
+update public.workspace_access
+set status = 'revoked', revoked_at = now()
+where workspace_id = '40000000-0000-0000-0000-000000000004'
+  and auth_account_id = '50000000-0000-0000-0000-000000000005';
+
+select pg_temp.assert_sees_ratings_and_validation('50000000-0000-0000-0000-000000000005', false, 'ratings/validation: linked login after workspace_access revoked');
 
 rollback;

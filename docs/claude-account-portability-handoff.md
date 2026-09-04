@@ -700,6 +700,50 @@ Verified: same full suite as prior increments (`db reset --local
 psql`, `npm run lint` exit 0, `npm run build`, `npm run test:run` 313 tests
 / 50 files unchanged).
 
+## Session update: peer ratings and validation requests (2026-09-04, continued)
+
+Tenth domain-by-domain increment, same session. Added in
+`20260904200000_peer_ratings_validation_requests_access_helper.sql` and
+`20260904201500_grant_skill_peer_ratings_select.sql`:
+
+- Reviewed and converted both tables deferred since the skills-dependents
+  increment as "different access semantics": `skill_peer_ratings`
+  (`skill_owner_id`) is single-owner, same shape as skills/courses/
+  experience -- its other existing policy (validators reviewing skills
+  they're validating) is an unrelated third-party path and stays untouched.
+  `rater_id` gets no new visibility: raters never had a SELECT policy of
+  their own either, so this stays purely additive to what the skill owner's
+  own login could already see. `skill_validation_requests` (`requester_id`,
+  `validator_id`) is two-party, same either-side shape as connections/
+  connection_requests.
+- Checked first: both tables' policies are exactly the ones already on
+  record, all permissive, none with `using (true)`.
+- Found a fifth instance of the local/Staging grant gap:
+  `skill_peer_ratings` has never had `grant select ... to authenticated` in
+  any migration (confirmed via `information_schema.role_table_grants`
+  against a fresh local reset). `skill_validation_requests` already had its
+  grant from `20260903160000_restore_learner_action_read_grants.sql`.
+- Extended `supabase/tests/learning_profile_access.sql` with a fresh
+  rating/validator fixture, reusing owner a and its linked account: proves
+  owner/unrelated/linked-active/linked-after-revoke across both tables.
+- Regenerated `stage_bootstrap_consolidated.sql`; diff-verified against the
+  prior bundle contains only these two migrations' content.
+
+Still unconverted: searchable skills, employer/manager-shared skills,
+public share-link skills, parent/child experience links,
+`employer_role_profiles`/`employer_role_assignments`,
+`employer_members`/`organisation_members`/`profile_share_links`, and
+`manager_collaboration_records`/`manager_collaboration_record_members`
+(these last two ruled permanently out of scope, not deferred -- see their
+own increment above). The executor remains out of scope until the rest are
+addressed or explicitly judged out of scope one by one.
+
+Verified: same full suite as prior increments (`db reset --local
+--no-seed`, `db lint --local --level error`, all three
+`supabase/tests/*.sql` suites via `docker exec supabase_db_learnscope
+psql`, `npm run lint` exit 0, `npm run build`, `npm run test:run` 313 tests
+/ 50 files unchanged).
+
 ## Remaining product and engineering work
 
 ### 1. Replace login-ID ownership with profile ownership

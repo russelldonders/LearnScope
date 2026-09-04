@@ -16455,3 +16455,84 @@ create policy "Linked accounts can view accessible shared skill records"
 grant select on public.employer_data_access_shared_skills to authenticated;
 
 
+-- =============================================================================
+-- 20260904200000_peer_ratings_validation_requests_access_helper.sql
+-- =============================================================================
+
+-- Tenth domain-by-domain step of the additive learning-profile ownership
+-- transition (see 20260904090000_learning_profile_access_helper.sql for the
+-- full design rationale). Converts skill_peer_ratings and skill_validation_
+-- requests, deferred from the skills-dependents increment as "different
+-- access semantics" (peer ratings, validation requests) pending review --
+-- reviewed now:
+--
+-- skill_peer_ratings (0010_connections.sql, its SELECT policy later
+-- recreated by 0017 for RLS-recursion reasons but unchanged in meaning) has
+-- exactly two existing SELECT policies: "Skill owners can view ratings on
+-- their skills" (auth.uid() = skill_owner_id -- single-owner, same shape as
+-- skills/courses/experience) and "Validators can view peer ratings for
+-- skills they're validating" (is_skill_validator(skill_id, auth.uid()) --
+-- an unrelated third-party reviewer path, left untouched). rater_id has no
+-- SELECT policy of its own today (a rater cannot look back at ratings they
+-- gave), so this migration adds no visibility for raters either -- purely
+-- additive to what the skill owner's own login could already see.
+--
+-- skill_validation_requests (0041_skill_validation.sql) is two-party:
+-- requester_id (the skill owner requesting validation) and validator_id
+-- (another skill owner performing it), each with their own existing SELECT
+-- policy. Same either-side shape as connections/connection_requests: visible
+-- if the caller can view either party's learning profile.
+--
+-- Checked before writing this migration: both tables' policies are exactly
+-- as quoted above, all permissive (not restrictive), none with
+-- `using (true)`. skill_validation_requests already has `grant select ...
+-- to authenticated` from 20260903160000_restore_learner_action_read_grants.
+-- sql. skill_peer_ratings does not -- confirmed via information_schema.
+-- role_table_grants against a fresh local reset -- so
+-- 20260904201500_grant_skill_peer_ratings_select.sql adds it, the fifth
+-- instance of the same local/Staging ambient-ACL divergence documented in
+-- earlier migrations of this transition.
+
+create policy "Linked accounts can view accessible peer ratings"
+  on skill_peer_ratings for select
+  to authenticated
+  using (private.can_view_learning_profile(skill_owner_id));
+
+create policy "Linked accounts can view accessible validation requests"
+  on skill_validation_requests for select
+  to authenticated
+  using (
+    private.can_view_learning_profile(requester_id)
+    or private.can_view_learning_profile(validator_id)
+  );
+
+
+-- =============================================================================
+-- 20260904201500_grant_skill_peer_ratings_select.sql
+-- =============================================================================
+
+-- Found while adding SQL allow/deny tests for
+-- 20260904200000_peer_ratings_validation_requests_access_helper.sql: a
+-- fresh local `supabase db reset` leaves `authenticated` without SELECT on
+-- `skill_peer_ratings` (0010_connections.sql enabled RLS and added
+-- correctly-scoped SELECT policies, but no migration ever granted the
+-- table-level privilege), confirmed via information_schema.role_table_grants
+-- against a fresh local reset: authenticated has REFERENCES/TRIGGER/
+-- TRUNCATE on this table but not SELECT/INSERT/UPDATE/DELETE.
+--
+-- Same root cause and same verdict as every prior instance of this gap:
+-- Staging's Postgres instance has an ambient default ACL (not captured in
+-- any migration) that grants `authenticated` full table privileges on new
+-- tables automatically, so this is not currently broken for real users on
+-- Staging. The fix still matters for local dev and for
+-- `stage_bootstrap_consolidated.sql`'s "bootstrap a brand-new Staging
+-- project from empty" use case (CLAUDE.md #17), which would not inherit
+-- Staging's undocumented default.
+--
+-- The RLS policies on skill_peer_ratings already scope visible rows to the
+-- skill owner, eligible validators, and (as of this transition) the owner's
+-- linked accounts, so this grant is safe regardless of environment.
+
+grant select on public.skill_peer_ratings to authenticated;
+
+

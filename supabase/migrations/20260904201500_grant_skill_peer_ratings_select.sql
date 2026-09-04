@@ -1,0 +1,23 @@
+-- Found while adding SQL allow/deny tests for
+-- 20260904200000_peer_ratings_validation_requests_access_helper.sql: a
+-- fresh local `supabase db reset` leaves `authenticated` without SELECT on
+-- `skill_peer_ratings` (0010_connections.sql enabled RLS and added
+-- correctly-scoped SELECT policies, but no migration ever granted the
+-- table-level privilege), confirmed via information_schema.role_table_grants
+-- against a fresh local reset: authenticated has REFERENCES/TRIGGER/
+-- TRUNCATE on this table but not SELECT/INSERT/UPDATE/DELETE.
+--
+-- Same root cause and same verdict as every prior instance of this gap:
+-- Staging's Postgres instance has an ambient default ACL (not captured in
+-- any migration) that grants `authenticated` full table privileges on new
+-- tables automatically, so this is not currently broken for real users on
+-- Staging. The fix still matters for local dev and for
+-- `stage_bootstrap_consolidated.sql`'s "bootstrap a brand-new Staging
+-- project from empty" use case (CLAUDE.md #17), which would not inherit
+-- Staging's undocumented default.
+--
+-- The RLS policies on skill_peer_ratings already scope visible rows to the
+-- skill owner, eligible validators, and (as of this transition) the owner's
+-- linked accounts, so this grant is safe regardless of environment.
+
+grant select on public.skill_peer_ratings to authenticated;
