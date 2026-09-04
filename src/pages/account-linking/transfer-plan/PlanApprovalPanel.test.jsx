@@ -136,4 +136,88 @@ describe('PlanApprovalPanel', () => {
     expect(screen.queryByRole('button', { name: 'Approve this plan' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Withdraw approval' })).not.toBeInTheDocument()
   })
+
+  describe('execute', () => {
+    function renderApprovedPanel(props = {}) {
+      return renderPanel({
+        status: 'approved',
+        version: 2,
+        approvals: [
+          { accountId: FIXTURE_DURABLE_ACCOUNT.id, approvedAt: '2026-09-02T09:00:00Z', approvedVersion: 2 },
+          { accountId: FIXTURE_SOURCE_ACCOUNT.id, approvedAt: '2026-09-03T09:00:00Z', approvedVersion: 2 },
+        ],
+        ...props,
+      })
+    }
+
+    it('only shows Execute once the plan is approved', () => {
+      renderPanel({ status: 'pending' })
+      expect(screen.queryByRole('button', { name: 'Execute this transfer' })).not.toBeInTheDocument()
+    })
+
+    it.each(['executed', 'cancelled', 'expired'])('hides Execute once the plan is %s', (status) => {
+      renderPanel({ status })
+      expect(screen.queryByRole('button', { name: 'Execute this transfer' })).not.toBeInTheDocument()
+    })
+
+    it('shows Execute alongside Withdraw once approved -- both remain valid actions', () => {
+      renderApprovedPanel()
+      expect(screen.getByRole('button', { name: 'Execute this transfer' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Withdraw approval' })).toBeInTheDocument()
+    })
+
+    it("requires typing 'execute' before the dialog's own button enables", () => {
+      const onExecute = vi.fn()
+      renderApprovedPanel({ onExecute })
+      fireEvent.click(screen.getByRole('button', { name: 'Execute this transfer' }))
+
+      const dialog = screen.getByRole('dialog')
+      const dialogExecute = within(dialog).getByRole('button', { name: 'Execute this transfer' })
+      expect(dialogExecute).toBeDisabled()
+
+      fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'execute' } })
+      expect(dialogExecute).not.toBeDisabled()
+      fireEvent.click(dialogExecute)
+      expect(onExecute).toHaveBeenCalledWith()
+    })
+
+    it('does not enable the dialog button for a near-miss confirmation phrase', () => {
+      renderApprovedPanel()
+      fireEvent.click(screen.getByRole('button', { name: 'Execute this transfer' }))
+      const dialog = screen.getByRole('dialog')
+      fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'executed' } })
+      expect(within(dialog).getByRole('button', { name: 'Execute this transfer' })).toBeDisabled()
+    })
+
+    it('surfaces a failed execute attempt inline in the dialog', () => {
+      renderApprovedPanel({ executeError: "Couldn't execute -- try again." })
+      fireEvent.click(screen.getByRole('button', { name: 'Execute this transfer' }))
+      expect(screen.getByRole('alert')).toHaveTextContent("Couldn't execute -- try again.")
+    })
+
+    it('closes the execute dialog once executing finishes with no error', () => {
+      const { rerender } = renderApprovedPanel({ executing: true })
+      fireEvent.click(screen.getByRole('button', { name: 'Execute this transfer' }))
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+      rerender(
+        <PlanApprovalPanel
+          status="approved"
+          version={2}
+          expiresAt="2026-09-15T10:00:00Z"
+          approvals={[
+            { accountId: FIXTURE_DURABLE_ACCOUNT.id, approvedAt: '2026-09-02T09:00:00Z', approvedVersion: 2 },
+            { accountId: FIXTURE_SOURCE_ACCOUNT.id, approvedAt: '2026-09-03T09:00:00Z', approvedVersion: 2 },
+          ]}
+          sourceAccount={FIXTURE_SOURCE_ACCOUNT}
+          durableAccount={FIXTURE_DURABLE_ACCOUNT}
+          currentAccountId={FIXTURE_DURABLE_ACCOUNT.id}
+          allConflictsResolved
+          executing={false}
+          executeError={null}
+        />
+      )
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+  })
 })

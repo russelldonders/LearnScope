@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import AppHeader from '../components/AppHeader'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -41,6 +41,7 @@ import {
 import {
   approveProfileTransferPlan,
   createProfileTransferPlan,
+  executeProfileTransferPlan,
   getProfileTransferPlan,
   listProfileTransferPlans,
   resolveProfileTransferPlanItem,
@@ -91,6 +92,8 @@ export default function ConnectedAccounts() {
   const [planError, setPlanError] = useState(null)
   const [planResolutionError, setPlanResolutionError] = useState(null)
   const [planApprovalError, setPlanApprovalError] = useState(null)
+  const [planExecuteError, setPlanExecuteError] = useState(null)
+  const executeIdempotencyKeyRef = useRef(null)
 
   useEffect(() => {
     handleOAuthReturn()
@@ -218,6 +221,28 @@ export default function ConnectedAccounts() {
       await loadTransferPlan(transferPlan.id)
     } catch (err) {
       setPlanApprovalError(err.message)
+    } finally {
+      setPlanBusyAction(null)
+    }
+  }
+
+  async function handleExecuteTransferPlan() {
+    if (!transferPlan) return
+    setPlanBusyAction('execute')
+    setPlanExecuteError(null)
+    try {
+      // Reused across retries of this same attempt (e.g. a network error)
+      // rather than regenerated per click, so a retry is recognised as the
+      // same attempt by execute_profile_transfer_plan's idempotency check
+      // instead of being treated as a second, independent execution.
+      if (executeIdempotencyKeyRef.current?.planId !== transferPlan.id) {
+        executeIdempotencyKeyRef.current = { planId: transferPlan.id, key: crypto.randomUUID() }
+      }
+      await executeProfileTransferPlan(transferPlan.id, executeIdempotencyKeyRef.current.key)
+      executeIdempotencyKeyRef.current = null
+      await loadTransferPlan(transferPlan.id)
+    } catch (err) {
+      setPlanExecuteError(err.message)
     } finally {
       setPlanBusyAction(null)
     }
@@ -485,10 +510,13 @@ export default function ConnectedAccounts() {
               resolutionError={planResolutionError}
               approving={planBusyAction === 'approve'}
               withdrawing={planBusyAction === 'withdraw'}
+              executing={planBusyAction === 'execute'}
               approvalError={planApprovalError}
+              executeError={planExecuteError}
               onSelectResolution={handleResolveTransferConflict}
               onApprove={handleApproveTransferPlan}
               onWithdrawApproval={handleWithdrawTransferApproval}
+              onExecute={handleExecuteTransferPlan}
             />
           )}
         </section>

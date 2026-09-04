@@ -15,7 +15,7 @@ const STATUS_LABELS = {
 const STATUS_DESCRIPTIONS = {
   pending: 'Waiting for both accounts to approve this exact plan version. Nothing has moved.',
   approved:
-    'Both accounts have approved this exact plan version. Nothing has moved yet -- execution happens as a separate step.',
+    'Both accounts have approved this exact plan version. Nothing has moved yet -- execution below is a separate, final step, and either account can still withdraw instead.',
   executed: 'This plan was executed.',
   cancelled: 'This plan was cancelled before execution. Nothing was moved.',
   expired: 'This plan expired before both accounts approved it. Nothing was moved.',
@@ -43,14 +43,19 @@ export default function PlanApprovalPanel({
   allConflictsResolved,
   approving = false,
   withdrawing = false,
+  executing = false,
   error = null,
+  executeError = null,
   onApprove,
   onWithdrawApproval,
+  onExecute,
 }) {
   const [approveOpen, setApproveOpen] = useState(false)
   const [withdrawOpen, setWithdrawOpen] = useState(false)
+  const [executeOpen, setExecuteOpen] = useState(false)
   const wasApproving = useRef(approving)
   const wasWithdrawing = useRef(withdrawing)
+  const wasExecuting = useRef(executing)
 
   useEffect(() => {
     if (wasApproving.current && !approving && !error) setApproveOpen(false)
@@ -62,6 +67,11 @@ export default function PlanApprovalPanel({
     wasWithdrawing.current = withdrawing
   }, [withdrawing, error])
 
+  useEffect(() => {
+    if (wasExecuting.current && !executing && !executeError) setExecuteOpen(false)
+    wasExecuting.current = executing
+  }, [executing, executeError])
+
   const isTerminal = TERMINAL_STATUSES.has(status)
   const myApproval = approvals.find((a) => a.accountId === currentAccountId)
   const myApprovalIsCurrent = Boolean(myApproval) && myApproval.approvedVersion === version
@@ -71,7 +81,7 @@ export default function PlanApprovalPanel({
     { ...sourceAccount, roleLabel: 'Source account' },
   ]
 
-  const anyDialogOpen = approveOpen || withdrawOpen
+  const anyDialogOpen = approveOpen || withdrawOpen || executeOpen
 
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
@@ -142,6 +152,22 @@ export default function PlanApprovalPanel({
         </>
       )}
 
+      {status === 'approved' && (
+        <div className="mt-4 pt-4 border-t border-hairline">
+          <p className="text-sm text-ink mb-2">
+            Both accounts have approved. Executing is the final, separate step that actually moves this data.
+          </p>
+          {!anyDialogOpen && <MutationFeedback status="error" message={executeError} className="mb-3" />}
+          <button
+            type="button"
+            onClick={() => setExecuteOpen(true)}
+            className="rounded-md bg-red-700 text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 whitespace-nowrap"
+          >
+            Execute this transfer
+          </button>
+        </div>
+      )}
+
       {approveOpen && (
         <ApproveDialog
           approving={approving}
@@ -167,6 +193,15 @@ export default function PlanApprovalPanel({
           confirming={withdrawing}
           onConfirm={() => onWithdrawApproval?.()}
           onCancel={() => setWithdrawOpen(false)}
+        />
+      )}
+
+      {executeOpen && (
+        <ExecuteDialog
+          executing={executing}
+          error={executeError}
+          onExecute={() => onExecute?.()}
+          onClose={() => setExecuteOpen(false)}
         />
       )}
     </div>
@@ -230,6 +265,75 @@ function ApproveDialog({ approving, error, onApprove, onClose }) {
           type="button"
           onClick={onClose}
           disabled={approving}
+          className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper disabled:opacity-60"
+        >
+          Cancel
+        </button>
+      </div>
+    </AccessibleDialog>
+  )
+}
+
+// The final, deliberate confirmation the handoff notes call for -- separate
+// from approval, and not reachable except by a party who has already
+// approved this exact version (the button above only renders once
+// status === 'approved'). Requires typing a literal phrase, not just a
+// checkbox, since this is the one action in this whole feature area that
+// actually moves data instead of only recording consent.
+function ExecuteDialog({ executing, error, onExecute, onClose }) {
+  const [confirmationText, setConfirmationText] = useState('')
+  const titleId = useId()
+  const canExecute = confirmationText.trim().toLowerCase() === 'execute'
+
+  return (
+    <AccessibleDialog
+      labelledBy={titleId}
+      onClose={executing ? undefined : onClose}
+      closeOnBackdrop={!executing}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+      <h2 id={titleId} className="font-display text-xl text-ink mb-1">
+        Execute this transfer
+      </h2>
+      <p className="text-sm text-secondary mb-4">
+        This is the step that actually moves data between the two accounts, exactly as resolved and approved
+        above. It cannot be undone from here afterward.
+      </p>
+      <ul className="text-sm text-secondary list-disc pl-5 mb-4 space-y-1">
+        <li>Every item above is applied in one all-or-nothing step -- either everything happens, or nothing does.</li>
+        <li>If either record has changed since this plan was approved, execution is refused rather than run against stale data.</li>
+        <li>Records kept over a duplicate, or replaced by one, are retired -- not merged -- so nothing is silently lost.</li>
+      </ul>
+
+      <label className="block mb-4">
+        <span className="text-sm text-ink">
+          Type <strong>execute</strong> to confirm.
+        </span>
+        <input
+          type="text"
+          value={confirmationText}
+          disabled={executing}
+          onChange={(e) => setConfirmationText(e.target.value)}
+          className="mt-1 w-full rounded-md border border-hairline py-1.5 px-2 text-sm"
+          autoComplete="off"
+        />
+      </label>
+
+      <MutationFeedback status="error" message={error} className="mb-3" />
+
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onExecute}
+          disabled={executing || !canExecute}
+          className="flex-1 rounded-md bg-red-700 text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
+        >
+          {executing ? 'Executing…' : 'Execute this transfer'}
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={executing}
           className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper disabled:opacity-60"
         >
           Cancel

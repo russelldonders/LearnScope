@@ -8,12 +8,12 @@ const TERMINAL_STATUSES = new Set(['executed', 'cancelled', 'expired'])
 
 // Genuinely props-in/callbacks-out: composes the plan-review pieces above
 // but owns no business data of its own -- the plan (including every
-// conflict resolution and approval) is fully controlled by the caller.
-// `onSelectResolution`/`onApprove`/`onWithdrawApproval` only ever propose
-// what the caller should persist; nothing here executes a transfer or
-// implies one has happened. FIXTURE_* imports are optional default props
-// for an isolated render only, never substituted back in after a real
-// callback fires.
+// conflict resolution, approval, and the final execute action) is fully
+// controlled by the caller. `onSelectResolution`/`onApprove`/
+// `onWithdrawApproval`/`onExecute` only ever propose what the caller should
+// persist; this component performs no mutation itself. FIXTURE_* imports
+// are optional default props for an isolated render only, never
+// substituted back in after a real callback fires.
 export default function TransferPlanReviewPanel({
   plan = FIXTURE_PLAN_PENDING,
   currentAccountId = FIXTURE_CURRENT_ACCOUNT_ID,
@@ -24,9 +24,12 @@ export default function TransferPlanReviewPanel({
   approving = false,
   withdrawing = false,
   approvalError = null,
+  executing = false,
+  executeError = null,
   onSelectResolution,
   onApprove,
   onWithdrawApproval,
+  onExecute,
 }) {
   if (loading) {
     return (
@@ -71,7 +74,7 @@ export default function TransferPlanReviewPanel({
         <p className="text-sm text-secondary">
           This is a proposed plan, not a completed action. Choosing a conflict resolution and approving here
           doesn't move, merge, delete, or share any data -- the transfer only runs once both accounts have
-          approved this exact plan version, and execution happens as a separate step that isn't available yet.
+          approved this exact plan version, and even then execution is a separate, final step below.
         </p>
       </div>
 
@@ -94,9 +97,12 @@ export default function TransferPlanReviewPanel({
         allConflictsResolved={allConflictsResolved}
         approving={approving}
         withdrawing={withdrawing}
+        executing={executing}
         error={approvalError}
+        executeError={executeError}
         onApprove={onApprove}
         onWithdrawApproval={onWithdrawApproval}
+        onExecute={onExecute}
       />
     </div>
   )

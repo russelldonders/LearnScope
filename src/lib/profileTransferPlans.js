@@ -40,6 +40,17 @@ export function cancelProfileTransferPlan(planId) {
   return call('cancel_profile_transfer_plan', { p_plan_id: planId })
 }
 
+// idempotencyKey should be generated once per attempt and reused across
+// retries of that same attempt (e.g. after a network error) -- passing a
+// fresh key each render/click would defeat execute_profile_transfer_plan's
+// own retry-safety check.
+export function executeProfileTransferPlan(planId, idempotencyKey) {
+  return call('execute_profile_transfer_plan', {
+    p_plan_id: planId,
+    p_idempotency_key: idempotencyKey,
+  })
+}
+
 export async function listProfileTransferPlans() {
   const rows = await call('list_my_profile_transfer_plans')
   return (rows ?? []).map((row) => ({

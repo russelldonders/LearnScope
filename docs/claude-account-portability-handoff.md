@@ -880,6 +880,126 @@ psql`, `npm run lint` exit 0, `npm run build`, `npm run test:run` 313 tests
 / 50 files unchanged). Not yet applied to Staging -- see the migration
 workflow in CLAUDE.md #10 before pushing.
 
+## Session update: the transactional executor (2026-09-04, new session)
+
+Item 3 -- built end to end (backend RPC, audit trail, and the frontend
+execute button), scoped to skills/courses/experience only per Decision 3
+above. Three migrations:
+
+- `20260904225000_fix_skills_fingerprint_alias_collision.sql`: fixes a
+  **pre-existing bug** in the already-deployed, otherwise-immutable
+  `create_profile_transfer_plan` (`20260903210000_profile_transfer_plans.
+  sql`). `skills` has a column literally named `source`
+  (`0008_skill_source.sql`); the original function also aliased the table
+  itself as `source`, so `to_jsonb(source)` resolved to the *column*, not
+  the row -- every skills plan item's stored fingerprint was a hash of a
+  string like `"manual"`, not the row, silently defeating the staleness
+  check for skills specifically (courses/experience use `source`/`target`
+  aliases that don't collide with any of their own columns, so they were
+  never affected). Found by the executor's own allow/deny test failing in
+  a way that made no sense until traced with a minimal repro. Fixed by
+  renaming the alias to `src`; every other line is byte-identical to the
+  original.
+- `20260904230000_transfer_plan_conflict_guards.sql`: enforces Decision 2
+  (`docs/profile-transfer-execution-rules.md`) -- three new `private.
+  *_has_exclusive_dependents` helpers, and `resolve_profile_transfer_plan_
+  item` now refuses `keep_durable`/`use_source` when the losing side has
+  any exclusive dependent, with a clear error telling the learner to
+  choose Move instead.
+- `20260904240000_profile_transfer_executor.sql`: `execute_profile_
+  transfer_plan(p_plan_id, p_idempotency_key)`, following the handoff's
+  own ten-step guard sequence -- locks the plan row first, re-verifies
+  approval status/version hash/two-current-approvals/expiry/active link
+  from scratch (never trusts anything from an earlier phase), recomputes
+  and compares every item's fingerprint under `FOR UPDATE` (aborting on
+  any drift since approval), re-verifies Decision 2 defensively (not just
+  trusting the resolve-time check), re-verifies Decision 1 (a parent
+  experience and its children must share one action -- checked as its own
+  pass, not built into plan creation, so it's a hard abort rather than a
+  UI constraint), applies every item's action, does one identity-scoped
+  pass over every dependent table, records an audit trail
+  (`profile_transfer_execution_records`, new table), and only marks the
+  plan `executed` after a postcondition check proves it. Idempotent: a
+  retried call with the same key returns the prior result; a different key
+  against an already-executed plan is rejected outright.
+
+**Independent security review before this was called done** (per CLAUDE.md
+"Subagent Usage") caught one HIGH and one MEDIUM finding, both fixed
+before commit:
+
+- **HIGH**: the dependent-table reassignment pass was written as a plain
+  identity match (`where user_id = v_source_user_id`), on the theory that
+  every surviving dependent already belongs to a moved root. That's only
+  true for dependents that existed *when the plan was created*. Plans can
+  sit approved for up to 7 days (`profile_transfer_plans.expires_at`); a
+  skill added during that window is correctly never captured in the plan
+  and correctly stays with the source login, but the identity-only sweep
+  would still reassign *its* target/tag/assessment/etc. to the durable
+  login -- and since several of those tables' RLS is unconditional on that
+  one denormalized column (`skill_targets`: `using (auth.uid() = user_id)`,
+  no join back to the skill's own ownership), that's a real unintended
+  access grant to a skill the durable login doesn't own, not just an
+  inconsistency. Fixed by scoping every skill/course/experience-keyed
+  dependent update to the specific ids this execution actually processed
+  (`profile_transfer_execution_records`, populated earlier in the same
+  call) rather than identity alone. `rater_id`/`validator_id` on
+  `skill_peer_ratings`/`skill_validation_requests` are the one deliberate
+  exception, left identity-scoped: those describe the transferring
+  learner's own action on *someone else's* skill (nothing in this plan to
+  scope against), matching principle 1 of the execution-rules doc, and
+  neither column drives that table's own RLS. Added a dedicated scenario
+  to `supabase/tests/profile_transfer_executor.sql` proving the fix: a
+  skill created after approval keeps its dependents on the source login
+  through execution.
+- **MEDIUM**: `course_content_progress` (SCORM/xAPI completion evidence)
+  was never reassigned at all, contradicting the execution-rules doc's own
+  `move` rule for courses. Root cause: it has no FK to the personal
+  `courses` table -- it's keyed to `content_resources` (organisation
+  content library, `0073_content_resource_library.sql`), linked to a
+  specific catalogue course only via `course_content_links(course_id,
+  resource_id)`. Fixed by joining `content_item_id -> course_content_
+  links.resource_id -> course_content_links.course_id ->
+  courses.catalogue_course_id`, the same join `course_content_progress`'s
+  own "Provider admins can view participant progress" policy already uses
+  -- confirmed against the live schema after getting the join wrong twice
+  first (once assuming a renamed-away `course_content_items.course_id`
+  that no longer exists post-`0073`, once before checking `content_
+  resources` had no course-scoped column at all).
+- A second MEDIUM (peer-rating/validation-request/share-link/searchable-
+  skills ownership moves with no dedicated plan-item preview, since they
+  ride along with the skills domain's move action rather than being
+  previewed as their own line items) and a LOW (any plan created against
+  the pre-fix buggy fingerprint function will fail execution with a
+  confusing "changed since approval" error, since it can never match the
+  corrected recompute) were reviewed and accepted as known, documented
+  behavior rather than fixed in this pass -- the first is an accepted
+  consequence of `docs/profile-transfer-execution-rules.md`'s own scoping
+  (these tables were deliberately grouped under "skills dependents," not
+  named as a fourth domain needing new preview UI in Decision 3); the
+  second only matters if a real plan with skills conflicts was created and
+  approved on Staging before this fix shipped, worth a quick check before
+  or during deploy.
+
+Frontend: `src/pages/account-linking/transfer-plan/PlanApprovalPanel.jsx`
+gets a new "Execute this transfer" section, shown only once `status ===
+'approved'`, alongside (not replacing) Withdraw -- both remain valid
+actions post-approval. Its confirmation dialog requires literally typing
+"execute" (not just a checkbox, unlike Approve's dialog), since this is
+the one action in the whole feature area that actually moves data instead
+of recording consent. `src/pages/ConnectedAccounts.jsx`'s
+`handleExecuteTransferPlan` generates an idempotency key once per attempt
+via `executeIdempotencyKeyRef` and reuses it across retries of that same
+attempt (only regenerating when `transferPlan.id` changes or an attempt
+succeeds), so a retry after a network error is recognised server-side as
+the same attempt rather than a second execution. 9 new component tests in
+`PlanApprovalPanel.test.jsx`.
+
+Verified: `db reset --local --no-seed`, `db lint --local --level error`,
+all four `supabase/tests/*.sql` suites (the three existing plus the new
+`profile_transfer_executor.sql`) via `docker exec supabase_db_learnscope
+psql`, `npm run lint` exit 0, `npm run build`, `npm run test:run` (322
+tests / 50 files, up from 313). Not yet applied to Staging.
+
 ## Remaining product and engineering work
 
 ### 1. Replace login-ID ownership with profile ownership
