@@ -1,8 +1,9 @@
 -- Allow/deny proof for the additive learning-profile access helper added in
 -- 20260904090000_learning_profile_access_helper.sql, applied to courses/
--- experience in 20260904110000_courses_experience_access_helper.sql, and to
+-- experience in 20260904110000_courses_experience_access_helper.sql, to
 -- their dependent tables in
--- 20260904120000_skills_courses_experience_dependents_access_helper.sql. Run
+-- 20260904120000_skills_courses_experience_dependents_access_helper.sql, and
+-- to connections in 20260904150000_connections_access_helper.sql. Run
 -- against a local database only; the script rolls back everything it does.
 --
 -- Proves the full scenario matrix for skills, courses, and experience, and
@@ -10,7 +11,10 @@
 -- the same already-proven helper) spot-checks it against one representative
 -- table per family instead of exhaustively fixturing all eleven: skill_targets
 -- (skills family), course_experience_links (courses family), and
--- xapi_statements (xAPI family).
+-- xapi_statements (xAPI family). connections has its own scenario matrix
+-- further down, since it is two-party (user_a_id/user_b_id) rather than
+-- single-owner and each side's linked account must be proven independent of
+-- the other's.
 --
 -- Proves, for each converted domain root table (skills, courses, experience):
 --   1. The profile owner's own personal login is unaffected.
@@ -155,5 +159,95 @@ select pg_temp.assert_owner_visibility('50000000-0000-0000-0000-000000000005', f
 
 -- 7. Unrelated login remains denied throughout.
 select pg_temp.assert_owner_visibility('60000000-0000-0000-0000-000000000006', false, 'unrelated login (end of scenario)');
+
+-- ----------------------------------------------------------------------------
+-- connections (20260904150000_connections_access_helper.sql): two owning
+-- parties per row, not one, so it needs its own scenario matrix proving each
+-- side's linked account is evaluated independently.
+-- ----------------------------------------------------------------------------
+
+insert into auth.users (id, email, email_confirmed_at)
+values
+  ('70000000-0000-0000-0000-000000000007', 'owner-b@example.com', now()),
+  ('80000000-0000-0000-0000-000000000008', 'linked-work-b@example.com', now());
+
+insert into public.connections (id, user_a_id, user_b_id, source)
+values (
+  '40000000-0000-0000-0000-000000009999',
+  least('40000000-0000-0000-0000-000000000004'::uuid, '70000000-0000-0000-0000-000000000007'::uuid),
+  greatest('40000000-0000-0000-0000-000000000004'::uuid, '70000000-0000-0000-0000-000000000007'::uuid),
+  'request'
+);
+
+create or replace function pg_temp.assert_sees_connection(p_as_user uuid, p_expect_visible boolean, p_label text)
+returns void
+language plpgsql
+as $$
+declare
+  v_sees boolean;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', p_as_user::text, true);
+
+  select exists (select 1 from public.connections where id = '40000000-0000-0000-0000-000000009999') into v_sees;
+
+  reset role;
+
+  if v_sees is distinct from p_expect_visible then
+    raise exception '% : expected connection visibility=%, got %', p_label, p_expect_visible, v_sees;
+  end if;
+end
+$$;
+
+-- 1. Both owning parties' own logins see the connection (unchanged).
+select pg_temp.assert_sees_connection('40000000-0000-0000-0000-000000000004', true, 'connection: owner a login');
+select pg_temp.assert_sees_connection('70000000-0000-0000-0000-000000000007', true, 'connection: owner b login');
+
+-- 2. Unrelated login is denied.
+select pg_temp.assert_sees_connection('60000000-0000-0000-0000-000000000006', false, 'connection: unrelated login');
+
+-- 3. Account 50000000...05 is linked to owner a (40000000...04) but, at this
+--    point in the file, its verified_account_link was revoked in scenario 6
+--    above (its workspace_access grant is active, but the link is not) --
+--    so it is denied.
+select pg_temp.assert_sees_connection('50000000-0000-0000-0000-000000000005', false, 'connection: link-a login before link reactivated');
+
+-- 4. Reactivating that link makes owner a's side resolve true, which alone
+--    is enough to see the connection.
+update public.verified_account_links
+set status = 'active', revoked_at = null
+where least(auth_account_a_id, auth_account_b_id) = least('40000000-0000-0000-0000-000000000004'::uuid, '50000000-0000-0000-0000-000000000005'::uuid)
+  and greatest(auth_account_a_id, auth_account_b_id) = greatest('40000000-0000-0000-0000-000000000004'::uuid, '50000000-0000-0000-0000-000000000005'::uuid);
+
+select pg_temp.assert_sees_connection('50000000-0000-0000-0000-000000000005', true, 'connection: link-a login with link and grant active');
+
+-- 5. A link+grant on owner b's side is evaluated independently: before it
+--    exists, owner b's linked account is denied even though owner a's side
+--    already grants visibility to a *different* account.
+insert into public.verified_account_links (auth_account_a_id, auth_account_b_id)
+values (
+  least('70000000-0000-0000-0000-000000000007'::uuid, '80000000-0000-0000-0000-000000000008'::uuid),
+  greatest('70000000-0000-0000-0000-000000000007'::uuid, '80000000-0000-0000-0000-000000000008'::uuid)
+);
+
+select pg_temp.assert_sees_connection('80000000-0000-0000-0000-000000000008', false, 'connection: link-b login before workspace_access grant');
+
+insert into public.workspace_access (workspace_id, auth_account_id, access_role)
+values ('70000000-0000-0000-0000-000000000007', '80000000-0000-0000-0000-000000000008', 'owner');
+
+select pg_temp.assert_sees_connection('80000000-0000-0000-0000-000000000008', true, 'connection: link-b login with link and grant active');
+
+-- 6. Revoking owner b's link denies that side again without affecting owner
+--    a's side, which is still active from step 4.
+update public.verified_account_links
+set status = 'revoked', revoked_at = now()
+where least(auth_account_a_id, auth_account_b_id) = least('70000000-0000-0000-0000-000000000007'::uuid, '80000000-0000-0000-0000-000000000008'::uuid)
+  and greatest(auth_account_a_id, auth_account_b_id) = greatest('70000000-0000-0000-0000-000000000007'::uuid, '80000000-0000-0000-0000-000000000008'::uuid);
+
+select pg_temp.assert_sees_connection('80000000-0000-0000-0000-000000000008', false, 'connection: link-b login after link revoked');
+select pg_temp.assert_sees_connection('50000000-0000-0000-0000-000000000005', true, 'connection: link-a login unaffected by link-b revoke');
+
+-- 7. Unrelated login remains denied throughout.
+select pg_temp.assert_sees_connection('60000000-0000-0000-0000-000000000006', false, 'connection: unrelated login (end of scenario)');
 
 rollback;

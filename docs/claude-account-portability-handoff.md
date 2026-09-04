@@ -430,6 +430,69 @@ Verified: npm run lint/build/test:run (313 tests, up from 302 -- 11 new
 component tests), supabase db reset --local, supabase db lint --local
 --level error, and all three supabase/tests/*.sql suites, all clean.
 
+## Session update: connections access helper (2026-09-04, new session)
+
+Fifth domain-by-domain increment, picking up from the prior session's
+"Remaining product and engineering work" list (item 1). Added in
+`20260904150000_connections_access_helper.sql`:
+
+- Converted `connections` (`0058_skill_discovery_and_connections.sql`).
+  Unlike every table converted so far, it has two owning parties
+  (`user_a_id`, `user_b_id`), not one `user_id` column, so it needed its own
+  policy shape rather than a verbatim reuse of the single-column pattern: a
+  row is visible if the caller can view *either* side's learning profile via
+  `private.can_view_learning_profile` (`using (private.can_view_learning_
+  profile(user_a_id) or private.can_view_learning_profile(user_b_id))`).
+  Existing "Users can view their own connections" policy is unchanged.
+  Checked first that it's the table's only policy, permissive, and has no
+  `using (true)`. Its `GRANT SELECT` was already fixed in
+  `20260904100000_grant_connections_select.sql`.
+- Deliberately NOT converted: `connection_requests` and `connection_invites`
+  -- pending, two-party invitation flows, matching the same "different
+  access semantics" exclusion the prior session already applied to
+  validation requests and connection invitations/requests when converting
+  skills' dependent tables.
+- Extended `supabase/tests/learning_profile_access.sql` with a dedicated
+  connections scenario matrix (a second, fresh legacy user pair plus their
+  own linked account) proving: both parties' own logins see the connection;
+  an unrelated login is denied; each side's linked-account visibility is
+  evaluated and revoked *independently* of the other side's (granting or
+  revoking owner B's link/grant does not affect what owner A's linked
+  account can see, and vice versa).
+- Investigated whether "actions" (next in the handoff's own unconverted-
+  domain list) is a real table to convert the same way: it isn't. `Actions`
+  page aggregates many existing, already-reviewed sharing/invitation
+  surfaces (validation requests, connection requests, org/employer/manager
+  invites, employer data-access requests, course assignments, skill
+  suggestions) rather than owning its own learner content, so it doesn't fit
+  this mechanical single/two-party-ownership conversion pattern at all --
+  each underlying surface would need its own bespoke review, if any is
+  needed. Similarly, "evidence" in the handoff's inventory maps to
+  `skill_assessments`, already converted in the prior session's third
+  increment (skills' dependent tables). Picked `connections` instead as the
+  next real, correctly-shaped root table.
+- Regenerated `supabase/migrations/stage_bootstrap_consolidated.sql` per
+  CLAUDE.md #17 (verified the diff against the prior bundle contains only
+  the new migration's content, nothing else changed or reordered).
+
+Still unconverted: `connection_requests`, `connection_invites`, xAPI (partial
+-- see the third increment's `xapi_launch_sessions` exclusion), manager
+sharing, employer sharing, and every table the third increment's own
+"Deliberately NOT included" list already named (peer ratings, validation
+requests, searchable skills, employer/manager-shared skills, public
+share-link skills, parent/child experience links, employer role alignment
+references, membership tables). The executor (§3 below) remains
+out of scope until those are addressed or explicitly judged out of scope one
+by one, per this document's own "Immediate next step" gating language.
+
+Verified: `npx supabase db reset --local --no-seed`, `npx supabase db lint
+--local --level error`, all three `supabase/tests/*.sql` suites (via `docker
+exec supabase_db_learnscope psql`, since `psql` and `supabase db query
+--local -f` don't support this project's `\set ON_ERROR_STOP` test files),
+`npm run lint` (exit 0, pre-existing warnings only), `npm run build` (311
+modules), `npm run test:run` (313 tests / 50 files, unchanged -- no frontend
+code touched this increment).
+
 ## Remaining product and engineering work
 
 ### 1. Replace login-ID ownership with profile ownership
