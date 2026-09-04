@@ -106,7 +106,13 @@ export default function AdminSkillDetail() {
               </div>
             </div>
 
-            {!skill.is_private && <SkillCompositionSection parentSkill={skill} userId={user.id} />}
+            {!skill.is_private && (
+              <SkillCompositionSection
+                parentSkill={skill}
+                userId={user.id}
+                componentHref={(component) => `/admin/skills/${component.id}`}
+              />
+            )}
 
             <div>
               <h3 className="font-display text-lg text-ink mb-2">

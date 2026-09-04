@@ -4,8 +4,9 @@ import AppHeader from '../../components/AppHeader'
 import { useAuth } from '../../context/AuthContext'
 import { listOrganisations } from '../../lib/admin/organisations'
 import { getProviderSkillAlignment, listOrganisationOfferedSkills, setResourceSkillAlignment, setTrainingSkillAlignment } from '../../lib/admin/providerSkills'
+import SkillCompositionSection from '../admin/SkillCompositionSection'
 
-const TABS = [{ key: 'training', label: 'Training' }, { key: 'resources', label: 'Resources' }]
+const BASE_TABS = [{ key: 'training', label: 'Training' }, { key: 'resources', label: 'Resources' }]
 
 export default function ProviderSkillDetail() {
   const { organisationId, skillId } = useParams()
@@ -21,7 +22,12 @@ export default function ProviderSkillDetail() {
   const [selectedCourseId, setSelectedCourseId] = useState('')
   const [selectedResourceId, setSelectedResourceId] = useState('')
   const [targetLevel, setTargetLevel] = useState(1)
-  const activeTab = searchParams.get('tab') === 'resources' ? 'resources' : 'training'
+  const requestedTab = searchParams.get('tab')
+  const canManageComponents = Boolean(
+    skill?.isOwnOrgSkill || (organisation?.is_system && skill?.organisationId == null)
+  )
+  const tabs = canManageComponents ? [...BASE_TABS, { key: 'components', label: 'Components' }] : BASE_TABS
+  const activeTab = tabs.some((tab) => tab.key === requestedTab) ? requestedTab : 'training'
 
   useEffect(() => {
     load()
@@ -128,10 +134,10 @@ export default function ProviderSkillDetail() {
             </header>
             {error && <p className="text-sm text-red-700 mb-4" role="alert">{error}</p>}
             <div className="border-b border-hairline mb-6" role="tablist" aria-label="Skill management"><div className="flex gap-1 overflow-x-auto">
-              {TABS.map((tab) => {
-                const count = tab.key === 'training' ? alignedTraining.length : alignedResources.length
+              {tabs.map((tab) => {
+                const count = tab.key === 'training' ? alignedTraining.length : tab.key === 'resources' ? alignedResources.length : null
                 const selected = activeTab === tab.key
-                return <button key={tab.key} id={`${tab.key}-tab`} type="button" role="tab" aria-selected={selected} aria-controls={`${tab.key}-panel`} onClick={() => changeTab(tab.key)} className={`relative min-h-11 px-4 whitespace-nowrap text-sm ${selected ? 'text-ink font-medium after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-moss' : 'text-secondary hover:text-ink'}`}>{tab.label}<span className="ml-2 rounded-full bg-moss/10 px-2 py-0.5 text-xs text-moss">{count}</span></button>
+                return <button key={tab.key} id={`${tab.key}-tab`} type="button" role="tab" aria-selected={selected} aria-controls={`${tab.key}-panel`} onClick={() => changeTab(tab.key)} className={`relative min-h-11 px-4 whitespace-nowrap text-sm ${selected ? 'text-ink font-medium after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-moss' : 'text-secondary hover:text-ink'}`}>{tab.label}{count != null && <span className="ml-2 rounded-full bg-moss/10 px-2 py-0.5 text-xs text-moss">{count}</span>}</button>
               })}
             </div></div>
 
@@ -142,13 +148,25 @@ export default function ProviderSkillDetail() {
                   {alignedTraining.map((course) => <li key={course.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-3"><div className="min-w-0 flex-1"><p className="text-sm text-ink font-medium break-words">{course.name}</p><p className="text-xs text-secondary mt-0.5">Published · version {course.version_number ?? 1}</p></div><div className="flex items-center gap-3"><label className="flex items-center gap-2 text-xs text-secondary">Target level<select value={course.level} disabled={savingKey === `course-${course.id}`} onChange={(event) => updateTrainingLevel(course, Number(event.target.value))} className="rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss">{[1,2,3,4,5].map((level) => <option key={level} value={level}>{level}</option>)}</select></label><button type="button" disabled={savingKey === `course-${course.id}`} onClick={() => removeTraining(course)} className="min-h-11 text-xs text-red-700 font-medium hover:underline disabled:opacity-50">Remove</button></div></li>)}
                 </AlignedList>
               </AlignmentSection>
-            ) : (
+            ) : activeTab === 'resources' ? (
               <AlignmentSection id="resources-panel" title="Resources aligned to this skill" description="Add from your organisation’s current published resources. The original resource stays in the library." addLabel={showAdd ? 'Close add form' : '+ Add resource'} onAdd={() => setShowAdd((value) => !value)}>
                 {showAdd && <ResourceAddForm items={availableResources} selectedId={selectedResourceId} saving={Boolean(savingKey)} onSelect={setSelectedResourceId} onAdd={addResource} onCancel={() => setShowAdd(false)} />}
                 <AlignedList empty="No published resources are aligned yet.">
                   {alignedResources.map((resource) => <li key={resource.id} className="p-4 flex items-center justify-between gap-4"><div className="min-w-0"><p className="text-sm text-ink font-medium break-words">{resource.title}</p><p className="text-xs text-secondary mt-0.5">{resource.type.replace('_', ' ')} · version {resource.version_number ?? 1}</p></div><button type="button" disabled={savingKey === `resource-${resource.id}`} onClick={() => removeResource(resource)} className="shrink-0 min-h-11 text-xs text-red-700 font-medium hover:underline disabled:opacity-50">Remove</button></li>)}
                 </AlignedList>
               </AlignmentSection>
+            ) : (
+              <div id="components-panel" role="tabpanel" aria-labelledby="components-tab">
+                <SkillCompositionSection
+                  parentSkill={{
+                    id: skill.skillLibraryId,
+                    name: skill.name,
+                    organisation_id: skill.organisationId,
+                    is_private: false,
+                  }}
+                  userId={user.id}
+                />
+              </div>
             )}
           </>
         )}

@@ -12,7 +12,7 @@ import {
   updateSkillCompositeComponent,
 } from '../../lib/admin/skillComposites'
 
-export default function SkillCompositionSection({ parentSkill, userId }) {
+export default function SkillCompositionSection({ parentSkill, userId, componentHref = null }) {
   const [definitions, setDefinitions] = useState({ draft: null, published: null })
   const [librarySkills, setLibrarySkills] = useState([])
   const [loading, setLoading] = useState(true)
@@ -201,12 +201,16 @@ export default function SkillCompositionSection({ parentSkill, userId }) {
               {displayedDefinition.components.map((component) => (
                 <li key={component.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                   <div className="min-w-[180px] flex-1">
-                    <Link
-                      to={`/admin/skills/${component.skill_library.id}`}
-                      className="text-sm font-medium text-ink hover:text-moss hover:underline"
-                    >
-                      {component.skill_library.name}
-                    </Link>
+                    {componentHref ? (
+                      <Link
+                        to={componentHref(component.skill_library)}
+                        className="text-sm font-medium text-ink hover:text-moss hover:underline"
+                      >
+                        {component.skill_library.name}
+                      </Link>
+                    ) : (
+                      <p className="text-sm font-medium text-ink">{component.skill_library.name}</p>
+                    )}
                     <p className="mt-0.5 text-xs text-secondary">{component.skill_library.skill_code}</p>
                   </div>
                   {editableDefinition ? (

@@ -42,6 +42,8 @@ import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
 import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
 import { computeTrustStatus, TRUST_STATUS, TRUST_STATUS_COLORS } from '../lib/skillProficiencyModel'
 import { countSkillTrackers, listConnectionsWithSkill } from '../lib/skillStats'
+import { getLearnerCompositeProgress } from '../lib/skillComposites'
+import CompositeSkillProgress from '../components/CompositeSkillProgress'
 
 export default function SkillDetail() {
   const { id } = useParams()
@@ -87,6 +89,9 @@ export default function SkillDetail() {
   const [peopleWithSkillOpen, setPeopleWithSkillOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [levelDetailAxis, setLevelDetailAxis] = useState(null)
+  const [composite, setComposite] = useState(null)
+  const [loadingComposite, setLoadingComposite] = useState(false)
+  const [compositeError, setCompositeError] = useState(null)
 
   useEffect(() => {
     loadSkill()
@@ -107,6 +112,28 @@ export default function SkillDetail() {
     listConnectionsWithSkill(skill.library_skill_id, user.id).then(setConnectionsWithSkill)
     countSkillTrackers(skill.library_skill_id).then(setTotalTrackersCount)
   }, [skill?.library_skill_id])
+
+  useEffect(() => {
+    let active = true
+    if (!skill?.library_skill_id) {
+      setComposite(null)
+      setCompositeError(null)
+      return undefined
+    }
+    setLoadingComposite(true)
+    setCompositeError(null)
+    getLearnerCompositeProgress(skill.library_skill_id, user.id)
+      .then((result) => {
+        if (active) setComposite(result)
+      })
+      .catch((err) => {
+        if (active) setCompositeError(`Couldn't load component progress: ${err.message}`)
+      })
+      .finally(() => {
+        if (active) setLoadingComposite(false)
+      })
+    return () => { active = false }
+  }, [skill?.library_skill_id, user.id])
 
   async function loadSkill() {
     setLoadingSkill(true)
@@ -665,6 +692,8 @@ export default function SkillDetail() {
                 }
               />
             </div>
+
+            <CompositeSkillProgress composite={composite} loading={loadingComposite} error={compositeError} />
 
             {skill.library_skill_id && (
               <div className="mt-4 pt-4 border-t border-hairline">

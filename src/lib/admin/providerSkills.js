@@ -23,6 +23,7 @@ export async function listOrganisationOfferedSkills(organisationId) {
       name: r.skill_library.name,
       category: r.skill_library.category,
       description: r.skill_library.description,
+      organisationId: r.skill_library.organisation_id,
       isOwnOrgSkill: r.skill_library.organisation_id === organisationId,
     }))
 }
