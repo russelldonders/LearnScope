@@ -121,19 +121,76 @@ At commit `49628af` plus its committed predecessors:
 
 Rerun these checks after changes; do not rely on the historic result.
 
-## Immediate next step
+## Immediate next step (done 2026-09-04)
 
-First deploy the already-integrated review phase to staging:
+The already-integrated review phase was deployed to staging:
 
-1. Confirm `origin/staging` is an ancestor of the canonical branch.
-2. Run the full frontend suite and local database checks.
-3. Fast-forward `staging` to the canonical branch.
-4. Wait for the Vercel commit status and confirm success.
-5. Smoke-test `/profile/connected-accounts` with two test logins if suitable
-   staging credentials are available. Do not create or modify real user data.
+1. Confirmed `origin/staging` (`0294380`) was an ancestor of the canonical
+   branch (`84a6f3d`, 4 commits ahead, no divergence).
+2. Ran the full frontend suite and local database checks: `npm run lint`
+   (exit 0, pre-existing warnings only), `npm run build` (308 modules),
+   `npm test -- --run` (1247 tests, 214 files, all passed -- the wider count
+   reflects the full suite rather than the narrower set run at `49628af`),
+   `npx supabase db reset --local --no-seed`, `npx supabase db lint --local
+   --level error` (no errors), and `supabase/tests/verified_account_links.sql`
+   (passed, rolled back).
+3. Fast-forwarded `staging` to `84a6f3d` and pushed.
+4. Vercel commit status returned `success`.
+5. Skipped the `/profile/connected-accounts` smoke test: no staging test
+   credentials were available in the repo (checked `.env.example`, `e2e/`).
+   Not created or modified any real user data.
 
-The database migration is already on staging, so do not reapply or edit the
-deployed migration. Any correction must be a new migration.
+The database migration `20260903210000_profile_transfer_plans.sql` was not
+reapplied or edited; it stays deployed and immutable.
+
+## Session update: learning-profile access helper (2026-09-04)
+
+First domain-by-domain increment of "Replace login-ID ownership with profile
+ownership" below. Added in `20260904090000_learning_profile_access_helper.sql`
+and `20260904100000_grant_connections_select.sql`:
+
+- `private.can_view_learning_profile(p_legacy_user_id uuid)`: SECURITY
+  DEFINER helper (bypass is required -- see the migration's comment on why a
+  linked account's own RLS context can never see another person's
+  `learning_profiles`/`workspaces` rows to evaluate access against). Returns
+  true for the profile's own owner, or for another auth account that holds
+  *both* an active `workspace_access` grant on the profile's personal
+  workspace *and* an active `verified_account_links` row to the owner's
+  personal auth account. Either fact alone is insufficient (defense in
+  depth); revoking either denies access.
+- `skills` gained one new additive, SELECT-only policy using that helper.
+  Its existing "for all" owner policy is unchanged.
+- `profiles` was deliberately **not** converted: it already carries a
+  pre-existing, unrelated `using (true)` SELECT policy ("Authenticated users
+  can view profile names"), so any narrower additive policy on it is a
+  no-op.
+- Found and fixed an unrelated pre-existing bug while writing the SQL
+  allow/deny tests: `connections` (from `0058_skill_discovery_and_
+  connections.sql`) had RLS and a scoping policy but no table-level `GRANT
+  SELECT` for `authenticated`. Any RLS evaluation needing `is_connected()`
+  for a row that wasn't the caller's own threw "permission denied for table
+  connections" instead of evaluating true/false -- silently breaking the
+  connections-based skill-sharing feature for exactly the rows it was meant
+  to allow. Fixed with a plain grant; `connections`' own RLS policy already
+  scopes rows correctly.
+- New test: `supabase/tests/learning_profile_access.sql`, covering personal
+  login, linked work login (via directly-seeded `workspace_access` +
+  `verified_account_links` rows -- no production grant RPC exists yet, see
+  below), unrelated login, revoked `workspace_access`, and revoked
+  `verified_account_links`, against `skills`. All pass; rolls back.
+- There is still no RPC or UI for a learner to actually grant their linked
+  account `workspace_access` -- that remains the separate "Grant controlled
+  cross-account access" phase in `docs/account-portability.md`, deliberately
+  still not built.
+- Only `skills` is converted so far. Courses, experience, actions, evidence,
+  connections, xAPI, manager sharing, employer sharing, and skills' own ~15
+  dependent tables (assessments, quizzes, peer ratings, targets, tags,
+  course/experience links, validation requests, xAPI statements, etc.) still
+  rely solely on `auth.uid() = user_id` and need their own reviewable,
+  domain-by-domain conversions before a transfer executor can be considered.
+
+Rerun the full frontend, migration-reset, database-lint, and transactional
+security suites after any further change; do not rely on this record.
 
 ## Remaining product and engineering work
 
