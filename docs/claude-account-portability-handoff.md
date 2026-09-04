@@ -493,6 +493,57 @@ exec supabase_db_learnscope psql`, since `psql` and `supabase db query
 modules), `npm run test:run` (313 tests / 50 files, unchanged -- no frontend
 code touched this increment).
 
+## Session update: manager_team_memberships access helper (2026-09-04, continued)
+
+Sixth domain-by-domain increment, same session, starting the "manager
+sharing" domain. Added in
+`20260904160000_manager_team_memberships_access_helper.sql`:
+
+- Converted `manager_team_memberships` (`20260903130000_manager_team_
+  foundation.sql`) -- the anchor/root table of manager sharing, same
+  root-first approach as skills before its dependents. Unlike every table
+  converted so far it has no single "owner" column; `member_user_id`
+  identifies which learner (or, for a 'manager'-role row, which manager) a
+  row is about. New additive policy: `private.can_view_learning_profile
+  (member_user_id)`. This does not change a manager's own
+  `can_manage_manager_team` visibility and does not let a linked account see
+  a different learner's membership rows.
+- `manager_teams` deliberately NOT touched: it belongs to the manager's own
+  workspace, not a learner's personal learning profile -- out of scope for
+  this transition entirely, not merely deferred.
+- Dependents deliberately deferred as their own future increment (matching
+  how skills' ~15 dependents were split from its own root-table migration):
+  `manager_team_shared_skills`, `manager_team_learning_activities`,
+  `manager_team_activity_participants`, `manager_collaboration_records`,
+  `manager_collaboration_record_members`.
+- Checked first: `manager_team_memberships` has exactly one existing policy,
+  permissive, no `using (true)`, and already has `grant select ... to
+  authenticated` from its original migration -- no grant migration needed.
+- Extended `supabase/tests/learning_profile_access.sql` with a scenario
+  matrix reusing the connections section's already-linked pair (owner
+  `...004` / linked account `...005`, still active at this point in the
+  file) plus a fresh manager/team/membership fixture: proves the member's
+  own login is unaffected, an unrelated login is denied, the linked account
+  sees the row once linked, and revoking the `workspace_access` grant alone
+  (link left active) denies it again -- proving the policy is actually gated
+  by the helper, not a static allow.
+- Regenerated `stage_bootstrap_consolidated.sql`; diff-verified against the
+  prior bundle contains only this migration's content.
+
+Still unconverted: `manager_team_shared_skills`,
+`manager_team_learning_activities`, `manager_team_activity_participants`,
+`manager_collaboration_records`, `manager_collaboration_record_members`,
+`connection_requests`, `connection_invites`, employer sharing, and every
+table named in the prior two "still unconverted" notes above. The executor
+remains out of scope until those are addressed or explicitly judged out of
+scope one by one.
+
+Verified: same full suite as the connections increment above (`db reset
+--local --no-seed`, `db lint --local --level error`, all three
+`supabase/tests/*.sql` suites via `docker exec supabase_db_learnscope
+psql`, `npm run lint` exit 0, `npm run build`, `npm run test:run` 313
+tests / 50 files unchanged).
+
 ## Remaining product and engineering work
 
 ### 1. Replace login-ID ownership with profile ownership

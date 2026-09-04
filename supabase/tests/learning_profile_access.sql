@@ -3,8 +3,10 @@
 -- experience in 20260904110000_courses_experience_access_helper.sql, to
 -- their dependent tables in
 -- 20260904120000_skills_courses_experience_dependents_access_helper.sql, and
--- to connections in 20260904150000_connections_access_helper.sql. Run
--- against a local database only; the script rolls back everything it does.
+-- to connections in 20260904150000_connections_access_helper.sql, and to
+-- manager_team_memberships in
+-- 20260904160000_manager_team_memberships_access_helper.sql. Run against a
+-- local database only; the script rolls back everything it does.
 --
 -- Proves the full scenario matrix for skills, courses, and experience, and
 -- (since all eleven dependent tables share the exact same policy shape and
@@ -249,5 +251,79 @@ select pg_temp.assert_sees_connection('50000000-0000-0000-0000-000000000005', tr
 
 -- 7. Unrelated login remains denied throughout.
 select pg_temp.assert_sees_connection('60000000-0000-0000-0000-000000000006', false, 'connection: unrelated login (end of scenario)');
+
+-- ----------------------------------------------------------------------------
+-- manager_team_memberships (20260904160000_manager_team_memberships_access_
+-- helper.sql): member_user_id identifies which learner a row is about, not
+-- an owner column, but the shape of what's being proven is the same as
+-- connections' single-side case -- a linked account should see exactly what
+-- the member's own login could already see, nothing about a manager's own
+-- can_manage_manager_team visibility changes here.
+-- ----------------------------------------------------------------------------
+
+insert into auth.users (id, email, email_confirmed_at)
+values ('b0000000-0000-0000-0000-00000000000b', 'manager@example.com', now());
+
+insert into public.workspaces (id, workspace_type, name, owner_person_id)
+select 'b0000000-0000-0000-0000-0000000000b1', 'manager', 'Test Manager Workspace', paa.person_id
+from public.person_auth_accounts paa
+where paa.auth_user_id = 'b0000000-0000-0000-0000-00000000000b'
+  and paa.account_type = 'personal' and paa.status = 'active';
+
+insert into public.manager_teams (id, workspace_id, name, created_by)
+values ('b0000000-0000-0000-0000-0000000000b2', 'b0000000-0000-0000-0000-0000000000b1', 'Test Team', 'b0000000-0000-0000-0000-00000000000b');
+
+-- Owner a (40000000...04, the learner) is the team member. Its linked
+-- account (50000000...05) already has an active link and an active
+-- workspace_access grant carried over from the connections scenario above.
+insert into public.manager_team_memberships (id, team_id, member_user_id, role, status, invited_by, decided_at)
+values (
+  'b0000000-0000-0000-0000-0000000000b3',
+  'b0000000-0000-0000-0000-0000000000b2',
+  '40000000-0000-0000-0000-000000000004',
+  'member', 'active', 'b0000000-0000-0000-0000-00000000000b', now()
+);
+
+create or replace function pg_temp.assert_sees_membership(p_as_user uuid, p_expect_visible boolean, p_label text)
+returns void
+language plpgsql
+as $$
+declare
+  v_sees boolean;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', p_as_user::text, true);
+
+  select exists (select 1 from public.manager_team_memberships where id = 'b0000000-0000-0000-0000-0000000000b3') into v_sees;
+
+  reset role;
+
+  if v_sees is distinct from p_expect_visible then
+    raise exception '% : expected membership visibility=%, got %', p_label, p_expect_visible, v_sees;
+  end if;
+end
+$$;
+
+-- 1. The member's own login is unaffected (already true via the pre-existing
+--    "member_user_id = auth.uid()" clause; proves the new policy doesn't
+--    change or duplicate-break that).
+select pg_temp.assert_sees_membership('40000000-0000-0000-0000-000000000004', true, 'membership: member login');
+
+-- 2. A genuinely unrelated login (no team role, no link to the member) is
+--    denied.
+select pg_temp.assert_sees_membership('60000000-0000-0000-0000-000000000006', false, 'membership: unrelated login');
+
+-- 3. The member's linked account (already carrying an active link and grant
+--    from the connections scenario above) can see the membership row.
+select pg_temp.assert_sees_membership('50000000-0000-0000-0000-000000000005', true, 'membership: linked login with active link and grant');
+
+-- 4. Revoking the workspace_access grant denies the linked login again --
+--    proves visibility is actually gated by the helper, not a static true.
+update public.workspace_access
+set status = 'revoked', revoked_at = now()
+where workspace_id = '40000000-0000-0000-0000-000000000004'
+  and auth_account_id = '50000000-0000-0000-0000-000000000005';
+
+select pg_temp.assert_sees_membership('50000000-0000-0000-0000-000000000005', false, 'membership: linked login after workspace_access revoked');
 
 rollback;
