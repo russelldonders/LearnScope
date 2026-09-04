@@ -884,6 +884,19 @@ workflow in CLAUDE.md #10 before pushing.
 
 ### 1. Replace login-ID ownership with profile ownership
 
+**Status (2026-09-04): done.** Completed across twelve domain-by-domain
+session updates above (learning-profile access helper through
+`employer_role_assignments`). Every table with a learner-identifying column
+now has an additive `private.can_view_learning_profile`-gated read policy,
+or is explicitly, reviewably ruled out of scope (manager/employer
+membership tables, credential-bearing tables, employer-side role
+templates). See the session-update log above for the full per-table record
+and the one real bug an allow/deny test caught (`employer_role_assignments`'
+cross-table RLS lookup). The steps below are the original plan, kept for
+context; it was executed via RLS-policy-domain-by-domain rather than a
+`learning_profile_id` compatibility column, since `private.can_view_
+learning_profile(legacy_user_id)` proved sufficient without one.
+
 Do this before implementing transfer execution. The current learner domain is
 still built around `auth.uid() = user_id`. Simply changing source rows to the
 durable auth user's UUID would make those rows inaccessible when the learner
@@ -910,6 +923,20 @@ learning, privacy, connections, evidence, xAPI, manager sharing, and employer
 sharing have different access semantics.
 
 ### 2. Define domain-specific execution rules
+
+**Status (2026-09-04): specified, not implemented.** See
+`docs/profile-transfer-execution-rules.md` for the full, reviewed
+move/keep_durable/use_source rule set per table, built directly from item
+1's completed table-by-table inventory (more precise than the summary
+below, which predates that inventory and undercounts/miscategorizes a few
+tables -- e.g. "employer role alignment references" turned out to need no
+transfer rule at all, not a dependency to handle). That document also
+records three open questions -- cross-profile `parent_experience_id`,
+re-parenting dependents on `keep_durable`/`use_source`, and missing
+plan-item UI for connections/xAPI/employer/manager domains -- that need a
+decision before item 3 (the executor) can be built safely. Original
+dependency catalog kept below for context; superseded by the new document
+where they differ.
 
 The executor must handle roots and every dependent foreign key in one database
 transaction. The local catalog identified these dependencies:
