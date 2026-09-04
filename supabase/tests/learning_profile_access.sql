@@ -5,10 +5,11 @@
 -- 20260904120000_skills_courses_experience_dependents_access_helper.sql, and
 -- to connections in 20260904150000_connections_access_helper.sql, to
 -- manager_team_memberships in
--- 20260904160000_manager_team_memberships_access_helper.sql, and to its
--- dependents in 20260904170000_manager_team_dependents_access_helper.sql.
--- Run against a local database only; the script rolls back everything it
--- does.
+-- 20260904160000_manager_team_memberships_access_helper.sql, to its
+-- dependents in 20260904170000_manager_team_dependents_access_helper.sql,
+-- and to connection_requests/connection_invites in
+-- 20260904180000_connection_requests_invites_access_helper.sql. Run against
+-- a local database only; the script rolls back everything it does.
 --
 -- Proves the full scenario matrix for skills, courses, and experience, and
 -- (since all eleven dependent tables share the exact same policy shape and
@@ -393,5 +394,86 @@ where workspace_id = '40000000-0000-0000-0000-000000000004'
   and auth_account_id = '50000000-0000-0000-0000-000000000005';
 
 select pg_temp.assert_sees_team_dependents('50000000-0000-0000-0000-000000000005', true, 'team dependents: linked login with grant reactivated');
+
+-- ----------------------------------------------------------------------------
+-- connection_requests and connection_invites
+-- (20260904180000_connection_requests_invites_access_helper.sql). Reuses
+-- owner a (...004) and its already-active linked account (...005) from
+-- above. connection_requests is two-party (already exhaustively proven
+-- independent-per-side on connections itself, so this is a proportionate
+-- one-side spot check); connection_invites is single-owner, same shape as
+-- skills/courses/experience.
+-- ----------------------------------------------------------------------------
+
+insert into auth.users (id, email, email_confirmed_at)
+values ('c0000000-0000-0000-0000-00000000000c', 'unrelated-2@example.com', now());
+
+insert into public.connection_requests (id, requester_id, recipient_id, status)
+values ('40000000-0000-0000-0000-00000000cccd', '40000000-0000-0000-0000-000000000004', '60000000-0000-0000-0000-000000000006', 'pending');
+
+insert into public.connection_invites (id, inviter_id, skill_id)
+values ('40000000-0000-0000-0000-00000000ccce', '40000000-0000-0000-0000-000000000004', '40000000-0000-0000-0000-00000000aaaa');
+
+create or replace function pg_temp.assert_sees_request_and_invite(p_as_user uuid, p_expect_visible boolean, p_label text)
+returns void
+language plpgsql
+as $$
+declare
+  v_sees_request boolean;
+  v_sees_invite boolean;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', p_as_user::text, true);
+
+  select exists (select 1 from public.connection_requests where id = '40000000-0000-0000-0000-00000000cccd') into v_sees_request;
+  select exists (select 1 from public.connection_invites where id = '40000000-0000-0000-0000-00000000ccce') into v_sees_invite;
+
+  reset role;
+
+  if v_sees_request is distinct from p_expect_visible then
+    raise exception '% : expected connection_request visibility=%, got %', p_label, p_expect_visible, v_sees_request;
+  end if;
+  if v_sees_invite is distinct from p_expect_visible then
+    raise exception '% : expected connection_invite visibility=%, got %', p_label, p_expect_visible, v_sees_invite;
+  end if;
+end
+$$;
+
+-- 1. The requester/inviter's own login is unaffected.
+select pg_temp.assert_sees_request_and_invite('40000000-0000-0000-0000-000000000004', true, 'request/invite: owner login');
+
+-- 2. A genuinely unrelated login (not the requester, recipient, or inviter)
+--    is denied.
+select pg_temp.assert_sees_request_and_invite('c0000000-0000-0000-0000-00000000000c', false, 'request/invite: unrelated login');
+
+-- 3. The requester/inviter's linked account (already active from the
+--    connections scenario above) can see both.
+select pg_temp.assert_sees_request_and_invite('50000000-0000-0000-0000-000000000005', true, 'request/invite: linked login with active link and grant');
+
+-- 4. The recipient's own login sees the connection_request (unchanged,
+--    already covered by the pre-existing policy) -- connection_invites has
+--    no recipient/accepter column to check symmetrically, so this checks
+--    connection_requests alone rather than reusing the combined assertion.
+create or replace function pg_temp.assert_sees_connection_request(p_as_user uuid, p_expect_visible boolean, p_label text)
+returns void
+language plpgsql
+as $$
+declare
+  v_sees boolean;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', p_as_user::text, true);
+
+  select exists (select 1 from public.connection_requests where id = '40000000-0000-0000-0000-00000000cccd') into v_sees;
+
+  reset role;
+
+  if v_sees is distinct from p_expect_visible then
+    raise exception '% : expected connection_request visibility=%, got %', p_label, p_expect_visible, v_sees;
+  end if;
+end
+$$;
+
+select pg_temp.assert_sees_connection_request('60000000-0000-0000-0000-000000000006', true, 'request: recipient login');
 
 rollback;

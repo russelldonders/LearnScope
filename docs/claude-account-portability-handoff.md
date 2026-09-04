@@ -594,6 +594,58 @@ Verified: same full suite as the two prior increments (`db reset --local
 psql`, `npm run lint` exit 0, `npm run build`, `npm run test:run` 313 tests
 / 50 files unchanged).
 
+## Session update: connection_requests/connection_invites (2026-09-04, continued)
+
+Eighth domain-by-domain increment, same session. Added in
+`20260904180000_connection_requests_invites_access_helper.sql` and
+`20260904181500_grant_connection_invites_select.sql`:
+
+- Reviewed and converted both tables deferred since the skills-dependents
+  and connections increments as "different access semantics": on inspection
+  neither actually needed bespoke treatment. `connection_requests`
+  (`requester_id`, `recipient_id`) is two-party, identical shape to
+  `connections` itself -- same additive either-side policy.
+  `connection_invites` (`inviter_id`, share-code based) is single-owner,
+  identical shape to skills/courses/experience -- same additive
+  `private.can_view_learning_profile(inviter_id)` policy. `accepted_by` on
+  `connection_invites` gets no new visibility: the existing schema never
+  gave the accepter read access to the invite either, so this stays purely
+  additive to what the inviter's own login could already see.
+- Checked first: both tables have exactly one existing SELECT policy each,
+  both permissive, neither with `using (true)`.
+- Found a third instance of the now-familiar local/Staging grant gap:
+  `connection_invites` has never had `grant select ... to authenticated` in
+  any migration (confirmed via `information_schema.role_table_grants`
+  against a fresh local reset: `authenticated` has TRUNCATE/REFERENCES/
+  TRIGGER on it but not SELECT/INSERT/UPDATE/DELETE). `connection_requests`
+  already had its grant from
+  `20260903160000_restore_learner_action_read_grants.sql`. Same verdict as
+  every prior instance of this gap: not broken on Staging (ambient default
+  ACL), fixed here for local dev and `stage_bootstrap_consolidated.sql`'s
+  from-empty bootstrap case.
+- Extended `supabase/tests/learning_profile_access.sql`, reusing owner a
+  (`...004`) and its already-active linked account (`...005`): proves the
+  requester/inviter's own login, a genuinely unrelated login, and the linked
+  account, across both tables together; connection_requests' two-party
+  independence was already exhaustively proven on `connections` itself, so
+  this adds one proportionate spot check (the recipient's own login sees
+  the request) rather than re-proving full two-sided independence again.
+- Regenerated `stage_bootstrap_consolidated.sql`; diff-verified against the
+  prior bundle contains only these two migrations' content.
+
+Still unconverted: employer sharing, and every table named in the earlier
+"still unconverted" notes above (peer ratings, validation requests,
+searchable skills, employer/manager-shared skills, public share-link
+skills, parent/child experience links, employer role alignment references,
+membership tables). The executor remains out of scope until those are
+addressed or explicitly judged out of scope one by one.
+
+Verified: same full suite as prior increments (`db reset --local
+--no-seed`, `db lint --local --level error`, all three
+`supabase/tests/*.sql` suites via `docker exec supabase_db_learnscope
+psql`, `npm run lint` exit 0, `npm run build`, `npm run test:run` 313 tests
+/ 50 files unchanged).
+
 ## Remaining product and engineering work
 
 ### 1. Replace login-ID ownership with profile ownership

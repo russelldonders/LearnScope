@@ -16264,3 +16264,87 @@ create policy "Linked accounts can view accessible team activity invitations"
   );
 
 
+-- =============================================================================
+-- 20260904180000_connection_requests_invites_access_helper.sql
+-- =============================================================================
+
+-- Eighth domain-by-domain step of the additive learning-profile ownership
+-- transition (see 20260904090000_learning_profile_access_helper.sql for the
+-- full design rationale). Converts connection_requests and connection_invites
+-- (0058_skill_discovery_and_connections.sql), deferred from both the
+-- skills-dependents increment and the connections increment as "different
+-- access semantics" pending review -- reviewed now:
+--
+-- connection_requests (requester_id, recipient_id) is two-party, the same
+-- shape as connections itself: visible if the caller can view *either*
+-- side's learning profile. Existing "Users can view requests they sent or
+-- received" policy is unchanged.
+--
+-- connection_invites (inviter_id, share-code based, single owner) is the
+-- same shape as skills/courses/experience: visible if the caller can view
+-- the inviter's learning profile. accepted_by is not given any additional
+-- visibility here -- the existing schema never granted the accepter read
+-- access to the invite either, so this stays purely additive to what the
+-- inviter's own login could already see. Existing "Inviters can view their
+-- own invites" policy is unchanged.
+--
+-- Checked before writing this migration: both tables have exactly one
+-- existing SELECT policy each, both permissive (not restrictive), neither
+-- with `using (true)`.
+--
+-- connection_requests already has `grant select ... to authenticated` (from
+-- 20260903160000_restore_learner_action_read_grants.sql). connection_invites
+-- does not -- confirmed via information_schema.role_table_grants against a
+-- fresh local reset -- so 20260904181500_grant_connection_invites_select.sql
+-- adds it, matching the same local/Staging ambient-ACL divergence documented
+-- for connections, courses, and their dependents in earlier migrations of
+-- this transition.
+
+create policy "Linked accounts can view accessible connection requests"
+  on connection_requests for select
+  to authenticated
+  using (
+    private.can_view_learning_profile(requester_id)
+    or private.can_view_learning_profile(recipient_id)
+  );
+
+create policy "Linked accounts can view accessible connection invites"
+  on connection_invites for select
+  to authenticated
+  using (private.can_view_learning_profile(inviter_id));
+
+
+-- =============================================================================
+-- 20260904181500_grant_connection_invites_select.sql
+-- =============================================================================
+
+-- Found while adding SQL allow/deny tests for
+-- 20260904180000_connection_requests_invites_access_helper.sql: a fresh
+-- local `supabase db reset` leaves `authenticated` without SELECT on
+-- `connection_invites` (0058_skill_discovery_and_connections.sql enabled RLS
+-- and added a correctly-scoped "Inviters can view their own invites" policy,
+-- but no migration ever granted the table-level privilege), confirmed via
+-- `information_schema.role_table_grants` against a fresh local reset:
+-- authenticated has TRUNCATE/REFERENCES/TRIGGER on this table but not
+-- SELECT/INSERT/UPDATE/DELETE.
+--
+-- Same root cause and same verdict as the connections/courses/skills-
+-- dependents grant gaps already documented and fixed in
+-- 20260904100000_grant_connections_select.sql,
+-- 20260904111500_grant_courses_select.sql, and
+-- 20260904121500_grant_skills_courses_experience_dependents_select.sql:
+-- Staging's Postgres instance has an ambient default ACL (not captured in
+-- any migration) that grants `authenticated` full table privileges on new
+-- tables automatically, so this is not currently broken for real users on
+-- Staging. The fix still matters for local dev and for
+-- `stage_bootstrap_consolidated.sql`'s "bootstrap a brand-new Staging
+-- project from empty" use case (CLAUDE.md #17), which would not inherit
+-- Staging's undocumented default.
+--
+-- The RLS policies on connection_invites already scope visible rows to the
+-- inviter (and, as of this transition, their linked accounts), so this
+-- grant is safe regardless of environment.
+
+grant select on public.connection_invites to authenticated;
+
+
