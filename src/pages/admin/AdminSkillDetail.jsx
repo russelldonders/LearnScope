@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
 import AdminLayout from './AdminLayout'
 import { getLibrarySkill, listCoursesForSkill } from '../../lib/admin/skills'
 import {
@@ -12,6 +13,7 @@ import { LEVEL_LABELS, LEVEL_DESCRIPTIONS, KNOWLEDGE_LEVEL_LABELS, LEVELS } from
 import { SKILL_TYPE_LABELS } from '../../lib/statusLabels'
 import SkillTestQuestionsModal from '../../components/SkillTestQuestionsModal'
 import StatusBadge from '../../components/StatusBadge'
+import SkillCompositionSection from './SkillCompositionSection'
 
 // Read-only overview for a platform admin drilling into one skill_library
 // entry -- who owns it, how many people track it at each ability level (with
@@ -24,6 +26,7 @@ import StatusBadge from '../../components/StatusBadge'
 // rather than a direct `skills` query, since a platform admin has no standing
 // RLS access to every learner's personal skills rows.
 export default function AdminSkillDetail() {
+  const { user } = useAuth()
   const { skillId } = useParams()
   const [skill, setSkill] = useState(null)
   const [totalTrackers, setTotalTrackers] = useState(0)
@@ -102,6 +105,8 @@ export default function AdminSkillDetail() {
                 />
               </div>
             </div>
+
+            {!skill.is_private && <SkillCompositionSection parentSkill={skill} userId={user.id} />}
 
             <div>
               <h3 className="font-display text-lg text-ink mb-2">
