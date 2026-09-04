@@ -813,6 +813,73 @@ psql`, `npm run lint` exit 0, `npm run build`, `npm run test:run` 313 tests
 / 50 files unchanged). Not yet applied to Staging -- see the migration
 workflow in CLAUDE.md #10 before pushing.
 
+## Session update: employer_role_assignments (2026-09-04, continued)
+
+Twelfth domain-by-domain increment, same session, resolving the one
+remaining item flagged as needing dedicated design review. Added in
+`20260904220000_employer_role_assignments_access_helper.sql`:
+
+- Full re-review split this into two independent pieces rather than one
+  "materially different" whole. `employer_role_profiles`, `employer_role_
+  profile_skills`, and `employer_role_profile_training` have no learner-
+  owned column at all -- they're the employer's own role templates,
+  visible only to active employer members; `created_by` is an audit field,
+  not ownership. These are permanently out of scope, same reasoning as
+  `manager_teams`. `employer_role_assignments` does have a resolvable
+  learner side (`employer_member_id` -> `employer_members.user_id`) and
+  fits the established dependent-join pattern -- converted.
+- **The SQL allow/deny test caught a real bug before commit**: the first
+  version of this migration's policy subqueried `employer_members` directly
+  to resolve `employer_member_id` to `user_id`. Unlike every prior
+  dependent-table conversion (which joins through a table *also* being
+  converted in the same transition), `employer_members` is deliberately
+  never converted -- so that subquery runs under the *caller's own* RLS on
+  `employer_members`, whose policies only cover "is a member/admin of this
+  employer" or "auth.uid() = user_id" -- neither true for a linked account
+  acting for a different `auth.uid()`. Result: the subquery silently
+  returned zero rows and denied access even with an active link and grant,
+  caught immediately by scenario 3 of the new test (expected visible=true,
+  got false). Fixed the same way `learning_profiles`/`workspaces`' own
+  equivalent cross-person lookup problem was fixed in the very first
+  migration of this transition: a narrow `private.employer_member_user_id
+  (uuid)` SECURITY DEFINER helper that resolves the lookup bypassing
+  employer_members' RLS, without exposing employer_members itself any more
+  broadly. One further correction from that same first-migration pattern:
+  `private.personal_workspace_owner_account` is only ever called from
+  *inside* another SECURITY DEFINER function's body, so `authenticated`
+  never needed direct execute on it -- but this new helper is called
+  directly from the policy's `USING` clause, which runs as the querying
+  role, so it needed its own explicit `grant execute ... to authenticated`
+  (a first version mistakenly revoked it from authenticated too, following
+  the other helper's grants literally rather than by function).
+  **Any future dependent-table conversion must check whether the table it
+  joins through is itself being converted in this transition -- if not, a
+  security-definer resolver function is required, not a plain subquery.**
+- Checked first: `employer_role_assignments` has exactly the one existing
+  SELECT policy, permissive, no `using (true)`, already granted `select` to
+  `authenticated`.
+- Extended `supabase/tests/learning_profile_access.sql` with an employer-
+  member/role-profile/assignment fixture, proving learner/unrelated/linked-
+  active/linked-after-revoke -- this is the test that caught the bug above.
+- Regenerated `stage_bootstrap_consolidated.sql`; diff-verified against the
+  prior bundle contains only this migration's content.
+
+This closes out the domain-by-domain ownership transition (item 1 of
+"Remaining product and engineering work" below) except for tables correctly
+ruled permanently out of scope (`manager_teams`, `manager_collaboration_
+records`/`_members`, `employer_members`, `organisation_members`,
+`employer_role_profiles`/`_skills`/`_training`) and `connection_invites`/
+`connection_requests`' underlying pending-invitation semantics already
+covered. The executor (item 3) can now be considered, subject to items 2-4
+below still being unaddressed.
+
+Verified: same full suite as prior increments (`db reset --local
+--no-seed`, `db lint --local --level error`, all three
+`supabase/tests/*.sql` suites via `docker exec supabase_db_learnscope
+psql`, `npm run lint` exit 0, `npm run build`, `npm run test:run` 313 tests
+/ 50 files unchanged). Not yet applied to Staging -- see the migration
+workflow in CLAUDE.md #10 before pushing.
+
 ## Remaining product and engineering work
 
 ### 1. Replace login-ID ownership with profile ownership

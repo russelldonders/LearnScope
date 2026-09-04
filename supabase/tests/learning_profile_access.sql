@@ -15,8 +15,10 @@
 -- skill_peer_ratings/skill_validation_requests in
 -- 20260904200000_peer_ratings_validation_requests_access_helper.sql, and to
 -- profile_searchable_skills/profile_share_links/profile_share_link_skills
--- in 20260904210000_searchable_and_share_link_skills_access_helper.sql. Run
--- against a local database only; the script rolls back everything it does.
+-- in 20260904210000_searchable_and_share_link_skills_access_helper.sql, and
+-- to employer_role_assignments in
+-- 20260904220000_employer_role_assignments_access_helper.sql. Run against a
+-- local database only; the script rolls back everything it does.
 --
 -- Proves the full scenario matrix for skills, courses, and experience, and
 -- (since all eleven dependent tables share the exact same policy shape and
@@ -696,5 +698,63 @@ where workspace_id = '40000000-0000-0000-0000-000000000004'
   and auth_account_id = '50000000-0000-0000-0000-000000000005';
 
 select pg_temp.assert_sees_searchable_and_share_links('50000000-0000-0000-0000-000000000005', false, 'searchable/share links: linked login after workspace_access revoked');
+
+-- ----------------------------------------------------------------------------
+-- employer_role_assignments
+-- (20260904220000_employer_role_assignments_access_helper.sql). Reuses
+-- owner a (...004), its linked account (...005), and employer d1 from the
+-- employer-sharing scenario above.
+-- ----------------------------------------------------------------------------
+
+update public.workspace_access
+set status = 'active', revoked_at = null
+where workspace_id = '40000000-0000-0000-0000-000000000004'
+  and auth_account_id = '50000000-0000-0000-0000-000000000005';
+
+insert into public.employer_members (id, employer_id, user_id, role, status)
+values ('d0000000-0000-0000-0000-0000000000d7', 'd0000000-0000-0000-0000-0000000000d1', '40000000-0000-0000-0000-000000000004', 'member', 'active');
+
+insert into public.employer_role_profiles (id, employer_id, name, created_by)
+values ('d0000000-0000-0000-0000-0000000000d8', 'd0000000-0000-0000-0000-0000000000d1', 'Test Role', 'b0000000-0000-0000-0000-00000000000b');
+
+insert into public.employer_role_assignments (id, role_profile_id, employer_member_id, proposed_by)
+values ('d0000000-0000-0000-0000-0000000000d9', 'd0000000-0000-0000-0000-0000000000d8', 'd0000000-0000-0000-0000-0000000000d7', 'b0000000-0000-0000-0000-00000000000b');
+
+create or replace function pg_temp.assert_sees_role_assignment(p_as_user uuid, p_expect_visible boolean, p_label text)
+returns void
+language plpgsql
+as $$
+declare
+  v_sees boolean;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', p_as_user::text, true);
+
+  select exists (select 1 from public.employer_role_assignments where id = 'd0000000-0000-0000-0000-0000000000d9') into v_sees;
+
+  reset role;
+
+  if v_sees is distinct from p_expect_visible then
+    raise exception '% : expected role-assignment visibility=%, got %', p_label, p_expect_visible, v_sees;
+  end if;
+end
+$$;
+
+-- 1. The assigned learner's own login is unaffected.
+select pg_temp.assert_sees_role_assignment('40000000-0000-0000-0000-000000000004', true, 'role assignment: learner login');
+
+-- 2. Unrelated login is denied.
+select pg_temp.assert_sees_role_assignment('60000000-0000-0000-0000-000000000006', false, 'role assignment: unrelated login');
+
+-- 3. Linked account (reactivated above) sees it.
+select pg_temp.assert_sees_role_assignment('50000000-0000-0000-0000-000000000005', true, 'role assignment: linked login with active link and grant');
+
+-- 4. Revoking the workspace_access grant denies the linked login again.
+update public.workspace_access
+set status = 'revoked', revoked_at = now()
+where workspace_id = '40000000-0000-0000-0000-000000000004'
+  and auth_account_id = '50000000-0000-0000-0000-000000000005';
+
+select pg_temp.assert_sees_role_assignment('50000000-0000-0000-0000-000000000005', false, 'role assignment: linked login after workspace_access revoked');
 
 rollback;
