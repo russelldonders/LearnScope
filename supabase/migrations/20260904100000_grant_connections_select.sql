@@ -1,19 +1,28 @@
--- Fix found while adding SQL allow/deny tests for
--- 20260904090000_learning_profile_access_helper.sql: 0058_skill_discovery_
--- and_connections.sql enabled RLS and added a "Users can view their own
--- connections" policy on connections, but never granted the authenticated
--- role table-level SELECT. Every existing helper that reads connections
--- (is_connected, used by the "Connections can view visible skills profiles"
--- and "Skills open to being asked to validate are discoverable" policies on
--- skills) runs SECURITY INVOKER, so any RLS evaluation that needs to check
--- someone else's skill visibility via a connection throws "permission
--- denied for table connections" instead of correctly evaluating to false/
--- true. This silently broke the connections-based skill-sharing feature
--- for any row where the cheap auth.uid() = user_id check didn't already
--- short-circuit visibility.
+-- Found while adding SQL allow/deny tests for
+-- 20260904090000_learning_profile_access_helper.sql: a fresh local
+-- `supabase db reset` leaves `authenticated` without SELECT on `connections`
+-- (0058_skill_discovery_and_connections.sql enabled RLS and added a
+-- correctly-scoped "Users can view their own connections" policy, but never
+-- granted the table-level privilege), so any RLS evaluation of
+-- is_connected() (SECURITY INVOKER, used by "Connections can view visible
+-- skills profiles" and "Skills open to being asked to validate are
+-- discoverable" on skills) for a row that wasn't the caller's own threw
+-- "permission denied for table connections" locally.
+--
+-- Checked directly against the linked Staging project
+-- (`npx supabase db query --linked`): `authenticated` already has full
+-- SELECT/INSERT/UPDATE/DELETE on `connections` there, so this is NOT
+-- currently broken for real users. Staging's Postgres instance has a
+-- default ACL (`alter default privileges ... grant all on tables to
+-- authenticated`, visible in `pg_default_acl`) that isn't captured in any
+-- migration and predates this project's migration history; new tables
+-- created there inherit full grants automatically. A fresh local reset (and,
+-- per CLAUDE.md #17, a brand-new Staging project bootstrapped purely from
+-- `stage_bootstrap_consolidated.sql`) does not have that ambient default, so
+-- it would be missing this grant. This migration makes that explicit so the
+-- schema doesn't depend on an undocumented, environment-specific default.
 --
 -- The RLS policy on connections already scopes visible rows to the caller's
--- own connections, so a blanket SELECT grant is safe here -- this is the
--- same pattern already used for is_skill_validator's dependency table.
+-- own connections, so this grant is safe regardless of environment.
 
 grant select on public.connections to authenticated;

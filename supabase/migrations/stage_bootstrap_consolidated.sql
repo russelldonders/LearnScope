@@ -15520,22 +15520,99 @@ create policy "Linked accounts can view accessible skills"
 -- 20260904100000_grant_connections_select.sql
 -- =============================================================================
 
--- Fix found while adding SQL allow/deny tests for
--- 20260904090000_learning_profile_access_helper.sql: 0058_skill_discovery_
--- and_connections.sql enabled RLS and added a "Users can view their own
--- connections" policy on connections, but never granted the authenticated
--- role table-level SELECT. Every existing helper that reads connections
--- (is_connected, used by the "Connections can view visible skills profiles"
--- and "Skills open to being asked to validate are discoverable" policies on
--- skills) runs SECURITY INVOKER, so any RLS evaluation that needs to check
--- someone else's skill visibility via a connection throws "permission
--- denied for table connections" instead of correctly evaluating to false/
--- true. This silently broke the connections-based skill-sharing feature
--- for any row where the cheap auth.uid() = user_id check didn't already
--- short-circuit visibility.
+-- Found while adding SQL allow/deny tests for
+-- 20260904090000_learning_profile_access_helper.sql: a fresh local
+-- `supabase db reset` leaves `authenticated` without SELECT on `connections`
+-- (0058_skill_discovery_and_connections.sql enabled RLS and added a
+-- correctly-scoped "Users can view their own connections" policy, but never
+-- granted the table-level privilege), so any RLS evaluation of
+-- is_connected() (SECURITY INVOKER, used by "Connections can view visible
+-- skills profiles" and "Skills open to being asked to validate are
+-- discoverable" on skills) for a row that wasn't the caller's own threw
+-- "permission denied for table connections" locally.
+--
+-- Checked directly against the linked Staging project
+-- (`npx supabase db query --linked`): `authenticated` already has full
+-- SELECT/INSERT/UPDATE/DELETE on `connections` there, so this is NOT
+-- currently broken for real users. Staging's Postgres instance has a
+-- default ACL (`alter default privileges ... grant all on tables to
+-- authenticated`, visible in `pg_default_acl`) that isn't captured in any
+-- migration and predates this project's migration history; new tables
+-- created there inherit full grants automatically. A fresh local reset (and,
+-- per CLAUDE.md #17, a brand-new Staging project bootstrapped purely from
+-- `stage_bootstrap_consolidated.sql`) does not have that ambient default, so
+-- it would be missing this grant. This migration makes that explicit so the
+-- schema doesn't depend on an undocumented, environment-specific default.
 --
 -- The RLS policy on connections already scopes visible rows to the caller's
--- own connections, so a blanket SELECT grant is safe here -- this is the
--- same pattern already used for is_skill_validator's dependency table.
+-- own connections, so this grant is safe regardless of environment.
 
 grant select on public.connections to authenticated;
+
+
+
+-- =============================================================================
+-- 20260904110000_courses_experience_access_helper.sql
+-- =============================================================================
+
+-- Second domain-by-domain step of the additive learning-profile ownership
+-- transition (see 20260904090000_learning_profile_access_helper.sql for the
+-- full design rationale). Converts the two next domain root tables from the
+-- handoff's dependency inventory: courses and experience. Same shape as the
+-- skills conversion -- existing "for all" owner policies are unchanged; each
+-- table gains one new, additive, SELECT-only policy using the existing
+-- private.can_view_learning_profile(uuid) helper.
+--
+-- Checked before writing this migration: neither courses nor experience has
+-- a pre-existing `using (true)` policy (unlike profiles), and every existing
+-- policy on both tables is permissive (not restrictive), so this addition
+-- is purely additive and cannot be narrowed or blocked by any of them.
+--
+-- Still unconverted: skills' and courses'/experience's own dependent tables
+-- (assessments, quizzes, peer ratings, targets, tags, course-experience
+-- links, skill-course/skill-experience links, validation requests, xAPI
+-- statements and launch sessions, employer role alignment references), plus
+-- actions, evidence, connections, and manager/employer sharing paths that
+-- reference these domains. Each remains its own reviewable increment.
+
+create policy "Linked accounts can view accessible courses"
+  on courses for select
+  to authenticated
+  using (private.can_view_learning_profile(user_id));
+
+create policy "Linked accounts can view accessible experience"
+  on experience for select
+  to authenticated
+  using (private.can_view_learning_profile(user_id));
+
+
+
+-- =============================================================================
+-- 20260904111500_grant_courses_select.sql
+-- =============================================================================
+
+-- Found while adding SQL allow/deny tests for
+-- 20260904110000_courses_experience_access_helper.sql: a fresh local
+-- `supabase db reset` leaves `authenticated` without SELECT on `courses`
+-- (0003_courses_experience.sql enabled RLS and the owner policy but never
+-- granted the table-level privilege; unlike `experience`, created in the
+-- same original migration, which later picked one up incidentally via
+-- 20260903170000_employer_role_profiles.sql). Any RLS evaluation of the
+-- SECURITY INVOKER "Validators can view courses linked to skills they're
+-- validating" or "Provider admins can view their course participants"
+-- policies for a row that wasn't the caller's own threw "permission denied
+-- for table courses" locally -- the same failure mode as
+-- 20260904100000_grant_connections_select.sql.
+--
+-- As with that migration: checked directly against the linked Staging
+-- project (`npx supabase db query --linked`) and `authenticated` already
+-- has full SELECT/INSERT/UPDATE/DELETE on `courses` there via Staging's
+-- ambient default ACL, so this is NOT currently broken for real users. This
+-- migration exists so the schema doesn't depend on that undocumented,
+-- environment-specific default -- see the fuller explanation in
+-- 20260904100000_grant_connections_select.sql.
+--
+-- The existing RLS policies on courses already scope visible rows
+-- correctly, so this grant is safe regardless of environment.
+
+grant select on public.courses to authenticated;

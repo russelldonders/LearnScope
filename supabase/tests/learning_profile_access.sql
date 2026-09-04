@@ -1,14 +1,15 @@
 -- Allow/deny proof for the additive learning-profile access helper added in
--- 20260904090000_learning_profile_access_helper.sql. Run against a local
--- database only; the script rolls back everything it does.
+-- 20260904090000_learning_profile_access_helper.sql and applied to courses/
+-- experience in 20260904110000_courses_experience_access_helper.sql. Run
+-- against a local database only; the script rolls back everything it does.
 --
--- Proves, for the skills domain root table:
+-- Proves, for each converted domain root table (skills, courses, experience):
 --   1. The profile owner's own personal login is unaffected.
 --   2. A truly unrelated login is denied throughout.
 --   3. A verified account link alone (no workspace_access grant) grants
 --      nothing.
 --   4. An active verified account link *and* an active workspace_access
---      grant together allow the linked login to view the skill.
+--      grant together allow the linked login to view the record.
 --   5. Revoking only the workspace_access grant denies access again.
 --   6. Revoking only the verified account link (grant left active) also
 --      denies access -- defense in depth, both facts must hold at once.
@@ -35,27 +36,44 @@ values
 insert into public.skills (id, user_id, name, category, level)
 values ('40000000-0000-0000-0000-00000000aaaa', '40000000-0000-0000-0000-000000000004', 'SQL', 'Technical', 3);
 
+insert into public.courses (id, user_id, name)
+values ('40000000-0000-0000-0000-00000000bbbb', '40000000-0000-0000-0000-000000000004', 'Advanced SQL');
+
+insert into public.experience (id, user_id, type, title, organization, start_date)
+values ('40000000-0000-0000-0000-00000000cccc', '40000000-0000-0000-0000-000000000004', 'employment', 'Engineer', 'Acme', '2020-01-01');
+
 create or replace function pg_temp.assert_owner_visibility(p_as_user uuid, p_expect_visible boolean, p_label text)
 returns void
 language plpgsql
 as $$
 declare
   v_sees_skill boolean;
+  v_sees_course boolean;
+  v_sees_experience boolean;
 begin
   set local role authenticated;
   perform set_config('request.jwt.claim.sub', p_as_user::text, true);
 
   select exists (select 1 from public.skills where id = '40000000-0000-0000-0000-00000000aaaa') into v_sees_skill;
+  select exists (select 1 from public.courses where id = '40000000-0000-0000-0000-00000000bbbb') into v_sees_course;
+  select exists (select 1 from public.experience where id = '40000000-0000-0000-0000-00000000cccc') into v_sees_experience;
 
   reset role;
 
   if v_sees_skill is distinct from p_expect_visible then
     raise exception '% : expected skill visibility=%, got %', p_label, p_expect_visible, v_sees_skill;
   end if;
+  if v_sees_course is distinct from p_expect_visible then
+    raise exception '% : expected course visibility=%, got %', p_label, p_expect_visible, v_sees_course;
+  end if;
+  if v_sees_experience is distinct from p_expect_visible then
+    raise exception '% : expected experience visibility=%, got %', p_label, p_expect_visible, v_sees_experience;
+  end if;
 end
 $$;
 
--- 1. Owner's own personal login sees their own profile/skill (unchanged).
+-- 1. Owner's own personal login sees their own skill/course/experience
+--    (unchanged).
 select pg_temp.assert_owner_visibility('40000000-0000-0000-0000-000000000004', true, 'owner login');
 
 -- 2. Unrelated login, no link and no grant, is denied.

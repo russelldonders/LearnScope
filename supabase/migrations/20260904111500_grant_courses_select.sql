@@ -1,0 +1,25 @@
+-- Found while adding SQL allow/deny tests for
+-- 20260904110000_courses_experience_access_helper.sql: a fresh local
+-- `supabase db reset` leaves `authenticated` without SELECT on `courses`
+-- (0003_courses_experience.sql enabled RLS and the owner policy but never
+-- granted the table-level privilege; unlike `experience`, created in the
+-- same original migration, which later picked one up incidentally via
+-- 20260903170000_employer_role_profiles.sql). Any RLS evaluation of the
+-- SECURITY INVOKER "Validators can view courses linked to skills they're
+-- validating" or "Provider admins can view their course participants"
+-- policies for a row that wasn't the caller's own threw "permission denied
+-- for table courses" locally -- the same failure mode as
+-- 20260904100000_grant_connections_select.sql.
+--
+-- As with that migration: checked directly against the linked Staging
+-- project (`npx supabase db query --linked`) and `authenticated` already
+-- has full SELECT/INSERT/UPDATE/DELETE on `courses` there via Staging's
+-- ambient default ACL, so this is NOT currently broken for real users. This
+-- migration exists so the schema doesn't depend on that undocumented,
+-- environment-specific default -- see the fuller explanation in
+-- 20260904100000_grant_connections_select.sql.
+--
+-- The existing RLS policies on courses already scope visible rows
+-- correctly, so this grant is safe regardless of environment.
+
+grant select on public.courses to authenticated;

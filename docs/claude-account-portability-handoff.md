@@ -129,8 +129,9 @@ The already-integrated review phase was deployed to staging:
    branch (`84a6f3d`, 4 commits ahead, no divergence).
 2. Ran the full frontend suite and local database checks: `npm run lint`
    (exit 0, pre-existing warnings only), `npm run build` (308 modules),
-   `npm test -- --run` (1247 tests, 214 files, all passed -- the wider count
-   reflects the full suite rather than the narrower set run at `49628af`),
+   `npm test -- --run` (reported 1247 tests/214 files at the time -- see the
+   "vitest.config.js worktree leak" note below; the real, correctly-scoped
+   count is 302 tests/49 files, matching `49628af`'s own record exactly),
    `npx supabase db reset --local --no-seed`, `npx supabase db lint --local
    --level error` (no errors), and `supabase/tests/verified_account_links.sql`
    (passed, rolled back).
@@ -164,15 +165,22 @@ and `20260904100000_grant_connections_select.sql`:
   pre-existing, unrelated `using (true)` SELECT policy ("Authenticated users
   can view profile names"), so any narrower additive policy on it is a
   no-op.
-- Found and fixed an unrelated pre-existing bug while writing the SQL
-  allow/deny tests: `connections` (from `0058_skill_discovery_and_
-  connections.sql`) had RLS and a scoping policy but no table-level `GRANT
-  SELECT` for `authenticated`. Any RLS evaluation needing `is_connected()`
-  for a row that wasn't the caller's own threw "permission denied for table
-  connections" instead of evaluating true/false -- silently breaking the
-  connections-based skill-sharing feature for exactly the rows it was meant
-  to allow. Fixed with a plain grant; `connections`' own RLS policy already
-  scopes rows correctly.
+- Found and fixed a local-environment gap while writing the SQL allow/deny
+  tests: `connections` (from `0058_skill_discovery_and_connections.sql`) had
+  RLS and a scoping policy but no table-level `GRANT SELECT` for
+  `authenticated` in any migration. A fresh local `supabase db reset` throws
+  "permission denied for table connections" from `is_connected()` for any
+  row that wasn't the caller's own, instead of evaluating true/false.
+  **Checked directly against the linked Staging project** (`npx supabase db
+  query --linked`) and this is *not* actually broken there: Staging's
+  Postgres instance has an ambient default ACL (`pg_default_acl`, not
+  captured in any migration) that grants `authenticated` full
+  SELECT/INSERT/UPDATE/DELETE on every new table automatically, so
+  connections-based skill-sharing works fine for real users today. The fix
+  (a plain grant) still matters for local dev and for
+  `stage_bootstrap_consolidated.sql`'s "bootstrap a brand-new Staging project
+  from empty" use case (CLAUDE.md #17) -- a genuinely fresh project would not
+  have Staging's undocumented default and would inherit this gap for real.
 - New test: `supabase/tests/learning_profile_access.sql`, covering personal
   login, linked work login (via directly-seeded `workspace_access` +
   `verified_account_links` rows -- no production grant RPC exists yet, see
@@ -191,6 +199,74 @@ and `20260904100000_grant_connections_select.sql`:
 
 Rerun the full frontend, migration-reset, database-lint, and transactional
 security suites after any further change; do not rely on this record.
+
+## Session update: courses/experience access helper (2026-09-04, continued)
+
+Second domain-by-domain increment, same session. Added in
+`20260904110000_courses_experience_access_helper.sql` and
+`20260904111500_grant_courses_select.sql`:
+
+- Converted `courses` and `experience` the same way as `skills`: one new
+  additive, SELECT-only policy each using the existing
+  `private.can_view_learning_profile(uuid)` helper; existing "for all" owner
+  policies untouched. Checked first that neither table has a `using (true)`
+  policy and that every existing policy on both is permissive, not
+  restrictive.
+- Found and fixed a second, structurally identical local-environment gap
+  while extending the SQL allow/deny tests: `courses` (from
+  `0003_courses_experience.sql`) was missing `GRANT SELECT` for
+  `authenticated` in any migration -- unlike `experience` (created in the
+  same original migration), which picked one up incidentally via
+  `20260903170000_employer_role_profiles.sql`. Same root cause and same
+  verdict as the `connections` gap above: confirmed via `npx supabase db
+  query --linked` that Staging already has full grants on `courses` through
+  its ambient default ACL, so "Validators can view courses linked to skills
+  they're validating" and "Provider admins can view their course
+  participants" are not currently broken for real users. Fixed with a plain
+  grant for the same local-dev/fresh-bootstrap reasons.
+- Extended `supabase/tests/learning_profile_access.sql` to assert the same
+  six scenarios across skills, courses, and experience together. All pass;
+  rolls back.
+- `skills`, `courses`, and `experience` are now converted. Still unconverted:
+  actions, evidence, connections, xAPI, manager sharing, employer sharing,
+  and every dependent table listed in "Define domain-specific execution
+  rules" below (assessments, quizzes, peer ratings, targets, tags,
+  course/experience links, validation requests, xAPI statements/launch
+  sessions, employer role alignment references).
+
+**Important environment-parity finding, not a live bug**: this session
+originally logged the two grant gaps above as bugs "silently breaking" live
+features, based only on a fresh local `supabase db reset`. Checking the
+actual linked Staging project directly (`npx supabase db query --linked`
+against `information_schema.role_table_grants` and `pg_default_acl`) showed
+neither was ever broken for real users -- Staging's Postgres instance has an
+ambient default ACL, outside of any migration, that grants `authenticated`
+full table privileges on new tables automatically; ordinary local `db reset`
+does not have that default. **Any future local-only finding of "permission
+denied for table X" during RLS testing must be checked against the linked
+project the same way before being treated as a real bug or written up as
+one** -- it may just be this same local/Staging divergence. Whether to
+formally document Staging's ambient grant defaults in a migration (so
+`stage_bootstrap_consolidated.sql` can truly bootstrap a brand-new project
+from empty per CLAUDE.md #17, per its own stated purpose) is a separate,
+unstarted piece of work, not part of this ownership transition.
+
+**Second, unrelated environment finding, also fixed this session**:
+`vitest.config.js`'s `exclude` list did not exclude `.claude/worktrees/**`.
+This repo checkout has several leftover git worktrees from other, unrelated
+Claude Code sessions sitting inside that directory, each a full checkout
+with its own copy of every `*.test.js`/`*.test.jsx` file. `npm run test:run`
+was silently also collecting and running those sibling worktrees' tests as
+if they were this project's own, inflating the reported file/test counts
+(seen as high as 214 files/1247 tests, then 176/1043 as other sessions'
+worktrees came and went) with no way to tell from the summary line alone.
+Every test count logged anywhere earlier in this document from before this
+fix is unreliable for that reason (though none reported failures -- the
+inflation was in scope, not correctness). Added `'**/.claude/worktrees/**'`
+to `vitest.config.js`'s `exclude`; the real, correctly-scoped count is 302
+tests across 49 files, exactly matching the count already on record at
+`49628af`. Did not touch the worktree directories themselves -- they may be
+other sessions' in-progress work.
 
 ## Remaining product and engineering work
 
