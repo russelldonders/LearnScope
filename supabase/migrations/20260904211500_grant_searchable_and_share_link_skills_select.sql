@@ -1,0 +1,22 @@
+-- Found while adding SQL allow/deny tests for
+-- 20260904210000_searchable_and_share_link_skills_access_helper.sql: a
+-- fresh local `supabase db reset` leaves `authenticated` without SELECT on
+-- profile_searchable_skills, profile_share_links, or profile_share_link_
+-- skills (each enabled RLS with correctly-scoped policies in its own
+-- migration, but none was ever given the table-level privilege), confirmed
+-- via information_schema.role_table_grants against a fresh local reset.
+--
+-- Same root cause and same verdict as every prior instance of this gap in
+-- this transition: Staging's Postgres instance has an ambient default ACL
+-- (not captured in any migration) that grants `authenticated` full table
+-- privileges on new tables automatically, so this is not currently broken
+-- for real users on Staging. The fix still matters for local dev and for
+-- `stage_bootstrap_consolidated.sql`'s "bootstrap a brand-new Staging
+-- project from empty" use case (CLAUDE.md #17), which would not inherit
+-- Staging's undocumented default.
+--
+-- The RLS policies on all three tables already scope visible rows to the
+-- owning learner (and, as of this transition, their linked accounts), so
+-- these grants are safe regardless of environment.
+
+grant select on public.profile_searchable_skills, public.profile_share_links, public.profile_share_link_skills to authenticated;

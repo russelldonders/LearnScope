@@ -744,6 +744,75 @@ Verified: same full suite as prior increments (`db reset --local
 psql`, `npm run lint` exit 0, `npm run build`, `npm run test:run` 313 tests
 / 50 files unchanged).
 
+## Session update: applied to Staging (2026-09-04, continued)
+
+All 17 migrations from `20260904090000` through `20260904201500`
+(everything in this domain-foundation transition up to this point) were
+applied to the Staging Supabase project (`ussqcmfxbbtncjvepuyn`) via
+`npx supabase db push --linked`. Before pushing: confirmed via `git ls-tree`
+that this branch already contains every migration `origin/staging` has (no
+missing predecessors), and `npx supabase migration list --linked` showed no
+migration applied to Staging outside a committed file. All 17 applied
+cleanly; `migration list --linked` re-checked afterward to confirm
+local/remote now match, and a direct query confirmed the new "Linked
+accounts can view accessible..." policies are present on Staging (26 at
+that point). This is a worktree freshly linked to Staging for this session
+(`.env`/link state isn't copied into new git worktrees) -- future sessions
+continuing this branch elsewhere will need their own `supabase link
+--project-ref ussqcmfxbbtncjvepuyn` before any remote command.
+
+## Session update: searchable and share-link skills (2026-09-04, continued)
+
+Eleventh domain-by-domain increment, same session. Added in
+`20260904210000_searchable_and_share_link_skills_access_helper.sql` and
+`20260904211500_grant_searchable_and_share_link_skills_select.sql`:
+
+- Converted `profile_searchable_skills` (`profile_id`, single-owner, same
+  shape as skills/courses/experience) and `profile_share_links` (`user_id`,
+  also single-owner -- its only existing policy is the owner's own
+  management view of links they created; the separate public/anonymous
+  token-based consumption path goes through its own SECURITY DEFINER RPCs,
+  untouched by this). `profile_share_link_skills` is a dependent, joining
+  via `share_link_id`, same pattern as `employer_data_access_shared_skills`.
+- **Corrected this transition's own record**: an earlier increment grouped
+  `profile_share_links` with `employer_members`/`organisation_members` as
+  "membership and account-setting records, not learning-profile content."
+  Direct inspection here shows that doesn't hold -- `profile_share_links` has
+  no admin/role semantics; it's the learner's own created records about
+  their own profile, structurally identical to `connection_invites`
+  (already converted). `employer_members`/`organisation_members` remain
+  correctly out of scope; `profile_share_links` did not belong in that
+  group.
+- Confirmed "parent/child experience links" needs no migration of its own:
+  `parent_experience_id` is a plain self-referential column on `experience`
+  itself, already fully covered by `experience`'s own policy from the
+  courses/experience increment.
+- Checked first: all three tables have exactly the one existing SELECT
+  policy each, all permissive, none with `using (true)`. None of the three
+  had `grant select ... to authenticated` in any migration -- the sixth
+  through eighth instances of this transition's grant gap, fixed the same
+  way as every prior instance.
+- Extended `supabase/tests/learning_profile_access.sql` with fixtures across
+  all three tables, proving owner/unrelated/linked-active/linked-after-
+  revoke together.
+- Regenerated `stage_bootstrap_consolidated.sql`; diff-verified against the
+  prior bundle contains only these two migrations' content.
+
+Still unconverted: `employer_role_profiles`/`employer_role_assignments`
+(materially different mutual-consent shape, needs dedicated review) and
+`employer_members`/`organisation_members` (membership/account-setting
+records, correctly out of scope). `manager_collaboration_records`/
+`manager_collaboration_record_members` are also permanently out of scope
+(see their own increment). The executor remains out of scope until the rest
+are addressed or explicitly judged out of scope.
+
+Verified: same full suite as prior increments (`db reset --local
+--no-seed`, `db lint --local --level error`, all three
+`supabase/tests/*.sql` suites via `docker exec supabase_db_learnscope
+psql`, `npm run lint` exit 0, `npm run build`, `npm run test:run` 313 tests
+/ 50 files unchanged). Not yet applied to Staging -- see the migration
+workflow in CLAUDE.md #10 before pushing.
+
 ## Remaining product and engineering work
 
 ### 1. Replace login-ID ownership with profile ownership

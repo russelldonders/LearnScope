@@ -13,7 +13,9 @@
 -- employer_skill_suggestions/course_assignments in
 -- 20260904190000_employer_sharing_access_helper.sql, and to
 -- skill_peer_ratings/skill_validation_requests in
--- 20260904200000_peer_ratings_validation_requests_access_helper.sql. Run
+-- 20260904200000_peer_ratings_validation_requests_access_helper.sql, and to
+-- profile_searchable_skills/profile_share_links/profile_share_link_skills
+-- in 20260904210000_searchable_and_share_link_skills_access_helper.sql. Run
 -- against a local database only; the script rolls back everything it does.
 --
 -- Proves the full scenario matrix for skills, courses, and experience, and
@@ -626,5 +628,73 @@ where workspace_id = '40000000-0000-0000-0000-000000000004'
   and auth_account_id = '50000000-0000-0000-0000-000000000005';
 
 select pg_temp.assert_sees_ratings_and_validation('50000000-0000-0000-0000-000000000005', false, 'ratings/validation: linked login after workspace_access revoked');
+
+-- ----------------------------------------------------------------------------
+-- profile_searchable_skills, profile_share_links, and profile_share_link_
+-- skills (20260904210000_searchable_and_share_link_skills_access_helper.sql).
+-- Reuses owner a (...004) and its linked account (...005), reactivating the
+-- grant revoked above.
+-- ----------------------------------------------------------------------------
+
+update public.workspace_access
+set status = 'active', revoked_at = null
+where workspace_id = '40000000-0000-0000-0000-000000000004'
+  and auth_account_id = '50000000-0000-0000-0000-000000000005';
+
+insert into public.profile_searchable_skills (profile_id, skill_id)
+values ('40000000-0000-0000-0000-000000000004', '40000000-0000-0000-0000-00000000aaaa');
+
+insert into public.profile_share_links (id, user_id, expires_at)
+values ('f0000000-0000-0000-0000-0000000000f1', '40000000-0000-0000-0000-000000000004', now() + interval '7 days');
+
+insert into public.profile_share_link_skills (share_link_id, skill_id)
+values ('f0000000-0000-0000-0000-0000000000f1', '40000000-0000-0000-0000-00000000aaaa');
+
+create or replace function pg_temp.assert_sees_searchable_and_share_links(p_as_user uuid, p_expect_visible boolean, p_label text)
+returns void
+language plpgsql
+as $$
+declare
+  v_sees_searchable boolean;
+  v_sees_share_link boolean;
+  v_sees_share_link_skill boolean;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', p_as_user::text, true);
+
+  select exists (select 1 from public.profile_searchable_skills where profile_id = '40000000-0000-0000-0000-000000000004' and skill_id = '40000000-0000-0000-0000-00000000aaaa') into v_sees_searchable;
+  select exists (select 1 from public.profile_share_links where id = 'f0000000-0000-0000-0000-0000000000f1') into v_sees_share_link;
+  select exists (select 1 from public.profile_share_link_skills where share_link_id = 'f0000000-0000-0000-0000-0000000000f1') into v_sees_share_link_skill;
+
+  reset role;
+
+  if v_sees_searchable is distinct from p_expect_visible then
+    raise exception '% : expected searchable-skill visibility=%, got %', p_label, p_expect_visible, v_sees_searchable;
+  end if;
+  if v_sees_share_link is distinct from p_expect_visible then
+    raise exception '% : expected share-link visibility=%, got %', p_label, p_expect_visible, v_sees_share_link;
+  end if;
+  if v_sees_share_link_skill is distinct from p_expect_visible then
+    raise exception '% : expected share-link-skill visibility=%, got %', p_label, p_expect_visible, v_sees_share_link_skill;
+  end if;
+end
+$$;
+
+-- 1. The learner's own login is unaffected.
+select pg_temp.assert_sees_searchable_and_share_links('40000000-0000-0000-0000-000000000004', true, 'searchable/share links: owner login');
+
+-- 2. Unrelated login is denied.
+select pg_temp.assert_sees_searchable_and_share_links('60000000-0000-0000-0000-000000000006', false, 'searchable/share links: unrelated login');
+
+-- 3. Linked account (reactivated above) sees all three.
+select pg_temp.assert_sees_searchable_and_share_links('50000000-0000-0000-0000-000000000005', true, 'searchable/share links: linked login with active link and grant');
+
+-- 4. Revoking the workspace_access grant denies the linked login again.
+update public.workspace_access
+set status = 'revoked', revoked_at = now()
+where workspace_id = '40000000-0000-0000-0000-000000000004'
+  and auth_account_id = '50000000-0000-0000-0000-000000000005';
+
+select pg_temp.assert_sees_searchable_and_share_links('50000000-0000-0000-0000-000000000005', false, 'searchable/share links: linked login after workspace_access revoked');
 
 rollback;
