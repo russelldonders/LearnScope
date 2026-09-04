@@ -18,6 +18,7 @@ const MENU_ITEMS = [
   { to: '/profile/connected-accounts', label: 'Connected Apps' },
   { to: '/profile/privacy', label: 'Privacy Settings' },
   { to: '/profile/import', label: 'Import Skills & Experience' },
+  { to: '/help', label: 'Help' },
 ]
 
 export default function AppHeader({ hideNavLinks = false }) {

@@ -26,6 +26,7 @@ import ProfilePrivacy from './pages/ProfilePrivacy'
 import ConnectedAccounts from './pages/ConnectedAccounts'
 import ProfileImport from './pages/ProfileImport'
 import ProfileExport from './pages/ProfileExport'
+import Help from './pages/Help'
 import Rate from './pages/Rate'
 import Recommend from './pages/Recommend'
 import SharedProfile from './pages/SharedProfile'
@@ -169,6 +170,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ProfileExport />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/help"
+            element={
+              <ProtectedRoute>
+                <Help />
               </ProtectedRoute>
             }
           />
