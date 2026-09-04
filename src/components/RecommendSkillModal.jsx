@@ -13,6 +13,7 @@ import {
 } from '../lib/connections'
 import { isMobileDevice } from '../lib/device'
 import WhatsAppIcon from './WhatsAppIcon'
+import { getOrCreateMyDefaultManagerTeam, inviteConnectionToManagerTeam } from '../lib/managerTeams'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -29,6 +30,19 @@ export default function RecommendSkillModal({ skill, onClose }) {
   const [selectedConnectionIds, setSelectedConnectionIds] = useState(new Set())
   const [connectionStatus, setConnectionStatus] = useState(new Map())
   const [sendingConnections, setSendingConnections] = useState(false)
+  // Also inviting to the manager team only ever applies to the "Recommend to
+  // a connection" list below: invite_connection_to_manager_team(_by_email)
+  // both require an existing connections row (a deliberate constraint of
+  // that feature, not something to route around here), which the email/
+  // share-link paths below can't guarantee -- someone typed into the email
+  // field is very often *not* an existing connection yet, that's the point
+  // of that path. teamId resolves lazily (get-or-create "My team") only the
+  // first time this is actually used, so opening this modal and never
+  // checking the box never creates a manager workspace for someone who
+  // isn't one.
+  const [alsoInviteToTeam, setAlsoInviteToTeam] = useState(false)
+  const [teamId, setTeamId] = useState(null)
+  const [teamInviteNotices, setTeamInviteNotices] = useState([])
 
   const [emails, setEmails] = useState([])
   const [emailInput, setEmailInput] = useState('')
@@ -71,11 +85,26 @@ export default function RecommendSkillModal({ skill, onClose }) {
     const targets = connections.filter((c) => selectedConnectionIds.has(c.id) && connectionStatus.get(c.id) !== 'sent')
     if (targets.length === 0) return
     setSendingConnections(true)
+    setTeamInviteNotices([])
     setConnectionStatus((prev) => {
       const next = new Map(prev)
       for (const c of targets) next.set(c.id, 'sending')
       return next
     })
+
+    // Resolved once, lazily, and reused for every target in this send --
+    // not per-target, so checking the box for a multi-select send doesn't
+    // race to create "My team" more than once.
+    let resolvedTeamId = teamId
+    if (alsoInviteToTeam && !resolvedTeamId) {
+      try {
+        resolvedTeamId = await getOrCreateMyDefaultManagerTeam()
+        setTeamId(resolvedTeamId)
+      } catch (err) {
+        setTeamInviteNotices((prev) => [...prev, `Couldn't set up your team: ${err.message}`])
+      }
+    }
+
     await Promise.all(
       targets.map(async (c) => {
         try {
@@ -88,6 +117,18 @@ export default function RecommendSkillModal({ skill, onClose }) {
               isDuplicatePendingInviteError(err) ? duplicatePendingInviteMessage(c.email) : err.message
             )
           )
+          return
+        }
+        // The team invite is best-effort and independent of the skill
+        // recommendation above: a failure here (e.g. they're already a
+        // pending/active team member) never undoes the recommendation that
+        // already sent successfully.
+        if (alsoInviteToTeam && resolvedTeamId) {
+          try {
+            await inviteConnectionToManagerTeam(resolvedTeamId, c.id)
+          } catch (err) {
+            setTeamInviteNotices((prev) => [...prev, `${c.name}: ${err.message}`])
+          }
         }
       })
     )
@@ -217,6 +258,25 @@ export default function RecommendSkillModal({ skill, onClose }) {
                     {message}
                   </p>
                 ))}
+              <label className="flex items-start gap-2 mt-2 mb-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={alsoInviteToTeam}
+                  onChange={(e) => setAlsoInviteToTeam(e.target.checked)}
+                  className="mt-0.5 rounded border-hairline accent-moss"
+                />
+                <span>
+                  Also invite them to join your team
+                  <span className="block text-xs text-secondary">
+                    If they accept, you'll become their manager and can share learning with them.
+                  </span>
+                </span>
+              </label>
+              {teamInviteNotices.map((notice, index) => (
+                <p key={index} className="text-xs text-red-700 mt-1">
+                  {notice}
+                </p>
+              ))}
               <button
                 type="button"
                 onClick={handleInviteConnections}
