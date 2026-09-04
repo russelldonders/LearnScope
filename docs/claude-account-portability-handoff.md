@@ -234,6 +234,63 @@ Second domain-by-domain increment, same session. Added in
   course/experience links, validation requests, xAPI statements/launch
   sessions, employer role alignment references).
 
+## Session update: skills/courses/experience dependent tables (2026-09-04, continued)
+
+Third domain-by-domain increment, same session. Added in
+`20260904120000_skills_courses_experience_dependents_access_helper.sql` and
+`20260904121500_grant_skills_courses_experience_dependents_select.sql`:
+
+- Converted 11 more tables that are direct dependents of skills/courses/
+  experience and share the exact same shape (a direct, not-null `user_id`
+  column; every existing policy confirmed permissive via
+  `pg_policy.polpermissive` before writing the migration): `skill_
+  assessments`, `skill_baseline_quizzes`, `skill_tags`, `skill_targets`,
+  `skill_course_links`, `skill_experience_links`, `course_experience_links`,
+  `course_content_progress`, `xapi_statements`, `xapi_statement_skills`,
+  `xapi_launch_sessions`. Same pattern as before: one new additive,
+  SELECT-only policy per table using the unmodified
+  `private.can_view_learning_profile(uuid)` helper.
+- All 11 also lacked a `GRANT SELECT` for `authenticated` locally -- by now
+  an expected instance of the same local/Staging default-ACL divergence
+  documented above, not re-verified against Staging table-by-table since the
+  root cause is structural/environmental rather than per-table. Fixed with
+  one grant migration covering all 11.
+- Deliberately NOT included (different access semantics): peer ratings,
+  validation requests, connection invitations/requests, searchable skills,
+  employer-shared skills, manager-shared skills, public share-link skills,
+  parent/child experience links, employer role alignment references, and
+  `employer_members`/`organisation_members`/`profile_share_links` (membership
+  and account-setting records, not learning-profile content).
+- Extended `supabase/tests/learning_profile_access.sql` with one
+  representative table per family (`skill_targets`, `course_experience_
+  links`, `xapi_statements`) rather than exhaustively fixturing all 11 --
+  they share the identical, already-proven policy shape and helper, so this
+  is proportionate coverage, not full per-table testing. All pass; rolls
+  back.
+- **A security review of this increment caught a real issue before commit**:
+  `xapi_launch_sessions` matches the same `user_id`/permissive-policy shape
+  as the other 10 tables, but its `token` column is a live bearer credential
+  -- `api/xapi/[...path].js` authenticates the entire xAPI LRS proxy purely
+  by looking up this token via the service role, no further check. Adding
+  the same "read-only" SELECT policy to it would have actually granted a
+  linked account the ability to read up to 200 of the owner's real xAPI
+  statements *and forge new ones* (persisted with the real owner's
+  `user_id`) for the token's up-to-4-hour lifetime -- a write/impersonation
+  capability wearing a read-only label, and squarely against this project's
+  "historical accuracy"/"evidence over unsupported claims" principles.
+  Excluded `xapi_launch_sessions` from the policy migration entirely (kept
+  its existing owner-only policies untouched); the grant migration still
+  covers it since granting the coarse table privilege exposes nothing new
+  when no additional policy exists to use it. Verified directly via
+  `pg_policy` that only the two original owner-only policies remain on it --
+  a full functional negative test was judged not worth the fixture cost
+  (`xapi_launch_sessions.resource_id` requires a `content_resources` row,
+  which itself requires a valid `organisation_id`). **Any future domain
+  conversion must check whether a "read-only" column is actually a
+  credential/secret before reusing this same mechanical pattern** --
+  `token`-like columns don't announce themselves via `\d` the way validator/
+  rater ownership columns do.
+
 **Important environment-parity finding, not a live bug**: this session
 originally logged the two grant gaps above as bugs "silently breaking" live
 features, based only on a fresh local `supabase db reset`. Checking the

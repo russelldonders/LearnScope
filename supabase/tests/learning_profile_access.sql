@@ -1,7 +1,16 @@
 -- Allow/deny proof for the additive learning-profile access helper added in
--- 20260904090000_learning_profile_access_helper.sql and applied to courses/
--- experience in 20260904110000_courses_experience_access_helper.sql. Run
+-- 20260904090000_learning_profile_access_helper.sql, applied to courses/
+-- experience in 20260904110000_courses_experience_access_helper.sql, and to
+-- their dependent tables in
+-- 20260904120000_skills_courses_experience_dependents_access_helper.sql. Run
 -- against a local database only; the script rolls back everything it does.
+--
+-- Proves the full scenario matrix for skills, courses, and experience, and
+-- (since all eleven dependent tables share the exact same policy shape and
+-- the same already-proven helper) spot-checks it against one representative
+-- table per family instead of exhaustively fixturing all eleven: skill_targets
+-- (skills family), course_experience_links (courses family), and
+-- xapi_statements (xAPI family).
 --
 -- Proves, for each converted domain root table (skills, courses, experience):
 --   1. The profile owner's own personal login is unaffected.
@@ -42,6 +51,15 @@ values ('40000000-0000-0000-0000-00000000bbbb', '40000000-0000-0000-0000-0000000
 insert into public.experience (id, user_id, type, title, organization, start_date)
 values ('40000000-0000-0000-0000-00000000cccc', '40000000-0000-0000-0000-000000000004', 'employment', 'Engineer', 'Acme', '2020-01-01');
 
+insert into public.skill_targets (id, skill_id, user_id, target_level, target_date)
+values ('40000000-0000-0000-0000-00000000dddd', '40000000-0000-0000-0000-00000000aaaa', '40000000-0000-0000-0000-000000000004', 5, '2027-01-01');
+
+insert into public.course_experience_links (id, user_id, course_id, experience_id)
+values ('40000000-0000-0000-0000-00000000eeee', '40000000-0000-0000-0000-000000000004', '40000000-0000-0000-0000-00000000bbbb', '40000000-0000-0000-0000-00000000cccc');
+
+insert into public.xapi_statements (id, user_id, statement, recorded_at)
+values ('40000000-0000-0000-0000-00000000ffff', '40000000-0000-0000-0000-000000000004', '{}'::jsonb, now());
+
 create or replace function pg_temp.assert_owner_visibility(p_as_user uuid, p_expect_visible boolean, p_label text)
 returns void
 language plpgsql
@@ -50,6 +68,9 @@ declare
   v_sees_skill boolean;
   v_sees_course boolean;
   v_sees_experience boolean;
+  v_sees_skill_target boolean;
+  v_sees_course_experience_link boolean;
+  v_sees_xapi_statement boolean;
 begin
   set local role authenticated;
   perform set_config('request.jwt.claim.sub', p_as_user::text, true);
@@ -57,6 +78,9 @@ begin
   select exists (select 1 from public.skills where id = '40000000-0000-0000-0000-00000000aaaa') into v_sees_skill;
   select exists (select 1 from public.courses where id = '40000000-0000-0000-0000-00000000bbbb') into v_sees_course;
   select exists (select 1 from public.experience where id = '40000000-0000-0000-0000-00000000cccc') into v_sees_experience;
+  select exists (select 1 from public.skill_targets where id = '40000000-0000-0000-0000-00000000dddd') into v_sees_skill_target;
+  select exists (select 1 from public.course_experience_links where id = '40000000-0000-0000-0000-00000000eeee') into v_sees_course_experience_link;
+  select exists (select 1 from public.xapi_statements where id = '40000000-0000-0000-0000-00000000ffff') into v_sees_xapi_statement;
 
   reset role;
 
@@ -68,6 +92,15 @@ begin
   end if;
   if v_sees_experience is distinct from p_expect_visible then
     raise exception '% : expected experience visibility=%, got %', p_label, p_expect_visible, v_sees_experience;
+  end if;
+  if v_sees_skill_target is distinct from p_expect_visible then
+    raise exception '% : expected skill_target visibility=%, got %', p_label, p_expect_visible, v_sees_skill_target;
+  end if;
+  if v_sees_course_experience_link is distinct from p_expect_visible then
+    raise exception '% : expected course_experience_link visibility=%, got %', p_label, p_expect_visible, v_sees_course_experience_link;
+  end if;
+  if v_sees_xapi_statement is distinct from p_expect_visible then
+    raise exception '% : expected xapi_statement visibility=%, got %', p_label, p_expect_visible, v_sees_xapi_statement;
   end if;
 end
 $$;
