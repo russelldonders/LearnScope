@@ -20,14 +20,14 @@ const TILE_DEFINITIONS = [
   {
     key: 'learners',
     label: 'Active learners',
-    section: 'learners',
+    section: 'users',
     count: (rows) => rows.filter((row) => row.role === 'member' && row.status === 'active').length,
     describe: (count) => `${count} learner${count === 1 ? '' : 's'} currently connected to this employer`,
   },
   {
     key: 'pendingInvites',
     label: 'Pending learner invitations',
-    section: 'learners',
+    section: 'users',
     source: 'members',
     count: (rows) => rows.filter((row) => row.status === 'pending').length,
     describe: (count) => `${count} invitation${count === 1 ? '' : 's'} waiting for a response`,
@@ -43,7 +43,7 @@ const TILE_DEFINITIONS = [
   {
     key: 'pendingAccess',
     label: 'Profile access requests',
-    section: 'learners',
+    section: 'users',
     source: 'accessRequests',
     count: (rows) => rows.filter((row) => row.status === 'pending').length,
     describe: (count) => `${count} consent request${count === 1 ? '' : 's'} awaiting a learner decision`,

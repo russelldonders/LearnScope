@@ -34,8 +34,8 @@ import StatusBadge from '../../components/StatusBadge'
 import EmployerRoleProfilesSection from './EmployerRoleProfilesSection'
 import EmployerOverviewPanel from './EmployerOverviewPanel'
 
-// Skills/Users are the attached provider organisation's own tabs (same
-// components ProviderConsole.jsx mounts for its own Skills/Users sections),
+// Skills and the training-team part of Users belong to the attached provider
+// organisation (the same components ProviderConsole.jsx mounts),
 // folded into this single tab bar instead of handing off to a separate
 // /provider page. providerOnly/adminOnly are resolved against myProviderRole
 // (below) into visibleSections, so they only appear once the employer's
@@ -44,8 +44,7 @@ const SECTIONS = [
   { key: 'overview', label: 'Overview' },
   { key: 'training', label: 'Training' },
   { key: 'skills', label: 'Skills', providerOnly: true },
-  { key: 'staff', label: 'Users', providerOnly: true, adminOnly: true },
-  { key: 'learners', label: 'Learners' },
+  { key: 'users', label: 'Users' },
   { key: 'roles', label: 'Roles' },
   { key: 'assign', label: 'Assign training' },
   { key: 'suggest-skills', label: 'Suggest skills' },
@@ -91,7 +90,7 @@ const LINKED_PROVIDER_SORT_ACCESSORS = {
   created_at: (p) => p.created_at ?? '',
 }
 
-// Every panel below (Learners, Assign training, Suggest skills, Providers)
+// Every panel below (Users, Assign training, Suggest skills, Providers)
 // keeps its own search/sort/page state in the URL, same convention as the
 // Training tab's ProviderTrainingSection. Each panel's "primary" table uses
 // the plain q/status/sort/dir/page/pageSize names (safe -- only one section
@@ -108,7 +107,8 @@ const LINKED_PROVIDER_SORT_ACCESSORS = {
 const EMPLOYER_FILTER_RESET = { q: null, status: null, page: null, aq: null, aPage: null, sq: null, sPage: null }
 
 // Foundation console for an employer's own admin (employer_members
-// role = 'admin', gated by EmployerAdminRoute). Training/Skills/Users reuse
+// role = 'admin', gated by EmployerAdminRoute). Training/Skills and the
+// training-team controls inside Users reuse
 // the existing provider console components verbatim, scoped to the
 // employer's own auto-provisioned attached provider organisation
 // (create_employer, 20260902090000) -- no forked UI. Authoring there is
@@ -117,11 +117,11 @@ const EMPLOYER_FILTER_RESET = { q: null, status: null, page: null, aq: null, aPa
 // in the standalone Provider console -- this stays the *only* place an
 // employer admin manages that org's training, so there's no separate
 // /provider hand-off to a second page (and no exposure to any *other*
-// provider organisation they might separately belong to). Learners is a
-// separate, new roster of the employer's own managed learners
-// (employer_members), not provider staff -- one-at-a-time add-by-email plus
-// (Phase 2) bulk import; course assignment and any learner-facing UI are
-// still later phases.
+// provider organisation they might separately belong to). The Users tab
+// combines the employer's managed learner/admin roster
+// (employer_members) alongside the attached provider organisation's
+// training-team permissions, while keeping their distinct access scopes
+// clear inside the combined page.
 export default function EmployerConsole() {
   const { user, employerMemberships, organisationMemberships } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -134,7 +134,10 @@ export default function EmployerConsole() {
   // on every render so refresh, Back/Forward, and a shared link all restore
   // the same view.
   const selectedEmployerId = searchParams.get('employer')
-  const activeSection = searchParams.get('section') ?? 'overview'
+  const requestedSection = searchParams.get('section') ?? 'overview'
+  // Preserve old bookmarked links after merging the former Users and
+  // Learners tabs. Both legacy destinations now open the combined view.
+  const activeSection = ['staff', 'learners'].includes(requestedSection) ? 'users' : requestedSection
   const employerTabRefs = useRef({})
   const sectionTabRefs = useRef({})
 
@@ -186,10 +189,8 @@ export default function EmployerConsole() {
     if (s.providerOnly) return !!myProviderRole
     return true
   })
-  // Guards against a stale Users tab surviving a switch to an employer (or a
-  // role change) where this admin no longer has organisation_members admin
-  // on the attached provider org -- mirrors ProviderConsole.jsx's own
-  // currentSection guard for its Staff tab.
+  // Guards against a stale provider-only tab surviving a switch to an
+  // employer where this admin no longer has the corresponding role.
   const currentSection = visibleSections.some((section) => section.key === activeSection) ? activeSection : 'overview'
 
   useEffect(() => {
@@ -365,13 +366,12 @@ export default function EmployerConsole() {
                       userId={user.id}
                     />
                   )}
-                  {currentSection === 'staff' && myProviderRole === 'admin' && (
-                    <OrganisationStaffPanel key={`${selectedEmployer.id}-staff`} organisation={attachedProviderOrg} />
-                  )}
-                  {currentSection === 'learners' && (
-                    <EmployerLearnersPanel
-                      key={selectedEmployer.id}
+                  {currentSection === 'users' && (
+                    <EmployerUsersPanel
+                      key={`${selectedEmployer.id}-users`}
                       employer={selectedEmployer}
+                      attachedProviderOrg={attachedProviderOrg}
+                      canManageTrainingTeam={myProviderRole === 'admin'}
                       searchParams={searchParams}
                       setSearchParams={setSearchParams}
                     />
@@ -425,7 +425,40 @@ const DATA_ACCESS_STATUS_LABELS = {
   revoked: 'Access revoked',
 }
 
-function EmployerLearnersPanel({ employer, searchParams, setSearchParams }) {
+function EmployerUsersPanel({ employer, attachedProviderOrg, canManageTrainingTeam, searchParams, setSearchParams }) {
+  return (
+    <div className="space-y-10">
+      <div>
+        <h2 className="font-display text-lg text-ink">Users</h2>
+        <p className="mt-1 max-w-2xl text-sm text-secondary">
+          Manage everyone connected to {employer.name}, including learners, employer administrators, and the
+          people who can maintain your training catalogue.
+        </p>
+      </div>
+
+      <EmployerLearnersPanel
+        employer={employer}
+        searchParams={searchParams}
+        setSearchParams={setSearchParams}
+        heading="Learners and employer administrators"
+        showIntro={false}
+      />
+
+      {canManageTrainingTeam && attachedProviderOrg && (
+        <section aria-labelledby="employer-training-team-heading" className="border-t border-hairline pt-8">
+          <OrganisationStaffPanel
+            organisation={attachedProviderOrg}
+            heading="Training team access"
+            headingId="employer-training-team-heading"
+            description="Give administrators and trainers access to create and maintain this employer's courses, skills, and resources."
+          />
+        </section>
+      )}
+    </div>
+  )
+}
+
+function EmployerLearnersPanel({ employer, searchParams, setSearchParams, heading = 'Learners', showIntro = true }) {
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -582,11 +615,13 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams }) {
   return (
     <section aria-labelledby="employer-learners-heading">
       <div className="mb-5">
-        <h2 id="employer-learners-heading" className="font-display text-lg text-ink">Learners</h2>
-        <p className="text-sm text-secondary mt-1 max-w-2xl">
-          People managed under {employer.name}. Invite someone by email below, or paste multiple emails to bulk
-          import learners at once.
-        </p>
+        <h3 id="employer-learners-heading" className="font-display text-base text-ink">{heading}</h3>
+        {showIntro && (
+          <p className="text-sm text-secondary mt-1 max-w-2xl">
+            People managed under {employer.name}. Invite someone by email below, or paste multiple emails to bulk
+            import learners at once.
+          </p>
+        )}
       </div>
 
       <form onSubmit={handleAdd} className="bg-card border border-hairline rounded-lg p-4 flex flex-wrap items-end gap-2 mb-4">

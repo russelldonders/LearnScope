@@ -553,7 +553,13 @@ function OrganisationRow({
 // extra click) -- ProviderConsole's Users tab instead gets the same
 // "+ Invite user" toggle-to-reveal pattern as its Training/Skills/
 // Resources tabs (see default false below).
-export function OrganisationStaffPanel({ organisation, alwaysShowForm = false }) {
+export function OrganisationStaffPanel({
+  organisation,
+  alwaysShowForm = false,
+  heading = 'Users',
+  headingId,
+  description = null,
+}) {
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -637,7 +643,10 @@ export function OrganisationStaffPanel({ organisation, alwaysShowForm = false })
     <div className={alwaysShowForm ? 'border-t border-hairline bg-paper p-4 space-y-3' : 'space-y-3'}>
       {!alwaysShowForm && (
         <div className="flex items-center justify-between gap-3 mb-3">
-          <h3 className="font-display text-lg text-ink">Users</h3>
+          <div>
+            <h3 id={headingId} className="font-display text-lg text-ink">{heading}</h3>
+            {description && <p className="mt-1 max-w-2xl text-sm text-secondary">{description}</p>}
+          </div>
           <button
             type="button"
             onClick={() => setShowInviteForm((v) => !v)}
