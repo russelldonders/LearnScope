@@ -3,10 +3,12 @@
 -- experience in 20260904110000_courses_experience_access_helper.sql, to
 -- their dependent tables in
 -- 20260904120000_skills_courses_experience_dependents_access_helper.sql, and
--- to connections in 20260904150000_connections_access_helper.sql, and to
+-- to connections in 20260904150000_connections_access_helper.sql, to
 -- manager_team_memberships in
--- 20260904160000_manager_team_memberships_access_helper.sql. Run against a
--- local database only; the script rolls back everything it does.
+-- 20260904160000_manager_team_memberships_access_helper.sql, and to its
+-- dependents in 20260904170000_manager_team_dependents_access_helper.sql.
+-- Run against a local database only; the script rolls back everything it
+-- does.
 --
 -- Proves the full scenario matrix for skills, courses, and experience, and
 -- (since all eleven dependent tables share the exact same policy shape and
@@ -325,5 +327,71 @@ where workspace_id = '40000000-0000-0000-0000-000000000004'
   and auth_account_id = '50000000-0000-0000-0000-000000000005';
 
 select pg_temp.assert_sees_membership('50000000-0000-0000-0000-000000000005', false, 'membership: linked login after workspace_access revoked');
+
+-- ----------------------------------------------------------------------------
+-- manager_team_memberships' dependents
+-- (20260904170000_manager_team_dependents_access_helper.sql): reuses the
+-- team/membership fixture above. All three tables share the same
+-- member_user_id-via-membership_id shape, so one representative row per
+-- table is enough -- same proportionate-coverage rationale already used for
+-- skills' own dependent tables.
+-- ----------------------------------------------------------------------------
+
+insert into public.manager_team_shared_skills (membership_id, skill_id)
+values ('b0000000-0000-0000-0000-0000000000b3', '40000000-0000-0000-0000-00000000aaaa');
+
+insert into public.manager_team_learning_activities (id, team_id, title, created_by)
+values ('b0000000-0000-0000-0000-0000000000b4', 'b0000000-0000-0000-0000-0000000000b2', 'Test Activity', 'b0000000-0000-0000-0000-00000000000b');
+
+insert into public.manager_team_activity_participants (activity_id, membership_id)
+values ('b0000000-0000-0000-0000-0000000000b4', 'b0000000-0000-0000-0000-0000000000b3');
+
+create or replace function pg_temp.assert_sees_team_dependents(p_as_user uuid, p_expect_visible boolean, p_label text)
+returns void
+language plpgsql
+as $$
+declare
+  v_sees_shared_skill boolean;
+  v_sees_activity boolean;
+  v_sees_participant boolean;
+begin
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', p_as_user::text, true);
+
+  select exists (select 1 from public.manager_team_shared_skills where membership_id = 'b0000000-0000-0000-0000-0000000000b3' and skill_id = '40000000-0000-0000-0000-00000000aaaa') into v_sees_shared_skill;
+  select exists (select 1 from public.manager_team_learning_activities where id = 'b0000000-0000-0000-0000-0000000000b4') into v_sees_activity;
+  select exists (select 1 from public.manager_team_activity_participants where activity_id = 'b0000000-0000-0000-0000-0000000000b4' and membership_id = 'b0000000-0000-0000-0000-0000000000b3') into v_sees_participant;
+
+  reset role;
+
+  if v_sees_shared_skill is distinct from p_expect_visible then
+    raise exception '% : expected shared-skill visibility=%, got %', p_label, p_expect_visible, v_sees_shared_skill;
+  end if;
+  if v_sees_activity is distinct from p_expect_visible then
+    raise exception '% : expected activity visibility=%, got %', p_label, p_expect_visible, v_sees_activity;
+  end if;
+  if v_sees_participant is distinct from p_expect_visible then
+    raise exception '% : expected participant visibility=%, got %', p_label, p_expect_visible, v_sees_participant;
+  end if;
+end
+$$;
+
+-- 1. The member's own login is unaffected.
+select pg_temp.assert_sees_team_dependents('40000000-0000-0000-0000-000000000004', true, 'team dependents: member login');
+
+-- 2. Unrelated login is denied.
+select pg_temp.assert_sees_team_dependents('60000000-0000-0000-0000-000000000006', false, 'team dependents: unrelated login');
+
+-- 3. Linked login, workspace_access still revoked from the membership
+--    scenario above, is denied.
+select pg_temp.assert_sees_team_dependents('50000000-0000-0000-0000-000000000005', false, 'team dependents: linked login before grant reactivated');
+
+-- 4. Reactivating the grant restores visibility through all three tables.
+update public.workspace_access
+set status = 'active', revoked_at = null
+where workspace_id = '40000000-0000-0000-0000-000000000004'
+  and auth_account_id = '50000000-0000-0000-0000-000000000005';
+
+select pg_temp.assert_sees_team_dependents('50000000-0000-0000-0000-000000000005', true, 'team dependents: linked login with grant reactivated');
 
 rollback;
