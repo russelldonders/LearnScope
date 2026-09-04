@@ -32,6 +32,7 @@ import { SortableTh, TablePagination, SelectionTh, BulkActionBar } from '../../c
 import MutationFeedback from '../../components/MutationFeedback'
 import StatusBadge from '../../components/StatusBadge'
 import EmployerRoleProfilesSection from './EmployerRoleProfilesSection'
+import EmployerOverviewPanel from './EmployerOverviewPanel'
 
 // Skills/Users are the attached provider organisation's own tabs (same
 // components ProviderConsole.jsx mounts for its own Skills/Users sections),
@@ -40,6 +41,7 @@ import EmployerRoleProfilesSection from './EmployerRoleProfilesSection'
 // (below) into visibleSections, so they only appear once the employer's
 // attached org actually grants that role.
 const SECTIONS = [
+  { key: 'overview', label: 'Overview' },
   { key: 'training', label: 'Training' },
   { key: 'skills', label: 'Skills', providerOnly: true },
   { key: 'staff', label: 'Users', providerOnly: true, adminOnly: true },
@@ -132,7 +134,7 @@ export default function EmployerConsole() {
   // on every render so refresh, Back/Forward, and a shared link all restore
   // the same view.
   const selectedEmployerId = searchParams.get('employer')
-  const activeSection = searchParams.get('section') ?? 'training'
+  const activeSection = searchParams.get('section') ?? 'overview'
   const employerTabRefs = useRef({})
   const sectionTabRefs = useRef({})
 
@@ -188,7 +190,7 @@ export default function EmployerConsole() {
   // role change) where this admin no longer has organisation_members admin
   // on the attached provider org -- mirrors ProviderConsole.jsx's own
   // currentSection guard for its Staff tab.
-  const currentSection = activeSection === 'staff' && myProviderRole !== 'admin' ? 'training' : activeSection
+  const currentSection = visibleSections.some((section) => section.key === activeSection) ? activeSection : 'overview'
 
   useEffect(() => {
     Promise.all([listEmployers(), listOrganisations()])
@@ -321,6 +323,9 @@ export default function EmployerConsole() {
                   aria-labelledby={`employer-section-tab-${currentSection}`}
                   tabIndex={0}
                 >
+                  {currentSection === 'overview' && (
+                    <EmployerOverviewPanel key={`${selectedEmployer.id}-overview`} employer={selectedEmployer} />
+                  )}
                   {currentSection === 'training' && (
                     <div className="space-y-10">
                       {!myProviderRole && (
