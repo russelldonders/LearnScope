@@ -52,6 +52,7 @@ import AdminActivityLog from './pages/admin/AdminActivityLog'
 import AdminOnboarding from './pages/admin/AdminOnboarding'
 import ProviderConsole from './pages/provider/ProviderConsole'
 import EmployerConsole from './pages/employer/EmployerConsole'
+import EmployerRoleProfileDetail from './pages/employer/EmployerRoleProfileDetail'
 import ManagerConsolePage from './pages/manager/ManagerConsolePage'
 import ProviderCourseEditor from './pages/provider/ProviderCourseEditor'
 import ProviderCatalogueDetail from './pages/provider/ProviderCatalogueDetail'
@@ -322,6 +323,14 @@ function App() {
             element={
               <EmployerAdminRoute>
                 <EmployerConsole />
+              </EmployerAdminRoute>
+            }
+          />
+          <Route
+            path="/employer/roles/:roleProfileId"
+            element={
+              <EmployerAdminRoute>
+                <EmployerRoleProfileDetail />
               </EmployerAdminRoute>
             }
           />

@@ -4,14 +4,15 @@ import { SortableTh, TablePagination } from '../../../components/TableControls'
 // Employer-facing table of this organisation's generic role profiles --
 // full page width, one row per profile, matching the same searchable/
 // sortable/paginated <table> convention as every other console list here
-// (Users, Providers, Platform admin's own tables) rather than a narrow
-// sidebar-and-detail-panel split. A role profile's required skills,
-// training and linked employees are each edited in their own modal (see
-// EmployerRoleProfilesConsole's onEdit/onAssignSkills/onAssignTraining/
-// onAssignUsers), opened from that row's own action -- this component only
-// ever renders the summary row, never any of that editing UI itself.
-// `roleProfiles` here is already the current page's slice
-// (EmployerRoleProfilesConsole computes it); `hasAnyRoleProfiles`
+// (Users, Providers, Platform admin's own tables). Clicking a row's name
+// opens that profile's own detail page (EmployerRoleProfileDetail.jsx, via
+// onOpenProfile) -- its own Skills/Courses/Users tabs are where a profile's
+// required skills, training and linked employees are actually managed, not
+// this table. Stays a plain callback rather than a real <Link> so this
+// component (and its own tests) never need a Router in scope -- the actual
+// navigation happens one level up, in EmployerConsole.jsx, which always
+// renders inside one. `roleProfiles` here is already the current page's
+// slice (EmployerRoleProfilesConsole computes it); `hasAnyRoleProfiles`
 // distinguishes an actually-empty roster from a search that just matched
 // nothing on it.
 export default function RoleProfileList({
@@ -20,10 +21,7 @@ export default function RoleProfileList({
   loading = false,
   error = null,
   onCreate,
-  onEdit,
-  onAssignSkills,
-  onAssignTraining,
-  onAssignUsers,
+  onOpenProfile,
   query = '',
   onQueryChange,
   filtersActive = false,
@@ -43,8 +41,8 @@ export default function RoleProfileList({
         <div>
           <h2 id="employer-role-profiles-heading" className="font-display text-lg text-ink">Role profiles</h2>
           <p className="text-sm text-secondary mt-1 max-w-2xl">
-            Define the skills, training and linked employees expected for a role, then assign each from its row
-            below.
+            Define the skills, courses and linked employees expected for a role. Open one to manage each from its
+            own page.
           </p>
         </div>
         <button
@@ -101,17 +99,23 @@ export default function RoleProfileList({
                       <SortableTh label="Name" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                       <th className="px-4 py-2 font-medium">Description</th>
                       <SortableTh label="Skills" columnKey="skills" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap" />
-                      <SortableTh label="Training" columnKey="training" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap" />
-                      <SortableTh label="Employees" columnKey="employees" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap" />
+                      <SortableTh label="Courses" columnKey="training" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap" />
+                      <SortableTh label="Users" columnKey="employees" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap" />
                       <SortableTh label="Updated" columnKey="updatedAt" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap" />
-                      <th className="px-4 py-2 font-medium"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {roleProfiles.map((profile) => (
                       <tr key={profile.id} className="border-b border-hairline last:border-0">
-                        <td className="px-4 py-2 text-ink font-medium truncate max-w-[200px]" title={profile.name}>
-                          {profile.name}
+                        <td className="px-4 py-2 whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => onOpenProfile?.(profile.id)}
+                            className="text-xs font-medium text-moss hover:underline text-left truncate max-w-[200px]"
+                            title={profile.name}
+                          >
+                            {profile.name}
+                          </button>
                         </td>
                         <td className="px-4 py-2 text-secondary truncate max-w-xs" title={profile.description || ''}>
                           {profile.description || '—'}
@@ -121,22 +125,6 @@ export default function RoleProfileList({
                         <td className="px-4 py-2 text-secondary whitespace-nowrap">{profile.linkedEmployeeCount}</td>
                         <td className="px-4 py-2 text-secondary whitespace-nowrap">
                           {profile.updatedAt ? formatAbsoluteDate(profile.updatedAt) : '—'}
-                        </td>
-                        <td className="px-4 py-2">
-                          <div className="flex items-center justify-end gap-x-3 whitespace-nowrap">
-                            <button type="button" onClick={() => onEdit?.(profile.id)} className="text-xs font-medium text-moss hover:underline">
-                              Edit
-                            </button>
-                            <button type="button" onClick={() => onAssignSkills?.(profile.id)} className="text-xs font-medium text-moss hover:underline">
-                              Assign skills
-                            </button>
-                            <button type="button" onClick={() => onAssignTraining?.(profile.id)} className="text-xs font-medium text-moss hover:underline">
-                              Assign training
-                            </button>
-                            <button type="button" onClick={() => onAssignUsers?.(profile.id)} className="text-xs font-medium text-moss hover:underline">
-                              Assign users
-                            </button>
-                          </div>
                         </td>
                       </tr>
                     ))}

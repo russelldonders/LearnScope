@@ -3,16 +3,13 @@ import AccessibleDialog from '../../../components/AccessibleDialog'
 import MutationFeedback from '../../../components/MutationFeedback'
 import RoleProfileList from './RoleProfileList'
 import RoleProfileDetailsForm from './RoleProfileDetailsForm'
-import RoleProfileSkillsPanel from './RoleProfileSkillsPanel'
-import RoleProfileTrainingPanel from './RoleProfileTrainingPanel'
-import RoleProfileLinkedEmployeesPanel from './RoleProfileLinkedEmployeesPanel'
 import { useSortedPage, useUrlParam, writeUrlParams } from '../../../lib/useSortedPage'
-import { FIXTURE_ROLE_PROFILES, FIXTURE_SKILL_CATALOGUE, FIXTURE_COURSE_CATALOGUE } from './roleProfileFixtures'
+import { FIXTURE_ROLE_PROFILES } from './roleProfileFixtures'
 
 // Inert stand-ins for searchParams/setSearchParams so the search/sort/page
 // hooks below can always be called unconditionally (rules of hooks) even
-// when this renders without a real router-backed pair -- same reason the
-// other props above default to FIXTURE_* -- letting
+// when this renders without a real router-backed pair -- same reason
+// roleProfiles defaults to FIXTURE_ROLE_PROFILES -- letting
 // EmployerRoleProfilesConsole.test.jsx keep rendering this with no
 // searchParams/setSearchParams at all (it falls back to page-1/no-filter,
 // same as every other list here does before a user interacts with it).
@@ -27,67 +24,56 @@ const ROLE_PROFILE_SORT_ACCESSORS = {
   employees: (p) => p.linkedEmployeeCount ?? 0,
 }
 
-// Genuinely props-in/callbacks-out: this composes the leaf panels below but
-// owns no business data of its own -- no role profile, skill, training or
-// assignment ever lives in local state here (each role profile's own
-// requiredSkills/training/linkedEmployees already arrive fully formed via
-// the `roleProfiles` prop -- see EmployerRoleProfilesSection's
-// toConsoleProfile). Every mutation (save details, add/update/remove a
-// skill or training item, assign/withdraw an employee) is relayed upward as
-// a callback carrying the *next* value the caller should persist; the UI
-// only ever reflects what comes back down through `roleProfiles` on the
-// next render. The only local state is `modal` (which row's edit/skills/
-// training/users dialog is open, if any) -- purely presentational, holds no
-// role-profile data of its own.
-//
-// The FIXTURE_* imports are optional default prop values for an isolated
-// render only (e.g. opening this file's own preview) -- they are never
-// substituted back in after a real callback fires, and a caller that wires
-// real data is expected to override every prop.
+// The full-width table only -- a row's own required skills, training and
+// linked employees are each managed on that role profile's own detail page
+// (EmployerRoleProfileDetail.jsx, reached via onOpenProfile), not here. The
+// only mutation this component drives is creating a new (empty) profile,
+// which then hands off to its detail page the same way ProviderConsole's
+// own "+ Create training" flow creates a draft and navigates straight to
+// its full editor rather than building it out inline.
 export default function EmployerRoleProfilesConsole({
   roleProfiles = FIXTURE_ROLE_PROFILES,
-  availableSkills = FIXTURE_SKILL_CATALOGUE,
-  availableCourses = FIXTURE_COURSE_CATALOGUE,
   loading = false,
   error = null,
   searchParams = EMPTY_SEARCH_PARAMS,
   setSearchParams = noopSetSearchParams,
-  onSaveRoleProfile,
-  onReplaceSkills,
-  onReplaceTraining,
-  onAssignEmployee,
-  onWithdrawAssignment,
+  onCreateRoleProfile,
+  onOpenProfile,
 }) {
-  // { type: 'edit' | 'skills' | 'training' | 'users', profileId: string | null }
-  // profileId null only ever pairs with type 'edit' (the "New role profile"
-  // create form) -- every other type always opens against an existing row.
-  const [modal, setModal] = useState(null)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState(null)
+  const [saving, setSaving] = useState(false)
   const wasLoading = useRef(loading)
 
-  // Same "caller owns the async lifecycle" contract as ManagerTeamSharingPanel:
-  // the edit/create dialog only closes once `loading` transitions back to
-  // false with no `error` -- a failed save leaves it open with the error
-  // still visible instead of closing prematurely on submit. The
-  // skills/training/users dialogs deliberately don't auto-close the same
-  // way -- they're a running editor a manager builds up over several add/
-  // remove actions in one sitting, not a single submit-and-done form.
+  // Falls back to just closing if onCreateRoleProfile doesn't hand back an
+  // id (e.g. it failed -- the caller's own `error` prop already surfaces
+  // why, via createError below) or there's nowhere to navigate to (no
+  // onOpenProfile wired, as in an isolated render/test).
+  async function handleCreate(values) {
+    setSaving(true)
+    setCreateError(null)
+    try {
+      const id = await onCreateRoleProfile?.(values)
+      setCreating(false)
+      if (id) onOpenProfile?.(id)
+    } catch (err) {
+      setCreateError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Belt-and-braces close: if the caller's own loading prop transitions
+  // back to done with no error while the create dialog is open (e.g.
+  // onCreateRoleProfile resolved but didn't itself throw or return an id),
+  // don't leave the dialog stuck open.
   useEffect(() => {
-    if (wasLoading.current && !loading && !error && modal?.type === 'edit') {
-      setModal(null)
+    if (wasLoading.current && !loading && !error && creating) {
+      setCreating(false)
     }
     wasLoading.current = loading
-  }, [loading, error, modal])
+  }, [loading, error, creating])
 
-  // Looked up from the full, unfiltered roleProfiles -- an open dialog stays
-  // on whatever row opened it even if a search subsequently typed into the
-  // table below no longer matches it, rather than going blank.
-  const modalProfile = modal ? roleProfiles.find((p) => p.id === modal.profileId) ?? null : null
-  const requiredSkills = modalProfile?.requiredSkills ?? []
-  const training = modalProfile?.training ?? []
-  const linkedEmployees = modalProfile?.linkedEmployees ?? []
-
-  // This section's own primary roster -- searchable, sortable and paginated
-  // the same way every other console list here is (Users, Providers, ...).
   const [query, setQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
   const q = query.trim().toLowerCase()
   const filteredProfiles = useMemo(
@@ -109,86 +95,16 @@ export default function EmployerRoleProfilesConsole({
     { defaultSortKey: 'name', urlSync: { searchParams, setSearchParams } }
   )
 
-  function closeModal() {
-    setModal(null)
-  }
-
-  function handleSaveDetails({ name, description }) {
-    onSaveRoleProfile?.(modal?.profileId ?? null, { name, description })
-  }
-
-  function handleAddSkill({ skillId, targetLevel }) {
-    if (!modal?.profileId) return
-    const skill = availableSkills.find((s) => s.id === skillId)
-    if (!skill) return
-    onReplaceSkills?.(modal.profileId, [...requiredSkills, {
-      skillId,
-      name: skill.name,
-      targetLevel,
-      isComposite: skill.isComposite,
-      componentCount: skill.componentCount,
-    }])
-  }
-
-  function handleUpdateTargetLevel(skillId, targetLevel) {
-    if (!modal?.profileId) return
-    onReplaceSkills?.(
-      modal.profileId,
-      requiredSkills.map((s) => (s.skillId === skillId ? { ...s, targetLevel } : s))
-    )
-  }
-
-  function handleRemoveSkill(skillId) {
-    if (!modal?.profileId) return
-    onReplaceSkills?.(
-      modal.profileId,
-      requiredSkills.filter((s) => s.skillId !== skillId)
-    )
-  }
-
-  function handleAddTraining({ courseId, requirement }) {
-    if (!modal?.profileId) return
-    const course = availableCourses.find((c) => c.id === courseId)
-    if (!course) return
-    onReplaceTraining?.(modal.profileId, [...training, { courseId, title: course.title, requirement }])
-  }
-
-  function handleUpdateRequirement(courseId, requirement) {
-    if (!modal?.profileId) return
-    onReplaceTraining?.(
-      modal.profileId,
-      training.map((t) => (t.courseId === courseId ? { ...t, requirement } : t))
-    )
-  }
-
-  function handleRemoveTraining(courseId) {
-    if (!modal?.profileId) return
-    onReplaceTraining?.(
-      modal.profileId,
-      training.filter((t) => t.courseId !== courseId)
-    )
-  }
-
-  function handleAssignEmployee(email) {
-    if (!modal?.profileId) return
-    onAssignEmployee?.(modal.profileId, email)
-  }
-
   return (
     <div>
-      {/* One shared banner for whichever load (not save/mutation -- those
-          surface inside their own open dialog below) last failed. */}
-      {error && !modal && <MutationFeedback status="error" message={error} className="mb-4" />}
+      {error && <MutationFeedback status="error" message={error} className="mb-4" />}
 
       <RoleProfileList
         roleProfiles={pageItems}
         hasAnyRoleProfiles={roleProfiles.length > 0}
         loading={loading && roleProfiles.length === 0}
-        onCreate={() => setModal({ type: 'edit', profileId: null })}
-        onEdit={(id) => setModal({ type: 'edit', profileId: id })}
-        onAssignSkills={(id) => setModal({ type: 'skills', profileId: id })}
-        onAssignTraining={(id) => setModal({ type: 'training', profileId: id })}
-        onAssignUsers={(id) => setModal({ type: 'users', profileId: id })}
+        onCreate={() => setCreating(true)}
+        onOpenProfile={onOpenProfile}
         query={query}
         onQueryChange={setQuery}
         filtersActive={filtersActive}
@@ -203,87 +119,19 @@ export default function EmployerRoleProfilesConsole({
         totalItems={totalItems}
       />
 
-      {modal?.type === 'edit' && (
+      {creating && (
         <AccessibleDialog
-          label={modalProfile ? `Edit ${modalProfile.name}` : 'New role profile'}
-          onClose={loading ? undefined : closeModal}
-          closeOnBackdrop={!loading}
+          label="New role profile"
+          onClose={saving ? undefined : () => setCreating(false)}
+          closeOnBackdrop={!saving}
           panelClassName="w-full max-w-md max-h-[90vh] overflow-y-auto overscroll-contain"
         >
           <RoleProfileDetailsForm
-            roleProfile={modalProfile}
-            saving={loading}
-            error={error}
-            onSave={handleSaveDetails}
-            onCancel={closeModal}
+            saving={saving}
+            error={createError}
+            onSave={handleCreate}
+            onCancel={() => setCreating(false)}
           />
-        </AccessibleDialog>
-      )}
-
-      {modal?.type === 'skills' && modalProfile && (
-        <AccessibleDialog
-          label={`Assign skills -- ${modalProfile.name}`}
-          onClose={closeModal}
-          panelClassName="w-full max-w-lg max-h-[90vh] overflow-y-auto overscroll-contain space-y-3"
-        >
-          <RoleProfileSkillsPanel
-            requiredSkills={requiredSkills}
-            availableSkills={availableSkills}
-            saving={loading}
-            error={error}
-            onAddSkill={handleAddSkill}
-            onUpdateTargetLevel={handleUpdateTargetLevel}
-            onRemoveSkill={handleRemoveSkill}
-          />
-          <div className="bg-card border border-hairline rounded-lg p-3 flex justify-end">
-            <button type="button" onClick={closeModal} className="rounded-md border border-hairline text-ink py-1.5 px-4 text-sm font-medium hover:bg-paper">
-              Close
-            </button>
-          </div>
-        </AccessibleDialog>
-      )}
-
-      {modal?.type === 'training' && modalProfile && (
-        <AccessibleDialog
-          label={`Assign training -- ${modalProfile.name}`}
-          onClose={closeModal}
-          panelClassName="w-full max-w-lg max-h-[90vh] overflow-y-auto overscroll-contain space-y-3"
-        >
-          <RoleProfileTrainingPanel
-            training={training}
-            availableCourses={availableCourses}
-            saving={loading}
-            error={error}
-            onAddTraining={handleAddTraining}
-            onUpdateRequirement={handleUpdateRequirement}
-            onRemoveTraining={handleRemoveTraining}
-          />
-          <div className="bg-card border border-hairline rounded-lg p-3 flex justify-end">
-            <button type="button" onClick={closeModal} className="rounded-md border border-hairline text-ink py-1.5 px-4 text-sm font-medium hover:bg-paper">
-              Close
-            </button>
-          </div>
-        </AccessibleDialog>
-      )}
-
-      {modal?.type === 'users' && modalProfile && (
-        <AccessibleDialog
-          label={`Assign users -- ${modalProfile.name}`}
-          onClose={closeModal}
-          panelClassName="w-full max-w-lg max-h-[90vh] overflow-y-auto overscroll-contain space-y-3"
-        >
-          <RoleProfileLinkedEmployeesPanel
-            employees={linkedEmployees}
-            assigning={loading}
-            error={error}
-            onAssignEmployee={handleAssignEmployee}
-            onWithdrawAssignment={onWithdrawAssignment}
-          />
-          <div className="bg-card border border-hairline rounded-lg p-3 flex justify-end">
-            <button type="button" onClick={closeModal} className="rounded-md border border-hairline text-ink py-1.5 px-4 text-sm font-medium hover:bg-paper">
-              Close
-            </button>
-          </div>
         </AccessibleDialog>
       )}
     </div>

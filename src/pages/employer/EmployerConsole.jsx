@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
 import AccessibleDialog from '../../components/AccessibleDialog'
@@ -139,6 +139,7 @@ const EMPLOYER_FILTER_RESET = { q: null, status: null, page: null, aq: null, aPa
 // clear inside the combined page.
 export default function EmployerConsole() {
   const { user, employerMemberships, organisationMemberships } = useAuth()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [employers, setEmployers] = useState([])
   const [organisations, setOrganisations] = useState([])
@@ -489,6 +490,7 @@ export default function EmployerConsole() {
                       user={user}
                       searchParams={searchParams}
                       setSearchParams={setSearchParams}
+                      onOpenProfile={(id) => navigate(`/employer/roles/${id}`)}
                     />
                   )}
                   {currentSection === 'providers' && (

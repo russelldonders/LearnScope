@@ -13,38 +13,24 @@ describe('RoleProfileList', () => {
   it('lists each role profile with its skill/training/linked-employee counts', () => {
     render(<RoleProfileList roleProfiles={FIXTURE_ROLE_PROFILES} />)
     const cells = getRow('Senior Support Engineer').querySelectorAll('td')
-    // Name, description, skills, training, employees, updated, actions
+    // Name, description, skills, training, employees, updated
     expect(cells[2]).toHaveTextContent('3')
     expect(cells[3]).toHaveTextContent('2')
     expect(cells[4]).toHaveTextContent('2')
   })
 
-  it('calls onEdit with the role profile id', () => {
-    const onEdit = vi.fn()
-    render(<RoleProfileList roleProfiles={FIXTURE_ROLE_PROFILES} onEdit={onEdit} />)
-    fireEvent.click(within(getRow('Senior Support Engineer')).getByRole('button', { name: 'Edit' }))
-    expect(onEdit).toHaveBeenCalledWith('role-profile-1')
+  it('calls onOpenProfile with the role profile id when its name is clicked', () => {
+    const onOpenProfile = vi.fn()
+    render(<RoleProfileList roleProfiles={FIXTURE_ROLE_PROFILES} onOpenProfile={onOpenProfile} />)
+    fireEvent.click(within(getRow('Senior Support Engineer')).getByRole('button', { name: 'Senior Support Engineer' }))
+    expect(onOpenProfile).toHaveBeenCalledWith('role-profile-1')
   })
 
-  it('calls onAssignSkills with the role profile id', () => {
-    const onAssignSkills = vi.fn()
-    render(<RoleProfileList roleProfiles={FIXTURE_ROLE_PROFILES} onAssignSkills={onAssignSkills} />)
-    fireEvent.click(within(getRow('Field Operations Lead')).getByRole('button', { name: 'Assign skills' }))
-    expect(onAssignSkills).toHaveBeenCalledWith('role-profile-2')
-  })
-
-  it('calls onAssignTraining with the role profile id', () => {
-    const onAssignTraining = vi.fn()
-    render(<RoleProfileList roleProfiles={FIXTURE_ROLE_PROFILES} onAssignTraining={onAssignTraining} />)
-    fireEvent.click(within(getRow('Senior Support Engineer')).getByRole('button', { name: 'Assign training' }))
-    expect(onAssignTraining).toHaveBeenCalledWith('role-profile-1')
-  })
-
-  it('calls onAssignUsers with the role profile id', () => {
-    const onAssignUsers = vi.fn()
-    render(<RoleProfileList roleProfiles={FIXTURE_ROLE_PROFILES} onAssignUsers={onAssignUsers} />)
-    fireEvent.click(within(getRow('Field Operations Lead')).getByRole('button', { name: 'Assign users' }))
-    expect(onAssignUsers).toHaveBeenCalledWith('role-profile-2')
+  it('calls onOpenProfile with a different row\'s own id', () => {
+    const onOpenProfile = vi.fn()
+    render(<RoleProfileList roleProfiles={FIXTURE_ROLE_PROFILES} onOpenProfile={onOpenProfile} />)
+    fireEvent.click(within(getRow('Field Operations Lead')).getByRole('button', { name: 'Field Operations Lead' }))
+    expect(onOpenProfile).toHaveBeenCalledWith('role-profile-2')
   })
 
   it('calls onCreate when "New role profile" is clicked', () => {
