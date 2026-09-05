@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import AccessibleDialog from '../../../components/AccessibleDialog'
 import ConfirmDialog from '../../../components/ConfirmDialog'
 import MutationFeedback from '../../../components/MutationFeedback'
+import PersonAvatar from '../../../components/PersonAvatar'
 import { LEVEL_LABELS } from '../../../lib/levels'
 import { formatAbsoluteDate } from '../../../lib/dates'
 
@@ -18,6 +19,21 @@ import { formatAbsoluteDate } from '../../../lib/dates'
 // list. `membership` is { id, teamName, managerName, joinedAt }.
 // `availableSkills` entries are { id, name, level, evidenceCount }.
 //
+// `roster` is who else is on the team -- just name/avatar/role, sourced
+// from list_manager_team_roster() rather than the manager-only
+// list_manager_team_member_summaries() -- deliberately never carries
+// teammates' shared skills here, since sharing a skill is consent scoped to
+// the manager, not to peers. Entries are { id, name, avatarUrl, role,
+// memberSince }.
+//
+// `assessments` are this manager's own ratings of the learner's shared
+// skills (list_manager_team_skill_assessments) -- shown read-only, latest
+// per skill, purely for transparency into what the manager has recorded.
+// They never feed back into `availableSkills`/`sharedSkillIds` or any
+// self-assessment: a manager's rating lives entirely alongside, not instead
+// of, the learner's own. Entries are { id, skillId, level, comments,
+// evidenceUrl, evidencePaths, assessedByName, assessedAt }.
+//
 // `saving`/`error` are owned by the caller, not this component -- there's
 // no internal saving/try-catch here. `onSave(skillIds)` and `onLeaveTeam()`
 // are just called; this panel reacts to `saving` transitioning back to
@@ -27,6 +43,8 @@ export default function ManagerTeamSharingPanel({
   membership,
   availableSkills = [],
   sharedSkillIds = [],
+  roster = [],
+  assessments = [],
   saving = false,
   error = null,
   onSave,
@@ -49,6 +67,19 @@ export default function ManagerTeamSharingPanel({
     [availableSkills, sharedSkillIds]
   )
 
+  // Latest rating per skill only -- history for a given skill can pile up
+  // over time, but this panel is a transparency summary, not the full log.
+  const latestRatingBySkillId = useMemo(() => {
+    const latest = new Map()
+    for (const entry of assessments) {
+      const current = latest.get(entry.skillId)
+      if (!current || new Date(entry.assessedAt) > new Date(current.assessedAt)) {
+        latest.set(entry.skillId, entry)
+      }
+    }
+    return latest
+  }, [assessments])
+
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
       <h3 className="font-display text-lg text-ink mb-1">{membership.teamName}</h3>
@@ -62,6 +93,47 @@ export default function ManagerTeamSharingPanel({
         profile -- including your experience or personal learning history -- is visible to them. You can
         change your selection or leave the team at any time.
       </p>
+
+      {roster.length > 0 && (
+        <div className="mb-4 pt-3 border-t border-hairline">
+          <p className="text-xs font-medium uppercase tracking-wide text-secondary mb-2">
+            {roster.length} {roster.length === 1 ? 'person' : 'people'} on this team
+          </p>
+          <ul className="flex flex-wrap gap-3">
+            {roster.map((person) => (
+              <li key={person.id} className="flex items-center gap-2">
+                <PersonAvatar name={person.name} avatarUrl={person.avatarUrl} size={6} />
+                <span className="text-sm text-ink">
+                  {person.name}
+                  {person.role === 'manager' && <span className="text-secondary"> · manager</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {sharedSkills.some((skill) => latestRatingBySkillId.has(skill.id)) && (
+        <div className="mb-4 pt-3 border-t border-hairline space-y-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-secondary">
+            {membership.managerName}'s ratings
+          </p>
+          {sharedSkills.map((skill) => {
+            const rating = latestRatingBySkillId.get(skill.id)
+            if (!rating) return null
+            return (
+              <div key={skill.id} className="text-sm">
+                <span className="text-ink">{skill.name}</span>
+                <span className="text-secondary">
+                  {' '}
+                  · {LEVEL_LABELS[rating.level]} · rated {formatAbsoluteDate(rating.assessedAt)}
+                </span>
+                {rating.comments && <p className="text-secondary text-xs mt-0.5">{rating.comments}</p>}
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-3 border-t border-hairline">
         <p className="text-sm text-ink">

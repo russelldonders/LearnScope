@@ -138,6 +138,14 @@ export async function listManagerTeamSharedSkills(teamId) {
   return data ?? []
 }
 
+export async function listManagerTeamRoster(teamId) {
+  const { data, error } = await supabase.rpc('list_manager_team_roster', { p_team_id: teamId })
+  if (error) throw error
+  return (data ?? []).map((row) => ({
+    id: row.id, name: row.name, avatarUrl: row.avatar_url, role: row.role, memberSince: row.member_since,
+  }))
+}
+
 export async function listManagerTeamMemberSummaries(teamId) {
   const { data, error } = await supabase.rpc('list_manager_team_member_summaries', { p_team_id: teamId })
   if (error) throw error
@@ -145,6 +153,40 @@ export async function listManagerTeamMemberSummaries(teamId) {
     id: row.id, name: row.name, avatarUrl: row.avatar_url, teamSince: row.team_since,
     sharedSkills: row.shared_skills ?? [],
     collaborativeLearningCount: Number(row.collaborative_learning_count ?? 0),
+  }))
+}
+
+// A manager's own rating of a skill a member has shared with them --
+// deliberately separate from the member's own skill/skill_assessments
+// history (see the migration): never overwrites it, always attributed to
+// the manager, scoped to this team relationship. `createManagerTeamSkillAssessment`
+// returns the new assessment id; when the caller also has evidence files,
+// upload them (see src/lib/skillEvidence.js, keyed by that id, same as any
+// other assessment-with-evidence flow) then attach the resulting paths with
+// `setManagerTeamSkillAssessmentEvidence`.
+export async function createManagerTeamSkillAssessment(membershipId, skillId, { level, comments = null, evidenceUrl = null }) {
+  const { data, error } = await supabase.rpc('create_manager_team_skill_assessment', {
+    p_membership_id: membershipId, p_skill_id: skillId, p_level: level,
+    p_comments: comments, p_evidence_url: evidenceUrl,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function setManagerTeamSkillAssessmentEvidence(assessmentId, evidencePaths) {
+  const { error } = await supabase.rpc('set_manager_team_skill_assessment_evidence', {
+    p_assessment_id: assessmentId, p_evidence_paths: evidencePaths,
+  })
+  if (error) throw error
+}
+
+export async function listManagerTeamSkillAssessments(membershipId) {
+  const { data, error } = await supabase.rpc('list_manager_team_skill_assessments', { p_membership_id: membershipId })
+  if (error) throw error
+  return (data ?? []).map((row) => ({
+    id: row.id, skillId: row.skill_id, level: row.level, comments: row.comments,
+    evidenceUrl: row.evidence_url, evidencePaths: row.evidence_paths ?? [],
+    assessedByName: row.assessed_by_name, assessedAt: row.assessed_at,
   }))
 }
 

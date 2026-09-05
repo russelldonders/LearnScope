@@ -23,3 +23,16 @@ export const FIXTURE_AVAILABLE_SKILLS = [
 ]
 
 export const FIXTURE_SHARED_SKILL_IDS = ['skill-1']
+
+export const FIXTURE_ROSTER = [
+  { id: 'membership-manager', name: 'Dana Whitfield', avatarUrl: null, role: 'manager', memberSince: '2026-05-01' },
+  { id: 'fixture-membership-1', name: 'Jordan Ellis', avatarUrl: null, role: 'member', memberSince: '2026-06-15' },
+  { id: 'membership-3', name: 'Priya Nair', avatarUrl: null, role: 'member', memberSince: '2026-07-02' },
+]
+
+export const FIXTURE_ASSESSMENTS = [
+  {
+    id: 'assessment-1', skillId: 'skill-1', level: 4, comments: 'Led the workshop well.',
+    evidenceUrl: null, evidencePaths: [], assessedByName: 'Dana Whitfield', assessedAt: '2026-08-20',
+  },
+]
