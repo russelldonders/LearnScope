@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
@@ -14,7 +14,6 @@ import {
   createProviderCatalogue,
   deleteProviderCatalogue,
   listPublicationCatalogueOptions,
-  updateProviderCatalogue,
 } from '../../lib/catalogues'
 // listProviderCatalogues specifically comes from admin/providerCatalogues.js,
 // not the same-named function in lib/catalogues.js -- only this version
@@ -22,8 +21,14 @@ import {
 // which the bulk-delete confirmation below needs to warn accurately about
 // live courses. The lib/catalogues.js version returns a plain column
 // select with no aggregate counts.
-import { assignProviderCourseToCatalogue, listProviderCatalogues } from '../../lib/admin/providerCatalogues'
-import { listOrganisations, listOrganisationMembers } from '../../lib/admin/organisations'
+import {
+  assignProviderCourseToCatalogue,
+  listProviderCatalogues,
+  listLinkableCatalogues,
+  linkCatalogueToOrganisation,
+  unlinkCatalogueFromOrganisation,
+} from '../../lib/admin/providerCatalogues'
+import { listOrganisations } from '../../lib/admin/organisations'
 import { listEmployers } from '../../lib/admin/employers'
 import { useRowSelection, useSortedPage, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
 import { handleTabListKeyDown } from '../../lib/tabsKeyboard'
@@ -36,9 +41,6 @@ import {
   listCourseVersionHistory,
   createDraftCourseVersion,
   listOrganisationCatalogueApprovers,
-  listCatalogueApprovers,
-  addCatalogueApprover,
-  removeCatalogueApprover,
   approveCatalogueCourse,
   rejectCatalogueCourse,
   deactivateCatalogueCourse,
@@ -387,23 +389,33 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate, rea
   const showCreateUI = canCreate && !readOnly
   const [catalogues, setCatalogues] = useState([])
   const [showCreateForm, setShowCreateForm] = useState(false)
-  const [form, setForm] = useState({ name: '', description: '' })
-  const [editingId, setEditingId] = useState(null)
+  const [form, setForm] = useState({ name: '', description: '', learnerVisible: false })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
-  const [expandedId, setExpandedId] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleteTargetPublishedCount] = useState(0)
   const [deleting, setDeleting] = useState(false)
   const [bulkDeleteTargets, setBulkDeleteTargets] = useState(null)
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  // Search-and-link widget for offering another provider's existing
+  // catalogue alongside this org's own (catalogue_links, 20260905180000) --
+  // local state only, mirrors EmployerProvidersPanel's identical "search
+  // organisations to link" widget in EmployerConsole.jsx.
+  const [linkQuery, setLinkQuery] = useState('')
+  const [linkMatches, setLinkMatches] = useState([])
+  const [linkingId, setLinkingId] = useState(null)
+  const [unlinkTarget, setUnlinkTarget] = useState(null)
+  const [unlinking, setUnlinking] = useState(false)
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
     useSortedPage(catalogues, CATALOGUE_SORT_ACCESSORS)
-  const selection = useRowSelection(catalogues.map((c) => c.id))
-  const pageIds = pageItems.map((c) => c.id)
-  const selectedOnPage = pageIds.filter((id) => selection.selected.has(id)).length
+  // Only this org's own catalogues are selectable for bulk delete -- a
+  // linked one belongs to another org (RLS would reject deleting it
+  // anyway), it only ever gets unlinked, one at a time, below.
+  const selection = useRowSelection(catalogues.filter((c) => c.isOwn).map((c) => c.id))
+  const pageOwnIds = pageItems.filter((c) => c.isOwn).map((c) => c.id)
+  const selectedOnPage = pageOwnIds.filter((id) => selection.selected.has(id)).length
 
   useEffect(() => {
     load()
@@ -427,10 +439,8 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate, rea
     setSaving(true)
     setError(null)
     try {
-      if (editingId) await updateProviderCatalogue(editingId, form)
-      else await createProviderCatalogue(userId, organisation.id, form)
-      setForm({ name: '', description: '' })
-      setEditingId(null)
+      await createProviderCatalogue(userId, organisation.id, form)
+      setForm({ name: '', description: '', learnerVisible: false })
       setShowCreateForm(false)
       await load()
     } catch (err) {
@@ -440,12 +450,64 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate, rea
     }
   }
 
+  // "Link a catalogue" -- searches every provider's own catalogues (already
+  // fully readable by any authenticated user, 0111) except this org's own
+  // and any it's already linked (listLinkableCatalogues excludes both
+  // server-side); no debounce, matching every other inline search box in
+  // this console.
+  useEffect(() => {
+    const q = linkQuery.trim()
+    if (!q) {
+      setLinkMatches([])
+      return
+    }
+    let cancelled = false
+    listLinkableCatalogues(organisation.id, q)
+      .then((matches) => {
+        if (!cancelled) setLinkMatches(matches)
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [linkQuery, organisation.id])
+
+  async function handleLink(catalogue) {
+    setLinkingId(catalogue.id)
+    setError(null)
+    try {
+      await linkCatalogueToOrganisation(catalogue.id, organisation.id, userId)
+      setLinkQuery('')
+      setLinkMatches([])
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLinkingId(null)
+    }
+  }
+
+  async function handleUnlink() {
+    setUnlinking(true)
+    setError(null)
+    try {
+      await unlinkCatalogueFromOrganisation(unlinkTarget.linkId)
+      setUnlinkTarget(null)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setUnlinking(false)
+    }
+  }
+
   async function handleDelete() {
     setDeleting(true)
     setError(null)
     try {
       await deleteProviderCatalogue(deleteTarget.id)
-      if (expandedId === deleteTarget.id) setExpandedId(null)
       setDeleteTarget(null)
       await load()
     } catch (err) {
@@ -467,10 +529,6 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate, rea
       const succeededIds = targets
         .filter((_, index) => results[index].status === 'fulfilled')
         .map((catalogue) => catalogue.id)
-      // Only collapse the expanded approvers panel if its catalogue was
-      // actually deleted -- if that particular delete failed, the catalogue
-      // still exists and the panel should stay put.
-      if (expandedId && succeededIds.includes(expandedId)) setExpandedId(null)
       setBulkDeleteTargets(null)
       // Full success clears the whole selection; a partial failure keeps
       // the still-undeleted catalogues selected so they're easy to retry.
@@ -514,8 +572,8 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate, rea
 
       {error && <p role="alert" className="text-sm text-red-700 mb-4">{error}</p>}
 
-      {showCreateUI && (showCreateForm || editingId) && <form onSubmit={handleSubmit} className="bg-card border border-hairline rounded-lg p-4 mb-6">
-        <h3 className="text-sm font-medium text-ink mb-3">{editingId ? 'Edit catalogue' : 'Create a catalogue'}</h3>
+      {showCreateUI && showCreateForm && <form onSubmit={handleSubmit} className="bg-card border border-hairline rounded-lg p-4 mb-6">
+        <h3 className="text-sm font-medium text-ink mb-3">Create a catalogue</h3>
         <div className="grid sm:grid-cols-2 gap-3">
           <label className="text-xs text-secondary">
             Name
@@ -526,13 +584,68 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate, rea
             <input value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} className="mt-1 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
           </label>
         </div>
+        <label className="flex items-start gap-2 mt-3 text-sm text-ink">
+          <input
+            type="checkbox"
+            checked={form.learnerVisible}
+            onChange={(event) => setForm((current) => ({ ...current, learnerVisible: event.target.checked }))}
+            className="mt-0.5 rounded border-hairline accent-moss"
+          />
+          <span>
+            Learner-facing
+            <span className="block text-xs text-secondary">
+              Its courses can appear on your public provider profile. Leave unchecked to keep this catalogue
+              backend-only, for admin-driven assignment only.
+            </span>
+          </span>
+        </label>
         <div className="flex gap-2 mt-3">
           <button disabled={saving || !form.name.trim()} className="rounded-md bg-moss px-3 py-1.5 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-50">
-            {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create catalogue'}
+            {saving ? 'Saving…' : 'Create catalogue'}
           </button>
-          <button type="button" onClick={() => { setEditingId(null); setShowCreateForm(false); setForm({ name: '', description: '' }) }} className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink hover:bg-paper">Cancel</button>
+          <button type="button" onClick={() => { setShowCreateForm(false); setForm({ name: '', description: '', learnerVisible: false }) }} className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink hover:bg-paper">Cancel</button>
         </div>
       </form>}
+
+      {showCreateUI && (
+        <div className="bg-card border border-hairline rounded-lg p-4 mb-6 relative">
+          <label className="block text-xs text-secondary mb-1" htmlFor="providerLinkCatalogueSearch">
+            Link a catalogue from another provider
+          </label>
+          <input
+            id="providerLinkCatalogueSearch"
+            value={linkQuery}
+            onChange={(event) => setLinkQuery(event.target.value)}
+            placeholder="Search catalogues by name…"
+            autoComplete="off"
+            className="w-full max-w-md rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+          />
+          {linkQuery.trim() && (
+            <div className="mt-1 w-full max-w-md bg-card border border-hairline rounded-md max-h-56 overflow-y-auto">
+              {linkMatches.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-secondary">No matching catalogues to link.</p>
+              ) : (
+                linkMatches.map((match) => (
+                  <div key={match.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm border-b border-hairline last:border-0">
+                    <div className="min-w-0">
+                      <p className="text-ink truncate">{match.name}</p>
+                      <p className="text-[10px] text-secondary truncate">{match.organisations?.name || 'Unknown provider'}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleLink(match)}
+                      disabled={linkingId === match.id}
+                      className="text-xs text-moss hover:underline disabled:opacity-60 shrink-0"
+                    >
+                      {linkingId === match.id ? 'Linking…' : 'Link'}
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {loading ? (
         <p role="status" className="text-sm text-secondary">Loading catalogues…</p>
@@ -565,56 +678,96 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate, rea
                   {!readOnly && (
                     <SelectionTh
                       idPrefix="provider-catalogues"
-                      checked={selection.isAllSelected(pageIds)}
-                      indeterminate={selectedOnPage > 0 && selectedOnPage < pageIds.length}
-                      onChange={() => selection.toggleAll(pageIds)}
+                      checked={selection.isAllSelected(pageOwnIds)}
+                      indeterminate={selectedOnPage > 0 && selectedOnPage < pageOwnIds.length}
+                      onChange={() => selection.toggleAll(pageOwnIds)}
                     />
                   )}
                   <SortableTh label="ID" columnKey="id" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   <SortableTh label="Catalogue" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <th className="px-4 py-2 font-medium whitespace-nowrap">Source</th>
+                  <th className="px-4 py-2 font-medium whitespace-nowrap">Visibility</th>
                   <SortableTh label="Description" columnKey="description" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <th className="px-4 py-2 font-medium whitespace-nowrap">Courses</th>
+                  <th className="px-4 py-2 font-medium whitespace-nowrap">Users</th>
                   <th className="px-4 py-2 font-medium"></th>
                 </tr>
               </thead>
               <tbody>
                 {pageItems.map((catalogue) => (
-                  <Fragment key={catalogue.id}>
-                    <tr className="border-b border-hairline last:border-0">
-                      {!readOnly && (
-                        <td className="px-4 py-3">
-                          <label className="sr-only" htmlFor={`select-catalogue-${catalogue.id}`}>Select {catalogue.name}</label>
-                          <input
-                            id={`select-catalogue-${catalogue.id}`}
-                            type="checkbox"
-                            checked={selection.selected.has(catalogue.id)}
-                            onChange={() => selection.toggle(catalogue.id)}
-                            className="rounded border-hairline accent-moss"
-                          />
-                        </td>
+                  <tr key={catalogue.id} className="border-b border-hairline last:border-0">
+                    {!readOnly && (
+                      <td className="px-4 py-3">
+                        {catalogue.isOwn && (
+                          <>
+                            <label className="sr-only" htmlFor={`select-catalogue-${catalogue.id}`}>Select {catalogue.name}</label>
+                            <input
+                              id={`select-catalogue-${catalogue.id}`}
+                              type="checkbox"
+                              checked={selection.selected.has(catalogue.id)}
+                              onChange={() => selection.toggle(catalogue.id)}
+                              className="rounded border-hairline accent-moss"
+                            />
+                          </>
+                        )}
+                      </td>
+                    )}
+                    <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{catalogue.id.slice(0, 8)}</td>
+                    <td className="px-4 py-3 text-ink font-medium whitespace-nowrap">{catalogue.name}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {catalogue.isOwn ? (
+                        <span className="text-xs text-secondary">Own</span>
+                      ) : (
+                        <span className="text-xs text-gold" title={`Linked from ${catalogue.ownerOrganisationName || 'another provider'}`}>
+                          Linked{catalogue.ownerOrganisationName ? ` · ${catalogue.ownerOrganisationName}` : ''}
+                        </span>
                       )}
-                      <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{catalogue.id.slice(0, 8)}</td>
-                      <td className="px-4 py-3 text-ink font-medium whitespace-nowrap">{catalogue.name}</td>
-                      <td className="px-4 py-3 text-secondary truncate max-w-xs">{catalogue.description || '—'}</td>
-                      <td className="px-4 py-3 text-right">
-                        <Link to={`/provider/catalogues/${catalogue.id}`} className="text-xs font-medium text-moss hover:underline whitespace-nowrap">
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-secondary">
+                      {catalogue.learner_visible ? 'Learner-facing' : 'Backend only'}
+                    </td>
+                    <td className="px-4 py-3 text-secondary truncate max-w-xs">{catalogue.description || '—'}</td>
+                    <td className="px-4 py-3 text-secondary whitespace-nowrap">{catalogue.courseCount}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {/* Straight to the Users tab -- this is a catalogue's own admins/
+                          approvers (who can approve courses into it), not learners. */}
+                      <Link to={`/provider/catalogues/${catalogue.id}?tab=users`} className="text-xs font-medium text-moss hover:underline">
+                        {catalogue.userCount} user{catalogue.userCount === 1 ? '' : 's'}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-x-3 whitespace-nowrap">
+                        <Link to={`/provider/catalogues/${catalogue.id}`} className="text-xs font-medium text-moss hover:underline">
                           Open catalogue →
                         </Link>
-                      </td>
-                    </tr>
-                    {expandedId === catalogue.id && (
-                      <tr className="border-b border-hairline last:border-0">
-                        <td colSpan={readOnly ? 4 : 5} className="px-4 pb-3">
-                          <CatalogueApproversPanel catalogueId={catalogue.id} organisationId={organisation.id} />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
+                        {!catalogue.isOwn && !readOnly && (
+                          <button
+                            type="button"
+                            onClick={() => setUnlinkTarget(catalogue)}
+                            className="text-xs font-medium text-red-700 hover:underline"
+                          >
+                            Unlink
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
                 ))}
               </tbody>
             </table>
           </div>
           <TablePagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalItems={totalItems} idPrefix="provider-catalogues" />
         </div>
+      )}
+
+      {unlinkTarget && (
+        <ConfirmDialog
+          message={`Unlink "${unlinkTarget.name}" from ${organisation.name || 'your organisation'}? It stays owned by ${unlinkTarget.ownerOrganisationName || 'the other provider'} -- this only stops offering it alongside your own catalogues.`}
+          confirmLabel="Unlink"
+          onConfirm={handleUnlink}
+          onCancel={() => setUnlinkTarget(null)}
+          confirming={unlinking}
+        />
       )}
 
       {deleteTarget && (
@@ -647,85 +800,6 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate, rea
   )
 }
 
-function CatalogueApproversPanel({ catalogueId, organisationId }) {
-  const { user } = useAuth()
-  const [members, setMembers] = useState([])
-  const [approvers, setApprovers] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [togglingUserId, setTogglingUserId] = useState(null)
-
-  useEffect(() => {
-    load()
-  }, [catalogueId])
-
-  async function load() {
-    setLoading(true)
-    setError(null)
-    try {
-      const [memberList, approverList] = await Promise.all([
-        listOrganisationMembers(organisationId),
-        listCatalogueApprovers(catalogueId),
-      ])
-      setMembers(memberList.filter((m) => m.status === 'active'))
-      setApprovers(approverList)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleToggle(member, isApprover) {
-    setTogglingUserId(member.user_id)
-    setError(null)
-    try {
-      if (isApprover) {
-        const row = approvers.find((a) => a.user_id === member.user_id)
-        if (row) await removeCatalogueApprover(row.id)
-      } else {
-        await addCatalogueApprover(catalogueId, member.user_id, user.id)
-      }
-      await load()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setTogglingUserId(null)
-    }
-  }
-
-  return (
-    <div className="border-t border-hairline bg-paper p-4 space-y-2 mb-2">
-      {error && <p className="text-xs text-red-700">{error}</p>}
-      {loading ? (
-        <p className="text-xs text-secondary">Loading users…</p>
-      ) : members.length === 0 ? (
-        <p className="text-xs text-secondary">No users yet.</p>
-      ) : (
-        <ul className="divide-y divide-hairline">
-          {members.map((m) => {
-            const isApprover = approvers.some((a) => a.user_id === m.user_id)
-            return (
-              <li key={m.user_id} className="flex items-center justify-between gap-2 text-sm py-2">
-                <span className="text-ink text-xs truncate">{m.email || m.user_id}</span>
-                <label className="flex items-center gap-1.5 text-xs text-secondary shrink-0">
-                  <input
-                    type="checkbox"
-                    checked={isApprover}
-                    disabled={togglingUserId === m.user_id}
-                    onChange={() => handleToggle(m, isApprover)}
-                    className="rounded border-hairline"
-                  />
-                  Approver
-                </label>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-    </div>
-  )
-}
 
 // Exported for the same reason as ProviderCataloguesSection above -- reused
 // verbatim by the employer console's Training tab.

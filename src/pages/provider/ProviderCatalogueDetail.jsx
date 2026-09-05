@@ -52,7 +52,7 @@ export default function ProviderCatalogueDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [editing, setEditing] = useState(false)
-  const [editForm, setEditForm] = useState({ name: '', description: '' })
+  const [editForm, setEditForm] = useState({ name: '', description: '', learnerVisible: false })
   const [saving, setSaving] = useState(false)
   const tabRefs = useRef({})
 
@@ -76,7 +76,7 @@ export default function ProviderCatalogueDetail() {
         listPublishedOrganisationResources(catalogueData.organisation_id),
       ])
       setCatalogue(catalogueData)
-      setEditForm({ name: catalogueData.name, description: catalogueData.description ?? '' })
+      setEditForm({ name: catalogueData.name, description: catalogueData.description ?? '', learnerVisible: catalogueData.learner_visible })
       setCourses(courseData)
       setOrganisationCourses(organisationCourseData)
       setSkills(skillData)
@@ -163,6 +163,18 @@ export default function ProviderCatalogueDetail() {
               <textarea rows={3} value={editForm.description} onChange={(event) => setEditForm((form) => ({ ...form, description: event.target.value }))} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
             </label>
           </div>
+          <label className="flex items-start gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={editForm.learnerVisible}
+              onChange={(event) => setEditForm((form) => ({ ...form, learnerVisible: event.target.checked }))}
+              className="mt-0.5 rounded border-hairline accent-moss"
+            />
+            <span>
+              Learner-facing
+              <span className="block text-xs text-secondary">Its courses can appear on your public provider profile. Leave unchecked to keep this catalogue backend-only, for admin-driven assignment only.</span>
+            </span>
+          </label>
           <div className="flex gap-2">
             <button disabled={saving} className="rounded-md bg-moss px-3 py-2 text-sm font-medium text-paper disabled:opacity-50">{saving ? 'Saving…' : 'Save catalogue'}</button>
             <button type="button" onClick={() => setEditing(false)} className="rounded-md border border-hairline px-3 py-2 text-sm font-medium text-ink hover:bg-card">Cancel</button>

@@ -183,6 +183,11 @@ export default function ProviderProfile() {
                           {[course.courseType, course.duration].filter(Boolean).join(' · ')}
                         </p>
                         {course.synopsis && <p className="text-sm text-secondary mt-2 flex-1">{course.synopsis}</p>}
+                        {course.catalogues.length > 0 && (
+                          <p className="text-xs text-secondary mt-2">
+                            {course.catalogues.map((c) => c.name).join(', ')}
+                          </p>
+                        )}
                         {(course.skillEntries.length > 0 || course.tags.length > 0) && (
                           <div className="flex flex-wrap gap-1 mt-2">
                             {course.skillEntries.map((e) => (

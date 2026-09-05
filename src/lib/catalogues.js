@@ -21,27 +21,20 @@ export async function listPublicationCatalogueOptions(organisationId) {
   return data ?? []
 }
 
-export async function createProviderCatalogue(userId, organisationId, { name, description }) {
+export async function createProviderCatalogue(userId, organisationId, { name, description, learnerVisible = false }) {
   const { data, error } = await supabase
     .from('catalogues')
     .insert({
       organisation_id: organisationId,
       name: name.trim(),
       description: description.trim() || null,
+      learner_visible: learnerVisible,
       created_by: userId,
     })
     .select()
     .single()
   if (error) throw error
   return data
-}
-
-export async function updateProviderCatalogue(id, { name, description }) {
-  const { error } = await supabase
-    .from('catalogues')
-    .update({ name: name.trim(), description: description.trim() || null, updated_at: new Date().toISOString() })
-    .eq('id', id)
-  if (error) throw error
 }
 
 export async function deleteProviderCatalogue(id) {
