@@ -49,11 +49,19 @@ export default function CompositeSkillProgress({ composite, loading = false, err
               <p className="mt-0.5 text-xs text-secondary">
                 {component.isRequired ? 'Required' : 'Optional'} · Target level {component.targetLevel}, {LEVEL_LABELS[component.targetLevel]}
               </p>
+              {component.childComposite && (
+                <p className="mt-1 text-xs text-secondary">
+                  Also built from {component.childComposite.components.length} subskill{component.childComposite.components.length === 1 ? '' : 's'} ·{' '}
+                  {component.childComposite.coverage.percentage}% subskill coverage
+                </p>
+              )}
             </div>
             <div className="sm:text-right">
               <p className={`text-sm font-medium ${component.targetMet ? 'text-moss' : 'text-ink'}`}>
                 {component.targetMet
-                  ? 'Target met'
+                  ? component.currentLevel != null && component.currentLevel >= component.targetLevel
+                    ? 'Target met'
+                    : 'Target met through subskills'
                   : component.currentLevel
                     ? `Level ${component.currentLevel} of ${component.targetLevel}`
                     : 'Not yet tracked'}

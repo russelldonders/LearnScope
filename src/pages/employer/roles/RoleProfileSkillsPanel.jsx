@@ -42,8 +42,13 @@ export default function RoleProfileSkillsPanel({
         <ul className="divide-y divide-hairline mb-4">
           {requiredSkills.map((skill) => (
             <li key={skill.skillId} className="flex flex-wrap items-center gap-2 py-2">
-              <span className="text-sm text-ink flex-1 min-w-[8rem] truncate" title={skill.name}>
-                {skill.name}
+              <span className="text-sm text-ink flex-1 min-w-[8rem]" title={skill.name}>
+                <span className="block truncate">{skill.name}</span>
+                {skill.isComposite && (
+                  <span className="mt-0.5 block text-xs text-secondary">
+                    Composite skill · {skill.componentCount} published component{skill.componentCount === 1 ? '' : 's'}
+                  </span>
+                )}
               </span>
               <select
                 aria-label={`Target level for ${skill.name}`}
@@ -89,7 +94,7 @@ export default function RoleProfileSkillsPanel({
               <option value="">Choose a skill…</option>
               {addableSkills.map((skill) => (
                 <option key={skill.id} value={skill.id}>
-                  {skill.name}
+                  {skill.name}{skill.isComposite ? ` · Composite (${skill.componentCount})` : ''}
                 </option>
               ))}
             </select>

@@ -72,7 +72,13 @@ export default function EmployerRoleProfilesConsole({
     if (!selectedRoleProfileId) return
     const skill = availableSkills.find((s) => s.id === skillId)
     if (!skill) return
-    onReplaceSkills?.(selectedRoleProfileId, [...requiredSkills, { skillId, name: skill.name, targetLevel }])
+    onReplaceSkills?.(selectedRoleProfileId, [...requiredSkills, {
+      skillId,
+      name: skill.name,
+      targetLevel,
+      isComposite: skill.isComposite,
+      componentCount: skill.componentCount,
+    }])
   }
 
   function handleUpdateTargetLevel(skillId, targetLevel) {

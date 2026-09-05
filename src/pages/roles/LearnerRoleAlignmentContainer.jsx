@@ -9,6 +9,7 @@ import {
   listMyEmployerRoleAssignments,
 } from '../../lib/employerRoleProfiles'
 import LearnerRoleAlignmentSection from './employer-link/LearnerRoleAlignmentSection'
+import { getLearnerCompositeProgressForSkills } from '../../lib/skillComposites'
 
 function toAssignment(assignment) {
   return {
@@ -32,6 +33,7 @@ export default function LearnerRoleAlignmentContainer() {
   const [personalCourses, setPersonalCourses] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [compositeProgressBySkillId, setCompositeProgressBySkillId] = useState({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -45,10 +47,17 @@ export default function LearnerRoleAlignmentContainer() {
       ])
       if (skillsResult.error) throw skillsResult.error
       if (coursesResult.error) throw coursesResult.error
+      const compositeSkillIds = [...new Set(roleAssignments.flatMap((assignment) =>
+        assignment.roleProfile.skillRequirements
+          .filter((requirement) => requirement.isComposite)
+          .map((requirement) => requirement.skillId)
+      ))]
+      const nextCompositeProgress = await getLearnerCompositeProgressForSkills(compositeSkillIds, user.id)
       setCurrentRoles(roles.map((role) => ({ ...role, since: role.start_date })))
       setAssignments(roleAssignments)
       setPersonalSkills((skillsResult.data ?? []).map((skill) => ({ ...skill, librarySkillId: skill.library_skill_id })))
       setPersonalCourses((coursesResult.data ?? []).map((course) => ({ ...course, catalogueCourseId: course.catalogue_course_id, completedDate: course.completed_date })))
+      setCompositeProgressBySkillId(nextCompositeProgress)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -68,14 +77,19 @@ export default function LearnerRoleAlignmentContainer() {
   )
   const alignmentByAssignmentId = useMemo(() => Object.fromEntries(
     assignments.filter((item) => item.status === 'linked').map((assignment) => {
-      const alignment = buildLearnerRoleAlignment(assignment.roleProfile, personalSkills, personalCourses)
+      const alignment = buildLearnerRoleAlignment(
+        assignment.roleProfile,
+        personalSkills,
+        personalCourses,
+        compositeProgressBySkillId
+      )
       const mapped = alignment.skills.map((skill) => ({ ...skill, learnerLevel: skill.currentLevel }))
       return [assignment.id, {
         aligned: mapped.filter((skill) => skill.gap === 0),
         gaps: mapped.filter((skill) => skill.gap > 0),
       }]
     })
-  ), [assignments, personalCourses, personalSkills])
+  ), [assignments, compositeProgressBySkillId, personalCourses, personalSkills])
 
   async function mutate(action) {
     setLoading(true)

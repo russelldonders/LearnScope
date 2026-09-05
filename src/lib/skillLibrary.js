@@ -5,13 +5,20 @@ import { supabase } from './supabaseClient'
 export async function listLibrarySkills() {
   const { data, error } = await supabase
     .from('skill_library')
-    .select('id, name, category, description, is_private, catalogue_skills!inner(catalogues!inner(is_global))')
+    .select('id, name, category, description, is_private, catalogue_skills!inner(catalogues!inner(is_global)), skill_composite_definitions(status, skill_composite_components(id))')
     .eq('status', 'active')
     .eq('catalogue_skills.catalogues.is_global', true)
     .order('name')
     .limit(500)
   if (error) throw error
-  return (data ?? []).map(({ catalogue_skills: _catalogueSkills, ...skill }) => skill)
+  return (data ?? []).map(({ catalogue_skills: _catalogueSkills, skill_composite_definitions: definitions, ...skill }) => {
+    const publishedComposite = definitions?.find((definition) => definition.status === 'published')
+    return {
+      ...skill,
+      isComposite: Boolean(publishedComposite),
+      componentCount: publishedComposite?.skill_composite_components?.length ?? 0,
+    }
+  })
 }
 
 // skill_library(lower(name)) is only unique among public entries (0028);

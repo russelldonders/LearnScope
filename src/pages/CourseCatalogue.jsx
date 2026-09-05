@@ -342,7 +342,7 @@ export default function CourseCatalogue() {
                           key={e.skillId}
                           className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5"
                         >
-                          {e.skillName} · {LEVEL_LABELS[e.level]}
+                          {e.skillName} · {LEVEL_LABELS[e.level]}{e.isComposite ? ' · Composite' : ''}
                         </span>
                       ))}
                       {course.tags.map((t) => (
@@ -437,7 +437,7 @@ function CourseDetailModal({ course, enrolled, completed, enrolling, onEnrol, on
                 key={e.skillId}
                 className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5"
               >
-                {e.skillName} · {LEVEL_LABELS[e.level]}
+                {e.skillName} · {LEVEL_LABELS[e.level]}{e.isComposite ? ` · Composite (${e.componentCount})` : ''}
               </span>
             ))}
             {course.tags.map((t) => (

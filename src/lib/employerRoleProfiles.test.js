@@ -23,7 +23,10 @@ describe('employer role profile service', () => {
       id: 'role-1', employer_id: 'employer-1', name: 'Designer', status: 'active',
       employer_role_profile_skills: [{
         library_skill_id: 'library-1', target_level: 4, requirement: 'required',
-        skill_library: { name: 'Research', category: 'Design' },
+        skill_library: {
+          name: 'Research', category: 'Design',
+          skill_composite_definitions: [{ status: 'published', skill_composite_components: [{ id: 'one' }, { id: 'two' }] }],
+        },
       }],
       employer_role_profile_training: [{
         catalogue_course_id: 'course-1', requirement: 'recommended',
@@ -31,7 +34,7 @@ describe('employer role profile service', () => {
       }],
     })).toMatchObject({
       id: 'role-1', employerId: 'employer-1', name: 'Designer',
-      skillRequirements: [{ skillId: 'library-1', name: 'Research', targetLevel: 4 }],
+      skillRequirements: [{ skillId: 'library-1', name: 'Research', targetLevel: 4, isComposite: true, componentCount: 2 }],
       trainingRequirements: [{ courseId: 'course-1', name: 'Research foundations' }],
     })
   })
@@ -113,5 +116,19 @@ describe('employer role profile service', () => {
       training: [{ courseId: 'course-1', name: 'Research foundations', completed: true }],
     })
     expect(roleProfile.skillRequirements[0]).not.toHaveProperty('currentLevel')
+  })
+
+  it('adds composite coverage to learner alignment without using it as an assessed level', () => {
+    const roleProfile = {
+      skillRequirements: [{ skillId: 'library-1', name: 'Research', targetLevel: 4, isComposite: true }],
+      trainingRequirements: [],
+    }
+    const coverage = { percentage: 75, requiredMet: 2, requiredTotal: 3, allRequiredMet: false }
+
+    const result = buildLearnerRoleAlignment(roleProfile, [], [], {
+      'library-1': { coverage },
+    })
+
+    expect(result.skills[0]).toMatchObject({ currentLevel: null, gap: 4, componentCoverage: coverage })
   })
 })

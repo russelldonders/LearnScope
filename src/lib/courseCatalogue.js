@@ -21,7 +21,10 @@ export function formatCoursePrice(course) {
 }
 
 const CATALOGUE_SELECT = `*,
-  course_catalogue_skills(id, level, skill_library(id, name)),
+  course_catalogue_skills(
+    id, level,
+    skill_library(id, name, skill_composite_definitions(status, skill_composite_components(id)))
+  ),
   course_catalogue_tags(id, tags(id, name)),
   course_catalogue_publications!inner(published_at, catalogues!inner(id, name, is_global)),
   organisations(logo_url, slug, public_profile_enabled)`
@@ -31,7 +34,16 @@ function mapCatalogueCourse(course) {
     ...course,
     skillEntries: (course.course_catalogue_skills ?? [])
       .filter((e) => e.skill_library)
-      .map((e) => ({ level: e.level, skillId: e.skill_library.id, skillName: e.skill_library.name })),
+      .map((e) => {
+        const publishedComposite = e.skill_library.skill_composite_definitions?.find((definition) => definition.status === 'published')
+        return {
+          level: e.level,
+          skillId: e.skill_library.id,
+          skillName: e.skill_library.name,
+          isComposite: Boolean(publishedComposite),
+          componentCount: publishedComposite?.skill_composite_components?.length ?? 0,
+        }
+      }),
     tags: (course.course_catalogue_tags ?? [])
       .filter((t) => t.tags)
       .map((t) => ({ id: t.tags.id, name: t.tags.name })),

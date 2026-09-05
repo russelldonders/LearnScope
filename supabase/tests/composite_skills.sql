@@ -2,6 +2,20 @@
 
 begin;
 
+do $$
+begin
+  if not has_table_privilege('service_role', 'public.skill_composite_definitions', 'select')
+     or not has_table_privilege('service_role', 'public.skill_composite_components', 'select') then
+    raise exception 'Service role is missing composite-skill Data API access';
+  end if;
+
+  if has_table_privilege('anon', 'public.skill_composite_definitions', 'select')
+     or has_table_privilege('anon', 'public.skill_composite_components', 'select') then
+    raise exception 'Anonymous role can read composite-skill tables';
+  end if;
+end
+$$;
+
 insert into auth.users (id, email, email_confirmed_at)
 values ('71000000-0000-0000-0000-000000000001', 'composite-admin@example.com', now());
 

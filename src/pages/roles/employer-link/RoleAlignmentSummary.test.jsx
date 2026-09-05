@@ -42,6 +42,16 @@ describe('RoleAlignmentSummary', () => {
     expect(screen.getByText(/Advanced troubleshooting/)).toHaveTextContent('(Recommended)')
   })
 
+  it('shows composite coverage alongside a role gap', () => {
+    renderSummary({
+      gaps: [{
+        skillId: 'composite-1', name: 'Pizza making', targetLevel: 4, learnerLevel: null,
+        componentCoverage: { percentage: 67, requiredMet: 2, requiredTotal: 3 },
+      }],
+    })
+    expect(screen.getByText(/Component coverage 67%/)).toHaveTextContent('2 of 3 required targets met')
+  })
+
   it('labels requirements as employer-managed', () => {
     renderSummary()
     expect(screen.getByText(/Employer requirements -- managed by Acme Corp/)).toBeInTheDocument()

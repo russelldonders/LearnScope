@@ -24,6 +24,10 @@ const composite = {
       currentLevel: null,
       targetMet: false,
       trackedSkillId: null,
+      childComposite: {
+        components: [{ id: 'knife-safety' }, { id: 'portion-control' }],
+        coverage: { percentage: 50, requiredMet: 1, requiredTotal: 2, allRequiredMet: false },
+      },
     },
   ],
 }
@@ -37,6 +41,7 @@ describe('CompositeSkillProgress', () => {
     expect(screen.getByRole('link', { name: 'Dough making' })).toHaveAttribute('href', '/skills/tracked-dough')
     expect(screen.getByText('Pizza slicing')).toBeInTheDocument()
     expect(screen.getByText('Not yet tracked')).toBeInTheDocument()
+    expect(screen.getByText('Also built from 2 subskills · 50% subskill coverage')).toBeInTheDocument()
     expect(screen.getByText('Based on published component set version 2.')).toBeInTheDocument()
   })
 

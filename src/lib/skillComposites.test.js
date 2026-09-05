@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculateCompositeCoverage } from './skillCompositeProgress'
+import { buildCompositeProgress, calculateCompositeCoverage } from './skillCompositeProgress'
 
 function component({ level, target = 3, weight = 1, required = true }) {
   return {
@@ -43,5 +43,54 @@ describe('calculateCompositeCoverage', () => {
       requiredTotal: 0,
       allRequiredMet: true,
     })
+  })
+})
+
+describe('buildCompositeProgress', () => {
+  it('rolls completed nested subskills into their parent component', () => {
+    const definitions = [
+      {
+        id: 'pizza-definition', parentSkillId: 'pizza', version: 1, components: [
+          { id: 'dough-component', librarySkillId: 'dough', name: 'Dough making', targetLevel: 3, contributionWeight: 1, isRequired: true },
+        ],
+      },
+      {
+        id: 'dough-definition', parentSkillId: 'dough', version: 1, components: [
+          { id: 'mixing-component', librarySkillId: 'mixing', name: 'Mixing dough', targetLevel: 2, contributionWeight: 1, isRequired: true },
+          { id: 'stretching-component', librarySkillId: 'stretching', name: 'Stretching dough', targetLevel: 2, contributionWeight: 1, isRequired: true },
+        ],
+      },
+    ]
+    const tracked = new Map([
+      ['mixing', { trackedSkillId: 'learner-mixing', currentLevel: 2 }],
+      ['stretching', { trackedSkillId: 'learner-stretching', currentLevel: 2 }],
+    ])
+
+    const result = buildCompositeProgress(definitions, 'pizza', tracked)
+
+    expect(result.coverage).toMatchObject({ percentage: 100, requiredMet: 1, allRequiredMet: true })
+    expect(result.components[0]).toMatchObject({ currentLevel: null, targetMet: true, progressRatio: 1 })
+    expect(result.components[0].childComposite.coverage.percentage).toBe(100)
+  })
+
+  it('uses direct achievement when it is stronger than partial nested coverage', () => {
+    const definitions = [
+      {
+        id: 'parent-definition', parentSkillId: 'parent', version: 1, components: [
+          { id: 'child-component', librarySkillId: 'child', name: 'Child', targetLevel: 4, contributionWeight: 1, isRequired: true },
+        ],
+      },
+      {
+        id: 'child-definition', parentSkillId: 'child', version: 1, components: [
+          { id: 'leaf-component', librarySkillId: 'leaf', name: 'Leaf', targetLevel: 4, contributionWeight: 1, isRequired: true },
+        ],
+      },
+    ]
+    const tracked = new Map([
+      ['child', { trackedSkillId: 'learner-child', currentLevel: 3 }],
+      ['leaf', { trackedSkillId: 'learner-leaf', currentLevel: 1 }],
+    ])
+
+    expect(buildCompositeProgress(definitions, 'parent', tracked).coverage.percentage).toBe(75)
   })
 })

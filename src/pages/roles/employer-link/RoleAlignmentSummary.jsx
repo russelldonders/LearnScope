@@ -74,6 +74,12 @@ export default function RoleAlignmentSummary({
                 <li key={skill.skillId}>
                   {skill.name} -- at {LEVEL_LABELS[skill.learnerLevel] ?? skill.learnerLevel}, requires{' '}
                   {LEVEL_LABELS[skill.targetLevel] ?? skill.targetLevel}
+                  {skill.componentCoverage && (
+                    <span className="block text-xs text-secondary">
+                      Component coverage {skill.componentCoverage.percentage}% · {skill.componentCoverage.requiredMet} of{' '}
+                      {skill.componentCoverage.requiredTotal} required targets met
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -92,6 +98,12 @@ export default function RoleAlignmentSummary({
                   {skill.learnerLevel !== null
                     ? `, you're at ${LEVEL_LABELS[skill.learnerLevel] ?? skill.learnerLevel}`
                     : ", you haven't tracked this skill yet"}
+                  {skill.componentCoverage && (
+                    <span className="block text-xs text-secondary">
+                      Component coverage {skill.componentCoverage.percentage}% · {skill.componentCoverage.requiredMet} of{' '}
+                      {skill.componentCoverage.requiredTotal} required targets met
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>

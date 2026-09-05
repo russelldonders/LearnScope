@@ -4,7 +4,7 @@ const PROFILE_SELECT = `
   id, employer_id, name, description, status, created_at, updated_at,
   employer_role_profile_skills(
     library_skill_id, target_level, requirement,
-    skill_library(id, name, category)
+    skill_library(id, name, category, skill_composite_definitions(status, skill_composite_components(id)))
   ),
   employer_role_profile_training(
     catalogue_course_id, requirement,
@@ -21,13 +21,20 @@ function mapRoleProfile(row) {
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    skillRequirements: (row.employer_role_profile_skills ?? []).map((item) => ({
-      skillId: item.library_skill_id,
-      name: item.skill_library?.name ?? 'Skill',
-      category: item.skill_library?.category ?? null,
-      targetLevel: item.target_level,
-      requirement: item.requirement,
-    })),
+    skillRequirements: (row.employer_role_profile_skills ?? []).map((item) => {
+      const publishedComposite = item.skill_library?.skill_composite_definitions?.find(
+        (definition) => definition.status === 'published'
+      )
+      return {
+        skillId: item.library_skill_id,
+        name: item.skill_library?.name ?? 'Skill',
+        category: item.skill_library?.category ?? null,
+        targetLevel: item.target_level,
+        requirement: item.requirement,
+        isComposite: Boolean(publishedComposite),
+        componentCount: publishedComposite?.skill_composite_components?.length ?? 0,
+      }
+    }),
     trainingRequirements: (row.employer_role_profile_training ?? []).map((item) => ({
       courseId: item.catalogue_course_id,
       name: item.course_catalogue?.name ?? 'Training',
@@ -181,7 +188,7 @@ export async function listMyEmployerRoleAssignments(userId) {
 // Learner-side alignment uses the learner's own complete data in their own
 // session. This result is not an employer projection: employers continue to
 // see only information shared through the existing consent allow-list.
-export function buildLearnerRoleAlignment(roleProfile, personalSkills, personalCourses) {
+export function buildLearnerRoleAlignment(roleProfile, personalSkills, personalCourses, compositeProgressBySkillId = {}) {
   const skillsByLibraryId = new Map(
     personalSkills
       .filter((skill) => skill.librarySkillId)
@@ -197,11 +204,13 @@ export function buildLearnerRoleAlignment(roleProfile, personalSkills, personalC
     skills: roleProfile.skillRequirements.map((requirement) => {
       const personalSkill = skillsByLibraryId.get(requirement.skillId)
       const currentLevel = personalSkill?.level ?? null
+      const compositeProgress = compositeProgressBySkillId[requirement.skillId] ?? null
       return {
         ...requirement,
         personalSkillId: personalSkill?.id ?? null,
         currentLevel,
         gap: currentLevel === null ? requirement.targetLevel : Math.max(requirement.targetLevel - currentLevel, 0),
+        ...(compositeProgress ? { componentCoverage: compositeProgress.coverage } : {}),
       }
     }),
     training: roleProfile.trainingRequirements.map((requirement) => ({

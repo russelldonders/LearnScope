@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient'
-import { calculateCompositeCoverage } from './skillCompositeProgress'
+import { buildCompositeProgress } from './skillCompositeProgress'
 
 const PUBLISHED_DEFINITION_SELECT = `
   id, parent_skill_id, version, published_at,
@@ -11,20 +11,44 @@ const PUBLISHED_DEFINITION_SELECT = `
 
 export async function getLearnerCompositeProgress(parentSkillId, userId) {
   if (!parentSkillId || !userId) return null
+  const progressBySkillId = await getLearnerCompositeProgressForSkills([parentSkillId], userId)
+  return progressBySkillId[parentSkillId] ?? null
+}
 
-  const { data: definition, error: definitionError } = await supabase
+export async function getLearnerCompositeProgressForSkills(parentSkillIds, userId) {
+  const requestedIds = [...new Set((parentSkillIds ?? []).filter(Boolean))]
+  if (requestedIds.length === 0 || !userId) return {}
+
+  const { data: definitionRows, error: definitionError } = await supabase
     .from('skill_composite_definitions')
     .select(PUBLISHED_DEFINITION_SELECT)
-    .eq('parent_skill_id', parentSkillId)
     .eq('status', 'published')
-    .maybeSingle()
+    .limit(1000)
   if (definitionError) throw definitionError
-  if (!definition) return null
+  const definitions = (definitionRows ?? []).map((definition) => ({
+    id: definition.id,
+    parentSkillId: definition.parent_skill_id,
+    version: definition.version,
+    publishedAt: definition.published_at,
+    components: (definition.skill_composite_components ?? [])
+      .filter((component) => component.skill_library)
+      .sort((a, b) => a.sort_order - b.sort_order || a.skill_library.name.localeCompare(b.skill_library.name))
+      .map((component) => ({
+        id: component.id,
+        librarySkillId: component.component_skill_id,
+        skillCode: component.skill_library.skill_code,
+        name: component.skill_library.name,
+        category: component.skill_library.category,
+        isRequired: component.is_required,
+        targetLevel: component.target_level,
+        contributionWeight: Number(component.contribution_weight),
+      })),
+  }))
+  if (!definitions.some((definition) => requestedIds.includes(definition.parentSkillId))) return {}
 
-  const definitionComponents = (definition.skill_composite_components ?? [])
-    .filter((component) => component.skill_library)
-    .sort((a, b) => a.sort_order - b.sort_order || a.skill_library.name.localeCompare(b.skill_library.name))
-  const componentLibraryIds = definitionComponents.map((component) => component.component_skill_id)
+  const componentLibraryIds = [...new Set(definitions.flatMap((definition) =>
+    definition.components.map((component) => component.librarySkillId)
+  ))]
 
   let trackedSkills = []
   if (componentLibraryIds.length > 0) {
@@ -37,7 +61,6 @@ export async function getLearnerCompositeProgress(parentSkillId, userId) {
     trackedSkills = data ?? []
   }
 
-  const trackedByLibraryId = new Map(trackedSkills.map((skill) => [skill.library_skill_id, skill]))
   const trackedSkillIds = trackedSkills.map((skill) => skill.id)
   let assessments = []
   if (trackedSkillIds.length > 0) {
@@ -56,30 +79,15 @@ export async function getLearnerCompositeProgress(parentSkillId, userId) {
     latestPracticalBySkillId.set(assessment.skill_id, assessment.level)
   }
 
-  const components = definitionComponents.map((component) => {
-    const trackedSkill = trackedByLibraryId.get(component.component_skill_id) ?? null
-    const currentLevel = trackedSkill?.level ?? latestPracticalBySkillId.get(trackedSkill?.id) ?? null
-    return {
-      id: component.id,
-      librarySkillId: component.component_skill_id,
-      skillCode: component.skill_library.skill_code,
-      name: component.skill_library.name,
-      category: component.skill_library.category,
-      isRequired: component.is_required,
-      targetLevel: component.target_level,
-      contributionWeight: Number(component.contribution_weight),
-      trackedSkillId: trackedSkill?.id ?? null,
-      lifecycleStage: trackedSkill?.lifecycle_stage ?? null,
-      currentLevel,
-      targetMet: currentLevel != null && currentLevel >= component.target_level,
-    }
-  })
+  const trackedByLibraryId = new Map(trackedSkills.map((skill) => [skill.library_skill_id, {
+    trackedSkillId: skill.id,
+    lifecycleStage: skill.lifecycle_stage,
+    currentLevel: skill.level ?? latestPracticalBySkillId.get(skill.id) ?? null,
+  }]))
 
-  return {
-    id: definition.id,
-    version: definition.version,
-    publishedAt: definition.published_at,
-    components,
-    coverage: calculateCompositeCoverage(components),
-  }
+  return Object.fromEntries(
+    requestedIds
+      .map((parentSkillId) => [parentSkillId, buildCompositeProgress(definitions, parentSkillId, trackedByLibraryId)])
+      .filter(([, progress]) => progress)
+  )
 }
