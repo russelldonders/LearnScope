@@ -2,8 +2,10 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ManagerTeamSharingPanel from './ManagerTeamSharingPanel'
 import {
+  FIXTURE_ASSESSMENTS,
   FIXTURE_AVAILABLE_SKILLS,
   FIXTURE_MEMBERSHIP,
+  FIXTURE_ROSTER,
   FIXTURE_SHARED_SKILL_IDS,
 } from './managerLearnerFixtures'
 
@@ -24,6 +26,31 @@ describe('ManagerTeamSharingPanel', () => {
   it('summarizes how many skills are currently shared', () => {
     renderPanel()
     expect(screen.getByText('Sharing 1 skill')).toBeInTheDocument()
+  })
+
+  it('lists who else is on the team once a roster is provided', () => {
+    renderPanel({ roster: FIXTURE_ROSTER })
+    expect(screen.getByText('3 people on this team')).toBeInTheDocument()
+    expect(screen.getByText('Jordan Ellis')).toBeInTheDocument()
+    expect(screen.getByText('Priya Nair')).toBeInTheDocument()
+    expect(screen.getByText('· manager')).toBeInTheDocument()
+  })
+
+  it('shows nothing team-roster-related when no roster is provided', () => {
+    renderPanel()
+    expect(screen.queryByText(/on this team/)).not.toBeInTheDocument()
+  })
+
+  it("shows the manager's own rating of a shared skill, read-only", () => {
+    renderPanel({ assessments: FIXTURE_ASSESSMENTS })
+    expect(screen.getByText("Dana Whitfield's ratings")).toBeInTheDocument()
+    expect(screen.getByText('Facilitation')).toBeInTheDocument()
+    expect(screen.getByText('Led the workshop well.')).toBeInTheDocument()
+  })
+
+  it('never shows a rating for a skill that is no longer shared', () => {
+    renderPanel({ assessments: FIXTURE_ASSESSMENTS, sharedSkillIds: [] })
+    expect(screen.queryByText(/'s ratings/)).not.toBeInTheDocument()
   })
 
   it('tells the learner experience and personal learning history are excluded', () => {

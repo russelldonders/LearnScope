@@ -9,10 +9,14 @@ const {
   createManagerTeam,
   inviteConnectionToManagerTeam,
   inviteConnectionToManagerTeamByEmail,
+  createManagerTeamSkillAssessment,
   listManagerTeamMemberSummaries,
+  listManagerTeamRoster,
+  listManagerTeamSkillAssessments,
   listMyManagerTeamRelationships,
   leaveManagerTeam,
   setManagerTeamSharedSkills,
+  setManagerTeamSkillAssessmentEvidence,
 } = await import('./managerTeams')
 
 describe('manager team service', () => {
@@ -58,6 +62,46 @@ describe('manager team service', () => {
     await expect(listManagerTeamMemberSummaries('team-1')).resolves.toEqual([{
       id: 'membership-1', name: 'Taylor', avatarUrl: null, teamSince: '2026-09-03',
       sharedSkills: [{ id: 'skill-1' }], collaborativeLearningCount: 2,
+    }])
+  })
+
+  it('maps the roster projection available to any active team participant', async () => {
+    rpc.mockResolvedValue({ data: [{
+      id: 'membership-manager', name: 'Dana', avatar_url: null, role: 'manager', member_since: '2026-05-01',
+    }], error: null })
+    await expect(listManagerTeamRoster('team-1')).resolves.toEqual([{
+      id: 'membership-manager', name: 'Dana', avatarUrl: null, role: 'manager', memberSince: '2026-05-01',
+    }])
+    expect(rpc).toHaveBeenCalledWith('list_manager_team_roster', { p_team_id: 'team-1' })
+  })
+
+  it('creates a manager team skill assessment through the shared-skill-gated RPC', async () => {
+    rpc.mockResolvedValue({ data: 'assessment-1', error: null })
+    await expect(
+      createManagerTeamSkillAssessment('membership-1', 'skill-1', { level: 4, comments: 'Great work' })
+    ).resolves.toBe('assessment-1')
+    expect(rpc).toHaveBeenCalledWith('create_manager_team_skill_assessment', {
+      p_membership_id: 'membership-1', p_skill_id: 'skill-1', p_level: 4,
+      p_comments: 'Great work', p_evidence_url: null,
+    })
+  })
+
+  it('attaches evidence paths to a manager team skill assessment', async () => {
+    rpc.mockResolvedValue({ error: null })
+    await setManagerTeamSkillAssessmentEvidence('assessment-1', ['a/b/c.png'])
+    expect(rpc).toHaveBeenCalledWith('set_manager_team_skill_assessment_evidence', {
+      p_assessment_id: 'assessment-1', p_evidence_paths: ['a/b/c.png'],
+    })
+  })
+
+  it('maps manager team skill assessment history to the console model', async () => {
+    rpc.mockResolvedValue({ data: [{
+      id: 'assessment-1', skill_id: 'skill-1', level: 4, comments: 'Great work',
+      evidence_url: null, evidence_paths: ['a/b/c.png'], assessed_by_name: 'Dana', assessed_at: '2026-09-05',
+    }], error: null })
+    await expect(listManagerTeamSkillAssessments('membership-1')).resolves.toEqual([{
+      id: 'assessment-1', skillId: 'skill-1', level: 4, comments: 'Great work',
+      evidenceUrl: null, evidencePaths: ['a/b/c.png'], assessedByName: 'Dana', assessedAt: '2026-09-05',
     }])
   })
 

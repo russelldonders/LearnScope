@@ -41,6 +41,8 @@ export default function ManagerConsole({
   error = null,
   onInviteToTeam,
   onCreateCollaborationRecord,
+  onRateSkill,
+  onLoadSkillAssessments,
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const activeSection = searchParams.get('section') ?? 'overview'
@@ -116,7 +118,14 @@ export default function ManagerConsole({
             />
           )}
           {activeSection === 'team' && (
-            <ManagerTeamPanel members={team} loading={loading} error={error} onInvite={onInviteToTeam} />
+            <ManagerTeamPanel
+              members={team}
+              loading={loading}
+              error={error}
+              onInvite={onInviteToTeam}
+              onRateSkill={onRateSkill}
+              onLoadSkillAssessments={onLoadSkillAssessments}
+            />
           )}
           {activeSection === 'learning' && (
             <ManagerLearningPanel records={learningRecords} loading={loading} error={error} />

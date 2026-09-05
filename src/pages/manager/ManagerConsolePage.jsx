@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { WORKSPACE_TYPES } from '../../lib/workspaces'
+import { uploadEvidenceFiles } from '../../lib/skillEvidence'
 import {
-  createManagerCollaborationRecord, createManagerTeam, inviteConnectionToManagerTeamByEmail,
-  listManagerCollaborationRecords, listManagerTeamLearningRecords, listManagerTeamMemberSummaries,
-  listManagerTeams, listPendingManagerTeamInvites,
+  createManagerCollaborationRecord, createManagerTeam, createManagerTeamSkillAssessment,
+  inviteConnectionToManagerTeamByEmail, listManagerCollaborationRecords, listManagerTeamLearningRecords,
+  listManagerTeamMemberSummaries, listManagerTeamSkillAssessments, listManagerTeams,
+  listPendingManagerTeamInvites, setManagerTeamSkillAssessmentEvidence,
 } from '../../lib/managerTeams'
 import ManagerConsole from './ManagerConsole'
 
 export default function ManagerConsolePage() {
-  const { workspaces } = useAuth()
+  const { user, workspaces } = useAuth()
   const workspace = useMemo(
     () => workspaces?.find((item) => item.kind === WORKSPACE_TYPES.MANAGER) ?? null,
     [workspaces]
@@ -57,8 +59,26 @@ export default function ManagerConsolePage() {
     await load()
   }
 
+  // Creates the assessment first, then -- same two-step shape as every other
+  // assessment-with-evidence flow in the app (see src/lib/skillEvidence.js)
+  // -- uploads any files keyed by the new assessment's own id, under this
+  // manager's own storage folder (not the learner's), before attaching the
+  // resulting paths. Reloads afterwards so the "Your rating" badge on the
+  // member-summary chip picks up the new rating.
+  async function handleRateSkill(membershipId, skillId, { level, comments, evidenceUrl, files }) {
+    const assessmentId = await createManagerTeamSkillAssessment(membershipId, skillId, {
+      level, comments, evidenceUrl,
+    })
+    if (files?.length > 0) {
+      const paths = await uploadEvidenceFiles(user.id, skillId, assessmentId, files)
+      await setManagerTeamSkillAssessmentEvidence(assessmentId, paths)
+    }
+    await load()
+  }
+
   return <ManagerConsole team={team} learningRecords={learningRecords}
     collaborationRecords={collaborationRecords} pendingInvites={pendingInvites}
     loading={loading} error={error} onInviteToTeam={handleInvite}
-    onCreateCollaborationRecord={handleCreateRecord} />
+    onCreateCollaborationRecord={handleCreateRecord} onRateSkill={handleRateSkill}
+    onLoadSkillAssessments={listManagerTeamSkillAssessments} />
 }
