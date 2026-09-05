@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import EmployerRoleProfilesConsole from './EmployerRoleProfilesConsole'
 import {
   FIXTURE_COURSE_CATALOGUE,
-  FIXTURE_LINKED_EMPLOYEES,
   FIXTURE_ROLE_PROFILES,
   FIXTURE_SKILL_CATALOGUE,
 } from './roleProfileFixtures'
@@ -16,28 +15,28 @@ function renderConsole(props = {}) {
       roleProfiles={FIXTURE_ROLE_PROFILES}
       availableSkills={FIXTURE_SKILL_CATALOGUE}
       availableCourses={FIXTURE_COURSE_CATALOGUE}
-      linkedEmployees={FIXTURE_LINKED_EMPLOYEES}
       {...props}
     />
   )
 }
 
+function getRow(name) {
+  return screen.getByText(name).closest('tr')
+}
+
 describe('EmployerRoleProfilesConsole (controlled)', () => {
-  it('clicking a role profile calls onSelectRoleProfile instead of self-selecting', () => {
-    const onSelectRoleProfile = vi.fn()
-    renderConsole({ onSelectRoleProfile })
-    fireEvent.click(screen.getByText('Senior Support Engineer'))
-    expect(onSelectRoleProfile).toHaveBeenCalledWith('role-profile-1')
-    // Nothing renders as selected until the caller feeds selectedRoleProfileId back down.
-    expect(screen.queryByText('Required skills')).not.toBeInTheDocument()
+  it('opens the edit dialog pre-filled with that row\'s own name/description', () => {
+    renderConsole()
+    fireEvent.click(within(getRow('Senior Support Engineer')).getByRole('button', { name: 'Edit' }))
+    expect(screen.getByLabelText('Name')).toHaveValue('Senior Support Engineer')
+    expect(screen.getByLabelText('Description')).toHaveValue(FIXTURE_ROLE_PROFILES[0].description)
   })
 
-  it('renders the selected profile\'s skills/training/linked employees purely from props', () => {
-    renderConsole({ selectedRoleProfileId: 'role-profile-1' })
+  it('opening "Assign skills" on a different row shows that row\'s own required skills, not another row\'s', () => {
+    renderConsole()
+    fireEvent.click(within(getRow('Senior Support Engineer')).getByRole('button', { name: 'Assign skills' }))
     expect(screen.getByText('Required skills')).toBeInTheDocument()
     expect(screen.getByText('Facilitation')).toBeInTheDocument()
-    expect(screen.getByText('De-escalation fundamentals')).toBeInTheDocument()
-    expect(screen.getByText('Priya Natarajan')).toBeInTheDocument()
   })
 
   it('creating a role profile calls onSaveRoleProfile with a null id', () => {
@@ -48,13 +47,12 @@ describe('EmployerRoleProfilesConsole (controlled)', () => {
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Guides new hires.' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(onSaveRoleProfile).toHaveBeenCalledWith(null, { name: 'Onboarding Specialist', description: 'Guides new hires.' })
-    // No new profile appears in the list -- the console never fabricates one itself.
-    expect(screen.queryByText('Onboarding Specialist')).not.toBeInTheDocument()
   })
 
   it('editing an existing role profile calls onSaveRoleProfile with its id', () => {
     const onSaveRoleProfile = vi.fn()
-    renderConsole({ selectedRoleProfileId: 'role-profile-1', onSaveRoleProfile })
+    renderConsole({ onSaveRoleProfile })
+    fireEvent.click(within(getRow('Senior Support Engineer')).getByRole('button', { name: 'Edit' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Senior Support Engineer II' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(onSaveRoleProfile).toHaveBeenCalledWith('role-profile-1', {
@@ -65,10 +63,10 @@ describe('EmployerRoleProfilesConsole (controlled)', () => {
 
   it('adding a required skill calls onReplaceSkills with the full next array, not a mutation', () => {
     const onReplaceSkills = vi.fn()
-    renderConsole({ selectedRoleProfileId: 'role-profile-2', onReplaceSkills })
-    const skillsPanel = screen.getByText('Required skills').closest('div')
-    fireEvent.change(within(skillsPanel).getByLabelText('Add a skill'), { target: { value: 'skill-3' } })
-    fireEvent.click(within(skillsPanel).getByRole('button', { name: 'Add' }))
+    renderConsole({ onReplaceSkills })
+    fireEvent.click(within(getRow('Field Operations Lead')).getByRole('button', { name: 'Assign skills' }))
+    fireEvent.change(screen.getByLabelText('Add a skill'), { target: { value: 'skill-3' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
     expect(onReplaceSkills).toHaveBeenCalledWith('role-profile-2', [
       { skillId: 'skill-3', name: 'Data storytelling', targetLevel: 3 },
     ])
@@ -78,9 +76,9 @@ describe('EmployerRoleProfilesConsole (controlled)', () => {
 
   it('removing a required skill calls onReplaceSkills with that skill filtered out', () => {
     const onReplaceSkills = vi.fn()
-    renderConsole({ selectedRoleProfileId: 'role-profile-1', onReplaceSkills })
-    const skillsPanel = screen.getByText('Required skills').closest('div')
-    fireEvent.click(within(skillsPanel).getAllByRole('button', { name: 'Remove' })[0])
+    renderConsole({ onReplaceSkills })
+    fireEvent.click(within(getRow('Senior Support Engineer')).getByRole('button', { name: 'Assign skills' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[0])
     expect(onReplaceSkills).toHaveBeenCalledWith(
       'role-profile-1',
       FIXTURE_ROLE_PROFILES[0].requiredSkills.slice(1)
@@ -89,18 +87,19 @@ describe('EmployerRoleProfilesConsole (controlled)', () => {
 
   it('adding training calls onReplaceTraining keyed by courseId, not a synthetic id', () => {
     const onReplaceTraining = vi.fn()
-    renderConsole({ selectedRoleProfileId: 'role-profile-2', onReplaceTraining })
-    const trainingPanel = screen.getByText('Training').closest('div')
-    fireEvent.change(within(trainingPanel).getByLabelText('Add training'), { target: { value: 'course-3' } })
-    fireEvent.click(within(trainingPanel).getByRole('button', { name: 'Add' }))
+    renderConsole({ onReplaceTraining })
+    fireEvent.click(within(getRow('Field Operations Lead')).getByRole('button', { name: 'Assign training' }))
+    fireEvent.change(screen.getByLabelText('Add training'), { target: { value: 'course-3' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
     expect(onReplaceTraining).toHaveBeenCalledWith('role-profile-2', [
       { courseId: 'course-3', title: 'Leading through change', requirement: 'required' },
     ])
   })
 
-  it('assigning an employee calls onAssignEmployee with the selected profile id and email', () => {
+  it('assigning an employee calls onAssignEmployee with that row\'s profile id and email', () => {
     const onAssignEmployee = vi.fn()
-    renderConsole({ selectedRoleProfileId: 'role-profile-1', onAssignEmployee })
+    renderConsole({ onAssignEmployee })
+    fireEvent.click(within(getRow('Senior Support Engineer')).getByRole('button', { name: 'Assign users' }))
     fireEvent.change(screen.getByLabelText('Assign by email'), { target: { value: 'new.hire@acme.example' } })
     fireEvent.click(screen.getByRole('button', { name: 'Assign' }))
     expect(onAssignEmployee).toHaveBeenCalledWith('role-profile-1', 'new.hire@acme.example')
@@ -108,21 +107,24 @@ describe('EmployerRoleProfilesConsole (controlled)', () => {
 
   it('withdrawing an assignment calls onWithdrawAssignment with the assignmentId', () => {
     const onWithdrawAssignment = vi.fn()
-    renderConsole({ selectedRoleProfileId: 'role-profile-1', onWithdrawAssignment })
+    renderConsole({ onWithdrawAssignment })
+    fireEvent.click(within(getRow('Senior Support Engineer')).getByRole('button', { name: 'Assign users' }))
     const row = screen.getByText('Priya Natarajan').closest('li')
     fireEvent.click(within(row).getByRole('button', { name: 'Withdraw' }))
     expect(onWithdrawAssignment).toHaveBeenCalledWith('assignment-1')
   })
 
-  it('shows a single shared error banner rather than repeating it per panel', () => {
-    renderConsole({ selectedRoleProfileId: 'role-profile-1', error: "Couldn't save that change." })
+  it('shows a single error banner inside whichever dialog is open, not a duplicate outer one', () => {
+    renderConsole({ error: "Couldn't save that change." })
+    fireEvent.click(within(getRow('Senior Support Engineer')).getByRole('button', { name: 'Assign skills' }))
     expect(screen.getAllByRole('alert')).toHaveLength(1)
     expect(screen.getByRole('alert')).toHaveTextContent("Couldn't save that change.")
   })
 
   it('disables mutation controls while loading', () => {
-    renderConsole({ selectedRoleProfileId: 'role-profile-1', loading: true })
-    expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled()
+    renderConsole({ loading: true })
+    fireEvent.click(within(getRow('Senior Support Engineer')).getByRole('button', { name: 'Assign users' }))
+    expect(screen.getByRole('button', { name: 'Assigning…' })).toBeDisabled()
     expect(screen.getByLabelText('Assign by email')).toBeDisabled()
   })
 })

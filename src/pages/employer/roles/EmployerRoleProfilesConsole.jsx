@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import AccessibleDialog from '../../../components/AccessibleDialog'
 import MutationFeedback from '../../../components/MutationFeedback'
 import RoleProfileList from './RoleProfileList'
 import RoleProfileDetailsForm from './RoleProfileDetailsForm'
@@ -6,12 +7,7 @@ import RoleProfileSkillsPanel from './RoleProfileSkillsPanel'
 import RoleProfileTrainingPanel from './RoleProfileTrainingPanel'
 import RoleProfileLinkedEmployeesPanel from './RoleProfileLinkedEmployeesPanel'
 import { useSortedPage, useUrlParam, writeUrlParams } from '../../../lib/useSortedPage'
-import {
-  FIXTURE_ROLE_PROFILES,
-  FIXTURE_SKILL_CATALOGUE,
-  FIXTURE_COURSE_CATALOGUE,
-  FIXTURE_LINKED_EMPLOYEES,
-} from './roleProfileFixtures'
+import { FIXTURE_ROLE_PROFILES, FIXTURE_SKILL_CATALOGUE, FIXTURE_COURSE_CATALOGUE } from './roleProfileFixtures'
 
 // Inert stand-ins for searchParams/setSearchParams so the search/sort/page
 // hooks below can always be called unconditionally (rules of hooks) even
@@ -26,17 +22,23 @@ function noopSetSearchParams() {}
 const ROLE_PROFILE_SORT_ACCESSORS = {
   name: (p) => p.name?.toLowerCase() ?? '',
   updatedAt: (p) => p.updatedAt ?? '',
+  skills: (p) => p.requiredSkills?.length ?? 0,
+  training: (p) => p.training?.length ?? 0,
+  employees: (p) => p.linkedEmployeeCount ?? 0,
 }
 
 // Genuinely props-in/callbacks-out: this composes the leaf panels below but
 // owns no business data of its own -- no role profile, skill, training or
-// assignment ever lives in local state here. Every mutation (save details,
-// add/update/remove a skill or training item, assign/withdraw an employee)
-// is relayed upward as a callback carrying the *next* value the caller
-// should persist; the UI only ever reflects what comes back down through
-// `roleProfiles`/`linkedEmployees` on the next render. The only local state
-// is `creating`, a purely presentational toggle for whether the "new role
-// profile" form is open -- it holds no role-profile data itself.
+// assignment ever lives in local state here (each role profile's own
+// requiredSkills/training/linkedEmployees already arrive fully formed via
+// the `roleProfiles` prop -- see EmployerRoleProfilesSection's
+// toConsoleProfile). Every mutation (save details, add/update/remove a
+// skill or training item, assign/withdraw an employee) is relayed upward as
+// a callback carrying the *next* value the caller should persist; the UI
+// only ever reflects what comes back down through `roleProfiles` on the
+// next render. The only local state is `modal` (which row's edit/skills/
+// training/users dialog is open, if any) -- purely presentational, holds no
+// role-profile data of its own.
 //
 // The FIXTURE_* imports are optional default prop values for an isolated
 // render only (e.g. opening this file's own preview) -- they are never
@@ -44,47 +46,48 @@ const ROLE_PROFILE_SORT_ACCESSORS = {
 // real data is expected to override every prop.
 export default function EmployerRoleProfilesConsole({
   roleProfiles = FIXTURE_ROLE_PROFILES,
-  selectedRoleProfileId = null,
   availableSkills = FIXTURE_SKILL_CATALOGUE,
   availableCourses = FIXTURE_COURSE_CATALOGUE,
-  linkedEmployees = FIXTURE_LINKED_EMPLOYEES,
   loading = false,
   error = null,
   searchParams = EMPTY_SEARCH_PARAMS,
   setSearchParams = noopSetSearchParams,
-  onSelectRoleProfile,
   onSaveRoleProfile,
   onReplaceSkills,
   onReplaceTraining,
   onAssignEmployee,
   onWithdrawAssignment,
 }) {
-  const [creating, setCreating] = useState(false)
+  // { type: 'edit' | 'skills' | 'training' | 'users', profileId: string | null }
+  // profileId null only ever pairs with type 'edit' (the "New role profile"
+  // create form) -- every other type always opens against an existing row.
+  const [modal, setModal] = useState(null)
   const wasLoading = useRef(loading)
 
   // Same "caller owns the async lifecycle" contract as ManagerTeamSharingPanel:
-  // the create form only closes once `loading` transitions back to false with
-  // no `error` -- a failed create leaves it open with the error still visible
-  // instead of closing prematurely on submit.
+  // the edit/create dialog only closes once `loading` transitions back to
+  // false with no `error` -- a failed save leaves it open with the error
+  // still visible instead of closing prematurely on submit. The
+  // skills/training/users dialogs deliberately don't auto-close the same
+  // way -- they're a running editor a manager builds up over several add/
+  // remove actions in one sitting, not a single submit-and-done form.
   useEffect(() => {
-    if (wasLoading.current && !loading && !error) {
-      setCreating(false)
+    if (wasLoading.current && !loading && !error && modal?.type === 'edit') {
+      setModal(null)
     }
     wasLoading.current = loading
-  }, [loading, error])
+  }, [loading, error, modal])
 
-  // Looked up from the full, unfiltered roleProfiles -- the detail panel
-  // stays on whatever was selected even if a search subsequently typed into
-  // the list below no longer matches it, rather than going blank.
-  const selected = roleProfiles.find((p) => p.id === selectedRoleProfileId) ?? null
-  const requiredSkills = selected?.requiredSkills ?? []
-  const training = selected?.training ?? []
+  // Looked up from the full, unfiltered roleProfiles -- an open dialog stays
+  // on whatever row opened it even if a search subsequently typed into the
+  // table below no longer matches it, rather than going blank.
+  const modalProfile = modal ? roleProfiles.find((p) => p.id === modal.profileId) ?? null : null
+  const requiredSkills = modalProfile?.requiredSkills ?? []
+  const training = modalProfile?.training ?? []
+  const linkedEmployees = modalProfile?.linkedEmployees ?? []
 
-  // The list on the left is this section's own primary roster -- searchable
-  // and paginated the same way every other console list here is (Users,
-  // Providers, ...), just rendered as RoleProfileList's cards instead of a
-  // <table> since a role profile's summary doesn't decompose into sortable
-  // columns the way a user/course/provider row does.
+  // This section's own primary roster -- searchable, sortable and paginated
+  // the same way every other console list here is (Users, Providers, ...).
   const [query, setQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
   const q = query.trim().toLowerCase()
   const filteredProfiles = useMemo(
@@ -100,26 +103,25 @@ export default function EmployerRoleProfilesConsole({
     writeUrlParams(searchParams, setSearchParams, { q: null, page: null })
   }
 
-  const { page, setPage, pageSize, setPageSize, pageItems, totalItems } = useSortedPage(
+  const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } = useSortedPage(
     filteredProfiles,
     ROLE_PROFILE_SORT_ACCESSORS,
     { defaultSortKey: 'name', urlSync: { searchParams, setSearchParams } }
   )
 
-  function handleSelect(id) {
-    setCreating(false)
-    onSelectRoleProfile?.(id)
+  function closeModal() {
+    setModal(null)
   }
 
   function handleSaveDetails({ name, description }) {
-    onSaveRoleProfile?.(creating ? null : selectedRoleProfileId, { name, description })
+    onSaveRoleProfile?.(modal?.profileId ?? null, { name, description })
   }
 
   function handleAddSkill({ skillId, targetLevel }) {
-    if (!selectedRoleProfileId) return
+    if (!modal?.profileId) return
     const skill = availableSkills.find((s) => s.id === skillId)
     if (!skill) return
-    onReplaceSkills?.(selectedRoleProfileId, [...requiredSkills, {
+    onReplaceSkills?.(modal.profileId, [...requiredSkills, {
       skillId,
       name: skill.name,
       targetLevel,
@@ -129,62 +131,71 @@ export default function EmployerRoleProfilesConsole({
   }
 
   function handleUpdateTargetLevel(skillId, targetLevel) {
-    if (!selectedRoleProfileId) return
+    if (!modal?.profileId) return
     onReplaceSkills?.(
-      selectedRoleProfileId,
+      modal.profileId,
       requiredSkills.map((s) => (s.skillId === skillId ? { ...s, targetLevel } : s))
     )
   }
 
   function handleRemoveSkill(skillId) {
-    if (!selectedRoleProfileId) return
+    if (!modal?.profileId) return
     onReplaceSkills?.(
-      selectedRoleProfileId,
+      modal.profileId,
       requiredSkills.filter((s) => s.skillId !== skillId)
     )
   }
 
   function handleAddTraining({ courseId, requirement }) {
-    if (!selectedRoleProfileId) return
+    if (!modal?.profileId) return
     const course = availableCourses.find((c) => c.id === courseId)
     if (!course) return
-    onReplaceTraining?.(selectedRoleProfileId, [...training, { courseId, title: course.title, requirement }])
+    onReplaceTraining?.(modal.profileId, [...training, { courseId, title: course.title, requirement }])
   }
 
   function handleUpdateRequirement(courseId, requirement) {
-    if (!selectedRoleProfileId) return
+    if (!modal?.profileId) return
     onReplaceTraining?.(
-      selectedRoleProfileId,
+      modal.profileId,
       training.map((t) => (t.courseId === courseId ? { ...t, requirement } : t))
     )
   }
 
   function handleRemoveTraining(courseId) {
-    if (!selectedRoleProfileId) return
+    if (!modal?.profileId) return
     onReplaceTraining?.(
-      selectedRoleProfileId,
+      modal.profileId,
       training.filter((t) => t.courseId !== courseId)
     )
   }
 
   function handleAssignEmployee(email) {
-    if (!selectedRoleProfileId) return
-    onAssignEmployee?.(selectedRoleProfileId, email)
+    if (!modal?.profileId) return
+    onAssignEmployee?.(modal.profileId, email)
   }
 
   return (
-    <div className="grid gap-6 md:grid-cols-[minmax(0,320px)_1fr]">
+    <div>
+      {/* One shared banner for whichever load (not save/mutation -- those
+          surface inside their own open dialog below) last failed. */}
+      {error && !modal && <MutationFeedback status="error" message={error} className="mb-4" />}
+
       <RoleProfileList
         roleProfiles={pageItems}
         hasAnyRoleProfiles={roleProfiles.length > 0}
-        selectedId={selectedRoleProfileId}
         loading={loading && roleProfiles.length === 0}
-        onSelect={handleSelect}
-        onCreate={() => setCreating(true)}
+        onCreate={() => setModal({ type: 'edit', profileId: null })}
+        onEdit={(id) => setModal({ type: 'edit', profileId: id })}
+        onAssignSkills={(id) => setModal({ type: 'skills', profileId: id })}
+        onAssignTraining={(id) => setModal({ type: 'training', profileId: id })}
+        onAssignUsers={(id) => setModal({ type: 'users', profileId: id })}
         query={query}
         onQueryChange={setQuery}
         filtersActive={filtersActive}
         onResetFilters={resetFilters}
+        sortKey={sortKey}
+        sortDir={sortDir}
+        onSort={toggleSort}
         page={page}
         setPage={setPage}
         pageSize={pageSize}
@@ -192,51 +203,89 @@ export default function EmployerRoleProfilesConsole({
         totalItems={totalItems}
       />
 
-      <div className="space-y-6">
-        {/* One shared banner for whichever action last failed, rather than
-            repeating the same message (and role="alert") across every leaf
-            panel below -- the single flat `error` prop doesn't say which
-            action it belongs to, so it's surfaced once, clearly, here. */}
-        <MutationFeedback status="error" message={error} />
+      {modal?.type === 'edit' && (
+        <AccessibleDialog
+          label={modalProfile ? `Edit ${modalProfile.name}` : 'New role profile'}
+          onClose={loading ? undefined : closeModal}
+          closeOnBackdrop={!loading}
+          panelClassName="w-full max-w-md max-h-[90vh] overflow-y-auto overscroll-contain"
+        >
+          <RoleProfileDetailsForm
+            roleProfile={modalProfile}
+            saving={loading}
+            error={error}
+            onSave={handleSaveDetails}
+            onCancel={closeModal}
+          />
+        </AccessibleDialog>
+      )}
 
-        {creating && (
-          <RoleProfileDetailsForm saving={loading} onSave={handleSaveDetails} onCancel={() => setCreating(false)} />
-        )}
-
-        {!creating && selected && (
-          <>
-            <RoleProfileDetailsForm roleProfile={selected} saving={loading} onSave={handleSaveDetails} />
-            <RoleProfileSkillsPanel
-              requiredSkills={requiredSkills}
-              availableSkills={availableSkills}
-              saving={loading}
-              onAddSkill={handleAddSkill}
-              onUpdateTargetLevel={handleUpdateTargetLevel}
-              onRemoveSkill={handleRemoveSkill}
-            />
-            <RoleProfileTrainingPanel
-              training={training}
-              availableCourses={availableCourses}
-              saving={loading}
-              onAddTraining={handleAddTraining}
-              onUpdateRequirement={handleUpdateRequirement}
-              onRemoveTraining={handleRemoveTraining}
-            />
-            <RoleProfileLinkedEmployeesPanel
-              employees={linkedEmployees}
-              assigning={loading}
-              onAssignEmployee={handleAssignEmployee}
-              onWithdrawAssignment={onWithdrawAssignment}
-            />
-          </>
-        )}
-
-        {!creating && !selected && (
-          <div className="bg-card border border-hairline rounded-lg p-6">
-            <p className="text-sm text-secondary">Select a role profile, or create a new one.</p>
+      {modal?.type === 'skills' && modalProfile && (
+        <AccessibleDialog
+          label={`Assign skills -- ${modalProfile.name}`}
+          onClose={closeModal}
+          panelClassName="w-full max-w-lg max-h-[90vh] overflow-y-auto overscroll-contain space-y-3"
+        >
+          <RoleProfileSkillsPanel
+            requiredSkills={requiredSkills}
+            availableSkills={availableSkills}
+            saving={loading}
+            error={error}
+            onAddSkill={handleAddSkill}
+            onUpdateTargetLevel={handleUpdateTargetLevel}
+            onRemoveSkill={handleRemoveSkill}
+          />
+          <div className="bg-card border border-hairline rounded-lg p-3 flex justify-end">
+            <button type="button" onClick={closeModal} className="rounded-md border border-hairline text-ink py-1.5 px-4 text-sm font-medium hover:bg-paper">
+              Close
+            </button>
           </div>
-        )}
-      </div>
+        </AccessibleDialog>
+      )}
+
+      {modal?.type === 'training' && modalProfile && (
+        <AccessibleDialog
+          label={`Assign training -- ${modalProfile.name}`}
+          onClose={closeModal}
+          panelClassName="w-full max-w-lg max-h-[90vh] overflow-y-auto overscroll-contain space-y-3"
+        >
+          <RoleProfileTrainingPanel
+            training={training}
+            availableCourses={availableCourses}
+            saving={loading}
+            error={error}
+            onAddTraining={handleAddTraining}
+            onUpdateRequirement={handleUpdateRequirement}
+            onRemoveTraining={handleRemoveTraining}
+          />
+          <div className="bg-card border border-hairline rounded-lg p-3 flex justify-end">
+            <button type="button" onClick={closeModal} className="rounded-md border border-hairline text-ink py-1.5 px-4 text-sm font-medium hover:bg-paper">
+              Close
+            </button>
+          </div>
+        </AccessibleDialog>
+      )}
+
+      {modal?.type === 'users' && modalProfile && (
+        <AccessibleDialog
+          label={`Assign users -- ${modalProfile.name}`}
+          onClose={closeModal}
+          panelClassName="w-full max-w-lg max-h-[90vh] overflow-y-auto overscroll-contain space-y-3"
+        >
+          <RoleProfileLinkedEmployeesPanel
+            employees={linkedEmployees}
+            assigning={loading}
+            error={error}
+            onAssignEmployee={handleAssignEmployee}
+            onWithdrawAssignment={onWithdrawAssignment}
+          />
+          <div className="bg-card border border-hairline rounded-lg p-3 flex justify-end">
+            <button type="button" onClick={closeModal} className="rounded-md border border-hairline text-ink py-1.5 px-4 text-sm font-medium hover:bg-paper">
+              Close
+            </button>
+          </div>
+        </AccessibleDialog>
+      )}
     </div>
   )
 }
