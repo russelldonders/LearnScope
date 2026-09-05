@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
@@ -41,8 +41,9 @@ import EmployerOverviewPanel from './EmployerOverviewPanel'
 // that org too (addEmployerMember/decide_employer_invite grant it, and
 // 20260905110000's trigger makes it permanent while they hold this role), so
 // there's no separate consent step before these tabs work. providerTab marks
-// all four for the distinct styling the tab bar renders them with below,
-// since they are provider-console functionality surfaced here, not employer
+// all four so the tab bar below collapses them into a single "Provider"
+// dropdown (see ProviderSectionMenu) instead of four standalone tabs, since
+// they are provider-console functionality surfaced here, not employer
 // functionality. Skills alone stays providerOnly (hidden without an actual
 // organisation_members role, same as before this change) since its own
 // component has no read-only mode to fall back to; Training/Catalogues/
@@ -210,6 +211,34 @@ export default function EmployerConsole() {
   // Guards against a stale provider-only tab surviving a switch to an
   // employer where this admin no longer has the corresponding role.
   const currentSection = visibleSections.some((section) => section.key === activeSection) ? activeSection : 'overview'
+  const providerSections = useMemo(() => visibleSections.filter((s) => s.providerTab), [visibleSections])
+  const activeSectionIsProvider = providerSections.some((s) => s.key === currentSection)
+  // Roving-tabindex keys for the top-level tablist's arrow-key navigation
+  // (handleTabListKeyDown) -- the four providerTab sections collapse into
+  // one 'provider-group' stop (the dropdown trigger button below) instead
+  // of four separate stops, mirroring how they're rendered as a single
+  // control rather than four tabs.
+  const rovingSectionKeys = useMemo(() => {
+    const keys = []
+    visibleSections.forEach((section, index) => {
+      if (section.providerTab) {
+        if (!visibleSections[index - 1]?.providerTab) keys.push('provider-group')
+      } else {
+        keys.push(section.key)
+      }
+    })
+    return keys
+  }, [visibleSections])
+  const rovingActiveKey = activeSectionIsProvider ? 'provider-group' : currentSection
+  // Arrow-key navigation onto the dropdown trigger activates whichever
+  // provider sub-section is already open, or the first one otherwise --
+  // it doesn't itself open the menu (that still needs a click/Enter).
+  function handleSectionRovingChange(key) {
+    const targetSection = key === 'provider-group'
+      ? (activeSectionIsProvider ? currentSection : providerSections[0]?.key)
+      : key
+    if (targetSection) setSearchParams(buildParams({ section: targetSection, ...EMPLOYER_FILTER_RESET }))
+  }
 
   useEffect(() => {
     Promise.all([listEmployers(), listOrganisations()])
@@ -300,55 +329,67 @@ export default function EmployerConsole() {
                 <div className="flex items-center flex-wrap gap-x-1 gap-y-2 mb-6 border-b border-hairline">
                   <div role="tablist" aria-label="Console section" className="flex items-center flex-wrap gap-x-1 gap-y-2">
                     {visibleSections.map((section, index) => {
-                      // A small "Provider" caption sits once before the first
-                      // provider-sourced tab in the run, so it's visually clear
-                      // these came from the attached provider organisation
-                      // rather than being employer functionality themselves --
-                      // the tabs behave identically either way (same ?section=
-                      // navigation, same employer-console frame), this is
-                      // purely a labelling cue.
-                      const startsProviderGroup = section.providerTab && !visibleSections[index - 1]?.providerTab
-                      return (
-                        <Fragment key={section.key}>
-                          {startsProviderGroup && (
-                            <span className="text-[10px] uppercase tracking-wide text-secondary pl-2 pr-1 self-center" aria-hidden="true">
-                              Provider
-                            </span>
-                          )}
-                          <Link
-                            ref={(el) => { sectionTabRefs.current[section.key] = el }}
-                            id={`employer-section-tab-${section.key}`}
-                            to={`?${buildParams({ section: section.key, ...EMPLOYER_FILTER_RESET }).toString()}`}
-                            role="tab"
-                            aria-selected={currentSection === section.key}
-                            aria-controls={`employer-section-panel-${section.key}`}
-                            tabIndex={currentSection === section.key ? 0 : -1}
+                      if (section.providerTab) {
+                        // Renders once for the whole consecutive run of
+                        // providerTab sections (Training/Skills/Catalogues/
+                        // Resources), as a single "Provider" dropdown rather
+                        // than four standalone tabs -- the tabs behave
+                        // identically either way (same ?section= navigation,
+                        // same employer-console frame), this only changes how
+                        // they're grouped in the tab bar.
+                        if (visibleSections[index - 1]?.providerTab) return null
+                        return (
+                          <ProviderSectionMenu
+                            key="provider-group"
+                            items={providerSections}
+                            currentSection={currentSection}
+                            isActive={activeSectionIsProvider}
+                            buttonRef={(el) => { sectionTabRefs.current['provider-group'] = el }}
+                            hrefFor={(sectionKey) => `?${buildParams({ section: sectionKey, ...EMPLOYER_FILTER_RESET }).toString()}`}
                             onKeyDown={(event) =>
                               handleTabListKeyDown(event, {
-                                keys: visibleSections.map((s) => s.key),
-                                activeKey: currentSection,
+                                keys: rovingSectionKeys,
+                                activeKey: rovingActiveKey,
                                 refs: sectionTabRefs,
-                                // Several sections now share the same plain q/status/page
-                                // param names for their own "primary" table (only one
-                                // section is ever mounted at a time, so there's no runtime
-                                // collision) -- clearing them on a section switch too, not
-                                // just an employer switch, stops a search typed into one
-                                // section's box from silently pre-filtering the next
-                                // section's unrelated table.
-                                onChange: (sectionKey) => setSearchParams(buildParams({ section: sectionKey, ...EMPLOYER_FILTER_RESET })),
+                                onChange: handleSectionRovingChange,
                               })
                             }
-                            className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
-                              currentSection === section.key
-                                ? section.providerTab
-                                  ? 'border-sky-600 text-ink font-medium'
-                                  : 'border-moss text-ink font-medium'
-                                : 'border-transparent text-secondary hover:text-ink'
-                            }`}
-                          >
-                            {section.label}
-                          </Link>
-                        </Fragment>
+                          />
+                        )
+                      }
+                      return (
+                        <Link
+                          key={section.key}
+                          ref={(el) => { sectionTabRefs.current[section.key] = el }}
+                          id={`employer-section-tab-${section.key}`}
+                          to={`?${buildParams({ section: section.key, ...EMPLOYER_FILTER_RESET }).toString()}`}
+                          role="tab"
+                          aria-selected={currentSection === section.key}
+                          aria-controls={`employer-section-panel-${section.key}`}
+                          tabIndex={currentSection === section.key ? 0 : -1}
+                          onKeyDown={(event) =>
+                            handleTabListKeyDown(event, {
+                              keys: rovingSectionKeys,
+                              activeKey: rovingActiveKey,
+                              refs: sectionTabRefs,
+                              // Several sections now share the same plain q/status/page
+                              // param names for their own "primary" table (only one
+                              // section is ever mounted at a time, so there's no runtime
+                              // collision) -- clearing them on a section switch too, not
+                              // just an employer switch, stops a search typed into one
+                              // section's box from silently pre-filtering the next
+                              // section's unrelated table.
+                              onChange: handleSectionRovingChange,
+                            })
+                          }
+                          className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
+                            currentSection === section.key
+                              ? 'border-moss text-ink font-medium'
+                              : 'border-transparent text-secondary hover:text-ink'
+                          }`}
+                        >
+                          {section.label}
+                        </Link>
                       )
                     })}
                   </div>
@@ -357,7 +398,9 @@ export default function EmployerConsole() {
                 <div
                   id={`employer-section-panel-${currentSection}`}
                   role="tabpanel"
-                  aria-labelledby={`employer-section-tab-${currentSection}`}
+                  aria-labelledby={
+                    activeSectionIsProvider ? 'employer-section-tab-provider-group' : `employer-section-tab-${currentSection}`
+                  }
                   tabIndex={0}
                 >
                   {currentSection === 'overview' && (
@@ -470,6 +513,78 @@ export default function EmployerConsole() {
           </>
         )}
       </main>
+    </div>
+  )
+}
+
+// Collapses the providerTab sections (Training/Skills/Catalogues/Resources)
+// into a single dropdown tab, same outside-click/Escape-to-close pattern as
+// AppHeader.jsx's own account menu. Still a real `role="tab"` so it slots
+// into the surrounding tablist/roving-tabindex the same as any other section
+// tab -- opening it is a separate affordance (click/Enter/Space) from
+// selecting a section, which only happens by choosing one of its menu items.
+function ProviderSectionMenu({ items, currentSection, isActive, buttonRef, hrefFor, onKeyDown }) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handleOutside(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false)
+    }
+    function handleEscape(e) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', handleOutside)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handleOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [open])
+
+  const activeItem = items.find((item) => item.key === currentSection)
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        ref={buttonRef}
+        id="employer-section-tab-provider-group"
+        role="tab"
+        aria-selected={isActive}
+        aria-controls={isActive ? `employer-section-panel-${currentSection}` : undefined}
+        aria-haspopup="true"
+        aria-expanded={open}
+        tabIndex={isActive ? 0 : -1}
+        onClick={() => setOpen((v) => !v)}
+        onKeyDown={onKeyDown}
+        className={`flex items-center gap-1 text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
+          isActive ? 'border-sky-600 text-ink font-medium' : 'border-transparent text-secondary hover:text-ink'
+        }`}
+      >
+        {activeItem ? `Provider: ${activeItem.label}` : 'Provider'}
+        <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5" aria-hidden="true">
+          <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+        </svg>
+      </button>
+      {open && (
+        <div role="menu" aria-label="Provider" className="absolute z-10 mt-1 min-w-[10rem] bg-card border border-hairline rounded-md shadow-lg py-1">
+          {items.map((item) => (
+            <Link
+              key={item.key}
+              role="menuitem"
+              to={hrefFor(item.key)}
+              onClick={() => setOpen(false)}
+              className={`block px-4 py-2 text-sm whitespace-nowrap ${
+                item.key === currentSection ? 'text-ink font-medium bg-paper' : 'text-ink hover:bg-paper'
+              }`}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
