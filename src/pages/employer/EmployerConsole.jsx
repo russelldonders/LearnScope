@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
@@ -34,16 +34,27 @@ import StatusBadge from '../../components/StatusBadge'
 import EmployerRoleProfilesSection from './EmployerRoleProfilesSection'
 import EmployerOverviewPanel from './EmployerOverviewPanel'
 
-// Skills and the training-team part of Users belong to the attached provider
-// organisation (the same components ProviderConsole.jsx mounts),
-// folded into this single tab bar instead of handing off to a separate
-// /provider page. providerOnly/adminOnly are resolved against myProviderRole
-// (below) into visibleSections, so they only appear once the employer's
-// attached org actually grants that role.
+// Training, Skills, Catalogues and Resources belong to the attached provider
+// organisation (the same components ProviderConsole.jsx mounts, reused
+// verbatim), folded into this single tab bar instead of handing off to a
+// separate /provider page -- an employer admin is automatically an admin of
+// that org too (addEmployerMember/decide_employer_invite grant it, and
+// 20260905110000's trigger makes it permanent while they hold this role), so
+// there's no separate consent step before these tabs work. providerTab marks
+// all four for the distinct styling the tab bar renders them with below,
+// since they are provider-console functionality surfaced here, not employer
+// functionality. Skills alone stays providerOnly (hidden without an actual
+// organisation_members role, same as before this change) since its own
+// component has no read-only mode to fall back to; Training/Catalogues/
+// Resources stay visible even without one, same as the single combined
+// "Training" tab did before this split, falling back to their own read-only
+// views (below) for the rare employer admin who doesn't yet have the grant.
 const SECTIONS = [
   { key: 'overview', label: 'Overview' },
-  { key: 'training', label: 'Training' },
-  { key: 'skills', label: 'Skills', providerOnly: true },
+  { key: 'provider-training', label: 'Training', providerTab: true },
+  { key: 'skills', label: 'Skills', providerOnly: true, providerTab: true },
+  { key: 'provider-catalogues', label: 'Catalogues', providerTab: true },
+  { key: 'provider-resources', label: 'Resources', providerTab: true },
   { key: 'users', label: 'Users' },
   { key: 'roles', label: 'Roles' },
   { key: 'assign', label: 'Assign training' },
@@ -136,8 +147,15 @@ export default function EmployerConsole() {
   const selectedEmployerId = searchParams.get('employer')
   const requestedSection = searchParams.get('section') ?? 'overview'
   // Preserve old bookmarked links after merging the former Users and
-  // Learners tabs. Both legacy destinations now open the combined view.
-  const activeSection = ['staff', 'learners'].includes(requestedSection) ? 'users' : requestedSection
+  // Learners tabs (both legacy destinations now open the combined view),
+  // and after splitting the former combined Training tab into the separate
+  // provider-training/provider-catalogues/provider-resources tabs below
+  // (an old link to the bundled view now opens just the Training portion).
+  const activeSection = ['staff', 'learners'].includes(requestedSection)
+    ? 'users'
+    : requestedSection === 'training'
+      ? 'provider-training'
+      : requestedSection
   const employerTabRefs = useRef({})
   const sectionTabRefs = useRef({})
 
@@ -281,40 +299,58 @@ export default function EmployerConsole() {
               >
                 <div className="flex items-center flex-wrap gap-x-1 gap-y-2 mb-6 border-b border-hairline">
                   <div role="tablist" aria-label="Console section" className="flex items-center flex-wrap gap-x-1 gap-y-2">
-                    {visibleSections.map((section) => (
-                      <Link
-                        key={section.key}
-                        ref={(el) => { sectionTabRefs.current[section.key] = el }}
-                        id={`employer-section-tab-${section.key}`}
-                        to={`?${buildParams({ section: section.key, ...EMPLOYER_FILTER_RESET }).toString()}`}
-                        role="tab"
-                        aria-selected={currentSection === section.key}
-                        aria-controls={`employer-section-panel-${section.key}`}
-                        tabIndex={currentSection === section.key ? 0 : -1}
-                        onKeyDown={(event) =>
-                          handleTabListKeyDown(event, {
-                            keys: visibleSections.map((s) => s.key),
-                            activeKey: currentSection,
-                            refs: sectionTabRefs,
-                            // Several sections now share the same plain q/status/page
-                            // param names for their own "primary" table (only one
-                            // section is ever mounted at a time, so there's no runtime
-                            // collision) -- clearing them on a section switch too, not
-                            // just an employer switch, stops a search typed into one
-                            // section's box from silently pre-filtering the next
-                            // section's unrelated table.
-                            onChange: (sectionKey) => setSearchParams(buildParams({ section: sectionKey, ...EMPLOYER_FILTER_RESET })),
-                          })
-                        }
-                        className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
-                          currentSection === section.key
-                            ? 'border-moss text-ink font-medium'
-                            : 'border-transparent text-secondary hover:text-ink'
-                        }`}
-                      >
-                        {section.label}
-                      </Link>
-                    ))}
+                    {visibleSections.map((section, index) => {
+                      // A small "Provider" caption sits once before the first
+                      // provider-sourced tab in the run, so it's visually clear
+                      // these came from the attached provider organisation
+                      // rather than being employer functionality themselves --
+                      // the tabs behave identically either way (same ?section=
+                      // navigation, same employer-console frame), this is
+                      // purely a labelling cue.
+                      const startsProviderGroup = section.providerTab && !visibleSections[index - 1]?.providerTab
+                      return (
+                        <Fragment key={section.key}>
+                          {startsProviderGroup && (
+                            <span className="text-[10px] uppercase tracking-wide text-secondary pl-2 pr-1 self-center" aria-hidden="true">
+                              Provider
+                            </span>
+                          )}
+                          <Link
+                            ref={(el) => { sectionTabRefs.current[section.key] = el }}
+                            id={`employer-section-tab-${section.key}`}
+                            to={`?${buildParams({ section: section.key, ...EMPLOYER_FILTER_RESET }).toString()}`}
+                            role="tab"
+                            aria-selected={currentSection === section.key}
+                            aria-controls={`employer-section-panel-${section.key}`}
+                            tabIndex={currentSection === section.key ? 0 : -1}
+                            onKeyDown={(event) =>
+                              handleTabListKeyDown(event, {
+                                keys: visibleSections.map((s) => s.key),
+                                activeKey: currentSection,
+                                refs: sectionTabRefs,
+                                // Several sections now share the same plain q/status/page
+                                // param names for their own "primary" table (only one
+                                // section is ever mounted at a time, so there's no runtime
+                                // collision) -- clearing them on a section switch too, not
+                                // just an employer switch, stops a search typed into one
+                                // section's box from silently pre-filtering the next
+                                // section's unrelated table.
+                                onChange: (sectionKey) => setSearchParams(buildParams({ section: sectionKey, ...EMPLOYER_FILTER_RESET })),
+                              })
+                            }
+                            className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
+                              currentSection === section.key
+                                ? section.providerTab
+                                  ? 'border-sky-600 text-ink font-medium'
+                                  : 'border-moss text-ink font-medium'
+                                : 'border-transparent text-secondary hover:text-ink'
+                            }`}
+                          >
+                            {section.label}
+                          </Link>
+                        </Fragment>
+                      )
+                    })}
                   </div>
                 </div>
 
@@ -327,12 +363,12 @@ export default function EmployerConsole() {
                   {currentSection === 'overview' && (
                     <EmployerOverviewPanel key={`${selectedEmployer.id}-overview`} employer={selectedEmployer} />
                   )}
-                  {currentSection === 'training' && (
-                    <div className="space-y-10">
+                  {currentSection === 'provider-training' && (
+                    <div className="space-y-4">
                       {!myProviderRole && (
                         <p className="text-sm text-secondary">
                           This view is read-only. Ask an admin of this employer's provider organisation to manage
-                          courses, catalogues, and resources there.
+                          courses there.
                         </p>
                       )}
                       <ProviderTrainingSection
@@ -344,6 +380,16 @@ export default function EmployerConsole() {
                         setSearchParams={setSearchParams}
                         readOnly={!myProviderRole}
                       />
+                    </div>
+                  )}
+                  {currentSection === 'provider-catalogues' && (
+                    <div className="space-y-4">
+                      {!myProviderRole && (
+                        <p className="text-sm text-secondary">
+                          This view is read-only. Ask an admin of this employer's provider organisation to manage
+                          catalogues there.
+                        </p>
+                      )}
                       <ProviderCataloguesSection
                         key={`${selectedEmployer.id}-catalogues`}
                         organisation={{ id: selectedEmployer.provider_organisation_id }}
@@ -351,6 +397,16 @@ export default function EmployerConsole() {
                         canCreate={myProviderRole === 'admin'}
                         readOnly={!myProviderRole}
                       />
+                    </div>
+                  )}
+                  {currentSection === 'provider-resources' && (
+                    <div className="space-y-4">
+                      {!myProviderRole && (
+                        <p className="text-sm text-secondary">
+                          This view is read-only. Ask an admin of this employer's provider organisation to manage
+                          resources there.
+                        </p>
+                      )}
                       <ResourceLibrarySection
                         key={`${selectedEmployer.id}-resources`}
                         organisationId={selectedEmployer.provider_organisation_id}
