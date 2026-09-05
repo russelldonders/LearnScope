@@ -7,6 +7,7 @@ import {
   inviteConnectionToManagerTeamByEmail, listManagerCollaborationRecords, listManagerTeamLearningRecords,
   listManagerTeamMemberSummaries, listManagerTeamSkillAssessments, listManagerTeams,
   listPendingManagerTeamInvites, setManagerTeamSkillAssessmentEvidence,
+  getManagerTeamSkillDetail, setManagerTeamSkillTarget,
 } from '../../lib/managerTeams'
 import ManagerConsole from './ManagerConsole'
 
@@ -80,5 +81,6 @@ export default function ManagerConsolePage() {
     collaborationRecords={collaborationRecords} pendingInvites={pendingInvites}
     loading={loading} error={error} onInviteToTeam={handleInvite}
     onCreateCollaborationRecord={handleCreateRecord} onRateSkill={handleRateSkill}
-    onLoadSkillAssessments={listManagerTeamSkillAssessments} />
+    onLoadSkillAssessments={listManagerTeamSkillAssessments}
+    onLoadSkillDetail={getManagerTeamSkillDetail} onSetTarget={setManagerTeamSkillTarget} />
 }

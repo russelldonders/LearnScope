@@ -1,5 +1,22 @@
 import { supabase } from './supabaseClient'
 
+export async function getManagerTeamSkillDetail(membershipId, skillId) {
+  const { data, error } = await supabase.rpc('get_manager_team_skill_detail', {
+    p_membership_id: membershipId, p_skill_id: skillId,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function setManagerTeamSkillTarget(membershipId, skillId, { level, date, comments }) {
+  const { data, error } = await supabase.rpc('set_manager_team_skill_target', {
+    p_membership_id: membershipId, p_skill_id: skillId,
+    p_target_level: level, p_target_date: date, p_comments: comments || null,
+  })
+  if (error) throw error
+  return data
+}
+
 export async function createManagerWorkspace(name = 'My manager workspace') {
   const { data, error } = await supabase.rpc('create_manager_workspace', { p_name: name })
   if (error) throw error

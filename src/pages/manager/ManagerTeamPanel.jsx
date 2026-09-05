@@ -7,6 +7,7 @@ import { SortableTh, TablePagination } from '../../components/TableControls'
 import { useSortedPage } from '../../lib/useSortedPage'
 import { LEVELS, LEVEL_LABELS } from '../../lib/levels'
 import { formatRelativeDate, formatAbsoluteDate } from '../../lib/dates'
+import ManagerMemberProfile from './ManagerMemberProfile'
 
 const SORT_ACCESSORS = {
   name: (m) => m.name?.toLowerCase() ?? '',
@@ -31,19 +32,25 @@ const SORT_ACCESSORS = {
 // `onLoadSkillAssessments` are the only contract with the data layer; this
 // component never fetches or writes anything itself outside of those.
 export default function ManagerTeamPanel({
-  members = [], loading = false, error = null, onInvite, onRateSkill, onLoadSkillAssessments,
+  members = [], loading = false, error = null, onInvite, onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget,
 }) {
   const [inviteOpen, setInviteOpen] = useState(false)
   const [rateTarget, setRateTarget] = useState(null)
+  const [profileId, setProfileId] = useState(null)
+  const profileMember = members.find((member) => member.id === profileId)
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
     useSortedPage(members, SORT_ACCESSORS, { defaultSortKey: 'name' })
+
+  if (profileMember) return <ManagerMemberProfile member={profileMember} onBack={() => setProfileId(null)}
+    onRateSkill={onRateSkill} onLoadSkillAssessments={onLoadSkillAssessments}
+    onLoadSkillDetail={onLoadSkillDetail} onSetTarget={onSetTarget} />
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-secondary">
-          People on your team, and the skills and evidence they've chosen to share with you. Inviting
-          someone here doesn't grant access to their full profile -- only what they explicitly share.
+          Open a team member’s skills profile, then choose a skill to review their progress, rate it or set a target.
+          Profiles show the skills they’ve shared with you.
         </p>
         <button
           type="button"
@@ -96,6 +103,11 @@ export default function ManagerTeamPanel({
                         <PersonAvatar name={member.name} avatarUrl={member.avatarUrl} size={7} />
                         <span className="text-ink">{member.name}</span>
                       </div>
+                      <button type="button" onClick={() => setProfileId(member.id)}
+                        aria-label={`View skills profile for ${member.name}`}
+                        className="mt-2 text-sm font-medium text-moss underline underline-offset-4 hover:text-ink">
+                        View skills profile
+                      </button>
                     </td>
                     <td className="px-4 py-2 text-secondary">
                       {member.teamSince ? (
@@ -272,7 +284,7 @@ function InviteToTeamDialog({ onClose, onInvite }) {
 // files } -- attaching any files to the new rating is the caller's job
 // (mirrors every other assessment-with-evidence flow: create the record,
 // then upload keyed by its id), not this dialog's.
-function RateSkillDialog({ member, skill, onClose, onRate, onLoadHistory }) {
+export function RateSkillDialog({ member, skill, onClose, onRate, onLoadHistory }) {
   const [level, setLevel] = useState(skill.managerRating?.level ?? skill.level ?? 1)
   const [comments, setComments] = useState('')
   const [evidenceUrl, setEvidenceUrl] = useState('')

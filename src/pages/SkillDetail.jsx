@@ -1345,6 +1345,8 @@ function LevelDetailModal({
                 </div>
               </div>
               {targetDescription && <p className="text-sm text-secondary mt-2">{targetDescription}</p>}
+              {currentTarget.set_by_manager && <p className="text-sm text-secondary mt-2">Set by your manager</p>}
+              {currentTarget.comments && <p className="text-sm text-secondary mt-2 whitespace-pre-wrap">{currentTarget.comments}</p>}
             </div>
           )
         })()}

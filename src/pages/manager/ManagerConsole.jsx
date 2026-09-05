@@ -43,6 +43,8 @@ export default function ManagerConsole({
   onCreateCollaborationRecord,
   onRateSkill,
   onLoadSkillAssessments,
+  onLoadSkillDetail,
+  onSetTarget,
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const activeSection = searchParams.get('section') ?? 'overview'
@@ -68,8 +70,7 @@ export default function ManagerConsole({
       <main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 py-8">
         <h1 className="font-display text-xl text-ink mb-1">Manager console</h1>
         <p className="text-sm text-secondary mb-6">
-          Build out your team from your connections, and see the collaborative learning and shared
-          skills they've chosen to give you visibility into.
+          View your team’s skills profiles in Team. Open a skill to review progress, add your rating and set a target.
         </p>
 
         <div role="tablist" aria-label="Console section" className="flex items-center flex-wrap gap-1 mb-6 border-b border-hairline">
@@ -125,6 +126,8 @@ export default function ManagerConsole({
               onInvite={onInviteToTeam}
               onRateSkill={onRateSkill}
               onLoadSkillAssessments={onLoadSkillAssessments}
+              onLoadSkillDetail={onLoadSkillDetail}
+              onSetTarget={onSetTarget}
             />
           )}
           {activeSection === 'learning' && (

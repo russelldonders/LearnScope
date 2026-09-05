@@ -179,6 +179,7 @@ export default function SetTargetModal({ skill, user, targets = [], currentLevel
                       {new Date(t.created_at).toLocaleDateString()}
                     </p>
                     {t.comments && <p className="text-xs text-secondary mt-0.5">{t.comments}</p>}
+                    {t.set_by_manager && <p className="text-xs text-secondary mt-0.5">Set by your manager</p>}
                   </div>
                 </li>
               ))}
