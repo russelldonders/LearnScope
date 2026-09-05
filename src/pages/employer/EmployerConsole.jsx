@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
+import AccessibleDialog from '../../components/AccessibleDialog'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import ResourceLibrarySection from '../../components/ResourceLibrarySection'
 import ProviderSkillsSection from '../../components/ProviderSkillsSection'
@@ -58,8 +59,6 @@ const SECTIONS = [
   { key: 'provider-resources', label: 'Resources', providerTab: true },
   { key: 'users', label: 'Users' },
   { key: 'roles', label: 'Roles' },
-  { key: 'assign', label: 'Assign training' },
-  { key: 'suggest-skills', label: 'Suggest skills' },
   { key: 'providers', label: 'Providers' },
 ]
 
@@ -102,20 +101,21 @@ const LINKED_PROVIDER_SORT_ACCESSORS = {
   created_at: (p) => p.created_at ?? '',
 }
 
-// Every panel below (Users, Assign training, Suggest skills, Providers)
-// keeps its own search/sort/page state in the URL, same convention as the
-// Training tab's ProviderTrainingSection. Each panel's "primary" table uses
-// the plain q/status/sort/dir/page/pageSize names (safe -- only one section
-// is ever mounted at a time, so there's no runtime collision, mirroring
-// ProviderConsole.jsx's org switcher); a panel with a second, simultaneously-
-// visible table (Assign training's assignment roster, Suggest skills'
-// suggestion roster) prefixes its own names (aq/aSort/..., sq/sSort/...) to
-// avoid colliding with the first. Used to reset all of them together on
-// both an employer switch and a section switch, so a stale filter/page from
-// one view never carries over and makes the newly-selected view look empty
-// (or, since several sections now share the plain q/status/page names,
-// silently pre-filtered by a search typed into a different section) --
-// mirrors the pre-existing q/status/page reset for the Training tab.
+// Every panel below (Users, Providers) keeps its own search/sort/page state
+// in the URL, same convention as the Training tab's ProviderTrainingSection.
+// Each panel's "primary" table uses the plain q/status/sort/dir/page/
+// pageSize names (safe -- only one section is ever mounted at a time, so
+// there's no runtime collision, mirroring ProviderConsole.jsx's org
+// switcher); the Users tab's two read-only history sections underneath its
+// learner roster (EmployerTrainingAssignmentsHistory, EmployerSkillAssign-
+// mentsHistory -- visible on screen at the same time as that roster) prefix
+// their own names (aq/aSort/..., sq/sSort/...) to avoid colliding with it.
+// Used to reset all of them together on both an employer switch and a
+// section switch, so a stale filter/page from one view never carries over
+// and makes the newly-selected view look empty (or, since several sections
+// share the plain q/status/page names, silently pre-filtered by a search
+// typed into a different section) -- mirrors the pre-existing q/status/page
+// reset for the Training tab.
 const EMPLOYER_FILTER_RESET = { q: null, status: null, page: null, aq: null, aPage: null, sq: null, sPage: null }
 
 // Foundation console for an employer's own admin (employer_members
@@ -149,10 +149,14 @@ export default function EmployerConsole() {
   const requestedSection = searchParams.get('section') ?? 'overview'
   // Preserve old bookmarked links after merging the former Users and
   // Learners tabs (both legacy destinations now open the combined view),
-  // and after splitting the former combined Training tab into the separate
-  // provider-training/provider-catalogues/provider-resources tabs below
-  // (an old link to the bundled view now opens just the Training portion).
-  const activeSection = ['staff', 'learners'].includes(requestedSection)
+  // after splitting the former combined Training tab into the separate
+  // provider-training/provider-catalogues/provider-resources tabs below (an
+  // old link to the bundled view now opens just the Training portion), and
+  // after folding the standalone Assign training/Suggest skills tabs into
+  // bulk actions on the Users tab's learner roster (EmployerLearnersPanel)
+  // -- old links to either now land on Users, where that functionality
+  // actually lives now.
+  const activeSection = ['staff', 'learners', 'assign', 'suggest-skills'].includes(requestedSection)
     ? 'users'
     : requestedSection === 'training'
       ? 'provider-training'
@@ -482,22 +486,6 @@ export default function EmployerConsole() {
                       user={user}
                     />
                   )}
-                  {currentSection === 'assign' && (
-                    <EmployerAssignTrainingPanel
-                      key={selectedEmployer.id}
-                      employer={selectedEmployer}
-                      searchParams={searchParams}
-                      setSearchParams={setSearchParams}
-                    />
-                  )}
-                  {currentSection === 'suggest-skills' && (
-                    <EmployerSuggestSkillsPanel
-                      key={selectedEmployer.id}
-                      employer={selectedEmployer}
-                      searchParams={searchParams}
-                      setSearchParams={setSearchParams}
-                    />
-                  )}
                   {currentSection === 'providers' && (
                     <EmployerProvidersPanel
                       key={selectedEmployer.id}
@@ -597,6 +585,16 @@ const DATA_ACCESS_STATUS_LABELS = {
 }
 
 function EmployerUsersPanel({ employer, attachedProviderOrg, canManageTrainingTeam, searchParams, setSearchParams }) {
+  // Bumped after a successful bulk assign-training/assign-skill action
+  // (triggered from EmployerLearnersPanel's own selection below) so the two
+  // read-only history sections further down -- which each load their own
+  // data independently -- pick up the new row without this whole panel
+  // needing to own or thread that data itself.
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0)
+  function refreshHistory() {
+    setHistoryRefreshKey((k) => k + 1)
+  }
+
   return (
     <div className="space-y-10">
       <div>
@@ -613,6 +611,7 @@ function EmployerUsersPanel({ employer, attachedProviderOrg, canManageTrainingTe
         setSearchParams={setSearchParams}
         heading="Learners and employer administrators"
         showIntro={false}
+        onAssigned={refreshHistory}
       />
 
       {canManageTrainingTeam && attachedProviderOrg && (
@@ -625,11 +624,29 @@ function EmployerUsersPanel({ employer, attachedProviderOrg, canManageTrainingTe
           />
         </section>
       )}
+
+      <section aria-labelledby="employer-training-history-heading" className="border-t border-hairline pt-8">
+        <EmployerTrainingAssignmentsHistory
+          key={`${employer.id}-${historyRefreshKey}`}
+          employer={employer}
+          searchParams={searchParams}
+          setSearchParams={setSearchParams}
+        />
+      </section>
+
+      <section aria-labelledby="employer-skill-history-heading" className="border-t border-hairline pt-8">
+        <EmployerSkillAssignmentsHistory
+          key={`${employer.id}-${historyRefreshKey}`}
+          employer={employer}
+          searchParams={searchParams}
+          setSearchParams={setSearchParams}
+        />
+      </section>
     </div>
   )
 }
 
-function EmployerLearnersPanel({ employer, searchParams, setSearchParams, heading = 'Learners', showIntro = true }) {
+function EmployerLearnersPanel({ employer, searchParams, setSearchParams, heading = 'Learners', showIntro = true, onAssigned }) {
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -640,6 +657,17 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
   const [message, setMessage] = useState(null)
   const [removeTarget, setRemoveTarget] = useState(null)
   const [removing, setRemoving] = useState(false)
+
+  // Assign training/Assign skill used to be their own top-level tabs, each
+  // with its own copy of this same learner roster to pick targets from --
+  // folded into bulk actions on this one roster instead (select learners
+  // here, then choose which to run), so there's a single place to manage
+  // who's covered by this employer and a single selection model for acting
+  // on them. 'assignModal' is which picker dialog (if any) is open;
+  // 'assignResult' surfaces the last run's outcome (assigned/skipped) the
+  // same way the old panels' inline result banner did.
+  const [assignModal, setAssignModal] = useState(null)
+  const [assignResult, setAssignResult] = useState(null)
 
   const [bulkEmails, setBulkEmails] = useState('')
   const [bulkRole, setBulkRole] = useState('member')
@@ -670,6 +698,19 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
     useSortedPage(filteredMembers, LEARNER_SORT_ACCESSORS, { urlSync: { searchParams, setSearchParams } })
+
+  // Only an active member is a valid assign-training/assign-skill target
+  // (both RPCs silently skip anyone else) -- selection is restricted to
+  // those rows up front instead, so a selection can't silently include
+  // someone who'd just be dropped once the action ran.
+  const eligibleMembers = useMemo(() => filteredMembers.filter((m) => m.status === 'active'), [filteredMembers])
+  const selection = useRowSelection(eligibleMembers.map((m) => m.user_id))
+  const eligiblePageIds = pageItems.filter((m) => m.status === 'active').map((m) => m.user_id)
+  const selectedOnPage = eligiblePageIds.filter((id) => selection.selected.has(id)).length
+  const selectedMembers = useMemo(
+    () => eligibleMembers.filter((m) => selection.selected.has(m.user_id)),
+    [eligibleMembers, selection.selected]
+  )
 
   useEffect(() => {
     load()
@@ -781,6 +822,13 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
     } finally {
       setRemoving(false)
     }
+  }
+
+  function handleAssignDone(result) {
+    setAssignModal(null)
+    setAssignResult(result)
+    selection.clear()
+    onAssigned?.()
   }
 
   return (
@@ -923,6 +971,35 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
         )}
       </div>
 
+      <BulkActionBar
+        count={selection.selected.size}
+        onClear={selection.clear}
+        actions={[
+          { label: 'Assign training', onClick: () => setAssignModal('training') },
+          { label: 'Assign skill', onClick: () => setAssignModal('skill') },
+        ]}
+      />
+
+      {assignResult && (
+        <div className="bg-card border border-hairline rounded-lg p-3 mb-3 text-xs">
+          <MutationFeedback
+            status="success"
+            message={
+              assignResult.kind === 'training'
+                ? `${assignResult.count} learner(s) assigned this course.`
+                : `${assignResult.count} learner(s) assigned this skill.`
+            }
+            size="xs"
+          />
+          {assignResult.skippedEmails.length > 0 && (
+            <p className="text-secondary mt-1">
+              Skipped (already had a live {assignResult.kind === 'training' ? 'assignment for this course' : 'suggestion for this skill'}):{' '}
+              {assignResult.skippedEmails.join(', ')}
+            </p>
+          )}
+        </div>
+      )}
+
       {loading ? (
         <p className="text-xs text-secondary">Loading learners…</p>
       ) : filteredMembers.length === 0 ? (
@@ -935,6 +1012,12 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-hairline text-left text-secondary">
+                  <SelectionTh
+                    idPrefix="employer-learners"
+                    checked={selection.isAllSelected(eligiblePageIds)}
+                    indeterminate={selectedOnPage > 0 && selectedOnPage < eligiblePageIds.length}
+                    onChange={() => selection.toggleAll(eligiblePageIds)}
+                  />
                   <SortableTh label="ID" columnKey="id" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   <SortableTh label="Learner" columnKey="email" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <SortableTh label="Role" columnKey="role" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
@@ -949,6 +1032,17 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
                   const canRequest = m.status === 'active' && (!dataAccess || dataAccess.status === 'declined' || dataAccess.status === 'revoked')
                   return (
                     <tr key={m.id} className="border-b border-hairline last:border-0">
+                      <td className="px-4 py-2">
+                        <input
+                          type="checkbox"
+                          checked={selection.selected.has(m.user_id)}
+                          onChange={() => selection.toggle(m.user_id)}
+                          disabled={m.status !== 'active'}
+                          aria-label={`Select ${m.email || m.user_id}`}
+                          title={m.status !== 'active' ? 'Only active members can be assigned training or skills' : undefined}
+                          className="rounded border-hairline accent-moss disabled:opacity-30"
+                        />
+                      </td>
                       <td className="px-4 py-2 font-mono text-[10px] text-secondary whitespace-nowrap">{m.id.slice(0, 8)}</td>
                       <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{m.email || m.user_id}</td>
                       <td className="px-4 py-2 whitespace-nowrap">
@@ -1001,33 +1095,149 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
           confirming={removing}
         />
       )}
+
+      {assignModal === 'training' && (
+        <AssignTrainingModal
+          employer={employer}
+          members={selectedMembers}
+          onClose={() => setAssignModal(null)}
+          onAssigned={handleAssignDone}
+        />
+      )}
+      {assignModal === 'skill' && (
+        <AssignSkillModal
+          employer={employer}
+          members={selectedMembers}
+          onClose={() => setAssignModal(null)}
+          onAssigned={handleAssignDone}
+        />
+      )}
     </section>
   )
 }
 
-// Phase 3: push training to specific learners rather than relying on 100%
-// learner-initiated browse/enrol (courseCatalogue.js's listCatalogueCourses/
-// enrolInCatalogueCourse, untouched by this phase). Course choices are
-// scoped to courses actually published in one of this employer's own
-// catalogues (listEmployerCatalogueCourses -- the RPC re-validates this
-// server-side regardless, this is only the picker's convenience list).
-// Assigning never enrols anyone by itself -- assign_course_to_employer_
-// members only creates a course_assignments row; the learner still has to
-// click "Start" on their own /actions page (respondToCourseAssignment) to
-// create the real enrolment. Member selection reuses the same
-// useRowSelection/SelectionTh/BulkActionBar primitives as ProviderConsole
-// .jsx's own bulk "Push to catalogue" table, for a consistent picker feel
-// across this console.
-function EmployerAssignTrainingPanel({ employer, searchParams, setSearchParams }) {
+// Course picker for the "Assign training" bulk action on the Users tab's
+// learner roster (EmployerLearnersPanel) -- used to be its own top-level
+// tab with its own copy of the learner picker; folded into a modal opened
+// from a selection made on that one roster instead, so there's a single
+// place to pick "who" (see EmployerLearnersPanel) and this only has to ask
+// "which course". Course choices are scoped to courses actually published
+// in one of this employer's own catalogues (listEmployerCatalogueCourses --
+// the RPC re-validates this server-side regardless, this is only the
+// picker's convenience list). Assigning never enrols anyone by itself --
+// assign_course_to_employer_members only creates a course_assignments row;
+// the learner still has to click "Start" on their own /actions page
+// (respondToCourseAssignment) to create the real enrolment.
+function AssignTrainingModal({ employer, members, onClose, onAssigned }) {
   const [courses, setCourses] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [selectedCourseId, setSelectedCourseId] = useState('')
+  const [assigning, setAssigning] = useState(false)
+
+  useEffect(() => {
+    listEmployerCatalogueCourses(employer.provider_organisation_id)
+      .then(setCourses)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false))
+  }, [employer.provider_organisation_id])
+
+  async function handleAssign(e) {
+    e.preventDefault()
+    if (!selectedCourseId) return
+    setAssigning(true)
+    setError(null)
+    try {
+      const requestedIds = members.map((m) => m.user_id)
+      const inserted = await assignCourseToEmployerMembers(employer.id, selectedCourseId, requestedIds)
+      const insertedIds = new Set(inserted.map((row) => row.assigned_to))
+      // Everyone passed in here already cleared the roster's own "active"
+      // filter -- the only reason the RPC would still skip one is an
+      // existing live assignment for this course (on conflict do nothing).
+      const skippedEmails = requestedIds
+        .filter((id) => !insertedIds.has(id))
+        .map((id) => members.find((m) => m.user_id === id)?.email || id)
+      onAssigned({ kind: 'training', count: inserted.length, skippedEmails })
+    } catch (err) {
+      setError(err.message)
+      setAssigning(false)
+    }
+  }
+
+  return (
+    <AccessibleDialog
+      labelledBy="assign-training-dialog-title"
+      onClose={assigning ? undefined : onClose}
+      closeOnBackdrop={!assigning}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+      <h2 id="assign-training-dialog-title" className="font-display text-xl text-ink mb-1">Assign training</h2>
+      <p className="text-sm text-secondary mb-4">
+        Push a course from {employer.name}'s own catalogue to {members.length} selected learner{members.length === 1 ? '' : 's'}.
+        They'll see it on their Actions page and choose whether to start it -- this doesn't enrol anyone
+        automatically.
+      </p>
+
+      <MutationFeedback status="error" message={error} size="xs" className="mb-3" />
+
+      {loading ? (
+        <p className="text-sm text-secondary">Loading courses…</p>
+      ) : courses.length === 0 ? (
+        <p className="text-sm text-secondary">
+          No published courses yet -- publish a course to one of this employer's own catalogues from the Training
+          tab first.
+        </p>
+      ) : (
+        <form onSubmit={handleAssign} className="space-y-4">
+          <div>
+            <label className="block text-xs text-secondary mb-1" htmlFor="employerAssignCourse">
+              Course
+            </label>
+            <select
+              id="employerAssignCourse"
+              required
+              value={selectedCourseId}
+              onChange={(e) => setSelectedCourseId(e.target.value)}
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+            >
+              <option value="">Choose a course…</option>
+              {courses.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={assigning}
+              className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!selectedCourseId || assigning}
+              className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+            >
+              {assigning ? 'Assigning…' : `Assign to ${members.length}`}
+            </button>
+          </div>
+        </form>
+      )}
+    </AccessibleDialog>
+  )
+}
+
+// Read-only "assigned so far" roster -- initiating an assignment moved to
+// AssignTrainingModal (triggered from EmployerLearnersPanel's own selection
+// on the Users tab above), this just keeps the history visible somewhere
+// now that it no longer has its own tab.
+function EmployerTrainingAssignmentsHistory({ employer, searchParams, setSearchParams }) {
   const [members, setMembers] = useState([])
   const [assignments, setAssignments] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-
-  const [selectedCourseId, setSelectedCourseId] = useState('')
-  const [assigning, setAssigning] = useState(false)
-  const [assignResult, setAssignResult] = useState(null)
 
   useEffect(() => {
     load()
@@ -1037,12 +1247,10 @@ function EmployerAssignTrainingPanel({ employer, searchParams, setSearchParams }
     setLoading(true)
     setError(null)
     try {
-      const [coursesData, membersData, assignmentsData] = await Promise.all([
-        listEmployerCatalogueCourses(employer.provider_organisation_id),
+      const [membersData, assignmentsData] = await Promise.all([
         listEmployerMembers(employer.id),
         listEmployerCourseAssignments(employer.id),
       ])
-      setCourses(coursesData)
       setMembers(membersData)
       setAssignments(assignmentsData)
     } catch (err) {
@@ -1052,39 +1260,14 @@ function EmployerAssignTrainingPanel({ employer, searchParams, setSearchParams }
     }
   }
 
-  // Only an active employer_members row is assignable -- mirrors the RPC's
-  // own membership filter (status = 'active'), so the picker never offers a
-  // pending invitee it would just silently skip.
-  const activeMembers = useMemo(() => members.filter((m) => m.status === 'active'), [members])
   const emailByUserId = useMemo(() => new Map(members.map((m) => [m.user_id, m.email || m.user_id])), [members])
-
-  // Member picker's own search/sort/page -- this panel's "primary" table, so
-  // it uses the plain q/sort/dir/page/pageSize param names.
-  const [memberQuery, setMemberQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
-  const memberQ = memberQuery.trim().toLowerCase()
-  const filteredMembers = useMemo(
-    () => (memberQ ? activeMembers.filter((m) => (m.email || m.user_id || '').toLowerCase().includes(memberQ)) : activeMembers),
-    [activeMembers, memberQ]
-  )
-  const memberFiltersActive = memberQuery !== ''
-
-  function resetMemberFilters() {
-    writeUrlParams(searchParams, setSearchParams, { q: null, page: null })
-  }
-
-  const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
-    useSortedPage(filteredMembers, LEARNER_SORT_ACCESSORS, { urlSync: { searchParams, setSearchParams } })
-  const selection = useRowSelection(filteredMembers.map((m) => m.user_id))
-  const pageUserIds = pageItems.map((m) => m.user_id)
-  const selectedOnPage = pageUserIds.filter((id) => selection.selected.has(id)).length
-
   const assignmentsWithEmail = useMemo(
     () => assignments.map((a) => ({ ...a, learnerEmail: emailByUserId.get(a.assigned_to) })),
     [assignments, emailByUserId]
   )
-  // Assignment roster's own search/sort/page -- prefixed (aq/aSort/...)
-  // since it's visible on screen at the same time as the member picker
-  // above, and would otherwise collide with its plain param names.
+  // Prefixed (aq/aSort/...) since this shares the Users tab's screen with
+  // EmployerLearnersPanel's own roster, which uses the plain q/sort/...
+  // names for its own "primary" table.
   const [assignmentQuery, setAssignmentQuery] = useUrlParam(searchParams, setSearchParams, 'aq', '', { resetParams: ['aPage'] })
   const aq = assignmentQuery.trim().toLowerCase()
   const filteredAssignments = useMemo(
@@ -1118,255 +1301,93 @@ function EmployerAssignTrainingPanel({ employer, searchParams, setSearchParams }
     urlSync: { searchParams, setSearchParams, paramNames: { sort: 'aSort', dir: 'aDir', page: 'aPage', pageSize: 'aPageSize' } },
   })
 
-  async function handleAssign() {
-    if (!selectedCourseId || selection.selected.size === 0) return
-    setAssigning(true)
-    setAssignResult(null)
-    setError(null)
-    try {
-      const requestedIds = Array.from(selection.selected)
-      const inserted = await assignCourseToEmployerMembers(employer.id, selectedCourseId, requestedIds)
-      const insertedIds = new Set(inserted.map((row) => row.assigned_to))
-      // The RPC silently skips anyone not an active member by the time it
-      // ran, or already assigned this course (on conflict do nothing) --
-      // report that explicitly rather than claiming every requested person
-      // was assigned.
-      const skippedEmails = requestedIds
-        .filter((id) => !insertedIds.has(id))
-        .map((id) => emailByUserId.get(id) || id)
-      setAssignResult({ assignedCount: inserted.length, skippedEmails })
-      selection.clear()
-      await load()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setAssigning(false)
-    }
-  }
-
   return (
-    <section aria-labelledby="employer-assign-training-heading">
-      <div className="mb-5">
-        <h2 id="employer-assign-training-heading" className="font-display text-lg text-ink">Assign training</h2>
-        <p className="text-sm text-secondary mt-1 max-w-2xl">
-          Push a course from {employer.name}'s own catalogue to specific learners. They'll see it on their Actions
-          page and choose whether to start it -- assigning doesn't enrol anyone automatically.
-        </p>
-      </div>
-
-      <MutationFeedback status="error" message={error} className="mb-3" />
-
+    <div>
+      <h3 id="employer-training-history-heading" className="font-display text-base text-ink mb-3">Training assigned so far</h3>
+      <MutationFeedback status="error" message={error} size="xs" className="mb-3" />
       {loading ? (
-        <p className="text-secondary">Loading…</p>
+        <p className="text-xs text-secondary">Loading…</p>
+      ) : assignments.length === 0 ? (
+        <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
+          <p className="text-secondary">No training assigned yet. Select learners above to assign a course.</p>
+        </div>
       ) : (
-        <>
-          <div className="bg-card border border-hairline rounded-lg p-4 mb-4">
-            <label className="block text-xs text-secondary mb-1" htmlFor="employerAssignCourse">
-              Course
-            </label>
-            {courses.length === 0 ? (
-              <p className="text-xs text-secondary">
-                No published courses yet -- publish a course to one of this employer's own catalogues from the
-                Training tab first.
-              </p>
-            ) : (
-              <select
-                id="employerAssignCourse"
-                value={selectedCourseId}
-                onChange={(e) => setSelectedCourseId(e.target.value)}
-                className="w-full max-w-md rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+        <div className="bg-card border border-hairline rounded-lg">
+          <div className="flex flex-wrap items-center gap-2 p-3">
+            <input
+              aria-label="Search assignments"
+              type="text"
+              value={assignmentQuery}
+              onChange={(e) => setAssignmentQuery(e.target.value)}
+              placeholder="Search by course or learner…"
+              className="flex-1 min-w-[220px] rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+            />
+            {assignmentFiltersActive && (
+              <button
+                type="button"
+                onClick={resetAssignmentFilters}
+                className="text-xs text-secondary hover:text-ink py-1.5 px-2 whitespace-nowrap"
               >
-                <option value="">Choose a course…</option>
-                {courses.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+                Reset filters
+              </button>
             )}
           </div>
-
-          {assignResult && (
-            <div className="bg-card border border-hairline rounded-lg p-4 mb-4">
-              <MutationFeedback status="success" message={`${assignResult.assignedCount} learner(s) assigned.`} size="xs" />
-              {assignResult.skippedEmails.length > 0 && (
-                <p className="text-xs text-secondary mt-1">
-                  Skipped (not an active member, or already assigned this course): {assignResult.skippedEmails.join(', ')}
-                </p>
-              )}
-            </div>
-          )}
-
-          {activeMembers.length === 0 ? (
-            <div className="text-center py-12 border border-dashed border-hairline rounded-lg mb-8">
-              <p className="text-secondary">No active learners to assign training to yet.</p>
-            </div>
+          {filteredAssignments.length === 0 ? (
+            <p className="text-center text-xs text-secondary py-8">No assignments match your search.</p>
           ) : (
-            <div className="bg-card border border-hairline rounded-lg mb-8">
-              <div className="flex flex-wrap items-center gap-2 p-3 pb-0">
-                <input
-                  aria-label="Search learners"
-                  type="text"
-                  value={memberQuery}
-                  onChange={(e) => setMemberQuery(e.target.value)}
-                  placeholder="Search by email…"
-                  className="flex-1 min-w-[220px] rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-                />
-                {memberFiltersActive && (
-                  <button
-                    type="button"
-                    onClick={resetMemberFilters}
-                    className="text-xs text-secondary hover:text-ink py-1.5 px-2 whitespace-nowrap"
-                  >
-                    Reset filters
-                  </button>
-                )}
-              </div>
-              <div className="p-3 pb-0">
-                <BulkActionBar
-                  count={selection.selected.size}
-                  onClear={selection.clear}
-                  busy={assigning}
-                  actions={[
-                    {
-                      label: assigning ? 'Assigning…' : `Assign course (${selection.selected.size})`,
-                      disabled: !selectedCourseId || selection.selected.size === 0,
-                      title: !selectedCourseId ? 'Choose a course above first' : undefined,
-                      onClick: handleAssign,
-                    },
-                  ]}
-                />
-              </div>
-              {filteredMembers.length === 0 ? (
-                <p className="text-center text-xs text-secondary py-8">No learners match your search.</p>
-              ) : (
-              <>
+            <>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-hairline text-left text-secondary">
-                      <SelectionTh
-                        idPrefix="employer-assign-members"
-                        checked={selection.isAllSelected(pageUserIds)}
-                        indeterminate={selectedOnPage > 0 && selectedOnPage < pageUserIds.length}
-                        onChange={() => selection.toggleAll(pageUserIds)}
-                      />
-                      <SortableTh label="Learner" columnKey="email" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                      <SortableTh label="Role" columnKey="role" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                      <SortableTh label="Course" columnKey="course" sortKey={aSortKey} sortDir={aSortDir} onSort={aToggleSort} />
+                      <SortableTh label="Learner" columnKey="learner" sortKey={aSortKey} sortDir={aSortDir} onSort={aToggleSort} />
+                      <SortableTh label="Status" columnKey="status" sortKey={aSortKey} sortDir={aSortDir} onSort={aToggleSort} className="whitespace-nowrap" />
+                      <SortableTh label="Assigned" columnKey="created_at" sortKey={aSortKey} sortDir={aSortDir} onSort={aToggleSort} className="whitespace-nowrap" />
                     </tr>
                   </thead>
                   <tbody>
-                    {pageItems.map((m) => (
-                      <tr key={m.user_id} className="border-b border-hairline last:border-0">
-                        <td className="px-4 py-2">
-                          <input
-                            type="checkbox"
-                            checked={selection.selected.has(m.user_id)}
-                            onChange={() => selection.toggle(m.user_id)}
-                            aria-label={`Select ${m.email || m.user_id}`}
-                            className="rounded border-hairline accent-moss"
-                          />
-                        </td>
-                        <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{m.email || m.user_id}</td>
+                    {aPageItems.map((a) => (
+                      <tr key={a.id} className="border-b border-hairline last:border-0">
+                        <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{a.course_catalogue?.name || 'Deleted course'}</td>
+                        <td className="px-4 py-2 text-secondary text-xs truncate max-w-[220px]">{a.learnerEmail || a.assigned_to}</td>
                         <td className="px-4 py-2 whitespace-nowrap">
-                          <StatusBadge label={m.role === 'admin' ? 'Admin' : 'Member'} tone="neutral" />
+                          <StatusBadge label={ASSIGNMENT_STATUS_LABELS[a.status] || a.status} tone={a.status === 'dismissed' ? 'danger' : 'neutral'} />
                         </td>
+                        <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{new Date(a.created_at).toLocaleDateString()}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <TablePagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalItems={totalItems} idPrefix={`employer-assign-members-${employer.id}`} />
-              </>
-              )}
-            </div>
+              <TablePagination page={aPage} setPage={aSetPage} pageSize={aPageSize} setPageSize={aSetPageSize} totalItems={aTotalItems} idPrefix={`employer-assignments-${employer.id}`} />
+            </>
           )}
-
-          <div>
-            <h3 className="font-display text-base text-ink mb-3">Assigned so far</h3>
-            {assignments.length === 0 ? (
-              <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
-                <p className="text-secondary">No training assigned yet.</p>
-              </div>
-            ) : (
-              <div className="bg-card border border-hairline rounded-lg">
-                <div className="flex flex-wrap items-center gap-2 p-3">
-                  <input
-                    aria-label="Search assignments"
-                    type="text"
-                    value={assignmentQuery}
-                    onChange={(e) => setAssignmentQuery(e.target.value)}
-                    placeholder="Search by course or learner…"
-                    className="flex-1 min-w-[220px] rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-                  />
-                  {assignmentFiltersActive && (
-                    <button
-                      type="button"
-                      onClick={resetAssignmentFilters}
-                      className="text-xs text-secondary hover:text-ink py-1.5 px-2 whitespace-nowrap"
-                    >
-                      Reset filters
-                    </button>
-                  )}
-                </div>
-                {filteredAssignments.length === 0 ? (
-                  <p className="text-center text-xs text-secondary py-8">No assignments match your search.</p>
-                ) : (
-                <>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-hairline text-left text-secondary">
-                        <SortableTh label="Course" columnKey="course" sortKey={aSortKey} sortDir={aSortDir} onSort={aToggleSort} />
-                        <SortableTh label="Learner" columnKey="learner" sortKey={aSortKey} sortDir={aSortDir} onSort={aToggleSort} />
-                        <SortableTh label="Status" columnKey="status" sortKey={aSortKey} sortDir={aSortDir} onSort={aToggleSort} className="whitespace-nowrap" />
-                        <SortableTh label="Assigned" columnKey="created_at" sortKey={aSortKey} sortDir={aSortDir} onSort={aToggleSort} className="whitespace-nowrap" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {aPageItems.map((a) => (
-                        <tr key={a.id} className="border-b border-hairline last:border-0">
-                          <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{a.course_catalogue?.name || 'Deleted course'}</td>
-                          <td className="px-4 py-2 text-secondary text-xs truncate max-w-[220px]">{a.learnerEmail || a.assigned_to}</td>
-                          <td className="px-4 py-2 whitespace-nowrap">
-                            <StatusBadge label={ASSIGNMENT_STATUS_LABELS[a.status] || a.status} tone={a.status === 'dismissed' ? 'danger' : 'neutral'} />
-                          </td>
-                          <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{new Date(a.created_at).toLocaleDateString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <TablePagination page={aPage} setPage={aSetPage} pageSize={aPageSize} setPageSize={aSetPageSize} totalItems={aTotalItems} idPrefix={`employer-assignments-${employer.id}`} />
-                </>
-                )}
-              </div>
-            )}
-          </div>
-        </>
+        </div>
       )}
-    </section>
+    </div>
   )
 }
 
-// Phase 6: push a skill (with an optional target level/date) to specific
-// learners, mirroring EmployerAssignTrainingPanel's "push, don't force"
-// shape exactly. Suggesting never creates or modifies anyone's actual
-// skills/skill_targets rows by itself -- suggest_skill_to_employer_members
-// only creates an employer_skill_suggestions row; the learner still has to
-// click "Add to my skills" on their own /actions page
-// (adoptSkillSuggestion) to create the real skill (and, if they choose,
-// a target) via the same unmodified findOrCreatePersonalSkill/skill_targets
-// path any other learner-initiated skill-add already uses. Skill choices
-// come from listLibrarySkills (src/lib/skillLibrary.js) -- the same active,
-// public-or-own-private library search every learner-facing "Find skill"
-// flow already uses, rather than the platform-admin-only listAllLibrarySkills
+// Skill (+ optional target level/date) picker for the "Assign skill" bulk
+// action on the Users tab's learner roster (EmployerLearnersPanel) -- used
+// to be its own top-level "Suggest skills" tab with its own copy of the
+// learner picker; folded into a modal opened from a selection made on that
+// one roster instead, mirroring AssignTrainingModal's shape exactly.
+// Suggesting never creates or modifies anyone's actual skills/skill_targets
+// rows by itself -- suggest_skill_to_employer_members only creates an
+// employer_skill_suggestions row; the learner still has to click "Add to my
+// skills" on their own /actions page (adoptSkillSuggestion) to create the
+// real skill (and, if they choose, a target) via the same unmodified
+// findOrCreatePersonalSkill/skill_targets path any other learner-initiated
+// skill-add already uses. Skill choices come from listLibrarySkills
+// (src/lib/skillLibrary.js) -- the same active, public-or-own-private
+// library search every learner-facing "Find skill" flow already uses,
+// rather than the platform-admin-only listAllLibrarySkills
 // (src/lib/admin/skills.js), which surfaces inactive/moderated entries and
-// pulls in owner-identity fields that have no place in this picker. Member
-// selection reuses the same useRowSelection/SelectionTh/BulkActionBar
-// primitives as the Assign training tab above, for a consistent picker feel.
-function EmployerSuggestSkillsPanel({ employer, searchParams, setSearchParams }) {
+// pulls in owner-identity fields that have no place in this picker.
+function AssignSkillModal({ employer, members, onClose, onAssigned }) {
   const [librarySkills, setLibrarySkills] = useState([])
-  const [members, setMembers] = useState([])
-  const [suggestions, setSuggestions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -1375,8 +1396,208 @@ function EmployerSuggestSkillsPanel({ employer, searchParams, setSearchParams })
   const [targetLevel, setTargetLevel] = useState('')
   const [targetDate, setTargetDate] = useState('')
   const [comments, setComments] = useState('')
-  const [suggesting, setSuggesting] = useState(false)
-  const [suggestResult, setSuggestResult] = useState(null)
+  const [assigning, setAssigning] = useState(false)
+
+  useEffect(() => {
+    listLibrarySkills()
+      .then(setLibrarySkills)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const skillMatches = useMemo(() => {
+    const q = skillQuery.trim().toLowerCase()
+    if (!q) return []
+    return librarySkills.filter((s) => s.name.toLowerCase().includes(q)).slice(0, 20)
+  }, [librarySkills, skillQuery])
+
+  function chooseSkill(skill) {
+    setSelectedSkill(skill)
+    setSkillQuery(skill.name)
+  }
+
+  function clearSkill() {
+    setSelectedSkill(null)
+    setSkillQuery('')
+  }
+
+  async function handleAssign(e) {
+    e.preventDefault()
+    if (!selectedSkill) return
+    if (targetLevel && !targetDate) {
+      setError('A target date is required when a target level is set.')
+      return
+    }
+    setAssigning(true)
+    setError(null)
+    try {
+      const requestedIds = members.map((m) => m.user_id)
+      const inserted = await suggestSkillToEmployerMembers(
+        employer.id,
+        selectedSkill.id,
+        selectedSkill.name,
+        requestedIds,
+        {
+          targetLevel: targetLevel ? Number(targetLevel) : null,
+          targetDate: targetDate || null,
+          comments: comments.trim() || null,
+        }
+      )
+      const insertedIds = new Set(inserted.map((row) => row.learner_id))
+      // Everyone passed in here already cleared the roster's own "active"
+      // filter -- the only reason the RPC would still skip one is an
+      // existing live ('suggested'/'adopted') suggestion for this skill.
+      const skippedEmails = requestedIds
+        .filter((id) => !insertedIds.has(id))
+        .map((id) => members.find((m) => m.user_id === id)?.email || id)
+      onAssigned({ kind: 'skill', count: inserted.length, skippedEmails })
+    } catch (err) {
+      setError(err.message)
+      setAssigning(false)
+    }
+  }
+
+  return (
+    <AccessibleDialog
+      labelledBy="assign-skill-dialog-title"
+      onClose={assigning ? undefined : onClose}
+      closeOnBackdrop={!assigning}
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+      <h2 id="assign-skill-dialog-title" className="font-display text-xl text-ink mb-1">Assign skill</h2>
+      <p className="text-sm text-secondary mb-4">
+        Suggest a skill (and optionally a target level/date) to {members.length} selected learner{members.length === 1 ? '' : 's'}.
+        They'll see it on their Actions page and decide whether to add it to their own profile -- this doesn't
+        touch their skills automatically.
+      </p>
+
+      <MutationFeedback status="error" message={error} size="xs" className="mb-3" />
+
+      {loading ? (
+        <p className="text-sm text-secondary">Loading the skill library…</p>
+      ) : (
+        <form onSubmit={handleAssign} className="space-y-3">
+          <div className="relative">
+            <label className="block text-xs text-secondary mb-1" htmlFor="employerAssignSkill">
+              Skill
+            </label>
+            <input
+              id="employerAssignSkill"
+              value={skillQuery}
+              onChange={(e) => {
+                setSkillQuery(e.target.value)
+                if (selectedSkill) setSelectedSkill(null)
+              }}
+              placeholder="Search the skill library…"
+              autoComplete="off"
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+            />
+            {selectedSkill && (
+              <button
+                type="button"
+                onClick={clearSkill}
+                className="mt-1 text-xs text-secondary hover:text-ink hover:underline"
+              >
+                Change
+              </button>
+            )}
+            {!selectedSkill && skillQuery.trim() && (
+              <div className="absolute z-10 mt-1 w-full bg-card border border-hairline rounded-md shadow-sm max-h-56 overflow-y-auto">
+                {skillMatches.length === 0 ? (
+                  <p className="px-3 py-2 text-xs text-secondary">No matching skills.</p>
+                ) : (
+                  skillMatches.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => chooseSkill(s)}
+                      className="block w-full text-left px-3 py-2 text-sm text-ink hover:bg-paper"
+                    >
+                      {s.name}
+                      {s.category && <span className="text-xs text-secondary ml-1.5">({s.category})</span>}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <div>
+              <label className="block text-xs text-secondary mb-1" htmlFor="employerAssignLevel">
+                Target level (optional)
+              </label>
+              <select
+                id="employerAssignLevel"
+                value={targetLevel}
+                onChange={(e) => setTargetLevel(e.target.value)}
+                className="rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              >
+                <option value="">No specific level</option>
+                {LEVELS.map((l) => (
+                  <option key={l} value={l}>{LEVEL_LABELS[l]}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-secondary mb-1" htmlFor="employerAssignDate">
+                Target date {targetLevel ? '' : '(optional)'}
+              </label>
+              <input
+                id="employerAssignDate"
+                type="date"
+                value={targetDate}
+                onChange={(e) => setTargetDate(e.target.value)}
+                className="rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-secondary mb-1" htmlFor="employerAssignComments">
+              Why this matters (optional)
+            </label>
+            <textarea
+              id="employerAssignComments"
+              rows={2}
+              value={comments}
+              onChange={(e) => setComments(e.target.value)}
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={assigning}
+              className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!selectedSkill || assigning}
+              className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+            >
+              {assigning ? 'Assigning…' : `Assign to ${members.length}`}
+            </button>
+          </div>
+        </form>
+      )}
+    </AccessibleDialog>
+  )
+}
+
+// Read-only "suggested so far" roster -- initiating a skill assignment
+// moved to AssignSkillModal (triggered from EmployerLearnersPanel's own
+// selection on the Users tab above), this just keeps the history visible
+// somewhere now that it no longer has its own tab.
+function EmployerSkillAssignmentsHistory({ employer, searchParams, setSearchParams }) {
+  const [members, setMembers] = useState([])
+  const [suggestions, setSuggestions] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     load()
@@ -1386,12 +1607,10 @@ function EmployerSuggestSkillsPanel({ employer, searchParams, setSearchParams })
     setLoading(true)
     setError(null)
     try {
-      const [skillsData, membersData, suggestionsData] = await Promise.all([
-        listLibrarySkills(),
+      const [membersData, suggestionsData] = await Promise.all([
         listEmployerMembers(employer.id),
         listEmployerSkillSuggestions(employer.id),
       ])
-      setLibrarySkills(skillsData)
       setMembers(membersData)
       setSuggestions(suggestionsData)
     } catch (err) {
@@ -1401,42 +1620,14 @@ function EmployerSuggestSkillsPanel({ employer, searchParams, setSearchParams })
     }
   }
 
-  const activeMembers = useMemo(() => members.filter((m) => m.status === 'active'), [members])
   const emailByUserId = useMemo(() => new Map(members.map((m) => [m.user_id, m.email || m.user_id])), [members])
-
-  // Member picker's own search/sort/page -- this panel's "primary" table, so
-  // it uses the plain q/sort/dir/page/pageSize param names.
-  const [memberQuery, setMemberQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
-  const memberQ = memberQuery.trim().toLowerCase()
-  const filteredMembers = useMemo(
-    () => (memberQ ? activeMembers.filter((m) => (m.email || m.user_id || '').toLowerCase().includes(memberQ)) : activeMembers),
-    [activeMembers, memberQ]
-  )
-  const memberFiltersActive = memberQuery !== ''
-
-  function resetMemberFilters() {
-    writeUrlParams(searchParams, setSearchParams, { q: null, page: null })
-  }
-
-  const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
-    useSortedPage(filteredMembers, LEARNER_SORT_ACCESSORS, { urlSync: { searchParams, setSearchParams } })
-  const selection = useRowSelection(filteredMembers.map((m) => m.user_id))
-  const pageUserIds = pageItems.map((m) => m.user_id)
-  const selectedOnPage = pageUserIds.filter((id) => selection.selected.has(id)).length
-
-  const skillMatches = useMemo(() => {
-    const q = skillQuery.trim().toLowerCase()
-    if (!q) return []
-    return librarySkills.filter((s) => s.name.toLowerCase().includes(q)).slice(0, 20)
-  }, [librarySkills, skillQuery])
-
   const suggestionsWithEmail = useMemo(
     () => suggestions.map((s) => ({ ...s, learnerEmail: emailByUserId.get(s.learner_id) })),
     [suggestions, emailByUserId]
   )
-  // Suggestions roster's own search/sort/page -- prefixed (sq/sSort/...)
-  // since it's visible on screen at the same time as the member picker
-  // above, and would otherwise collide with its plain param names.
+  // Prefixed (sq/sSort/...) since this shares the Users tab's screen with
+  // EmployerLearnersPanel's own roster, which uses the plain q/sort/...
+  // names for its own "primary" table.
   const [suggestionQuery, setSuggestionQuery] = useUrlParam(searchParams, setSearchParams, 'sq', '', { resetParams: ['sPage'] })
   const sq = suggestionQuery.trim().toLowerCase()
   const filteredSuggestions = useMemo(
@@ -1470,329 +1661,76 @@ function EmployerSuggestSkillsPanel({ employer, searchParams, setSearchParams })
     urlSync: { searchParams, setSearchParams, paramNames: { sort: 'sSort', dir: 'sDir', page: 'sPage', pageSize: 'sPageSize' } },
   })
 
-  function chooseSkill(skill) {
-    setSelectedSkill(skill)
-    setSkillQuery(skill.name)
-  }
-
-  function clearSkill() {
-    setSelectedSkill(null)
-    setSkillQuery('')
-  }
-
-  async function handleSuggest() {
-    if (!selectedSkill || selection.selected.size === 0) return
-    if (targetLevel && !targetDate) {
-      setError('A target date is required when a target level is set.')
-      return
-    }
-    setSuggesting(true)
-    setSuggestResult(null)
-    setError(null)
-    try {
-      const requestedIds = Array.from(selection.selected)
-      const inserted = await suggestSkillToEmployerMembers(
-        employer.id,
-        selectedSkill.id,
-        selectedSkill.name,
-        requestedIds,
-        {
-          targetLevel: targetLevel ? Number(targetLevel) : null,
-          targetDate: targetDate || null,
-          comments: comments.trim() || null,
-        }
-      )
-      const insertedIds = new Set(inserted.map((row) => row.learner_id))
-      // The RPC silently skips anyone not an active member by the time it
-      // ran, or already has a live ('suggested'/'adopted') suggestion for
-      // this skill -- report that explicitly rather than claiming a uniform
-      // success.
-      const skippedEmails = requestedIds
-        .filter((id) => !insertedIds.has(id))
-        .map((id) => emailByUserId.get(id) || id)
-      setSuggestResult({ suggestedCount: inserted.length, skippedEmails })
-      selection.clear()
-      await load()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setSuggesting(false)
-    }
-  }
-
   return (
-    <section aria-labelledby="employer-suggest-skills-heading">
-      <div className="mb-5">
-        <h2 id="employer-suggest-skills-heading" className="font-display text-lg text-ink">Suggest skills</h2>
-        <p className="text-sm text-secondary mt-1 max-w-2xl">
-          Suggest a skill (and optionally a target level/date) for specific learners to develop. They'll see it on
-          their Actions page and decide whether to add it to their own profile -- suggesting doesn't touch their
-          skills automatically.
-        </p>
-      </div>
-
-      <MutationFeedback status="error" message={error} className="mb-3" />
-
+    <div>
+      <h3 id="employer-skill-history-heading" className="font-display text-base text-ink mb-3">Skills assigned so far</h3>
+      <MutationFeedback status="error" message={error} size="xs" className="mb-3" />
       {loading ? (
-        <p className="text-secondary">Loading…</p>
+        <p className="text-xs text-secondary">Loading…</p>
+      ) : suggestions.length === 0 ? (
+        <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
+          <p className="text-secondary">No skills assigned yet. Select learners above to assign one.</p>
+        </div>
       ) : (
-        <>
-          <div className="bg-card border border-hairline rounded-lg p-4 mb-4 space-y-3">
-            <div className="relative">
-              <label className="block text-xs text-secondary mb-1" htmlFor="employerSuggestSkill">
-                Skill
-              </label>
-              <input
-                id="employerSuggestSkill"
-                value={skillQuery}
-                onChange={(e) => {
-                  setSkillQuery(e.target.value)
-                  if (selectedSkill) setSelectedSkill(null)
-                }}
-                placeholder="Search the skill library…"
-                autoComplete="off"
-                className="w-full max-w-md rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-              />
-              {selectedSkill && (
-                <button
-                  type="button"
-                  onClick={clearSkill}
-                  className="ml-2 text-xs text-secondary hover:text-ink hover:underline"
-                >
-                  Change
-                </button>
-              )}
-              {!selectedSkill && skillQuery.trim() && (
-                <div className="absolute z-10 mt-1 w-full max-w-md bg-card border border-hairline rounded-md shadow-sm max-h-56 overflow-y-auto">
-                  {skillMatches.length === 0 ? (
-                    <p className="px-3 py-2 text-xs text-secondary">No matching skills.</p>
-                  ) : (
-                    skillMatches.map((s) => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => chooseSkill(s)}
-                        className="block w-full text-left px-3 py-2 text-sm text-ink hover:bg-paper"
-                      >
-                        {s.name}
-                        {s.category && <span className="text-xs text-secondary ml-1.5">({s.category})</span>}
-                      </button>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <div>
-                <label className="block text-xs text-secondary mb-1" htmlFor="employerSuggestLevel">
-                  Target level (optional)
-                </label>
-                <select
-                  id="employerSuggestLevel"
-                  value={targetLevel}
-                  onChange={(e) => setTargetLevel(e.target.value)}
-                  className="rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                >
-                  <option value="">No specific level</option>
-                  {LEVELS.map((l) => (
-                    <option key={l} value={l}>{LEVEL_LABELS[l]}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-secondary mb-1" htmlFor="employerSuggestDate">
-                  Target date {targetLevel ? '' : '(optional)'}
-                </label>
-                <input
-                  id="employerSuggestDate"
-                  type="date"
-                  value={targetDate}
-                  onChange={(e) => setTargetDate(e.target.value)}
-                  className="rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs text-secondary mb-1" htmlFor="employerSuggestComments">
-                Why this matters (optional)
-              </label>
-              <textarea
-                id="employerSuggestComments"
-                rows={2}
-                value={comments}
-                onChange={(e) => setComments(e.target.value)}
-                className="w-full max-w-md rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-              />
-            </div>
+        <div className="bg-card border border-hairline rounded-lg">
+          <div className="flex flex-wrap items-center gap-2 p-3">
+            <input
+              aria-label="Search suggestions"
+              type="text"
+              value={suggestionQuery}
+              onChange={(e) => setSuggestionQuery(e.target.value)}
+              placeholder="Search by skill or learner…"
+              className="flex-1 min-w-[220px] rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+            />
+            {suggestionFiltersActive && (
+              <button
+                type="button"
+                onClick={resetSuggestionFilters}
+                className="text-xs text-secondary hover:text-ink py-1.5 px-2 whitespace-nowrap"
+              >
+                Reset filters
+              </button>
+            )}
           </div>
-
-          {suggestResult && (
-            <div className="bg-card border border-hairline rounded-lg p-4 mb-4">
-              <MutationFeedback status="success" message={`${suggestResult.suggestedCount} learner(s) suggested this skill.`} size="xs" />
-              {suggestResult.skippedEmails.length > 0 && (
-                <p className="text-xs text-secondary mt-1">
-                  Skipped (not an active member, or already have a live suggestion for this skill): {suggestResult.skippedEmails.join(', ')}
-                </p>
-              )}
-            </div>
-          )}
-
-          {activeMembers.length === 0 ? (
-            <div className="text-center py-12 border border-dashed border-hairline rounded-lg mb-8">
-              <p className="text-secondary">No active learners to suggest skills to yet.</p>
-            </div>
+          {filteredSuggestions.length === 0 ? (
+            <p className="text-center text-xs text-secondary py-8">No suggestions match your search.</p>
           ) : (
-            <div className="bg-card border border-hairline rounded-lg mb-8">
-              <div className="flex flex-wrap items-center gap-2 p-3 pb-0">
-                <input
-                  aria-label="Search learners"
-                  type="text"
-                  value={memberQuery}
-                  onChange={(e) => setMemberQuery(e.target.value)}
-                  placeholder="Search by email…"
-                  className="flex-1 min-w-[220px] rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-                />
-                {memberFiltersActive && (
-                  <button
-                    type="button"
-                    onClick={resetMemberFilters}
-                    className="text-xs text-secondary hover:text-ink py-1.5 px-2 whitespace-nowrap"
-                  >
-                    Reset filters
-                  </button>
-                )}
-              </div>
-              <div className="p-3 pb-0">
-                <BulkActionBar
-                  count={selection.selected.size}
-                  onClear={selection.clear}
-                  busy={suggesting}
-                  actions={[
-                    {
-                      label: suggesting ? 'Suggesting…' : `Suggest skill (${selection.selected.size})`,
-                      disabled: !selectedSkill || selection.selected.size === 0,
-                      title: !selectedSkill ? 'Choose a skill above first' : undefined,
-                      onClick: handleSuggest,
-                    },
-                  ]}
-                />
-              </div>
-              {filteredMembers.length === 0 ? (
-                <p className="text-center text-xs text-secondary py-8">No learners match your search.</p>
-              ) : (
-              <>
+            <>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-hairline text-left text-secondary">
-                      <SelectionTh
-                        idPrefix="employer-suggest-members"
-                        checked={selection.isAllSelected(pageUserIds)}
-                        indeterminate={selectedOnPage > 0 && selectedOnPage < pageUserIds.length}
-                        onChange={() => selection.toggleAll(pageUserIds)}
-                      />
-                      <SortableTh label="Learner" columnKey="email" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                      <SortableTh label="Role" columnKey="role" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                      <SortableTh label="Skill" columnKey="skill" sortKey={sSortKey} sortDir={sSortDir} onSort={sToggleSort} />
+                      <SortableTh label="Learner" columnKey="learner" sortKey={sSortKey} sortDir={sSortDir} onSort={sToggleSort} />
+                      <th className="px-4 py-2 font-medium whitespace-nowrap">Target</th>
+                      <SortableTh label="Status" columnKey="status" sortKey={sSortKey} sortDir={sSortDir} onSort={sToggleSort} className="whitespace-nowrap" />
+                      <SortableTh label="Suggested" columnKey="created_at" sortKey={sSortKey} sortDir={sSortDir} onSort={sToggleSort} className="whitespace-nowrap" />
                     </tr>
                   </thead>
                   <tbody>
-                    {pageItems.map((m) => (
-                      <tr key={m.user_id} className="border-b border-hairline last:border-0">
-                        <td className="px-4 py-2">
-                          <input
-                            type="checkbox"
-                            checked={selection.selected.has(m.user_id)}
-                            onChange={() => selection.toggle(m.user_id)}
-                            aria-label={`Select ${m.email || m.user_id}`}
-                            className="rounded border-hairline accent-moss"
-                          />
+                    {sPageItems.map((s) => (
+                      <tr key={s.id} className="border-b border-hairline last:border-0">
+                        <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{s.skill_name}</td>
+                        <td className="px-4 py-2 text-secondary text-xs truncate max-w-[220px]">{s.learnerEmail || s.learner_id}</td>
+                        <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">
+                          {s.suggested_target_level ? LEVEL_LABELS[s.suggested_target_level] : '—'}
+                          {s.target_date ? ` by ${new Date(`${s.target_date}T00:00:00`).toLocaleDateString()}` : ''}
                         </td>
-                        <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{m.email || m.user_id}</td>
                         <td className="px-4 py-2 whitespace-nowrap">
-                          <StatusBadge label={m.role === 'admin' ? 'Admin' : 'Member'} tone="neutral" />
+                          <StatusBadge label={SKILL_SUGGESTION_STATUS_LABELS[s.status] || s.status} tone={s.status === 'dismissed' ? 'danger' : 'neutral'} />
                         </td>
+                        <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{new Date(s.created_at).toLocaleDateString()}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <TablePagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalItems={totalItems} idPrefix={`employer-suggest-members-${employer.id}`} />
-              </>
-              )}
-            </div>
+              <TablePagination page={sPage} setPage={sSetPage} pageSize={sPageSize} setPageSize={sSetPageSize} totalItems={sTotalItems} idPrefix={`employer-skill-suggestions-${employer.id}`} />
+            </>
           )}
-
-          <div>
-            <h3 className="font-display text-base text-ink mb-3">Suggested so far</h3>
-            {suggestions.length === 0 ? (
-              <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
-                <p className="text-secondary">No skills suggested yet.</p>
-              </div>
-            ) : (
-              <div className="bg-card border border-hairline rounded-lg">
-                <div className="flex flex-wrap items-center gap-2 p-3">
-                  <input
-                    aria-label="Search suggestions"
-                    type="text"
-                    value={suggestionQuery}
-                    onChange={(e) => setSuggestionQuery(e.target.value)}
-                    placeholder="Search by skill or learner…"
-                    className="flex-1 min-w-[220px] rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-                  />
-                  {suggestionFiltersActive && (
-                    <button
-                      type="button"
-                      onClick={resetSuggestionFilters}
-                      className="text-xs text-secondary hover:text-ink py-1.5 px-2 whitespace-nowrap"
-                    >
-                      Reset filters
-                    </button>
-                  )}
-                </div>
-                {filteredSuggestions.length === 0 ? (
-                  <p className="text-center text-xs text-secondary py-8">No suggestions match your search.</p>
-                ) : (
-                <>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-hairline text-left text-secondary">
-                        <SortableTh label="Skill" columnKey="skill" sortKey={sSortKey} sortDir={sSortDir} onSort={sToggleSort} />
-                        <SortableTh label="Learner" columnKey="learner" sortKey={sSortKey} sortDir={sSortDir} onSort={sToggleSort} />
-                        <th className="px-4 py-2 font-medium whitespace-nowrap">Target</th>
-                        <SortableTh label="Status" columnKey="status" sortKey={sSortKey} sortDir={sSortDir} onSort={sToggleSort} className="whitespace-nowrap" />
-                        <SortableTh label="Suggested" columnKey="created_at" sortKey={sSortKey} sortDir={sSortDir} onSort={sToggleSort} className="whitespace-nowrap" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sPageItems.map((s) => (
-                        <tr key={s.id} className="border-b border-hairline last:border-0">
-                          <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{s.skill_name}</td>
-                          <td className="px-4 py-2 text-secondary text-xs truncate max-w-[220px]">{s.learnerEmail || s.learner_id}</td>
-                          <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">
-                            {s.suggested_target_level ? LEVEL_LABELS[s.suggested_target_level] : '—'}
-                            {s.target_date ? ` by ${new Date(`${s.target_date}T00:00:00`).toLocaleDateString()}` : ''}
-                          </td>
-                          <td className="px-4 py-2 whitespace-nowrap">
-                            <StatusBadge label={SKILL_SUGGESTION_STATUS_LABELS[s.status] || s.status} tone={s.status === 'dismissed' ? 'danger' : 'neutral'} />
-                          </td>
-                          <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">{new Date(s.created_at).toLocaleDateString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <TablePagination page={sPage} setPage={sSetPage} pageSize={sPageSize} setPageSize={sSetPageSize} totalItems={sTotalItems} idPrefix={`employer-skill-suggestions-${employer.id}`} />
-                </>
-                )}
-              </div>
-            )}
-          </div>
-        </>
+        </div>
       )}
-    </section>
+    </div>
   )
 }
 
