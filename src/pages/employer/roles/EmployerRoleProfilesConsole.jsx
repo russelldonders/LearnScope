@@ -1,16 +1,32 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import MutationFeedback from '../../../components/MutationFeedback'
 import RoleProfileList from './RoleProfileList'
 import RoleProfileDetailsForm from './RoleProfileDetailsForm'
 import RoleProfileSkillsPanel from './RoleProfileSkillsPanel'
 import RoleProfileTrainingPanel from './RoleProfileTrainingPanel'
 import RoleProfileLinkedEmployeesPanel from './RoleProfileLinkedEmployeesPanel'
+import { useSortedPage, useUrlParam, writeUrlParams } from '../../../lib/useSortedPage'
 import {
   FIXTURE_ROLE_PROFILES,
   FIXTURE_SKILL_CATALOGUE,
   FIXTURE_COURSE_CATALOGUE,
   FIXTURE_LINKED_EMPLOYEES,
 } from './roleProfileFixtures'
+
+// Inert stand-ins for searchParams/setSearchParams so the search/sort/page
+// hooks below can always be called unconditionally (rules of hooks) even
+// when this renders without a real router-backed pair -- same reason the
+// other props above default to FIXTURE_* -- letting
+// EmployerRoleProfilesConsole.test.jsx keep rendering this with no
+// searchParams/setSearchParams at all (it falls back to page-1/no-filter,
+// same as every other list here does before a user interacts with it).
+const EMPTY_SEARCH_PARAMS = new URLSearchParams()
+function noopSetSearchParams() {}
+
+const ROLE_PROFILE_SORT_ACCESSORS = {
+  name: (p) => p.name?.toLowerCase() ?? '',
+  updatedAt: (p) => p.updatedAt ?? '',
+}
 
 // Genuinely props-in/callbacks-out: this composes the leaf panels below but
 // owns no business data of its own -- no role profile, skill, training or
@@ -34,6 +50,8 @@ export default function EmployerRoleProfilesConsole({
   linkedEmployees = FIXTURE_LINKED_EMPLOYEES,
   loading = false,
   error = null,
+  searchParams = EMPTY_SEARCH_PARAMS,
+  setSearchParams = noopSetSearchParams,
   onSelectRoleProfile,
   onSaveRoleProfile,
   onReplaceSkills,
@@ -55,9 +73,38 @@ export default function EmployerRoleProfilesConsole({
     wasLoading.current = loading
   }, [loading, error])
 
+  // Looked up from the full, unfiltered roleProfiles -- the detail panel
+  // stays on whatever was selected even if a search subsequently typed into
+  // the list below no longer matches it, rather than going blank.
   const selected = roleProfiles.find((p) => p.id === selectedRoleProfileId) ?? null
   const requiredSkills = selected?.requiredSkills ?? []
   const training = selected?.training ?? []
+
+  // The list on the left is this section's own primary roster -- searchable
+  // and paginated the same way every other console list here is (Users,
+  // Providers, ...), just rendered as RoleProfileList's cards instead of a
+  // <table> since a role profile's summary doesn't decompose into sortable
+  // columns the way a user/course/provider row does.
+  const [query, setQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
+  const q = query.trim().toLowerCase()
+  const filteredProfiles = useMemo(
+    () =>
+      q
+        ? roleProfiles.filter((p) => p.name?.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q))
+        : roleProfiles,
+    [roleProfiles, q]
+  )
+  const filtersActive = query !== ''
+
+  function resetFilters() {
+    writeUrlParams(searchParams, setSearchParams, { q: null, page: null })
+  }
+
+  const { page, setPage, pageSize, setPageSize, pageItems, totalItems } = useSortedPage(
+    filteredProfiles,
+    ROLE_PROFILE_SORT_ACCESSORS,
+    { defaultSortKey: 'name', urlSync: { searchParams, setSearchParams } }
+  )
 
   function handleSelect(id) {
     setCreating(false)
@@ -128,11 +175,21 @@ export default function EmployerRoleProfilesConsole({
   return (
     <div className="grid gap-6 md:grid-cols-[minmax(0,320px)_1fr]">
       <RoleProfileList
-        roleProfiles={roleProfiles}
+        roleProfiles={pageItems}
+        hasAnyRoleProfiles={roleProfiles.length > 0}
         selectedId={selectedRoleProfileId}
         loading={loading && roleProfiles.length === 0}
         onSelect={handleSelect}
         onCreate={() => setCreating(true)}
+        query={query}
+        onQueryChange={setQuery}
+        filtersActive={filtersActive}
+        onResetFilters={resetFilters}
+        page={page}
+        setPage={setPage}
+        pageSize={pageSize}
+        setPageSize={setPageSize}
+        totalItems={totalItems}
       />
 
       <div className="space-y-6">

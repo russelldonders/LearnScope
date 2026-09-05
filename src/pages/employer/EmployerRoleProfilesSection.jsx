@@ -22,7 +22,7 @@ function toConsoleProfile(profile, assignments) {
   }
 }
 
-export default function EmployerRoleProfilesSection({ employer, user }) {
+export default function EmployerRoleProfilesSection({ employer, user, searchParams, setSearchParams }) {
   const [profiles, setProfiles] = useState([])
   const [assignmentsByProfile, setAssignmentsByProfile] = useState({})
   const [members, setMembers] = useState([])
@@ -93,6 +93,8 @@ export default function EmployerRoleProfilesSection({ employer, user }) {
     <EmployerRoleProfilesConsole
       roleProfiles={roleProfiles}
       selectedRoleProfileId={selectedId}
+      searchParams={searchParams}
+      setSearchParams={setSearchParams}
       availableSkills={skills}
       availableCourses={courses.map((course) => ({ id: course.id, title: course.name }))}
       linkedEmployees={linkedEmployees}

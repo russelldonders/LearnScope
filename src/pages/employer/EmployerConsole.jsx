@@ -45,12 +45,15 @@ import EmployerOverviewPanel from './EmployerOverviewPanel'
 // all four so the tab bar below collapses them into a single "Provider"
 // dropdown (see ProviderSectionMenu) instead of four standalone tabs, since
 // they are provider-console functionality surfaced here, not employer
-// functionality. Skills alone stays providerOnly (hidden without an actual
-// organisation_members role, same as before this change) since its own
-// component has no read-only mode to fall back to; Training/Catalogues/
-// Resources stay visible even without one, same as the single combined
-// "Training" tab did before this split, falling back to their own read-only
-// views (below) for the rare employer admin who doesn't yet have the grant.
+// functionality -- styled identically to every other tab (border-moss when
+// active), the same as AdminLayout.jsx/ProviderConsole.jsx's own tabs, just
+// grouped under one extra affordance rather than four separate stops. Skills
+// alone stays providerOnly (hidden without an actual organisation_members
+// role, same as before this change) since its own component has no
+// read-only mode to fall back to; Training/Catalogues/Resources stay
+// visible even without one, same as the single combined "Training" tab did
+// before this split, falling back to their own read-only views (below) for
+// the rare employer admin who doesn't yet have the grant.
 const SECTIONS = [
   { key: 'overview', label: 'Overview' },
   { key: 'provider-training', label: 'Training', providerTab: true },
@@ -58,7 +61,7 @@ const SECTIONS = [
   { key: 'provider-catalogues', label: 'Catalogues', providerTab: true },
   { key: 'provider-resources', label: 'Resources', providerTab: true },
   { key: 'users', label: 'Users' },
-  { key: 'roles', label: 'Roles' },
+  { key: 'roles', label: 'Role profiles' },
   { key: 'providers', label: 'Providers' },
 ]
 
@@ -484,6 +487,8 @@ export default function EmployerConsole() {
                       key={selectedEmployer.id}
                       employer={selectedEmployer}
                       user={user}
+                      searchParams={searchParams}
+                      setSearchParams={setSearchParams}
                     />
                   )}
                   {currentSection === 'providers' && (
@@ -548,7 +553,7 @@ function ProviderSectionMenu({ items, currentSection, isActive, buttonRef, hrefF
         onClick={() => setOpen((v) => !v)}
         onKeyDown={onKeyDown}
         className={`flex items-center gap-1 text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
-          isActive ? 'border-sky-600 text-ink font-medium' : 'border-transparent text-secondary hover:text-ink'
+          isActive ? 'border-moss text-ink font-medium' : 'border-transparent text-secondary hover:text-ink'
         }`}
       >
         {activeItem ? `Provider: ${activeItem.label}` : 'Provider'}
