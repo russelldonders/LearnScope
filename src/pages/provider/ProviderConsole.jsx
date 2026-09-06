@@ -61,11 +61,6 @@ const CATALOGUE_SORT_ACCESSORS = {
   description: (c) => c.description?.toLowerCase() ?? '',
 }
 
-// Mirrors the single-delete confirmation's own published-count warning
-// (see ProviderCataloguesSection's deleteTarget dialog) but built from the
-// courseCount field listProviderCatalogues already attaches to each row,
-// rather than the deleteTargetPublishedCount state that dialog never
-// actually populates.
 function buildBulkCatalogueDeleteMessage(targets) {
   const label = targets.length === 1 ? 'catalogue' : 'catalogues'
   const withCourses = targets.filter((c) => (c.courseCount ?? 0) > 0)
@@ -393,9 +388,6 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate, rea
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
-  const [deleteTarget, setDeleteTarget] = useState(null)
-  const [deleteTargetPublishedCount] = useState(0)
-  const [deleting, setDeleting] = useState(false)
   const [bulkDeleteTargets, setBulkDeleteTargets] = useState(null)
   const [bulkDeleting, setBulkDeleting] = useState(false)
   // Search-and-link widget for offering another provider's existing
@@ -500,20 +492,6 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate, rea
       setError(err.message)
     } finally {
       setUnlinking(false)
-    }
-  }
-
-  async function handleDelete() {
-    setDeleting(true)
-    setError(null)
-    try {
-      await deleteProviderCatalogue(deleteTarget.id)
-      setDeleteTarget(null)
-      await load()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setDeleting(false)
     }
   }
 
@@ -768,23 +746,6 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate, rea
           onConfirm={handleUnlink}
           onCancel={() => setUnlinkTarget(null)}
           confirming={unlinking}
-        />
-      )}
-
-      {deleteTarget && (
-        <ConfirmDialog
-          message={
-            deleteTargetPublishedCount > 0
-              ? `Delete the "${deleteTarget.name}" catalogue? ${deleteTargetPublishedCount} currently live ${
-                  deleteTargetPublishedCount === 1 ? 'course is' : 'courses are'
-                } published there -- ${
-                  deleteTargetPublishedCount === 1 ? 'it' : 'they'
-                } will disappear from it, and may become invisible to learners entirely if this was its only destination.`
-              : `Delete the "${deleteTarget.name}" catalogue? Courses currently published there will no longer appear in it.`
-          }
-          onConfirm={handleDelete}
-          onCancel={() => setDeleteTarget(null)}
-          confirming={deleting}
         />
       )}
 
