@@ -25,6 +25,8 @@ import PageContent from './PageContent'
 import { useRowSelection, useSortedPage } from '../lib/useSortedPage'
 import { BulkActionBar, SelectionTh, SortableTh, TablePagination } from './TableControls'
 import { RESOURCE_TYPE_LABELS } from '../lib/statusLabels'
+import { addProviderCatalogueResource } from '../lib/admin/providerCatalogues'
+import BulkAssignToCatalogueDialog from './BulkAssignToCatalogueDialog'
 
 const STATUS_LABELS = { draft: 'Draft', inactive: 'Previous version', published: 'Published' }
 
@@ -73,6 +75,7 @@ export default function ResourceLibrarySection({ organisationId, userId, readOnl
   const [editingPage, setEditingPage] = useState(null)
   const [query, setQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
+  const [bulkPush, setBulkPush] = useState(null)
   const fileInputRef = useRef(null)
 
   const filteredResources = useMemo(() => {
@@ -89,6 +92,18 @@ export default function ResourceLibrarySection({ organisationId, userId, readOnl
   const selection = useRowSelection(filteredResources.map((r) => r.id))
   const resourcePageIds = pageItems.map((r) => r.id)
   const resourcesSelectedOnPage = resourcePageIds.filter((id) => selection.selected.has(id)).length
+  // Only a published, currently-published version can be added to a
+  // catalogue (matches ProviderCatalogueDetail's own "available" resource
+  // picker) -- mirrors ProviderTrainingSection's identical eligibility split
+  // for its own "Push to catalogue" bulk action.
+  const selectedEligibleResources = useMemo(
+    () => resources.filter((r) => selection.selected.has(r.id) && r.status === 'published' && r.is_current_published),
+    [resources, selection.selected]
+  )
+  const selectedIneligibleResources = useMemo(
+    () => resources.filter((r) => selection.selected.has(r.id) && !(r.status === 'published' && r.is_current_published)),
+    [resources, selection.selected]
+  )
 
   useEffect(() => {
     load()
@@ -476,6 +491,19 @@ export default function ResourceLibrarySection({ organisationId, userId, readOnl
                 busy={bulkDeleting}
                 actions={[
                   {
+                    label: `Push to catalogue (${selectedEligibleResources.length})`,
+                    disabled: selectedEligibleResources.length === 0,
+                    title:
+                      selectedEligibleResources.length === 0
+                        ? 'None of the selected resources is a currently published version'
+                        : undefined,
+                    onClick: () =>
+                      setBulkPush({
+                        resources: selectedEligibleResources,
+                        excludedResources: selectedIneligibleResources,
+                      }),
+                  },
+                  {
                     label: `Remove selected (${selection.selected.size})`,
                     variant: 'danger',
                     onClick: () => setPendingBulkDelete(resources.filter((r) => selection.selected.has(r.id))),
@@ -551,6 +579,24 @@ export default function ResourceLibrarySection({ organisationId, userId, readOnl
           confirming={bulkDeleting}
           onConfirm={handleBulkDelete}
           onCancel={() => setPendingBulkDelete(null)}
+        />
+      )}
+
+      {bulkPush && (
+        <BulkAssignToCatalogueDialog
+          organisationId={organisationId}
+          items={bulkPush.resources}
+          excludedItems={bulkPush.excludedResources}
+          excludedReason="a currently published version"
+          itemLabel="resource"
+          getItemLabel={(resource) => resource.title}
+          description="Choose one catalogue to add the selected resources to."
+          onAssign={(catalogueId, resource) => addProviderCatalogueResource(catalogueId, resource.id, userId)}
+          onClose={() => setBulkPush(null)}
+          onDone={(succeededIds, hadFailures) => {
+            if (hadFailures) selection.clearIds(succeededIds)
+            else selection.clear()
+          }}
         />
       )}
 
