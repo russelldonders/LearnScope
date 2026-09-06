@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import ConfirmDialog from '../components/ConfirmDialog'
 import ConnectionsTeams from '../components/ConnectionsTeams'
 import { LEVEL_LABELS } from '../lib/levels'
+import { handleTabListKeyDown } from '../lib/tabsKeyboard'
 import {
   listMyPeerRatings,
   listConnections,
@@ -18,6 +19,9 @@ import {
 
 export default function Connections() {
   const { user } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeSection = searchParams.get('section') === 'teams' ? 'teams' : 'people'
+  const tabRefs = useRef({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [ratings, setRatings] = useState([])
@@ -144,13 +148,50 @@ export default function Connections() {
     }
   }
 
+  function selectSection(section) {
+    const next = new URLSearchParams(searchParams)
+    if (section === 'people') next.delete('section')
+    else next.set('section', section)
+    setSearchParams(next)
+  }
+
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
 
-      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8 space-y-10">
-        <h1 className="sr-only">Connections</h1>
-        <ConnectionsTeams connections={connections.filter((connection) => allConnectionIds.includes(connection.id))} />
+      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
+        <h1 className="font-display text-xl text-ink mb-1">Connections</h1>
+        <p className="text-sm text-secondary mb-6">Stay connected with people you trust, and organise learning together in teams.</p>
+
+        <div role="tablist" aria-label="Connections sections" className="flex items-center gap-1 mb-8 border-b border-hairline">
+          {[
+            { key: 'people', label: 'People' },
+            { key: 'teams', label: 'Teams' },
+          ].map((section) => (
+            <button key={section.key} type="button" role="tab"
+              ref={(element) => { tabRefs.current[section.key] = element }}
+              id={`connections-tab-${section.key}`}
+              aria-selected={activeSection === section.key}
+              aria-controls={`connections-panel-${section.key}`}
+              tabIndex={activeSection === section.key ? 0 : -1}
+              onClick={() => selectSection(section.key)}
+              onKeyDown={(event) => handleTabListKeyDown(event, {
+                keys: ['people', 'teams'], activeKey: activeSection, refs: tabRefs, onChange: selectSection,
+              })}
+              className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${activeSection === section.key
+                ? 'border-moss text-ink font-medium'
+                : 'border-transparent text-secondary hover:text-ink'}`}>
+              {section.label}
+            </button>
+          ))}
+        </div>
+
+        <div id={`connections-panel-${activeSection}`} role="tabpanel"
+          aria-labelledby={`connections-tab-${activeSection}`} tabIndex={0}>
+        {activeSection === 'teams' && (
+          <ConnectionsTeams connections={connections.filter((connection) => allConnectionIds.includes(connection.id))} />
+        )}
+        {activeSection === 'people' && <div className="space-y-10">
         <div>
           <h2 className="font-display text-xl text-ink mb-6">Your connections</h2>
 
@@ -271,6 +312,8 @@ export default function Connections() {
             </div>
           </div>
         )}
+        </div>}
+        </div>
       </main>
 
       {pendingRevoke && (
