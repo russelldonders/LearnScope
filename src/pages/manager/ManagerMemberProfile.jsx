@@ -9,8 +9,8 @@ import { RateSkillDialog } from './ManagerTeamPanel'
 
 const actionClass = 'rounded-md border border-hairline px-3 py-2 text-sm font-medium text-ink hover:bg-paper focus-visible:outline-2 focus-visible:outline-moss'
 
-export default function ManagerMemberProfile({ member, onBack, onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget }) {
-  const [skillId, setSkillId] = useState(null)
+export default function ManagerMemberProfile({ member, initialSkillId = null, onBack, onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget }) {
+  const [skillId, setSkillId] = useState(initialSkillId)
   const skill = member.sharedSkills?.find((item) => item.id === skillId)
   return <div className="space-y-6">
     <nav aria-label="Team profile navigation" className="flex flex-wrap gap-3 text-sm">

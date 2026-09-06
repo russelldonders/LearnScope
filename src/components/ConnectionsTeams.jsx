@@ -122,7 +122,7 @@ export default function ConnectionsTeams({ connections = [] }) {
     {teams.length > 0 && <div className="max-w-lg space-y-4">
       <div className="flex flex-wrap items-end gap-3"><label className="flex-1 min-w-48 text-sm text-ink">Team you lead<select disabled={busy} value={teamId} onChange={(e) => { setTeamId(e.target.value); setNotice(''); setError(null) }} className={fieldClass}>
         {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
-      </select></label><Link to={`/manager?section=team&team=${encodeURIComponent(teamId)}`} className={`${buttonClass} inline-block`}>View team</Link></div>
+      </select></label><Link to={`/manager?section=skills&team=${encodeURIComponent(teamId)}`} className={`${buttonClass} inline-block`}>Manage skills</Link></div>
       {connections.length > 0 ? <form onSubmit={handleInvite} className="space-y-3">
         <label className="block text-sm text-ink">Connection to invite<select value={connectionId} disabled={busy || membersLoading || membersError} onChange={(e) => setConnectionId(e.target.value)} className={fieldClass}>
           <option value="">{membersLoading ? 'Loading team members…' : 'Choose a connection'}</option>
