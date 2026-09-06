@@ -49,6 +49,7 @@ export default function ManagerTeamSharingPanel({
   error = null,
   onSave,
   onLeaveTeam,
+  readOnly = false,
 }) {
   const [editOpen, setEditOpen] = useState(false)
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false)
@@ -82,7 +83,6 @@ export default function ManagerTeamSharingPanel({
 
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
-      <h3 className="font-display text-lg text-ink mb-1">{membership.teamName}</h3>
       <p className="text-sm text-secondary mb-4">
         Managed by {membership.managerName} · member since {formatAbsoluteDate(membership.joinedAt)}
       </p>
@@ -142,13 +142,15 @@ export default function ManagerTeamSharingPanel({
             : `Sharing ${sharedSkills.length} skill${sharedSkills.length === 1 ? '' : 's'}`}
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setEditOpen(true)}
-            className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper whitespace-nowrap"
-          >
-            {sharedSkills.length === 0 ? 'Choose skills to share' : 'Edit shared skills'}
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => setEditOpen(true)}
+              className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper whitespace-nowrap"
+            >
+              {sharedSkills.length === 0 ? 'Choose skills to share' : 'Edit shared skills'}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setLeaveConfirmOpen(true)}

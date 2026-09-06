@@ -33,7 +33,7 @@ const SORT_ACCESSORS = {
 // component never fetches or writes anything itself outside of those.
 export default function ManagerTeamPanel({
   members = [], loading = false, error = null, onInvite, onInviteConnection, connections = [], teamMemberships = [],
-  onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget,
+  onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget, readOnly = false,
 }) {
   const [inviteOpen, setInviteOpen] = useState(false)
   const [rateTarget, setRateTarget] = useState(null)
@@ -53,13 +53,15 @@ export default function ManagerTeamPanel({
           Open a team member’s skills profile, then choose a skill to review their progress, rate it or set a target.
           Profiles show the skills they’ve shared with you.
         </p>
-        <button
-          type="button"
-          onClick={() => setInviteOpen(true)}
-          className="shrink-0 rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
-        >
-          Invite to team
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => setInviteOpen(true)}
+            className="shrink-0 rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+          >
+            Invite to team
+          </button>
+        )}
       </div>
 
       <MutationFeedback status="error" message={error} />

@@ -6,6 +6,22 @@ export async function listMyLedManagerTeams() {
   return data ?? []
 }
 
+export async function listMyArchivedManagerTeams() {
+  const { data, error } = await supabase.rpc('list_my_archived_manager_teams')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function archiveManagerTeam(teamId) {
+  const { error } = await supabase.rpc('archive_manager_team', { p_team_id: teamId })
+  if (error) throw error
+}
+
+export async function restoreManagerTeam(teamId) {
+  const { error } = await supabase.rpc('restore_manager_team', { p_team_id: teamId })
+  if (error) throw error
+}
+
 export async function transferManagerTeamLeadership(teamId, membershipId) {
   const { error } = await supabase.rpc('transfer_manager_team_leadership', {
     p_team_id: teamId, p_membership_id: membershipId,
@@ -71,6 +87,7 @@ export async function listMyManagerTeamRelationships() {
     invitedAt: row.invited_at,
     joinedAt: row.joined_at,
     sharedSkillIds: row.shared_skill_ids ?? [],
+    teamStatus: row.team_status,
   }))
 }
 

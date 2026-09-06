@@ -15,6 +15,7 @@ export default function ManagerCollaborationPanel({
   loading = false,
   error = null,
   onCreateRecord,
+  readOnly = false,
 }) {
   const [formOpen, setFormOpen] = useState(false)
 
@@ -24,15 +25,17 @@ export default function ManagerCollaborationPanel({
         <p className="text-sm text-secondary">
           Notes, goals and other collaboration records you've logged with your team.
         </p>
-        <button
-          type="button"
-          onClick={() => setFormOpen(true)}
-          disabled={teamOptions.length === 0}
-          title={teamOptions.length === 0 ? 'Add a team member first' : undefined}
-          className="shrink-0 rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-50"
-        >
-          New record
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => setFormOpen(true)}
+            disabled={teamOptions.length === 0}
+            title={teamOptions.length === 0 ? 'Add a team member first' : undefined}
+            className="shrink-0 rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-50"
+          >
+            New record
+          </button>
+        )}
       </div>
 
       <MutationFeedback status="error" message={error} />

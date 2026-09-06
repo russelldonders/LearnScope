@@ -168,13 +168,6 @@ export default function AppHeader({ hideNavLinks = false }) {
                       {location.pathname.startsWith('/employer') ? 'Switch to learner mode' : 'Employer console'}
                     </Link>
                   )}
-                  <Link
-                    to="/connections?section=teams"
-                    onClick={() => setMenuOpen(false)}
-                    className="block px-4 py-2 text-sm text-ink hover:bg-paper"
-                  >
-                    Your teams
-                  </Link>
                   <div className="my-1 border-t border-hairline" />
                   <button
                     type="button"
