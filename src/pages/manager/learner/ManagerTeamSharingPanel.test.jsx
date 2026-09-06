@@ -33,7 +33,7 @@ describe('ManagerTeamSharingPanel', () => {
     expect(screen.getByText('3 people on this team')).toBeInTheDocument()
     expect(screen.getByText('Jordan Ellis')).toBeInTheDocument()
     expect(screen.getByText('Priya Nair')).toBeInTheDocument()
-    expect(screen.getByText('· manager')).toBeInTheDocument()
+    expect(screen.getByText('· team leader')).toBeInTheDocument()
   })
 
   it('shows nothing team-roster-related when no roster is provided', () => {

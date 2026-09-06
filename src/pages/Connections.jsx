@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import ConfirmDialog from '../components/ConfirmDialog'
+import ConnectionsTeams from '../components/ConnectionsTeams'
 import { LEVEL_LABELS } from '../lib/levels'
 import {
   listMyPeerRatings,
@@ -149,6 +150,7 @@ export default function Connections() {
 
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8 space-y-10">
         <h1 className="sr-only">Connections</h1>
+        <ConnectionsTeams connections={connections.filter((connection) => allConnectionIds.includes(connection.id))} />
         <div>
           <h2 className="font-display text-xl text-ink mb-6">Your connections</h2>
 

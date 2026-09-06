@@ -18650,3 +18650,321 @@ revoke all on function public.get_manager_team_skill_detail(uuid, uuid),
   public.set_manager_team_skill_target(uuid, uuid, int, date, text) from public, anon;
 grant execute on function public.get_manager_team_skill_detail(uuid, uuid),
   public.set_manager_team_skill_target(uuid, uuid, int, date, text) to authenticated;
+
+
+
+-- =============================================================================
+-- 20260905170000_course_catalogue_version_group_default.sql
+-- =============================================================================
+
+-- course_catalogue.version_group_id (0107) was made not-null but never got
+-- an insert-time default -- every existing row was backfilled at the time
+-- (version_group_id = id), but createProviderCourse/createPlatformCourse
+-- (src/lib/admin/catalogue.js) never set it themselves, so creating a new
+-- course fails with "null value in column version_group_id violates
+-- not-null constraint". content_resources hit the identical gap during its
+-- own versioning migration (20260831130759) and fixed it with a BEFORE
+-- INSERT trigger defaulting version_group_id to the row's own id -- this
+-- mirrors that.
+create or replace function initialise_course_version_group()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  new.version_group_id := coalesce(new.version_group_id, new.id);
+  return new;
+end;
+$$;
+create trigger initialise_course_version_group_trigger
+  before insert on course_catalogue
+  for each row execute procedure initialise_course_version_group();
+
+
+
+-- =============================================================================
+-- 20260905180000_catalogue_links_and_visibility.sql
+-- =============================================================================
+
+-- Two independent additions to the provider-catalogue model (0111/0112):
+--
+-- 1. catalogue_links: a provider can "link" another provider's existing
+--    catalogue to offer it alongside their own. Deliberately a plain
+--    reference/association only, mirroring how employer_provider_links
+--    (20260902090000-era) already links an employer to a provider org --
+--    linking grants no cross-org write access at all: only the owning
+--    catalogue's own admins/approvers (catalogue_approvers) can add courses
+--    to it or manage it, and submit_course_for_publication's own
+--    organisation_id/is_global check is untouched, so a course still can't
+--    be submitted into a catalogue it doesn't already own. Unilateral, no
+--    consent step -- catalogues are already fully readable by any
+--    authenticated user (0111's "Authenticated users can view catalogues"),
+--    so this doesn't expose anything that wasn't already visible.
+--
+-- 2. catalogues.learner_visible: per-catalogue backend-only vs learner-
+--    facing flag. Doesn't introduce a new public route -- a learner-facing
+--    catalogue's courses simply become eligible to appear on its owning
+--    org's existing public profile page (get_provider_profile, 0090/0107),
+--    and on the profile of any org that has linked it ("offer alongside
+--    their own"). A catalogue defaults to backend-only (false): today's
+--    get_provider_profile shows every approved+current course regardless of
+--    catalogue, so this migration also tightens that to only courses
+--    actually published to a learner-visible catalogue -- see the
+--    function's own comment below for why that's the correct behaviour
+--    change to bundle with this rather than a separate migration.
+
+alter table catalogues add column learner_visible boolean not null default false;
+create table catalogue_links (
+  id uuid primary key default gen_random_uuid(),
+  catalogue_id uuid not null references catalogues(id) on delete cascade,
+  organisation_id uuid not null references organisations(id) on delete cascade,
+  linked_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique (catalogue_id, organisation_id)
+);
+create index catalogue_links_organisation_idx on catalogue_links (organisation_id);
+create index catalogue_links_catalogue_idx on catalogue_links (catalogue_id);
+-- Guards what a plain insert policy can't express cleanly: never the Global
+-- catalogue (already universally available -- linking it would just be
+-- confusing noise) and never an org linking its own catalogue to itself
+-- (that's just "own", not "linked").
+create or replace function guard_catalogue_link()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_catalogue catalogues%rowtype;
+begin
+  select * into v_catalogue from catalogues where id = new.catalogue_id;
+  if v_catalogue.is_global then
+    raise exception 'The Global catalogue is already available to everyone and cannot be linked';
+  end if;
+  if v_catalogue.organisation_id = new.organisation_id then
+    raise exception 'An organisation cannot link its own catalogue';
+  end if;
+  return new;
+end;
+$$;
+create trigger guard_catalogue_link_trigger
+  before insert on catalogue_links
+  for each row execute procedure guard_catalogue_link();
+alter table catalogue_links enable row level security;
+create policy "Authenticated users can view catalogue links"
+  on catalogue_links for select
+  to authenticated
+  using (true);
+create policy "Org admins can link a catalogue to their own organisation"
+  on catalogue_links for insert
+  to authenticated
+  with check (
+    linked_by = (select auth.uid())
+    and is_org_admin(organisation_id, (select auth.uid()))
+  );
+create policy "Org admins can remove their own organisation's catalogue links"
+  on catalogue_links for delete
+  to authenticated
+  using (is_org_admin(organisation_id, (select auth.uid())));
+grant select, insert, delete on table catalogue_links to authenticated;
+-- Rewritten to gate visibility on learner_visible (see migration comment
+-- above) and to fold in courses reached via a linked catalogue -- each
+-- course's own `catalogues` array names which of this org's own/linked
+-- learner-visible catalogues actually carries it, so the profile page can
+-- show that without a dedicated per-catalogue browse page.
+create or replace function get_provider_profile(p_slug text)
+returns json
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select json_build_object(
+    'organisation', (
+      select json_build_object('id', o.id, 'name', o.name, 'about', o.about, 'logoUrl', o.logo_url, 'url', o.url)
+      from organisations o
+      where o.slug = p_slug and o.status = 'active' and o.public_profile_enabled = true
+    ),
+    'skills', (
+      select coalesce(json_agg(json_build_object(
+        'id', sl.id, 'name', sl.name, 'category', sl.category, 'description', sl.description
+      ) order by sl.name), '[]'::json)
+      from organisation_offered_skills oos
+      join skill_library sl on sl.id = oos.skill_library_id
+      join organisations o on o.id = oos.organisation_id
+      where o.slug = p_slug and o.status = 'active' and o.public_profile_enabled = true
+    ),
+    'courses', (
+      select coalesce(json_agg(entry.course_json order by entry.course_name), '[]'::json)
+      from (
+        -- This org's own approved courses, published to at least one of
+        -- its own learner-visible catalogues.
+        select cc.name as course_name, json_build_object(
+          'id', cc.id, 'name', cc.name, 'synopsis', cc.synopsis,
+          'courseType', cc.course_type, 'duration', cc.duration,
+          'imageUrl', cc.image_url, 'courseCode', cc.course_code,
+          'versionNumber', cc.version_number,
+          'skillEntries', (
+            select coalesce(json_agg(json_build_object(
+              'skillId', ccs.skill_library_id, 'skillName', sl2.name, 'level', ccs.level
+            )), '[]'::json)
+            from course_catalogue_skills ccs
+            join skill_library sl2 on sl2.id = ccs.skill_library_id
+            where ccs.course_catalogue_id = cc.id
+          ),
+          'tags', (
+            select coalesce(json_agg(json_build_object('id', t.id, 'name', t.name)), '[]'::json)
+            from course_catalogue_tags cct
+            join tags t on t.id = cct.tag_id
+            where cct.course_catalogue_id = cc.id
+          ),
+          'catalogues', (
+            select coalesce(json_agg(json_build_object('id', cat.id, 'name', cat.name) order by cat.name), '[]'::json)
+            from course_catalogue_publications ccp
+            join catalogues cat on cat.id = ccp.catalogue_id
+            where ccp.course_id = cc.id
+              and ccp.published_at is not null
+              and cat.learner_visible
+              and cat.organisation_id = cc.organisation_id
+          )
+        ) as course_json
+        from course_catalogue cc
+        join organisations o on o.id = cc.organisation_id
+        where o.slug = p_slug and o.status = 'active' and o.public_profile_enabled = true
+          and cc.status = 'approved' and cc.is_current_published
+          and exists (
+            select 1
+            from course_catalogue_publications ccp2
+            join catalogues cat2 on cat2.id = ccp2.catalogue_id
+            where ccp2.course_id = cc.id
+              and ccp2.published_at is not null
+              and cat2.learner_visible
+              and cat2.organisation_id = cc.organisation_id
+          )
+
+        -- union all, not union: json has no equality operator to dedupe
+        -- with, and a genuine duplicate here would need this org to have
+        -- linked two different catalogues that both happen to carry the
+        -- exact same course -- rare enough not to be worth casting every
+        -- json_build_object result to jsonb just to dedupe against it.
+        union all
+
+        -- Another provider's course, reached because this org has linked
+        -- one of that provider's own learner-visible catalogues -- "offer
+        -- alongside their own".
+        select cc3.name, json_build_object(
+          'id', cc3.id, 'name', cc3.name, 'synopsis', cc3.synopsis,
+          'courseType', cc3.course_type, 'duration', cc3.duration,
+          'imageUrl', cc3.image_url, 'courseCode', cc3.course_code,
+          'versionNumber', cc3.version_number,
+          'skillEntries', (
+            select coalesce(json_agg(json_build_object(
+              'skillId', ccs3.skill_library_id, 'skillName', sl3.name, 'level', ccs3.level
+            )), '[]'::json)
+            from course_catalogue_skills ccs3
+            join skill_library sl3 on sl3.id = ccs3.skill_library_id
+            where ccs3.course_catalogue_id = cc3.id
+          ),
+          'tags', (
+            select coalesce(json_agg(json_build_object('id', t3.id, 'name', t3.name)), '[]'::json)
+            from course_catalogue_tags cct3
+            join tags t3 on t3.id = cct3.tag_id
+            where cct3.course_catalogue_id = cc3.id
+          ),
+          'catalogues', json_build_array(json_build_object('id', linked_cat.id, 'name', linked_cat.name))
+        )
+        from organisations o4
+        join catalogue_links cl on cl.organisation_id = o4.id
+        join catalogues linked_cat on linked_cat.id = cl.catalogue_id and linked_cat.learner_visible
+        join course_catalogue_publications ccp3 on ccp3.catalogue_id = linked_cat.id and ccp3.published_at is not null
+        join course_catalogue cc3 on cc3.id = ccp3.course_id and cc3.status = 'approved' and cc3.is_current_published
+        where o4.slug = p_slug and o4.status = 'active' and o4.public_profile_enabled = true
+      ) entry
+    )
+  )
+$$;
+grant execute on function get_provider_profile(text) to anon, authenticated;
+
+
+
+-- =============================================================================
+-- 20260905190000_multiple_teams_and_team_leadership.sql
+-- =============================================================================
+
+-- Leadership is team-scoped. A workspace owner does not retain leadership
+-- after transferring a team. created_by remains the historical creator.
+create unique index manager_team_one_active_leader_idx
+  on public.manager_team_memberships(team_id) where role = 'manager' and status = 'active';
+
+create or replace function private.can_manage_manager_team(p_team_id uuid, p_user_id uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1 from public.manager_team_memberships m
+    join public.manager_teams t on t.id = m.team_id
+    where m.team_id = p_team_id and m.member_user_id = p_user_id
+      and m.role = 'manager' and m.status = 'active' and t.status = 'active'
+  );
+$$;
+
+create function public.list_my_led_manager_teams()
+returns setof public.manager_teams language sql stable security definer set search_path = '' as $$
+  select t.* from public.manager_teams t
+  where private.can_manage_manager_team(t.id, auth.uid())
+  order by t.created_at, t.id;
+$$;
+
+create function public.transfer_manager_team_leadership(p_team_id uuid, p_membership_id uuid)
+returns void language plpgsql security definer set search_path = '' as $$
+declare v_successor uuid;
+begin
+  if auth.uid() is null then raise exception 'Not authorised'; end if;
+  -- Serialize leadership changes before checking the current leader.
+  perform 1 from public.manager_teams where id = p_team_id for update;
+  if not private.can_manage_manager_team(p_team_id, auth.uid()) then raise exception 'Only the current team leader can transfer leadership'; end if;
+  select m.member_user_id into v_successor from public.manager_team_memberships m
+  where m.id = p_membership_id and m.team_id = p_team_id and m.role = 'member' and m.status = 'active'
+  for update;
+  if v_successor is null then raise exception 'Choose an active member of this team'; end if;
+  update public.manager_team_memberships set role = 'member'
+  where team_id = p_team_id and member_user_id = auth.uid() and role = 'manager' and status = 'active';
+  update public.manager_team_memberships set role = 'manager' where id = p_membership_id;
+  -- Existing consent names the old leader. Members explicitly share again.
+  delete from public.manager_team_shared_skills ss using public.manager_team_memberships m
+  where ss.membership_id = m.id and m.team_id = p_team_id;
+  update public.manager_teams set updated_at = now() where id = p_team_id;
+end;
+$$;
+
+create or replace function public.list_my_manager_team_relationships()
+returns table (id uuid, status text, team_id uuid, team_name text, manager_name text,
+  invited_at timestamptz, joined_at timestamptz, shared_skill_ids uuid[])
+language sql stable security definer set search_path = '' as $$
+  select m.id, m.status, t.id, t.name,
+    coalesce(nullif(trim(p.full_name), ''), 'Team leader'), m.invited_at, m.decided_at,
+    coalesce(array_agg(ss.skill_id order by ss.shared_at) filter (where ss.skill_id is not null), '{}')
+  from public.manager_team_memberships m
+  join public.manager_teams t on t.id = m.team_id
+  join public.manager_team_memberships leader on leader.team_id = t.id and leader.role = 'manager' and leader.status = 'active'
+  join public.profiles p on p.id = leader.member_user_id
+  left join public.manager_team_shared_skills ss on ss.membership_id = m.id
+  where m.member_user_id = auth.uid() and m.role = 'member'
+    and m.status in ('pending', 'active') and t.status = 'active'
+  group by m.id, t.id, p.full_name order by m.invited_at desc;
+$$;
+
+-- A member leaving concurrently with promotion must not leave a leaderless
+-- team. Lock before checking role; retain historical membership dates.
+create or replace function public.leave_manager_team(p_membership_id uuid)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  perform 1 from public.manager_team_memberships m where m.id = p_membership_id
+    and m.member_user_id = auth.uid() and m.role = 'member' and m.status = 'active' for update;
+  if not found then raise exception 'Active team membership not found'; end if;
+  delete from public.manager_team_shared_skills where membership_id = p_membership_id;
+  update public.manager_team_memberships set status = 'left', decided_at = now() where id = p_membership_id;
+end;
+$$;
+
+revoke all on function public.list_my_led_manager_teams(), public.transfer_manager_team_leadership(uuid, uuid) from public, anon;
+grant execute on function public.list_my_led_manager_teams(), public.transfer_manager_team_leadership(uuid, uuid) to authenticated;

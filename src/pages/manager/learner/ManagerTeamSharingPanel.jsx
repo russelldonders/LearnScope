@@ -105,7 +105,7 @@ export default function ManagerTeamSharingPanel({
                 <PersonAvatar name={person.name} avatarUrl={person.avatarUrl} size={6} />
                 <span className="text-sm text-ink">
                   {person.name}
-                  {person.role === 'manager' && <span className="text-secondary"> · manager</span>}
+                  {person.role === 'manager' && <span className="text-secondary"> · team leader</span>}
                 </span>
               </li>
             ))}

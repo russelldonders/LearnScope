@@ -45,6 +45,9 @@ export default function ManagerConsole({
   onLoadSkillAssessments,
   onLoadSkillDetail,
   onSetTarget,
+  teamOptions: ledTeamOptions = [],
+  selectedTeamId,
+  onSelectTeam,
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const activeSection = searchParams.get('section') ?? 'overview'
@@ -72,6 +75,13 @@ export default function ManagerConsole({
         <p className="text-sm text-secondary mb-6">
           View your team’s skills profiles in Team. Open a skill to review progress, add your rating and set a target.
         </p>
+
+        {ledTeamOptions.length > 0 && <label className="block max-w-sm text-sm text-ink mb-6">Team you lead
+          <select className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2" value={selectedTeamId ?? ''}
+            disabled={loading} onChange={(event) => onSelectTeam?.(event.target.value)}>
+            {ledTeamOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </label>}
 
         <div role="tablist" aria-label="Console section" className="flex items-center flex-wrap gap-1 mb-6 border-b border-hairline">
           {SECTIONS.map((section) => (

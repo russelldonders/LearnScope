@@ -1,5 +1,18 @@
 import { supabase } from './supabaseClient'
 
+export async function listMyLedManagerTeams() {
+  const { data, error } = await supabase.rpc('list_my_led_manager_teams')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function transferManagerTeamLeadership(teamId, membershipId) {
+  const { error } = await supabase.rpc('transfer_manager_team_leadership', {
+    p_team_id: teamId, p_membership_id: membershipId,
+  })
+  if (error) throw error
+}
+
 export async function getManagerTeamSkillDetail(membershipId, skillId) {
   const { data, error } = await supabase.rpc('get_manager_team_skill_detail', {
     p_membership_id: membershipId, p_skill_id: skillId,
@@ -78,7 +91,7 @@ export async function listPendingManagerTeamInvites(teamId) {
 // there isn't one yet.
 export async function getOrCreateMyDefaultManagerTeam() {
   const workspaceId = await createManagerWorkspace()
-  const teams = await listManagerTeams(workspaceId)
+  const teams = await listMyLedManagerTeams()
   return teams[0]?.id ?? (await createManagerTeam(workspaceId, { name: 'My team' }))
 }
 
