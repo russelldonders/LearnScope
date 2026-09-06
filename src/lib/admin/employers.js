@@ -139,10 +139,13 @@ export async function listEmployerCourseAssignments(employerId) {
 // p_learnerId is an active member of it, then upserts the (employer, learner)
 // row -- idempotent for an existing pending/approved row, resets a declined/
 // revoked one back to pending.
-export async function requestEmployerDataAccess(employerId, learnerId) {
-  const { data, error } = await supabase.rpc('request_employer_data_access', {
+export async function requestEmployerDataAccess(employerId, learnerId, { categories = ['skills'], skillIds = [], comment = '' } = {}) {
+  const { data, error } = await supabase.rpc('request_scoped_employer_data_access', {
     p_employer_id: employerId,
     p_learner_id: learnerId,
+    p_requested_data: categories,
+    p_skill_library_ids: skillIds,
+    p_comment: comment,
   })
   if (error) throw error
   return data
@@ -154,10 +157,11 @@ export async function requestEmployerDataAccess(employerId, learnerId) {
 // status server-side. skillIds is only meaningful when accepting -- it
 // replaces the request's shared-skill set (employer_data_access_shared_
 // skills), validated server-side to actually belong to the caller.
-export async function decideEmployerDataAccessRequest(requestId, accept, skillIds = []) {
-  const { error } = await supabase.rpc('decide_employer_data_access_request', {
+export async function decideEmployerDataAccessRequest(requestId, accept, skillIds = [], categories = ['skills']) {
+  const { error } = await supabase.rpc('decide_scoped_employer_data_access', {
     p_request_id: requestId,
     p_accept: accept,
+    p_approved_data: accept ? categories : [],
     p_skill_ids: skillIds,
   })
   if (error) throw error
@@ -219,7 +223,7 @@ export async function revokeEmployerDataAccess(requestId) {
 export async function listEmployerDataAccessRequests(employerId) {
   const { data, error } = await supabase
     .from('employer_data_access_requests')
-    .select('id, learner_id, status, requested_by, created_at, decided_at')
+    .select('id, learner_id, status, requested_by, created_at, decided_at, requested_data, requested_skill_library_ids, requested_skill_names, request_comment, approved_data')
     .eq('employer_id', employerId)
     .order('created_at', { ascending: false })
   if (error) throw error
@@ -232,7 +236,7 @@ export async function listEmployerDataAccessRequests(employerId) {
 export async function listMyPendingDataAccessRequests(userId) {
   const { data, error } = await supabase
     .from('employer_data_access_requests')
-    .select('id, employer_id, created_at, employers(id, name)')
+    .select('id, employer_id, created_at, requested_data, requested_skill_library_ids, requested_skill_names, request_comment, employers(id, name)')
     .eq('learner_id', userId)
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
@@ -248,7 +252,7 @@ export async function listMyPendingDataAccessRequests(userId) {
 export async function listMyEmployerDataAccessStatus(userId) {
   const { data, error } = await supabase
     .from('employer_data_access_requests')
-    .select('id, employer_id, status, requested_by, created_at, decided_at, employers(id, name)')
+    .select('id, employer_id, status, requested_by, created_at, decided_at, approved_data, employers(id, name)')
     .eq('learner_id', userId)
     .order('created_at', { ascending: false })
   if (error) throw error
