@@ -55,7 +55,7 @@ describe('Connections teams', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Invite to team' }))
     await screen.findByText(/Invitation sent to Sam/)
     expect(teams.inviteConnectionToManagerTeam).toHaveBeenCalledWith('two', 'sam')
-    expect(screen.getByRole('link', { name: 'View team' })).toHaveAttribute('href', '/manager?section=team&team=two')
+    expect(screen.getByRole('link', { name: 'Manage skills' })).toHaveAttribute('href', '/manager?section=skills&team=two')
   })
 
   it('transfers leadership only to a selected active member and removes leader controls', async () => {

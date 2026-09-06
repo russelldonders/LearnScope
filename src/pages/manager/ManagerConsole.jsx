@@ -1,16 +1,16 @@
 import { useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import AppHeader from '../../components/AppHeader'
-import ManagerOverviewPanel from './ManagerOverviewPanel'
+import ManagerSkillsPanel from './ManagerSkillsPanel'
 import ManagerTeamPanel from './ManagerTeamPanel'
 import ManagerLearningPanel from './ManagerLearningPanel'
 import ManagerCollaborationPanel from './ManagerCollaborationPanel'
 import { handleTabListKeyDown } from '../../lib/tabsKeyboard'
-import { FIXTURE_TEAM, FIXTURE_LEARNING, FIXTURE_RECORDS, FIXTURE_PENDING_INVITES } from './managerFixtures'
+import { FIXTURE_TEAM, FIXTURE_LEARNING, FIXTURE_RECORDS } from './managerFixtures'
 
 const SECTIONS = [
-  { key: 'overview', label: 'Overview' },
-  { key: 'team', label: 'Team' },
+  { key: 'skills', label: 'Skills' },
+  { key: 'members', label: 'Members' },
   { key: 'learning', label: 'Learning' },
   { key: 'collaboration', label: 'Collaboration' },
 ]
@@ -36,7 +36,6 @@ export default function ManagerConsole({
   team = FIXTURE_TEAM,
   learningRecords = FIXTURE_LEARNING,
   collaborationRecords = FIXTURE_RECORDS,
-  pendingInvites = FIXTURE_PENDING_INVITES,
   loading = false,
   error = null,
   onInviteToTeam,
@@ -50,7 +49,9 @@ export default function ManagerConsole({
   onSelectTeam,
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
-  const activeSection = searchParams.get('section') ?? 'overview'
+  const requestedSection = searchParams.get('section')
+  const activeSection = requestedSection === 'overview' ? 'skills' : requestedSection === 'team' ? 'members'
+    : SECTIONS.some((section) => section.key === requestedSection) ? requestedSection : 'skills'
   const sectionTabRefs = useRef({})
 
   function buildParams(overrides) {
@@ -73,7 +74,7 @@ export default function ManagerConsole({
       <main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 py-8">
         <h1 className="font-display text-xl text-ink mb-1">Manager console</h1>
         <p className="text-sm text-secondary mb-6">
-          View your team’s skills profiles in Team. Open a skill to review progress, add your rating and set a target.
+          Start with the skills your learners share. Review progress, add your rating and set clear development targets.
         </p>
 
         {ledTeamOptions.length > 0 && <label className="block max-w-sm text-sm text-ink mb-6">Team you lead
@@ -119,16 +120,11 @@ export default function ManagerConsole({
           aria-labelledby={`manager-section-tab-${activeSection}`}
           tabIndex={0}
         >
-          {activeSection === 'overview' && (
-            <ManagerOverviewPanel
-              team={team}
-              learningRecords={learningRecords}
-              collaborationRecords={collaborationRecords}
-              pendingInvites={pendingInvites}
-              loading={loading}
-            />
+          {activeSection === 'skills' && (
+            <ManagerSkillsPanel members={team} loading={loading} error={error} onRateSkill={onRateSkill}
+              onLoadSkillAssessments={onLoadSkillAssessments} onLoadSkillDetail={onLoadSkillDetail} onSetTarget={onSetTarget} />
           )}
-          {activeSection === 'team' && (
+          {activeSection === 'members' && (
             <ManagerTeamPanel
               members={team}
               loading={loading}
