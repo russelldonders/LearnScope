@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const rpc = vi.fn()
 const from = vi.fn()
 vi.mock('./supabaseClient', () => ({ supabase: { rpc, from } }))
+const callAdminApi = vi.fn()
+vi.mock('./admin/adminApi', () => ({ callAdminApi }))
 
 const {
   createManagerCollaborationRecord,
   createManagerTeam,
   inviteConnectionToManagerTeam,
-  inviteConnectionToManagerTeamByEmail,
+  inviteManagerTeamMemberByEmail,
   createManagerTeamSkillAssessment,
   listManagerTeamMemberSummaries,
   listManagerTeamRoster,
@@ -46,12 +48,13 @@ describe('manager team service', () => {
     })
   })
 
-  it('resolves email invitations only through the connection-gated RPC', async () => {
-    rpc.mockResolvedValue({ data: 'membership-2', error: null })
-    await inviteConnectionToManagerTeamByEmail('team-1', 'person@example.com')
-    expect(rpc).toHaveBeenCalledWith('invite_connection_to_manager_team_by_email', {
-      p_team_id: 'team-1', p_email: 'person@example.com',
+  it('invites someone by email through the service-role admin action, not a plain RPC', async () => {
+    callAdminApi.mockResolvedValue({ ok: true, userId: 'user-2', alreadyExisted: false })
+    await inviteManagerTeamMemberByEmail('team-1', 'person@example.com')
+    expect(callAdminApi).toHaveBeenCalledWith('inviteManagerTeamMemberByEmail', {
+      teamId: 'team-1', email: 'person@example.com',
     })
+    expect(rpc).not.toHaveBeenCalled()
   })
 
   it('maps the narrow member summary projection to the console model', async () => {

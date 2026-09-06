@@ -10,7 +10,7 @@ vi.mock('../lib/managerTeams', () => ({
   createManagerWorkspace: vi.fn(), createManagerTeam: vi.fn(), listMyLedManagerTeams: vi.fn(),
   listMyArchivedManagerTeams: vi.fn(), listMyManagerTeamRelationships: vi.fn(), listMyManagerShareableSkills: vi.fn(),
   listManagerTeamMembers: vi.fn(), listManagerTeamRoster: vi.fn(),
-  inviteConnectionToManagerTeam: vi.fn(), inviteConnectionToManagerTeamByEmail: vi.fn(),
+  inviteConnectionToManagerTeam: vi.fn(), inviteManagerTeamMemberByEmail: vi.fn(),
   transferManagerTeamLeadership: vi.fn(), listManagerTeamMemberSummaries: vi.fn(),
   listManagerTeamLearningRecords: vi.fn(), listManagerCollaborationRecords: vi.fn(),
   createManagerCollaborationRecord: vi.fn(), createManagerTeamSkillAssessment: vi.fn(),
@@ -40,6 +40,7 @@ beforeEach(() => {
   teams.createManagerWorkspace.mockResolvedValue('workspace')
   teams.createManagerTeam.mockResolvedValue('new-team')
   teams.inviteConnectionToManagerTeam.mockResolvedValue('invite')
+  teams.inviteManagerTeamMemberByEmail.mockResolvedValue({ ok: true, userId: 'new-user', alreadyExisted: false })
   teams.transferManagerTeamLeadership.mockResolvedValue()
   teams.archiveManagerTeam.mockResolvedValue()
   teams.restoreManagerTeam.mockResolvedValue()
@@ -147,6 +148,20 @@ describe('Connections teams', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Revoke' }))
     await waitFor(() => expect(teams.revokeManagerTeamInvite).toHaveBeenCalledWith('p1'))
+  })
+
+  it('invites a batch of email addresses to a led team, whether or not they already have an account', async () => {
+    teams.listMyLedManagerTeams.mockResolvedValue([{ id: 'one', name: 'First team', status: 'active' }])
+    renderTeams()
+    fireEvent.click(await screen.findByRole('tab', { name: 'Members' }))
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Members' })).toHaveAttribute('aria-selected', 'true'), { timeout: 3000 })
+    fireEvent.click(await screen.findByRole('button', { name: 'Invite to team' }))
+    fireEvent.change(screen.getByLabelText('Email 1'), { target: { value: 'newperson@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: '+ Add another' }))
+    fireEvent.change(screen.getByLabelText('Email 2'), { target: { value: 'existing@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send 2 invites' }))
+    await waitFor(() => expect(teams.inviteManagerTeamMemberByEmail).toHaveBeenCalledWith('one', 'newperson@example.com'))
+    expect(teams.inviteManagerTeamMemberByEmail).toHaveBeenCalledWith('one', 'existing@example.com')
   })
 
   it('supports multiple led and joined teams in one selector, keeping pending invitations separate', async () => {

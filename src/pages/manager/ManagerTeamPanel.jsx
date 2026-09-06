@@ -232,13 +232,16 @@ export default function ManagerTeamPanel({
   )
 }
 
+const MAX_EMAIL_ROWS = 10
+
 function InviteToTeamDialog({ onClose, onInvite, onInviteConnection, connections, teamMemberships }) {
-  const [email, setEmail] = useState('')
+  const [emails, setEmails] = useState([''])
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
   const initialFocusRef = useRef(null)
   const [connectionId, setConnectionId] = useState('')
   const unavailableIds = new Set(teamMemberships.filter((membership) => ['active', 'pending'].includes(membership.status)).map((membership) => membership.member_user_id))
+  const emailsToSend = emails.map((value) => value.trim()).filter(Boolean)
 
   async function handleConnectionSubmit(event) {
     event.preventDefault()
@@ -249,19 +252,39 @@ function InviteToTeamDialog({ onClose, onInvite, onInviteConnection, connections
     finally { setSubmitting(false) }
   }
 
+  function updateEmail(index, value) {
+    setEmails((previous) => previous.map((v, i) => (i === index ? value : v)))
+  }
+
+  function addEmailRow() {
+    setEmails((previous) => (previous.length < MAX_EMAIL_ROWS ? [...previous, ''] : previous))
+  }
+
+  function removeEmailRow(index) {
+    setEmails((previous) => (previous.length > 1 ? previous.filter((_, i) => i !== index) : previous))
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!onInvite) {
-      onClose()
-      return
-    }
+    if (!onInvite || emailsToSend.length === 0) return
     setSubmitting(true)
     setSubmitError(null)
     try {
-      await onInvite(email.trim())
-      onClose()
+      const results = await onInvite(emailsToSend)
+      const failures = results.filter((r) => !r.ok)
+      if (failures.length === 0) {
+        onClose()
+        return
+      }
+      // Drop the ones that succeeded so a retry doesn't re-invite them --
+      // only the failed addresses stay in the form to fix and resend.
+      setEmails(failures.map((f) => f.email))
+      setSubmitError(
+        (failures.length < emailsToSend.length ? `${emailsToSend.length - failures.length} sent. ` : '') +
+        failures.map((f) => `${f.email}: ${f.error}`).join('; ')
+      )
     } catch (error) {
-      setSubmitError(error.message || 'Could not send the invitation. Try again.')
+      setSubmitError(error.message || 'Could not send the invitations. Try again.')
     } finally {
       setSubmitting(false)
     }
@@ -291,20 +314,49 @@ function InviteToTeamDialog({ onClose, onInvite, onInviteConnection, connections
         </form>}
         <form onSubmit={handleSubmit}>
         <h3 className="font-display text-base text-ink mb-3">Invite by email</h3>
-        <label htmlFor="manager-team-invite-email" className="block text-sm font-medium text-ink mb-1">
-          Email
-        </label>
-        <input
-          ref={connections.length > 0 ? undefined : initialFocusRef}
-          id="manager-team-invite-email"
-          type="email"
-          required
-          maxLength={320}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          data-dialog-initial-focus={connections.length > 0 ? undefined : true}
-          className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss mb-2"
-        />
+        <p className="text-sm text-secondary mb-3">
+          No LearnScope account yet? They’ll get a real sign-up invite. Already have one? They’ll see this on their Actions page.
+        </p>
+        <div className="space-y-2 mb-2">
+          {emails.map((value, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <label htmlFor={`manager-team-invite-email-${index}`} className="sr-only">Email {index + 1}</label>
+              <input
+                ref={index === 0 && connections.length === 0 ? initialFocusRef : undefined}
+                id={`manager-team-invite-email-${index}`}
+                type="email"
+                maxLength={320}
+                value={value}
+                onChange={(e) => updateEmail(index, e.target.value)}
+                disabled={submitting}
+                placeholder="name@example.com"
+                data-dialog-initial-focus={index === 0 && connections.length === 0 ? true : undefined}
+                className="flex-1 rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              />
+              {emails.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeEmailRow(index)}
+                  disabled={submitting}
+                  aria-label={`Remove email ${index + 1}`}
+                  className="shrink-0 rounded-md border border-hairline text-secondary hover:text-red-700 px-2 py-2 text-sm disabled:opacity-60"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        {emails.length < MAX_EMAIL_ROWS && (
+          <button
+            type="button"
+            onClick={addEmailRow}
+            disabled={submitting}
+            className="text-xs font-medium text-moss hover:underline disabled:opacity-60 mb-3"
+          >
+            + Add another
+          </button>
+        )}
         <MutationFeedback status="error" message={submitError} className="mb-4" />
         <div className="flex justify-end gap-2">
           <button
@@ -317,10 +369,10 @@ function InviteToTeamDialog({ onClose, onInvite, onInviteConnection, connections
           </button>
           <button
             type="submit"
-            disabled={submitting || !email.trim()}
+            disabled={submitting || emailsToSend.length === 0}
             className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
           >
-            {submitting ? 'Sending…' : 'Send invite'}
+            {submitting ? 'Sending…' : emailsToSend.length > 1 ? `Send ${emailsToSend.length} invites` : 'Send invite'}
           </button>
         </div>
         </form>

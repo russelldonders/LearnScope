@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { callAdminApi } from './admin/adminApi'
 
 export async function listMyLedManagerTeams() {
   const { data, error } = await supabase.rpc('list_my_led_manager_teams')
@@ -120,12 +121,14 @@ export async function inviteConnectionToManagerTeam(teamId, memberUserId) {
   return data
 }
 
-export async function inviteConnectionToManagerTeamByEmail(teamId, email) {
-  const { data, error } = await supabase.rpc('invite_connection_to_manager_team_by_email', {
-    p_team_id: teamId, p_email: email,
-  })
-  if (error) throw error
-  return data
+// Genuinely invites someone by email -- an existing LearnScope account (no
+// prior connection required) gets a pending team invite plus a notification
+// email, and someone with no account yet gets a real Supabase sign-up
+// invite. Needs the service-role key (creating an account isn't something a
+// plain client-callable RPC can do), so this goes through the shared
+// admin/org action dispatcher rather than supabase.rpc.
+export async function inviteManagerTeamMemberByEmail(teamId, email) {
+  return callAdminApi('inviteManagerTeamMemberByEmail', { teamId, email })
 }
 
 export async function decideManagerTeamInvite(membershipId, accept) {

@@ -6,7 +6,7 @@ import { handleTabListKeyDown } from '../lib/tabsKeyboard'
 import {
   createManagerWorkspace, createManagerTeam, listMyLedManagerTeams, listMyArchivedManagerTeams,
   listMyManagerTeamRelationships, listManagerTeamMembers, listManagerTeamRoster, inviteConnectionToManagerTeam,
-  inviteConnectionToManagerTeamByEmail, transferManagerTeamLeadership, listManagerTeamMemberSummaries,
+  inviteManagerTeamMemberByEmail, transferManagerTeamLeadership, listManagerTeamMemberSummaries,
   listManagerTeamLearningRecords, listManagerCollaborationRecords, createManagerCollaborationRecord,
   createManagerTeamSkillAssessment, setManagerTeamSkillAssessmentEvidence, listManagerTeamSkillAssessments,
   getManagerTeamSkillDetail, setManagerTeamSkillTarget, archiveManagerTeam, restoreManagerTeam,
@@ -311,9 +311,19 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     finally { setBusy(false) }
   }
 
-  async function handleInviteByEmail(email) {
-    await inviteConnectionToManagerTeamByEmail(teamId, email)
+  // Invites each address independently (one bad/duplicate address shouldn't
+  // sink the rest of a batch) and reports per-email results back to the
+  // dialog rather than throwing, so it can drop the ones that succeeded and
+  // leave only the failed ones for the leader to fix and retry.
+  async function handleInviteByEmail(emails) {
+    const results = await Promise.allSettled(emails.map((email) => inviteManagerTeamMemberByEmail(teamId, email)))
     await loadTeamDetail(teamId)
+    return emails.map((email, i) => {
+      const result = results[i]
+      return result.status === 'fulfilled'
+        ? { email, ok: true }
+        : { email, ok: false, error: result.reason?.message || 'Could not send this invitation' }
+    })
   }
 
   async function handleInviteConnection(connectionId) {

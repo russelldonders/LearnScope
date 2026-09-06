@@ -2,13 +2,15 @@ import { verifySupabaseUser } from '../_lib/auth.js'
 import { supabaseAdmin } from '../_lib/supabaseAdmin.js'
 import { deleteUserEvidenceFiles } from '../_lib/evidenceStorage.js'
 
-// Single dispatcher for every platform-admin/org-admin service-role action,
-// rather than one serverless function per action -- Vercel's Hobby plan
-// caps deployments at 12 serverless functions, and this project was
-// already at that cap before the admin console existed. Each action below
-// re-verifies the caller's authority server-side exactly as its own
-// function would have, since this route uses the service-role key and
-// bypasses RLS entirely.
+// Single dispatcher for every service-role action needing the Supabase Auth
+// admin API or otherwise needing to bypass RLS, rather than one serverless
+// function per action -- Vercel's Hobby plan caps deployments at 12
+// serverless functions, and this project was already at that cap before the
+// admin console existed. Mostly platform-admin/org-admin actions, but
+// inviteManagerTeamMemberByEmail below is scoped to an ordinary user acting
+// on their own team, not any admin role. Each action below re-verifies the
+// caller's authority server-side exactly as its own function would have,
+// since this route uses the service-role key and bypasses RLS entirely.
 
 const PER_PAGE = 200
 const VALID_ORG_ROLES = ['admin', 'trainer']
@@ -79,6 +81,9 @@ export default async function handler(req, res) {
         return
       case 'addEmployerMember':
         await addEmployerMember(admin, caller, payload, res)
+        return
+      case 'inviteManagerTeamMemberByEmail':
+        await inviteManagerTeamMemberByEmail(admin, caller, payload, res)
         return
       default:
         res.status(400).json({ error: 'Unknown action' })
@@ -1028,6 +1033,126 @@ async function notifyEmployerInvitePending(admin, email, employerId, role) {
     }
   } catch (err) {
     console.error('Failed to send employer-invite-pending notification email:', err)
+  }
+}
+
+// Mirrors inviteOrgStaff above, but scoped to the caller's own manager team
+// rather than any admin role -- is_manager_team_leader takes the caller
+// explicitly (this runs under the service-role key, with no user JWT for
+// auth.uid() to read). Unlike organisation_members/employer_members, a
+// brand-new account here still lands 'pending' (the table's own default,
+// left unset below) rather than 'active' -- manager-team membership is
+// already consent-based even for an existing connection (see
+// decide_manager_team_invite), and skipping that only for a first-time
+// signup would make clicking a sign-up link a bigger commitment than
+// accepting an invite ever otherwise is.
+async function inviteManagerTeamMemberByEmail(admin, caller, { teamId, email }, res) {
+  if (!teamId || !email?.trim()) {
+    res.status(400).json({ error: 'Missing teamId or email' })
+    return
+  }
+
+  const { data: team, error: teamFetchError } = await admin
+    .from('manager_teams').select('name, status').eq('id', teamId).maybeSingle()
+  if (teamFetchError) throw teamFetchError
+  if (!team) {
+    res.status(404).json({ error: 'Team not found' })
+    return
+  }
+  if (team.status !== 'active') {
+    res.status(400).json({ error: 'This team has been archived and can no longer be changed' })
+    return
+  }
+
+  const { data: canManage, error: canManageError } = await admin
+    .rpc('is_manager_team_leader', { p_team_id: teamId, p_user_id: caller.id })
+  if (canManageError) throw canManageError
+  if (!canManage) {
+    res.status(403).json({ error: 'Only this team’s leader can invite members' })
+    return
+  }
+
+  const trimmedEmail = email.trim()
+  const existingUserId = await findUserIdByEmail(admin, trimmedEmail)
+  if (existingUserId === caller.id) {
+    res.status(400).json({ error: 'You can’t invite yourself' })
+    return
+  }
+
+  let userId = existingUserId
+  if (!userId) {
+    const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(trimmedEmail, inviteRedirectTo())
+    if (inviteError) throw inviteError
+    userId = invited.user.id
+  }
+
+  const { data: existingMembership, error: membershipFetchError } = await admin
+    .from('manager_team_memberships')
+    .select('id, status')
+    .eq('team_id', teamId)
+    .eq('member_user_id', userId)
+    .maybeSingle()
+  if (membershipFetchError) throw membershipFetchError
+
+  if (existingMembership && ['pending', 'active'].includes(existingMembership.status)) {
+    res.status(409).json({ error: 'This person already has a live team membership' })
+    return
+  }
+
+  if (existingMembership) {
+    const { error: reinviteError } = await admin.from('manager_team_memberships').update({
+      status: 'pending', role: 'member', invited_email: trimmedEmail,
+      invited_by: caller.id, invited_at: new Date().toISOString(), decided_at: null,
+    }).eq('id', existingMembership.id)
+    if (reinviteError) throw reinviteError
+  } else {
+    const { error: membershipInsertError } = await admin.from('manager_team_memberships').insert({
+      team_id: teamId, member_user_id: userId, invited_email: trimmedEmail, invited_by: caller.id,
+    })
+    if (membershipInsertError) throw membershipInsertError
+  }
+
+  // An existing user gets no Supabase invite email (there's nothing to
+  // accept there -- they already have an account), so this is the only
+  // signal they get that someone wants to add them to a team. Best-effort:
+  // a failed notification shouldn't undo the pending row that already
+  // succeeded above -- they can still find and accept/decline it from
+  // /actions without ever seeing this email.
+  if (existingUserId) {
+    await notifyManagerTeamInvitePending(admin, trimmedEmail, caller.id, team.name)
+  }
+
+  res.status(200).json({ ok: true, userId, alreadyExisted: Boolean(existingUserId) })
+}
+
+// Mirrors notifyOrgInvitePending above, scoped to a manager team invite.
+async function notifyManagerTeamInvitePending(admin, email, inviterId, teamName) {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) return
+
+  const { data: inviter } = await admin.from('profiles').select('full_name').eq('id', inviterId).maybeSingle()
+  const inviterName = inviter?.full_name?.trim() || 'Someone'
+
+  try {
+    const resendRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'LearnScope <onboarding@resend.dev>',
+        to: email,
+        subject: `${inviterName} invited you to a team on LearnScope`,
+        html: `
+          <p><strong>${escapeHtml(inviterName)}</strong> invited you to join <strong>${escapeHtml(teamName)}</strong> on LearnScope.</p>
+          <p>Sign in to your existing account and check your Actions page to accept or decline.</p>
+        `,
+      }),
+    })
+    if (!resendRes.ok) {
+      const detail = await resendRes.text()
+      console.error('notifyManagerTeamInvitePending: Resend error', resendRes.status, detail)
+    }
+  } catch (err) {
+    console.error('Failed to send manager-team-invite-pending notification email:', err)
   }
 }
 

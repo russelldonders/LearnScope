@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ManagerTeamPanel from './ManagerTeamPanel'
 import { FIXTURE_TEAM } from './managerFixtures'
@@ -74,6 +74,47 @@ describe('ManagerTeamPanel', () => {
     fireEvent.change(screen.getByLabelText('Add a connection'), { target: { value: 'alex' } })
     fireEvent.click(screen.getByRole('button', { name: 'Invite connection' }))
     expect(onInviteConnection).toHaveBeenCalledWith('alex')
+  })
+
+  it('invites several people by email in one batch, closing once every address succeeds', async () => {
+    const onInvite = vi.fn().mockResolvedValue([
+      { email: 'a@example.com', ok: true },
+      { email: 'b@example.com', ok: true },
+    ])
+    render(<ManagerTeamPanel members={FIXTURE_TEAM} onInvite={onInvite} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Invite to team' }))
+    fireEvent.change(screen.getByLabelText('Email 1'), { target: { value: 'a@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: '+ Add another' }))
+    fireEvent.change(screen.getByLabelText('Email 2'), { target: { value: 'b@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send 2 invites' }))
+    await waitFor(() => expect(onInvite).toHaveBeenCalledWith(['a@example.com', 'b@example.com']))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('keeps only the failed address in the form after a partial failure', async () => {
+    const onInvite = vi.fn().mockResolvedValue([
+      { email: 'a@example.com', ok: true },
+      { email: 'b@example.com', ok: false, error: 'Could not send this invitation' },
+    ])
+    render(<ManagerTeamPanel members={FIXTURE_TEAM} onInvite={onInvite} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Invite to team' }))
+    fireEvent.change(screen.getByLabelText('Email 1'), { target: { value: 'a@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: '+ Add another' }))
+    fireEvent.change(screen.getByLabelText('Email 2'), { target: { value: 'b@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send 2 invites' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/b@example\.com/)
+    expect(screen.getByLabelText('Email 1')).toHaveValue('b@example.com')
+    expect(screen.queryByLabelText('Email 2')).not.toBeInTheDocument()
+  })
+
+  it('lets a leader remove an added email row before sending', () => {
+    render(<ManagerTeamPanel members={FIXTURE_TEAM} onInvite={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Invite to team' }))
+    expect(screen.queryByRole('button', { name: 'Remove email 1' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '+ Add another' }))
+    fireEvent.change(screen.getByLabelText('Email 2'), { target: { value: 'b@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Remove email 2' }))
+    expect(screen.queryByLabelText('Email 2')).not.toBeInTheDocument()
   })
 
   it('shows a still-pending invitee in the same list, muted, with a revoke action instead of a profile link', () => {
