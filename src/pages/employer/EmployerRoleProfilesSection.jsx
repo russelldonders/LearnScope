@@ -1,34 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import EmployerRoleProfilesConsole from './roles/EmployerRoleProfilesConsole'
 import {
-  assignEmployerRoleProfile,
   createEmployerRoleProfile,
   listEmployerRoleAssignments,
   listEmployerRoleProfiles,
-  replaceEmployerRoleSkillRequirements,
-  replaceEmployerRoleTrainingRequirements,
-  updateEmployerRoleProfile,
-  withdrawEmployerRoleAssignment,
+  toRoleProfileViewModel,
 } from '../../lib/employerRoleProfiles'
-import { listEmployerCatalogueCourses, listEmployerMembers } from '../../lib/admin/employers'
-import { listLibrarySkills } from '../../lib/skillLibrary'
+import { listEmployerMembers } from '../../lib/admin/employers'
 
-function toConsoleProfile(profile, assignments) {
-  return {
-    ...profile,
-    requiredSkills: profile.skillRequirements,
-    training: profile.trainingRequirements.map((item) => ({ ...item, title: item.name })),
-    linkedEmployeeCount: assignments.filter((item) => ['proposed', 'linked'].includes(item.status)).length,
-  }
-}
-
-export default function EmployerRoleProfilesSection({ employer, user }) {
+// Drives the full-width role-profiles table only -- editing a single
+// profile's own details/skills/training/linked-employees now happens on its
+// own page (EmployerRoleProfileDetail.jsx, reached by clicking its row),
+// not here. This still loads the whole roster (every profile's own
+// requiredSkills/training/linkedEmployeeCount) since the table's columns
+// summarize all of that per row.
+export default function EmployerRoleProfilesSection({ employer, user, searchParams, setSearchParams, onOpenProfile }) {
   const [profiles, setProfiles] = useState([])
   const [assignmentsByProfile, setAssignmentsByProfile] = useState({})
   const [members, setMembers] = useState([])
-  const [skills, setSkills] = useState([])
-  const [courses, setCourses] = useState([])
-  const [selectedId, setSelectedId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -36,11 +25,9 @@ export default function EmployerRoleProfilesSection({ employer, user }) {
     setLoading(true)
     setError(null)
     try {
-      const [nextProfiles, nextMembers, nextSkills, nextCourses] = await Promise.all([
+      const [nextProfiles, nextMembers] = await Promise.all([
         listEmployerRoleProfiles(employer.id),
         listEmployerMembers(employer.id),
-        listLibrarySkills(),
-        listEmployerCatalogueCourses(employer.provider_organisation_id),
       ])
       const assignmentEntries = await Promise.all(
         nextProfiles.map(async (profile) => [profile.id, await listEmployerRoleAssignments(profile.id)])
@@ -48,73 +35,48 @@ export default function EmployerRoleProfilesSection({ employer, user }) {
       setProfiles(nextProfiles)
       setAssignmentsByProfile(Object.fromEntries(assignmentEntries))
       setMembers(nextMembers)
-      setSkills(nextSkills)
-      setCourses(nextCourses)
-      setSelectedId((current) => nextProfiles.some((profile) => profile.id === current) ? current : nextProfiles[0]?.id ?? null)
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
-  }, [employer.id, employer.provider_organisation_id])
+  }, [employer.id])
 
   useEffect(() => { load() }, [load])
 
-  const roleProfiles = useMemo(
-    () => profiles.map((profile) => toConsoleProfile(profile, assignmentsByProfile[profile.id] ?? [])),
-    [profiles, assignmentsByProfile]
-  )
-  const linkedEmployees = useMemo(() => {
+  const roleProfiles = useMemo(() => {
     const memberByUserId = new Map(members.map((member) => [member.user_id, member]))
-    return (assignmentsByProfile[selectedId] ?? [])
-      .filter((assignment) => ['proposed', 'linked'].includes(assignment.status))
-      .map((assignment) => ({
-        assignmentId: assignment.id,
-        name: assignment.name,
-        email: memberByUserId.get(assignment.userId)?.email ?? '',
-        status: assignment.status === 'linked' ? 'accepted' : 'pending',
-        assignedAt: assignment.proposedAt,
-      }))
-  }, [assignmentsByProfile, members, selectedId])
+    return profiles.map((profile) => toRoleProfileViewModel(profile, assignmentsByProfile[profile.id] ?? [], memberByUserId))
+  }, [profiles, assignmentsByProfile, members])
 
-  async function mutate(action) {
+  // Only ever called to create (the console no longer edits an existing
+  // profile's name/description itself -- that's the detail page's job) --
+  // returns the new profile's id so the console can navigate straight to
+  // its detail page once created, the same way ProviderConsole's own
+  // "+ Create training" flow does.
+  async function handleCreate(values) {
     setLoading(true)
     setError(null)
     try {
-      await action()
+      const id = await createEmployerRoleProfile(employer.id, values, user.id)
       await load()
+      return id
     } catch (err) {
       setError(err.message)
       setLoading(false)
+      return undefined
     }
   }
 
   return (
     <EmployerRoleProfilesConsole
       roleProfiles={roleProfiles}
-      selectedRoleProfileId={selectedId}
-      availableSkills={skills}
-      availableCourses={courses.map((course) => ({ id: course.id, title: course.name }))}
-      linkedEmployees={linkedEmployees}
+      searchParams={searchParams}
+      setSearchParams={setSearchParams}
       loading={loading}
       error={error}
-      onSelectRoleProfile={setSelectedId}
-      onSaveRoleProfile={(profileId, values) => mutate(async () => {
-        if (profileId) await updateEmployerRoleProfile(profileId, values)
-        else {
-          const id = await createEmployerRoleProfile(employer.id, values, user.id)
-          setSelectedId(id)
-        }
-      })}
-      onReplaceSkills={(profileId, nextSkills) => mutate(() => replaceEmployerRoleSkillRequirements(profileId, nextSkills))}
-      onReplaceTraining={(profileId, nextTraining) => mutate(() => replaceEmployerRoleTrainingRequirements(profileId, nextTraining))}
-      onAssignEmployee={(profileId, email) => mutate(async () => {
-        const normalizedEmail = email.trim().toLowerCase()
-        const member = members.find((item) => item.email?.trim().toLowerCase() === normalizedEmail && item.status === 'active')
-        if (!member) throw new Error('Choose an active learner from this employer using their account email.')
-        await assignEmployerRoleProfile(profileId, member.id)
-      })}
-      onWithdrawAssignment={(assignmentId) => mutate(() => withdrawEmployerRoleAssignment(assignmentId))}
+      onCreateRoleProfile={handleCreate}
+      onOpenProfile={onOpenProfile}
     />
   )
 }

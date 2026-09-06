@@ -18,6 +18,7 @@ begin
   return new;
 end;
 $$;
+
 create trigger initialise_course_version_group_trigger
   before insert on course_catalogue
   for each row execute procedure initialise_course_version_group();

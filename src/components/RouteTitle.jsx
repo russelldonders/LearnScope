@@ -28,6 +28,7 @@ const TITLES = [
   [/^\/rate\/[^/]+$/, 'Rate a skill'],
   [/^\/provider\/training\/[^/]+$/, 'Edit provider course'],
   [/^\/provider$/, 'Provider console'],
+  [/^\/employer\/roles\/[^/]+$/, 'Role profile details'],
   [/^\/admin\/users\/[^/]+$/, 'Admin user details'],
   [/^\/admin\/providers$/, 'Admin providers'],
   [/^\/admin\/catalogue$/, 'Admin courses'],

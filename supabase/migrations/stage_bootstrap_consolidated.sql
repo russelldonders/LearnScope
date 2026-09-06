@@ -18677,6 +18677,7 @@ begin
   return new;
 end;
 $$;
+
 create trigger initialise_course_version_group_trigger
   before insert on course_catalogue
   for each row execute procedure initialise_course_version_group();
@@ -18715,6 +18716,7 @@ create trigger initialise_course_version_group_trigger
 --    change to bundle with this rather than a separate migration.
 
 alter table catalogues add column learner_visible boolean not null default false;
+
 create table catalogue_links (
   id uuid primary key default gen_random_uuid(),
   catalogue_id uuid not null references catalogues(id) on delete cascade,
@@ -18723,8 +18725,10 @@ create table catalogue_links (
   created_at timestamptz not null default now(),
   unique (catalogue_id, organisation_id)
 );
+
 create index catalogue_links_organisation_idx on catalogue_links (organisation_id);
 create index catalogue_links_catalogue_idx on catalogue_links (catalogue_id);
+
 -- Guards what a plain insert policy can't express cleanly: never the Global
 -- catalogue (already universally available -- linking it would just be
 -- confusing noise) and never an org linking its own catalogue to itself
@@ -18748,14 +18752,18 @@ begin
   return new;
 end;
 $$;
+
 create trigger guard_catalogue_link_trigger
   before insert on catalogue_links
   for each row execute procedure guard_catalogue_link();
+
 alter table catalogue_links enable row level security;
+
 create policy "Authenticated users can view catalogue links"
   on catalogue_links for select
   to authenticated
   using (true);
+
 create policy "Org admins can link a catalogue to their own organisation"
   on catalogue_links for insert
   to authenticated
@@ -18763,11 +18771,14 @@ create policy "Org admins can link a catalogue to their own organisation"
     linked_by = (select auth.uid())
     and is_org_admin(organisation_id, (select auth.uid()))
   );
+
 create policy "Org admins can remove their own organisation's catalogue links"
   on catalogue_links for delete
   to authenticated
   using (is_org_admin(organisation_id, (select auth.uid())));
+
 grant select, insert, delete on table catalogue_links to authenticated;
+
 -- Rewritten to gate visibility on learner_visible (see migration comment
 -- above) and to fold in courses reached via a linked catalogue -- each
 -- course's own `catalogues` array names which of this org's own/linked
@@ -18884,6 +18895,7 @@ as $$
     )
   )
 $$;
+
 grant execute on function get_provider_profile(text) to anon, authenticated;
 
 

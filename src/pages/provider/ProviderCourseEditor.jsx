@@ -563,10 +563,6 @@ export default function ProviderCourseEditor() {
 
   async function handleSave(e) {
     e?.preventDefault()
-    if (!form.courseCode.trim()) {
-      setSaveError('Course code / ID is required.')
-      return
-    }
     setSaving(true)
     setSaveError(null)
     try {
@@ -831,14 +827,13 @@ function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCre
               <label className="block text-sm text-secondary mb-1" htmlFor="courseCode">
                 Course code / ID
               </label>
-              <input
-                id="courseCode"
-                required
-                value={form.courseCode}
-                onChange={(e) => setForm((f) => ({ ...f, courseCode: e.target.value }))}
-                placeholder="e.g. LS-101"
-                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-              />
+              {/* System-generated (set_course_code_trigger, 0113) the moment
+                  the course is created -- never hand-entered, so this is a
+                  read-only reference the same way AdminProviders/AdminUsers
+                  show org_code/user_code, not an editable field. */}
+              <p id="courseCode" className="w-full rounded-md border border-hairline bg-paper/60 px-3 py-2 font-mono text-xs text-secondary">
+                {form.courseCode || '—'}
+              </p>
             </div>
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="courseDuration">

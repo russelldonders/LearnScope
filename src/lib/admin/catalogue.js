@@ -331,36 +331,6 @@ export async function countPublishedCoursesInCatalogue(catalogueId) {
   return count ?? 0
 }
 
-// Catalogue approvers (0112): an org admin's picks from their own
-// organisation_members, scoped to one specific catalogue their org owns --
-// able to approve/reject/deactivate a course being published into that
-// catalogue, without a platform admin. RLS-scoped directly (no service-role
-// hop needed) -- unlike listOrganisationMembers, nothing here needs an
-// email lookup against auth.users.
-export async function listCatalogueApprovers(catalogueId) {
-  const { data, error } = await supabase
-    .from('catalogue_approvers')
-    .select('*')
-    .eq('catalogue_id', catalogueId)
-  if (error) throw error
-  return data ?? []
-}
-
-export async function addCatalogueApprover(catalogueId, userId, addedBy) {
-  const { data, error } = await supabase
-    .from('catalogue_approvers')
-    .insert({ catalogue_id: catalogueId, user_id: userId, added_by: addedBy })
-    .select()
-    .single()
-  if (error) throw error
-  return data
-}
-
-export async function removeCatalogueApprover(approverRowId) {
-  const { error } = await supabase.from('catalogue_approvers').delete().eq('id', approverRowId)
-  if (error) throw error
-}
-
 // Coarse "is this user an approver of at least one of this org's own
 // catalogues" check for the provider console's moderation buttons -- purely
 // a UI affordance, computed client-side since that's just as cheap as a

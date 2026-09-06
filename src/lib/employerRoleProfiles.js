@@ -56,6 +56,22 @@ export async function listEmployerRoleProfiles(employerId) {
   return (data ?? []).map(mapRoleProfile)
 }
 
+// Single-row counterpart for the role profile's own detail page
+// (EmployerRoleProfileDetail.jsx), reached directly by id (e.g. a bookmark
+// or refresh) rather than always arriving via the employer's full list.
+// maybeSingle (not single) so a deleted/inaccessible id resolves to null
+// instead of throwing -- RLS already scopes this to employer admins of that
+// profile's own employer, same as listEmployerRoleProfiles.
+export async function getEmployerRoleProfile(profileId) {
+  const { data, error } = await supabase
+    .from('employer_role_profiles')
+    .select(PROFILE_SELECT)
+    .eq('id', profileId)
+    .maybeSingle()
+  if (error) throw error
+  return data ? mapRoleProfile(data) : null
+}
+
 export async function createEmployerRoleProfile(employerId, profile, userId) {
   const { data, error } = await supabase
     .from('employer_role_profiles')
@@ -217,6 +233,32 @@ export function buildLearnerRoleAlignment(roleProfile, personalSkills, personalC
       ...requirement,
       completed: completedCourseIds.has(requirement.courseId),
     })),
+  }
+}
+
+// Denormalizes a raw mapRoleProfile() result plus its own
+// listEmployerRoleAssignments rows into the shape the role-profile UI
+// (RoleProfileList/RoleProfileSkillsPanel/RoleProfileTrainingPanel/
+// RoleProfileLinkedEmployeesPanel) actually renders -- shared by both the
+// full-roster table (EmployerRoleProfilesSection) and the single-profile
+// detail page (EmployerRoleProfileDetail) so the two can't drift into
+// different shapes for the same underlying data.
+export function toRoleProfileViewModel(profile, assignments, memberByUserId) {
+  const linkedEmployees = assignments
+    .filter((assignment) => ['proposed', 'linked'].includes(assignment.status))
+    .map((assignment) => ({
+      assignmentId: assignment.id,
+      name: assignment.name,
+      email: memberByUserId.get(assignment.userId)?.email ?? '',
+      status: assignment.status === 'linked' ? 'accepted' : 'pending',
+      assignedAt: assignment.proposedAt,
+    }))
+  return {
+    ...profile,
+    requiredSkills: profile.skillRequirements,
+    training: profile.trainingRequirements.map((item) => ({ ...item, title: item.name })),
+    linkedEmployees,
+    linkedEmployeeCount: linkedEmployees.length,
   }
 }
 

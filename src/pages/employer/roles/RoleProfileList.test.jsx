@@ -1,22 +1,36 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import RoleProfileList from './RoleProfileList'
 import { FIXTURE_ROLE_PROFILES } from './roleProfileFixtures'
 
 afterEach(cleanup)
 
+function getRow(name) {
+  return screen.getByText(name).closest('tr')
+}
+
 describe('RoleProfileList', () => {
   it('lists each role profile with its skill/training/linked-employee counts', () => {
     render(<RoleProfileList roleProfiles={FIXTURE_ROLE_PROFILES} />)
-    expect(screen.getByText('Senior Support Engineer')).toBeInTheDocument()
-    expect(screen.getByText(/3 skills · 2 training items · 2 employees linked/)).toBeInTheDocument()
+    const cells = getRow('Senior Support Engineer').querySelectorAll('td')
+    // Name, description, skills, training, employees, updated
+    expect(cells[2]).toHaveTextContent('3')
+    expect(cells[3]).toHaveTextContent('2')
+    expect(cells[4]).toHaveTextContent('2')
   })
 
-  it('calls onSelect with the role profile id', () => {
-    const onSelect = vi.fn()
-    render(<RoleProfileList roleProfiles={FIXTURE_ROLE_PROFILES} onSelect={onSelect} />)
-    fireEvent.click(screen.getByText('Senior Support Engineer'))
-    expect(onSelect).toHaveBeenCalledWith('role-profile-1')
+  it('calls onOpenProfile with the role profile id when its name is clicked', () => {
+    const onOpenProfile = vi.fn()
+    render(<RoleProfileList roleProfiles={FIXTURE_ROLE_PROFILES} onOpenProfile={onOpenProfile} />)
+    fireEvent.click(within(getRow('Senior Support Engineer')).getByRole('button', { name: 'Senior Support Engineer' }))
+    expect(onOpenProfile).toHaveBeenCalledWith('role-profile-1')
+  })
+
+  it('calls onOpenProfile with a different row\'s own id', () => {
+    const onOpenProfile = vi.fn()
+    render(<RoleProfileList roleProfiles={FIXTURE_ROLE_PROFILES} onOpenProfile={onOpenProfile} />)
+    fireEvent.click(within(getRow('Field Operations Lead')).getByRole('button', { name: 'Field Operations Lead' }))
+    expect(onOpenProfile).toHaveBeenCalledWith('role-profile-2')
   })
 
   it('calls onCreate when "New role profile" is clicked', () => {
@@ -31,10 +45,10 @@ describe('RoleProfileList', () => {
     expect(screen.getByText(/No role profiles yet/)).toBeInTheDocument()
   })
 
-  it('marks the selected profile with aria-current', () => {
-    render(<RoleProfileList roleProfiles={FIXTURE_ROLE_PROFILES} selectedId="role-profile-1" />)
-    expect(screen.getByText('Senior Support Engineer').closest('button')).toHaveAttribute('aria-current', 'true')
-    expect(screen.getByText('Field Operations Lead').closest('button')).not.toHaveAttribute('aria-current')
+  it('shows a no-match state when a search matches nothing, distinct from the empty roster', () => {
+    render(<RoleProfileList roleProfiles={[]} hasAnyRoleProfiles query="nomatch" filtersActive />)
+    expect(screen.getByText(/No role profiles match your search/)).toBeInTheDocument()
+    expect(screen.queryByText(/No role profiles yet/)).not.toBeInTheDocument()
   })
 
   it('renders an inline error', () => {

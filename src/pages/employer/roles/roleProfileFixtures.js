@@ -25,6 +25,10 @@ export const FIXTURE_ROLE_PROFILES = [
       { courseId: 'course-1', title: 'De-escalation fundamentals', requirement: 'required' },
       { courseId: 'course-2', title: 'Advanced troubleshooting', requirement: 'recommended' },
     ],
+    linkedEmployees: [
+      { assignmentId: 'assignment-1', name: 'Priya Natarajan', email: 'priya@acme.example', status: 'accepted', assignedAt: '2026-06-01' },
+      { assignmentId: 'assignment-2', name: 'Owen McAllister', email: 'owen@acme.example', status: 'pending', assignedAt: '2026-07-14' },
+    ],
     linkedEmployeeCount: 2,
   },
   {
@@ -34,6 +38,7 @@ export const FIXTURE_ROLE_PROFILES = [
     updatedAt: '2026-07-02',
     requiredSkills: [],
     training: [],
+    linkedEmployees: [],
     linkedEmployeeCount: 0,
   },
 ]
