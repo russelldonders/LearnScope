@@ -67,7 +67,7 @@ const SECTIONS = [
 ]
 
 const LEARNER_SORT_ACCESSORS = {
-  id: (m) => m.id ?? '',
+  id: (m) => m.userCode ?? '',
   email: (m) => (m.email || m.user_id || '').toLowerCase(),
   role: (m) => m.role ?? '',
   status: (m) => m.status ?? '',
@@ -613,7 +613,7 @@ function EmployerUsersPanel({ employer, attachedProviderOrg, canManageTrainingTe
   )
 }
 
-function EmployerLearnersPanel({ employer, searchParams, setSearchParams, heading = 'Learners', showIntro = true, attachedProviderOrg }) {
+export function EmployerLearnersPanel({ employer, searchParams, setSearchParams, heading = 'Learners', showIntro = true, attachedProviderOrg }) {
   const [members, setMembers] = useState([])
   const [trainingStaff, setTrainingStaff] = useState([])
   const [trainingStaffError, setTrainingStaffError] = useState(null)
@@ -627,6 +627,7 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
   const [message, setMessage] = useState(null)
   const [removeTarget, setRemoveTarget] = useState(null)
   const [removing, setRemoving] = useState(false)
+  const [showAddUsers, setShowAddUsers] = useState(false)
 
   // Assign training/Assign skill used to be their own top-level tabs, each
   // with its own copy of this same learner roster to pick targets from --
@@ -696,9 +697,9 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
 
   // Staff access can be managed for any listed user; learning actions still
   // require an active employer membership for every selected user.
-  const eligibleMembers = useMemo(() => filteredMembers.filter((m) => attachedProviderOrg || (m.employerMember && m.status === 'active')), [filteredMembers, attachedProviderOrg])
+  const eligibleMembers = filteredMembers
   const selection = useRowSelection(eligibleMembers.map((m) => m.user_id))
-  const eligiblePageIds = pageItems.filter((m) => attachedProviderOrg || (m.employerMember && m.status === 'active')).map((m) => m.user_id)
+  const eligiblePageIds = pageItems.map((m) => m.user_id)
   const selectedOnPage = eligiblePageIds.filter((id) => selection.selected.has(id)).length
   const selectedMembers = useMemo(
     () => eligibleMembers.filter((m) => selection.selected.has(m.user_id)),
@@ -726,17 +727,19 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
     }
   }
 
-  async function handleRequestDataAccess(member) {
+  const requestableMembers = selectedMembers.filter((m) => m.employerMember && m.status === 'active' && (!dataAccessByLearner[m.user_id] || ['declined', 'revoked'].includes(dataAccessByLearner[m.user_id].status)))
+
+  async function handleBulkRequestDataAccess() {
     setDataAccessError(null)
-    setDataAccessRequestingId(member.user_id)
-    try {
+    setDataAccessRequestingId('bulk')
+    const results = await Promise.allSettled(requestableMembers.map(async (member) => {
       const row = await requestEmployerDataAccess(employer.id, member.user_id)
       setDataAccessByLearner((prev) => ({ ...prev, [member.user_id]: row }))
-    } catch (err) {
-      setDataAccessError({ id: member.user_id, message: err.message })
-    } finally {
-      setDataAccessRequestingId(null)
-    }
+    }))
+    const failures = results.flatMap((r, i) => r.status === 'rejected' ? [requestableMembers[i].email + ': ' + (r.reason?.message || 'Request failed')] : [])
+    setMessage((results.length - failures.length) + ' data access request(s) sent. ' + (selectedMembers.length - results.length) + ' ineligible user(s) skipped.')
+    setDataAccessError(failures.join('; ') || null)
+    setDataAccessRequestingId(null)
   }
 
   async function handleAdd(e) {
@@ -807,9 +810,13 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
     setError(null)
     setRemoving(true)
     try {
-      await removeEmployerMember(removeTarget.id)
+      const results = await Promise.allSettled(removeTarget.map((m) => removeEmployerMember(m.id)))
+      const failures = results.flatMap((r, i) => r.status === 'rejected' ? [removeTarget[i].email + ': ' + (r.reason?.message || 'Removal failed')] : [])
+      setMessage((results.length - failures.length) + ' user(s) removed.')
+      selection.clear()
       setRemoveTarget(null)
       await load()
+      setError(failures.join('; ') || null)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -835,6 +842,8 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
         )}
       </div>
 
+      {selection.selected.size === 0 && <button type="button" aria-expanded={showAddUsers} aria-controls="employer-add-users" onClick={() => setShowAddUsers(!showAddUsers)} className="mb-3 rounded-md border border-hairline px-3 py-2 text-sm font-medium text-ink hover:bg-paper">{showAddUsers ? 'Close add users' : 'Add users'}</button>}
+      <div id="employer-add-users" hidden={!showAddUsers || selection.selected.size > 0}>
       <form onSubmit={handleAdd} className="bg-card border border-hairline rounded-lg p-4 flex flex-wrap items-end gap-2 mb-4">
         <div className="flex-1 min-w-[180px]">
           <label className="block text-xs text-secondary mb-1" htmlFor="employerMemberEmail">
@@ -872,8 +881,7 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
         </button>
       </form>
 
-      <MutationFeedback status="success" message={message} size="xs" className="mb-3" />
-      <MutationFeedback status="error" message={error} size="xs" className="mb-3" />
+
 
       <details className="bg-card border border-hairline rounded-lg p-4 mb-4">
         <summary className="text-sm font-medium text-ink cursor-pointer">Bulk import learners</summary>
@@ -942,6 +950,10 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
           </div>
         )}
       </details>
+      </div>
+      <MutationFeedback status="success" message={message} size="xs" className="mb-3" />
+      <MutationFeedback status="error" message={error} size="xs" className="mb-3" />
+      <MutationFeedback status="error" message={dataAccessError} size="xs" className="mb-3" />
 
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <input
@@ -967,8 +979,11 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
 
       <BulkActionBar
         count={selection.selected.size}
+        busy={Boolean(dataAccessRequestingId) || removing}
         onClear={selection.clear}
         actions={[
+          { label: 'Request data access', onClick: handleBulkRequestDataAccess, disabled: requestableMembers.length === 0 },
+          { label: 'Remove', onClick: () => setRemoveTarget([...selectedMembers]), variant: 'danger', disabled: selectedMembers.some((m) => !m.employerMember) },
           { label: 'Assign training', onClick: () => setAssignModal('training'), disabled: selectedMembers.some((m) => !m.employerMember || m.status !== 'active') },
           { label: 'Assign skill', onClick: () => setAssignModal('skill'), disabled: selectedMembers.some((m) => !m.employerMember || m.status !== 'active') },
           ...(attachedProviderOrg ? [{ label: 'Training team access', onClick: () => setAssignModal('access'), disabled: trainingStaffLoading || Boolean(trainingStaffError) }] : []),
@@ -1026,13 +1041,12 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
                   <SortableTh label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   {attachedProviderOrg && <th className="px-4 py-2 font-medium whitespace-nowrap">Training access</th>}
                   <th className="px-4 py-2 font-medium whitespace-nowrap">Data access</th>
-                  <th className="px-4 py-2 font-medium"></th>
+
                 </tr>
               </thead>
               <tbody>
                 {pageItems.map((m) => {
                   const dataAccess = dataAccessByLearner[m.user_id]
-                  const canRequest = m.employerMember && m.status === 'active' && (!dataAccess || dataAccess.status === 'declined' || dataAccess.status === 'revoked')
                   return (
                     <tr key={m.id} className="border-b border-hairline last:border-0">
                       <td className="px-4 py-2">
@@ -1040,13 +1054,11 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
                           type="checkbox"
                           checked={selection.selected.has(m.user_id)}
                           onChange={() => selection.toggle(m.user_id)}
-                          disabled={!attachedProviderOrg && m.status !== 'active'}
                           aria-label={`Select ${m.email || m.user_id}`}
-                          title={!attachedProviderOrg && m.status !== 'active' ? 'Only active members can be assigned training or skills' : undefined}
                           className="rounded border-hairline accent-moss disabled:opacity-30"
                         />
                       </td>
-                      <td className="px-4 py-2 font-mono text-[10px] text-secondary whitespace-nowrap">{m.id.slice(0, 8)}</td>
+                      <td className="px-4 py-2 font-mono text-xs text-secondary whitespace-nowrap">{m.userCode || '—'}</td>
                       <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{m.email || m.user_id}</td>
                       <td className="px-4 py-2 whitespace-nowrap">
                         <StatusBadge label={!m.employerMember ? 'Training team' : m.role === 'admin' ? 'Admin' : 'Member'} tone="neutral" />
@@ -1065,23 +1077,7 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
                             label={!m.employerMember ? 'Not applicable' : dataAccess ? DATA_ACCESS_STATUS_LABELS[dataAccess.status] : 'No request yet'}
                             tone={dataAccess?.status === 'declined' || dataAccess?.status === 'revoked' ? 'danger' : 'neutral'}
                           />
-                          {canRequest && (
-                            <button
-                              type="button"
-                              onClick={() => handleRequestDataAccess(m)}
-                              disabled={dataAccessRequestingId === m.user_id}
-                              className="text-moss hover:underline disabled:opacity-60"
-                            >
-                              {dataAccessRequestingId === m.user_id ? 'Requesting…' : 'Request data access'}
-                            </button>
-                          )}
-                          {dataAccessError?.id === m.user_id && (
-                            <MutationFeedback status="error" message={dataAccessError.message} size="xs" />
-                          )}
                         </div>
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        {m.employerMember && <button type="button" onClick={() => setRemoveTarget(m)} className="text-xs text-red-700 hover:underline whitespace-nowrap">Remove</button>}
                       </td>
                     </tr>
                   )
@@ -1095,7 +1091,8 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
 
       {removeTarget && (
         <ConfirmDialog
-          message={`Remove ${removeTarget.email || removeTarget.user_id} from ${employer.name}? They'll lose their ${removeTarget.role} access.`}
+          confirmLabel="Remove"
+          message={`Remove ${removeTarget.length === 1 ? (removeTarget[0].email || removeTarget[0].userCode) : `${removeTarget.length} selected users`} from ${employer.name}? They'll lose their employer access.`}
           onConfirm={handleRemove}
           onCancel={() => setRemoveTarget(null)}
           confirming={removing}
