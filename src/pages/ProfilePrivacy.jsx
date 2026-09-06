@@ -612,20 +612,21 @@ export default function ProfilePrivacy() {
                                 ? 'This employer has requested access — respond from your Actions page, or share directly below'
                                 : 'Not shared'}
                           </p>
+                          {isShared && access.approved_data?.some((category) => category !== 'skills') && <p className="text-xs text-secondary">Also shared: {access.approved_data.filter((category) => category !== 'skills').join(', ')}. Revoke access stops all sharing with this employer.</p>}
                           {dataAccessError?.id === employer.id && (
                             <p className="text-xs text-red-700 mt-1">{dataAccessError.message}</p>
                           )}
                         </div>
                         {isShared ? (
                           <div className="flex items-center gap-2 shrink-0">
-                            <button
+                            {(access.approved_data || ['skills']).includes('skills') && <button
                               type="button"
                               onClick={() => handleOpenEditShared(employer.id, access.id)}
                               disabled={acting}
                               className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60 whitespace-nowrap"
                             >
                               Edit shared skills
-                            </button>
+                            </button>}
                             <button
                               type="button"
                               onClick={() => handleRevoke(employer.id, access.id)}

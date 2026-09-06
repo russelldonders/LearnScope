@@ -17,7 +17,8 @@ import {
 } from '../lib/courseCatalogue'
 import { listMySkillSuggestions, adoptSkillSuggestion, dismissSkillSuggestion } from '../lib/skillSuggestions'
 import { supabase } from '../lib/supabaseClient'
-import ShareSkillsModal from '../components/ShareSkillsModal'
+import EmployerDataAccessConsentDialog from '../components/EmployerDataAccessConsentDialog'
+import { requestedDataSummary } from '../lib/employerDataAccess'
 import CohortPickerModal from '../components/CohortPickerModal'
 import ManagerTeamInviteCard from './manager/learner/ManagerTeamInviteCard'
 import { decideManagerTeamInvite, listMyManagerTeamInvites } from '../lib/managerTeams'
@@ -94,7 +95,7 @@ export default function Actions() {
           load: async () => {
             const { data, error: skillsError } = await supabase
               .from('skills')
-              .select('id, name')
+              .select('id, name, library_skill_id')
               .eq('user_id', user.id)
               .order('name', { ascending: true })
             if (skillsError) throw skillsError
@@ -216,14 +217,14 @@ export default function Actions() {
     setAcceptingDataAccessRequest(request)
   }
 
-  // Any thrown error propagates to ShareSkillsModal, which shows it inline
+  // Any thrown error propagates to EmployerDataAccessConsentDialog, which shows it inline
   // and stays open (same pattern as its own save errors) rather than being
   // caught here.
-  async function handleConfirmAcceptDataAccess(skillIds) {
+  async function handleConfirmAcceptDataAccess(skillIds, categories) {
     const request = acceptingDataAccessRequest
     setDataAccessDecidingId(request.id)
     try {
-      await decideEmployerDataAccessRequest(request.id, true, skillIds)
+      await decideEmployerDataAccessRequest(request.id, true, skillIds, categories)
       setDataAccessRequests((prev) => prev.filter((r) => r.id !== request.id))
       setAcceptingDataAccessRequest(null)
       refreshPendingActionCount()
@@ -608,12 +609,13 @@ export default function Actions() {
               {dataAccessRequests.map((request) => (
                 <div key={request.id} className="bg-card border border-hairline rounded-lg p-4">
                   <p className="text-sm text-ink">
-                    <strong>{request.employers?.name || 'An employer'}</strong> would like access to view your
-                    skills profile
+                    <strong>{request.employers?.name || 'An employer'}</strong> would like access to: {' '}
+                    {requestedDataSummary(request)}
                   </p>
                   <p className="font-mono text-xs text-secondary mt-1">
                     {new Date(request.created_at).toLocaleDateString()}
                   </p>
+                  {request.request_comment && <blockquote className="text-sm text-secondary whitespace-pre-wrap mt-2">{request.request_comment}</blockquote>}
                   {dataAccessError?.id === request.id && (
                     <p className="text-xs text-red-700 mt-1">{dataAccessError.message}</p>
                   )}
@@ -624,7 +626,7 @@ export default function Actions() {
                       disabled={dataAccessDecidingId === request.id}
                       className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
                     >
-                      Select which skills to share
+                      Review request
                     </button>
                     <button
                       type="button"
@@ -830,12 +832,9 @@ export default function Actions() {
       </main>
 
       {acceptingDataAccessRequest && (
-        <ShareSkillsModal
+        <EmployerDataAccessConsentDialog
+          request={acceptingDataAccessRequest}
           skills={mySkills}
-          initiallySelectedIds={[]}
-          title="Choose skills to share"
-          description={`Pick which of your skills ${acceptingDataAccessRequest.employers?.name || 'this employer'} can see. You can change this any time from Privacy settings.`}
-          confirmLabel="Accept and share"
           onConfirm={handleConfirmAcceptDataAccess}
           onClose={() => setAcceptingDataAccessRequest(null)}
         />

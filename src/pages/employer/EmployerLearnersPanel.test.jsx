@@ -4,6 +4,8 @@ import { MemoryRouter, useSearchParams } from 'react-router-dom'
 import { EmployerLearnersPanel } from './EmployerConsole'
 import { listEmployerMembers, listEmployerDataAccessRequests, requestEmployerDataAccess, removeEmployerMember } from '../../lib/admin/employers'
 
+vi.mock('../../lib/skillLibrary', () => ({ listLibrarySkills: vi.fn().mockResolvedValue([]) }))
+
 vi.mock('../../lib/supabaseClient', () => ({ supabase: {} }))
 
 vi.mock('../../lib/admin/employers', async (original) => ({
@@ -31,10 +33,14 @@ it('reveals invitations through Add users and uses the account code', async () =
   render(<MemoryRouter><Panel /></MemoryRouter>)
   expect(await screen.findByText('USR-000001')).toBeVisible()
   expect(screen.queryByRole('textbox', { name: 'Add or invite by email' })).toBeNull()
-  fireEvent.click(screen.getByRole('button', { name: 'Add users' }))
+  fireEvent.click(screen.getByRole('link', { name: 'Add users' }))
   expect(screen.getByRole('textbox', { name: 'Add or invite by email' })).toBeVisible()
+  expect(screen.queryByRole('table')).toBeNull()
+  expect(screen.getByRole('heading', { name: 'Add users' })).toBeVisible()
+  fireEvent.click(screen.getByRole('link', { name: 'Back to users' }))
+  expect(screen.getByRole('table')).toBeVisible()
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select a@example.com' }))
-  expect(screen.queryByRole('button', { name: 'Close add users' })).toBeNull()
+  expect(screen.queryByRole('link', { name: 'Add users' })).toBeNull()
   expect(screen.queryByRole('textbox', { name: 'Add or invite by email' })).toBeNull()
 })
 it('requests access for eligible selections and removes active and pending users after confirmation', async () => {
@@ -42,7 +48,8 @@ it('requests access for eligible selections and removes active and pending users
   fireEvent.click(await screen.findByRole('checkbox', { name: 'Select a@example.com' }))
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select b@example.com' }))
   fireEvent.click(screen.getByRole('button', { name: 'Request data access' }))
-  await waitFor(() => expect(requestEmployerDataAccess).toHaveBeenCalledWith('employer', 'a'))
+  fireEvent.click(screen.getByRole('button', { name: 'Send request' }))
+  await waitFor(() => expect(requestEmployerDataAccess).toHaveBeenCalledWith('employer', 'a', { categories: ['skills'], skillIds: [], comment: '' }))
   expect(requestEmployerDataAccess).toHaveBeenCalledTimes(1)
   await screen.findByText(/1 data access request\(s\) sent/)
   fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
