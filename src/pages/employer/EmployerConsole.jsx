@@ -7,7 +7,7 @@ import ConfirmDialog from '../../components/ConfirmDialog'
 import ResourceLibrarySection from '../../components/ResourceLibrarySection'
 import ProviderSkillsSection from '../../components/ProviderSkillsSection'
 import { ProviderTrainingSection, ProviderCataloguesSection } from '../provider/ProviderConsole'
-import { OrganisationStaffPanel } from '../admin/AdminProviders'
+import TrainingTeamAccessDialog from './TrainingTeamAccessDialog'
 import {
   listEmployers,
   listEmployerMembers,
@@ -24,7 +24,7 @@ import {
   linkProviderToEmployer,
   unlinkProviderFromEmployer,
 } from '../../lib/admin/employers'
-import { listOrganisations } from '../../lib/admin/organisations'
+import { listOrganisationMembers, listOrganisations } from '../../lib/admin/organisations'
 import { listLibrarySkills } from '../../lib/skillLibrary'
 import { listEmployerRoleProfiles, assignEmployerRoleProfile } from '../../lib/employerRoleProfiles'
 import { LEVELS, LEVEL_LABELS } from '../../lib/levels'
@@ -110,10 +110,7 @@ const LINKED_PROVIDER_SORT_ACCESSORS = {
 // Each panel's "primary" table uses the plain q/status/sort/dir/page/
 // pageSize names (safe -- only one section is ever mounted at a time, so
 // there's no runtime collision, mirroring ProviderConsole.jsx's org
-// switcher); the Users tab's two read-only history sections underneath its
-// learner roster (EmployerTrainingAssignmentsHistory, EmployerSkillAssign-
-// mentsHistory -- visible on screen at the same time as that roster) prefix
-// their own names (aq/aSort/..., sq/sSort/...) to avoid colliding with it.
+// switcher). Assignment dialogs keep history filters local to each selection.
 // Used to reset all of them together on both an employer switch and a
 // section switch, so a stale filter/page from one view never carries over
 // and makes the newly-selected view look empty (or, since several sections
@@ -593,16 +590,6 @@ const DATA_ACCESS_STATUS_LABELS = {
 }
 
 function EmployerUsersPanel({ employer, attachedProviderOrg, canManageTrainingTeam, searchParams, setSearchParams }) {
-  // Bumped after a successful bulk assign-training/assign-skill action
-  // (triggered from EmployerLearnersPanel's own selection below) so the two
-  // read-only history sections further down -- which each load their own
-  // data independently -- pick up the new row without this whole panel
-  // needing to own or thread that data itself.
-  const [historyRefreshKey, setHistoryRefreshKey] = useState(0)
-  function refreshHistory() {
-    setHistoryRefreshKey((k) => k + 1)
-  }
-
   return (
     <div className="space-y-10">
       <div>
@@ -617,45 +604,20 @@ function EmployerUsersPanel({ employer, attachedProviderOrg, canManageTrainingTe
         employer={employer}
         searchParams={searchParams}
         setSearchParams={setSearchParams}
-        heading="Learners and employer administrators"
+        heading="Users and access"
+        attachedProviderOrg={canManageTrainingTeam ? attachedProviderOrg : null}
         showIntro={false}
-        onAssigned={refreshHistory}
       />
 
-      {canManageTrainingTeam && attachedProviderOrg && (
-        <section aria-labelledby="employer-training-team-heading" className="border-t border-hairline pt-8">
-          <OrganisationStaffPanel
-            organisation={attachedProviderOrg}
-            heading="Training team access"
-            headingId="employer-training-team-heading"
-            description="Give administrators and trainers access to create and maintain this employer's courses, skills, and resources."
-          />
-        </section>
-      )}
-
-      <section aria-labelledby="employer-training-history-heading" className="border-t border-hairline pt-8">
-        <EmployerTrainingAssignmentsHistory
-          key={`${employer.id}-${historyRefreshKey}`}
-          employer={employer}
-          searchParams={searchParams}
-          setSearchParams={setSearchParams}
-        />
-      </section>
-
-      <section aria-labelledby="employer-skill-history-heading" className="border-t border-hairline pt-8">
-        <EmployerSkillAssignmentsHistory
-          key={`${employer.id}-${historyRefreshKey}`}
-          employer={employer}
-          searchParams={searchParams}
-          setSearchParams={setSearchParams}
-        />
-      </section>
     </div>
   )
 }
 
-function EmployerLearnersPanel({ employer, searchParams, setSearchParams, heading = 'Learners', showIntro = true, onAssigned }) {
+function EmployerLearnersPanel({ employer, searchParams, setSearchParams, heading = 'Learners', showIntro = true, attachedProviderOrg }) {
   const [members, setMembers] = useState([])
+  const [trainingStaff, setTrainingStaff] = useState([])
+  const [trainingStaffError, setTrainingStaffError] = useState(null)
+  const [trainingStaffLoading, setTrainingStaffLoading] = useState(Boolean(attachedProviderOrg))
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -694,9 +656,34 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
   // panel's own "primary" table, so it uses the plain param names.
   const [query, setQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
   const q = query.trim().toLowerCase()
+  const users = useMemo(() => {
+    const staffById = new Map(trainingStaff.map((staff) => [staff.user_id, staff]))
+    const employerUserIds = new Set(members.map((member) => member.user_id))
+    return [
+      ...members.map((member) => ({ ...member, employerMember: true, trainingAccess: staffById.get(member.user_id) })),
+      ...trainingStaff.filter((staff) => !employerUserIds.has(staff.user_id)).map((staff) => ({
+        ...staff, role: null, employerMember: false, trainingAccess: staff,
+      })),
+    ]
+  }, [members, trainingStaff])
+
+  useEffect(() => {
+    let cancelled = false
+    setTrainingStaff([])
+    setTrainingStaffError(null)
+    setTrainingStaffLoading(Boolean(attachedProviderOrg))
+    if (attachedProviderOrg) {
+      listOrganisationMembers(attachedProviderOrg.id)
+        .then((staff) => { if (!cancelled) setTrainingStaff(staff) })
+        .catch((err) => { if (!cancelled) setTrainingStaffError(err.message) })
+        .finally(() => { if (!cancelled) setTrainingStaffLoading(false) })
+    }
+    return () => { cancelled = true }
+  }, [attachedProviderOrg])
+
   const filteredMembers = useMemo(
-    () => (q ? members.filter((m) => (m.email || m.user_id || '').toLowerCase().includes(q)) : members),
-    [members, q]
+    () => (q ? users.filter((m) => (m.email || m.user_id || '').toLowerCase().includes(q)) : users),
+    [users, q]
   )
   const filtersActive = query !== ''
 
@@ -707,13 +694,11 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
     useSortedPage(filteredMembers, LEARNER_SORT_ACCESSORS, { urlSync: { searchParams, setSearchParams } })
 
-  // Only an active member is a valid assign-training/assign-skill target
-  // (both RPCs silently skip anyone else) -- selection is restricted to
-  // those rows up front instead, so a selection can't silently include
-  // someone who'd just be dropped once the action ran.
-  const eligibleMembers = useMemo(() => filteredMembers.filter((m) => m.status === 'active'), [filteredMembers])
+  // Staff access can be managed for any listed user; learning actions still
+  // require an active employer membership for every selected user.
+  const eligibleMembers = useMemo(() => filteredMembers.filter((m) => attachedProviderOrg || (m.employerMember && m.status === 'active')), [filteredMembers, attachedProviderOrg])
   const selection = useRowSelection(eligibleMembers.map((m) => m.user_id))
-  const eligiblePageIds = pageItems.filter((m) => m.status === 'active').map((m) => m.user_id)
+  const eligiblePageIds = pageItems.filter((m) => attachedProviderOrg || (m.employerMember && m.status === 'active')).map((m) => m.user_id)
   const selectedOnPage = eligiblePageIds.filter((id) => selection.selected.has(id)).length
   const selectedMembers = useMemo(
     () => eligibleMembers.filter((m) => selection.selected.has(m.user_id)),
@@ -836,7 +821,6 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
     setAssignModal(null)
     setAssignResult(result)
     selection.clear()
-    onAssigned?.()
   }
 
   return (
@@ -979,13 +963,16 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
         )}
       </div>
 
+      <MutationFeedback status="error" message={trainingStaffError ? `Could not load training team access: ${trainingStaffError}` : null} size="xs" />
+
       <BulkActionBar
         count={selection.selected.size}
         onClear={selection.clear}
         actions={[
-          { label: 'Assign training', onClick: () => setAssignModal('training') },
-          { label: 'Assign skill', onClick: () => setAssignModal('skill') },
-          { label: 'Assign role profile', onClick: () => setAssignModal('role') },
+          { label: 'Assign training', onClick: () => setAssignModal('training'), disabled: selectedMembers.some((m) => !m.employerMember || m.status !== 'active') },
+          { label: 'Assign skill', onClick: () => setAssignModal('skill'), disabled: selectedMembers.some((m) => !m.employerMember || m.status !== 'active') },
+          ...(attachedProviderOrg ? [{ label: 'Training team access', onClick: () => setAssignModal('access'), disabled: trainingStaffLoading || Boolean(trainingStaffError) }] : []),
+          { label: 'Assign role profile', onClick: () => setAssignModal('role'), disabled: selectedMembers.some((m) => !m.employerMember || m.status !== 'active') },
         ]}
       />
 
@@ -1019,7 +1006,7 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
         <p className="text-xs text-secondary">Loading learners…</p>
       ) : filteredMembers.length === 0 ? (
         <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
-          <p className="text-secondary">{members.length === 0 ? 'No learners yet.' : 'No learners match your search.'}</p>
+          <p className="text-secondary">{users.length === 0 ? 'No users yet.' : 'No users match your search.'}</p>
         </div>
       ) : (
         <div className="bg-card border border-hairline rounded-lg">
@@ -1034,9 +1021,10 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
                     onChange={() => selection.toggleAll(eligiblePageIds)}
                   />
                   <SortableTh label="ID" columnKey="id" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                  <SortableTh label="Learner" columnKey="email" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortableTh label="User" columnKey="email" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <SortableTh label="Role" columnKey="role" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   <SortableTh label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                  {attachedProviderOrg && <th className="px-4 py-2 font-medium whitespace-nowrap">Training access</th>}
                   <th className="px-4 py-2 font-medium whitespace-nowrap">Data access</th>
                   <th className="px-4 py-2 font-medium"></th>
                 </tr>
@@ -1044,7 +1032,7 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
               <tbody>
                 {pageItems.map((m) => {
                   const dataAccess = dataAccessByLearner[m.user_id]
-                  const canRequest = m.status === 'active' && (!dataAccess || dataAccess.status === 'declined' || dataAccess.status === 'revoked')
+                  const canRequest = m.employerMember && m.status === 'active' && (!dataAccess || dataAccess.status === 'declined' || dataAccess.status === 'revoked')
                   return (
                     <tr key={m.id} className="border-b border-hairline last:border-0">
                       <td className="px-4 py-2">
@@ -1052,24 +1040,29 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
                           type="checkbox"
                           checked={selection.selected.has(m.user_id)}
                           onChange={() => selection.toggle(m.user_id)}
-                          disabled={m.status !== 'active'}
+                          disabled={!attachedProviderOrg && m.status !== 'active'}
                           aria-label={`Select ${m.email || m.user_id}`}
-                          title={m.status !== 'active' ? 'Only active members can be assigned training or skills' : undefined}
+                          title={!attachedProviderOrg && m.status !== 'active' ? 'Only active members can be assigned training or skills' : undefined}
                           className="rounded border-hairline accent-moss disabled:opacity-30"
                         />
                       </td>
                       <td className="px-4 py-2 font-mono text-[10px] text-secondary whitespace-nowrap">{m.id.slice(0, 8)}</td>
                       <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{m.email || m.user_id}</td>
                       <td className="px-4 py-2 whitespace-nowrap">
-                        <StatusBadge label={m.role === 'admin' ? 'Admin' : 'Member'} tone="neutral" />
+                        <StatusBadge label={!m.employerMember ? 'Training team' : m.role === 'admin' ? 'Admin' : 'Member'} tone="neutral" />
                       </td>
                       <td className="px-4 py-2 whitespace-nowrap">
                         <StatusBadge label={m.status === 'pending' ? 'Pending' : 'Active'} tone="neutral" />
                       </td>
+                      {attachedProviderOrg && (
+                        <td className="px-4 py-2 text-xs whitespace-nowrap">
+                          {m.trainingAccess ? `${m.trainingAccess.role === 'admin' ? 'Admin' : 'Trainer'}${m.trainingAccess.status === 'pending' ? ' (pending)' : ''}` : 'None'}
+                        </td>
+                      )}
                       <td className="px-4 py-2 text-xs whitespace-nowrap">
                         <div className="flex flex-col gap-1 items-start">
                           <StatusBadge
-                            label={dataAccess ? DATA_ACCESS_STATUS_LABELS[dataAccess.status] : 'No request yet'}
+                            label={!m.employerMember ? 'Not applicable' : dataAccess ? DATA_ACCESS_STATUS_LABELS[dataAccess.status] : 'No request yet'}
                             tone={dataAccess?.status === 'declined' || dataAccess?.status === 'revoked' ? 'danger' : 'neutral'}
                           />
                           {canRequest && (
@@ -1088,9 +1081,7 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
                         </div>
                       </td>
                       <td className="px-4 py-2 text-right">
-                        <button type="button" onClick={() => setRemoveTarget(m)} className="text-xs text-red-700 hover:underline whitespace-nowrap">
-                          Remove
-                        </button>
+                        {m.employerMember && <button type="button" onClick={() => setRemoveTarget(m)} className="text-xs text-red-700 hover:underline whitespace-nowrap">Remove</button>}
                       </td>
                     </tr>
                   )
@@ -1111,6 +1102,21 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
         />
       )}
 
+      {assignModal === 'access' && attachedProviderOrg && (
+        <TrainingTeamAccessDialog
+          organisation={attachedProviderOrg}
+          members={selectedMembers}
+          onClose={() => setAssignModal(null)}
+          onUpdated={async () => {
+            try {
+              setTrainingStaff(await listOrganisationMembers(attachedProviderOrg.id))
+              setTrainingStaffError(null)
+            } catch (err) {
+              setTrainingStaffError(err.message)
+            }
+          }}
+        />
+      )}
       {assignModal === 'training' && (
         <AssignTrainingModal
           employer={employer}
@@ -1152,6 +1158,7 @@ function EmployerLearnersPanel({ employer, searchParams, setSearchParams, headin
 // the learner still has to click "Start" on their own /actions page
 // (respondToCourseAssignment) to create the real enrolment.
 function AssignTrainingModal({ employer, members, onClose, onAssigned }) {
+  const [historyParams, setHistoryParams] = useState(() => new URLSearchParams())
   const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -1192,7 +1199,7 @@ function AssignTrainingModal({ employer, members, onClose, onAssigned }) {
       labelledBy="assign-training-dialog-title"
       onClose={assigning ? undefined : onClose}
       closeOnBackdrop={!assigning}
-      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+      panelClassName="w-full max-w-3xl bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
       <h2 id="assign-training-dialog-title" className="font-display text-xl text-ink mb-1">Assign training</h2>
       <p className="text-sm text-secondary mb-4">
@@ -1248,34 +1255,36 @@ function AssignTrainingModal({ employer, members, onClose, onAssigned }) {
           </div>
         </form>
       )}
+      <section aria-labelledby="employer-training-history-heading" className="mt-6 border-t border-hairline pt-6">
+        <EmployerTrainingAssignmentsHistory
+          employer={employer}
+          members={members}
+          searchParams={historyParams}
+          setSearchParams={setHistoryParams}
+        />
+      </section>
     </AccessibleDialog>
   )
 }
 
-// Read-only "assigned so far" roster -- initiating an assignment moved to
-// AssignTrainingModal (triggered from EmployerLearnersPanel's own selection
-// on the Users tab above), this just keeps the history visible somewhere
-// now that it no longer has its own tab.
-function EmployerTrainingAssignmentsHistory({ employer, searchParams, setSearchParams }) {
-  const [members, setMembers] = useState([])
+// Assignment history for the selected users in the matching assignment dialog.
+
+function EmployerTrainingAssignmentsHistory({ employer, members, searchParams, setSearchParams }) {
   const [assignments, setAssignments] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   useEffect(() => {
     load()
-  }, [employer.id])
+  }, [employer.id, members])
 
   async function load() {
     setLoading(true)
     setError(null)
     try {
-      const [membersData, assignmentsData] = await Promise.all([
-        listEmployerMembers(employer.id),
-        listEmployerCourseAssignments(employer.id),
-      ])
-      setMembers(membersData)
-      setAssignments(assignmentsData)
+      const rows = await listEmployerCourseAssignments(employer.id)
+      const selectedUserIds = new Set(members.map((member) => member.user_id))
+      setAssignments(rows.filter((row) => selectedUserIds.has(row.assigned_to)))
     } catch (err) {
       setError(err.message)
     } finally {
@@ -1288,9 +1297,6 @@ function EmployerTrainingAssignmentsHistory({ employer, searchParams, setSearchP
     () => assignments.map((a) => ({ ...a, learnerEmail: emailByUserId.get(a.assigned_to) })),
     [assignments, emailByUserId]
   )
-  // Prefixed (aq/aSort/...) since this shares the Users tab's screen with
-  // EmployerLearnersPanel's own roster, which uses the plain q/sort/...
-  // names for its own "primary" table.
   const [assignmentQuery, setAssignmentQuery] = useUrlParam(searchParams, setSearchParams, 'aq', '', { resetParams: ['aPage'] })
   const aq = assignmentQuery.trim().toLowerCase()
   const filteredAssignments = useMemo(
@@ -1332,7 +1338,7 @@ function EmployerTrainingAssignmentsHistory({ employer, searchParams, setSearchP
         <p className="text-xs text-secondary">Loading…</p>
       ) : assignments.length === 0 ? (
         <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
-          <p className="text-secondary">No training assigned yet. Select learners above to assign a course.</p>
+          <p className="text-secondary">No training assigned to the selected users yet.</p>
         </div>
       ) : (
         <div className="bg-card border border-hairline rounded-lg">
@@ -1410,6 +1416,7 @@ function EmployerTrainingAssignmentsHistory({ employer, searchParams, setSearchP
 // (src/lib/admin/skills.js), which surfaces inactive/moderated entries and
 // pulls in owner-identity fields that have no place in this picker.
 function AssignSkillModal({ employer, members, onClose, onAssigned }) {
+  const [historyParams, setHistoryParams] = useState(() => new URLSearchParams())
   const [librarySkills, setLibrarySkills] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -1485,7 +1492,7 @@ function AssignSkillModal({ employer, members, onClose, onAssigned }) {
       labelledBy="assign-skill-dialog-title"
       onClose={assigning ? undefined : onClose}
       closeOnBackdrop={!assigning}
-      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+      panelClassName="w-full max-w-3xl bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
       <h2 id="assign-skill-dialog-title" className="font-display text-xl text-ink mb-1">Assign skill</h2>
       <p className="text-sm text-secondary mb-4">
@@ -1608,6 +1615,14 @@ function AssignSkillModal({ employer, members, onClose, onAssigned }) {
           </div>
         </form>
       )}
+      <section aria-labelledby="employer-skill-history-heading" className="mt-6 border-t border-hairline pt-6">
+        <EmployerSkillAssignmentsHistory
+          employer={employer}
+          members={members}
+          searchParams={historyParams}
+          setSearchParams={setHistoryParams}
+        />
+      </section>
     </AccessibleDialog>
   )
 }
@@ -1724,30 +1739,24 @@ function AssignRoleModal({ employer, members, onClose, onAssigned }) {
   )
 }
 
-// Read-only "suggested so far" roster -- initiating a skill assignment
-// moved to AssignSkillModal (triggered from EmployerLearnersPanel's own
-// selection on the Users tab above), this just keeps the history visible
-// somewhere now that it no longer has its own tab.
-function EmployerSkillAssignmentsHistory({ employer, searchParams, setSearchParams }) {
-  const [members, setMembers] = useState([])
+// Assignment history for the selected users in the matching assignment dialog.
+
+function EmployerSkillAssignmentsHistory({ employer, members, searchParams, setSearchParams }) {
   const [suggestions, setSuggestions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   useEffect(() => {
     load()
-  }, [employer.id])
+  }, [employer.id, members])
 
   async function load() {
     setLoading(true)
     setError(null)
     try {
-      const [membersData, suggestionsData] = await Promise.all([
-        listEmployerMembers(employer.id),
-        listEmployerSkillSuggestions(employer.id),
-      ])
-      setMembers(membersData)
-      setSuggestions(suggestionsData)
+      const rows = await listEmployerSkillSuggestions(employer.id)
+      const selectedUserIds = new Set(members.map((member) => member.user_id))
+      setSuggestions(rows.filter((row) => selectedUserIds.has(row.learner_id)))
     } catch (err) {
       setError(err.message)
     } finally {
@@ -1760,9 +1769,6 @@ function EmployerSkillAssignmentsHistory({ employer, searchParams, setSearchPara
     () => suggestions.map((s) => ({ ...s, learnerEmail: emailByUserId.get(s.learner_id) })),
     [suggestions, emailByUserId]
   )
-  // Prefixed (sq/sSort/...) since this shares the Users tab's screen with
-  // EmployerLearnersPanel's own roster, which uses the plain q/sort/...
-  // names for its own "primary" table.
   const [suggestionQuery, setSuggestionQuery] = useUrlParam(searchParams, setSearchParams, 'sq', '', { resetParams: ['sPage'] })
   const sq = suggestionQuery.trim().toLowerCase()
   const filteredSuggestions = useMemo(
@@ -1804,7 +1810,7 @@ function EmployerSkillAssignmentsHistory({ employer, searchParams, setSearchPara
         <p className="text-xs text-secondary">Loading…</p>
       ) : suggestions.length === 0 ? (
         <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
-          <p className="text-secondary">No skills assigned yet. Select learners above to assign one.</p>
+          <p className="text-secondary">No skills assigned to the selected users yet.</p>
         </div>
       ) : (
         <div className="bg-card border border-hairline rounded-lg">
