@@ -22,6 +22,9 @@ const {
   suggestManagerTeamSkill,
   listMyManagerTeamSkillSuggestions,
   dismissManagerTeamSkillSuggestion,
+  addManagerTeamSkill,
+  listManagerTeamSkills,
+  removeManagerTeamSkill,
 } = await import('./managerTeams')
 
 describe('manager team service', () => {
@@ -169,5 +172,30 @@ describe('manager team service', () => {
     await dismissManagerTeamSkillSuggestion('suggestion-1')
     expect(from).toHaveBeenCalledWith('manager_team_skill_suggestions')
     expect(update).toHaveBeenCalledWith({ status: 'dismissed' })
+  })
+
+  it('adds a skill to the team through the leader-authorised RPC, independent of any member', async () => {
+    rpc.mockResolvedValue({
+      data: { id: 'tracked-1', team_id: 'team-1', skill_library_id: 'lib-1', skill_name: 'Coaching', added_by: 'me', created_at: '2026-09-07' },
+      error: null,
+    })
+    await expect(addManagerTeamSkill('team-1', 'lib-1', 'Coaching')).resolves.toEqual({
+      id: 'tracked-1', teamId: 'team-1', skillLibraryId: 'lib-1', skillName: 'Coaching', addedBy: 'me', createdAt: '2026-09-07',
+    })
+    expect(rpc).toHaveBeenCalledWith('add_manager_team_skill', { p_team_id: 'team-1', p_skill_library_id: 'lib-1', p_skill_name: 'Coaching' })
+  })
+
+  it('lists the team’s own tracked skills through the leader-authorised RPC', async () => {
+    rpc.mockResolvedValue({ data: [{ id: 'tracked-1', team_id: 'team-1', skill_library_id: 'lib-1', skill_name: 'Coaching', added_by: 'me', created_at: '2026-09-07' }], error: null })
+    await expect(listManagerTeamSkills('team-1')).resolves.toEqual([
+      { id: 'tracked-1', teamId: 'team-1', skillLibraryId: 'lib-1', skillName: 'Coaching', addedBy: 'me', createdAt: '2026-09-07' },
+    ])
+    expect(rpc).toHaveBeenCalledWith('list_manager_team_skills', { p_team_id: 'team-1' })
+  })
+
+  it('removes a tracked team skill through the leader-authorised RPC', async () => {
+    rpc.mockResolvedValue({ error: null })
+    await removeManagerTeamSkill('tracked-1')
+    expect(rpc).toHaveBeenCalledWith('remove_manager_team_skill', { p_id: 'tracked-1' })
   })
 })

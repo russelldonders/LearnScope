@@ -44,47 +44,63 @@ describe('ManagerSkillsPanel', () => {
     expect(screen.getByText(/Invite learners from the Members tab/)).toBeInTheDocument()
   })
 
-  it('does not offer to add a skill without permission (an archived team, or no members yet)', () => {
-    const { rerender } = render(<ManagerSkillsPanel members={members} />)
-    expect(screen.queryByRole('button', { name: '+ Add a skill' })).not.toBeInTheDocument()
-    rerender(<ManagerSkillsPanel members={[]} onSuggestSkill={vi.fn()} />)
+  it('does not offer to add a skill without permission (an archived team)', () => {
+    render(<ManagerSkillsPanel members={members} />)
     expect(screen.queryByRole('button', { name: '+ Add a skill' })).not.toBeInTheDocument()
   })
 
-  it('lets a leader suggest a skill to selected team members, retrying only the ones that failed', async () => {
+  it('lets a leader add a skill for the team with nobody selected, tracking it before anyone has it', async () => {
     listLibrarySkills.mockResolvedValue([{ id: 'lib-1', name: 'Coaching' }])
+    const onAddSkill = vi.fn().mockResolvedValue()
+    const onSuggestSkill = vi.fn()
+    render(<ManagerSkillsPanel members={members} onAddSkill={onAddSkill} onSuggestSkill={onSuggestSkill} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Add a skill' }))
+    fireEvent.change(screen.getByLabelText('Skill'), { target: { value: 'Coach' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Coaching' }))
+    expect(screen.getByRole('button', { name: 'Add skill' })).not.toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Add skill' }))
+
+    await waitFor(() => expect(onAddSkill).toHaveBeenCalledWith('lib-1', 'Coaching'))
+    expect(onSuggestSkill).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('shows a just-added team skill as its own row, with a Remove action since nobody has it yet', () => {
+    const teamSkills = [{ id: 'tracked-1', teamId: 'team-1', skillLibraryId: 'lib-1', skillName: 'Coaching', addedBy: 'me', createdAt: '2026-09-07' }]
+    const onRemoveTeamSkill = vi.fn()
+    render(<ManagerSkillsPanel members={members} teamSkills={teamSkills} onAddSkill={vi.fn()} onRemoveTeamSkill={onRemoveTeamSkill} />)
+    expect(screen.getByRole('rowheader', { name: /Coaching/ })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: "Remove Coaching from the team's skill list" }))
+    expect(onRemoveTeamSkill).toHaveBeenCalledWith('tracked-1')
+  })
+
+  it('does not offer to remove a tracked skill once someone has actually shared it', () => {
+    const teamSkills = [{ id: 'tracked-1', teamId: 'team-1', skillLibraryId: 'lib-1', skillName: 'Facilitation', addedBy: 'me', createdAt: '2026-09-07' }]
+    render(<ManagerSkillsPanel members={members} teamSkills={teamSkills} onAddSkill={vi.fn()} onRemoveTeamSkill={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: /Remove Facilitation/ })).not.toBeInTheDocument()
+  })
+
+  it('lets a leader add and suggest a skill to selected team members in one step, retrying only the ones that failed', async () => {
+    listLibrarySkills.mockResolvedValue([{ id: 'lib-1', name: 'Coaching' }])
+    const onAddSkill = vi.fn().mockResolvedValue()
     const onSuggestSkill = vi.fn()
       .mockResolvedValueOnce()
       .mockRejectedValueOnce(new Error('Already suggested'))
-    render(<ManagerSkillsPanel members={members} onSuggestSkill={onSuggestSkill} />)
+    render(<ManagerSkillsPanel members={members} onAddSkill={onAddSkill} onSuggestSkill={onSuggestSkill} />)
 
     fireEvent.click(screen.getByRole('button', { name: '+ Add a skill' }))
     fireEvent.change(screen.getByLabelText('Skill'), { target: { value: 'Coach' } })
     fireEvent.click(await screen.findByRole('button', { name: 'Coaching' }))
     fireEvent.click(screen.getByRole('button', { name: 'Select all' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Suggest to 2' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add & suggest to 2' }))
 
+    await waitFor(() => expect(onAddSkill).toHaveBeenCalledWith('lib-1', 'Coaching'))
     await waitFor(() => expect(onSuggestSkill).toHaveBeenCalledTimes(2))
     expect(onSuggestSkill).toHaveBeenCalledWith('alex', 'lib-1', 'Coaching', { targetLevel: null, targetDate: null, comments: null })
     expect(onSuggestSkill).toHaveBeenCalledWith('sam', 'lib-1', 'Coaching', { targetLevel: null, targetDate: null, comments: null })
-    // Partial failure: the dialog stays open, only the failed member is still checked.
-    expect(await screen.findByRole('alert')).toHaveTextContent(/Suggested to 1.*Sam/)
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Sam/)
     expect(screen.getByRole('checkbox', { name: 'Sam' })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Alex' })).not.toBeChecked()
-  })
-
-  it('closes the add-skill dialog once every selected member succeeds', async () => {
-    listLibrarySkills.mockResolvedValue([{ id: 'lib-1', name: 'Coaching' }])
-    const onSuggestSkill = vi.fn().mockResolvedValue()
-    render(<ManagerSkillsPanel members={members} onSuggestSkill={onSuggestSkill} />)
-
-    fireEvent.click(screen.getByRole('button', { name: '+ Add a skill' }))
-    fireEvent.change(screen.getByLabelText('Skill'), { target: { value: 'Coach' } })
-    fireEvent.click(await screen.findByRole('button', { name: 'Coaching' }))
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Alex' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Suggest skill' }))
-
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(onSuggestSkill).toHaveBeenCalledWith('alex', 'lib-1', 'Coaching', { targetLevel: null, targetDate: null, comments: null })
   })
 })

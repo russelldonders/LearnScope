@@ -303,6 +303,34 @@ export async function listManagerCollaborationRecords(teamId) {
   }))
 }
 
+// The team's own "working on together" list, independent of any specific
+// member -- lets a leader add a skill with nobody suggested yet. Adding is
+// idempotent (same team+skill twice just returns the existing row).
+export async function addManagerTeamSkill(teamId, skillLibraryId, skillName) {
+  const { data, error } = await supabase.rpc('add_manager_team_skill', {
+    p_team_id: teamId, p_skill_library_id: skillLibraryId, p_skill_name: skillName,
+  })
+  if (error) throw error
+  return {
+    id: data.id, teamId: data.team_id, skillLibraryId: data.skill_library_id,
+    skillName: data.skill_name, addedBy: data.added_by, createdAt: data.created_at,
+  }
+}
+
+export async function listManagerTeamSkills(teamId) {
+  const { data, error } = await supabase.rpc('list_manager_team_skills', { p_team_id: teamId })
+  if (error) throw error
+  return (data ?? []).map((row) => ({
+    id: row.id, teamId: row.team_id, skillLibraryId: row.skill_library_id,
+    skillName: row.skill_name, addedBy: row.added_by, createdAt: row.created_at,
+  }))
+}
+
+export async function removeManagerTeamSkill(id) {
+  const { error } = await supabase.rpc('remove_manager_team_skill', { p_id: id })
+  if (error) throw error
+}
+
 // Leader side of a "push, don't force" skill suggestion (mirrors
 // suggestSkillToEmployerMembers in src/lib/admin/employers.js) -- this only
 // ever creates a manager_team_skill_suggestions row. It never touches the

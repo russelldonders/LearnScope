@@ -20,6 +20,8 @@ vi.mock('../lib/managerTeams', () => ({
   archiveManagerTeam: vi.fn(), restoreManagerTeam: vi.fn(),
   setManagerTeamSharedSkills: vi.fn(), leaveManagerTeam: vi.fn(),
   listManagerTeamPendingMembers: vi.fn(), revokeManagerTeamInvite: vi.fn(),
+  suggestManagerTeamSkill: vi.fn(),
+  listManagerTeamSkills: vi.fn(), addManagerTeamSkill: vi.fn(), removeManagerTeamSkill: vi.fn(),
 }))
 const connections = [{ id: 'alex', name: 'Alex' }, { id: 'sam', name: 'Sam' }]
 function renderTeams(props = {}) {
@@ -38,6 +40,7 @@ beforeEach(() => {
   teams.listManagerCollaborationRecords.mockResolvedValue([])
   teams.listManagerTeamSkillAssessments.mockResolvedValue([])
   teams.listManagerTeamPendingMembers.mockResolvedValue([])
+  teams.listManagerTeamSkills.mockResolvedValue([])
   teams.createManagerWorkspace.mockResolvedValue('workspace')
   teams.createManagerTeam.mockResolvedValue('new-team')
   teams.inviteConnectionToManagerTeam.mockResolvedValue('invite')

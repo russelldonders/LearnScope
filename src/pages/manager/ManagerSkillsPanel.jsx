@@ -13,25 +13,32 @@ function skillKey(skill) {
 }
 
 export default function ManagerSkillsPanel({
-  members = [], loading = false, error = null, onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget, onSuggestSkill,
+  members = [], teamSkills = [], loading = false, error = null,
+  onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget, onSuggestSkill, onAddSkill, onRemoveTeamSkill,
 }) {
   const [selection, setSelection] = useState(null)
   const [addSkillOpen, setAddSkillOpen] = useState(false)
   const selectedMember = members.find((member) => member.id === selection?.memberId)
   // Row-per-skill, column-per-member matrix -- byMemberId gives each row an
-  // O(1) lookup for whether a given member has it, and at what level,
-  // rather than the flat learners list a grouped-by-skill layout needed.
+  // O(1) lookup for whether a given member has it, and at what level. Rows
+  // are seeded from the team's own tracked-skill list first (so a skill the
+  // leader added shows up even with nobody sharing it yet), then every
+  // member's actually-shared skills are layered on top -- a name match
+  // between the two is the same skill, not a duplicate row.
   const skills = useMemo(() => {
     const grouped = new Map()
+    teamSkills.forEach((tracked) => {
+      const key = skillKey({ name: tracked.skillName })
+      grouped.set(key, { key, name: tracked.skillName, trackedId: tracked.id, byMemberId: new Map() })
+    })
     members.forEach((member) => member.sharedSkills?.forEach((skill) => {
       const key = skillKey(skill)
-      const current = grouped.get(key) ?? { key, name: skill.name, byMemberId: new Map(), learnerCount: 0 }
+      const current = grouped.get(key) ?? { key, name: skill.name, trackedId: null, byMemberId: new Map() }
       current.byMemberId.set(member.id, skill)
-      current.learnerCount += 1
       grouped.set(key, current)
     }))
     return [...grouped.values()].sort((a, b) => a.name.localeCompare(b.name))
-  }, [members])
+  }, [members, teamSkills])
   const ratedCount = skills.reduce(
     (total, group) => total + [...group.byMemberId.values()].filter((skill) => skill.managerRating).length,
     0
@@ -45,9 +52,9 @@ export default function ManagerSkillsPanel({
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="max-w-3xl">
         <h2 id="team-skills-title" className="font-display text-2xl text-ink">Skills across your team</h2>
-        <p className="mt-1 text-sm text-secondary">Compare who has which skill and at what level, add your own rating or a target, or suggest a skill for the team to work on together.</p>
+        <p className="mt-1 text-sm text-secondary">Compare who has which skill and at what level, add your own rating or a target, or add a skill for the team to work on together.</p>
       </div>
-      {onSuggestSkill && members.length > 0 && (
+      {onAddSkill && (
         <button type="button" onClick={() => setAddSkillOpen(true)} className={`${actionClass} shrink-0`}>
           + Add a skill
         </button>
@@ -58,8 +65,8 @@ export default function ManagerSkillsPanel({
       <div className="rounded-lg border border-dashed border-hairline px-5 py-12 text-center">
         <h3 className="font-display text-lg text-ink">No shared skills yet</h3>
         <p className="mx-auto mt-1 max-w-xl text-sm text-secondary">
-          {onSuggestSkill && members.length > 0
-            ? 'Suggest a skill for the team to work on, or wait for learners to share their own from the Members tab.'
+          {onAddSkill
+            ? 'Add a skill for the team to work on, or wait for learners to share their own from the Members tab.'
             : 'Invite learners from the Members tab. Their skills will appear here when they choose to share them with you.'}
         </p>
       </div> : <>
@@ -86,7 +93,19 @@ export default function ManagerSkillsPanel({
             <tbody>
               {skills.map((group) => (
                 <tr key={group.key}>
-                  <th scope="row" className="sticky left-0 bg-card px-3 py-2 text-left font-medium text-ink border-r border-b border-hairline whitespace-nowrap">{group.name}</th>
+                  <th scope="row" className="sticky left-0 bg-card px-3 py-2 text-left font-medium text-ink border-r border-b border-hairline whitespace-nowrap">
+                    {group.name}
+                    {/* Only offered while nobody has actually shared it yet -- otherwise
+                        this row exists because of real shared-skill data, not this tracking
+                        row, so removing it wouldn't make the row disappear anyway. */}
+                    {group.trackedId && group.byMemberId.size === 0 && onRemoveTeamSkill && (
+                      <button type="button" onClick={() => onRemoveTeamSkill(group.trackedId)}
+                        aria-label={`Remove ${group.name} from the team's skill list`}
+                        className="ml-2 text-xs font-normal text-red-700 hover:underline align-middle">
+                        Remove
+                      </button>
+                    )}
+                  </th>
                   {members.map((member) => {
                     const skill = group.byMemberId.get(member.id)
                     return (
@@ -109,20 +128,21 @@ export default function ManagerSkillsPanel({
         </div>
       </>}
     {addSkillOpen && (
-      <AddTeamSkillModal members={members} onClose={() => setAddSkillOpen(false)} onSuggest={onSuggestSkill} />
+      <AddTeamSkillModal members={members} onClose={() => setAddSkillOpen(false)} onAdd={onAddSkill} onSuggest={onSuggestSkill} />
     )}
   </section>
 }
 
-// Push, don't force -- mirrors AssignSkillModal (src/pages/employer/
-// EmployerConsole.jsx) exactly, just scoped to this team's own members
-// instead of an employer's roster: never creates or modifies anyone's
-// skills/skill_targets rows itself, each selected member still chooses to
-// add it (or not) from their own Actions page. Suggests to each selected
-// member independently (mirrors InviteToTeamDialog's own email batching) so
-// one bad/duplicate suggestion doesn't sink the rest -- on a partial
-// failure only the still-failed members stay checked, ready to retry.
-function AddTeamSkillModal({ members, onClose, onSuggest }) {
+// Adding always tracks the skill on the team's own list (onAdd) --
+// suggesting it to specific members is an optional next step in the same
+// form, not a requirement: picking nobody just leaves it as something the
+// team is tracking, ready to suggest to someone later. Mirrors
+// AssignSkillModal (src/pages/employer/EmployerConsole.jsx) for the skill
+// search and (when members are picked) InviteToTeamDialog's own email
+// batching for suggesting to several people at once -- one bad/duplicate
+// suggestion doesn't sink the rest, and a partial failure leaves only the
+// still-failed members checked, ready to retry.
+function AddTeamSkillModal({ members, onClose, onAdd, onSuggest }) {
   const [librarySkills, setLibrarySkills] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
@@ -161,7 +181,7 @@ function AddTeamSkillModal({ members, onClose, onSuggest }) {
 
   async function handleSubmit(event) {
     event.preventDefault()
-    if (!selectedSkill || selectedMemberIds.size === 0) return
+    if (!selectedSkill) return
     if (targetLevel && !targetDate) {
       setError('A target date is required when a target level is set.')
       return
@@ -169,15 +189,24 @@ function AddTeamSkillModal({ members, onClose, onSuggest }) {
     setSubmitting(true)
     setError(null)
     try {
+      await onAdd(selectedSkill.id, selectedSkill.name)
+    } catch (err) {
+      setError(err.message || 'Could not add this skill. Try again.')
+      setSubmitting(false)
+      return
+    }
+    const memberIds = [...selectedMemberIds]
+    if (memberIds.length === 0) {
+      onClose()
+      return
+    }
+    try {
       const payload = {
         targetLevel: targetLevel ? Number(targetLevel) : null,
         targetDate: targetDate || null,
         comments: comments.trim() || null,
       }
-      const memberIds = [...selectedMemberIds]
-      const results = await Promise.allSettled(
-        memberIds.map((id) => onSuggest(id, selectedSkill.id, selectedSkill.name, payload))
-      )
+      const results = await Promise.allSettled(memberIds.map((id) => onSuggest(id, selectedSkill.id, selectedSkill.name, payload)))
       const failures = memberIds
         .map((id, i) => ({ id, result: results[i] }))
         .filter(({ result }) => result.status === 'rejected')
@@ -188,7 +217,7 @@ function AddTeamSkillModal({ members, onClose, onSuggest }) {
       const nameById = new Map(members.map((m) => [m.id, m.name]))
       setSelectedMemberIds(new Set(failures.map((f) => f.id)))
       setError(
-        (failures.length < memberIds.length ? `Suggested to ${memberIds.length - failures.length}. ` : '') +
+        `Added to the team. ${failures.length < memberIds.length ? `Suggested to ${memberIds.length - failures.length}. ` : ''}` +
         `Could not suggest to: ${failures.map(({ id, result }) => `${nameById.get(id)} (${result.reason?.message || 'failed'})`).join('; ')}`
       )
     } finally {
@@ -205,9 +234,9 @@ function AddTeamSkillModal({ members, onClose, onSuggest }) {
     >
       <h2 className="font-display text-xl text-ink mb-1">Add a skill for the team</h2>
       <p className="text-sm text-secondary mb-4">
-        Suggest a skill (and optionally a target level/date) to the team members you pick below. They’ll each see it
-        on their own Actions page and decide whether to add it to their profile -- this doesn’t touch anyone’s
-        skills automatically.
+        Add a skill for the team to work on. Optionally suggest it to specific members now (they’ll each see it on
+        their own Actions page and decide whether to add it to their profile), or leave everyone unchecked and just
+        track it for now -- this never touches anyone’s skills automatically.
       </p>
       {loadError && <MutationFeedback status="error" message={loadError} className="mb-4" />}
       <form onSubmit={handleSubmit} className="space-y-3">
@@ -238,9 +267,9 @@ function AddTeamSkillModal({ members, onClose, onSuggest }) {
             </div>
           )}
         </div>
-        <div>
+        {onSuggest && members.length > 0 && <div>
           <div className="flex items-center justify-between mb-1">
-            <span className="text-sm font-medium text-ink">Team members</span>
+            <span className="text-sm font-medium text-ink">Suggest to team members (optional)</span>
             <div className="flex gap-3 text-xs">
               <button type="button" onClick={() => setSelectedMemberIds(new Set(members.map((m) => m.id)))}
                 disabled={submitting} className="text-moss hover:underline disabled:opacity-60">
@@ -261,36 +290,38 @@ function AddTeamSkillModal({ members, onClose, onSuggest }) {
               </label>
             ))}
           </div>
-        </div>
-        <div>
-          <label htmlFor="add-team-skill-level" className="block text-sm font-medium text-ink mb-1">Target level (optional)</label>
-          <select id="add-team-skill-level" value={targetLevel} disabled={submitting}
-            onChange={(e) => setTargetLevel(e.target.value)}
-            className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss">
-            <option value="">No target level</option>
-            {LEVELS.map((l) => <option key={l} value={l}>{LEVEL_LABELS[l]}</option>)}
-          </select>
-        </div>
-        {targetLevel && (
+        </div>}
+        {selectedMemberIds.size > 0 && <>
           <div>
-            <label htmlFor="add-team-skill-date" className="block text-sm font-medium text-ink mb-1">Achieve by</label>
-            <input id="add-team-skill-date" type="date" required value={targetDate} disabled={submitting}
-              onChange={(e) => setTargetDate(e.target.value)}
+            <label htmlFor="add-team-skill-level" className="block text-sm font-medium text-ink mb-1">Target level (optional)</label>
+            <select id="add-team-skill-level" value={targetLevel} disabled={submitting}
+              onChange={(e) => setTargetLevel(e.target.value)}
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss">
+              <option value="">No target level</option>
+              {LEVELS.map((l) => <option key={l} value={l}>{LEVEL_LABELS[l]}</option>)}
+            </select>
+          </div>
+          {targetLevel && (
+            <div>
+              <label htmlFor="add-team-skill-date" className="block text-sm font-medium text-ink mb-1">Achieve by</label>
+              <input id="add-team-skill-date" type="date" required value={targetDate} disabled={submitting}
+                onChange={(e) => setTargetDate(e.target.value)}
+                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
+            </div>
+          )}
+          <div>
+            <label htmlFor="add-team-skill-comments" className="block text-sm font-medium text-ink mb-1">Comments (optional)</label>
+            <textarea id="add-team-skill-comments" rows={3} value={comments} disabled={submitting}
+              onChange={(e) => setComments(e.target.value)}
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
           </div>
-        )}
-        <div>
-          <label htmlFor="add-team-skill-comments" className="block text-sm font-medium text-ink mb-1">Comments (optional)</label>
-          <textarea id="add-team-skill-comments" rows={3} value={comments} disabled={submitting}
-            onChange={(e) => setComments(e.target.value)}
-            className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
-        </div>
+        </>}
         <MutationFeedback status="error" message={error} />
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} disabled={submitting} className={actionClass}>Cancel</button>
-          <button type="submit" disabled={submitting || !selectedSkill || selectedMemberIds.size === 0}
+          <button type="submit" disabled={submitting || !selectedSkill}
             className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 disabled:opacity-60">
-            {submitting ? 'Sending…' : selectedMemberIds.size > 1 ? `Suggest to ${selectedMemberIds.size}` : 'Suggest skill'}
+            {submitting ? 'Saving…' : selectedMemberIds.size > 0 ? `Add & suggest to ${selectedMemberIds.size}` : 'Add skill'}
           </button>
         </div>
       </form>

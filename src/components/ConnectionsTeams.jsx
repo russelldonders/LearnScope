@@ -12,6 +12,7 @@ import {
   getManagerTeamSkillDetail, setManagerTeamSkillTarget, archiveManagerTeam, restoreManagerTeam,
   listMyManagerShareableSkills, setManagerTeamSharedSkills, leaveManagerTeam,
   listManagerTeamPendingMembers, revokeManagerTeamInvite, suggestManagerTeamSkill,
+  listManagerTeamSkills, addManagerTeamSkill, removeManagerTeamSkill,
 } from '../lib/managerTeams'
 import MutationFeedback from './MutationFeedback'
 import ConfirmDialog from './ConfirmDialog'
@@ -93,6 +94,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
   const [roster, setRoster] = useState([])
   const [teamMemberSummaries, setTeamMemberSummaries] = useState([])
   const [pendingMembers, setPendingMembers] = useState([])
+  const [teamSkills, setTeamSkills] = useState([])
   const [revokeTarget, setRevokeTarget] = useState(null)
   const [revoking, setRevoking] = useState(false)
   const [learningRecords, setLearningRecords] = useState([])
@@ -169,9 +171,10 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     setMembersLoading(true)
     setMembersError(false)
     try {
-      const [membershipRows, people, summaries, learning, collaboration, pending] = await Promise.all([
+      const [membershipRows, people, summaries, learning, collaboration, pending, tracked] = await Promise.all([
         listManagerTeamMembers(id), listManagerTeamRoster(id), listManagerTeamMemberSummaries(id),
         listManagerTeamLearningRecords(id), listManagerCollaborationRecords(id), listManagerTeamPendingMembers(id),
+        listManagerTeamSkills(id),
       ])
       setMembers(membershipRows)
       setRoster(people)
@@ -179,6 +182,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       setLearningRecords(learning)
       setCollaborationRecords(collaboration)
       setPendingMembers(pending)
+      setTeamSkills(tracked)
     } catch (err) {
       setMembersError(true)
       setError(err.message || 'Could not load team members. Try again.')
@@ -194,6 +198,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     setLearningRecords([])
     setCollaborationRecords([])
     setPendingMembers([])
+    setTeamSkills([])
     setSuccessorId('')
     setTransferOpen(false)
     setMembersError(false)
@@ -366,6 +371,19 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     await suggestManagerTeamSkill(membershipId, skillLibraryId, skillName, payload)
   }
 
+  // Tracks a skill on the team's own list, independent of any member --
+  // reloads so it shows up as a matrix row immediately, even before anyone
+  // has it shared or suggested.
+  async function handleAddTeamSkill(skillLibraryId, skillName) {
+    await addManagerTeamSkill(teamId, skillLibraryId, skillName)
+    await loadTeamDetail(teamId)
+  }
+
+  async function handleRemoveTeamSkill(id) {
+    await removeManagerTeamSkill(id)
+    await loadTeamDetail(teamId)
+  }
+
   async function handleManagerTeamShare(skillIds) {
     if (!selected?.membership) return
     setMemberActionError(null)
@@ -482,10 +500,12 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
 
         <div id={`team-panel-${activePanel}`} role="tabpanel" aria-labelledby={`team-panel-tab-${activePanel}`} tabIndex={0}>
           {activePanel === 'skills' && (
-            <ManagerSkillsPanel members={teamMemberSummaries} loading={membersLoading} error={membersError ? error : null}
+            <ManagerSkillsPanel members={teamMemberSummaries} teamSkills={teamSkills} loading={membersLoading} error={membersError ? error : null}
               onRateSkill={isArchived ? undefined : handleRateSkill} onLoadSkillAssessments={listManagerTeamSkillAssessments}
               onLoadSkillDetail={getManagerTeamSkillDetail} onSetTarget={isArchived ? undefined : setManagerTeamSkillTarget}
-              onSuggestSkill={isArchived ? undefined : handleSuggestSkill} />
+              onSuggestSkill={isArchived ? undefined : handleSuggestSkill}
+              onAddSkill={isArchived ? undefined : handleAddTeamSkill}
+              onRemoveTeamSkill={isArchived ? undefined : handleRemoveTeamSkill} />
           )}
           {activePanel === 'members' && (
             <ManagerTeamPanel members={teamMemberSummaries} pendingMembers={pendingMembers}
