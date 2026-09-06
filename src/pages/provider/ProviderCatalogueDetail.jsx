@@ -29,7 +29,6 @@ const TABS = [
   { key: 'courses', label: 'Courses' },
   { key: 'skills', label: 'Skills' },
   { key: 'resources', label: 'Resources' },
-  { key: 'users', label: 'Users' },
 ]
 
 export default function ProviderCatalogueDetail() {
@@ -49,6 +48,11 @@ export default function ProviderCatalogueDetail() {
   // query param, so refresh/Back/Forward/a shared link all land on the
   // same catalogue-detail tab instead of resetting to Courses.
   const activeTab = TABS.some((t) => t.key === searchParams.get('tab')) ? searchParams.get('tab') : 'courses'
+  // Users/approvers used to be its own tab; it's a catalogue setting now
+  // (see the header cog below), but the catalogue list's "N users" link
+  // (ProviderConsole.jsx) still points at ?tab=users, so that same param
+  // keeps working as the deep link into this settings panel.
+  const showUsersPanel = searchParams.get('tab') === 'users'
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [editing, setEditing] = useState(false)
@@ -150,8 +154,35 @@ export default function ProviderCatalogueDetail() {
             {catalogue.description || 'Courses, skills and the people responsible for this catalogue.'}
           </p>
         </div>
-        {canManage && <CogMenu label="Catalogue settings" onEdit={() => setEditing((value) => !value)} />}
+        {canManage && (
+          <CogMenu
+            label="Catalogue settings"
+            onEdit={() => {
+              setEditing((value) => !value)
+              if (showUsersPanel) setSearchParams({})
+            }}
+            options={[
+              {
+                label: 'Manage users & approvers',
+                action: () => {
+                  setEditing(false)
+                  setSearchParams(showUsersPanel ? {} : { tab: 'users' })
+                },
+              },
+            ]}
+          />
+        )}
       </div>
+
+      {showUsersPanel && (
+        <div className="mt-5 border-y border-hairline py-5">
+          <div className="mb-4 flex items-center justify-between">
+            <p className="text-xs font-medium uppercase tracking-wide text-secondary">Catalogue setting</p>
+            <button type="button" onClick={() => setSearchParams({})} className="text-xs font-medium text-secondary hover:text-ink">Close</button>
+          </div>
+          <UsersTab catalogueId={catalogue.id} members={members} orgMembers={orgMembers} canManage={canManage} userId={user.id} onReload={load} onError={setError} />
+        </div>
+      )}
 
       {editing && (
         <form onSubmit={handleSaveCatalogue} className="mt-5 border-y border-hairline py-5 space-y-3">
@@ -206,7 +237,7 @@ export default function ProviderCatalogueDetail() {
             className={`-mb-px border-b-2 px-3 py-2 text-sm ${activeTab === tab.key ? 'border-moss font-medium text-ink' : 'border-transparent text-secondary hover:text-ink'}`}
           >
             {tab.label}
-            <span className="ml-2 tabular-nums text-xs text-secondary">{tab.key === 'courses' ? courses.length : tab.key === 'skills' ? skills.length : tab.key === 'resources' ? resources.length : members.length}</span>
+            <span className="ml-2 tabular-nums text-xs text-secondary">{tab.key === 'courses' ? courses.length : tab.key === 'skills' ? skills.length : resources.length}</span>
           </Link>
         ))}
       </div>
@@ -221,7 +252,6 @@ export default function ProviderCatalogueDetail() {
         {activeTab === 'courses' && <CoursesTab catalogue={catalogue} courses={courses} organisationCourses={organisationCourses} canManage={canManage} canApprove={canApprove} onReload={load} onError={setError} />}
         {activeTab === 'skills' && <SkillsTab catalogueId={catalogue.id} skills={skills} offeredSkills={offeredSkills} canManage={canManage} userId={user.id} onReload={load} onError={setError} />}
         {activeTab === 'resources' && <ResourcesTab catalogueId={catalogue.id} resources={resources} organisationResources={organisationResources} canManage={canManage} userId={user.id} onReload={load} onError={setError} />}
-        {activeTab === 'users' && <UsersTab catalogueId={catalogue.id} members={members} orgMembers={orgMembers} canManage={canManage} userId={user.id} onReload={load} onError={setError} />}
       </div>
     </ProviderPage>
   )
