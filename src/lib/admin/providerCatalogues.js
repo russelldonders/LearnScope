@@ -141,10 +141,19 @@ export async function listProviderCatalogueSkills(catalogueId) {
   return (data ?? []).filter((item) => item.skill_library).map((item) => ({ ...item.skill_library, linkId: item.id }))
 }
 
+// ignoreDuplicates rather than a plain insert -- catalogue_skills has a
+// unique (catalogue_id, skill_library_id) constraint, and the provider
+// console's bulk "Push to catalogue" action (ProviderSkillsSection) can
+// legitimately re-select a skill already in the target catalogue; that
+// should no-op like assign_course_to_catalogue's own on-conflict-do-nothing,
+// not surface as a per-item failure.
 export async function addProviderCatalogueSkill(catalogueId, skillLibraryId, userId) {
   const { error } = await supabase
     .from('catalogue_skills')
-    .insert({ catalogue_id: catalogueId, skill_library_id: skillLibraryId, created_by: userId })
+    .upsert(
+      { catalogue_id: catalogueId, skill_library_id: skillLibraryId, created_by: userId },
+      { onConflict: 'catalogue_id,skill_library_id', ignoreDuplicates: true }
+    )
   if (error) throw error
 }
 

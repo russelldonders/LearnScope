@@ -7,8 +7,10 @@ import {
   removeOfferedSkill,
 } from '../lib/admin/providerSkills'
 import { listLibrarySkills, isDuplicateLibrarySkillError, duplicateLibrarySkillMessage } from '../lib/skillLibrary'
-import { useSortedPage } from '../lib/useSortedPage'
-import { SortableTh, TablePagination } from './TableControls'
+import { addProviderCatalogueSkill } from '../lib/admin/providerCatalogues'
+import { useRowSelection, useSortedPage } from '../lib/useSortedPage'
+import { BulkActionBar, SelectionTh, SortableTh, TablePagination } from './TableControls'
+import BulkAssignToCatalogueDialog from './BulkAssignToCatalogueDialog'
 
 const EMPTY_FORM = { name: '', category: '', description: '' }
 
@@ -44,6 +46,7 @@ export default function ProviderSkillsSection({ organisationId, userId }) {
   const [removingId, setRemovingId] = useState(null)
   const [query, setQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
+  const [bulkPush, setBulkPush] = useState(null)
 
   useEffect(() => {
     load()
@@ -139,6 +142,10 @@ export default function ProviderSkillsSection({ organisationId, userId }) {
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
     useSortedPage(filteredOffered, OFFERED_SKILL_SORT_ACCESSORS)
+  const selection = useRowSelection(filteredOffered.map((item) => item.offeredId))
+  const skillPageIds = pageItems.map((item) => item.offeredId)
+  const skillsSelectedOnPage = skillPageIds.filter((id) => selection.selected.has(id)).length
+  const selectedSkills = offered.filter((item) => selection.selected.has(item.offeredId))
 
   return (
     <div>
@@ -290,10 +297,28 @@ export default function ProviderSkillsSection({ organisationId, userId }) {
         </div>
       ) : (
         <div className="bg-card border border-hairline rounded-lg">
+          <div className="p-3 pb-0">
+            <BulkActionBar
+              count={selection.selected.size}
+              onClear={selection.clear}
+              actions={[
+                {
+                  label: `Push to catalogue (${selectedSkills.length})`,
+                  onClick: () => setBulkPush(selectedSkills),
+                },
+              ]}
+            />
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-hairline text-left text-secondary">
+                  <SelectionTh
+                    idPrefix="provider-skills"
+                    checked={selection.isAllSelected(skillPageIds)}
+                    indeterminate={skillsSelectedOnPage > 0 && skillsSelectedOnPage < skillPageIds.length}
+                    onChange={() => selection.toggleAll(skillPageIds)}
+                  />
                   <SortableTh label="ID" columnKey="skillCode" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
                   <SortableTh label="Skill" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <SortableTh label="Category" columnKey="category" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
@@ -305,6 +330,16 @@ export default function ProviderSkillsSection({ organisationId, userId }) {
               <tbody>
                 {pageItems.map((item) => (
                   <tr key={item.offeredId} className="border-b border-hairline last:border-0">
+                    <td className="px-4 py-3">
+                      <label className="sr-only" htmlFor={`select-skill-${item.offeredId}`}>Select {item.name}</label>
+                      <input
+                        id={`select-skill-${item.offeredId}`}
+                        type="checkbox"
+                        checked={selection.selected.has(item.offeredId)}
+                        onChange={() => selection.toggle(item.offeredId)}
+                        className="rounded border-hairline accent-moss"
+                      />
+                    </td>
                     <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{item.skillCode}</td>
                     <td className="px-4 py-3 text-ink font-medium whitespace-nowrap">{item.name}</td>
                     <td className="px-4 py-3 text-secondary whitespace-nowrap">{item.category || '—'}</td>
@@ -337,6 +372,21 @@ export default function ProviderSkillsSection({ organisationId, userId }) {
         </div>
       )}
 
+      {bulkPush && (
+        <BulkAssignToCatalogueDialog
+          organisationId={organisationId}
+          items={bulkPush}
+          itemLabel="skill"
+          description="Choose one catalogue to add the selected skills to."
+          getItemId={(item) => item.offeredId}
+          onAssign={(catalogueId, item) => addProviderCatalogueSkill(catalogueId, item.skillLibraryId, userId)}
+          onClose={() => setBulkPush(null)}
+          onDone={(succeededIds, hadFailures) => {
+            if (hadFailures) selection.clearIds(succeededIds)
+            else selection.clear()
+          }}
+        />
+      )}
     </div>
   )
 }

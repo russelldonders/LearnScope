@@ -13,8 +13,8 @@ import ProgressBar from '../../components/ProgressBar'
 import {
   createProviderCatalogue,
   deleteProviderCatalogue,
-  listPublicationCatalogueOptions,
 } from '../../lib/catalogues'
+import BulkAssignToCatalogueDialog from '../../components/BulkAssignToCatalogueDialog'
 // listProviderCatalogues specifically comes from admin/providerCatalogues.js,
 // not the same-named function in lib/catalogues.js -- only this version
 // attaches courseCount (course_catalogue_publications count) to each row,
@@ -1177,10 +1177,14 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
         <CourseVersionHistoryDialog course={historyCourse} onClose={() => setHistoryCourse(null)} />
       )}
       {bulkPush && (
-        <BulkPushToCatalogueDialog
+        <BulkAssignToCatalogueDialog
           organisationId={organisation.id}
-          courses={bulkPush.courses}
-          excludedCourses={bulkPush.excludedCourses}
+          items={bulkPush.courses}
+          excludedItems={bulkPush.excludedCourses}
+          excludedReason="an approved, currently published version"
+          itemLabel="course"
+          description="Choose one catalogue to add the selected courses to. Each becomes visible there as soon as it's added -- a platform admin still has to approve anything added to the global catalogue."
+          onAssign={(catalogueId, course) => assignProviderCourseToCatalogue(catalogueId, course.id)}
           onClose={() => setBulkPush(null)}
           onDone={(succeededCourseIds, hadFailures) => {
             // Called right after the push attempt settles, whether or not
@@ -1363,131 +1367,6 @@ function CourseRow({
         </tr>
       )}
     </>
-  )
-}
-
-// Bulk counterpart to ProviderCourseEditor's own PushToCatalogueDialog --
-// same assignProviderCourseToCatalogue call, looped once per selected
-// course, but only ever offers a single catalogue destination at a time
-// (the per-course dialog lets several be ticked because it's already
-// scoped to one course; picking several catalogues *and* several courses
-// at once would make the excluded/failed summary below unreadable). Courses
-// that didn't pass the eligibility check the caller already applied
-// (status !== 'approved' or not is_current_published) never reach here --
-// excludedCourses only reports which of those were dropped and why, so the
-// provider isn't left guessing why the count doesn't match their selection.
-function BulkPushToCatalogueDialog({ organisationId, courses, excludedCourses, onClose, onDone }) {
-  const [catalogues, setCatalogues] = useState([])
-  const [catalogueId, setCatalogueId] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    listPublicationCatalogueOptions(organisationId)
-      .then(setCatalogues)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
-  }, [organisationId])
-
-  async function handlePush() {
-    if (!catalogueId || courses.length === 0) return
-    setSubmitting(true)
-    setError(null)
-    try {
-      const results = await Promise.allSettled(
-        courses.map((course) => assignProviderCourseToCatalogue(catalogueId, course.id))
-      )
-      const succeeded = courses.filter((_, index) => results[index].status === 'fulfilled')
-      const failures = results
-        .map((result, index) => ({ result, course: courses[index] }))
-        .filter(({ result }) => result.status === 'rejected')
-      // Reload/update the parent's selection regardless of outcome -- a
-      // partial failure still means some courses were actually added, so
-      // the caller shouldn't stay stale (or lose track of which succeeded)
-      // just because this dialog is staying open to show the failures.
-      onDone(succeeded.map((course) => course.id), failures.length > 0)
-      if (failures.length > 0) {
-        setError(
-          `${failures.length} of ${courses.length} courses couldn't be added: ` +
-            failures
-              .map(({ course, result }) => `"${course.name}" (${result.reason?.message ?? 'unknown error'})`)
-              .join('; ')
-        )
-        return
-      }
-      onClose()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <AccessibleDialog
-      labelledBy="bulk-push-catalogue-title"
-      describedBy="bulk-push-catalogue-description"
-      onClose={submitting ? undefined : onClose}
-      closeOnBackdrop={!submitting}
-      panelClassName="w-full max-w-lg rounded-xl bg-card border border-hairline p-5 shadow-xl"
-    >
-      <h2 id="bulk-push-catalogue-title" className="font-display text-lg text-ink">
-        Push {courses.length} {courses.length === 1 ? 'course' : 'courses'} to catalogue
-      </h2>
-      <p id="bulk-push-catalogue-description" className="text-sm text-secondary mt-1 mb-3">
-        Choose one catalogue to add the selected courses to. Each becomes visible there as soon as it's added -- a
-        platform admin still has to approve anything added to the global catalogue.
-      </p>
-      {excludedCourses.length > 0 && (
-        <p className="text-xs text-amber-700 mb-3">
-          {excludedCourses.length} of the selected {excludedCourses.length === 1 ? 'course isn’t' : 'courses aren’t'}{' '}
-          an approved, currently published version, so {excludedCourses.length === 1 ? "it won't" : "they won't"} be
-          included: {excludedCourses.map((course) => `"${course.name}"`).join(', ')}.
-        </p>
-      )}
-
-      {error && <p role="alert" className="text-sm text-red-700 mb-3">{error}</p>}
-      {loading ? (
-        <p role="status" className="text-sm text-secondary">Loading catalogues…</p>
-      ) : catalogues.length === 0 ? (
-        <p className="text-sm text-secondary">No publishing destinations are available.</p>
-      ) : (
-        <div className="divide-y divide-hairline border-y border-hairline">
-          {catalogues.map((catalogue) => (
-            <label key={catalogue.id} className="flex items-start gap-3 py-3 cursor-pointer">
-              <input
-                type="radio"
-                name="bulk-push-catalogue"
-                checked={catalogueId === catalogue.id}
-                onChange={() => setCatalogueId(catalogue.id)}
-                className="mt-0.5 h-4 w-4 accent-moss"
-              />
-              <span className="min-w-0">
-                <span className="block text-sm font-medium text-ink">{catalogue.name}</span>
-                {catalogue.description && (
-                  <span className="block text-xs text-secondary mt-0.5">{catalogue.description}</span>
-                )}
-              </span>
-            </label>
-          ))}
-        </div>
-      )}
-
-      <div className="flex justify-end gap-2 mt-5">
-        <button type="button" onClick={onClose} disabled={submitting} className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink hover:bg-paper disabled:opacity-50">
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={handlePush}
-          disabled={submitting || loading || !catalogueId || courses.length === 0}
-          className="rounded-md bg-moss px-3 py-1.5 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-50"
-        >
-          {submitting ? 'Adding…' : 'Add to catalogue'}
-        </button>
-      </div>
-    </AccessibleDialog>
   )
 }
 
