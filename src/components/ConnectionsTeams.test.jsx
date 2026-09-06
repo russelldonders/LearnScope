@@ -17,7 +17,9 @@ vi.mock('../lib/managerTeams', () => ({
   getManagerTeamSkillDetail: vi.fn(), setManagerTeamSkillTarget: vi.fn(),
 }))
 const connections = [{ id: 'alex', name: 'Alex' }, { id: 'sam', name: 'Sam' }]
-function renderTeams() { return render(<MemoryRouter><ConnectionsTeams connections={connections} /></MemoryRouter>) }
+function renderTeams(props = {}) {
+  return render(<MemoryRouter><ConnectionsTeams connections={connections} currentUserName="Russell" {...props} /></MemoryRouter>)
+}
 beforeEach(() => {
   vi.resetAllMocks()
   teams.listMyLedManagerTeams.mockResolvedValue([])
@@ -49,7 +51,7 @@ describe('Connections teams', () => {
   it('lets a user without a manager workspace create a team and invite a connection', async () => {
     renderTeams()
     await screen.findByText(/No teams yet/)
-    fireEvent.click(screen.getByRole('button', { name: 'Create a team' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Form team' }))
     fireEvent.change(screen.getByLabelText('Team name'), { target: { value: 'Coaching circle' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create team', exact: true }))
     await screen.findByText('Team created. Invite a connection from the Members tab below.')
@@ -57,6 +59,34 @@ describe('Connections teams', () => {
     await waitFor(() => expect(teams.inviteConnectionToManagerTeam).toHaveBeenCalledWith('new-team', 'alex'))
     expect(teams.createManagerWorkspace).toHaveBeenCalledOnce()
     expect(teams.createManagerTeam).toHaveBeenCalledWith('workspace', { name: 'Coaching circle' })
+  })
+
+  it('auto-selects the only connection and names the team after both people, inviting them immediately', async () => {
+    renderTeams({ connections: [{ id: 'alex', name: 'Alex' }] })
+    await screen.findByText(/No teams yet/)
+    fireEvent.click(screen.getByRole('button', { name: 'Form team' }))
+    expect(screen.getByLabelText('Team name')).toHaveValue('Russell and Alex')
+    expect(screen.getByRole('checkbox', { name: 'Alex' })).toBeChecked()
+    fireEvent.click(screen.getByRole('button', { name: 'Create team', exact: true }))
+    await screen.findByText('Team created and members invited.')
+    expect(teams.createManagerTeam).toHaveBeenCalledWith('workspace', { name: 'Russell and Alex' })
+    expect(teams.inviteConnectionToManagerTeam).toHaveBeenCalledWith('new-team', 'alex')
+  })
+
+  it('lets you add a member from the picker while creating a team, until you edit the name yourself', async () => {
+    renderTeams()
+    await screen.findByText(/No teams yet/)
+    fireEvent.click(screen.getByRole('button', { name: 'Form team' }))
+    expect(screen.getByLabelText('Team name')).toHaveValue('Russell')
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Sam' }))
+    expect(screen.getByLabelText('Team name')).toHaveValue('Russell and Sam')
+    fireEvent.change(screen.getByLabelText('Team name'), { target: { value: 'Custom name' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Alex' }))
+    expect(screen.getByLabelText('Team name')).toHaveValue('Custom name')
+    fireEvent.click(screen.getByRole('button', { name: 'Create team', exact: true }))
+    await screen.findByText('Team created and members invited.')
+    expect(teams.inviteConnectionToManagerTeam).toHaveBeenCalledWith('new-team', 'sam')
+    expect(teams.inviteConnectionToManagerTeam).toHaveBeenCalledWith('new-team', 'alex')
   })
 
   it('shows the merged team console (Skills/Members/Learning/Collaboration) for a led team, scoped to the selected team', async () => {

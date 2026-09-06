@@ -33,7 +33,17 @@ const PANELS = [
   { key: 'collaboration', label: 'Collaboration' },
 ]
 
-export default function ConnectionsTeams({ connections = [] }) {
+// Builds "Alex", "Alex and Sam", or "Alex, Sam and Jo" from the leader's own
+// name plus whoever is currently checked in the create-team member picker --
+// only ever used to seed the (still-editable) name field's initial value.
+function buildDefaultTeamName(selfName, memberNames) {
+  const names = [selfName, ...memberNames].filter(Boolean)
+  if (names.length <= 1) return names[0] || ''
+  if (names.length === 2) return `${names[0]} and ${names[1]}`
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+}
+
+export default function ConnectionsTeams({ connections = [], currentUserName = '' }) {
   const { user, refreshWorkspaces } = useAuth()
   const [teams, setTeams] = useState([])
   const [teamId, setTeamId] = useState('')
@@ -52,6 +62,8 @@ export default function ConnectionsTeams({ connections = [] }) {
   const [membersLoading, setMembersLoading] = useState(false)
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
+  const [nameEdited, setNameEdited] = useState(false)
+  const [initialMemberIds, setInitialMemberIds] = useState(new Set())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState('')
@@ -114,6 +126,33 @@ export default function ConnectionsTeams({ connections = [] }) {
     if (teamId) loadTeamDetail(teamId)
   }, [teamId, retry, loadTeamDetail])
 
+  // Opening the form -- with exactly one connection to choose from, there's
+  // no real choice to make, so pre-check them and seed the name from both
+  // people; with none or several, leave it to the member picker below rather
+  // than guess who belongs on the team.
+  function startCreating() {
+    const onlyConnection = connections.length === 1 ? connections[0] : null
+    const seeded = onlyConnection ? new Set([onlyConnection.id]) : new Set()
+    setInitialMemberIds(seeded)
+    setName(buildDefaultTeamName(currentUserName, onlyConnection ? [onlyConnection.name] : []))
+    setNameEdited(false)
+    setCreating(true)
+    setNotice('')
+  }
+
+  function toggleInitialMember(connectionId) {
+    setInitialMemberIds((previous) => {
+      const next = new Set(previous)
+      if (next.has(connectionId)) next.delete(connectionId)
+      else next.add(connectionId)
+      if (!nameEdited) {
+        const memberNames = connections.filter((c) => next.has(c.id)).map((c) => c.name)
+        setName(buildDefaultTeamName(currentUserName, memberNames))
+      }
+      return next
+    })
+  }
+
   async function handleCreate(event) {
     event.preventDefault()
     if (!name.trim()) return
@@ -122,9 +161,22 @@ export default function ConnectionsTeams({ connections = [] }) {
       const workspaceId = await createManagerWorkspace()
       const id = await createManagerTeam(workspaceId, { name: name.trim() })
       setTeams((previous) => [...previous, { id, name: name.trim(), status: 'active' }])
-      setTeamId(id); setCreating(false); setName('')
-      setNotice('Team created. Invite a connection from the Members tab below.')
+      setTeamId(id); setCreating(false); setName(''); setNameEdited(false)
       await refreshWorkspaces().catch(() => {})
+      const memberIds = [...initialMemberIds]
+      setInitialMemberIds(new Set())
+      if (memberIds.length > 0) {
+        const results = await Promise.allSettled(memberIds.map((memberId) => inviteConnectionToManagerTeam(id, memberId)))
+        const failureCount = results.filter((r) => r.status === 'rejected').length
+        await loadTeamDetail(id)
+        setNotice(
+          failureCount > 0
+            ? `Team created, but ${failureCount} of ${memberIds.length} member invitations couldn't be sent. Try inviting them from the Members tab below.`
+            : 'Team created and members invited.'
+        )
+      } else {
+        setNotice('Team created. Invite a connection from the Members tab below.')
+      }
     } catch (err) { setError(err.message || 'Could not create your team. Try again.') }
     finally { setBusy(false) }
   }
@@ -175,7 +227,7 @@ export default function ConnectionsTeams({ connections = [] }) {
   return <section aria-labelledby="connections-teams-title" className="space-y-4 border-b border-hairline pb-8">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h2 id="connections-teams-title" className="font-display text-xl text-ink">Your teams</h2>
-      {!creating && <button type="button" disabled={busy || loading} onClick={() => { setCreating(true); setNotice('') }} className={buttonClass}>Create a team</button>}
+      {!creating && <button type="button" disabled={busy || loading} onClick={startCreating} className={buttonClass}>{teams.length === 0 ? 'Form team' : 'Create a team'}</button>}
     </div>
     <p className="text-sm text-secondary">Create and lead multiple teams, or join teams led by others. Invite your connections to learn together. Members choose which skills to share with their team leader.</p>
     {loading && <p role="status" className="text-sm text-secondary">Loading your teams…</p>}
@@ -183,7 +235,22 @@ export default function ConnectionsTeams({ connections = [] }) {
     {error && <button type="button" disabled={busy} className={buttonClass} onClick={() => setRetry((n) => n + 1)}>Reload teams</button>}
     <MutationFeedback status="success" message={notice} />
     {creating && <form onSubmit={handleCreate} className="max-w-lg space-y-3">
-      <label className="block text-sm text-ink">Team name<input required maxLength={120} value={name} disabled={busy} onChange={(e) => setName(e.target.value)} className={fieldClass} /></label>
+      <label className="block text-sm text-ink">Team name
+        <input required maxLength={120} value={name} disabled={busy}
+          onChange={(e) => { setName(e.target.value); setNameEdited(true) }} className={fieldClass} />
+      </label>
+      {connections.length > 0 && <fieldset>
+        <legend className="text-sm text-ink">Add members (optional)</legend>
+        <div className="mt-1 max-h-40 overflow-y-auto rounded-md border border-hairline bg-card divide-y divide-hairline">
+          {connections.map((connection) => (
+            <label key={connection.id} className="flex items-center gap-2 px-3 py-1.5 text-sm text-ink">
+              <input type="checkbox" checked={initialMemberIds.has(connection.id)} disabled={busy}
+                onChange={() => toggleInitialMember(connection.id)} className="rounded border-hairline accent-moss" />
+              {connection.name}
+            </label>
+          ))}
+        </div>
+      </fieldset>}
       <div className="flex gap-2"><button type="submit" disabled={busy || !name.trim()} className={buttonClass}>{busy ? 'Creating…' : 'Create team'}</button>
         <button type="button" disabled={busy} className={buttonClass} onClick={() => setCreating(false)}>Cancel</button></div>
     </form>}

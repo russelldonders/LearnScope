@@ -203,7 +203,10 @@ export default function Connections() {
         <div id={`connections-panel-${activeSection}`} role="tabpanel"
           aria-labelledby={`connections-tab-${activeSection}`} tabIndex={0}>
         {activeSection === 'teams' && (
-          <ConnectionsTeams connections={connections.filter((connection) => allConnectionIds.includes(connection.id))} />
+          <ConnectionsTeams
+            connections={connections.filter((connection) => allConnectionIds.includes(connection.id))}
+            currentUserName={profiles[user.id]?.name || user.email}
+          />
         )}
         {activeSection === 'people' && <div className="space-y-10">
         <div>
