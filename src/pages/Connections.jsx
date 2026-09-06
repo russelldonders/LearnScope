@@ -5,6 +5,7 @@ import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import ConfirmDialog from '../components/ConfirmDialog'
 import ConnectionsTeams from '../components/ConnectionsTeams'
+import ConnectionTeamInviteControl from '../components/ConnectionTeamInviteControl'
 import { LEVEL_LABELS } from '../lib/levels'
 import { handleTabListKeyDown } from '../lib/tabsKeyboard'
 import {
@@ -16,6 +17,7 @@ import {
   sendInviteEmail,
   revokeInvite,
 } from '../lib/connections'
+import { inviteConnectionToManagerTeam, listMyLedManagerTeams } from '../lib/managerTeams'
 
 export default function Connections() {
   const { user } = useAuth()
@@ -36,6 +38,7 @@ export default function Connections() {
   const [revokingId, setRevokingId] = useState(null)
   const [revokeError, setRevokeError] = useState(null)
   const [pendingRevoke, setPendingRevoke] = useState(null)
+  const [ledTeams, setLedTeams] = useState([])
 
   useEffect(() => {
     load()
@@ -45,14 +48,16 @@ export default function Connections() {
     setLoading(true)
     setError(null)
     try {
-      const [ratingsData, connectionsData, invitesData] = await Promise.all([
+      const [ratingsData, connectionsData, invitesData, teamsData] = await Promise.all([
         listMyPeerRatings(),
         listConnections(user.id),
         listSentInvites(),
+        listMyLedManagerTeams(),
       ])
       setRatings(ratingsData)
       setAllConnectionIds(connectionsData.map((c) => c.id))
       setInvites(invitesData)
+      setLedTeams(teamsData.filter((team) => team.status === 'active'))
       const otherIds = ratingsData.map((r) => (r.rater_id === user.id ? r.skill_owner_id : r.rater_id))
       const connectionIds = [...new Set([...connectionsData.map((c) => c.id), ...otherIds])]
       const [profilesData, sharedSkillCountsData] = await Promise.all([
@@ -249,6 +254,9 @@ export default function Connections() {
                     </div>
                   ))}
                 </div>
+                {allConnectionIds.includes(c.id) && <div className="mt-4 border-t border-hairline pt-3">
+                  <ConnectionTeamInviteControl connection={c} teams={ledTeams} onInvite={inviteConnectionToManagerTeam} />
+                </div>}
               </div>
             ))}
           </div>

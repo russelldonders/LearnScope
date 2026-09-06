@@ -32,7 +32,8 @@ const SORT_ACCESSORS = {
 // `onLoadSkillAssessments` are the only contract with the data layer; this
 // component never fetches or writes anything itself outside of those.
 export default function ManagerTeamPanel({
-  members = [], loading = false, error = null, onInvite, onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget,
+  members = [], loading = false, error = null, onInvite, onInviteConnection, connections = [], teamMemberships = [],
+  onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget,
 }) {
   const [inviteOpen, setInviteOpen] = useState(false)
   const [rateTarget, setRateTarget] = useState(null)
@@ -184,6 +185,9 @@ export default function ManagerTeamPanel({
         <InviteToTeamDialog
           onClose={() => setInviteOpen(false)}
           onInvite={onInvite}
+          onInviteConnection={onInviteConnection}
+          connections={connections}
+          teamMemberships={teamMemberships}
         />
       )}
 
@@ -200,11 +204,22 @@ export default function ManagerTeamPanel({
   )
 }
 
-function InviteToTeamDialog({ onClose, onInvite }) {
+function InviteToTeamDialog({ onClose, onInvite, onInviteConnection, connections, teamMemberships }) {
   const [email, setEmail] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
   const initialFocusRef = useRef(null)
+  const [connectionId, setConnectionId] = useState('')
+  const unavailableIds = new Set(teamMemberships.filter((membership) => ['active', 'pending'].includes(membership.status)).map((membership) => membership.member_user_id))
+
+  async function handleConnectionSubmit(event) {
+    event.preventDefault()
+    if (!connectionId || !onInviteConnection) return
+    setSubmitting(true); setSubmitError(null)
+    try { await onInviteConnection(connectionId); onClose() }
+    catch (error) { setSubmitError(error.message || 'Could not send the invitation. Try again.') }
+    finally { setSubmitting(false) }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -231,24 +246,35 @@ function InviteToTeamDialog({ onClose, onInvite }) {
       closeOnBackdrop={!submitting}
       panelClassName="w-full max-w-sm bg-card border border-hairline rounded-lg p-6"
     >
-      <form onSubmit={handleSubmit}>
+      <div>
         <h2 className="font-display text-lg text-ink mb-1">Invite to team</h2>
-        <p className="text-sm text-secondary mb-4">
-          Invites go to an existing connection's email address. They'll need to accept before appearing
-          on your team, and nothing of theirs becomes visible to you beyond what they choose to share.
-        </p>
+        <p className="text-sm text-secondary mb-5">Invite one of your connections, or send an email invite. They’ll appear after accepting and choose which skills to share.</p>
+        {connections.length > 0 && onInviteConnection && <form onSubmit={handleConnectionSubmit} className="space-y-3 border-b border-hairline pb-5 mb-5">
+          <label className="block text-sm font-medium text-ink">Add a connection
+            <select ref={initialFocusRef} data-dialog-initial-focus value={connectionId} onChange={(event) => setConnectionId(event.target.value)} disabled={submitting}
+              className="mt-1 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink">
+              <option value="">Choose a connection</option>
+              {connections.map((connection) => <option key={connection.id} value={connection.id} disabled={unavailableIds.has(connection.id)}>
+                {connection.name}{unavailableIds.has(connection.id) ? ' — Already added or invited' : ''}
+              </option>)}
+            </select>
+          </label>
+          <button type="submit" disabled={submitting || !connectionId || unavailableIds.has(connectionId)} className="rounded-md bg-moss px-4 py-2 text-sm font-medium text-paper disabled:opacity-60">{submitting ? 'Sending…' : 'Invite connection'}</button>
+        </form>}
+        <form onSubmit={handleSubmit}>
+        <h3 className="font-display text-base text-ink mb-3">Invite by email</h3>
         <label htmlFor="manager-team-invite-email" className="block text-sm font-medium text-ink mb-1">
           Email
         </label>
         <input
-          ref={initialFocusRef}
+          ref={connections.length > 0 ? undefined : initialFocusRef}
           id="manager-team-invite-email"
           type="email"
           required
           maxLength={320}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          data-dialog-initial-focus
+          data-dialog-initial-focus={connections.length > 0 ? undefined : true}
           className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss mb-2"
         />
         <MutationFeedback status="error" message={submitError} className="mb-4" />
@@ -269,7 +295,8 @@ function InviteToTeamDialog({ onClose, onInvite }) {
             {submitting ? 'Sending…' : 'Send invite'}
           </button>
         </div>
-      </form>
+        </form>
+      </div>
     </AccessibleDialog>
   )
 }

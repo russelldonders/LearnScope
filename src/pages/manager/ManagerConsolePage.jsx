@@ -3,12 +3,13 @@ import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { WORKSPACE_TYPES } from '../../lib/workspaces'
 import { uploadEvidenceFiles } from '../../lib/skillEvidence'
+import { listConnections } from '../../lib/connections'
 import {
   createManagerCollaborationRecord, createManagerTeam, createManagerTeamSkillAssessment,
-  inviteConnectionToManagerTeamByEmail, listManagerCollaborationRecords, listManagerTeamLearningRecords,
+  inviteConnectionToManagerTeam, inviteConnectionToManagerTeamByEmail, listManagerCollaborationRecords, listManagerTeamLearningRecords,
   listManagerTeamMemberSummaries, listManagerTeamSkillAssessments, listMyLedManagerTeams,
   listPendingManagerTeamInvites, setManagerTeamSkillAssessmentEvidence,
-  getManagerTeamSkillDetail, setManagerTeamSkillTarget,
+  getManagerTeamSkillDetail, setManagerTeamSkillTarget, listManagerTeamMembers,
 } from '../../lib/managerTeams'
 import ManagerConsole from './ManagerConsole'
 
@@ -26,6 +27,8 @@ export default function ManagerConsolePage() {
   const [learningRecords, setLearningRecords] = useState([])
   const [collaborationRecords, setCollaborationRecords] = useState([])
   const [pendingInvites, setPendingInvites] = useState([])
+  const [connections, setConnections] = useState([])
+  const [memberships, setMemberships] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -41,25 +44,33 @@ export default function ManagerConsolePage() {
       }
       const selectedTeamId = requestedTeamId ?? teams[0]?.id ?? await createManagerTeam(workspace.id, { name: 'My team' })
       setTeamId(selectedTeamId)
-      const [members, learning, records, invites] = await Promise.all([
+      const [members, learning, records, invites, availableConnections, teamMemberships] = await Promise.all([
         listManagerTeamMemberSummaries(selectedTeamId), listManagerTeamLearningRecords(selectedTeamId),
         listManagerCollaborationRecords(selectedTeamId), listPendingManagerTeamInvites(selectedTeamId),
+        listConnections(user.id), listManagerTeamMembers(selectedTeamId),
       ])
       setTeam(members)
       setLearningRecords(learning)
       setCollaborationRecords(records)
       setPendingInvites(invites)
+      setConnections(availableConnections)
+      setMemberships(teamMemberships)
     } catch (loadError) {
       setError(loadError.message || 'Could not load the manager console. Try again.')
     } finally {
       setLoading(false)
     }
-  }, [workspace, requestedTeamId])
+  }, [workspace, requestedTeamId, user.id])
 
   useEffect(() => { load() }, [load])
 
   async function handleInvite(email) {
     await inviteConnectionToManagerTeamByEmail(teamId, email)
+    await load()
+  }
+
+  async function handleInviteConnection(connectionId) {
+    await inviteConnectionToManagerTeam(teamId, connectionId)
     await load()
   }
 
@@ -90,7 +101,8 @@ export default function ManagerConsolePage() {
       const next = new URLSearchParams(searchParams); next.set('team', id); setSearchParams(next)
     }}
     collaborationRecords={collaborationRecords} pendingInvites={pendingInvites}
-    loading={loading} error={error} onInviteToTeam={handleInvite}
+    loading={loading} error={error} onInviteToTeam={handleInvite} onInviteConnection={handleInviteConnection}
+    connections={connections} teamMemberships={memberships}
     onCreateCollaborationRecord={handleCreateRecord} onRateSkill={handleRateSkill}
     onLoadSkillAssessments={listManagerTeamSkillAssessments}
     onLoadSkillDetail={getManagerTeamSkillDetail} onSetTarget={setManagerTeamSkillTarget} />

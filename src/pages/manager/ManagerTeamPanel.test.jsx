@@ -65,4 +65,14 @@ describe('ManagerTeamPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Rate' }))
     expect(screen.getByText(/rates themselves at Skilled/)).toBeInTheDocument()
   })
+
+  it('invites an existing connection from the members tab', async () => {
+    const onInviteConnection = vi.fn().mockResolvedValue()
+    render(<ManagerTeamPanel members={FIXTURE_TEAM} connections={[{ id: 'alex', name: 'Alex' }]}
+      teamMemberships={[]} onInviteConnection={onInviteConnection} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Invite to team' }))
+    fireEvent.change(screen.getByLabelText('Add a connection'), { target: { value: 'alex' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Invite connection' }))
+    expect(onInviteConnection).toHaveBeenCalledWith('alex')
+  })
 })

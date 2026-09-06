@@ -39,6 +39,9 @@ export default function ManagerConsole({
   loading = false,
   error = null,
   onInviteToTeam,
+  onInviteConnection,
+  connections = [],
+  teamMemberships = [],
   onCreateCollaborationRecord,
   onRateSkill,
   onLoadSkillAssessments,
@@ -130,6 +133,9 @@ export default function ManagerConsole({
               loading={loading}
               error={error}
               onInvite={onInviteToTeam}
+              onInviteConnection={onInviteConnection}
+              connections={connections}
+              teamMemberships={teamMemberships}
               onRateSkill={onRateSkill}
               onLoadSkillAssessments={onLoadSkillAssessments}
               onLoadSkillDetail={onLoadSkillDetail}

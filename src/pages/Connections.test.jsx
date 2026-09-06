@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Connections from './Connections'
 import * as connectionApi from '../lib/connections'
+import * as managerApi from '../lib/managerTeams'
 
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'me', email: 'me@example.com' } }),
@@ -12,6 +13,9 @@ vi.mock('../components/ConnectionsTeams', () => ({ default: () => <section>Team 
 vi.mock('../lib/connections', () => ({
   listMyPeerRatings: vi.fn(), listConnections: vi.fn(), listSentInvites: vi.fn(),
   getProfiles: vi.fn(), getSharedSkillCounts: vi.fn(), sendInviteEmail: vi.fn(), revokeInvite: vi.fn(),
+}))
+vi.mock('../lib/managerTeams', () => ({
+  listMyLedManagerTeams: vi.fn(), inviteConnectionToManagerTeam: vi.fn(),
 }))
 
 function renderPage(path = '/connections') {
@@ -25,6 +29,8 @@ beforeEach(() => {
   connectionApi.listSentInvites.mockResolvedValue([])
   connectionApi.getProfiles.mockResolvedValue({})
   connectionApi.getSharedSkillCounts.mockResolvedValue({})
+  managerApi.listMyLedManagerTeams.mockResolvedValue([])
+  managerApi.inviteConnectionToManagerTeam.mockResolvedValue('invite')
 })
 afterEach(cleanup)
 
@@ -39,6 +45,17 @@ describe('Connections sections', () => {
     expect(screen.getByRole('tab', { name: 'Teams' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText('Team controls')).toBeInTheDocument()
     expect(screen.queryByText(/No connections yet/)).not.toBeInTheDocument()
+  })
+
+  it('offers an add-to-team action for each connection', async () => {
+    connectionApi.listConnections.mockResolvedValue([{ id: 'alex', name: 'Alex' }])
+    connectionApi.getProfiles.mockResolvedValue({ alex: { name: 'Alex' } })
+    managerApi.listMyLedManagerTeams.mockResolvedValue([{ id: 'team-1', name: 'Coaching', status: 'active' }])
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Add to team' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send invite' }))
+    expect(managerApi.inviteConnectionToManagerTeam).toHaveBeenCalledWith('team-1', 'alex')
+    expect(await screen.findByText('Invitation sent to Coaching.')).toBeInTheDocument()
   })
 
   it('opens the teams tab directly and supports arrow-key tab navigation', () => {
