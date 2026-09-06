@@ -1,15 +1,16 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import MutationFeedback from './MutationFeedback'
 
 const controlClass = 'rounded-md border border-hairline px-3 py-2 text-sm font-medium text-ink hover:bg-paper disabled:opacity-60'
 
-export default function ConnectionTeamInviteControl({ connection, teams = [], onInvite }) {
+export default function ConnectionTeamInviteControl({ connection, teams = [], onInvite, onCreateTeam }) {
   const [open, setOpen] = useState(false)
+  const [creatingNew, setCreatingNew] = useState(false)
   const [teamId, setTeamId] = useState(teams[0]?.id ?? '')
+  const [teamName, setTeamName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
-  const [sentTeamId, setSentTeamId] = useState(null)
+  const [sentTeamName, setSentTeamName] = useState('')
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -17,19 +18,30 @@ export default function ConnectionTeamInviteControl({ connection, teams = [], on
     setBusy(true); setError(null)
     try {
       await onInvite(teamId, connection.id)
-      setSentTeamId(teamId); setOpen(false)
+      setSentTeamName(teams.find((team) => team.id === teamId)?.name ?? 'team'); setOpen(false)
     } catch (err) {
       setError(err.message || `Could not invite ${connection.name}. Try again.`)
     } finally { setBusy(false) }
   }
 
-  if (sentTeamId) return <p role="status" className="text-sm text-moss">
-    Invitation sent to {teams.find((team) => team.id === sentTeamId)?.name ?? 'team'}.
-  </p>
+  async function handleCreate(event) {
+    event.preventDefault()
+    if (!teamName.trim() || !onCreateTeam) return
+    setBusy(true); setError(null)
+    try {
+      const team = await onCreateTeam(teamName.trim())
+      await onInvite(team.id, connection.id)
+      setSentTeamName(team.name); setOpen(false)
+    } catch (err) {
+      setError(err.message || `Could not create the team and invite ${connection.name}. Try again.`)
+    } finally { setBusy(false) }
+  }
+
+  if (sentTeamName) return <p role="status" className="text-sm text-moss">Invitation sent to {sentTeamName}.</p>
 
   return <div className="space-y-2">
-    {!open && <button type="button" className={controlClass} onClick={() => setOpen(true)}>Add to team</button>}
-    {open && (teams.length ? <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2">
+    {!open && <button type="button" className={controlClass} onClick={() => { setOpen(true); setCreatingNew(teams.length === 0) }}>Add to team</button>}
+    {open && !creatingNew && teams.length > 0 && <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2">
       <label className="min-w-48 flex-1 text-sm text-ink">Team
         <select value={teamId} onChange={(event) => setTeamId(event.target.value)} disabled={busy}
           className="mt-1 block w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink">
@@ -37,8 +49,18 @@ export default function ConnectionTeamInviteControl({ connection, teams = [], on
         </select>
       </label>
       <button type="submit" disabled={busy || !teamId} className="rounded-md bg-moss px-3 py-2 text-sm font-medium text-paper disabled:opacity-60">{busy ? 'Sending…' : 'Send invite'}</button>
+      {onCreateTeam && <button type="button" disabled={busy} className={controlClass} onClick={() => setCreatingNew(true)}>Create new team</button>}
       <button type="button" disabled={busy} className={controlClass} onClick={() => { setOpen(false); setError(null) }}>Cancel</button>
-    </form> : <p className="text-sm text-secondary">Create a team in the <Link className="text-moss underline underline-offset-4" to="/connections?section=teams">Teams tab</Link> first.</p>)}
+    </form>}
+    {open && creatingNew && <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-2">
+      <label className="min-w-48 flex-1 text-sm text-ink">New team name
+        <input required maxLength={120} value={teamName} onChange={(event) => setTeamName(event.target.value)} disabled={busy} autoFocus
+          className="mt-1 block w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink" />
+      </label>
+      <button type="submit" disabled={busy || !teamName.trim()} className="rounded-md bg-moss px-3 py-2 text-sm font-medium text-paper disabled:opacity-60">{busy ? 'Creating and inviting…' : `Create and invite ${connection.name}`}</button>
+      {teams.length > 0 && <button type="button" disabled={busy} className={controlClass} onClick={() => setCreatingNew(false)}>Choose existing team</button>}
+      <button type="button" disabled={busy} className={controlClass} onClick={() => { setOpen(false); setError(null) }}>Cancel</button>
+    </form>}
     <MutationFeedback status="error" message={error} />
   </div>
 }

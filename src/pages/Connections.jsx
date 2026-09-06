@@ -17,10 +17,10 @@ import {
   sendInviteEmail,
   revokeInvite,
 } from '../lib/connections'
-import { inviteConnectionToManagerTeam, listMyLedManagerTeams } from '../lib/managerTeams'
+import { createManagerTeam, createManagerWorkspace, inviteConnectionToManagerTeam, listMyLedManagerTeams } from '../lib/managerTeams'
 
 export default function Connections() {
-  const { user } = useAuth()
+  const { user, refreshWorkspaces } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const activeSection = searchParams.get('section') === 'teams' ? 'teams' : 'people'
   const tabRefs = useRef({})
@@ -153,6 +153,15 @@ export default function Connections() {
     }
   }
 
+  async function handleCreateTeam(name) {
+    const workspaceId = await createManagerWorkspace()
+    const id = await createManagerTeam(workspaceId, { name })
+    const team = { id, name, status: 'active' }
+    setLedTeams((current) => [...current, team])
+    await refreshWorkspaces?.().catch(() => {})
+    return team
+  }
+
   function selectSection(section) {
     const next = new URLSearchParams(searchParams)
     if (section === 'people') next.delete('section')
@@ -255,7 +264,7 @@ export default function Connections() {
                   ))}
                 </div>
                 {allConnectionIds.includes(c.id) && <div className="mt-4 border-t border-hairline pt-3">
-                  <ConnectionTeamInviteControl connection={c} teams={ledTeams} onInvite={inviteConnectionToManagerTeam} />
+                  <ConnectionTeamInviteControl connection={c} teams={ledTeams} onInvite={inviteConnectionToManagerTeam} onCreateTeam={handleCreateTeam} />
                 </div>}
               </div>
             ))}

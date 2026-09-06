@@ -6,7 +6,7 @@ import * as connectionApi from '../lib/connections'
 import * as managerApi from '../lib/managerTeams'
 
 vi.mock('../context/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'me', email: 'me@example.com' } }),
+  useAuth: () => ({ user: { id: 'me', email: 'me@example.com' }, refreshWorkspaces: vi.fn().mockResolvedValue() }),
 }))
 vi.mock('../components/AppHeader', () => ({ default: () => <header>Header</header> }))
 vi.mock('../components/ConnectionsTeams', () => ({ default: () => <section>Team controls</section> }))
@@ -16,6 +16,7 @@ vi.mock('../lib/connections', () => ({
 }))
 vi.mock('../lib/managerTeams', () => ({
   listMyLedManagerTeams: vi.fn(), inviteConnectionToManagerTeam: vi.fn(),
+  createManagerWorkspace: vi.fn(), createManagerTeam: vi.fn(),
 }))
 
 function renderPage(path = '/connections') {
@@ -31,6 +32,8 @@ beforeEach(() => {
   connectionApi.getSharedSkillCounts.mockResolvedValue({})
   managerApi.listMyLedManagerTeams.mockResolvedValue([])
   managerApi.inviteConnectionToManagerTeam.mockResolvedValue('invite')
+  managerApi.createManagerWorkspace.mockResolvedValue('workspace')
+  managerApi.createManagerTeam.mockResolvedValue('new-team')
 })
 afterEach(cleanup)
 
