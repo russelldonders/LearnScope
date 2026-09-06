@@ -248,6 +248,7 @@ export function toRoleProfileViewModel(profile, assignments, memberByUserId) {
     .filter((assignment) => ['proposed', 'linked'].includes(assignment.status))
     .map((assignment) => ({
       assignmentId: assignment.id,
+      userId: assignment.userId,
       name: assignment.name,
       email: memberByUserId.get(assignment.userId)?.email ?? '',
       status: assignment.status === 'linked' ? 'accepted' : 'pending',
@@ -260,6 +261,54 @@ export function toRoleProfileViewModel(profile, assignments, memberByUserId) {
     linkedEmployees,
     linkedEmployeeCount: linkedEmployees.length,
   }
+}
+
+// Employer-side readiness, for the linked-employees roster on a role
+// profile's own page (EmployerRoleProfileDetail -- rendered by
+// RoleProfileLinkedEmployeesPanel). Deliberately reuses the two access paths
+// an employer admin already has rather than computing the learner's full
+// alignment (that stays buildLearnerRoleAlignment's job, run only in the
+// learner's own session): skills come straight from the `skills` table,
+// so RLS's existing is_skill_shared_with_employer policy (20260904191500)
+// silently limits results to whatever the employee already chose to share
+// via the employer data-access flow (EmployerConsole's Users tab) -- an
+// unshared skill just returns no row, read here as "not shared" rather than
+// distinguished from "not tracked". Training comes from course_assignments
+// scoped to this employer, which only ever reflects assigned/enrolled/
+// dismissed (started, not completed -- see 20260902180000's own comment);
+// it says nothing about a completion the learner reached on their own.
+export async function getEmployerRoleProfileReadiness(employerId, profile, employeeUserIds) {
+  const readiness = Object.fromEntries(employeeUserIds.map((userId) => [userId, { skills: {}, training: {} }]))
+  if (employeeUserIds.length === 0) return readiness
+
+  const skillIds = profile.skillRequirements.map((requirement) => requirement.skillId)
+  if (skillIds.length > 0) {
+    const { data, error } = await supabase
+      .from('skills')
+      .select('user_id, library_skill_id, level')
+      .in('user_id', employeeUserIds)
+      .in('library_skill_id', skillIds)
+    if (error) throw error
+    for (const row of data ?? []) {
+      if (readiness[row.user_id]) readiness[row.user_id].skills[row.library_skill_id] = row.level
+    }
+  }
+
+  const courseIds = profile.trainingRequirements.map((requirement) => requirement.courseId)
+  if (courseIds.length > 0) {
+    const { data, error } = await supabase
+      .from('course_assignments')
+      .select('assigned_to, catalogue_course_id, status')
+      .eq('employer_id', employerId)
+      .in('assigned_to', employeeUserIds)
+      .in('catalogue_course_id', courseIds)
+    if (error) throw error
+    for (const row of data ?? []) {
+      if (readiness[row.assigned_to]) readiness[row.assigned_to].training[row.catalogue_course_id] = row.status
+    }
+  }
+
+  return readiness
 }
 
 export { mapRoleProfile }

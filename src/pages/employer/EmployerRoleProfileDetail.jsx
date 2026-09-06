@@ -11,6 +11,7 @@ import {
   withdrawEmployerRoleAssignment,
   listEmployerRoleAssignments,
   toRoleProfileViewModel,
+  getEmployerRoleProfileReadiness,
 } from '../../lib/employerRoleProfiles'
 import { getEmployer, listEmployerCatalogueCourses, listEmployerMembers } from '../../lib/admin/employers'
 import { listLibrarySkills } from '../../lib/skillLibrary'
@@ -41,6 +42,7 @@ export default function EmployerRoleProfileDetail() {
   const [members, setMembers] = useState([])
   const [availableSkills, setAvailableSkills] = useState([])
   const [availableCourses, setAvailableCourses] = useState([])
+  const [readiness, setReadiness] = useState({})
   const [tab, setTab] = useState('skills')
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
@@ -64,11 +66,17 @@ export default function EmployerRoleProfileDetail() {
       ])
       const coursesData = await listEmployerCatalogueCourses(employerData.provider_organisation_id)
       const memberByUserId = new Map(membersData.map((m) => [m.user_id, m]))
-      setProfile(toRoleProfileViewModel(rawProfile, assignments, memberByUserId))
+      const nextProfile = toRoleProfileViewModel(rawProfile, assignments, memberByUserId)
+      setProfile(nextProfile)
       setEmployer(employerData)
       setMembers(membersData)
       setAvailableSkills(skillsData)
       setAvailableCourses(coursesData.map((c) => ({ id: c.id, title: c.name })))
+
+      const acceptedUserIds = nextProfile.linkedEmployees
+        .filter((employee) => employee.status === 'accepted')
+        .map((employee) => employee.userId)
+      setReadiness(await getEmployerRoleProfileReadiness(rawProfile.employerId, nextProfile, acceptedUserIds))
     } catch (err) {
       setError(err.message)
     } finally {
@@ -222,6 +230,9 @@ export default function EmployerRoleProfileDetail() {
                 {tab === 'users' && (
                   <RoleProfileLinkedEmployeesPanel
                     employees={profile.linkedEmployees}
+                    requiredSkills={profile.requiredSkills}
+                    training={profile.training}
+                    readiness={readiness}
                     assigning={saving}
                     onAssignEmployee={handleAssignEmployee}
                     onWithdrawAssignment={handleWithdrawAssignment}

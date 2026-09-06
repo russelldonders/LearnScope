@@ -729,7 +729,8 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate, rea
                     <td className="px-4 py-3 text-secondary truncate max-w-xs">{catalogue.description || '—'}</td>
                     <td className="px-4 py-3 text-secondary whitespace-nowrap">{catalogue.courseCount}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {/* Straight to the Users tab -- this is a catalogue's own admins/
+                      {/* Straight to the "Manage users & approvers" settings panel (under
+                          the catalogue's cog menu) -- this is a catalogue's own admins/
                           approvers (who can approve courses into it), not learners. */}
                       <Link to={`/provider/catalogues/${catalogue.id}?tab=users`} className="text-xs font-medium text-moss hover:underline">
                         {catalogue.userCount} user{catalogue.userCount === 1 ? '' : 's'}

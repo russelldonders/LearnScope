@@ -26,8 +26,8 @@ export const FIXTURE_ROLE_PROFILES = [
       { courseId: 'course-2', title: 'Advanced troubleshooting', requirement: 'recommended' },
     ],
     linkedEmployees: [
-      { assignmentId: 'assignment-1', name: 'Priya Natarajan', email: 'priya@acme.example', status: 'accepted', assignedAt: '2026-06-01' },
-      { assignmentId: 'assignment-2', name: 'Owen McAllister', email: 'owen@acme.example', status: 'pending', assignedAt: '2026-07-14' },
+      { assignmentId: 'assignment-1', userId: 'user-1', name: 'Priya Natarajan', email: 'priya@acme.example', status: 'accepted', assignedAt: '2026-06-01' },
+      { assignmentId: 'assignment-2', userId: 'user-2', name: 'Owen McAllister', email: 'owen@acme.example', status: 'pending', assignedAt: '2026-07-14' },
     ],
     linkedEmployeeCount: 2,
   },
@@ -65,6 +65,6 @@ export const FIXTURE_COURSE_CATALOGUE = [
 // accept/decline -- see src/pages/roles/employer-link/) or 'accepted'
 // (the employee linked it to one of their own current-role records).
 export const FIXTURE_LINKED_EMPLOYEES = [
-  { assignmentId: 'assignment-1', name: 'Priya Natarajan', email: 'priya@acme.example', status: 'accepted', assignedAt: '2026-06-01' },
-  { assignmentId: 'assignment-2', name: 'Owen McAllister', email: 'owen@acme.example', status: 'pending', assignedAt: '2026-07-14' },
+  { assignmentId: 'assignment-1', userId: 'user-1', name: 'Priya Natarajan', email: 'priya@acme.example', status: 'accepted', assignedAt: '2026-06-01' },
+  { assignmentId: 'assignment-2', userId: 'user-2', name: 'Owen McAllister', email: 'owen@acme.example', status: 'pending', assignedAt: '2026-07-14' },
 ]

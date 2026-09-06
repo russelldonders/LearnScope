@@ -52,4 +52,38 @@ describe('RoleProfileLinkedEmployeesPanel', () => {
     render(<RoleProfileLinkedEmployeesPanel employees={[]} error="Couldn't assign that employee." />)
     expect(screen.getByRole('alert')).toHaveTextContent("Couldn't assign that employee.")
   })
+
+  it('summarizes readiness for a linked employee against required skills and training', () => {
+    render(
+      <RoleProfileLinkedEmployeesPanel
+        employees={FIXTURE_LINKED_EMPLOYEES}
+        requiredSkills={[{ skillId: 'skill-1', name: 'Facilitation', targetLevel: 3 }, { skillId: 'skill-2', name: 'Incident response', targetLevel: 4 }]}
+        training={[{ courseId: 'course-1', title: 'De-escalation fundamentals' }]}
+        readiness={{ 'user-1': { skills: { 'skill-1': 3, 'skill-2': 2 }, training: { 'course-1': 'enrolled' } } }}
+      />
+    )
+    expect(screen.getByText('1/2 skills met · 1/1 training started')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('1/2 skills met · 1/1 training started'))
+    expect(screen.getByText('Meets target (3)')).toBeInTheDocument()
+    expect(screen.getByText('Below target (2 of 4)')).toBeInTheDocument()
+    expect(screen.getByText('Started')).toBeInTheDocument()
+  })
+
+  it('shows unshared skills and unassigned training distinctly from a pending employee with no readiness at all', () => {
+    render(
+      <RoleProfileLinkedEmployeesPanel
+        employees={FIXTURE_LINKED_EMPLOYEES}
+        requiredSkills={[{ skillId: 'skill-1', name: 'Facilitation', targetLevel: 3 }]}
+        training={[{ courseId: 'course-1', title: 'De-escalation fundamentals' }]}
+        readiness={{}}
+      />
+    )
+    // Only the accepted employee (Priya) gets a readiness summary -- the
+    // pending one (Owen) hasn't linked their experience yet, so there's
+    // nothing to evaluate against.
+    expect(screen.getByText('0/1 skills met · 0/1 training started')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('0/1 skills met · 0/1 training started'))
+    expect(screen.getByText('Not shared')).toBeInTheDocument()
+    expect(screen.getByText('Not assigned')).toBeInTheDocument()
+  })
 })
