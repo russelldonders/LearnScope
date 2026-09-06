@@ -9,7 +9,7 @@ function skillKey(skill) {
 }
 
 export default function ManagerSkillsPanel({
-  members = [], loading = false, error = null, onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget,
+  members = [], loading = false, error = null, onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget, onSuggestSkill,
 }) {
   const [selection, setSelection] = useState(null)
   const selectedMember = members.find((member) => member.id === selection?.memberId)
@@ -28,7 +28,7 @@ export default function ManagerSkillsPanel({
 
   if (selectedMember) return <ManagerMemberProfile member={selectedMember} initialSkillId={selection.skillId}
     onBack={() => setSelection(null)} onRateSkill={onRateSkill} onLoadSkillAssessments={onLoadSkillAssessments}
-    onLoadSkillDetail={onLoadSkillDetail} onSetTarget={onSetTarget} />
+    onLoadSkillDetail={onLoadSkillDetail} onSetTarget={onSetTarget} onSuggestSkill={onSuggestSkill} />
 
   return <section aria-labelledby="team-skills-title" className="space-y-6">
     <div className="max-w-3xl">

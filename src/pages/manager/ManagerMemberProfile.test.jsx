@@ -1,7 +1,11 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ManagerTeamPanel from './ManagerTeamPanel'
+import { listLibrarySkills } from '../../lib/skillLibrary'
 
+vi.mock('../../lib/skillLibrary', () => ({ listLibrarySkills: vi.fn() }))
+
+beforeEach(() => { listLibrarySkills.mockResolvedValue([]) })
 afterEach(cleanup)
 const members = [{ id: 'member-1', name: 'Alex', sharedSkills: [{ id: 'skill-1', name: 'Coaching', level: 2 }] }]
 const detail = { level: 2, knowledge_level: 3, targets: [], assessments: [] }
@@ -56,5 +60,26 @@ describe('manager skills profile', () => {
     fireEvent.click(screen.getByRole('button', { name: 'View skill detail for Coaching' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Skill no longer shared')
     expect(screen.queryByRole('button', { name: 'Set target' })).not.toBeInTheDocument()
+  })
+
+  it('lets a leader suggest a skill to a member -- never touching the member’s own record directly', async () => {
+    listLibrarySkills.mockResolvedValue([{ id: 'lib-1', name: 'Facilitation' }])
+    const onSuggestSkill = vi.fn().mockResolvedValue()
+    const noSkillsYet = [{ id: 'member-1', name: 'Alex', sharedSkills: [] }]
+    render(<ManagerTeamPanel members={noSkillsYet} onSuggestSkill={onSuggestSkill} />)
+    fireEvent.click(screen.getByRole('button', { name: 'View skills profile for Alex' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Suggest a skill' }))
+    fireEvent.change(screen.getByLabelText('Skill'), { target: { value: 'Facil' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Facilitation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Suggest skill' }))
+    await waitFor(() => expect(onSuggestSkill).toHaveBeenCalledWith(
+      'member-1', 'lib-1', 'Facilitation', { targetLevel: null, targetDate: null, comments: null }
+    ))
+  })
+
+  it('does not offer to suggest a skill when the caller has no permission (an archived team)', async () => {
+    render(<ManagerTeamPanel members={[{ id: 'member-1', name: 'Alex', sharedSkills: [] }]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'View skills profile for Alex' }))
+    expect(screen.queryByRole('button', { name: 'Suggest a skill' })).not.toBeInTheDocument()
   })
 })

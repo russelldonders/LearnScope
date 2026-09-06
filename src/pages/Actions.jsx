@@ -21,7 +21,13 @@ import EmployerDataAccessConsentDialog from '../components/EmployerDataAccessCon
 import { requestedDataSummary } from '../lib/employerDataAccess'
 import CohortPickerModal from '../components/CohortPickerModal'
 import ManagerTeamInviteCard from './manager/learner/ManagerTeamInviteCard'
-import { decideManagerTeamInvite, listMyManagerTeamInvites } from '../lib/managerTeams'
+import {
+  decideManagerTeamInvite,
+  listMyManagerTeamInvites,
+  listMyManagerTeamSkillSuggestions,
+  adoptManagerTeamSkillSuggestion,
+  dismissManagerTeamSkillSuggestion,
+} from '../lib/managerTeams'
 import { loadActionSources } from '../lib/actionLoading'
 
 // Everything actually waiting on this learner to act -- the same sources
@@ -88,6 +94,7 @@ export default function Actions() {
         { key: 'dataAccessRequests', label: 'employer data-access requests', fallback: [], load: () => listMyPendingDataAccessRequests(user.id) },
         { key: 'courseAssignments', label: 'course assignments', fallback: [], load: () => listMyCourseAssignments(user.id) },
         { key: 'skillSuggestions', label: 'skill suggestions', fallback: [], load: () => listMySkillSuggestions(user.id) },
+        { key: 'managerTeamSkillSuggestions', label: 'team skill suggestions', fallback: [], load: listMyManagerTeamSkillSuggestions },
         {
           key: 'skills',
           label: 'skills available to share',
@@ -112,7 +119,25 @@ export default function Actions() {
       const managerTeamInvitesData = values.managerInvites
       const dataAccessRequestsData = values.dataAccessRequests
       const courseAssignmentsData = values.courseAssignments
-      const skillSuggestionsData = values.skillSuggestions
+      // Two independent sources (an employer admin, or a manager-team
+      // leader) feed the same "push, don't force" pending-suggestion list --
+      // normalized to one shape here so the rest of this page (adopt/
+      // dismiss handlers, the render below) doesn't need to branch on
+      // field-naming per source, only on `kind` for which underlying
+      // adopt/dismiss function to call. `raw` keeps each suggestion's own
+      // native shape (skill_name vs skillName) for that call.
+      const skillSuggestionsData = [
+        ...values.skillSuggestions.map((s) => ({
+          id: s.id, kind: 'employer', skillName: s.skill_name, suggestedTargetLevel: s.suggested_target_level,
+          targetDate: s.target_date, comments: s.comments, createdAt: s.created_at,
+          sourceLabel: s.employers?.name || 'An employer', raw: s,
+        })),
+        ...values.managerTeamSkillSuggestions.map((s) => ({
+          id: s.id, kind: 'managerTeam', skillName: s.skillName, suggestedTargetLevel: s.suggestedTargetLevel,
+          targetDate: s.targetDate, comments: s.comments, createdAt: s.createdAt,
+          sourceLabel: `${s.suggestedByName} (${s.teamName})`, raw: s,
+        })),
+      ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       setIncomingRateInvites(incomingRateInvitesData)
       setIncomingRecommendInvites(incomingRecommendInvitesData)
       setValidationRequests(validationRequestsData)
@@ -302,9 +327,9 @@ export default function Actions() {
     setSuggestionError(null)
     setAdoptingSuggestion(suggestion.id)
     setAdoptForm({
-      setTarget: suggestion.suggested_target_level != null,
-      targetLevel: suggestion.suggested_target_level ?? 3,
-      targetDate: suggestion.target_date ?? '',
+      setTarget: suggestion.suggestedTargetLevel != null,
+      targetLevel: suggestion.suggestedTargetLevel ?? 3,
+      targetDate: suggestion.targetDate ?? '',
       comments: suggestion.comments ?? '',
     })
   }
@@ -313,11 +338,14 @@ export default function Actions() {
     setAdoptingSuggestion(null)
   }
 
-  // Calls adoptSkillSuggestion, which resolves-or-creates the real skills
-  // row via the existing, unchanged findOrCreatePersonalSkill, then (only
-  // if the learner kept a target) inserts a skill_targets row shaped like
-  // SetTargetModal's own -- never a silent copy of the employer's suggested
-  // values, since adoptForm was already reviewed/edited above.
+  // Calls adoptSkillSuggestion (an employer's suggestion) or
+  // adoptManagerTeamSkillSuggestion (a team leader's) -- both resolve-or-
+  // create the real skills row via the same unchanged findOrCreatePersonalSkill,
+  // then (only if the learner kept a target) insert a skill_targets row
+  // shaped like SetTargetModal's own -- never a silent copy of the
+  // suggester's values, since adoptForm was already reviewed/edited above.
+  // `suggestion.raw` is each source's own native shape, which is what these
+  // two functions expect (skill_name vs skillName).
   async function handleAdoptSuggestion(suggestion) {
     if (adoptForm.setTarget && !adoptForm.targetDate) {
       setSuggestionError({ id: suggestion.id, message: 'Target date is required when setting a target level.' })
@@ -326,7 +354,8 @@ export default function Actions() {
     setSuggestionError(null)
     setSuggestionActingId(suggestion.id)
     try {
-      await adoptSkillSuggestion(user.id, suggestion, {
+      const adopt = suggestion.kind === 'managerTeam' ? adoptManagerTeamSkillSuggestion : adoptSkillSuggestion
+      await adopt(user.id, suggestion.raw, {
         targetLevel: adoptForm.setTarget ? Number(adoptForm.targetLevel) : null,
         targetDate: adoptForm.setTarget ? adoptForm.targetDate : null,
         comments: adoptForm.setTarget ? adoptForm.comments : null,
@@ -345,7 +374,8 @@ export default function Actions() {
     setSuggestionError(null)
     setSuggestionActingId(suggestion.id)
     try {
-      await dismissSkillSuggestion(suggestion.id)
+      const dismiss = suggestion.kind === 'managerTeam' ? dismissManagerTeamSkillSuggestion : dismissSkillSuggestion
+      await dismiss(suggestion.id)
       setSkillSuggestions((prev) => prev.filter((s) => s.id !== suggestion.id))
       if (adoptingSuggestion === suggestion.id) setAdoptingSuggestion(null)
       refreshPendingActionCount()
@@ -690,19 +720,19 @@ export default function Actions() {
               {skillSuggestions.map((suggestion) => (
                 <div key={suggestion.id} className="bg-card border border-hairline rounded-lg p-4">
                   <p className="text-sm text-ink">
-                    <strong>{suggestion.employers?.name || 'An employer'}</strong> suggested you develop:{' '}
-                    <strong>{suggestion.skill_name}</strong>
+                    <strong>{suggestion.sourceLabel}</strong> suggested you develop:{' '}
+                    <strong>{suggestion.skillName}</strong>
                   </p>
-                  {(suggestion.suggested_target_level || suggestion.target_date) && (
+                  {(suggestion.suggestedTargetLevel || suggestion.targetDate) && (
                     <p className="text-sm text-secondary mt-1">
-                      {suggestion.suggested_target_level && `Suggested target: ${LEVEL_LABELS[suggestion.suggested_target_level]}`}
-                      {suggestion.suggested_target_level && suggestion.target_date && ' by '}
-                      {suggestion.target_date && new Date(`${suggestion.target_date}T00:00:00`).toLocaleDateString()}
+                      {suggestion.suggestedTargetLevel && `Suggested target: ${LEVEL_LABELS[suggestion.suggestedTargetLevel]}`}
+                      {suggestion.suggestedTargetLevel && suggestion.targetDate && ' by '}
+                      {suggestion.targetDate && new Date(`${suggestion.targetDate}T00:00:00`).toLocaleDateString()}
                     </p>
                   )}
                   {suggestion.comments && <p className="text-sm text-secondary mt-1">{suggestion.comments}</p>}
                   <p className="font-mono text-xs text-secondary mt-1">
-                    {new Date(suggestion.created_at).toLocaleDateString()}
+                    {new Date(suggestion.createdAt).toLocaleDateString()}
                   </p>
                   {suggestionError?.id === suggestion.id && (
                     <p className="text-xs text-red-700 mt-1">{suggestionError.message}</p>

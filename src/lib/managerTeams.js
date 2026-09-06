@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient'
 import { callAdminApi } from './admin/adminApi'
+import { findOrCreatePersonalSkill } from './skillLibrary'
 
 export async function listMyLedManagerTeams() {
   const { data, error } = await supabase.rpc('list_my_led_manager_teams')
@@ -300,4 +301,74 @@ export async function listManagerCollaborationRecords(teamId) {
     id: row.id, title: row.title, note: row.note,
     memberIds: row.member_ids ?? [], memberNames: row.member_names ?? [], createdAt: row.created_at,
   }))
+}
+
+// Leader side of a "push, don't force" skill suggestion (mirrors
+// suggestSkillToEmployerMembers in src/lib/admin/employers.js) -- this only
+// ever creates a manager_team_skill_suggestions row. It never touches the
+// member's own skills/skill_targets; they still have to explicitly adopt it
+// via /actions (adoptManagerTeamSkillSuggestion below).
+export async function suggestManagerTeamSkill(membershipId, skillLibraryId, skillName, { targetLevel = null, targetDate = null, comments = null } = {}) {
+  const { data, error } = await supabase.rpc('suggest_manager_team_skill', {
+    p_membership_id: membershipId, p_skill_library_id: skillLibraryId, p_skill_name: skillName,
+    p_target_level: targetLevel, p_target_date: targetDate, p_comments: comments,
+  })
+  if (error) throw error
+  return data
+}
+
+// Learner side, surfaced on /actions alongside every other pending-action
+// type. Pending ('suggested') suggestions only -- once adopted/dismissed
+// they drop off this list.
+export async function listMyManagerTeamSkillSuggestions() {
+  const { data, error } = await supabase.rpc('list_my_manager_team_skill_suggestions')
+  if (error) throw error
+  return (data ?? []).map((row) => ({
+    id: row.id, membershipId: row.membership_id, skillName: row.skill_name,
+    suggestedTargetLevel: row.suggested_target_level, targetDate: row.target_date,
+    comments: row.comments, status: row.status, createdAt: row.created_at,
+    teamName: row.team_name, suggestedByName: row.suggested_by_name,
+  }))
+}
+
+// "Add to my skills" -- resolves-or-creates the real skills row via the
+// same unmodified findOrCreatePersonalSkill every other learner-initiated
+// skill-add path uses (never a silent copy of the leader's suggested
+// values), then -- only if the learner kept a target -- inserts a
+// skill_targets row shaped exactly like SetTargetModal's own. Marking the
+// suggestion 'adopted' purely drops it off the pending list; it's never
+// itself the thing shown on the learner's skills profile.
+export async function adoptManagerTeamSkillSuggestion(userId, suggestion, { targetLevel = null, targetDate = null, comments = null } = {}) {
+  if (targetLevel != null && !targetDate) {
+    throw new Error('Target date is required when setting a target level.')
+  }
+
+  const { skill } = await findOrCreatePersonalSkill(userId, suggestion.skillName)
+
+  if (targetLevel != null) {
+    const { error: targetError } = await supabase.from('skill_targets').insert({
+      skill_id: skill.id,
+      user_id: userId,
+      target_level: targetLevel,
+      target_date: targetDate,
+      comments: comments?.trim() || null,
+    })
+    if (targetError) throw targetError
+  }
+
+  const { error } = await supabase
+    .from('manager_team_skill_suggestions')
+    .update({ status: 'adopted' })
+    .eq('id', suggestion.id)
+  if (error) throw error
+
+  return skill
+}
+
+export async function dismissManagerTeamSkillSuggestion(suggestionId) {
+  const { error } = await supabase
+    .from('manager_team_skill_suggestions')
+    .update({ status: 'dismissed' })
+    .eq('id', suggestionId)
+  if (error) throw error
 }

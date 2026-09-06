@@ -6,6 +6,7 @@ import * as teams from '../lib/managerTeams'
 
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'me' }, workspaces: [], refreshWorkspaces: async () => {} }) }))
 vi.mock('../lib/skillEvidence', () => ({ uploadEvidenceFiles: vi.fn() }))
+vi.mock('../lib/skillLibrary', () => ({ listLibrarySkills: vi.fn().mockResolvedValue([]) }))
 vi.mock('../lib/managerTeams', () => ({
   createManagerWorkspace: vi.fn(), createManagerTeam: vi.fn(), listMyLedManagerTeams: vi.fn(),
   listMyArchivedManagerTeams: vi.fn(), listMyManagerTeamRelationships: vi.fn(), listMyManagerShareableSkills: vi.fn(),

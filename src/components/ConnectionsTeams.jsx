@@ -11,7 +11,7 @@ import {
   createManagerTeamSkillAssessment, setManagerTeamSkillAssessmentEvidence, listManagerTeamSkillAssessments,
   getManagerTeamSkillDetail, setManagerTeamSkillTarget, archiveManagerTeam, restoreManagerTeam,
   listMyManagerShareableSkills, setManagerTeamSharedSkills, leaveManagerTeam,
-  listManagerTeamPendingMembers, revokeManagerTeamInvite,
+  listManagerTeamPendingMembers, revokeManagerTeamInvite, suggestManagerTeamSkill,
 } from '../lib/managerTeams'
 import MutationFeedback from './MutationFeedback'
 import ConfirmDialog from './ConfirmDialog'
@@ -359,6 +359,13 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     await loadTeamDetail(teamId)
   }
 
+  // Push, don't force: only ever creates a manager_team_skill_suggestions
+  // row -- the member still has to explicitly adopt it (or not) from their
+  // own Actions page, same as an employer's skill suggestion.
+  async function handleSuggestSkill(membershipId, skillLibraryId, skillName, payload) {
+    await suggestManagerTeamSkill(membershipId, skillLibraryId, skillName, payload)
+  }
+
   async function handleManagerTeamShare(skillIds) {
     if (!selected?.membership) return
     setMemberActionError(null)
@@ -477,7 +484,8 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
           {activePanel === 'skills' && (
             <ManagerSkillsPanel members={teamMemberSummaries} loading={membersLoading} error={membersError ? error : null}
               onRateSkill={isArchived ? undefined : handleRateSkill} onLoadSkillAssessments={listManagerTeamSkillAssessments}
-              onLoadSkillDetail={getManagerTeamSkillDetail} onSetTarget={isArchived ? undefined : setManagerTeamSkillTarget} />
+              onLoadSkillDetail={getManagerTeamSkillDetail} onSetTarget={isArchived ? undefined : setManagerTeamSkillTarget}
+              onSuggestSkill={isArchived ? undefined : handleSuggestSkill} />
           )}
           {activePanel === 'members' && (
             <ManagerTeamPanel members={teamMemberSummaries} pendingMembers={pendingMembers}
@@ -486,7 +494,8 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
               onRevokeInvite={isArchived ? undefined : (person) => setRevokeTarget(person)}
               connections={connections} teamMemberships={members} readOnly={isArchived}
               onRateSkill={isArchived ? undefined : handleRateSkill} onLoadSkillAssessments={listManagerTeamSkillAssessments}
-              onLoadSkillDetail={getManagerTeamSkillDetail} onSetTarget={isArchived ? undefined : setManagerTeamSkillTarget} />
+              onLoadSkillDetail={getManagerTeamSkillDetail} onSetTarget={isArchived ? undefined : setManagerTeamSkillTarget}
+              onSuggestSkill={isArchived ? undefined : handleSuggestSkill} />
           )}
           {activePanel === 'learning' && (
             <ManagerLearningPanel records={learningRecords} loading={membersLoading} error={membersError ? error : null} />
