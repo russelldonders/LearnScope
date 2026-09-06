@@ -494,8 +494,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
               onRevokeInvite={isArchived ? undefined : (person) => setRevokeTarget(person)}
               connections={connections} teamMemberships={members} readOnly={isArchived}
               onRateSkill={isArchived ? undefined : handleRateSkill} onLoadSkillAssessments={listManagerTeamSkillAssessments}
-              onLoadSkillDetail={getManagerTeamSkillDetail} onSetTarget={isArchived ? undefined : setManagerTeamSkillTarget}
-              onSuggestSkill={isArchived ? undefined : handleSuggestSkill} />
+              onLoadSkillDetail={getManagerTeamSkillDetail} onSetTarget={isArchived ? undefined : setManagerTeamSkillTarget} />
           )}
           {activePanel === 'learning' && (
             <ManagerLearningPanel records={learningRecords} loading={membersLoading} error={membersError ? error : null} />

@@ -34,7 +34,7 @@ const SORT_ACCESSORS = {
 export default function ManagerTeamPanel({
   members = [], pendingMembers = [], loading = false, error = null, onInvite, onInviteConnection,
   onRevokeInvite, connections = [], teamMemberships = [],
-  onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget, onSuggestSkill, readOnly = false,
+  onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget, readOnly = false,
 }) {
   const [inviteOpen, setInviteOpen] = useState(false)
   const [rateTarget, setRateTarget] = useState(null)
@@ -50,7 +50,7 @@ export default function ManagerTeamPanel({
 
   if (profileMember) return <ManagerMemberProfile member={profileMember} onBack={() => setProfileId(null)}
     onRateSkill={onRateSkill} onLoadSkillAssessments={onLoadSkillAssessments}
-    onLoadSkillDetail={onLoadSkillDetail} onSetTarget={onSetTarget} onSuggestSkill={onSuggestSkill} />
+    onLoadSkillDetail={onLoadSkillDetail} onSetTarget={onSetTarget} />
 
   return (
     <div className="space-y-4">

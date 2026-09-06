@@ -3,8 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import ManagerTeamPanel from './ManagerTeamPanel'
 import { FIXTURE_TEAM } from './managerFixtures'
 
-vi.mock('../../lib/skillLibrary', () => ({ listLibrarySkills: vi.fn().mockResolvedValue([]) }))
-
 afterEach(cleanup)
 
 describe('ManagerTeamPanel', () => {

@@ -1,38 +1,26 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import PersonAvatar from '../../components/PersonAvatar'
 import GrowthRing from '../../components/GrowthRing'
 import KnowledgeLevelBar from '../../components/KnowledgeLevelBar'
 import MutationFeedback from '../../components/MutationFeedback'
-import AccessibleDialog from '../../components/AccessibleDialog'
 import { LEVELS, LEVEL_LABELS, KNOWLEDGE_LEVEL_LABELS } from '../../lib/levels'
 import { formatAbsoluteDate } from '../../lib/dates'
-import { listLibrarySkills } from '../../lib/skillLibrary'
 import { RateSkillDialog } from './ManagerTeamPanel'
 
 const actionClass = 'rounded-md border border-hairline px-3 py-2 text-sm font-medium text-ink hover:bg-paper focus-visible:outline-2 focus-visible:outline-moss'
 
-export default function ManagerMemberProfile({
-  member, initialSkillId = null, onBack, onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget, onSuggestSkill,
-}) {
+export default function ManagerMemberProfile({ member, initialSkillId = null, onBack, onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget }) {
   const [skillId, setSkillId] = useState(initialSkillId)
-  const [suggestOpen, setSuggestOpen] = useState(false)
   const skill = member.sharedSkills?.find((item) => item.id === skillId)
   return <div className="space-y-6">
     <nav aria-label="Team profile navigation" className="flex flex-wrap gap-3 text-sm">
       <button className="text-moss underline underline-offset-4" onClick={onBack}>Back to team</button>
       {skill && <button className="text-moss underline underline-offset-4" onClick={() => setSkillId(null)}>Back to {member.name}’s skills</button>}
     </nav>
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex items-center gap-3">
-        <PersonAvatar name={member.name} avatarUrl={member.avatarUrl} size={10} />
-        <div><h2 className="font-display text-2xl text-ink">{member.name}’s skills profile</h2>
-          <p className="text-sm text-secondary">Skills shared with you · Select a skill to review progress, rate it and set targets.</p></div>
-      </div>
-      {!skill && onSuggestSkill && (
-        <button type="button" onClick={() => setSuggestOpen(true)} className={`${actionClass} shrink-0`}>
-          Suggest a skill
-        </button>
-      )}
+    <div className="flex items-center gap-3">
+      <PersonAvatar name={member.name} avatarUrl={member.avatarUrl} size={10} />
+      <div><h2 className="font-display text-2xl text-ink">{member.name}’s skills profile</h2>
+        <p className="text-sm text-secondary">Skills shared with you · Select a skill to review progress, rate it and set targets.</p></div>
     </div>
     {skill ? <ManagerSkillDetail key={skill.id} member={member} skill={skill} onRateSkill={onRateSkill}
       onLoadSkillAssessments={onLoadSkillAssessments} onLoadSkillDetail={onLoadSkillDetail} onSetTarget={onSetTarget} />
@@ -46,143 +34,7 @@ export default function ManagerMemberProfile({
           <span className="text-sm text-moss">View skill detail</span>
         </button>) : <p className="py-8 text-sm text-secondary">No skills shared yet. Their skills will appear here when they share them with you.</p>}
       </div>}
-    {suggestOpen && (
-      <SuggestSkillModal member={member} onClose={() => setSuggestOpen(false)}
-        onSuggest={(skillLibraryId, skillName, payload) => onSuggestSkill(member.id, skillLibraryId, skillName, payload)} />
-    )}
   </div>
-}
-
-// Push, don't force -- mirrors AssignSkillModal (src/pages/employer/
-// EmployerConsole.jsx) exactly, scoped to this one member instead of a
-// bulk-selected roster. Never creates or modifies the member's own skills/
-// skill_targets rows itself; they still choose to add it (or not) from
-// their own Actions page. Skill choices come from listLibrarySkills, the
-// same active, public-or-own-private library search every learner-facing
-// "Find skill" flow already uses.
-function SuggestSkillModal({ member, onClose, onSuggest }) {
-  const [librarySkills, setLibrarySkills] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(null)
-  const [skillQuery, setSkillQuery] = useState('')
-  const [selectedSkill, setSelectedSkill] = useState(null)
-  const [targetLevel, setTargetLevel] = useState('')
-  const [targetDate, setTargetDate] = useState('')
-  const [comments, setComments] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    listLibrarySkills().then(setLibrarySkills).catch((err) => setLoadError(err.message)).finally(() => setLoading(false))
-  }, [])
-
-  const skillMatches = useMemo(() => {
-    const q = skillQuery.trim().toLowerCase()
-    if (!q) return []
-    return librarySkills.filter((s) => s.name.toLowerCase().includes(q)).slice(0, 20)
-  }, [librarySkills, skillQuery])
-
-  function chooseSkill(skill) {
-    setSelectedSkill(skill)
-    setSkillQuery(skill.name)
-  }
-
-  async function handleSubmit(event) {
-    event.preventDefault()
-    if (!selectedSkill) return
-    if (targetLevel && !targetDate) {
-      setError('A target date is required when a target level is set.')
-      return
-    }
-    setSubmitting(true)
-    setError(null)
-    try {
-      await onSuggest(selectedSkill.id, selectedSkill.name, {
-        targetLevel: targetLevel ? Number(targetLevel) : null,
-        targetDate: targetDate || null,
-        comments: comments.trim() || null,
-      })
-      onClose()
-    } catch (err) {
-      setError(err.message || 'Could not suggest this skill. Try again.')
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <AccessibleDialog
-      label="Suggest a skill"
-      onClose={submitting ? undefined : onClose}
-      closeOnBackdrop={!submitting}
-      panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
-    >
-      <h2 className="font-display text-xl text-ink mb-1">Suggest a skill</h2>
-      <p className="text-sm text-secondary mb-4">
-        Suggest a skill (and optionally a target level/date) to {member.name}. They’ll see it on their Actions page
-        and decide whether to add it to their own profile -- this doesn’t touch their skills automatically.
-      </p>
-      {loadError && <MutationFeedback status="error" message={loadError} className="mb-4" />}
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="relative">
-          <label htmlFor="suggest-skill-query" className="block text-sm font-medium text-ink mb-1">Skill</label>
-          <input
-            id="suggest-skill-query"
-            data-dialog-initial-focus
-            value={skillQuery}
-            disabled={loading || submitting}
-            onChange={(e) => { setSkillQuery(e.target.value); setSelectedSkill(null) }}
-            placeholder="Search skills…"
-            autoComplete="off"
-            className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-          />
-          {skillQuery.trim() && !selectedSkill && (
-            <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto bg-card border border-hairline rounded-md">
-              {skillMatches.length === 0 ? (
-                <p className="px-3 py-2 text-xs text-secondary">No matching skills.</p>
-              ) : (
-                skillMatches.map((s) => (
-                  <button type="button" key={s.id} onClick={() => chooseSkill(s)}
-                    className="block w-full text-left px-3 py-2 text-sm text-ink hover:bg-paper">
-                    {s.name}
-                  </button>
-                ))
-              )}
-            </div>
-          )}
-        </div>
-        <div>
-          <label htmlFor="suggest-skill-level" className="block text-sm font-medium text-ink mb-1">Target level (optional)</label>
-          <select id="suggest-skill-level" value={targetLevel} disabled={submitting}
-            onChange={(e) => setTargetLevel(e.target.value)}
-            className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss">
-            <option value="">No target level</option>
-            {LEVELS.map((l) => <option key={l} value={l}>{LEVEL_LABELS[l]}</option>)}
-          </select>
-        </div>
-        {targetLevel && (
-          <div>
-            <label htmlFor="suggest-skill-date" className="block text-sm font-medium text-ink mb-1">Achieve by</label>
-            <input id="suggest-skill-date" type="date" required value={targetDate} disabled={submitting}
-              onChange={(e) => setTargetDate(e.target.value)}
-              className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
-          </div>
-        )}
-        <div>
-          <label htmlFor="suggest-skill-comments" className="block text-sm font-medium text-ink mb-1">Comments (optional)</label>
-          <textarea id="suggest-skill-comments" rows={3} value={comments} disabled={submitting}
-            onChange={(e) => setComments(e.target.value)}
-            className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
-        </div>
-        <MutationFeedback status="error" message={error} />
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} disabled={submitting} className={actionClass}>Cancel</button>
-          <button type="submit" disabled={submitting || !selectedSkill} className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 disabled:opacity-60">
-            {submitting ? 'Sending…' : 'Suggest skill'}
-          </button>
-        </div>
-      </form>
-    </AccessibleDialog>
-  )
 }
 
 function ManagerSkillDetail({ member, skill, onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget }) {
