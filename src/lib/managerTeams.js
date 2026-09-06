@@ -84,11 +84,11 @@ export async function listPendingManagerTeamInvites(teamId) {
 
 // Any learner can freely become a manager (create_manager_workspace is
 // idempotent and open to any authenticated user, not a granted role), so
-// callers outside the manager console itself -- e.g. "also invite them to
-// your team" from a skill recommendation -- can resolve a target team
-// without the user ever having visited it. Mirrors ManagerConsolePage.jsx's
-// own load() exactly: reuse the first existing team, or create "My team" if
-// there isn't one yet.
+// callers outside the Connections Teams tab itself -- e.g. "also invite them
+// to your team" from a skill recommendation -- can resolve a target team
+// without the user ever having visited it. Same fallback ConnectionsTeams.jsx
+// itself uses when creating a team: reuse the first existing team, or create
+// "My team" if there isn't one yet.
 export async function getOrCreateMyDefaultManagerTeam() {
   const workspaceId = await createManagerWorkspace()
   const teams = await listMyLedManagerTeams()

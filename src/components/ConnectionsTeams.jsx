@@ -1,11 +1,37 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { createManagerWorkspace, createManagerTeam, listMyLedManagerTeams, listMyManagerTeamRelationships, listManagerTeamMembers, listManagerTeamRoster, inviteConnectionToManagerTeam, transferManagerTeamLeadership } from '../lib/managerTeams'
+import { uploadEvidenceFiles } from '../lib/skillEvidence'
+import { handleTabListKeyDown } from '../lib/tabsKeyboard'
+import {
+  createManagerWorkspace, createManagerTeam, listMyLedManagerTeams, listMyManagerTeamRelationships,
+  listManagerTeamMembers, listManagerTeamRoster, inviteConnectionToManagerTeam, inviteConnectionToManagerTeamByEmail,
+  transferManagerTeamLeadership, listManagerTeamMemberSummaries, listManagerTeamLearningRecords,
+  listManagerCollaborationRecords, createManagerCollaborationRecord, createManagerTeamSkillAssessment,
+  setManagerTeamSkillAssessmentEvidence, listManagerTeamSkillAssessments, getManagerTeamSkillDetail, setManagerTeamSkillTarget,
+} from '../lib/managerTeams'
 import MutationFeedback from './MutationFeedback'
+import ManagerSkillsPanel from '../pages/manager/ManagerSkillsPanel'
+import ManagerTeamPanel from '../pages/manager/ManagerTeamPanel'
+import ManagerLearningPanel from '../pages/manager/ManagerLearningPanel'
+import ManagerCollaborationPanel from '../pages/manager/ManagerCollaborationPanel'
 
 const fieldClass = 'mt-1 block w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink'
 const buttonClass = 'rounded-md border border-hairline px-3 py-2 text-sm font-medium text-ink hover:bg-card disabled:opacity-60'
+
+// A team leader (formerly a separate "manager console" at /manager) is the
+// same concept as a Connections team's leader -- merged here so leading a
+// team, from creating it through to rating shared skills, all happens in one
+// place instead of handing off to a second console. PANELS mirrors the old
+// console's own section shape (Skills/Members/Learning/Collaboration)
+// exactly, reusing its panels verbatim; only the shell around them (this
+// component) and where their data loads from changed.
+const PANELS = [
+  { key: 'skills', label: 'Skills' },
+  { key: 'members', label: 'Members' },
+  { key: 'learning', label: 'Learning' },
+  { key: 'collaboration', label: 'Collaboration' },
+]
 
 export default function ConnectionsTeams({ connections = [] }) {
   const { user, refreshWorkspaces } = useAuth()
@@ -14,10 +40,14 @@ export default function ConnectionsTeams({ connections = [] }) {
   const [members, setMembers] = useState([])
   const [joinedTeams, setJoinedTeams] = useState([])
   const [roster, setRoster] = useState([])
+  const [teamMemberSummaries, setTeamMemberSummaries] = useState([])
+  const [learningRecords, setLearningRecords] = useState([])
+  const [collaborationRecords, setCollaborationRecords] = useState([])
+  const [activePanel, setActivePanel] = useState('skills')
+  const panelTabRefs = useRef({})
   const [successorId, setSuccessorId] = useState('')
   const [transferOpen, setTransferOpen] = useState(false)
   const [membersError, setMembersError] = useState(false)
-  const [connectionId, setConnectionId] = useState('')
   const [loading, setLoading] = useState(true)
   const [membersLoading, setMembersLoading] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -44,22 +74,45 @@ export default function ConnectionsTeams({ connections = [] }) {
     return () => { active = false }
   }, [user.id, retry])
 
+  // One team's whole detail set -- membership roster (invite eligibility),
+  // the leadership-transfer roster, the enriched member summaries Skills/
+  // Members both read, and the Learning/Collaboration records. Reloaded
+  // wholesale after any mutation below (invite, rating, new record) the same
+  // way the old ManagerConsolePage did, rather than each panel managing its
+  // own slice independently.
+  const loadTeamDetail = useCallback(async (id) => {
+    setMembersLoading(true)
+    setMembersError(false)
+    try {
+      const [membershipRows, people, summaries, learning, collaboration] = await Promise.all([
+        listManagerTeamMembers(id), listManagerTeamRoster(id), listManagerTeamMemberSummaries(id),
+        listManagerTeamLearningRecords(id), listManagerCollaborationRecords(id),
+      ])
+      setMembers(membershipRows)
+      setRoster(people)
+      setTeamMemberSummaries(summaries)
+      setLearningRecords(learning)
+      setCollaborationRecords(collaboration)
+    } catch (err) {
+      setMembersError(true)
+      setError(err.message || 'Could not load team members. Try again.')
+    } finally {
+      setMembersLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     setMembers([])
     setRoster([])
+    setTeamMemberSummaries([])
+    setLearningRecords([])
+    setCollaborationRecords([])
     setSuccessorId('')
     setTransferOpen(false)
     setMembersError(false)
-    setConnectionId('')
-    if (!teamId) return
-    let active = true
-    setMembersLoading(true)
-    Promise.all([listManagerTeamMembers(teamId), listManagerTeamRoster(teamId)])
-      .then(([rows, people]) => { if (active) { setMembers(rows); setRoster(people) } })
-      .catch((err) => { if (active) { setMembersError(true); setError(err.message || 'Could not load team members. Try again.') } })
-      .finally(() => { if (active) setMembersLoading(false) })
-    return () => { active = false }
-  }, [teamId, retry])
+    setActivePanel('skills')
+    if (teamId) loadTeamDetail(teamId)
+  }, [teamId, retry, loadTeamDetail])
 
   async function handleCreate(event) {
     event.preventDefault()
@@ -70,7 +123,7 @@ export default function ConnectionsTeams({ connections = [] }) {
       const id = await createManagerTeam(workspaceId, { name: name.trim() })
       setTeams((previous) => [...previous, { id, name: name.trim(), status: 'active' }])
       setTeamId(id); setCreating(false); setName('')
-      setNotice('Team created. Choose a connection to invite below.')
+      setNotice('Team created. Invite a connection from the Members tab below.')
       await refreshWorkspaces().catch(() => {})
     } catch (err) { setError(err.message || 'Could not create your team. Try again.') }
     finally { setBusy(false) }
@@ -89,20 +142,36 @@ export default function ConnectionsTeams({ connections = [] }) {
     finally { setBusy(false) }
   }
 
-  async function handleInvite(event) {
-    event.preventDefault()
-    if (!teamId || !connectionId) return
-    setBusy(true); setError(null); setNotice('')
-    try {
-      await inviteConnectionToManagerTeam(teamId, connectionId)
-      setMembers((previous) => [...previous, { member_user_id: connectionId, status: 'pending' }])
-      setNotice(`Invitation sent to ${connections.find((c) => c.id === connectionId)?.name ?? 'your connection'}. They’ll appear in your team after accepting.`)
-      setConnectionId('')
-    } catch (err) { setError(err.message || 'Could not send the invitation. Try again.') }
-    finally { setBusy(false) }
+  async function handleInviteByEmail(email) {
+    await inviteConnectionToManagerTeamByEmail(teamId, email)
+    await loadTeamDetail(teamId)
   }
 
-  const liveMembers = new Map(members.filter((m) => ['active', 'pending'].includes(m.status)).map((m) => [m.member_user_id, m.status]))
+  async function handleInviteConnection(connectionId) {
+    await inviteConnectionToManagerTeam(teamId, connectionId)
+    await loadTeamDetail(teamId)
+  }
+
+  async function handleCreateCollaborationRecord(record) {
+    await createManagerCollaborationRecord(teamId, record)
+    await loadTeamDetail(teamId)
+  }
+
+  // Same two-step shape as every other assessment-with-evidence flow (see
+  // src/lib/skillEvidence.js): create the assessment first, then upload any
+  // files keyed by its own id, under this leader's own storage folder (not
+  // the member's), before attaching the resulting paths.
+  async function handleRateSkill(membershipId, skillId, { level, comments, evidenceUrl, files }) {
+    const assessmentId = await createManagerTeamSkillAssessment(membershipId, skillId, { level, comments, evidenceUrl })
+    if (files?.length > 0) {
+      const paths = await uploadEvidenceFiles(user.id, skillId, assessmentId, files)
+      await setManagerTeamSkillAssessmentEvidence(assessmentId, paths)
+    }
+    await loadTeamDetail(teamId)
+  }
+
+  const collaborationMemberOptions = teamMemberSummaries.map((m) => ({ id: m.id, name: m.name }))
+
   return <section aria-labelledby="connections-teams-title" className="space-y-4 border-b border-hairline pb-8">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h2 id="connections-teams-title" className="font-display text-xl text-ink">Your teams</h2>
@@ -119,19 +188,53 @@ export default function ConnectionsTeams({ connections = [] }) {
         <button type="button" disabled={busy} className={buttonClass} onClick={() => setCreating(false)}>Cancel</button></div>
     </form>}
     {!loading && teams.length === 0 && !creating && !error && <p className="text-sm text-secondary">No teams yet. Create your first team to start inviting connections.</p>}
-    {teams.length > 0 && <div className="max-w-lg space-y-4">
-      <div className="flex flex-wrap items-end gap-3"><label className="flex-1 min-w-48 text-sm text-ink">Team you lead<select disabled={busy} value={teamId} onChange={(e) => { setTeamId(e.target.value); setNotice(''); setError(null) }} className={fieldClass}>
+    {teams.length > 0 && <div className="space-y-4">
+      <label className="block max-w-sm text-sm text-ink">Team you lead<select disabled={busy} value={teamId} onChange={(e) => { setTeamId(e.target.value); setNotice(''); setError(null) }} className={fieldClass}>
         {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
-      </select></label><Link to={`/manager?section=skills&team=${encodeURIComponent(teamId)}`} className={`${buttonClass} inline-block`}>Manage skills</Link></div>
-      {connections.length > 0 ? <form onSubmit={handleInvite} className="space-y-3">
-        <label className="block text-sm text-ink">Connection to invite<select value={connectionId} disabled={busy || membersLoading || membersError} onChange={(e) => setConnectionId(e.target.value)} className={fieldClass}>
-          <option value="">{membersLoading ? 'Loading team members…' : 'Choose a connection'}</option>
-          {connections.map((connection) => <option key={connection.id} value={connection.id} disabled={liveMembers.has(connection.id)}>
-            {connection.name}{liveMembers.get(connection.id) === 'pending' ? ' — Invited' : liveMembers.get(connection.id) === 'active' ? ' — Already on team' : ''}
-          </option>)}
-        </select></label>
-        <button type="submit" disabled={busy || membersLoading || membersError || !connectionId || liveMembers.has(connectionId)} className="rounded-md bg-moss text-paper px-4 py-2 text-sm font-medium disabled:opacity-60">{busy && !creating && !transferOpen ? 'Sending…' : 'Invite to team'}</button>
-      </form> : <p className="text-sm text-secondary">Once you connect with someone, you can invite them to this team here.</p>}
+      </select></label>
+
+      <div role="tablist" aria-label="Team section" className="flex items-center flex-wrap gap-1 border-b border-hairline">
+        {PANELS.map((panel) => (
+          <button key={panel.key} type="button" role="tab"
+            ref={(el) => { panelTabRefs.current[panel.key] = el }}
+            id={`team-panel-tab-${panel.key}`}
+            aria-selected={activePanel === panel.key}
+            aria-controls={`team-panel-${panel.key}`}
+            tabIndex={activePanel === panel.key ? 0 : -1}
+            onClick={() => setActivePanel(panel.key)}
+            onKeyDown={(event) => handleTabListKeyDown(event, {
+              keys: PANELS.map((p) => p.key), activeKey: activePanel, refs: panelTabRefs, onChange: setActivePanel,
+            })}
+            className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${activePanel === panel.key
+              ? 'border-moss text-ink font-medium'
+              : 'border-transparent text-secondary hover:text-ink'}`}>
+            {panel.label}
+          </button>
+        ))}
+      </div>
+
+      <div id={`team-panel-${activePanel}`} role="tabpanel" aria-labelledby={`team-panel-tab-${activePanel}`} tabIndex={0}>
+        {activePanel === 'skills' && (
+          <ManagerSkillsPanel members={teamMemberSummaries} loading={membersLoading} error={membersError ? error : null}
+            onRateSkill={handleRateSkill} onLoadSkillAssessments={listManagerTeamSkillAssessments}
+            onLoadSkillDetail={getManagerTeamSkillDetail} onSetTarget={setManagerTeamSkillTarget} />
+        )}
+        {activePanel === 'members' && (
+          <ManagerTeamPanel members={teamMemberSummaries} loading={membersLoading} error={membersError ? error : null}
+            onInvite={handleInviteByEmail} onInviteConnection={handleInviteConnection}
+            connections={connections} teamMemberships={members}
+            onRateSkill={handleRateSkill} onLoadSkillAssessments={listManagerTeamSkillAssessments}
+            onLoadSkillDetail={getManagerTeamSkillDetail} onSetTarget={setManagerTeamSkillTarget} />
+        )}
+        {activePanel === 'learning' && (
+          <ManagerLearningPanel records={learningRecords} loading={membersLoading} error={membersError ? error : null} />
+        )}
+        {activePanel === 'collaboration' && (
+          <ManagerCollaborationPanel records={collaborationRecords} teamOptions={collaborationMemberOptions}
+            loading={membersLoading} error={membersError ? error : null} onCreateRecord={handleCreateCollaborationRecord} />
+        )}
+      </div>
+
       {!transferOpen && <button type="button" disabled={busy || membersLoading || membersError} onClick={() => setTransferOpen(true)} className={buttonClass}>Change team leader</button>}
       {transferOpen && <form onSubmit={handleTransfer} className="space-y-3 border-t border-hairline pt-4">
         <label className="block text-sm text-ink">New team leader<select value={successorId} disabled={busy} onChange={(e) => setSuccessorId(e.target.value)} className={fieldClass}>

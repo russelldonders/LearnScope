@@ -5,10 +5,16 @@ import ConnectionsTeams from './ConnectionsTeams'
 import * as teams from '../lib/managerTeams'
 
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'me' }, workspaces: [], refreshWorkspaces: async () => {} }) }))
+vi.mock('../lib/skillEvidence', () => ({ uploadEvidenceFiles: vi.fn() }))
 vi.mock('../lib/managerTeams', () => ({
   createManagerWorkspace: vi.fn(), createManagerTeam: vi.fn(), listMyLedManagerTeams: vi.fn(),
   listMyManagerTeamRelationships: vi.fn(), listManagerTeamMembers: vi.fn(), listManagerTeamRoster: vi.fn(),
-  inviteConnectionToManagerTeam: vi.fn(), transferManagerTeamLeadership: vi.fn(),
+  inviteConnectionToManagerTeam: vi.fn(), inviteConnectionToManagerTeamByEmail: vi.fn(),
+  transferManagerTeamLeadership: vi.fn(), listManagerTeamMemberSummaries: vi.fn(),
+  listManagerTeamLearningRecords: vi.fn(), listManagerCollaborationRecords: vi.fn(),
+  createManagerCollaborationRecord: vi.fn(), createManagerTeamSkillAssessment: vi.fn(),
+  setManagerTeamSkillAssessmentEvidence: vi.fn(), listManagerTeamSkillAssessments: vi.fn(),
+  getManagerTeamSkillDetail: vi.fn(), setManagerTeamSkillTarget: vi.fn(),
 }))
 const connections = [{ id: 'alex', name: 'Alex' }, { id: 'sam', name: 'Sam' }]
 function renderTeams() { return render(<MemoryRouter><ConnectionsTeams connections={connections} /></MemoryRouter>) }
@@ -18,12 +24,26 @@ beforeEach(() => {
   teams.listMyManagerTeamRelationships.mockResolvedValue([])
   teams.listManagerTeamMembers.mockResolvedValue([])
   teams.listManagerTeamRoster.mockResolvedValue([])
+  teams.listManagerTeamMemberSummaries.mockResolvedValue([])
+  teams.listManagerTeamLearningRecords.mockResolvedValue([])
+  teams.listManagerCollaborationRecords.mockResolvedValue([])
   teams.createManagerWorkspace.mockResolvedValue('workspace')
   teams.createManagerTeam.mockResolvedValue('new-team')
   teams.inviteConnectionToManagerTeam.mockResolvedValue('invite')
   teams.transferManagerTeamLeadership.mockResolvedValue()
 })
 afterEach(cleanup)
+
+// Opens the Members tab's "Invite to team" dialog and picks an existing
+// connection -- the flow this merged component now shares with the former
+// standalone manager console (ManagerTeamPanel, reused verbatim here).
+async function inviteConnection(name) {
+  fireEvent.click(screen.getByRole('tab', { name: 'Members' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Invite to team' }))
+  await waitFor(() => expect(screen.getByLabelText('Add a connection')).not.toBeDisabled())
+  fireEvent.change(screen.getByLabelText('Add a connection'), { target: { value: name } })
+  fireEvent.click(screen.getByRole('button', { name: 'Invite connection' }))
+}
 
 describe('Connections teams', () => {
   it('lets a user without a manager workspace create a team and invite a connection', async () => {
@@ -32,15 +52,26 @@ describe('Connections teams', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create a team' }))
     fireEvent.change(screen.getByLabelText('Team name'), { target: { value: 'Coaching circle' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create team', exact: true }))
-    await screen.findByText('Team created. Choose a connection to invite below.')
-    await waitFor(() => expect(screen.getByLabelText('Connection to invite')).not.toBeDisabled())
-    fireEvent.change(screen.getByLabelText('Connection to invite'), { target: { value: 'alex' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Invite to team' }))
-    await screen.findByText(/Invitation sent to Alex/)
+    await screen.findByText('Team created. Invite a connection from the Members tab below.')
+    await inviteConnection('alex')
+    await waitFor(() => expect(teams.inviteConnectionToManagerTeam).toHaveBeenCalledWith('new-team', 'alex'))
     expect(teams.createManagerWorkspace).toHaveBeenCalledOnce()
     expect(teams.createManagerTeam).toHaveBeenCalledWith('workspace', { name: 'Coaching circle' })
-    expect(teams.inviteConnectionToManagerTeam).toHaveBeenCalledWith('new-team', 'alex')
-    expect(screen.getByRole('option', { name: 'Alex — Invited' })).toBeDisabled()
+  })
+
+  it('shows the merged team console (Skills/Members/Learning/Collaboration) for a led team, scoped to the selected team', async () => {
+    teams.listMyLedManagerTeams.mockResolvedValue([{ id: 'one', name: 'First team', status: 'active' }, { id: 'two', name: 'Second team', status: 'active' }])
+    renderTeams()
+    await waitFor(() => expect(teams.listManagerTeamMemberSummaries).toHaveBeenCalledWith('one'))
+    expect(screen.getByRole('tab', { name: 'Skills' })).toHaveAttribute('aria-selected', 'true')
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Learning' }))
+    expect(screen.getByText(/Courses and sessions your team has done together/)).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Team you lead'), { target: { value: 'two' } })
+    await waitFor(() => expect(teams.listManagerTeamMemberSummaries).toHaveBeenCalledWith('two'))
+    // Switching teams resets back to the Skills tab and drops the stale Learning selection.
+    expect(screen.getByRole('tab', { name: 'Skills' })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('supports multiple led and joined teams and scopes invitations to the selected team', async () => {
@@ -50,12 +81,9 @@ describe('Connections teams', () => {
     await screen.findByText('Book group')
     expect(screen.getByText('Study group')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Team you lead'), { target: { value: 'two' } })
-    await waitFor(() => expect(screen.getByLabelText('Connection to invite')).not.toBeDisabled())
-    fireEvent.change(screen.getByLabelText('Connection to invite'), { target: { value: 'sam' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Invite to team' }))
-    await screen.findByText(/Invitation sent to Sam/)
-    expect(teams.inviteConnectionToManagerTeam).toHaveBeenCalledWith('two', 'sam')
-    expect(screen.getByRole('link', { name: 'Manage skills' })).toHaveAttribute('href', '/manager?section=skills&team=two')
+    await waitFor(() => expect(teams.listManagerTeamMemberSummaries).toHaveBeenCalledWith('two'))
+    await inviteConnection('sam')
+    await waitFor(() => expect(teams.inviteConnectionToManagerTeam).toHaveBeenCalledWith('two', 'sam'))
   })
 
   it('transfers leadership only to a selected active member and removes leader controls', async () => {
@@ -76,10 +104,9 @@ describe('Connections teams', () => {
     teams.listMyLedManagerTeams.mockResolvedValue([{ id: 'one', name: 'First team', status: 'active' }])
     teams.inviteConnectionToManagerTeam.mockRejectedValue(new Error('Could not send invitation'))
     renderTeams()
-    await waitFor(() => expect(screen.getByLabelText('Connection to invite')).not.toBeDisabled())
-    fireEvent.change(screen.getByLabelText('Connection to invite'), { target: { value: 'alex' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Invite to team' }))
+    await screen.findByLabelText('Team you lead')
+    await inviteConnection('alex')
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not send invitation')
-    expect(screen.getByLabelText('Connection to invite')).toHaveValue('alex')
+    expect(screen.getByLabelText('Add a connection')).toHaveValue('alex')
   })
 })

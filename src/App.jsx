@@ -7,7 +7,6 @@ import ProtectedRoute from './components/ProtectedRoute'
 import PlatformAdminRoute from './components/PlatformAdminRoute'
 import ProviderAdminRoute from './components/ProviderAdminRoute'
 import EmployerAdminRoute from './components/EmployerAdminRoute'
-import ManagerRoute from './components/ManagerRoute'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
@@ -53,7 +52,6 @@ import AdminOnboarding from './pages/admin/AdminOnboarding'
 import ProviderConsole from './pages/provider/ProviderConsole'
 import EmployerConsole from './pages/employer/EmployerConsole'
 import EmployerRoleProfileDetail from './pages/employer/EmployerRoleProfileDetail'
-import ManagerConsolePage from './pages/manager/ManagerConsolePage'
 import ProviderCourseEditor from './pages/provider/ProviderCourseEditor'
 import ProviderCatalogueDetail from './pages/provider/ProviderCatalogueDetail'
 import ProviderSkillDetail from './pages/provider/ProviderSkillDetail'
@@ -332,14 +330,6 @@ function App() {
               <EmployerAdminRoute>
                 <EmployerRoleProfileDetail />
               </EmployerAdminRoute>
-            }
-          />
-          <Route
-            path="/manager"
-            element={
-              <ManagerRoute>
-                <ManagerConsolePage />
-              </ManagerRoute>
             }
           />
           <Route
