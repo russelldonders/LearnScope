@@ -18,6 +18,7 @@ vi.mock('../lib/managerTeams', () => ({
   getManagerTeamSkillDetail: vi.fn(), setManagerTeamSkillTarget: vi.fn(),
   archiveManagerTeam: vi.fn(), restoreManagerTeam: vi.fn(),
   setManagerTeamSharedSkills: vi.fn(), leaveManagerTeam: vi.fn(),
+  listManagerTeamPendingMembers: vi.fn(), revokeManagerTeamInvite: vi.fn(),
 }))
 const connections = [{ id: 'alex', name: 'Alex' }, { id: 'sam', name: 'Sam' }]
 function renderTeams(props = {}) {
@@ -35,6 +36,7 @@ beforeEach(() => {
   teams.listManagerTeamLearningRecords.mockResolvedValue([])
   teams.listManagerCollaborationRecords.mockResolvedValue([])
   teams.listManagerTeamSkillAssessments.mockResolvedValue([])
+  teams.listManagerTeamPendingMembers.mockResolvedValue([])
   teams.createManagerWorkspace.mockResolvedValue('workspace')
   teams.createManagerTeam.mockResolvedValue('new-team')
   teams.inviteConnectionToManagerTeam.mockResolvedValue('invite')
@@ -133,6 +135,20 @@ describe('Connections teams', () => {
     expect(screen.getByRole('tab', { name: 'Skills' })).toHaveAttribute('aria-selected', 'true')
   })
 
+  it('shows a pending invitee on the Members tab and lets the leader revoke it after confirming', async () => {
+    teams.listMyLedManagerTeams.mockResolvedValue([{ id: 'one', name: 'First team', status: 'active' }])
+    teams.listManagerTeamPendingMembers.mockResolvedValue([{ id: 'p1', name: 'Sam Rivera', avatarUrl: null, invitedAt: '2026-08-01' }])
+    teams.revokeManagerTeamInvite.mockResolvedValue()
+    renderTeams()
+    fireEvent.click(await screen.findByRole('tab', { name: 'Members' }))
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Members' })).toHaveAttribute('aria-selected', 'true'), { timeout: 3000 })
+    expect(await screen.findByText('Sam Rivera')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Revoke' }))
+    await waitFor(() => expect(teams.revokeManagerTeamInvite).toHaveBeenCalledWith('p1'))
+  })
+
   it('supports multiple led and joined teams in one selector, keeping pending invitations separate', async () => {
     teams.listMyLedManagerTeams.mockResolvedValue([{ id: 'one', name: 'First team', status: 'active' }, { id: 'two', name: 'Second team', status: 'active' }])
     teams.listMyManagerTeamRelationships.mockResolvedValue([
@@ -219,7 +235,7 @@ describe('Connections teams', () => {
     // race the transfer form's own render (same class of timing issue as
     // the Members-tab race above) -- wait for it rather than assume it's
     // already committed.
-    fireEvent.change(await screen.findByLabelText('New team leader'), { target: { value: 'membership-alex' } })
+    fireEvent.change(await screen.findByLabelText('New team leader', {}, { timeout: 3000 }), { target: { value: 'membership-alex' } })
     expect(screen.queryByRole('option', { name: 'Me' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Transfer leadership' }))
     await screen.findByText('Team leader changed. You are now a member of this team.')

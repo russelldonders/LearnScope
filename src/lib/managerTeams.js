@@ -193,6 +193,19 @@ export async function listManagerTeamRoster(teamId) {
   }))
 }
 
+export async function listManagerTeamPendingMembers(teamId) {
+  const { data, error } = await supabase.rpc('list_manager_team_pending_members', { p_team_id: teamId })
+  if (error) throw error
+  return (data ?? []).map((row) => ({
+    id: row.id, name: row.name, avatarUrl: row.avatar_url, invitedAt: row.invited_at,
+  }))
+}
+
+export async function revokeManagerTeamInvite(membershipId) {
+  const { error } = await supabase.rpc('revoke_manager_team_invite', { p_membership_id: membershipId })
+  if (error) throw error
+}
+
 export async function listManagerTeamMemberSummaries(teamId) {
   const { data, error } = await supabase.rpc('list_manager_team_member_summaries', { p_team_id: teamId })
   if (error) throw error

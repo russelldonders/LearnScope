@@ -32,15 +32,21 @@ const SORT_ACCESSORS = {
 // `onLoadSkillAssessments` are the only contract with the data layer; this
 // component never fetches or writes anything itself outside of those.
 export default function ManagerTeamPanel({
-  members = [], loading = false, error = null, onInvite, onInviteConnection, connections = [], teamMemberships = [],
+  members = [], pendingMembers = [], loading = false, error = null, onInvite, onInviteConnection,
+  onRevokeInvite, connections = [], teamMemberships = [],
   onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget, readOnly = false,
 }) {
   const [inviteOpen, setInviteOpen] = useState(false)
   const [rateTarget, setRateTarget] = useState(null)
   const [profileId, setProfileId] = useState(null)
   const profileMember = members.find((member) => member.id === profileId)
+  // Invited-but-not-yet-accepted people are folded into the same roster
+  // (rather than a separate section) so they're genuinely "in the list" --
+  // just visually muted, with no shared skills or collaborative learning
+  // possible yet, and a Revoke action instead of a skills-profile link.
+  const rows = [...members, ...pendingMembers.map((p) => ({ ...p, pending: true }))]
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
-    useSortedPage(members, SORT_ACCESSORS, { defaultSortKey: 'name' })
+    useSortedPage(rows, SORT_ACCESSORS, { defaultSortKey: 'name' })
 
   if (profileMember) return <ManagerMemberProfile member={profileMember} onBack={() => setProfileId(null)}
     onRateSkill={onRateSkill} onLoadSkillAssessments={onLoadSkillAssessments}
@@ -68,7 +74,7 @@ export default function ManagerTeamPanel({
 
       {loading ? (
         <p className="text-secondary text-sm">Loading…</p>
-      ) : members.length === 0 ? (
+      ) : rows.length === 0 ? (
         <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
           <p className="text-secondary text-sm">
             No team members yet. Invite one of your connections to build out your team.
@@ -99,7 +105,27 @@ export default function ManagerTeamPanel({
                 </tr>
               </thead>
               <tbody>
-                {pageItems.map((member) => (
+                {pageItems.map((member) => member.pending ? (
+                  <tr key={member.id} className="border-b border-hairline last:border-b-0 align-top opacity-50">
+                    <td className="px-4 py-2">
+                      <div className="flex items-center gap-2">
+                        <PersonAvatar name={member.name} avatarUrl={member.avatarUrl} size={7} />
+                        <span className="text-ink">{member.name}</span>
+                      </div>
+                      {onRevokeInvite && (
+                        <button type="button" onClick={() => onRevokeInvite(member)}
+                          className="mt-2 text-sm font-medium text-red-700 underline underline-offset-4 hover:opacity-80">
+                          Revoke
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-secondary" title={formatAbsoluteDate(member.invitedAt)}>
+                      Invited {formatRelativeDate(member.invitedAt)}
+                    </td>
+                    <td className="px-4 py-2 text-secondary">—</td>
+                    <td className="px-4 py-2 text-secondary">—</td>
+                  </tr>
+                ) : (
                   <tr key={member.id} className="border-b border-hairline last:border-b-0 align-top">
                     <td className="px-4 py-2">
                       <div className="flex items-center gap-2">

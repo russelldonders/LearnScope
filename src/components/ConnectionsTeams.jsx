@@ -11,6 +11,7 @@ import {
   createManagerTeamSkillAssessment, setManagerTeamSkillAssessmentEvidence, listManagerTeamSkillAssessments,
   getManagerTeamSkillDetail, setManagerTeamSkillTarget, archiveManagerTeam, restoreManagerTeam,
   listMyManagerShareableSkills, setManagerTeamSharedSkills, leaveManagerTeam,
+  listManagerTeamPendingMembers, revokeManagerTeamInvite,
 } from '../lib/managerTeams'
 import MutationFeedback from './MutationFeedback'
 import ConfirmDialog from './ConfirmDialog'
@@ -91,6 +92,9 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
   const [members, setMembers] = useState([])
   const [roster, setRoster] = useState([])
   const [teamMemberSummaries, setTeamMemberSummaries] = useState([])
+  const [pendingMembers, setPendingMembers] = useState([])
+  const [revokeTarget, setRevokeTarget] = useState(null)
+  const [revoking, setRevoking] = useState(false)
   const [learningRecords, setLearningRecords] = useState([])
   const [collaborationRecords, setCollaborationRecords] = useState([])
   const [activePanel, setActivePanel] = useState('skills')
@@ -165,15 +169,16 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     setMembersLoading(true)
     setMembersError(false)
     try {
-      const [membershipRows, people, summaries, learning, collaboration] = await Promise.all([
+      const [membershipRows, people, summaries, learning, collaboration, pending] = await Promise.all([
         listManagerTeamMembers(id), listManagerTeamRoster(id), listManagerTeamMemberSummaries(id),
-        listManagerTeamLearningRecords(id), listManagerCollaborationRecords(id),
+        listManagerTeamLearningRecords(id), listManagerCollaborationRecords(id), listManagerTeamPendingMembers(id),
       ])
       setMembers(membershipRows)
       setRoster(people)
       setTeamMemberSummaries(summaries)
       setLearningRecords(learning)
       setCollaborationRecords(collaboration)
+      setPendingMembers(pending)
     } catch (err) {
       setMembersError(true)
       setError(err.message || 'Could not load team members. Try again.')
@@ -188,6 +193,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     setTeamMemberSummaries([])
     setLearningRecords([])
     setCollaborationRecords([])
+    setPendingMembers([])
     setSuccessorId('')
     setTransferOpen(false)
     setMembersError(false)
@@ -313,6 +319,16 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
   async function handleInviteConnection(connectionId) {
     await inviteConnectionToManagerTeam(teamId, connectionId)
     await loadTeamDetail(teamId)
+  }
+
+  async function handleRevokeInvite() {
+    setRevoking(true); setError(null)
+    try {
+      await revokeManagerTeamInvite(revokeTarget.id)
+      setRevokeTarget(null)
+      await loadTeamDetail(teamId)
+    } catch (err) { setError(err.message || 'Could not revoke this invitation. Try again.') }
+    finally { setRevoking(false) }
   }
 
   async function handleCreateCollaborationRecord(record) {
@@ -454,8 +470,10 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
               onLoadSkillDetail={getManagerTeamSkillDetail} onSetTarget={isArchived ? undefined : setManagerTeamSkillTarget} />
           )}
           {activePanel === 'members' && (
-            <ManagerTeamPanel members={teamMemberSummaries} loading={membersLoading} error={membersError ? error : null}
+            <ManagerTeamPanel members={teamMemberSummaries} pendingMembers={pendingMembers}
+              loading={membersLoading} error={membersError ? error : null}
               onInvite={handleInviteByEmail} onInviteConnection={handleInviteConnection}
+              onRevokeInvite={isArchived ? undefined : (person) => setRevokeTarget(person)}
               connections={connections} teamMemberships={members} readOnly={isArchived}
               onRateSkill={isArchived ? undefined : handleRateSkill} onLoadSkillAssessments={listManagerTeamSkillAssessments}
               onLoadSkillDetail={getManagerTeamSkillDetail} onSetTarget={isArchived ? undefined : setManagerTeamSkillTarget} />
@@ -516,6 +534,16 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
         onConfirm={handleArchive}
         onCancel={() => setArchiveConfirmOpen(false)}
         confirming={archiving}
+      />
+    )}
+
+    {revokeTarget && (
+      <ConfirmDialog
+        message={`Revoke the invitation to "${revokeTarget.name}"? They'll no longer be able to accept it -- you can invite them again later if you change your mind.`}
+        confirmLabel="Revoke"
+        onConfirm={handleRevokeInvite}
+        onCancel={() => setRevokeTarget(null)}
+        confirming={revoking}
       />
     )}
 

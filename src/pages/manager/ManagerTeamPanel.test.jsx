@@ -75,4 +75,26 @@ describe('ManagerTeamPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Invite connection' }))
     expect(onInviteConnection).toHaveBeenCalledWith('alex')
   })
+
+  it('shows a still-pending invitee in the same list, muted, with a revoke action instead of a profile link', () => {
+    const onRevokeInvite = vi.fn()
+    const pendingMembers = [{ id: 'p1', name: 'Sam Rivera', avatarUrl: null, invitedAt: '2026-08-01' }]
+    render(<ManagerTeamPanel members={[]} pendingMembers={pendingMembers} onRevokeInvite={onRevokeInvite} />)
+
+    expect(screen.getByText('Sam Rivera')).toBeInTheDocument()
+    expect(screen.getByText(/Invited/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /View skills profile/ })).not.toBeInTheDocument()
+    const row = screen.getByText('Sam Rivera').closest('tr')
+    expect(row).toHaveClass('opacity-50')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
+    expect(onRevokeInvite).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1', name: 'Sam Rivera' }))
+  })
+
+  it('hides the revoke action for a pending invitee when no onRevokeInvite is given (an archived team)', () => {
+    const pendingMembers = [{ id: 'p1', name: 'Sam Rivera', avatarUrl: null, invitedAt: '2026-08-01' }]
+    render(<ManagerTeamPanel members={[]} pendingMembers={pendingMembers} />)
+    expect(screen.getByText('Sam Rivera')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Revoke' })).not.toBeInTheDocument()
+  })
 })
