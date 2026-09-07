@@ -260,11 +260,28 @@ function formatCohortDate(dateStr) {
   return new Date(dateStr).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+function formatCohortTime(dateStr) {
+  return new Date(dateStr).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+}
+
+export function formatCohortDateTime(dateStr) {
+  return `${formatCohortDate(dateStr)}, ${formatCohortTime(dateStr)}`
+}
+
+// start_date/end_date carry a time now (20260907240000 -- a cohort can run
+// entirely within one day, e.g. a one-day workshop), so a same-day range
+// collapses to one date with a time range, the same shape
+// formatSessionDateTime already uses for a single session's start/end.
 export function formatCohortDateRange(startDate, endDate) {
   if (!startDate && !endDate) return 'No dates set'
-  if (startDate && endDate) return `${formatCohortDate(startDate)} – ${formatCohortDate(endDate)}`
-  if (startDate) return `Starts ${formatCohortDate(startDate)}`
-  return `Ends ${formatCohortDate(endDate)}`
+  if (startDate && endDate) {
+    const sameDay = new Date(startDate).toDateString() === new Date(endDate).toDateString()
+    return sameDay
+      ? `${formatCohortDate(startDate)} · ${formatCohortTime(startDate)}–${formatCohortTime(endDate)}`
+      : `${formatCohortDateTime(startDate)} – ${formatCohortDateTime(endDate)}`
+  }
+  if (startDate) return `Starts ${formatCohortDateTime(startDate)}`
+  return `Ends ${formatCohortDateTime(endDate)}`
 }
 
 // Name is optional (20260907230000) -- a cohort with no name is identified

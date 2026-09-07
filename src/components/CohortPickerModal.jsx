@@ -1,5 +1,5 @@
 import AccessibleDialog from './AccessibleDialog'
-import { cohortDisplayName } from '../lib/courseCatalogue'
+import { cohortDisplayName, formatCohortDateRange } from '../lib/courseCatalogue'
 
 // Shown in place of a plain "Enrol" click whenever a course has at least
 // one cohort defined (20260902270000) -- lets a learner pick a specific
@@ -42,9 +42,7 @@ export default function CohortPickerModal({ courseName, cohorts, enrolling, erro
               <div key={cohort.id} className="border border-hairline rounded-md p-3">
                 <p className="text-sm font-medium text-ink">{cohortDisplayName(cohort)}</p>
                 <p className="text-xs text-secondary mt-0.5">
-                  {cohort.start_date
-                    ? `Starts ${new Date(cohort.start_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`
-                    : 'Start date to be confirmed'}
+                  {cohort.start_date ? formatCohortDateRange(cohort.start_date, null) : 'Start date to be confirmed'}
                   {cohort.capacity != null && ` · ${Math.max(0, cohort.seatsRemaining)} of ${cohort.capacity} seats remaining`}
                 </p>
                 {cohort.sessions.length > 0 && (

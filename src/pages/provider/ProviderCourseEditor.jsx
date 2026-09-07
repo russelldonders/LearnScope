@@ -2645,7 +2645,7 @@ function CourseCohorts({ courseCatalogueId, organisationId, canManage }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="font-display text-lg text-ink">Cohorts</h3>
           <p className="text-sm text-secondary mt-1">
@@ -2818,7 +2818,7 @@ function CourseCohorts({ courseCatalogueId, organisationId, canManage }) {
         <AccessibleDialog
           labelledBy="add-cohort-dialog-title"
           onClose={() => setShowAddCohort(false)}
-          panelClassName="w-full max-w-sm bg-card border border-hairline rounded-lg p-6"
+          panelClassName="w-full max-w-sm bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
         >
           <h2 id="add-cohort-dialog-title" className="font-display text-xl text-ink mb-4">
             Add cohort
@@ -2852,8 +2852,8 @@ function CourseCohorts({ courseCatalogueId, organisationId, canManage }) {
 
 function CohortForm({ initial, candidates = [], busy, submitLabel, onSubmit, onCancel, showEnrolmentToggle }) {
   const [name, setName] = useState(initial?.name ?? '')
-  const [startDate, setStartDate] = useState(initial?.start_date ?? '')
-  const [endDate, setEndDate] = useState(initial?.end_date ?? '')
+  const [startDate, setStartDate] = useState(toLocalInputValue(initial?.start_date))
+  const [endDate, setEndDate] = useState(toLocalInputValue(initial?.end_date))
   const [capacity, setCapacity] = useState(initial?.capacity ?? '')
   const [location, setLocation] = useState(initial?.location ?? '')
   const [enrolmentOpen, setEnrolmentOpen] = useState(initial?.enrolment_open ?? true)
@@ -2870,7 +2870,10 @@ function CohortForm({ initial, candidates = [], busy, submitLabel, onSubmit, onC
 
   function handleSubmit(e) {
     e.preventDefault()
-    onSubmit({ name, startDate: startDate || null, endDate: endDate || null, capacity, location, enrolmentOpen, trainerIds: [...trainerIds] })
+    onSubmit({
+      name, startDate: toIsoOrNull(startDate), endDate: toIsoOrNull(endDate),
+      capacity, location, enrolmentOpen, trainerIds: [...trainerIds],
+    })
   }
 
   return (
@@ -2888,33 +2891,33 @@ function CohortForm({ initial, candidates = [], busy, submitLabel, onSubmit, onC
           className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
         />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="block text-xs text-secondary mb-1" htmlFor="cohortStartDate">
-            Start date
+            Starts
           </label>
           <input
             id="cohortStartDate"
-            type="date"
-            value={startDate ?? ''}
+            type="datetime-local"
+            value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
             className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
           />
         </div>
         <div>
           <label className="block text-xs text-secondary mb-1" htmlFor="cohortEndDate">
-            End date
+            Ends
           </label>
           <input
             id="cohortEndDate"
-            type="date"
-            value={endDate ?? ''}
+            type="datetime-local"
+            value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
             className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
           />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="block text-xs text-secondary mb-1" htmlFor="cohortCapacity">
             Capacity
