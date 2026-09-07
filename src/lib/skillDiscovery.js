@@ -31,6 +31,26 @@ export function isDuplicatePendingRequestError(error) {
   return error?.code === '23505' && error?.message?.includes('connection_requests_pending_pair_idx')
 }
 
+// Asks an existing connection to consider sharing some of their skills --
+// see 20260907200000_skill_access_requests.sql. Deliberately reuses
+// connection_requests rather than a new table (same requester/recipient/
+// message/pending-decline-accept shape as a "wants to connect" request),
+// distinguished only by request_type. The insert policy requires the two
+// people to already be connected for this type, so this only makes sense
+// from SkillsProfile.jsx, never the pre-connection skill-search flow.
+export async function requestSkillAccess({ recipientId, note }) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const { error } = await supabase.from('connection_requests').insert({
+    requester_id: user.id,
+    recipient_id: recipientId,
+    request_type: 'skill_access',
+    message: note?.trim() || null,
+  })
+  if (error) throw error
+}
+
 // RLS on connection_requests allows a user to see rows where they're either
 // side (requester or recipient), so without this filter a sent request came
 // back here too -- rendered as "incoming", it showed the current user's own
@@ -38,7 +58,7 @@ export function isDuplicatePendingRequestError(error) {
 export async function listIncomingConnectionRequests(userId) {
   const { data, error } = await supabase
     .from('connection_requests')
-    .select('id, requester_id, skill_id, message, status, created_at, skills(name)')
+    .select('id, requester_id, skill_id, message, status, created_at, request_type, skills(name)')
     .eq('status', 'pending')
     .eq('recipient_id', userId)
     .order('created_at', { ascending: false })

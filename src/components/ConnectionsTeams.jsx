@@ -83,7 +83,7 @@ function pickDefaultKey(options) {
     ?? options[0]?.key ?? ''
 }
 
-export default function ConnectionsTeams({ connections = [], currentUserName = '' }) {
+export default function ConnectionsTeams({ connections = [], currentUserName = '', initialTeamId = null }) {
   const { user, refreshWorkspaces } = useAuth()
   const [ledTeams, setLedTeams] = useState([])
   const [archivedLedTeams, setArchivedLedTeams] = useState([])
@@ -145,7 +145,11 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
         // happen to sort. Keeps the current selection if it's still valid
         // (e.g. after archiving/restoring the very team being viewed).
         const options = buildTeamOptions(led, archivedLed, relationshipRows)
-        setSelectedKey((previous) => (options.some((t) => t.key === previous) ? previous : pickDefaultKey(options)))
+        setSelectedKey((previous) => {
+          if (options.some((t) => t.key === previous)) return previous
+          const fromUrl = initialTeamId && options.find((t) => t.id === initialTeamId)
+          return fromUrl?.key ?? pickDefaultKey(options)
+        })
       })
       .catch((err) => { if (active) setError(err.message || 'Could not load your teams. Try again.') })
       .finally(() => { if (active) setLoading(false) })

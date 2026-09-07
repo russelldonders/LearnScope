@@ -17,6 +17,7 @@ vi.mock('../lib/connections', () => ({
 vi.mock('../lib/managerTeams', () => ({
   listMyLedManagerTeams: vi.fn(), inviteConnectionToManagerTeam: vi.fn(),
   createManagerWorkspace: vi.fn(), createManagerTeam: vi.fn(),
+  listMySharedTeamsByConnection: vi.fn(),
 }))
 
 function renderPage(path = '/connections') {
@@ -31,6 +32,7 @@ beforeEach(() => {
   connectionApi.getProfiles.mockResolvedValue({})
   connectionApi.getSharedSkillCounts.mockResolvedValue({})
   managerApi.listMyLedManagerTeams.mockResolvedValue([])
+  managerApi.listMySharedTeamsByConnection.mockResolvedValue([])
   managerApi.inviteConnectionToManagerTeam.mockResolvedValue('invite')
   managerApi.createManagerWorkspace.mockResolvedValue('workspace')
   managerApi.createManagerTeam.mockResolvedValue('new-team')

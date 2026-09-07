@@ -17,7 +17,13 @@ import {
   sendInviteEmail,
   revokeInvite,
 } from '../lib/connections'
-import { createManagerTeam, createManagerWorkspace, inviteConnectionToManagerTeam, listMyLedManagerTeams } from '../lib/managerTeams'
+import {
+  createManagerTeam,
+  createManagerWorkspace,
+  inviteConnectionToManagerTeam,
+  listMyLedManagerTeams,
+  listMySharedTeamsByConnection,
+} from '../lib/managerTeams'
 
 export default function Connections() {
   const { user, refreshWorkspaces } = useAuth()
@@ -39,6 +45,7 @@ export default function Connections() {
   const [revokeError, setRevokeError] = useState(null)
   const [pendingRevoke, setPendingRevoke] = useState(null)
   const [ledTeams, setLedTeams] = useState([])
+  const [sharedTeamsByConnection, setSharedTeamsByConnection] = useState({})
 
   useEffect(() => {
     load()
@@ -48,16 +55,26 @@ export default function Connections() {
     setLoading(true)
     setError(null)
     try {
-      const [ratingsData, connectionsData, invitesData, teamsData] = await Promise.all([
+      const [ratingsData, connectionsData, invitesData, teamsData, sharedTeamsData] = await Promise.all([
         listMyPeerRatings(),
         listConnections(user.id),
         listSentInvites(),
         listMyLedManagerTeams(),
+        listMySharedTeamsByConnection(),
       ])
       setRatings(ratingsData)
       setAllConnectionIds(connectionsData.map((c) => c.id))
       setInvites(invitesData)
       setLedTeams(teamsData.filter((team) => team.status === 'active'))
+      const sharedByConnection = {}
+      for (const row of sharedTeamsData) {
+        if (!sharedByConnection[row.connectionUserId]) {
+          sharedByConnection[row.connectionUserId] = { active: [], pending: [] }
+        }
+        const bucket = row.membershipStatus === 'pending' ? 'pending' : 'active'
+        sharedByConnection[row.connectionUserId][bucket].push({ id: row.teamId, name: row.teamName })
+      }
+      setSharedTeamsByConnection(sharedByConnection)
       const otherIds = ratingsData.map((r) => (r.rater_id === user.id ? r.skill_owner_id : r.rater_id))
       const connectionIds = [...new Set([...connectionsData.map((c) => c.id), ...otherIds])]
       const [profilesData, sharedSkillCountsData] = await Promise.all([
@@ -206,6 +223,7 @@ export default function Connections() {
           <ConnectionsTeams
             connections={connections.filter((connection) => allConnectionIds.includes(connection.id))}
             currentUserName={profiles[user.id]?.name || user.email}
+            initialTeamId={searchParams.get('team')}
           />
         )}
         {activeSection === 'people' && <div className="space-y-10">
@@ -239,6 +257,36 @@ export default function Connections() {
                       {sharedSkillCounts[c.id]} shared skill{sharedSkillCounts[c.id] === 1 ? '' : 's'}
                     </span>
                   )}
+                  {(() => {
+                    const active = sharedTeamsByConnection[c.id]?.active ?? []
+                    const pending = sharedTeamsByConnection[c.id]?.pending ?? []
+                    return <>
+                      {active.length === 1 && (
+                        <Link
+                          to={`/connections?section=teams&team=${active[0].id}`}
+                          className="font-mono text-xs text-moss border border-hairline rounded-full px-2 py-0.5 hover:underline"
+                        >
+                          {active[0].name}
+                        </Link>
+                      )}
+                      {active.length > 1 && (
+                        <Link
+                          to="/connections?section=teams"
+                          className="font-mono text-xs text-moss border border-hairline rounded-full px-2 py-0.5 hover:underline"
+                        >
+                          {active.length} teams
+                        </Link>
+                      )}
+                      {pending.length > 0 && (
+                        <Link
+                          to="/connections?section=teams"
+                          className="font-mono text-xs text-secondary border border-hairline rounded-full px-2 py-0.5 hover:underline"
+                        >
+                          Invited to {pending.length} team{pending.length === 1 ? '' : 's'}
+                        </Link>
+                      )}
+                    </>
+                  })()}
                 </div>
                 <div className="space-y-3">
                   {c.events.length === 0 && <p className="text-sm text-secondary">Connected</p>}

@@ -71,6 +71,7 @@ const VISIBILITY_OPTIONS = [
 export default function ProfilePrivacy() {
   const { user, employerMemberships } = useAuth()
   const [skillsProfileVisible, setSkillsProfileVisible] = useState(false)
+  const [allowConnectionRatings, setAllowConnectionRatings] = useState(true)
   const [activityFeedVisible, setActivityFeedVisible] = useState(false)
   const [profileVisibleToMatches, setProfileVisibleToMatches] = useState(false)
   const [searchVisibility, setSearchVisibility] = useState('hidden')
@@ -144,11 +145,12 @@ export default function ProfilePrivacy() {
   async function load() {
     try {
       const [{ data }, searchSettings, skillsData] = await Promise.all([
-        supabase.from('profiles').select('skills_profile_visible').eq('id', user.id).single(),
+        supabase.from('profiles').select('skills_profile_visible, allow_connection_skill_ratings').eq('id', user.id).single(),
         getSearchPrivacySettings(user.id),
         listMyManagerShareableSkills(user.id),
       ])
       setSkillsProfileVisible(data?.skills_profile_visible ?? false)
+      setAllowConnectionRatings(data?.allow_connection_skill_ratings ?? true)
       setActivityFeedVisible(searchSettings?.activity_feed_visible ?? false)
       setProfileVisibleToMatches(searchSettings?.profile_visible_to_skill_matches ?? false)
       setSearchVisibility(searchSettings?.skill_search_visibility ?? 'hidden')
@@ -336,6 +338,21 @@ export default function ProfilePrivacy() {
     setPrivacySaving(false)
   }
 
+  async function handleAllowRatingsToggle(checked) {
+    setPrivacyError(null)
+    setPrivacySaving(true)
+    const { error } = await supabase
+      .from('profiles')
+      .update({ allow_connection_skill_ratings: checked, updated_at: new Date().toISOString() })
+      .eq('id', user.id)
+    if (error) {
+      setPrivacyError(error.message)
+    } else {
+      setAllowConnectionRatings(checked)
+    }
+    setPrivacySaving(false)
+  }
+
   async function handleActivityFeedToggle(checked) {
     setPrivacyError(null)
     setPrivacySaving(true)
@@ -432,6 +449,24 @@ export default function ProfilePrivacy() {
                   <span className="block text-xs text-secondary mt-0.5">
                     Only applies to people who find you via skill search below — doesn't change
                     who can find you in the first place.
+                  </span>
+                </span>
+              </label>
+
+              <label className="flex items-start gap-3 mt-4 pt-4 border-t border-hairline">
+                <input
+                  type="checkbox"
+                  checked={allowConnectionRatings}
+                  disabled={privacySaving}
+                  onChange={(e) => handleAllowRatingsToggle(e.target.checked)}
+                  className="mt-0.5 rounded border-hairline"
+                />
+                <span className="text-sm text-ink">
+                  Let connections rate your shared skills
+                  <span className="block text-xs text-secondary mt-0.5">
+                    Lets a connection open one of your shared skills from their view of your skills profile and
+                    leave their own rating on it, without you having to send them an invite first. Applies to all
+                    your shared skills — on by default.
                   </span>
                 </span>
               </label>

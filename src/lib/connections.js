@@ -194,6 +194,20 @@ export async function listMyPeerRatings() {
   return data ?? []
 }
 
+// Rates a connection's shared skill directly, without an invite code -- only
+// works when the skill owner has allow_connection_skill_ratings on (see
+// ProfilePrivacy.jsx) and the caller is an actual connection; RLS/authorization
+// is enforced server-side in rate_connection_skill (20260907210000).
+export async function rateConnectionSkill(skillId, level, comments) {
+  const { data, error } = await supabase.rpc('rate_connection_skill', {
+    p_skill_id: skillId,
+    p_level: level,
+    p_comments: comments || '',
+  })
+  if (error) throw error
+  return data
+}
+
 // The person's true signup date (auth.users.created_at), not duplicated
 // onto profiles -- see get_member_since in
 // 0103_connection_profile_growth_and_member_since.sql.

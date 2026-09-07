@@ -72,6 +72,21 @@ export async function listManagerTeams(workspaceId) {
   return data ?? []
 }
 
+// One row per (connection, shared team) -- grouped client-side by
+// connection_user_id. See 20260907190000_shared_teams_by_connection.sql for
+// why this needs a SECURITY DEFINER RPC rather than a plain table query.
+export async function listMySharedTeamsByConnection() {
+  const { data, error } = await supabase.rpc('list_my_shared_teams_by_connection')
+  if (error) throw error
+  return (data ?? []).map((row) => ({
+    connectionUserId: row.connection_user_id,
+    teamId: row.team_id,
+    teamName: row.team_name,
+    teamStatus: row.team_status,
+    membershipStatus: row.membership_status,
+  }))
+}
+
 export async function listMyManagerTeamInvites() {
   const relationships = await listMyManagerTeamRelationships()
   return relationships.filter((relationship) => relationship.status === 'pending')

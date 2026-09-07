@@ -19777,3 +19777,270 @@ $$;
 
 revoke all on function public.add_manager_team_skill(uuid, uuid, text), public.list_manager_team_skills(uuid), public.remove_manager_team_skill(uuid) from public, anon;
 grant execute on function public.add_manager_team_skill(uuid, uuid, text), public.list_manager_team_skills(uuid), public.remove_manager_team_skill(uuid) to authenticated;
+
+-- =============================================================================
+-- 20260907190000_shared_teams_by_connection.sql
+-- =============================================================================
+
+-- Lets the Connections list show, per connection tile, any manager team the
+-- current user and that connection are both part of -- plus teams the
+-- current user has invited them to that are still pending.
+--
+-- Needed as a SECURITY DEFINER RPC rather than a plain client query: RLS on
+-- manager_team_memberships ("member_user_id = auth.uid() OR
+-- private.can_manage_manager_team(...)", see 20260903130000) only lets a
+-- caller see their own membership rows, plus every row for a team they
+-- manage. It deliberately does NOT let a plain member of team X see who
+-- else is in team X if they don't manage it -- so cross-referencing that
+-- against the caller's connections has to happen server-side.
+--
+-- Visibility rules enforced below:
+-- * The caller must themselves have an active membership in the team
+--   (mine.status = 'active') before anything about it is returned.
+-- * A connection's *active* membership in a shared team is visible to any
+--   fellow active member (you're already both genuinely on the team).
+-- * A connection's *pending* invite is only visible if the caller manages
+--   that team -- i.e. only the person who could have sent the invite sees
+--   it as "still pending", never a third member.
+create or replace function list_my_shared_teams_by_connection()
+returns table (connection_user_id uuid, team_id uuid, team_name text, team_status text, membership_status text)
+language sql stable security definer set search_path = '' as $$
+  select other.member_user_id, mt.id, mt.name, mt.status, other.status
+  from public.manager_team_memberships mine
+  join public.manager_teams mt on mt.id = mine.team_id
+  join public.manager_team_memberships other on other.team_id = mine.team_id
+    and other.member_user_id <> auth.uid()
+  join public.connections c on
+    c.user_a_id = least(auth.uid(), other.member_user_id)
+    and c.user_b_id = greatest(auth.uid(), other.member_user_id)
+  where mine.member_user_id = auth.uid() and mine.status = 'active'
+    and (
+      other.status = 'active'
+      or (other.status = 'pending' and private.can_manage_manager_team(mine.team_id, auth.uid()))
+    )
+$$;
+
+revoke all on function list_my_shared_teams_by_connection() from public, anon;
+grant execute on function list_my_shared_teams_by_connection() to authenticated;
+
+-- =============================================================================
+-- 20260907200000_skill_access_requests.sql
+-- =============================================================================
+
+-- "Request skill access" (item 5): lets a learner ask an existing
+-- connection who hasn't shared any skills to consider sharing some, with a
+-- short note attached.
+--
+-- Deliberately reuses connection_requests (0058/0060) rather than a new
+-- table -- a targeted request with an optional message and a
+-- pending/accepted/declined lifecycle is the same shape already used for
+-- "wants to connect" requests, just distinguished by request_type. This
+-- also means the existing pending-actions badge count and
+-- respond_to_connection_request RPC cover it for free.
+--
+-- Accepting a skill_access request must NOT create/refresh a `connections`
+-- row the way accepting a 'connect' request does -- the two people are
+-- already connected (that's a precondition of sending one, enforced by the
+-- insert policy below), and LearnScope has no per-connection skill-sharing
+-- scope today (see docs in ProfilePrivacy.jsx) -- sharing stays a manual,
+-- global, per-skill decision the recipient makes themselves. Accepting here
+-- only means "acknowledged"; the actual sharing happens separately via the
+-- existing visible_on_profile / skills_profile_visible toggles.
+alter table connection_requests
+  add column request_type text not null default 'connect'
+  check (request_type in ('connect', 'skill_access'));
+
+drop policy "Users can send a connection request" on connection_requests;
+create policy "Users can send a connection or skill-access request"
+  on connection_requests for insert
+  with check (
+    auth.uid() = requester_id and status = 'pending'
+    and (
+      request_type = 'connect'
+      or (request_type = 'skill_access' and is_connected(requester_id, recipient_id))
+    )
+  );
+
+create or replace function respond_to_connection_request(p_request_id uuid, p_accept boolean)
+returns void
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  v_request connection_requests%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select * into v_request from connection_requests where id = p_request_id for update;
+  if not found then
+    raise exception 'Request not found';
+  end if;
+  if v_request.recipient_id <> auth.uid() then
+    raise exception 'Not authorized to respond to this request';
+  end if;
+  if v_request.status <> 'pending' then
+    raise exception 'This request has already been decided.';
+  end if;
+
+  update connection_requests
+  set status = case when p_accept then 'accepted' else 'declined' end,
+      decided_at = now()
+  where id = p_request_id;
+
+  if p_accept and v_request.request_type = 'connect' then
+    perform upsert_connection(v_request.requester_id, v_request.recipient_id, 'request');
+  end if;
+end;
+$$;
+
+-- =============================================================================
+-- 20260907210000_direct_connection_skill_rating.sql
+-- =============================================================================
+
+-- Item 3: a global, learner-controlled toggle for whether connections can
+-- rate a shared skill directly from the connection's skills profile view
+-- (SkillsProfile.jsx), instead of only via an invite link/code
+-- (accept_invite_and_rate, 0033). On by default, alongside the other
+-- connection-visibility toggles already on `profiles` (skills_profile_visible,
+-- profile_visible_to_skill_matches, activity_feed_visible).
+alter table profiles
+  add column allow_connection_skill_ratings boolean not null default true;
+
+-- Mirrors accept_invite_and_rate's insert shape (skill_peer_ratings is
+-- informational history only since 0033 -- no auto-level side effect here
+-- either), but with no invite_id/share code: authorization instead rests on
+-- the rater and skill owner being an actual connection, the skill being
+-- visible on the owner's profile, and the owner's global rating opt-in.
+create or replace function rate_connection_skill(p_skill_id uuid, p_level int, p_comments text)
+returns uuid
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  v_skill skills%rowtype;
+  v_allow_ratings boolean;
+  v_rater_name text;
+  v_rater_email text;
+  v_rating_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+  if p_level < 1 or p_level > 5 then
+    raise exception 'Invalid level';
+  end if;
+
+  select * into v_skill from skills where id = p_skill_id and visible_on_profile = true;
+  if not found then
+    raise exception 'Skill not found';
+  end if;
+  if v_skill.user_id = auth.uid() then
+    raise exception 'You can''t rate your own skill.';
+  end if;
+  if not is_connected(auth.uid(), v_skill.user_id) then
+    raise exception 'You can only rate skills for a connection.';
+  end if;
+
+  select allow_connection_skill_ratings into v_allow_ratings from profiles where id = v_skill.user_id;
+  if not coalesce(v_allow_ratings, false) then
+    raise exception 'This person is not accepting ratings from connections right now.';
+  end if;
+
+  select full_name into v_rater_name from profiles where id = auth.uid();
+  select email into v_rater_email from auth.users where id = auth.uid();
+
+  insert into skill_peer_ratings (
+    skill_id, skill_name, skill_category, skill_owner_id, rater_id, rater_name, rater_email, level, comments
+  )
+  values (
+    v_skill.id, v_skill.name, v_skill.category, v_skill.user_id, auth.uid(), v_rater_name, v_rater_email,
+    p_level, nullif(p_comments, '')
+  )
+  returning id into v_rating_id;
+
+  return v_rating_id;
+end;
+$$;
+
+revoke all on function rate_connection_skill(uuid, int, text) from public, anon;
+grant execute on function rate_connection_skill(uuid, int, text) to authenticated;
+
+-- =============================================================================
+-- 20260907220000_rate_connection_skill_cooldown.sql
+-- =============================================================================
+
+-- Security review of 20260907210000 found a real gap: unlike the invite-based
+-- accept_invite_and_rate flow (each rating gated behind a single-use invite
+-- code the skill owner has to actively generate/send), the new direct-rate
+-- path lets a connection call rate_connection_skill as many times as they
+-- like with no server-side friction at all -- the only "already rated" guard
+-- was the client's in-memory React state, trivially bypassed by calling the
+-- RPC directly. That's a spam/harassment vector against someone the rater is
+-- merely connected to.
+--
+-- Not fixed with a hard unique(skill_id, rater_id) constraint: skill_peer_
+-- ratings is deliberately historical (0033 -- "ratings are informational
+-- history now"), and the existing invite flow already allows the same rater
+-- to rate the same skill again months later via a fresh invite. A permanent
+-- one-rating-ever constraint would break that legitimate re-rating-over-time
+-- case. A cooldown preserves it while closing the rapid-fire spam gap this
+-- self-service path introduced.
+create or replace function rate_connection_skill(p_skill_id uuid, p_level int, p_comments text)
+returns uuid
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  v_skill skills%rowtype;
+  v_allow_ratings boolean;
+  v_rater_name text;
+  v_rater_email text;
+  v_rating_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+  if p_level < 1 or p_level > 5 then
+    raise exception 'Invalid level';
+  end if;
+
+  select * into v_skill from skills where id = p_skill_id and visible_on_profile = true;
+  if not found then
+    raise exception 'Skill not found';
+  end if;
+  if v_skill.user_id = auth.uid() then
+    raise exception 'You can''t rate your own skill.';
+  end if;
+  if not is_connected(auth.uid(), v_skill.user_id) then
+    raise exception 'You can only rate skills for a connection.';
+  end if;
+
+  select allow_connection_skill_ratings into v_allow_ratings from profiles where id = v_skill.user_id;
+  if not coalesce(v_allow_ratings, false) then
+    raise exception 'This person is not accepting ratings from connections right now.';
+  end if;
+
+  if exists (
+    select 1 from skill_peer_ratings
+    where skill_id = p_skill_id and rater_id = auth.uid() and rated_at > now() - interval '24 hours'
+  ) then
+    raise exception 'You already rated this skill recently. You can rate it again later.';
+  end if;
+
+  select full_name into v_rater_name from profiles where id = auth.uid();
+  select email into v_rater_email from auth.users where id = auth.uid();
+
+  insert into skill_peer_ratings (
+    skill_id, skill_name, skill_category, skill_owner_id, rater_id, rater_name, rater_email, level, comments
+  )
+  values (
+    v_skill.id, v_skill.name, v_skill.category, v_skill.user_id, auth.uid(), v_rater_name, v_rater_email,
+    p_level, nullif(p_comments, '')
+  )
+  returning id into v_rating_id;
+
+  return v_rating_id;
+end;
+$$;

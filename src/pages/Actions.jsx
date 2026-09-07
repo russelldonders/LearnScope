@@ -400,6 +400,9 @@ export default function Actions() {
     }
   }
 
+  const connectionRequests = incomingRequests.filter((r) => r.request_type !== 'skill_access')
+  const skillAccessRequests = incomingRequests.filter((r) => r.request_type === 'skill_access')
+
   const hasNothingPending =
     !loading &&
     !error &&
@@ -485,11 +488,11 @@ export default function Actions() {
           </div>
         )}
 
-        {incomingRequests.length > 0 && (
+        {connectionRequests.length > 0 && (
           <div>
             <h2 className="font-display text-xl text-ink mb-6">Connection requests</h2>
             <div className="space-y-3">
-              {incomingRequests.map((request) => (
+              {connectionRequests.map((request) => (
                 <div key={request.id} className="bg-card border border-hairline rounded-lg p-4">
                   <p className="text-sm text-ink">
                     <strong>{profiles[request.requester_id]?.name || 'Someone'}</strong>
@@ -524,6 +527,46 @@ export default function Actions() {
                       className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
                     >
                       Decline
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {skillAccessRequests.length > 0 && (
+          <div>
+            <h2 className="font-display text-xl text-ink mb-6">Skill access requests</h2>
+            <div className="space-y-3">
+              {skillAccessRequests.map((request) => (
+                <div key={request.id} className="bg-card border border-hairline rounded-lg p-4">
+                  <p className="text-sm text-ink">
+                    <strong>{profiles[request.requester_id]?.name || 'Someone'}</strong> would like you to
+                    consider sharing some of your skills with them.
+                  </p>
+                  {request.message && <p className="text-sm text-secondary mt-1">{request.message}</p>}
+                  <p className="font-mono text-xs text-secondary mt-1">
+                    {new Date(request.created_at).toLocaleDateString()}
+                  </p>
+                  {respondError?.id === request.id && (
+                    <p className="text-xs text-red-700 mt-1">{respondError.message}</p>
+                  )}
+                  <div className="flex items-center gap-2 mt-3">
+                    <Link
+                      to="/profile/privacy"
+                      onClick={() => handleRequestResponse(request.id, true)}
+                      className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
+                    >
+                      Manage sharing
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => handleRequestResponse(request.id, false)}
+                      disabled={respondingId === request.id}
+                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+                    >
+                      Dismiss
                     </button>
                   </div>
                 </div>

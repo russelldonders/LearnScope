@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { getMemberSince, listConnectionRecentGrowth } from '../lib/connections'
+import { getMemberSince, listConnectionRecentGrowth, rateConnectionSkill } from '../lib/connections'
+import { requestSkillAccess } from '../lib/skillDiscovery'
 import { formatMonthYear, formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
-import { LEVEL_LABELS } from '../lib/levels'
+import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import AppHeader from '../components/AppHeader'
+import AccessibleDialog from '../components/AccessibleDialog'
 import GrowthRing from '../components/GrowthRing'
 import GrowthArrow from '../components/GrowthArrow'
 import PersonAvatar from '../components/PersonAvatar'
@@ -32,6 +34,14 @@ export default function SkillsProfile() {
   const [error, setError] = useState(null)
   const [growth, setGrowth] = useState([])
   const [growthError, setGrowthError] = useState(null)
+  const [requestOpen, setRequestOpen] = useState(false)
+  const [requestNote, setRequestNote] = useState('')
+  const [requestSending, setRequestSending] = useState(false)
+  const [requestError, setRequestError] = useState(null)
+  const [requestSent, setRequestSent] = useState(false)
+  const [allowRatings, setAllowRatings] = useState(false)
+  const [ratingSkill, setRatingSkill] = useState(null)
+  const [ratedSkillIds, setRatedSkillIds] = useState(new Set())
 
   useEffect(() => {
     load()
@@ -43,7 +53,9 @@ export default function SkillsProfile() {
     const [{ data: profile, error: profileError }, since] = await Promise.all([
       supabase
         .from('profiles')
-        .select('full_name, avatar_url, country, location, skills_profile_visible, profile_visible_to_skill_matches')
+        .select(
+          'full_name, avatar_url, country, location, skills_profile_visible, profile_visible_to_skill_matches, allow_connection_skill_ratings'
+        )
         .eq('id', userId)
         .single(),
       getMemberSince(userId).catch(() => null),
@@ -58,6 +70,7 @@ export default function SkillsProfile() {
     setLocation(profile.location ?? '')
     setCountry(profile.country ?? '')
     setMemberSince(since)
+    setAllowRatings(Boolean(profile.allow_connection_skill_ratings))
     // Either opt-in can grant visibility -- skills_profile_visible for an
     // existing connection, profile_visible_to_skill_matches for someone who
     // shares a skill but isn't connected yet. RLS still gates which rows can
@@ -117,6 +130,30 @@ export default function SkillsProfile() {
     setLoading(false)
   }
 
+  async function handleRequestAccess(e) {
+    e.preventDefault()
+    setRequestSending(true)
+    setRequestError(null)
+    try {
+      await requestSkillAccess({ recipientId: userId, note: requestNote })
+      setRequestSent(true)
+      setRequestOpen(false)
+      setRequestNote('')
+    } catch (err) {
+      setRequestError(err.message)
+    } finally {
+      setRequestSending(false)
+    }
+  }
+
+  async function handleSubmitRating(level, comments) {
+    await rateConnectionSkill(ratingSkill.id, level, comments)
+    setRatedSkillIds((prev) => new Set(prev).add(ratingSkill.id))
+    setRatingSkill(null)
+  }
+
+  const canRate = !isOwnProfile && allowRatings
+
   const commonSkills = useMemo(
     () => skills.filter((s) => s.library_skill_id && ownLibrarySkillIds.has(s.library_skill_id)),
     [skills, ownLibrarySkillIds]
@@ -162,6 +199,8 @@ export default function SkillsProfile() {
             {!visible ? (
               <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
                 <p className="text-secondary">{name} hasn't made their skills profile visible.</p>
+                {!isOwnProfile && <RequestAccessButton
+                  name={name} requestSent={requestSent} onOpen={() => setRequestOpen(true)} />}
               </div>
             ) : (
               <div className="mb-10">
@@ -189,7 +228,7 @@ export default function SkillsProfile() {
                           : 'border-hairline text-secondary hover:text-ink'
                       }`}
                     >
-                      All shared skills ({skills.length})
+                      All skills ({skills.length})
                     </button>
                   </div>
                 )}
@@ -197,18 +236,20 @@ export default function SkillsProfile() {
                 {filteredSkills.length === 0 ? (
                   <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
                     <p className="text-secondary">
-                      {filterMode === 'common' ? "You don't share any skills in common yet." : 'No skills tracked yet.'}
+                      {filterMode === 'common' && skills.length > 0
+                        ? "You don't share any skills in common yet."
+                        : 'No skills tracked yet.'}
                     </p>
+                    {!isOwnProfile && skills.length === 0 && <RequestAccessButton
+                      name={name} requestSent={requestSent} onOpen={() => setRequestOpen(true)} />}
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {filteredSkills.map((skill) => (
-                      <div
-                        key={skill.id}
-                        className="bg-card border border-hairline rounded-lg p-4 flex gap-4 items-center"
-                      >
+                    {filteredSkills.map((skill) => {
+                      const rated = ratedSkillIds.has(skill.id)
+                      const content = <>
                         <GrowthRing level={skill.level} size={48} />
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <h3 className="font-display text-lg text-ink truncate">{skill.name}</h3>
                           {tagsBySkill.get(skill.id)?.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1">
@@ -222,9 +263,26 @@ export default function SkillsProfile() {
                               ))}
                             </div>
                           )}
+                          {canRate && (
+                            <p className="text-xs text-moss mt-1">{rated ? 'Rated — click to rate again' : 'Click to rate this skill'}</p>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      </>
+                      return canRate ? (
+                        <button
+                          key={skill.id}
+                          type="button"
+                          onClick={() => setRatingSkill(skill)}
+                          className="bg-card border border-hairline rounded-lg p-4 flex gap-4 items-center text-left hover:border-moss/60 transition-colors"
+                        >
+                          {content}
+                        </button>
+                      ) : (
+                        <div key={skill.id} className="bg-card border border-hairline rounded-lg p-4 flex gap-4 items-center">
+                          {content}
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -281,6 +339,157 @@ export default function SkillsProfile() {
           </>
         )}
       </main>
+
+      {ratingSkill && (
+        <RateSkillDialog
+          skill={ratingSkill}
+          onClose={() => setRatingSkill(null)}
+          onSubmit={handleSubmitRating}
+        />
+      )}
+
+      {requestOpen && (
+        <AccessibleDialog
+          labelledBy="request-skill-access-title"
+          onClose={requestSending ? undefined : () => setRequestOpen(false)}
+          closeOnBackdrop={!requestSending}
+          panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6"
+        >
+          <h2 id="request-skill-access-title" className="font-display text-xl text-ink mb-2">
+            Request skill access
+          </h2>
+          <p className="text-sm text-secondary mb-4">
+            Ask {name} to consider sharing some of their skills with you. They choose what, if anything, to share.
+          </p>
+          <form onSubmit={handleRequestAccess} className="space-y-3">
+            <label className="block text-sm text-ink">
+              Note (optional)
+              <textarea
+                rows={3}
+                maxLength={500}
+                value={requestNote}
+                disabled={requestSending}
+                onChange={(e) => setRequestNote(e.target.value)}
+                placeholder="Let them know why you're asking"
+                className="mt-1 block w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink"
+              />
+            </label>
+            {requestError && <p role="alert" className="text-sm text-red-700">{requestError}</p>}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={requestSending}
+                onClick={() => setRequestOpen(false)}
+                className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={requestSending}
+                className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+              >
+                {requestSending ? 'Sending…' : 'Send request'}
+              </button>
+            </div>
+          </form>
+        </AccessibleDialog>
+      )}
     </div>
+  )
+}
+
+function RateSkillDialog({ skill, onClose, onSubmit }) {
+  const [level, setLevel] = useState(skill.level || 3)
+  const [comments, setComments] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState(null)
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setSubmitting(true)
+    setError(null)
+    try {
+      await onSubmit(level, comments)
+    } catch (err) {
+      setError(err.message)
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <AccessibleDialog
+      labelledBy="rate-skill-dialog-title"
+      onClose={submitting ? undefined : onClose}
+      closeOnBackdrop={!submitting}
+      panelClassName="w-full max-w-sm bg-card border border-hairline rounded-lg p-6"
+    >
+      <h2 id="rate-skill-dialog-title" className="font-display text-xl text-ink mb-4">
+        Rate {skill.name}
+      </h2>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <span className="block text-sm text-secondary mb-2">Your rating</span>
+          <div className="flex items-center justify-between">
+            {LEVELS.map((l) => (
+              <button
+                type="button"
+                key={l}
+                disabled={submitting}
+                onClick={() => setLevel(l)}
+                className={`flex flex-col items-center gap-1 rounded-md px-1 py-1 ${level === l ? 'bg-moss/10' : ''}`}
+              >
+                <GrowthRing level={l} size={36} />
+                <span className="font-mono text-[10px] text-secondary">{LEVEL_LABELS[l]}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <textarea
+          rows={3}
+          value={comments}
+          disabled={submitting}
+          onChange={(e) => setComments(e.target.value)}
+          placeholder="Why this level? (optional)"
+          className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+        />
+
+        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={onClose}
+            className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+          >
+            {submitting ? 'Submitting…' : 'Submit rating'}
+          </button>
+        </div>
+      </form>
+    </AccessibleDialog>
+  )
+}
+
+function RequestAccessButton({ name, requestSent, onOpen }) {
+  if (requestSent) {
+    return <p className="text-sm text-secondary mt-4">Request sent to {name}.</p>
+  }
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="mt-4 rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+    >
+      Request skill access
+    </button>
   )
 }

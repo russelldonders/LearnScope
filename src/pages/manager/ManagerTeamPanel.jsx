@@ -128,14 +128,11 @@ export default function ManagerTeamPanel({
                 ) : (
                   <tr key={member.id} className="border-b border-hairline last:border-b-0 align-top">
                     <td className="px-4 py-2">
-                      <div className="flex items-center gap-2">
-                        <PersonAvatar name={member.name} avatarUrl={member.avatarUrl} size={7} />
-                        <span className="text-ink">{member.name}</span>
-                      </div>
                       <button type="button" onClick={() => setProfileId(member.id)}
                         aria-label={`View skills profile for ${member.name}`}
-                        className="mt-2 text-sm font-medium text-moss underline underline-offset-4 hover:text-ink">
-                        View skills profile
+                        className="flex items-center gap-2 group">
+                        <PersonAvatar name={member.name} avatarUrl={member.avatarUrl} size={7} />
+                        <span className="text-ink group-hover:text-moss group-hover:underline">{member.name}</span>
                       </button>
                     </td>
                     <td className="px-4 py-2 text-secondary">
