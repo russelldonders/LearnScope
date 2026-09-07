@@ -256,6 +256,25 @@ export async function listMyAssignedCourseEmployers(userId) {
 // Actions.jsx), so they live here rather than split across
 // lib/admin/catalogue.js -- RLS already scopes what each caller can see or
 // manage, the same as every other function in this file.
+function formatCohortDate(dateStr) {
+  return new Date(dateStr).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+export function formatCohortDateRange(startDate, endDate) {
+  if (!startDate && !endDate) return 'No dates set'
+  if (startDate && endDate) return `${formatCohortDate(startDate)} – ${formatCohortDate(endDate)}`
+  if (startDate) return `Starts ${formatCohortDate(startDate)}`
+  return `Ends ${formatCohortDate(endDate)}`
+}
+
+// Name is optional (20260907230000) -- a cohort with no name is identified
+// by its dates instead of showing a blank heading. Shared by every surface
+// that displays a cohort (provider editor, learner cohort picker, and the
+// enrolled-learner view on CourseLearn.jsx).
+export function cohortDisplayName(cohort) {
+  return cohort.name || formatCohortDateRange(cohort.start_date, cohort.end_date)
+}
+
 function mapCohort(cohort, enrolledCount) {
   const sessions = (cohort.course_cohort_sessions ?? [])
     .slice()
@@ -309,14 +328,20 @@ export async function getCourseCohort(cohortId) {
   return data ? mapCohort(data, 0) : null
 }
 
-export async function createCourseCohort(courseCatalogueId, { name, startDate, capacity }) {
+// name is optional -- a cohort can be identified by its dates alone
+// (20260907230000 dropped the not-null constraint); listCourseCohorts'
+// display already has to fall back to something when it's blank (see
+// CourseCohorts.jsx).
+export async function createCourseCohort(courseCatalogueId, { name, startDate, endDate, capacity, location }) {
   const { data, error } = await supabase
     .from('course_cohorts')
     .insert({
       course_catalogue_id: courseCatalogueId,
-      name: name.trim(),
+      name: name?.trim() || null,
       start_date: startDate || null,
+      end_date: endDate || null,
       capacity: capacity === '' || capacity === null || capacity === undefined ? null : Number(capacity),
+      location: location?.trim() || null,
     })
     .select()
     .single()
@@ -324,17 +349,91 @@ export async function createCourseCohort(courseCatalogueId, { name, startDate, c
   return data
 }
 
-export async function updateCourseCohort(cohortId, { name, startDate, capacity, enrolmentOpen }) {
+export async function updateCourseCohort(cohortId, { name, startDate, endDate, capacity, location, enrolmentOpen }) {
   const { error } = await supabase
     .from('course_cohorts')
     .update({
-      name: name.trim(),
+      name: name?.trim() || null,
       start_date: startDate || null,
+      end_date: endDate || null,
       capacity: capacity === '' || capacity === null || capacity === undefined ? null : Number(capacity),
+      location: location?.trim() || null,
       enrolment_open: enrolmentOpen,
     })
     .eq('id', cohortId)
   if (error) throw error
+}
+
+// --- Trainers (course_trainers / course_cohort_trainers, 20260907230000) ---
+// Both are simple join tables against organisation_members' own identity --
+// a trainer is always a real org member, never a free-text name (enforced
+// server-side by the migration's RLS with-check). Names come from
+// `profiles` via a second query since neither join table has a direct FK
+// to it (only to auth.users, same as profiles itself) -- PostgREST can't
+// embed across that gap in one call.
+async function namesByUserId(userIds) {
+  const ids = [...new Set(userIds)].filter(Boolean)
+  if (ids.length === 0) return new Map()
+  const { data, error } = await supabase.from('profiles').select('id, full_name').in('id', ids)
+  if (error) throw error
+  return new Map((data ?? []).map((p) => [p.id, p.full_name || 'Someone']))
+}
+
+export async function listCourseTrainers(courseCatalogueId) {
+  const { data, error } = await supabase
+    .from('course_trainers')
+    .select('user_id')
+    .eq('course_catalogue_id', courseCatalogueId)
+  if (error) throw error
+  const names = await namesByUserId((data ?? []).map((r) => r.user_id))
+  return (data ?? []).map((r) => ({ userId: r.user_id, name: names.get(r.user_id) || 'Someone' }))
+}
+
+// Replace-all, same shape as set_manager_team_shared_skills -- the picker
+// always sends the whole intended list rather than incremental add/remove
+// calls.
+export async function setCourseTrainers(courseCatalogueId, userIds) {
+  const { error: deleteError } = await supabase.from('course_trainers').delete().eq('course_catalogue_id', courseCatalogueId)
+  if (deleteError) throw deleteError
+  if (userIds.length === 0) return
+  const { error } = await supabase
+    .from('course_trainers')
+    .insert(userIds.map((userId) => ({ course_catalogue_id: courseCatalogueId, user_id: userId })))
+  if (error) throw error
+}
+
+export async function listCohortTrainers(cohortId) {
+  const { data, error } = await supabase.from('course_cohort_trainers').select('user_id').eq('cohort_id', cohortId)
+  if (error) throw error
+  const names = await namesByUserId((data ?? []).map((r) => r.user_id))
+  return (data ?? []).map((r) => ({ userId: r.user_id, name: names.get(r.user_id) || 'Someone' }))
+}
+
+export async function setCohortTrainers(cohortId, userIds) {
+  const { error: deleteError } = await supabase.from('course_cohort_trainers').delete().eq('cohort_id', cohortId)
+  if (deleteError) throw deleteError
+  if (userIds.length === 0) return
+  const { error } = await supabase
+    .from('course_cohort_trainers')
+    .insert(userIds.map((userId) => ({ cohort_id: cohortId, user_id: userId })))
+  if (error) throw error
+}
+
+// Candidates for a trainer picker -- active members of the course's own
+// organisation. organisation_members' own SELECT RLS ("Platform admins and
+// org members can view organisation members", 0065) already lets any
+// fellow member read this directly, so no service-role dispatcher is
+// needed here (unlike listOrganisationMembers in admin/organisations.js,
+// which additionally needs each member's email -- this only needs names).
+export async function listOrganisationTrainerCandidates(organisationId) {
+  const { data, error } = await supabase
+    .from('organisation_members')
+    .select('user_id, role')
+    .eq('organisation_id', organisationId)
+    .eq('status', 'active')
+  if (error) throw error
+  const names = await namesByUserId((data ?? []).map((r) => r.user_id))
+  return (data ?? []).map((r) => ({ userId: r.user_id, name: names.get(r.user_id) || 'Someone', role: r.role }))
 }
 
 // Deletes the cohort and its sessions (course_cohort_sessions is "on delete

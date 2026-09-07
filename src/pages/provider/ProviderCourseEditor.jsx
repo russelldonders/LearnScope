@@ -31,6 +31,13 @@ import {
   addCohortSession,
   updateCohortSession,
   deleteCohortSession,
+  listCourseTrainers,
+  setCourseTrainers,
+  listCohortTrainers,
+  setCohortTrainers,
+  listOrganisationTrainerCandidates,
+  cohortDisplayName,
+  formatCohortDateRange,
 } from '../../lib/courseCatalogue'
 import {
   listCourseSections,
@@ -55,6 +62,9 @@ import {
 import { optimizeCourseImage, COURSE_IMAGE_MAX_INPUT_BYTES } from '../../lib/optimizeImage'
 import { useIsDesktop } from '../../lib/device'
 import { COURSE_STATUS_LABELS, RESOURCE_TYPE_LABELS } from '../../lib/statusLabels'
+import { COURSE_TYPES } from '../../lib/courseTypes'
+import { DURATION_UNITS } from '../../lib/courseDuration'
+import { CURRENCIES } from '../../lib/currencies'
 
 const MAX_IMAGE_BYTES = COURSE_IMAGE_MAX_INPUT_BYTES
 
@@ -542,7 +552,13 @@ export default function ProviderCourseEditor() {
             courseCode: data.course_code ?? '',
             provider: data.provider ?? '',
             courseType: data.course_type ?? '',
-            duration: data.duration ?? '',
+            // Legacy free-text duration (pre-structured, or never parsed
+            // back apart -- see courseDuration.js) shown as a read-only
+            // hint when there's no structured value/unit to prefill the
+            // picker from, rather than guessing at parsing it.
+            legacyDuration: data.duration_value == null ? (data.duration ?? '') : '',
+            durationValue: data.duration_value ?? '',
+            durationUnit: data.duration_unit ?? 'hours',
             synopsis: data.synopsis ?? '',
             priceAmount: data.price_amount ?? '',
             priceCurrency: data.price_currency ?? '',
@@ -727,24 +743,27 @@ export default function ProviderCourseEditor() {
             </div>
 
             {tab === 'info' && (
-              <CourseHeader
-                course={course}
-                canEdit={canEdit}
-                onSaved={load}
-                form={form}
-                setForm={setForm}
-                onSubmit={handleSave}
-                onCreateDraftVersion={handleCreateDraftVersion}
-                creatingDraft={saving}
-                publishedCatalogues={publishedCatalogues}
-                onPushToCatalogue={() => setShowCatalogueDialog(true)}
-              />
+              <div className="space-y-4">
+                <CourseHeader
+                  course={course}
+                  canEdit={canEdit}
+                  onSaved={load}
+                  form={form}
+                  setForm={setForm}
+                  onSubmit={handleSave}
+                  onCreateDraftVersion={handleCreateDraftVersion}
+                  creatingDraft={saving}
+                  publishedCatalogues={publishedCatalogues}
+                  onPushToCatalogue={() => setShowCatalogueDialog(true)}
+                />
+                <CourseTrainers courseCatalogueId={course.id} organisationId={course.organisation_id} canManage={Boolean(myRole)} />
+              </div>
             )}
             {tab === 'content' && (
               <CourseSections courseId={course.id} organisationId={course.organisation_id} userId={user.id} canEdit={canEdit} />
             )}
             {tab === 'cohorts' && (
-              <CourseCohorts courseCatalogueId={course.id} canManage={Boolean(myRole)} />
+              <CourseCohorts courseCatalogueId={course.id} organisationId={course.organisation_id} canManage={Boolean(myRole)} />
             )}
           </div>
         )}
@@ -815,13 +834,21 @@ function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCre
               <label className="block text-sm text-secondary mb-1" htmlFor="courseType">
                 Course type
               </label>
-              <input
+              <select
                 id="courseType"
                 value={form.courseType}
                 onChange={(e) => setForm((f) => ({ ...f, courseType: e.target.value }))}
-                placeholder="Online, In-person, Workshop…"
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-              />
+              >
+                <option value="">Choose a type…</option>
+                {/* A legacy course_type value from before this was a fixed
+                    list isn't in COURSE_TYPES -- shown as an extra option
+                    so saving doesn't silently blank it out. */}
+                {form.courseType && !COURSE_TYPES.includes(form.courseType) && (
+                  <option value={form.courseType}>{form.courseType}</option>
+                )}
+                {COURSE_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+              </select>
             </div>
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="courseCode">
@@ -839,12 +866,30 @@ function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCre
               <label className="block text-sm text-secondary mb-1" htmlFor="courseDuration">
                 Duration
               </label>
-              <input
-                id="courseDuration"
-                value={form.duration}
-                onChange={(e) => setForm((f) => ({ ...f, duration: e.target.value }))}
-                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-              />
+              <div className="flex gap-2">
+                <input
+                  id="courseDuration"
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputMode="numeric"
+                  value={form.durationValue}
+                  onChange={(e) => setForm((f) => ({ ...f, durationValue: e.target.value }))}
+                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                />
+                <label className="sr-only" htmlFor="courseDurationUnit">Duration unit</label>
+                <select
+                  id="courseDurationUnit"
+                  value={form.durationUnit}
+                  onChange={(e) => setForm((f) => ({ ...f, durationUnit: e.target.value }))}
+                  className="shrink-0 rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                >
+                  {DURATION_UNITS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
+                </select>
+              </div>
+              {form.legacyDuration && (
+                <p className="mt-1 text-xs text-secondary">Current: {form.legacyDuration} (set a value above to replace it)</p>
+              )}
             </div>
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="coursePriceAmount">
@@ -866,14 +911,18 @@ function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCre
               <label className="block text-sm text-secondary mb-1" htmlFor="coursePriceCurrency">
                 Currency
               </label>
-              <input
+              <select
                 id="coursePriceCurrency"
                 value={form.priceCurrency}
                 onChange={(e) => setForm((f) => ({ ...f, priceCurrency: e.target.value }))}
-                placeholder="e.g. USD, GBP, EUR"
-                maxLength={3}
-                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink uppercase focus:outline-none focus:ring-2 focus:ring-moss"
-              />
+                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              >
+                <option value="">Choose a currency…</option>
+                {form.priceCurrency && !CURRENCIES.includes(form.priceCurrency) && (
+                  <option value={form.priceCurrency}>{form.priceCurrency}</option>
+                )}
+                {CURRENCIES.map((code) => <option key={code} value={code}>{code}</option>)}
+              </select>
             </div>
             <div className="sm:col-span-2">
               <label className="block text-sm text-secondary mb-1" htmlFor="courseSynopsis">
@@ -889,6 +938,122 @@ function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCre
             </div>
           </div>
         </form>
+      )}
+    </div>
+  )
+}
+
+// Shared by the course-level trainer list (CourseTrainers) and each
+// cohort's own trainer list (inside CohortForm) -- a trainer is always
+// picked from the course's own organisation members (course_trainers/
+// course_cohort_trainers, 20260907230000), never free text, so both are
+// just this same checkbox-list-of-candidates shape at a different scope.
+function TrainerPicker({ candidates, selectedIds, onToggle, disabled }) {
+  if (candidates.length === 0) {
+    return <p className="text-sm text-secondary">No organisation members to choose from yet.</p>
+  }
+  return (
+    <div className="max-h-40 overflow-y-auto rounded-md border border-hairline divide-y divide-hairline">
+      {candidates.map((candidate) => (
+        <label key={candidate.userId} className="flex items-center gap-2 px-3 py-1.5 text-sm text-ink">
+          <input
+            type="checkbox"
+            checked={selectedIds.has(candidate.userId)}
+            disabled={disabled}
+            onChange={() => onToggle(candidate.userId)}
+            className="rounded border-hairline accent-moss"
+          />
+          {candidate.name}
+        </label>
+      ))}
+    </div>
+  )
+}
+
+// Course-level trainer list (item 6) -- separate from, and independent of,
+// each cohort's own trainer list below: this is who's generally associated
+// with delivering the training, not tied to a specific scheduled run.
+function CourseTrainers({ courseCatalogueId, organisationId, canManage }) {
+  const [candidates, setCandidates] = useState([])
+  const [trainers, setTrainers] = useState([])
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [notice, setNotice] = useState('')
+
+  useEffect(() => {
+    load()
+  }, [courseCatalogueId, organisationId])
+
+  async function load() {
+    setLoading(true)
+    setError(null)
+    try {
+      const [candidateRows, trainerRows] = await Promise.all([
+        organisationId ? listOrganisationTrainerCandidates(organisationId) : Promise.resolve([]),
+        listCourseTrainers(courseCatalogueId),
+      ])
+      setCandidates(candidateRows)
+      setTrainers(trainerRows)
+      setSelectedIds(new Set(trainerRows.map((t) => t.userId)))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function toggle(userId) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(userId)) next.delete(userId)
+      else next.add(userId)
+      return next
+    })
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    setError(null)
+    setNotice('')
+    try {
+      await setCourseTrainers(courseCatalogueId, [...selectedIds])
+      setNotice('Trainer list saved.')
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="bg-card border border-hairline rounded-lg p-6">
+      <h2 className="font-display text-lg text-ink mb-1">Trainers</h2>
+      <p className="text-sm text-secondary mb-4">Who's generally associated with delivering this training.</p>
+      {loading ? (
+        <p className="text-sm text-secondary">Loading…</p>
+      ) : !canManage ? (
+        trainers.length === 0 ? (
+          <p className="text-sm text-secondary">No trainers listed yet.</p>
+        ) : (
+          <ul className="text-sm text-ink space-y-1">{trainers.map((t) => <li key={t.userId}>{t.name}</li>)}</ul>
+        )
+      ) : (
+        <div className="space-y-3">
+          <TrainerPicker candidates={candidates} selectedIds={selectedIds} onToggle={toggle} disabled={saving} />
+          {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+          {notice && <p role="status" className="text-sm text-moss">{notice}</p>}
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+          >
+            {saving ? 'Saving…' : 'Save trainers'}
+          </button>
+        </div>
       )}
     </div>
   )
@@ -2340,8 +2505,9 @@ function formatSessionDateTime(startsAt, endsAt) {
 // live, not just while it's still being drafted. canManage mirrors this
 // page's own org-membership bar (myRole), matching how course editing
 // itself is authorized -- not a stricter admin-only gate.
-function CourseCohorts({ courseCatalogueId, canManage }) {
+function CourseCohorts({ courseCatalogueId, organisationId, canManage }) {
   const [cohorts, setCohorts] = useState([])
+  const [trainerCandidates, setTrainerCandidates] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showAddCohort, setShowAddCohort] = useState(false)
@@ -2354,13 +2520,22 @@ function CourseCohorts({ courseCatalogueId, canManage }) {
 
   useEffect(() => {
     load()
-  }, [courseCatalogueId])
+  }, [courseCatalogueId, organisationId])
 
   async function load() {
     setLoading(true)
     setError(null)
     try {
-      setCohorts(await listCourseCohorts(courseCatalogueId))
+      const [cohortRows, candidateRows] = await Promise.all([
+        listCourseCohorts(courseCatalogueId),
+        organisationId ? listOrganisationTrainerCandidates(organisationId) : Promise.resolve([]),
+      ])
+      // Sessions come back nested from listCourseCohorts' own join;
+      // trainers can't (see namesByUserId's comment in courseCatalogue.js),
+      // so each cohort's list is fetched alongside it here.
+      const trainersByCohort = await Promise.all(cohortRows.map((c) => listCohortTrainers(c.id)))
+      setCohorts(cohortRows.map((c, i) => ({ ...c, trainers: trainersByCohort[i] })))
+      setTrainerCandidates(candidateRows)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -2372,7 +2547,18 @@ function CourseCohorts({ courseCatalogueId, canManage }) {
     setBusy(true)
     setError(null)
     try {
-      await createCourseCohort(courseCatalogueId, form)
+      const created = await createCourseCohort(courseCatalogueId, form)
+      // The cohort itself is already saved at this point -- a failure here
+      // is reported distinctly (not as "couldn't add cohort") and still
+      // closes/reloads, so the provider doesn't retry the whole form and
+      // end up with a duplicate cohort.
+      if (form.trainerIds?.length > 0) {
+        try {
+          await setCohortTrainers(created.id, form.trainerIds)
+        } catch (err) {
+          setError(`Cohort added, but its trainer list couldn't be saved: ${err.message}`)
+        }
+      }
       setShowAddCohort(false)
       await load()
     } catch (err) {
@@ -2388,6 +2574,11 @@ function CourseCohorts({ courseCatalogueId, canManage }) {
     try {
       await updateCourseCohort(cohortId, form)
       setEditingCohortId(null)
+      try {
+        await setCohortTrainers(cohortId, form.trainerIds ?? [])
+      } catch (err) {
+        setError(`Cohort saved, but its trainer list couldn't be saved: ${err.message}`)
+      }
       await load()
     } catch (err) {
       setError(err.message)
@@ -2490,6 +2681,7 @@ function CourseCohorts({ courseCatalogueId, canManage }) {
               {editingCohortId === cohort.id ? (
                 <CohortForm
                   initial={cohort}
+                  candidates={trainerCandidates}
                   busy={busy}
                   submitLabel="Save"
                   onSubmit={(form) => handleUpdateCohort(cohort.id, form)}
@@ -2500,7 +2692,7 @@ function CourseCohorts({ courseCatalogueId, canManage }) {
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h4 className="font-display text-base text-ink">{cohort.name}</h4>
+                      <h4 className="font-display text-base text-ink">{cohortDisplayName(cohort)}</h4>
                       {!cohort.enrolment_open && (
                         <span className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5">
                           Enrolment closed
@@ -2508,14 +2700,18 @@ function CourseCohorts({ courseCatalogueId, canManage }) {
                       )}
                     </div>
                     <p className="text-xs text-secondary mt-1">
-                      {cohort.start_date
-                        ? `Starts ${new Date(cohort.start_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`
-                        : 'No start date set'}
+                      {formatCohortDateRange(cohort.start_date, cohort.end_date)}
                       {' · '}
                       {cohort.capacity == null
                         ? `${cohort.enrolledCount} enrolled`
                         : `${cohort.seatsRemaining} of ${cohort.capacity} seats remaining`}
                     </p>
+                    {cohort.location && <p className="text-xs text-secondary mt-0.5">{cohort.location}</p>}
+                    {cohort.trainers?.length > 0 && (
+                      <p className="text-xs text-secondary mt-0.5">
+                        Trainers: {cohort.trainers.map((t) => t.name).join(', ')}
+                      </p>
+                    )}
                   </div>
                   {canManage && (
                     <div className="flex items-center gap-2 shrink-0">
@@ -2627,13 +2823,13 @@ function CourseCohorts({ courseCatalogueId, canManage }) {
           <h2 id="add-cohort-dialog-title" className="font-display text-xl text-ink mb-4">
             Add cohort
           </h2>
-          <CohortForm busy={busy} submitLabel="Add cohort" onSubmit={handleAddCohort} onCancel={() => setShowAddCohort(false)} />
+          <CohortForm candidates={trainerCandidates} busy={busy} submitLabel="Add cohort" onSubmit={handleAddCohort} onCancel={() => setShowAddCohort(false)} />
         </AccessibleDialog>
       )}
 
       {deletingCohort && (
         <ConfirmDialog
-          message={`Delete the "${deletingCohort.name}" cohort and its sessions? Learners already enrolled keep their course record, just no longer linked to this specific cohort.`}
+          message={`Delete the "${cohortDisplayName(deletingCohort)}" cohort and its sessions? Learners already enrolled keep their course record, just no longer linked to this specific cohort.`}
           confirmLabel="Delete cohort"
           confirming={busy}
           onConfirm={handleDeleteCohort}
@@ -2654,23 +2850,34 @@ function CourseCohorts({ courseCatalogueId, canManage }) {
   )
 }
 
-function CohortForm({ initial, busy, submitLabel, onSubmit, onCancel, showEnrolmentToggle }) {
+function CohortForm({ initial, candidates = [], busy, submitLabel, onSubmit, onCancel, showEnrolmentToggle }) {
   const [name, setName] = useState(initial?.name ?? '')
   const [startDate, setStartDate] = useState(initial?.start_date ?? '')
+  const [endDate, setEndDate] = useState(initial?.end_date ?? '')
   const [capacity, setCapacity] = useState(initial?.capacity ?? '')
+  const [location, setLocation] = useState(initial?.location ?? '')
   const [enrolmentOpen, setEnrolmentOpen] = useState(initial?.enrolment_open ?? true)
+  const [trainerIds, setTrainerIds] = useState(new Set((initial?.trainers ?? []).map((t) => t.userId)))
+
+  function toggleTrainer(userId) {
+    setTrainerIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(userId)) next.delete(userId)
+      else next.add(userId)
+      return next
+    })
+  }
 
   function handleSubmit(e) {
     e.preventDefault()
-    if (!name.trim()) return
-    onSubmit({ name, startDate: startDate || null, capacity, enrolmentOpen })
+    onSubmit({ name, startDate: startDate || null, endDate: endDate || null, capacity, location, enrolmentOpen, trainerIds: [...trainerIds] })
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div>
         <label className="block text-xs text-secondary mb-1" htmlFor="cohortName">
-          Cohort name
+          Cohort name (optional)
         </label>
         <input
           id="cohortName"
@@ -2695,6 +2902,20 @@ function CohortForm({ initial, busy, submitLabel, onSubmit, onCancel, showEnrolm
           />
         </div>
         <div>
+          <label className="block text-xs text-secondary mb-1" htmlFor="cohortEndDate">
+            End date
+          </label>
+          <input
+            id="cohortEndDate"
+            type="date"
+            value={endDate ?? ''}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
           <label className="block text-xs text-secondary mb-1" htmlFor="cohortCapacity">
             Capacity
           </label>
@@ -2710,6 +2931,22 @@ function CohortForm({ initial, busy, submitLabel, onSubmit, onCancel, showEnrolm
             className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
           />
         </div>
+        <div>
+          <label className="block text-xs text-secondary mb-1" htmlFor="cohortLocation">
+            Location
+          </label>
+          <input
+            id="cohortLocation"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="e.g. a city, room, or meeting URL"
+            className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+          />
+        </div>
+      </div>
+      <div>
+        <span className="block text-xs text-secondary mb-1">Trainers</span>
+        <TrainerPicker candidates={candidates} selectedIds={trainerIds} onToggle={toggleTrainer} disabled={busy} />
       </div>
       {showEnrolmentToggle && (
         <label className="flex items-center gap-2 text-sm text-ink cursor-pointer">
@@ -2725,7 +2962,7 @@ function CohortForm({ initial, busy, submitLabel, onSubmit, onCancel, showEnrolm
       <div className="flex items-center gap-2 pt-1">
         <button
           type="submit"
-          disabled={busy || !name.trim()}
+          disabled={busy}
           className="flex-1 rounded-md bg-moss text-paper py-2 text-sm font-medium hover:opacity-90 disabled:opacity-60"
         >
           {busy ? 'Saving…' : submitLabel}

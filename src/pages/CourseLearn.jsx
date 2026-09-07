@@ -10,7 +10,7 @@ import {
   markContentComplete,
   contentFileUrl,
 } from '../lib/courseContent'
-import { getCourseCohort } from '../lib/courseCatalogue'
+import { getCourseCohort, cohortDisplayName } from '../lib/courseCatalogue'
 import { RESOURCE_TYPE_LABELS } from '../lib/statusLabels'
 import ScormPlayer from '../components/ScormPlayer'
 import XapiPlayer from '../components/XapiPlayer'
@@ -423,7 +423,7 @@ export default function CourseLearn() {
 
         {cohort && (
           <div className="bg-card border border-hairline rounded-lg p-4 mb-6">
-            <p className="text-sm font-medium text-ink">{cohort.name}</p>
+            <p className="text-sm font-medium text-ink">{cohortDisplayName(cohort)}</p>
             <p className="text-xs text-secondary mt-0.5">
               {cohort.start_date
                 ? `Started ${new Date(cohort.start_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`

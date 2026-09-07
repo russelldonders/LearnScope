@@ -33,6 +33,8 @@ import { listEmployers } from '../../lib/admin/employers'
 import { useRowSelection, useSortedPage, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
 import { handleTabListKeyDown } from '../../lib/tabsKeyboard'
 import { COURSE_STATUS_LABELS } from '../../lib/statusLabels'
+import { COURSE_TYPES } from '../../lib/courseTypes'
+import { DURATION_UNITS } from '../../lib/courseDuration'
 import { BulkActionBar, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 import {
   listOrganisationCatalogueCourses,
@@ -86,7 +88,7 @@ const SECTIONS = [
   { key: 'resources', label: 'Resources' },
 ]
 
-const EMPTY_FORM = { name: '', courseCode: '', provider: '', courseType: '', duration: '', synopsis: '' }
+const EMPTY_FORM = { name: '', provider: '', courseType: '', durationValue: '', durationUnit: 'hours', synopsis: '' }
 
 // Console for a provider's own staff (organisation_members rows) -- built on
 // top of the RLS/role model 0065/0066 already shipped: any org member
@@ -965,37 +967,41 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
               <label className="block text-sm text-secondary mb-1" htmlFor="providerCourseType">
                 Course type
               </label>
-              <input
+              <select
                 id="providerCourseType"
                 value={form.courseType}
                 onChange={(e) => setForm((f) => ({ ...f, courseType: e.target.value }))}
-                placeholder="Online, In-person, Workshop…"
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-secondary mb-1" htmlFor="providerCourseCode">
-                Course code / ID
-              </label>
-              <input
-                id="providerCourseCode"
-                required
-                value={form.courseCode}
-                onChange={(e) => setForm((f) => ({ ...f, courseCode: e.target.value }))}
-                placeholder="e.g. LS-101"
-                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-              />
+              >
+                <option value="">Choose a type…</option>
+                {COURSE_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+              </select>
             </div>
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="providerCourseDuration">
                 Duration
               </label>
-              <input
-                id="providerCourseDuration"
-                value={form.duration}
-                onChange={(e) => setForm((f) => ({ ...f, duration: e.target.value }))}
-                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-              />
+              <div className="flex gap-2">
+                <input
+                  id="providerCourseDuration"
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputMode="numeric"
+                  value={form.durationValue}
+                  onChange={(e) => setForm((f) => ({ ...f, durationValue: e.target.value }))}
+                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                />
+                <label className="sr-only" htmlFor="providerCourseDurationUnit">Duration unit</label>
+                <select
+                  id="providerCourseDurationUnit"
+                  value={form.durationUnit}
+                  onChange={(e) => setForm((f) => ({ ...f, durationUnit: e.target.value }))}
+                  className="shrink-0 rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                >
+                  {DURATION_UNITS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
+                </select>
+              </div>
             </div>
             <div className="sm:col-span-2">
               <label className="block text-sm text-secondary mb-1" htmlFor="providerCourseSynopsis">

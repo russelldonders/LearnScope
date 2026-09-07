@@ -1,5 +1,6 @@
 import { supabase } from '../supabaseClient'
 import { listProviderCatalogues } from '../catalogues'
+import { composeDurationText } from '../courseDuration'
 
 const ADMIN_CATALOGUE_SELECT = `*, organisations(id, name),
   course_catalogue_publications(catalogue_id, published_at, catalogues(id, name, is_global))`
@@ -49,15 +50,18 @@ export async function createPlatformCourse(userId, { name, courseCode, provider,
 // (edit details, attach content) before choosing to submit it for review.
 // RLS (0066) rejects anything but draft/pending_approval from this role, so
 // there's no way to self-approve from here even if the app layer tried.
-export async function createProviderCourse(userId, organisationId, { name, courseCode, provider, courseType, duration, synopsis }) {
+// course_code is never passed in -- set_course_code_trigger (0113) always
+// generates it, the same way the (read-only) edit screen already treats it.
+export async function createProviderCourse(userId, organisationId, { name, provider, courseType, durationValue, durationUnit, synopsis }) {
   const { data, error } = await supabase
     .from('course_catalogue')
     .insert({
       name: name.trim(),
-      course_code: courseCode?.trim() || null,
       provider: provider?.trim() || null,
       course_type: courseType?.trim() || null,
-      duration: duration?.trim() || null,
+      duration: composeDurationText(durationValue, durationUnit),
+      duration_value: durationValue === '' || durationValue === null || durationValue === undefined ? null : Number(durationValue),
+      duration_unit: durationUnit || null,
       synopsis: synopsis?.trim() || null,
       organisation_id: organisationId,
       created_by: userId,
@@ -72,16 +76,18 @@ export async function createProviderCourse(userId, organisationId, { name, cours
 // Editing is only possible while draft/rejected (RLS 0066's `using` clause
 // for the org-members update policy), matching what the provider console UI
 // exposes an edit affordance for -- pending_approval/approved rows are
-// read-only from here regardless.
-export async function updateProviderCourse(id, { name, courseCode, provider, courseType, duration, synopsis, priceAmount, priceCurrency }) {
+// read-only from here regardless. course_code is immutable and never
+// updated from here.
+export async function updateProviderCourse(id, { name, provider, courseType, durationValue, durationUnit, synopsis, priceAmount, priceCurrency }) {
   const { error } = await supabase
     .from('course_catalogue')
     .update({
       name: name.trim(),
-      course_code: courseCode?.trim() || null,
       provider: provider?.trim() || null,
       course_type: courseType?.trim() || null,
-      duration: duration?.trim() || null,
+      duration: composeDurationText(durationValue, durationUnit),
+      duration_value: durationValue === '' || durationValue === null || durationValue === undefined ? null : Number(durationValue),
+      duration_unit: durationUnit || null,
       synopsis: synopsis?.trim() || null,
       // '' means "not specified" (null), distinct from an entered 0 which
       // means free -- priceAmount arrives as a string from the number
