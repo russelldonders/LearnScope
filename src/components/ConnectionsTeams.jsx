@@ -37,6 +37,7 @@ const PANELS = [
   { key: 'members', label: 'Members' },
   { key: 'learning', label: 'Learning' },
   { key: 'collaboration', label: 'Collaboration' },
+  { key: 'settings', label: 'Settings' },
 ]
 
 // Builds "Alex", "Alex and Sam", or "Alex, Sam and Jo" from the leader's own
@@ -195,6 +196,16 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     }
   }, [])
 
+  // Switching to a different team should land back on the Skills tab, but
+  // archiving/restoring/retrying the *same* team (both of which live under
+  // Settings) must not -- otherwise clicking "Archive team" or "Restore
+  // team" would immediately bounce the leader away from the Settings tab
+  // they were just on. Kept as its own effect, keyed only on teamId, so it
+  // doesn't fire on the `retry` bumps below.
+  useEffect(() => {
+    setActivePanel('skills')
+  }, [teamId])
+
   useEffect(() => {
     setMembers([])
     setRoster([])
@@ -206,7 +217,6 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     setSuccessorId('')
     setTransferOpen(false)
     setMembersError(false)
-    setActivePanel('skills')
     if (teamId) loadTeamDetail(teamId)
   }, [teamId, retry, loadTeamDetail])
 
@@ -528,24 +538,27 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
               loading={membersLoading} error={membersError ? error : null} onCreateRecord={handleCreateCollaborationRecord}
               readOnly={isArchived} />
           )}
-        </div>
+          {activePanel === 'settings' && (
+            <div className="space-y-4">
+              {!isArchived && !transferOpen && <button type="button" disabled={busy || membersLoading || membersError} onClick={() => setTransferOpen(true)} className={buttonClass}>Change team leader</button>}
+              {!isArchived && transferOpen && <form onSubmit={handleTransfer} className="space-y-3 border-t border-hairline pt-4">
+                <label className="block text-sm text-ink">New team leader<select value={successorId} disabled={busy} onChange={(e) => setSuccessorId(e.target.value)} className={fieldClass}>
+                  <option value="">Choose a team member</option>
+                  {roster.filter((person) => person.role === 'member').map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+                </select></label>
+                <p className="text-sm text-secondary">Choose a member who has accepted their invitation. You’ll remain a member and lose leader controls. Members will need to share their skills with the new leader.</p>
+                <div className="flex gap-2"><button type="submit" disabled={busy || !successorId} className={buttonClass}>{busy ? 'Changing…' : 'Transfer leadership'}</button>
+                  <button type="button" disabled={busy} onClick={() => setTransferOpen(false)} className={buttonClass}>Cancel</button></div>
+              </form>}
 
-        {!isArchived && !transferOpen && <button type="button" disabled={busy || membersLoading || membersError} onClick={() => setTransferOpen(true)} className={buttonClass}>Change team leader</button>}
-        {!isArchived && transferOpen && <form onSubmit={handleTransfer} className="space-y-3 border-t border-hairline pt-4">
-          <label className="block text-sm text-ink">New team leader<select value={successorId} disabled={busy} onChange={(e) => setSuccessorId(e.target.value)} className={fieldClass}>
-            <option value="">Choose a team member</option>
-            {roster.filter((person) => person.role === 'member').map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
-          </select></label>
-          <p className="text-sm text-secondary">Choose a member who has accepted their invitation. You’ll remain a member and lose leader controls. Members will need to share their skills with the new leader.</p>
-          <div className="flex gap-2"><button type="submit" disabled={busy || !successorId} className={buttonClass}>{busy ? 'Changing…' : 'Transfer leadership'}</button>
-            <button type="button" disabled={busy} onClick={() => setTransferOpen(false)} className={buttonClass}>Cancel</button></div>
-        </form>}
-
-        <div className="border-t border-hairline pt-4">
-          {isArchived ? (
-            <button type="button" disabled={archiving} onClick={handleRestore} className={buttonClass}>{archiving ? 'Restoring…' : 'Restore team'}</button>
-          ) : (
-            <button type="button" disabled={archiving || membersLoading} onClick={() => setArchiveConfirmOpen(true)} className={`${buttonClass} text-red-700`}>Archive team</button>
+              <div className="border-t border-hairline pt-4">
+                {isArchived ? (
+                  <button type="button" disabled={archiving} onClick={handleRestore} className={buttonClass}>{archiving ? 'Restoring…' : 'Restore team'}</button>
+                ) : (
+                  <button type="button" disabled={archiving || membersLoading} onClick={() => setArchiveConfirmOpen(true)} className={`${buttonClass} text-red-700`}>Archive team</button>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>}

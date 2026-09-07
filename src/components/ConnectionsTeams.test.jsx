@@ -220,21 +220,29 @@ describe('Connections teams', () => {
     teams.listMyLedManagerTeams.mockResolvedValueOnce([{ id: 'one', name: 'First team', status: 'active' }]).mockResolvedValue([])
     teams.listMyArchivedManagerTeams.mockResolvedValueOnce([]).mockResolvedValue([{ id: 'one', name: 'First team', status: 'archived' }])
     renderTeams()
+    // Archive/restore and change-leader live under the Settings tab.
+    fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Archive team' })).not.toBeDisabled())
     // Still fully interactive while active.
     fireEvent.click(screen.getByRole('tab', { name: 'Members' }))
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Members' })).toHaveAttribute('aria-selected', 'true'), { timeout: 3000 })
     expect(await screen.findByRole('button', { name: 'Invite to team' })).toBeInTheDocument()
 
+    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }))
     fireEvent.click(screen.getByRole('button', { name: 'Archive team' }))
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archive team' }))
     await waitFor(() => expect(teams.archiveManagerTeam).toHaveBeenCalledWith('one'))
     await screen.findByText(/Team archived/)
 
-    // Once archived: no invite/change-leader controls, but still viewable, with a restore option.
+    // Once archived: no invite/change-leader controls, but still viewable, with
+    // a restore option -- and archiving must not bounce the leader off the
+    // Settings tab they were already on.
     expect(await screen.findByText(/This team has been archived/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Invite to team' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Settings' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.queryByRole('button', { name: 'Change team leader' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Members' }))
+    expect(screen.queryByRole('button', { name: 'Invite to team' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Restore team' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Restore team' }))
     await waitFor(() => expect(teams.restoreManagerTeam).toHaveBeenCalledWith('one'))
@@ -248,6 +256,7 @@ describe('Connections teams', () => {
     teams.listMyLedManagerTeams.mockResolvedValueOnce([{ id: 'one', name: 'First team', status: 'active' }]).mockResolvedValue([])
     teams.listManagerTeamRoster.mockResolvedValue([{ id: 'membership-alex', name: 'Alex', role: 'member' }, { id: 'membership-me', name: 'Me', role: 'manager' }])
     renderTeams()
+    fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Change team leader' })).not.toBeDisabled())
     fireEvent.click(screen.getByRole('button', { name: 'Change team leader' }))
     // A synchronous click immediately followed by a query can occasionally
