@@ -248,35 +248,20 @@ export default function SkillsSection() {
             </button>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex gap-1 overflow-x-auto scrollbar-hide" aria-label="Skill views">
-              {SKILL_VIEWS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setView(option.value)}
-                  aria-pressed={view === option.value}
-                  className={`shrink-0 rounded-full px-3 py-1.5 text-sm transition-colors ${
-                    view === option.value ? 'bg-moss text-paper' : 'text-secondary hover:bg-card hover:text-ink'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            <label className="shrink-0">
-              <span className="sr-only">Sort skills</span>
-              <select
-                value={sortBy}
-                onChange={(event) => setSortBy(event.target.value)}
-                className="rounded-md border border-hairline bg-card px-3 py-1.5 text-sm text-ink"
+          <div className="flex gap-1 overflow-x-auto scrollbar-hide" aria-label="Skill views">
+            {SKILL_VIEWS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setView(option.value)}
+                aria-pressed={view === option.value}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                  view === option.value ? 'bg-moss text-paper' : 'text-secondary hover:bg-card hover:text-ink'
+                }`}
               >
-                <option value="attention">Needs attention</option>
-                <option value="recent">Recently added</option>
-                <option value="name">Name</option>
-                <option value="level">Highest level</option>
-              </select>
-            </label>
+                {option.label}
+              </button>
+            ))}
           </div>
 
           {showFilters && (
@@ -299,6 +284,21 @@ export default function SkillsSection() {
                     options={availableTags.map((t) => ({ value: t, label: t }))}
                   />
               )}
+              <label className="flex items-center gap-2">
+                <span className="font-mono text-[10px] uppercase tracking-wide text-secondary w-28 shrink-0">
+                  Sort by
+                </span>
+                <select
+                  value={sortBy}
+                  onChange={(event) => setSortBy(event.target.value)}
+                  className="rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink"
+                >
+                  <option value="attention">Needs attention</option>
+                  <option value="recent">Recently added</option>
+                  <option value="name">Name</option>
+                  <option value="level">Highest level</option>
+                </select>
+              </label>
             </div>
           )}
         </div>
