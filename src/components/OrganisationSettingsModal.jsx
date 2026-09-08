@@ -4,6 +4,19 @@ import AccessibleDialog from './AccessibleDialog'
 
 const MAX_LOGO_BYTES = 5 * 1024 * 1024
 
+// Mirrors src/index.css's --color-moss/--color-slate/--color-gold light
+// values -- shown as each field's placeholder swatch/value so "unset" reads
+// as "currently using the default LearnScope colours" rather than a blank
+// picker, and used to seed the <input type="color"> since that control
+// can't display a true empty state.
+const BRAND_COLOR_FIELDS = [
+  { key: 'brandPrimaryColor', label: 'Primary', hint: 'Buttons and links', fallback: '#4a6741' },
+  { key: 'brandSecondaryColor', label: 'Secondary', hint: 'Accents', fallback: '#3d5a73' },
+  { key: 'brandHoverColor', label: 'Hover', hint: 'Button hover state', fallback: '#80651d' },
+]
+
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/
+
 // The provider console's settings cog -- website/about are a plain form
 // (saved together on submit), but the logo uploads/removes immediately on
 // selection, same UX as ProfilePhoto.jsx's avatar upload, since it's a
@@ -14,6 +27,10 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
   const [url, setUrl] = useState(organisation.url ?? '')
   const [about, setAbout] = useState(organisation.about ?? '')
   const [logoUrl, setLogoUrl] = useState(organisation.logo_url ?? null)
+  const [brandPrimaryColor, setBrandPrimaryColor] = useState(organisation.brand_primary_color ?? '')
+  const [brandSecondaryColor, setBrandSecondaryColor] = useState(organisation.brand_secondary_color ?? '')
+  const [brandHoverColor, setBrandHoverColor] = useState(organisation.brand_hover_color ?? '')
+  const [colorError, setColorError] = useState(null)
   const [publicProfileEnabled, setPublicProfileEnabled] = useState(organisation.public_profile_enabled ?? false)
   // Tracks what's actually persisted, separately from the checkbox above --
   // the link/copy/pop-out block reads this, not the live checkbox, so
@@ -72,10 +89,25 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
 
   async function handleSave(e) {
     e.preventDefault()
+    setColorError(null)
+    for (const field of BRAND_COLOR_FIELDS) {
+      const value = { brandPrimaryColor, brandSecondaryColor, brandHoverColor }[field.key]
+      if (value && !HEX_COLOR_RE.test(value)) {
+        setColorError(`${field.label} colour must be a hex value like ${field.fallback}.`)
+        return
+      }
+    }
     setSaving(true)
     setError(null)
     try {
-      await updateOrganisation(organisation.id, { url, about, publicProfileEnabled })
+      await updateOrganisation(organisation.id, {
+        url,
+        about,
+        publicProfileEnabled,
+        brandPrimaryColor: brandPrimaryColor || null,
+        brandSecondaryColor: brandSecondaryColor || null,
+        brandHoverColor: brandHoverColor || null,
+      })
       setSavedPublicProfileEnabled(publicProfileEnabled)
       // Stay open when the public page is (now) enabled, so there's a
       // moment to actually copy/open the link this save just made live --
@@ -172,6 +204,51 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
               placeholder="What your organisation offers, who you work with…"
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
             />
+          </div>
+
+          <div className="border-t border-hairline pt-4">
+            <label className="block text-sm text-secondary mb-1">Brand colours</label>
+            <p className="text-xs text-secondary mb-2">
+              Used on your public page below. Leave any of these blank to use LearnScope's default colours. Buttons
+              use white text on your Primary/Hover colours, so pick shades dark enough to stay readable.
+            </p>
+            <div className="grid grid-cols-3 gap-3">
+              {BRAND_COLOR_FIELDS.map((field) => {
+                const value = { brandPrimaryColor, brandSecondaryColor, brandHoverColor }[field.key]
+                const setValue = {
+                  brandPrimaryColor: setBrandPrimaryColor,
+                  brandSecondaryColor: setBrandSecondaryColor,
+                  brandHoverColor: setBrandHoverColor,
+                }[field.key]
+                const inputId = `orgSettings-${field.key}`
+                return (
+                  <div key={field.key}>
+                    <label className="block text-xs text-secondary mb-1" htmlFor={inputId}>
+                      {field.label}
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="color"
+                        aria-label={`${field.label} colour swatch`}
+                        value={HEX_COLOR_RE.test(value) ? value : field.fallback}
+                        onChange={(e) => setValue(e.target.value)}
+                        className="w-9 h-9 rounded border border-hairline shrink-0 cursor-pointer bg-paper"
+                      />
+                      <input
+                        id={inputId}
+                        type="text"
+                        value={value}
+                        onChange={(e) => setValue(e.target.value)}
+                        placeholder={field.fallback}
+                        className="w-full min-w-0 rounded-md border border-hairline bg-paper px-2 py-1.5 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                      />
+                    </div>
+                    <p className="text-[11px] text-secondary mt-1">{field.hint}</p>
+                  </div>
+                )
+              })}
+            </div>
+            {colorError && <p className="text-sm text-red-700 mt-2">{colorError}</p>}
           </div>
 
           <div className="border-t border-hairline pt-4">

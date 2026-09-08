@@ -8,6 +8,7 @@ import AccessibleDialog from '../../components/AccessibleDialog'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import ResourceLibrarySection from '../../components/ResourceLibrarySection'
 import ProviderSkillsSection from '../../components/ProviderSkillsSection'
+import OrganisationSettingsModal from '../../components/OrganisationSettingsModal'
 import { ProviderTrainingSection, ProviderCataloguesSection } from '../provider/ProviderConsole'
 import TrainingTeamAccessDialog from './TrainingTeamAccessDialog'
 import {
@@ -145,6 +146,7 @@ export default function EmployerConsole() {
   const [organisations, setOrganisations] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [showSettings, setShowSettings] = useState(false)
   // employer/section selection lives in the URL (?employer=&section=), the
   // same convention as ProviderConsole.jsx -- re-derived from searchParams
   // on every render so refresh, Back/Forward, and a shared link all restore
@@ -258,6 +260,14 @@ export default function EmployerConsole() {
       .finally(() => setLoading(false))
   }, [])
 
+  // Refreshes attachedProviderOrg after the settings modal saves branding
+  // changes -- mirrors ProviderConsole.jsx's own reloadOrganisations.
+  function reloadOrganisations() {
+    listOrganisations()
+      .then(setOrganisations)
+      .catch((err) => setError(err.message))
+  }
+
   // Defaults ?employer= to the first employer this user admins whenever
   // it's absent or points at one they no longer admin -- replace: true so
   // this correction doesn't itself become a Back-button stop.
@@ -334,7 +344,7 @@ export default function EmployerConsole() {
                     }
                   : {})}
               >
-                <div className="flex items-center flex-wrap gap-x-1 gap-y-2 mb-6 border-b border-hairline">
+                <div className="flex items-center justify-between flex-wrap gap-x-1 gap-y-2 mb-6 border-b border-hairline">
                   <div role="tablist" aria-label="Console section" className="flex items-center flex-wrap gap-x-1 gap-y-2">
                     {visibleSections.map((section, index) => {
                       if (section.providerTab) {
@@ -401,6 +411,25 @@ export default function EmployerConsole() {
                       )
                     })}
                   </div>
+                  {myProviderRole === 'admin' && (
+                    <button
+                      type="button"
+                      onClick={() => setShowSettings(true)}
+                      title="Organisation settings"
+                      aria-label="Organisation settings"
+                      className="shrink-0 mb-2 w-11 h-11 rounded-md border border-hairline text-secondary hover:text-ink hover:bg-paper flex items-center justify-center"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="3" />
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                      </svg>
+                    </button>
+                  )}
+                  {myProviderRole !== 'admin' && (
+                    <p className="text-xs text-secondary shrink-0 mb-2">
+                      Organisation settings need provider admin access.
+                    </p>
+                  )}
                 </div>
 
                 <div
@@ -508,6 +537,16 @@ export default function EmployerConsole() {
           </>
         )}
       </main>
+
+      {showSettings && attachedProviderOrg && (
+        <OrganisationSettingsModal
+          organisation={attachedProviderOrg}
+          onClose={() => {
+            setShowSettings(false)
+            reloadOrganisations()
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -96,8 +96,36 @@ export default function ProviderProfile() {
     }
   }
 
+  // Falls back to the app's own moss/slate design tokens via CSS var()'s
+  // second argument whenever an org hasn't set a custom colour -- so this
+  // page renders identically to before this feature for every org that
+  // hasn't opted into branding, and only the CTA buttons/name link actually
+  // switch to a custom colour (see the Tailwind arbitrary-value classes
+  // below), rather than a hardcoded style ProviderProfile would otherwise
+  // have to override.
+  const brandStyle = profile
+    ? {
+        '--org-primary': profile.organisation.brandPrimaryColor || undefined,
+        '--org-secondary': profile.organisation.brandSecondaryColor || undefined,
+        '--org-hover': profile.organisation.brandHoverColor || undefined,
+      }
+    : undefined
+  // text-paper (the default CTA text colour) is itself a theme-dependent
+  // token -- it flips between near-white and near-black across light/dark
+  // mode, same as --color-moss does, so the two stay paired automatically
+  // for an org using the default colours. A custom brand colour has no
+  // dark-mode variant of its own though, so pairing it with the
+  // theme-flipping text-paper could land on near-black text over a
+  // near-black background for a dark-mode visitor. Fixed white text isn't
+  // guaranteed-legible against every hex an admin could pick (this is an
+  // inherent tradeoff of a free colour picker, called out in the settings
+  // modal's own hint), but it at least stays consistent across themes
+  // instead of silently flipping to the wrong end of the contrast range.
+  const hasCustomPrimary = Boolean(profile?.organisation.brandPrimaryColor)
+  const ctaTextClass = hasCustomPrimary ? 'text-white' : 'text-paper'
+
   return (
-    <div className="min-h-screen bg-paper">
+    <div className="min-h-screen bg-paper" style={brandStyle}>
       {authLoading ? null : user ? <AppHeader hideNavLinks /> : <PublicHeader />}
 
       <main className="max-w-4xl mx-auto px-4 py-10">
@@ -112,7 +140,11 @@ export default function ProviderProfile() {
 
         {profile && (
           <>
-            <div className="flex items-start gap-4 mb-8">
+            <div
+              className={`flex items-start gap-4 mb-8 ${
+                profile.organisation.brandSecondaryColor ? 'border-l-4 border-[var(--org-secondary)] pl-4' : ''
+              }`}
+            >
               {profile.organisation.logoUrl && (
                 <img
                   src={profile.organisation.logoUrl}
@@ -127,7 +159,7 @@ export default function ProviderProfile() {
                     href={profile.organisation.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm text-moss font-medium break-all"
+                    className="text-sm text-[var(--org-primary,var(--color-moss))] font-medium break-all"
                   >
                     {profile.organisation.url}
                   </a>
@@ -216,7 +248,7 @@ export default function ProviderProfile() {
                             type="button"
                             onClick={() => handleEnrol(course)}
                             disabled={enrolled || enrollingId === course.id}
-                            className="mt-3 self-start rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className={`mt-3 self-start rounded-md bg-[var(--org-primary,var(--color-moss))] hover:bg-[var(--org-hover,var(--org-primary,var(--color-moss)))] hover:opacity-90 ${ctaTextClass} py-1.5 px-3 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed`}
                           >
                             {completed
                               ? 'Completed ✓'
@@ -230,7 +262,7 @@ export default function ProviderProfile() {
                           <Link
                             to="/login"
                             onClick={() => setPendingEnrolCourseId(course.id)}
-                            className="mt-3 self-start rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
+                            className={`mt-3 self-start rounded-md bg-[var(--org-primary,var(--color-moss))] hover:bg-[var(--org-hover,var(--org-primary,var(--color-moss)))] hover:opacity-90 ${ctaTextClass} py-1.5 px-3 text-sm font-medium`}
                           >
                             Log in to enrol
                           </Link>
