@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { buildPeerRatingStatement } from './xapiStatement'
 
 const PENDING_INVITE_KEY = 'ls_pending_invite_code'
 
@@ -194,17 +195,94 @@ export async function listMyPeerRatings() {
   return data ?? []
 }
 
+// The current user's own most-recent rating date per skill, scoped to
+// skillIds -- lets SkillsProfile.jsx show "Rated {when}" instead of always
+// "Click to rate this skill" once already rated, persisted across a reload
+// (unlike the previous purely in-memory ratedSkillIds set). No explicit
+// rater_id filter needed: skill_peer_ratings' RLS ("Raters can view ratings
+// they gave") already scopes an unfiltered select to the caller's own given
+// ratings for someone else's skills -- the "skill owners can view" policy
+// can never match here since skillIds belongs to the profile being viewed,
+// not the caller.
+export async function listMyRatingsGivenTo(skillIds) {
+  const ids = [...new Set(skillIds)].filter(Boolean)
+  if (ids.length === 0) return {}
+  const { data, error } = await supabase
+    .from('skill_peer_ratings')
+    .select('skill_id, rated_at')
+    .in('skill_id', ids)
+    .order('rated_at', { ascending: false })
+  if (error) throw error
+  const lastRatedBySkillId = {}
+  for (const row of data ?? []) {
+    if (!(row.skill_id in lastRatedBySkillId)) lastRatedBySkillId[row.skill_id] = row.rated_at
+  }
+  return lastRatedBySkillId
+}
+
+// Ratings received on the current user's own skills that they haven't seen
+// yet -- feeds the bell notification (PendingActionsContext) and the
+// "Ratings received" section on Actions.jsx. Scoped explicitly to
+// skill_owner_id: skill_peer_ratings' seen_at is only ever set for rows
+// where the caller is the owner (see mark_peer_ratings_seen,
+// 20260908090000), never for ratings the caller themselves gave someone
+// else, so an unscoped `seen_at is null` filter would also return every
+// rating this user has ever given.
+export async function listUnseenPeerRatings(userId) {
+  const { data, error } = await supabase
+    .from('skill_peer_ratings')
+    .select('id, skill_id, skill_name, rater_id, rater_name, level, comments, rated_at')
+    .eq('skill_owner_id', userId)
+    .is('seen_at', null)
+    .order('rated_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+// Marks every unseen rating received as seen -- see mark_peer_ratings_seen
+// (20260908090000). skill_peer_ratings has no update policy for regular
+// users, so this always goes through the RPC rather than a direct update.
+export async function markPeerRatingsSeen() {
+  const { error } = await supabase.rpc('mark_peer_ratings_seen')
+  if (error) throw error
+}
+
 // Rates a connection's shared skill directly, without an invite code -- only
 // works when the skill owner has allow_connection_skill_ratings on (see
 // ProfilePrivacy.jsx) and the caller is an actual connection; RLS/authorization
-// is enforced server-side in rate_connection_skill (20260907210000).
-export async function rateConnectionSkill(skillId, level, comments) {
+// is enforced server-side in rate_connection_skill (20260907210000). That
+// function (20260908090000) also writes the owner's own xAPI copy of this
+// rating server-side, since it crosses into the owner's user_id; this then
+// writes the rater's own copy client-side, which stays within their own row.
+export async function rateConnectionSkill(skill, ownerName, level, comments) {
   const { data, error } = await supabase.rpc('rate_connection_skill', {
-    p_skill_id: skillId,
+    p_skill_id: skill.id,
     p_level: level,
     p_comments: comments || '',
   })
   if (error) throw error
+
+  // Best-effort: the rating itself (skill_peer_ratings row, owner's own
+  // xAPI copy, bell notification) already succeeded above via the RPC --
+  // this only adds the rater's own /activity visibility, so a failure here
+  // must not surface as a failed rating.
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
+    const statement = buildPeerRatingStatement({
+      actor: { name: profile?.full_name, email: user.email },
+      ownerName,
+      skillName: skill.name,
+      level,
+      comments,
+    })
+    await supabase.from('xapi_statements').insert({ user_id: user.id, statement, recorded_at: statement.timestamp })
+  } catch {
+    // Non-fatal -- see comment above.
+  }
+
   return data
 }
 

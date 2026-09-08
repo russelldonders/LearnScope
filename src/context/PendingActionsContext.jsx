@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { useAuth } from './AuthContext'
 import { supabase } from '../lib/supabaseClient'
-import { listIncomingRateInvites, listIncomingRecommendInvites } from '../lib/connections'
+import { listIncomingRateInvites, listIncomingRecommendInvites, listUnseenPeerRatings } from '../lib/connections'
 import { listMyPendingOrgInvites } from '../lib/organisationInvites'
 import { listMyPendingEmployerInvites, listMyPendingDataAccessRequests } from '../lib/admin/employers'
 import { listMyCourseAssignments } from '../lib/courseCatalogue'
@@ -24,7 +24,11 @@ export function PendingActionsProvider({ children }) {
   // employer invites, employer data access requests, pushed course
   // assignments, pushed skill suggestions, and rate invites addressed to
   // them -- not invites/requests they sent themselves, which are waiting on
-  // someone else instead.
+  // someone else instead. Unseen ratings received are the one purely
+  // informational source here (nothing to accept/decline) -- included
+  // anyway since the bell is the notification surface a learner already
+  // checks, and it clears itself once they visit Actions.jsx (see
+  // markPeerRatingsSeen there).
   const refreshPendingActionCount = useCallback(async () => {
     if (!user) {
       setPendingActionCount(0)
@@ -52,6 +56,7 @@ export function PendingActionsProvider({ children }) {
       { key: 'courseAssignments', label: 'course assignments', fallback: [], load: () => listMyCourseAssignments(user.id) },
       { key: 'skillSuggestions', label: 'skill suggestions', fallback: [], load: () => listMySkillSuggestions(user.id) },
       { key: 'managerTeamInvites', label: 'manager-team invitations', fallback: [], load: listMyManagerTeamInvites },
+      { key: 'unseenRatings', label: 'ratings received', fallback: [], load: () => listUnseenPeerRatings(user.id) },
     ])
     setPendingActionCount(
       values.requests +
@@ -63,7 +68,8 @@ export function PendingActionsProvider({ children }) {
         values.dataAccessRequests.length +
         values.courseAssignments.length +
         values.skillSuggestions.length +
-        values.managerTeamInvites.length
+        values.managerTeamInvites.length +
+        values.unseenRatings.length
     )
   }, [user])
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { getMemberSince, listConnectionRecentGrowth, rateConnectionSkill } from '../lib/connections'
+import { getMemberSince, listConnectionRecentGrowth, listMyRatingsGivenTo, rateConnectionSkill } from '../lib/connections'
 import { requestSkillAccess } from '../lib/skillDiscovery'
 import { formatMonthYear, formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
@@ -41,7 +41,7 @@ export default function SkillsProfile() {
   const [requestSent, setRequestSent] = useState(false)
   const [allowRatings, setAllowRatings] = useState(false)
   const [ratingSkill, setRatingSkill] = useState(null)
-  const [ratedSkillIds, setRatedSkillIds] = useState(new Set())
+  const [lastRatedBySkillId, setLastRatedBySkillId] = useState({})
 
   useEffect(() => {
     load()
@@ -116,6 +116,12 @@ export default function SkillsProfile() {
           .eq('user_id', user.id)
           .not('library_skill_id', 'is', null)
         setOwnLibrarySkillIds(new Set((mine ?? []).map((s) => s.library_skill_id)))
+
+        try {
+          setLastRatedBySkillId(await listMyRatingsGivenTo((data ?? []).map((s) => s.id)))
+        } catch {
+          setLastRatedBySkillId({})
+        }
       }
     }
 
@@ -147,8 +153,8 @@ export default function SkillsProfile() {
   }
 
   async function handleSubmitRating(level, comments) {
-    await rateConnectionSkill(ratingSkill.id, level, comments)
-    setRatedSkillIds((prev) => new Set(prev).add(ratingSkill.id))
+    await rateConnectionSkill(ratingSkill, name, level, comments)
+    setLastRatedBySkillId((prev) => ({ ...prev, [ratingSkill.id]: new Date().toISOString() }))
     setRatingSkill(null)
   }
 
@@ -246,7 +252,7 @@ export default function SkillsProfile() {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {filteredSkills.map((skill) => {
-                      const rated = ratedSkillIds.has(skill.id)
+                      const lastRatedAt = lastRatedBySkillId[skill.id]
                       const content = <>
                         <GrowthRing level={skill.level} size={48} />
                         <div className="min-w-0 flex-1">
@@ -264,7 +270,11 @@ export default function SkillsProfile() {
                             </div>
                           )}
                           {canRate && (
-                            <p className="text-xs text-moss mt-1">{rated ? 'Rated — click to rate again' : 'Click to rate this skill'}</p>
+                            <p className="text-xs text-moss mt-1" title={lastRatedAt ? formatAbsoluteDate(lastRatedAt) : undefined}>
+                              {lastRatedAt
+                                ? `You last rated this skill ${formatRelativeDate(lastRatedAt)} — click to rate again`
+                                : 'Click to rate this skill'}
+                            </p>
                           )}
                         </div>
                       </>

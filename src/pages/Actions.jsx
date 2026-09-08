@@ -4,7 +4,8 @@ import { useAuth } from '../context/AuthContext'
 import { usePendingActions } from '../context/PendingActionsContext'
 import AppHeader from '../components/AppHeader'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
-import { listIncomingRateInvites, listIncomingRecommendInvites, getProfiles } from '../lib/connections'
+import { listIncomingRateInvites, listIncomingRecommendInvites, listUnseenPeerRatings, markPeerRatingsSeen, getProfiles } from '../lib/connections'
+import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 import { listIncomingPendingValidationRequests } from '../lib/skillValidationRequests'
 import { listIncomingConnectionRequests, respondToConnectionRequest } from '../lib/skillDiscovery'
 import { listMyPendingOrgInvites, decideOrgInvite } from '../lib/organisationInvites'
@@ -33,7 +34,11 @@ import { loadActionSources } from '../lib/actionLoading'
 // Everything actually waiting on this learner to act -- the same sources
 // PendingActionsContext counts for the header badge, just rendered in full
 // here instead of as a number. Deliberately separate from Connections.jsx,
-// which is about the learner's network/history, not open requests.
+// which is about the learner's network/history, not open requests. Ratings
+// received are the one purely informational section (nothing to accept/
+// decline) -- shown here anyway since the bell is the notification surface
+// a learner already checks; loading them here is also what marks them seen
+// (see markPeerRatingsSeen below), clearing the bell.
 export default function Actions() {
   const { user, refreshOrganisationMemberships, refreshEmployerMemberships } = useAuth()
   const { refreshPendingActionCount } = usePendingActions()
@@ -41,6 +46,7 @@ export default function Actions() {
   const [error, setError] = useState(null)
   const [incomingRateInvites, setIncomingRateInvites] = useState([])
   const [incomingRecommendInvites, setIncomingRecommendInvites] = useState([])
+  const [unseenRatings, setUnseenRatings] = useState([])
   const [validationRequests, setValidationRequests] = useState([])
   const [incomingRequests, setIncomingRequests] = useState([])
   const [orgInvites, setOrgInvites] = useState([])
@@ -86,6 +92,7 @@ export default function Actions() {
       const { values, failures } = await loadActionSources([
         { key: 'rateInvites', label: 'rating invitations', fallback: [], load: listIncomingRateInvites },
         { key: 'recommendInvites', label: 'skill recommendations', fallback: [], load: listIncomingRecommendInvites },
+        { key: 'unseenRatings', label: 'ratings received', fallback: [], load: () => listUnseenPeerRatings(user.id) },
         { key: 'validationRequests', label: 'validation requests', fallback: [], load: () => listIncomingPendingValidationRequests(user.id) },
         { key: 'connectionRequests', label: 'connection requests', fallback: [], load: () => listIncomingConnectionRequests(user.id) },
         { key: 'organisationInvites', label: 'organisation invitations', fallback: [], load: () => listMyPendingOrgInvites(user.id) },
@@ -149,8 +156,17 @@ export default function Actions() {
       setCourseAssignments(courseAssignmentsData)
       setSkillSuggestions(skillSuggestionsData)
       setMySkills(values.skills)
+      setUnseenRatings(values.unseenRatings)
       if (failures.length > 0) {
         setError(`Some actions could not be loaded (${failures.map(({ label }) => label).join(', ')}). Other actions are shown below.`)
+      }
+      // Seeing them here is what clears the bell -- best-effort, since a
+      // failure to mark seen just means the badge count stays put, not that
+      // anything is lost (the ratings themselves stay visible either way).
+      if (values.unseenRatings.length > 0) {
+        markPeerRatingsSeen()
+          .then(refreshPendingActionCount)
+          .catch(() => {})
       }
       const requesterIds = validationRequestsData.map((r) => r.requester_id)
       const requestSenderIds = incomingRequestsData.map((r) => r.requester_id)
@@ -415,7 +431,8 @@ export default function Actions() {
     dataAccessRequests.length === 0 &&
     courseAssignments.length === 0 &&
     skillSuggestions.length === 0 &&
-    validationRequests.length === 0
+    validationRequests.length === 0 &&
+    unseenRatings.length === 0
 
   return (
     <div className="min-h-screen bg-paper">
@@ -437,6 +454,30 @@ export default function Actions() {
         {hasNothingPending && (
           <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
             <p className="text-secondary">Nothing needs your attention right now.</p>
+          </div>
+        )}
+
+        {unseenRatings.length > 0 && (
+          <div>
+            <h2 className="font-display text-xl text-ink mb-6">Ratings received</h2>
+            <div className="space-y-3">
+              {unseenRatings.map((rating) => (
+                <Link
+                  key={rating.id}
+                  to={`/skills/${rating.skill_id}`}
+                  className="block bg-card border border-hairline rounded-lg p-4 hover:border-moss/60 transition-colors"
+                >
+                  <p className="text-sm text-ink">
+                    <strong>{rating.rater_name || 'A connection'}</strong> rated your skill{' '}
+                    <strong>{rating.skill_name}</strong>: {LEVEL_LABELS[rating.level]}
+                  </p>
+                  {rating.comments && <p className="text-sm text-secondary mt-1">{rating.comments}</p>}
+                  <p className="font-mono text-xs text-secondary mt-1" title={formatAbsoluteDate(rating.rated_at)}>
+                    {formatRelativeDate(rating.rated_at)}
+                  </p>
+                </Link>
+              ))}
+            </div>
           </div>
         )}
 

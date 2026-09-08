@@ -17,7 +17,7 @@ import TrackingReasonPicker from '../components/TrackingReasonPicker'
 import { LEVEL_LABELS, LEVEL_DESCRIPTIONS, KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
 import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
-import { activityName, verbLabel, formatDuration, isDiagnosticStatement, relatedExperienceFromStatement, experienceTrail, provenanceFromStatement, PROVENANCE_SOURCE_LABELS } from '../lib/xapiStatement'
+import { activityName, verbLabel, formatDuration, isDiagnosticStatement, isPeerRatingStatement, relatedExperienceFromStatement, experienceTrail, provenanceFromStatement, PROVENANCE_SOURCE_LABELS } from '../lib/xapiStatement'
 import { applyCurrentRoleSelection, getCurrentRoleTrackingStatus, trackUnderCurrentRole } from '../lib/currentRole'
 import { fetchStatementsForSkill, insertStatementSkillLinks } from '../lib/activitySkillLinks'
 import CurrentRoleSelectModal from '../components/CurrentRoleSelectModal'
@@ -305,7 +305,7 @@ export default function SkillDetail() {
   // that's knowledge-axis evidence, not practical activity, so it must be
   // excluded here or it silently marks "Record an activity" done and
   // inflates practical trust/history for a skill nobody has practiced yet.
-  const practicalStatements = statements.filter((s) => !isDiagnosticStatement(s.statement))
+  const practicalStatements = statements.filter((s) => !isDiagnosticStatement(s.statement) && !isPeerRatingStatement(s.statement))
   const invitesSentCount = invites.length
   const hasAnyEvaluationInput = selfAssessedCount > 0 || peerRatings.length > 0 || practicalStatements.length > 0
   const latestKnowledgeAssessment = history.find((a) => a.axis === 'knowledge') ?? null
@@ -1459,7 +1459,7 @@ function HistorySection({
   // The Confirming Baseline knowledge quiz logs its own xAPI attempt --
   // exclude it here too, same reasoning as the top-level SkillDetail
   // component (see there for the full comment).
-  const practicalStatements = statements.filter((s) => !isDiagnosticStatement(s.statement))
+  const practicalStatements = statements.filter((s) => !isDiagnosticStatement(s.statement) && !isPeerRatingStatement(s.statement))
   const pendingValidationRequests = validationRequests.filter((r) => r.status === 'pending')
   const decidedValidationRequests = validationRequests.filter((r) => r.status !== 'pending')
   const [selectedEvent, setSelectedEvent] = useState(null)
