@@ -125,6 +125,12 @@ export default function ProviderProfile() {
   // instead of silently flipping to the wrong end of the contrast range.
   const hasCustomPrimary = Boolean(profile?.organisation.brandPrimaryColor)
   const ctaTextClass = hasCustomPrimary ? 'text-white' : 'text-paper'
+  // Replaces CourseThumbnail's own varied-by-course-name gradient with this
+  // org's own colours, for a course with no uploaded image of its own --
+  // undefined (component's default) when the org hasn't set a Primary.
+  const thumbnailGradient = hasCustomPrimary
+    ? [profile.organisation.brandPrimaryColor, profile.organisation.brandSecondaryColor || profile.organisation.brandPrimaryColor]
+    : undefined
 
   return (
     <div className="min-h-screen bg-[var(--org-background,var(--color-paper))]" style={brandStyle}>
@@ -212,12 +218,13 @@ export default function ProviderProfile() {
                     const enrolled = Boolean(enrollment)
                     const completed = Boolean(enrollment?.completedDate)
                     return (
-                    <div key={course.id} className="bg-card border border-hairline rounded-lg overflow-hidden flex flex-col">
+                    <div key={course.id} className="bg-[var(--org-background,var(--color-card))] border border-hairline rounded-lg overflow-hidden flex flex-col">
                       <CourseThumbnail
                         name={course.name}
                         provider={profile.organisation.name}
                         logoUrl={profile.organisation.logoUrl}
                         imageUrl={course.imageUrl}
+                        gradientColors={thumbnailGradient}
                         className="h-24 w-full shrink-0"
                       />
                       <div className="p-4 flex flex-col flex-1">

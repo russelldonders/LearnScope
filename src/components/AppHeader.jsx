@@ -70,8 +70,14 @@ export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandNam
     }
   }, [menuOpen])
 
+  // bg-[var(--org-background,var(--color-card))]: --org-background is only
+  // ever set (as an inline custom property on an ancestor) by
+  // ProviderProfile.jsx when this header is rendered for a branded org's
+  // public page -- everywhere else in the app nothing sets that variable,
+  // so this resolves to the same --color-card as the plain bg-card class
+  // it replaces.
   return (
-    <header className="border-b border-hairline bg-card">
+    <header className="border-b border-hairline bg-[var(--org-background,var(--color-card))]">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-ink focus:px-4 focus:py-2 focus:text-paper"
@@ -90,7 +96,7 @@ export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandNam
               aria-label={pendingActionCount > 0 ? `Actions, ${pendingActionCount} pending` : 'Actions'}
               className={`relative flex items-center justify-center w-9 h-9 rounded-full border shrink-0 ${
                 location.pathname === '/actions'
-                  ? 'border-moss text-ink'
+                  ? 'border-[var(--org-primary,var(--color-moss))] text-ink'
                   : 'border-hairline text-ink hover:bg-paper'
               }`}
             >
@@ -99,7 +105,7 @@ export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandNam
                 <path d="M13.73 21a2 2 0 0 1-3.46 0" />
               </svg>
               {pendingActionCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-moss text-paper text-xs font-medium">
+                <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-[var(--org-primary,var(--color-moss))] text-paper text-xs font-medium">
                   {pendingActionCount}
                 </span>
               )}
@@ -116,7 +122,7 @@ export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandNam
                 <span
                   className={`flex items-center justify-center w-9 h-9 rounded-full border shrink-0 overflow-hidden ${
                     location.pathname.startsWith('/profile') || location.pathname.startsWith('/connections')
-                      ? 'border-moss text-ink'
+                      ? 'border-[var(--org-primary,var(--color-moss))] text-ink'
                       : 'border-hairline text-ink hover:bg-paper'
                   }`}
                 >
@@ -132,7 +138,7 @@ export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandNam
               </button>
 
               {menuOpen && (
-                <div className="absolute right-0 top-full mt-2 w-56 rounded-md border border-hairline bg-card shadow-lg py-1 z-10">
+                <div className="absolute right-0 top-full mt-2 w-56 rounded-md border border-hairline bg-[var(--org-background,var(--color-card))] shadow-lg py-1 z-10">
                   {fullName && (
                     <div className="px-4 py-2 text-sm font-medium text-ink border-b border-hairline">
                       {fullName}
