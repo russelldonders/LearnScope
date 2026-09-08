@@ -41,7 +41,7 @@ export default function SkillsProfile() {
   const [requestSent, setRequestSent] = useState(false)
   const [allowRatings, setAllowRatings] = useState(false)
   const [ratingSkill, setRatingSkill] = useState(null)
-  const [lastRatedBySkillId, setLastRatedBySkillId] = useState({})
+  const [myRatingBySkillId, setMyRatingBySkillId] = useState({})
 
   useEffect(() => {
     load()
@@ -118,9 +118,9 @@ export default function SkillsProfile() {
         setOwnLibrarySkillIds(new Set((mine ?? []).map((s) => s.library_skill_id)))
 
         try {
-          setLastRatedBySkillId(await listMyRatingsGivenTo((data ?? []).map((s) => s.id)))
+          setMyRatingBySkillId(await listMyRatingsGivenTo((data ?? []).map((s) => s.id)))
         } catch {
-          setLastRatedBySkillId({})
+          setMyRatingBySkillId({})
         }
       }
     }
@@ -154,7 +154,7 @@ export default function SkillsProfile() {
 
   async function handleSubmitRating(level, comments) {
     await rateConnectionSkill(ratingSkill, name, level, comments)
-    setLastRatedBySkillId((prev) => ({ ...prev, [ratingSkill.id]: new Date().toISOString() }))
+    setMyRatingBySkillId((prev) => ({ ...prev, [ratingSkill.id]: { level, ratedAt: new Date().toISOString() } }))
     setRatingSkill(null)
   }
 
@@ -252,7 +252,6 @@ export default function SkillsProfile() {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {filteredSkills.map((skill) => {
-                      const lastRatedAt = lastRatedBySkillId[skill.id]
                       const content = <>
                         <GrowthRing level={skill.level} size={48} />
                         <div className="min-w-0 flex-1">
@@ -268,13 +267,6 @@ export default function SkillsProfile() {
                                 </span>
                               ))}
                             </div>
-                          )}
-                          {canRate && (
-                            <p className="text-xs text-moss mt-1" title={lastRatedAt ? formatAbsoluteDate(lastRatedAt) : undefined}>
-                              {lastRatedAt
-                                ? `You last rated this skill ${formatRelativeDate(lastRatedAt)} — click to rate again`
-                                : 'Click to rate this skill'}
-                            </p>
                           )}
                         </div>
                       </>
@@ -353,6 +345,7 @@ export default function SkillsProfile() {
       {ratingSkill && (
         <RateSkillDialog
           skill={ratingSkill}
+          initialLevel={myRatingBySkillId[ratingSkill.id]?.level}
           onClose={() => setRatingSkill(null)}
           onSubmit={handleSubmitRating}
         />
@@ -409,8 +402,12 @@ export default function SkillsProfile() {
   )
 }
 
-function RateSkillDialog({ skill, onClose, onSubmit }) {
-  const [level, setLevel] = useState(skill.level || 3)
+// Defaults to the rater's own last rating for this skill, if they've rated
+// it before; otherwise starts at the lowest level rather than the
+// skill-owner's level or a mid-scale guess -- an unrated skill shouldn't
+// default toward "I already think this is Capable."
+function RateSkillDialog({ skill, initialLevel, onClose, onSubmit }) {
+  const [level, setLevel] = useState(initialLevel ?? LEVELS[0])
   const [comments, setComments] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)

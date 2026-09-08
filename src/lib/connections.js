@@ -195,29 +195,30 @@ export async function listMyPeerRatings() {
   return data ?? []
 }
 
-// The current user's own most-recent rating date per skill, scoped to
-// skillIds -- lets SkillsProfile.jsx show "Rated {when}" instead of always
-// "Click to rate this skill" once already rated, persisted across a reload
-// (unlike the previous purely in-memory ratedSkillIds set). No explicit
-// rater_id filter needed: skill_peer_ratings' RLS ("Raters can view ratings
-// they gave") already scopes an unfiltered select to the caller's own given
-// ratings for someone else's skills -- the "skill owners can view" policy
-// can never match here since skillIds belongs to the profile being viewed,
-// not the caller.
+// The current user's own most-recent rating (level + when) per skill,
+// scoped to skillIds -- lets SkillsProfile.jsx pre-select the rating dialog
+// to what the rater last gave, rather than always starting mid-scale. No
+// explicit rater_id filter needed: skill_peer_ratings' RLS ("Raters can
+// view ratings they gave") already scopes an unfiltered select to the
+// caller's own given ratings for someone else's skills -- the "skill
+// owners can view" policy can never match here since skillIds belongs to
+// the profile being viewed, not the caller.
 export async function listMyRatingsGivenTo(skillIds) {
   const ids = [...new Set(skillIds)].filter(Boolean)
   if (ids.length === 0) return {}
   const { data, error } = await supabase
     .from('skill_peer_ratings')
-    .select('skill_id, rated_at')
+    .select('skill_id, level, rated_at')
     .in('skill_id', ids)
     .order('rated_at', { ascending: false })
   if (error) throw error
-  const lastRatedBySkillId = {}
+  const myRatingBySkillId = {}
   for (const row of data ?? []) {
-    if (!(row.skill_id in lastRatedBySkillId)) lastRatedBySkillId[row.skill_id] = row.rated_at
+    if (!(row.skill_id in myRatingBySkillId)) {
+      myRatingBySkillId[row.skill_id] = { level: row.level, ratedAt: row.rated_at }
+    }
   }
-  return lastRatedBySkillId
+  return myRatingBySkillId
 }
 
 // Ratings received on the current user's own skills that they haven't seen
