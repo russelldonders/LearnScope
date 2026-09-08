@@ -139,6 +139,7 @@ export default function ProviderProfile() {
           hideNavLinks
           brandLogoUrl={profile?.organisation.logoUrl}
           brandName={profile?.organisation.name}
+          brandHomeHref={`/providers/${slug}`}
         />
       ) : (
         <PublicHeader organisation={profile?.organisation} slug={slug} />

@@ -7,6 +7,8 @@ import {
   countPendingStaffInvitations,
   countDraftResources,
 } from '../../lib/admin/providerOverview'
+import { listOrganisationCatalogueResources } from '../../lib/admin/providerCatalogues'
+import { RESOURCE_TYPE_LABELS } from '../../lib/statusLabels'
 
 // Work-queue tiles for the currently selected organisation -- mirrors
 // AdminOverview.jsx's QUEUE_TILES shape (heading/to/load/describe) so the
@@ -73,6 +75,12 @@ function buildTiles(organisationId, role) {
 export default function ProviderOverviewPanel({ organisation, role }) {
   const [loading, setLoading] = useState(true)
   const [tileResults, setTileResults] = useState({})
+  // Loaded independently of the work-queue tiles above (own loading flag,
+  // own effect) so a slow catalogue-resources join doesn't hold up the
+  // tiles, and a tile-load failure doesn't blank this list or vice versa.
+  const [catalogueResources, setCatalogueResources] = useState([])
+  const [resourcesLoading, setResourcesLoading] = useState(true)
+  const [resourcesError, setResourcesError] = useState(null)
 
   const tiles = buildTiles(organisation.id, role)
 
@@ -80,6 +88,15 @@ export default function ProviderOverviewPanel({ organisation, role }) {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organisation.id, role])
+
+  useEffect(() => {
+    setResourcesLoading(true)
+    setResourcesError(null)
+    listOrganisationCatalogueResources(organisation.id)
+      .then(setCatalogueResources)
+      .catch((err) => setResourcesError(err.message))
+      .finally(() => setResourcesLoading(false))
+  }, [organisation.id])
 
   async function load() {
     setLoading(true)
@@ -141,6 +158,38 @@ export default function ProviderOverviewPanel({ organisation, role }) {
             )
           })}
         </ul>
+      )}
+
+      {/* Informational, not a work-queue item -- shown independently of the
+          tiles' own loading/zeroAttention state above, and hidden entirely
+          once loaded if this org's catalogues have no published resources
+          yet, rather than an empty-state box for something that isn't
+          "attention needed". */}
+      {!resourcesLoading && (resourcesError || catalogueResources.length > 0) && (
+        <div className="mt-8">
+          <h3 className="font-display text-base text-ink mb-3">Resources in your catalogues</h3>
+          {resourcesError ? (
+            <p role="alert" className="text-sm text-red-700">{resourcesError}</p>
+          ) : (
+            <ul className="divide-y divide-hairline border-y border-hairline">
+              {catalogueResources.map((resource) => (
+                <li key={resource.linkId} className="flex items-center justify-between gap-4 py-3">
+                  <div className="min-w-0">
+                    <Link
+                      to={`/provider/catalogues/${resource.catalogueId}?tab=resources`}
+                      className="truncate font-medium text-ink hover:text-moss block"
+                    >
+                      {resource.title}
+                    </Link>
+                    <p className="mt-0.5 text-xs text-secondary">
+                      {RESOURCE_TYPE_LABELS[resource.type] ?? resource.type} · {resource.catalogueName}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </section>
   )

@@ -192,6 +192,28 @@ export async function listProviderCatalogueResources(catalogueId) {
   return (data ?? []).filter((item) => item.resource).map((item) => ({ ...item.resource, linkId: item.id }))
 }
 
+// Every published resource linked into any of this organisation's OWN
+// catalogues (not catalogues merely linked in via catalogue_links from
+// another provider -- catalogue.organisation_id is the catalogue's actual
+// owner, so filtering on that already excludes those without needing the
+// isOwn distinction listProviderCatalogues uses). Powers
+// ProviderOverviewPanel.jsx's "Resources in your catalogues" list -- a
+// single join query across every catalogue rather than one
+// listProviderCatalogueResources call per catalogue.
+export async function listOrganisationCatalogueResources(organisationId) {
+  const { data, error } = await supabase
+    .from('catalogue_resources')
+    .select(
+      'id, catalogue:catalogue_id!inner(id, name, organisation_id), resource:resource_id(id, title, type, file_name, external_url, version_number, status, is_current_published)'
+    )
+    .eq('catalogue.organisation_id', organisationId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? [])
+    .filter((item) => item.resource && item.resource.status === 'published' && item.resource.is_current_published)
+    .map((item) => ({ ...item.resource, linkId: item.id, catalogueId: item.catalogue.id, catalogueName: item.catalogue.name }))
+}
+
 export async function addProviderCatalogueResource(catalogueId, resourceId, userId) {
   const { error } = await supabase
     .from('catalogue_resources')

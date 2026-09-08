@@ -21,14 +21,15 @@ const MENU_ITEMS = [
   { to: '/help', label: 'Help' },
 ]
 
-// brandLogoUrl/brandName let a page whitelabel this header for an
-// organisation's own branded context (currently only ProviderProfile.jsx,
-// for a logged-in visitor viewing an org's public page via its own link) --
-// purely cosmetic, the logo still links to /dashboard (this learner's own
-// account, unaffected by which org's page they arrived from) and every
-// other page continues to render the plain LearnScope mark by omitting
-// these props.
-export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandName }) {
+// brandLogoUrl/brandName/brandHomeHref let a page whitelabel this header for
+// an organisation's own branded context (currently only ProviderProfile.jsx,
+// for a logged-in visitor viewing an org's public page via its own link).
+// brandHomeHref defaults to /dashboard (this learner's own account) so every
+// other page continues to behave exactly as before by omitting these props;
+// ProviderProfile.jsx overrides it to the org's own page so clicking its
+// logo stays on/returns to that page instead of jumping to the visitor's
+// personal dashboard.
+export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandName, brandHomeHref = '/dashboard' }) {
   const { signOut, user, isPlatformAdmin, organisationMemberships, employerMemberships } = useAuth()
   const { pendingActionCount } = usePendingActions()
   const { navVisibility } = useNavVisibility()
@@ -86,7 +87,7 @@ export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandNam
       </a>
       <div className="max-w-4xl mx-auto px-4 py-3">
         <div className="flex items-center justify-between gap-4">
-          <Link to="/dashboard" className="flex items-center gap-2 font-display text-2xl text-ink shrink-0">
+          <Link to={brandHomeHref} className="flex items-center gap-2 font-display text-2xl text-ink shrink-0">
             <img src={brandLogoUrl || '/favicon.svg'} alt="" className="w-7 h-7 object-contain rounded" />
             {brandLogoUrl ? brandName : 'LearnScope'}
           </Link>

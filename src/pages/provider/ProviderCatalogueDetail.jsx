@@ -24,6 +24,8 @@ import {
 } from '../../lib/admin/providerCatalogues'
 import { COURSE_STATUS_LABELS, RESOURCE_TYPE_LABELS } from '../../lib/statusLabels'
 import { handleTabListKeyDown } from '../../lib/tabsKeyboard'
+import { useRowSelection } from '../../lib/useSortedPage'
+import { BulkActionBar } from '../../components/TableControls'
 
 const TABS = [
   { key: 'courses', label: 'Courses' },
@@ -263,21 +265,7 @@ function ProviderPage({ children }) {
 
 function CoursesTab({ catalogue, courses, organisationCourses, canManage, canApprove, onReload, onError }) {
   const [adding, setAdding] = useState(false)
-  const [savingId, setSavingId] = useState(null)
   const available = organisationCourses.filter((course) => !courses.some((assigned) => assigned.id === course.id))
-
-  async function handleAdd(courseId) {
-    setSavingId(courseId)
-    onError(null)
-    try {
-      await assignProviderCourseToCatalogue(catalogue.id, courseId)
-      await onReload()
-    } catch (err) {
-      onError(err.message)
-    } finally {
-      setSavingId(null)
-    }
-  }
 
   async function handleApprove(courseId) {
     onError(null)
@@ -291,8 +279,20 @@ function CoursesTab({ catalogue, courses, organisationCourses, canManage, canApp
 
   return (
     <section>
-      <SectionHeading title="Courses" description="Training available through this catalogue." action={canManage && available.length ? { label: adding ? 'Cancel' : 'Add course', onClick: () => setAdding((value) => !value) } : null} />
-      {adding && <div className="mb-5 border-y border-hairline py-3"><p className="mb-2 text-xs text-secondary">Choose from your organisation’s published courses.</p><ul className="divide-y divide-hairline">{available.map((course) => <li key={course.id} className="flex items-center justify-between gap-4 py-2 text-sm"><div className="min-w-0"><p className="truncate font-medium text-ink">{course.name}</p><p className="mt-0.5 text-xs text-secondary">{course.course_code || course.course_type || 'Course'} · Published</p></div><button type="button" disabled={savingId !== null} onClick={() => handleAdd(course.id)} className="shrink-0 font-medium text-moss hover:underline disabled:opacity-50">{savingId === course.id ? 'Adding…' : 'Add'}</button></li>)}</ul></div>}
+      <SectionHeading title="Courses" description="Training available through this catalogue." action={canManage && available.length ? { label: adding ? 'Cancel' : 'Add courses', onClick: () => setAdding((value) => !value) } : null} />
+      {adding && (
+        <MultiAddList
+          items={available}
+          getId={(course) => course.id}
+          renderLabel={(course) => course.name}
+          renderMeta={(course) => `${course.course_code || course.course_type || 'Course'} · Published`}
+          addOne={(course) => assignProviderCourseToCatalogue(catalogue.id, course.id)}
+          onDone={onReload}
+          onError={onError}
+          addingLabel="Add courses"
+          introText="Choose from your organisation’s published courses."
+        />
+      )}
       {courses.length === 0 ? <EmptyState>No courses have been added to this catalogue.</EmptyState> : (
         <ul className="divide-y divide-hairline border-y border-hairline">
           {courses.map((course) => (
@@ -310,35 +310,31 @@ function CoursesTab({ catalogue, courses, organisationCourses, canManage, canApp
 function SkillsTab({ catalogueId, skills, offeredSkills, canManage, userId, onReload, onError }) {
   const [adding, setAdding] = useState(false)
   const available = offeredSkills.filter((offered) => !skills.some((skill) => skill.id === offered.skillLibraryId))
-  async function add(skillId) { setAdding(true); onError(null); try { await addProviderCatalogueSkill(catalogueId, skillId, userId); await onReload() } catch (err) { onError(err.message) } finally { setAdding(false) } }
   async function remove(linkId) { onError(null); try { await removeProviderCatalogueSkill(linkId); await onReload() } catch (err) { onError(err.message) } }
-  return <section><SectionHeading title="Skills" description="Capabilities represented by the courses in this catalogue." action={canManage && available.length ? { label: adding ? 'Cancel' : 'Add skill', onClick: () => setAdding((value) => !value) } : null} />
-    {adding && <div className="mb-5 border-y border-hairline py-3"><p className="mb-2 text-xs text-secondary">Choose from skills your organisation offers.</p><ul className="divide-y divide-hairline">{available.map((skill) => <li key={skill.skillLibraryId} className="flex items-center justify-between py-2 text-sm"><span className="text-ink">{skill.name}</span><button type="button" onClick={() => add(skill.skillLibraryId)} className="font-medium text-moss hover:underline">Add</button></li>)}</ul></div>}
+  return <section><SectionHeading title="Skills" description="Capabilities represented by the courses in this catalogue." action={canManage && available.length ? { label: adding ? 'Cancel' : 'Add skills', onClick: () => setAdding((value) => !value) } : null} />
+    {adding && (
+      <MultiAddList
+        items={available}
+        getId={(skill) => skill.skillLibraryId}
+        renderLabel={(skill) => skill.name}
+        addOne={(skill) => addProviderCatalogueSkill(catalogueId, skill.skillLibraryId, userId)}
+        onDone={onReload}
+        onError={onError}
+        addingLabel="Add skills"
+        introText="Choose from skills your organisation offers."
+      />
+    )}
     {skills.length === 0 ? <EmptyState>No skills have been added to this catalogue.</EmptyState> : <ul className="divide-y divide-hairline border-y border-hairline">{skills.map((skill) => <li key={skill.linkId} className="flex items-center justify-between gap-4 py-4"><div><p className="font-medium text-ink">{skill.name}</p><p className="mt-1 text-sm text-secondary">{skill.category || 'Uncategorised'}</p></div>{canManage && <CogMenu label={`Manage ${skill.name}`} destructiveLabel="Remove from catalogue" onDestructive={() => remove(skill.linkId)} />}</li>)}</ul>}
   </section>
 }
 
 function ResourcesTab({ catalogueId, resources, organisationResources, canManage, userId, onReload, onError }) {
   const [adding, setAdding] = useState(false)
-  const [savingId, setSavingId] = useState(null)
   const available = organisationResources.filter((resource) =>
     resource.status === 'published'
     && resource.is_current_published
     && !resources.some((assigned) => assigned.id === resource.id)
   )
-
-  async function add(resourceId) {
-    setSavingId(resourceId)
-    onError(null)
-    try {
-      await addProviderCatalogueResource(catalogueId, resourceId, userId)
-      await onReload()
-    } catch (err) {
-      onError(err.message)
-    } finally {
-      setSavingId(null)
-    }
-  }
 
   async function remove(linkId) {
     onError(null)
@@ -350,8 +346,20 @@ function ResourcesTab({ catalogueId, resources, organisationResources, canManage
     }
   }
 
-  return <section><SectionHeading title="Resources" description="Learning resources shared through this catalogue." action={canManage && available.length ? { label: adding ? 'Cancel' : 'Add resource', onClick: () => setAdding((value) => !value) } : null} />
-    {adding && <div className="mb-5 border-y border-hairline py-3"><p className="mb-2 text-xs text-secondary">Choose from your organisation’s resource library.</p><ul className="divide-y divide-hairline">{available.map((resource) => <li key={resource.id} className="flex items-center justify-between gap-4 py-2 text-sm"><div className="min-w-0"><p className="truncate text-ink">{resource.title}</p><p className="mt-0.5 text-xs text-secondary">{RESOURCE_TYPE_LABELS[resource.type] ?? resource.type}</p></div><button type="button" disabled={savingId !== null} onClick={() => add(resource.id)} className="shrink-0 font-medium text-moss hover:underline disabled:opacity-50">{savingId === resource.id ? 'Adding…' : 'Add'}</button></li>)}</ul></div>}
+  return <section><SectionHeading title="Resources" description="Learning resources shared through this catalogue." action={canManage && available.length ? { label: adding ? 'Cancel' : 'Add resources', onClick: () => setAdding((value) => !value) } : null} />
+    {adding && (
+      <MultiAddList
+        items={available}
+        getId={(resource) => resource.id}
+        renderLabel={(resource) => resource.title}
+        renderMeta={(resource) => RESOURCE_TYPE_LABELS[resource.type] ?? resource.type}
+        addOne={(resource) => addProviderCatalogueResource(catalogueId, resource.id, userId)}
+        onDone={onReload}
+        onError={onError}
+        addingLabel="Add resources"
+        introText="Choose from your organisation’s resource library."
+      />
+    )}
     {resources.length === 0 ? <EmptyState>No resources have been added to this catalogue.</EmptyState> : <ul className="divide-y divide-hairline border-y border-hairline">{resources.map((resource) => <li key={resource.linkId} className="flex items-center justify-between gap-4 py-4"><div className="min-w-0"><p className="truncate font-medium text-ink">{resource.title}</p><p className="mt-1 text-sm text-secondary">{RESOURCE_TYPE_LABELS[resource.type] ?? resource.type} · v{resource.version_number ?? 1}</p></div>{canManage && <CogMenu label={`Manage ${resource.title}`} destructiveLabel="Remove from catalogue" onDestructive={() => remove(resource.linkId)} />}</li>)}</ul>}
     {resources.length > 0 && canManage && <p className="mt-3 text-xs text-secondary">Removing a resource only unlinks it from this catalogue.</p>}
   </section>
@@ -377,6 +385,84 @@ function UsersTab({ catalogueId, members, orgMembers, canManage, userId, onReloa
     {adding && <form onSubmit={saveMember} className="mb-5 flex flex-wrap items-end gap-3 border-y border-hairline py-4"><label className="min-w-[220px] flex-1 text-sm text-secondary">Organisation user<select required value={selectedUser} onChange={(event) => setSelectedUser(event.target.value)} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-ink"><option value="">Choose a user…</option>{available.map((member) => <option key={member.user_id} value={member.user_id}>{member.email || member.user_id}</option>)}</select></label><label className="text-sm text-secondary">Catalogue role<select value={role} onChange={(event) => setRole(event.target.value)} className="mt-1 block rounded-md border border-hairline bg-card px-3 py-2 text-ink"><option value="admin">Admin</option><option value="approver">Approver</option></select></label><button disabled={!selectedUser} className="rounded-md bg-moss px-3 py-2 text-sm font-medium text-paper disabled:opacity-50">Add user</button></form>}
     {effectiveMembers.length === 0 ? <EmptyState>No catalogue users yet.</EmptyState> : <ul className="divide-y divide-hairline border-y border-hairline">{effectiveMembers.map((member) => <li key={member.id} className="flex items-center justify-between gap-4 py-4"><div className="min-w-0"><p className="truncate font-medium text-ink">{emailByUser.get(member.user_id) || member.user_id}</p><p className="mt-1 text-sm text-secondary">{member.inherited ? 'Organisation admin · Catalogue admin' : `Catalogue ${member.role}`}</p></div>{canManage && !member.inherited && <CogMenu label={`Manage ${emailByUser.get(member.user_id) || 'user'}`} options={[member.role === 'admin' ? { label: 'Make approver', action: () => changeRole(member, 'approver') } : { label: 'Make admin', action: () => changeRole(member, 'admin') }]} destructiveLabel="Remove from catalogue" onDestructive={() => remove(member.id)} />}</li>)}</ul>}
   </section>
+}
+
+// Shared by the Courses/Skills/Resources "available to add" pickers above --
+// select any number of items and add them all in one action, instead of the
+// old one-Add-click-per-item flow. addOne(item) does the actual per-item
+// mutation; this owns just the selection UI and the Promise.allSettled
+// partial-failure idiom already used by ResourceLibrarySection.jsx's own
+// bulk actions (kept-selected-on-failure, cleared-on-success).
+function MultiAddList({ items, getId, renderLabel, renderMeta, addOne, onDone, onError, addingLabel, introText }) {
+  const ids = useMemo(() => items.map(getId), [items, getId])
+  const selection = useRowSelection(ids)
+  const [busy, setBusy] = useState(false)
+
+  async function handleAdd() {
+    const targets = items.filter((item) => selection.selected.has(getId(item)))
+    setBusy(true)
+    onError(null)
+    try {
+      const results = await Promise.allSettled(targets.map((item) => addOne(item)))
+      const failures = results
+        .map((result, index) => ({ result, item: targets[index] }))
+        .filter(({ result }) => result.status === 'rejected')
+      const succeededIds = targets.filter((_, index) => results[index].status === 'fulfilled').map(getId)
+      if (failures.length > 0) selection.clearIds(succeededIds)
+      else selection.clear()
+      await onDone()
+      if (failures.length > 0) {
+        onError(
+          `${failures.length} of ${targets.length} couldn't be added: ` +
+            failures.map(({ item, result }) => `"${renderLabel(item)}" (${result.reason?.message ?? 'unknown error'})`).join('; ')
+        )
+      }
+    } catch (err) {
+      onError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mb-5 border-y border-hairline py-3">
+      {introText && <p className="mb-2 text-xs text-secondary">{introText}</p>}
+      <label className="mb-2 flex items-center gap-2 text-xs text-secondary">
+        <input
+          type="checkbox"
+          checked={selection.isAllSelected(ids)}
+          onChange={() => selection.toggleAll(ids)}
+          className="rounded border-hairline accent-moss"
+        />
+        Select all
+      </label>
+      <BulkActionBar
+        count={selection.selected.size}
+        onClear={selection.clear}
+        busy={busy}
+        actions={[{ label: busy ? 'Adding…' : addingLabel, onClick: handleAdd }]}
+      />
+      <ul className="divide-y divide-hairline">
+        {items.map((item) => {
+          const id = getId(item)
+          return (
+            <li key={id} className="flex items-center gap-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                checked={selection.selected.has(id)}
+                onChange={() => selection.toggle(id)}
+                className="shrink-0 rounded border-hairline accent-moss"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-ink">{renderLabel(item)}</p>
+                {renderMeta && <p className="mt-0.5 text-xs text-secondary">{renderMeta(item)}</p>}
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
 }
 
 function SectionHeading({ title, description, action }) {
