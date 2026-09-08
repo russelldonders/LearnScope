@@ -13,7 +13,7 @@ import {
 } from '../lib/connections'
 import { isMobileDevice } from '../lib/device'
 import WhatsAppIcon from './WhatsAppIcon'
-import { getOrCreateMyDefaultManagerTeam, inviteConnectionToManagerTeam } from '../lib/managerTeams'
+import { getOrCreateMyDefaultManagerTeam, inviteConnectionToManagerTeam, inviteManagerTeamMemberByEmail } from '../lib/managerTeams'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -30,16 +30,17 @@ export default function RecommendSkillModal({ skill, onClose }) {
   const [selectedConnectionIds, setSelectedConnectionIds] = useState(new Set())
   const [connectionStatus, setConnectionStatus] = useState(new Map())
   const [sendingConnections, setSendingConnections] = useState(false)
-  // Also inviting to the manager team only ever applies to the "Recommend to
-  // a connection" list below: invite_connection_to_manager_team(_by_email)
-  // both require an existing connections row (a deliberate constraint of
-  // that feature, not something to route around here), which the email/
-  // share-link paths below can't guarantee -- someone typed into the email
-  // field is very often *not* an existing connection yet, that's the point
-  // of that path. teamId resolves lazily (get-or-create "My team") only the
-  // first time this is actually used, so opening this modal and never
-  // checking the box never creates a manager workspace for someone who
-  // isn't one.
+  // Applies to both the "existing connections" and "by email" methods below
+  // -- inviteManagerTeamMemberByEmail (unlike the old, now-dropped
+  // invite_connection_to_manager_team_by_email) creates a brand-new account
+  // and sends a real sign-up invite when the address isn't an existing
+  // connection yet, so it isn't limited to people already connected. The
+  // share-link method is the one exception: LearnScope doesn't know who
+  // will use a link until they do, so there's no recipient to invite to the
+  // team at send time -- see the note on that card below. teamId resolves
+  // lazily (get-or-create "My team") only the first time this is actually
+  // used, so opening this modal and never checking the box never creates a
+  // manager workspace for someone who isn't one.
   const [alsoInviteToTeam, setAlsoInviteToTeam] = useState(false)
   const [teamId, setTeamId] = useState(null)
   const [teamInviteNotices, setTeamInviteNotices] = useState([])
@@ -81,6 +82,17 @@ export default function RecommendSkillModal({ skill, onClose }) {
     })
   }
 
+  // Resolved once, lazily, and reused for every target across both the
+  // connections and email methods -- not per-target/per-method, so
+  // checking the box for a multi-select send (or using both methods in the
+  // same visit) doesn't race to create "My team" more than once.
+  async function resolveTeamId() {
+    if (teamId) return teamId
+    const resolved = await getOrCreateMyDefaultManagerTeam()
+    setTeamId(resolved)
+    return resolved
+  }
+
   async function handleInviteConnections() {
     const targets = connections.filter((c) => selectedConnectionIds.has(c.id) && connectionStatus.get(c.id) !== 'sent')
     if (targets.length === 0) return
@@ -92,14 +104,10 @@ export default function RecommendSkillModal({ skill, onClose }) {
       return next
     })
 
-    // Resolved once, lazily, and reused for every target in this send --
-    // not per-target, so checking the box for a multi-select send doesn't
-    // race to create "My team" more than once.
-    let resolvedTeamId = teamId
-    if (alsoInviteToTeam && !resolvedTeamId) {
+    let resolvedTeamId = null
+    if (alsoInviteToTeam) {
       try {
-        resolvedTeamId = await getOrCreateMyDefaultManagerTeam()
-        setTeamId(resolvedTeamId)
+        resolvedTeamId = await resolveTeamId()
       } catch (err) {
         setTeamInviteNotices((prev) => [...prev, `Couldn't set up your team: ${err.message}`])
       }
@@ -174,11 +182,22 @@ export default function RecommendSkillModal({ skill, onClose }) {
     const targets = emails.filter((addr) => emailStatus.get(addr) !== 'sent')
     if (targets.length === 0) return
     setSendingEmails(true)
+    setTeamInviteNotices([])
     setEmailStatus((prev) => {
       const next = new Map(prev)
       for (const addr of targets) next.set(addr, 'sending')
       return next
     })
+
+    let resolvedTeamId = null
+    if (alsoInviteToTeam) {
+      try {
+        resolvedTeamId = await resolveTeamId()
+      } catch (err) {
+        setTeamInviteNotices((prev) => [...prev, `Couldn't set up your team: ${err.message}`])
+      }
+    }
+
     await Promise.all(
       targets.map(async (addr) => {
         try {
@@ -188,6 +207,16 @@ export default function RecommendSkillModal({ skill, onClose }) {
           setEmailStatus((prev) =>
             new Map(prev).set(addr, isDuplicatePendingInviteError(err) ? duplicatePendingInviteMessage(addr) : err.message)
           )
+          return
+        }
+        // Best-effort and independent of the recommendation email above --
+        // see handleInviteConnections' matching comment.
+        if (alsoInviteToTeam && resolvedTeamId) {
+          try {
+            await inviteManagerTeamMemberByEmail(resolvedTeamId, addr)
+          } catch (err) {
+            setTeamInviteNotices((prev) => [...prev, `${addr}: ${err.message}`])
+          }
         }
       })
     )
@@ -217,10 +246,33 @@ export default function RecommendSkillModal({ skill, onClose }) {
 
         {linkError && <p className="text-sm text-red-700 mb-4">{linkError}</p>}
 
-        <div className="space-y-5">
+        <label className="flex items-start gap-2 mb-4 text-sm text-ink">
+          <input
+            type="checkbox"
+            checked={alsoInviteToTeam}
+            onChange={(e) => setAlsoInviteToTeam(e.target.checked)}
+            className="mt-0.5 rounded border-hairline accent-moss"
+          />
+          <span>
+            Also invite to your team
+            <span className="block text-xs text-secondary">
+              Applies to the connections and email methods below. If they accept, you'll become their manager
+              and can share learning with them.
+            </span>
+          </span>
+        </label>
+        {teamInviteNotices.map((notice, index) => (
+          <p key={index} className="text-xs text-red-700 mb-4 -mt-3">
+            {notice}
+          </p>
+        ))}
+
+        <div className="space-y-3">
           {connections.length > 0 && (
-            <div>
-              <span className="block text-sm text-secondary mb-1">Recommend to a connection</span>
+            <div className="rounded-lg border border-hairline p-3">
+              <span className="block font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">
+                1 · Recommend to a connection
+              </span>
               <div className="flex flex-wrap gap-2 mb-2">
                 {connections.map((c) => {
                   const status = connectionStatus.get(c.id)
@@ -258,25 +310,6 @@ export default function RecommendSkillModal({ skill, onClose }) {
                     {message}
                   </p>
                 ))}
-              <label className="flex items-start gap-2 mt-2 mb-2 text-sm text-ink">
-                <input
-                  type="checkbox"
-                  checked={alsoInviteToTeam}
-                  onChange={(e) => setAlsoInviteToTeam(e.target.checked)}
-                  className="mt-0.5 rounded border-hairline accent-moss"
-                />
-                <span>
-                  Also invite them to join your team
-                  <span className="block text-xs text-secondary">
-                    If they accept, you'll become their manager and can share learning with them.
-                  </span>
-                </span>
-              </label>
-              {teamInviteNotices.map((notice, index) => (
-                <p key={index} className="text-xs text-red-700 mt-1">
-                  {notice}
-                </p>
-              ))}
               <button
                 type="button"
                 onClick={handleInviteConnections}
@@ -292,28 +325,9 @@ export default function RecommendSkillModal({ skill, onClose }) {
             </div>
           )}
 
-          {isMobileDevice() && (
-            <a
-              href={
-                link
-                  ? whatsappShareUrl(`I think you'd be great at "${skill.name}" -- want to start tracking it on LearnScope? ${link.url}`)
-                  : undefined
-              }
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-disabled={!link}
-              className={`flex items-center justify-center gap-2 w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper ${
-                !link ? 'pointer-events-none opacity-60' : ''
-              }`}
-            >
-              <WhatsAppIcon />
-              Share via WhatsApp
-            </a>
-          )}
-
-          <form onSubmit={handleSendEmails} className="space-y-2">
-            <label className="block text-sm text-secondary" htmlFor="recommendEmail">
-              Recommend by email
+          <form onSubmit={handleSendEmails} className="rounded-lg border border-hairline p-3 space-y-2">
+            <label className="block font-mono text-[10px] uppercase tracking-wide text-secondary" htmlFor="recommendEmail">
+              2 · Recommend by email
             </label>
             {emails.length > 0 && (
               <div className="flex flex-wrap gap-2">
@@ -368,8 +382,10 @@ export default function RecommendSkillModal({ skill, onClose }) {
             </button>
           </form>
 
-          <div>
-            <span className="block text-sm text-secondary mb-1">Or copy the share link</span>
+          <div className="rounded-lg border border-hairline p-3">
+            <span className="block font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">
+              3 · Or share a link
+            </span>
             <div className="flex items-center gap-2">
               <input
                 readOnly
@@ -386,6 +402,29 @@ export default function RecommendSkillModal({ skill, onClose }) {
                 {copied ? 'Copied!' : 'Copy'}
               </button>
             </div>
+            {isMobileDevice() && (
+              <a
+                href={
+                  link
+                    ? whatsappShareUrl(`I think you'd be great at "${skill.name}" -- want to start tracking it on LearnScope? ${link.url}`)
+                    : undefined
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-disabled={!link}
+                className={`flex items-center justify-center gap-2 w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper mt-2 ${
+                  !link ? 'pointer-events-none opacity-60' : ''
+                }`}
+              >
+                <WhatsAppIcon />
+                Share via WhatsApp
+              </a>
+            )}
+            {alsoInviteToTeam && (
+              <p className="text-xs text-secondary mt-2">
+                Team invites aren't included with a shared link -- use connections or email above for that.
+              </p>
+            )}
           </div>
         </div>
 

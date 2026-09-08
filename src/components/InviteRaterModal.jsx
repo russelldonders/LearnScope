@@ -172,10 +172,12 @@ export default function InviteRaterModal({ skill, afterSelfAssessment = false, o
 
         {linkError && <p className="text-sm text-red-700 mb-4">{linkError}</p>}
 
-        <div className="space-y-5">
+        <div className="space-y-3">
           {connections.length > 0 && (
-            <div>
-              <span className="block text-sm text-secondary mb-1">Invite existing connections</span>
+            <div className="rounded-lg border border-hairline p-3">
+              <span className="block font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">
+                1 · Invite existing connections
+              </span>
               <div className="flex flex-wrap gap-2 mb-2">
                 {connections.map((c) => {
                   const status = connectionStatus.get(c.id)
@@ -228,28 +230,9 @@ export default function InviteRaterModal({ skill, afterSelfAssessment = false, o
             </div>
           )}
 
-          {isMobileDevice() && (
-            <a
-              href={
-                link
-                  ? whatsappShareUrl(`Can you rate my skill "${skill.name}" on LearnScope? ${link.url}`)
-                  : undefined
-              }
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-disabled={!link}
-              className={`flex items-center justify-center gap-2 w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper ${
-                !link ? 'pointer-events-none opacity-60' : ''
-              }`}
-            >
-              <WhatsAppIcon />
-              Share via WhatsApp
-            </a>
-          )}
-
-          <form onSubmit={handleSendEmails} className="space-y-2">
-            <label className="block text-sm text-secondary" htmlFor="inviteEmail">
-              Invite by email
+          <form onSubmit={handleSendEmails} className="rounded-lg border border-hairline p-3 space-y-2">
+            <label className="block font-mono text-[10px] uppercase tracking-wide text-secondary" htmlFor="inviteEmail">
+              2 · Invite by email
             </label>
             {emails.length > 0 && (
               <div className="flex flex-wrap gap-2">
@@ -304,8 +287,10 @@ export default function InviteRaterModal({ skill, afterSelfAssessment = false, o
             </button>
           </form>
 
-          <div>
-            <span className="block text-sm text-secondary mb-1">Or copy the share link</span>
+          <div className="rounded-lg border border-hairline p-3">
+            <span className="block font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">
+              3 · Or share a link
+            </span>
             <div className="flex items-center gap-2">
               <input
                 readOnly
@@ -322,6 +307,24 @@ export default function InviteRaterModal({ skill, afterSelfAssessment = false, o
                 {copied ? 'Copied!' : 'Copy'}
               </button>
             </div>
+            {isMobileDevice() && (
+              <a
+                href={
+                  link
+                    ? whatsappShareUrl(`Can you rate my skill "${skill.name}" on LearnScope? ${link.url}`)
+                    : undefined
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-disabled={!link}
+                className={`flex items-center justify-center gap-2 w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper mt-2 ${
+                  !link ? 'pointer-events-none opacity-60' : ''
+                }`}
+              >
+                <WhatsAppIcon />
+                Share via WhatsApp
+              </a>
+            )}
           </div>
         </div>
 
