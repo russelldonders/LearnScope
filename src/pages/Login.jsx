@@ -1,18 +1,33 @@
-import { useState } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getPendingInviteCode, clearPendingInviteCode } from '../lib/connections'
 import { getPendingEnrolCourseId, clearPendingEnrolCourseId, resumePendingEnrolment } from '../lib/courseCatalogue'
+import { getOrganisationBranding, orgBrandStyle } from '../lib/orgBranding'
 import GoogleSignInButton from '../components/GoogleSignInButton'
 
 export default function Login() {
   const { signIn, signInWithGoogle, user, loading } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const orgSlug = searchParams.get('org')
+  const [branding, setBranding] = useState(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [googleSubmitting, setGoogleSubmitting] = useState(false)
+
+  // Arrived here via a `?org=:slug` link from that org's public page
+  // (ProviderProfile.jsx) -- carries its logo/colours through to this page
+  // too, so the whitelabelled look continues into account creation rather
+  // than dropping back to plain LearnScope branding mid-flow. Silently
+  // falls back to the default look if the slug is stale/invalid (same
+  // "indistinguishable to the caller" behaviour as the public page itself).
+  useEffect(() => {
+    if (!orgSlug) return
+    getOrganisationBranding(orgSlug).then(setBranding).catch(() => {})
+  }, [orgSlug])
 
   if (loading) {
     return (
@@ -74,12 +89,17 @@ export default function Login() {
     // Supabase's own auth-state listener in AuthContext.
   }
 
+  const ctaTextClass = branding?.primaryColor ? 'text-white' : 'text-paper'
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-paper px-4">
+    <div className="min-h-screen flex items-center justify-center bg-paper px-4" style={orgBrandStyle(branding)}>
       <div className="w-full max-w-sm bg-card border border-hairline rounded-lg p-8">
-        <Link to="/" className="flex items-center gap-2 font-display text-3xl text-ink mb-1">
-          <img src="/favicon.svg" alt="" className="w-8 h-8" />
-          LearnScope
+        <Link
+          to={branding?.logoUrl ? `/providers/${orgSlug}` : '/'}
+          className="flex items-center gap-2 font-display text-3xl text-ink mb-1"
+        >
+          <img src={branding?.logoUrl || '/favicon.svg'} alt="" className="w-8 h-8 object-contain rounded" />
+          {branding?.logoUrl ? branding.name : 'LearnScope'}
         </Link>
         <p className="text-secondary text-sm mb-6">Log in to your growth log.</p>
 
@@ -110,7 +130,7 @@ export default function Login() {
               <label className="block text-sm text-secondary" htmlFor="password">
                 Password
               </label>
-              <Link to="/forgot-password" className="text-sm text-moss font-medium">
+              <Link to="/forgot-password" className="text-sm text-[var(--org-primary,var(--color-moss))] font-medium">
                 Forgot password?
               </Link>
             </div>
@@ -129,7 +149,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
+            className={`w-full rounded-md bg-[var(--org-primary,var(--color-moss))] hover:bg-[var(--org-hover,var(--org-primary,var(--color-moss)))] ${ctaTextClass} py-2 font-medium hover:opacity-90 disabled:opacity-60`}
           >
             {submitting ? 'Logging in…' : 'Log in'}
           </button>
@@ -137,7 +157,7 @@ export default function Login() {
 
         <p className="text-sm text-secondary mt-6 text-center">
           No account yet?{' '}
-          <Link to="/signup" className="text-moss font-medium">
+          <Link to={orgSlug ? `/signup?org=${orgSlug}` : '/signup'} className="text-[var(--org-primary,var(--color-moss))] font-medium">
             Sign up
           </Link>
         </p>

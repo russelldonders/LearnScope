@@ -5,6 +5,7 @@ import AppHeader from '../components/AppHeader'
 import CourseThumbnail from '../components/CourseThumbnail'
 import { LEVEL_LABELS } from '../lib/levels'
 import { getProviderProfile } from '../lib/providerProfile'
+import { orgBrandStyle } from '../lib/orgBranding'
 import {
   listEnrolledCatalogueIds,
   enrolInCatalogueCourse,
@@ -104,11 +105,11 @@ export default function ProviderProfile() {
   // below), rather than a hardcoded style ProviderProfile would otherwise
   // have to override.
   const brandStyle = profile
-    ? {
-        '--org-primary': profile.organisation.brandPrimaryColor || undefined,
-        '--org-secondary': profile.organisation.brandSecondaryColor || undefined,
-        '--org-hover': profile.organisation.brandHoverColor || undefined,
-      }
+    ? orgBrandStyle({
+        primaryColor: profile.organisation.brandPrimaryColor,
+        secondaryColor: profile.organisation.brandSecondaryColor,
+        hoverColor: profile.organisation.brandHoverColor,
+      })
     : undefined
   // text-paper (the default CTA text colour) is itself a theme-dependent
   // token -- it flips between near-white and near-black across light/dark
@@ -126,7 +127,15 @@ export default function ProviderProfile() {
 
   return (
     <div className="min-h-screen bg-paper" style={brandStyle}>
-      {authLoading ? null : user ? <AppHeader hideNavLinks /> : <PublicHeader />}
+      {authLoading ? null : user ? (
+        <AppHeader
+          hideNavLinks
+          brandLogoUrl={profile?.organisation.logoUrl}
+          brandName={profile?.organisation.name}
+        />
+      ) : (
+        <PublicHeader organisation={profile?.organisation} slug={slug} />
+      )}
 
       <main className="max-w-4xl mx-auto px-4 py-10">
         {loading && <p className="text-secondary">Loading…</p>}
@@ -171,7 +180,9 @@ export default function ProviderProfile() {
             </div>
 
             <section className="mb-10">
-              <h2 className="font-display text-xl text-ink mb-4">Skills offered</h2>
+              <h2 className="font-display text-xl text-ink mb-4 pb-1 border-b-2 border-[var(--org-primary,transparent)]">
+                Skills offered
+              </h2>
               {profile.skills.length === 0 ? (
                 <p className="text-sm text-secondary">No skills listed yet.</p>
               ) : (
@@ -180,7 +191,7 @@ export default function ProviderProfile() {
                     <span
                       key={skill.id}
                       title={skill.description || undefined}
-                      className="font-mono text-xs uppercase tracking-wide text-ink border border-hairline rounded-full px-3 py-1"
+                      className="font-mono text-xs uppercase tracking-wide text-ink border border-[var(--org-primary,var(--color-hairline))] rounded-full px-3 py-1"
                     >
                       {skill.name}
                       {skill.category ? ` · ${skill.category}` : ''}
@@ -191,7 +202,9 @@ export default function ProviderProfile() {
             </section>
 
             <section>
-              <h2 className="font-display text-xl text-ink mb-4">Training offered</h2>
+              <h2 className="font-display text-xl text-ink mb-4 pb-1 border-b-2 border-[var(--org-primary,transparent)]">
+                Training offered
+              </h2>
               {profile.courses.length === 0 ? (
                 <p className="text-sm text-secondary">No training listed yet.</p>
               ) : (
@@ -225,7 +238,7 @@ export default function ProviderProfile() {
                             {course.skillEntries.map((e) => (
                               <span
                                 key={e.skillId}
-                                className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5"
+                                className="font-mono text-[10px] uppercase tracking-wide text-[var(--org-primary,var(--color-moss))] border border-[var(--org-primary,var(--color-moss))] rounded-full px-2 py-0.5"
                               >
                                 {e.skillName} · {LEVEL_LABELS[e.level]}
                               </span>
@@ -260,7 +273,7 @@ export default function ProviderProfile() {
                           </button>
                         ) : (
                           <Link
-                            to="/login"
+                            to={`/login?org=${slug}`}
                             onClick={() => setPendingEnrolCourseId(course.id)}
                             className={`mt-3 self-start rounded-md bg-[var(--org-primary,var(--color-moss))] hover:bg-[var(--org-hover,var(--org-primary,var(--color-moss)))] hover:opacity-90 ${ctaTextClass} py-1.5 px-3 text-sm font-medium`}
                           >
@@ -292,18 +305,33 @@ export default function ProviderProfile() {
   )
 }
 
-function PublicHeader() {
+// Swaps in the org's own logo/name once its profile has loaded, and links
+// Log in/Sign up onward with ?org=:slug so Login.jsx/Signup.jsx can pick up
+// the same branding -- until then (profile still loading, or an org with no
+// logo of its own), this renders exactly as before: the plain LearnScope
+// mark linking home.
+function PublicHeader({ organisation, slug }) {
+  const authLinkSuffix = slug ? `?org=${slug}` : ''
+  // Same theme-flip reasoning as the main component's ctaTextClass.
+  const ctaTextClass = organisation?.brandPrimaryColor ? 'text-white' : 'text-paper'
   return (
     <header className="max-w-4xl mx-auto px-4 py-6 flex items-center justify-between">
-      <Link to="/" className="flex items-center gap-2 font-display text-2xl text-ink">
-        <img src="/favicon.svg" alt="" className="w-7 h-7" />
-        LearnScope
+      <Link to={organisation?.logoUrl ? `/providers/${slug}` : '/'} className="flex items-center gap-2 font-display text-2xl text-ink">
+        <img
+          src={organisation?.logoUrl || '/favicon.svg'}
+          alt=""
+          className="w-7 h-7 object-contain rounded"
+        />
+        {organisation?.logoUrl ? organisation.name : 'LearnScope'}
       </Link>
       <nav className="flex items-center gap-3">
-        <Link to="/login" className="text-sm text-secondary hover:text-ink">
+        <Link to={`/login${authLinkSuffix}`} className="text-sm text-secondary hover:text-ink">
           Log in
         </Link>
-        <Link to="/signup" className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90">
+        <Link
+          to={`/signup${authLinkSuffix}`}
+          className={`rounded-md bg-[var(--org-primary,var(--color-moss))] hover:bg-[var(--org-hover,var(--org-primary,var(--color-moss)))] hover:opacity-90 ${ctaTextClass} py-2 px-4 font-medium`}
+        >
           Sign up
         </Link>
       </nav>

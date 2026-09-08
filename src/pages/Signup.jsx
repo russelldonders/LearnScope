@@ -1,13 +1,17 @@
-import { useState } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getPendingInviteCode, clearPendingInviteCode } from '../lib/connections'
 import { getPendingEnrolCourseId, clearPendingEnrolCourseId, resumePendingEnrolment } from '../lib/courseCatalogue'
+import { getOrganisationBranding, orgBrandStyle } from '../lib/orgBranding'
 import GoogleSignInButton from '../components/GoogleSignInButton'
 
 export default function Signup() {
   const { signUp, signInWithGoogle, user, loading } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const orgSlug = searchParams.get('org')
+  const [branding, setBranding] = useState(null)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
@@ -16,6 +20,13 @@ export default function Signup() {
   const [submitting, setSubmitting] = useState(false)
   const [confirmationSent, setConfirmationSent] = useState(false)
   const [googleSubmitting, setGoogleSubmitting] = useState(false)
+
+  // Same reasoning as Login.jsx's identical effect -- carries the org's
+  // branding from its public page through to account creation.
+  useEffect(() => {
+    if (!orgSlug) return
+    getOrganisationBranding(orgSlug).then(setBranding).catch(() => {})
+  }, [orgSlug])
 
   if (loading) {
     return (
@@ -77,12 +88,17 @@ export default function Signup() {
     }
   }
 
+  const ctaTextClass = branding?.primaryColor ? 'text-white' : 'text-paper'
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-paper px-4">
+    <div className="min-h-screen flex items-center justify-center bg-paper px-4" style={orgBrandStyle(branding)}>
       <div className="w-full max-w-sm bg-card border border-hairline rounded-lg p-8">
-        <Link to="/" className="flex items-center gap-2 font-display text-3xl text-ink mb-1">
-          <img src="/favicon.svg" alt="" className="w-8 h-8" />
-          LearnScope
+        <Link
+          to={branding?.logoUrl ? `/providers/${orgSlug}` : '/'}
+          className="flex items-center gap-2 font-display text-3xl text-ink mb-1"
+        >
+          <img src={branding?.logoUrl || '/favicon.svg'} alt="" className="w-8 h-8 object-contain rounded" />
+          {branding?.logoUrl ? branding.name : 'LearnScope'}
         </Link>
         <p className="text-secondary text-sm mb-6">Start tracking the skills you're growing.</p>
 
@@ -170,7 +186,7 @@ export default function Signup() {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
+              className={`w-full rounded-md bg-[var(--org-primary,var(--color-moss))] hover:bg-[var(--org-hover,var(--org-primary,var(--color-moss)))] ${ctaTextClass} py-2 font-medium hover:opacity-90 disabled:opacity-60`}
             >
               {submitting ? 'Creating account…' : 'Sign up'}
             </button>
@@ -180,7 +196,7 @@ export default function Signup() {
         {!confirmationSent && (
           <p className="text-sm text-secondary mt-6 text-center">
             Already have an account?{' '}
-            <Link to="/login" className="text-moss font-medium">
+            <Link to={orgSlug ? `/login?org=${orgSlug}` : '/login'} className="text-[var(--org-primary,var(--color-moss))] font-medium">
               Log in
             </Link>
           </p>
