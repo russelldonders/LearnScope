@@ -72,15 +72,27 @@ export function buildDuration(hours, minutes) {
 
 const DURATION_PATTERN = /^PT(?:(\d+)H)?(?:(\d+)M)?$/
 
-export function formatDuration(statement) {
+// The raw-number companion to formatDuration -- lets a caller sum several
+// statements' durations (e.g. a Timeline's grouped-activity summary) before
+// formatting the total once, rather than only ever getting a pre-formatted
+// string per statement.
+export function durationMinutes(statement) {
   const iso = statement.result?.duration
-  if (!iso) return null
+  if (!iso) return 0
   const match = DURATION_PATTERN.exec(iso)
-  if (!match) return null
-  const hours = Number(match[1] || 0)
-  const minutes = Number(match[2] || 0)
-  if (hours === 0 && minutes === 0) return null
+  if (!match) return 0
+  return Number(match[1] || 0) * 60 + Number(match[2] || 0)
+}
+
+export function formatMinutes(totalMinutes) {
+  if (!totalMinutes) return null
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
   return [hours > 0 ? `${hours}h` : null, minutes > 0 ? `${minutes}m` : null].filter(Boolean).join(' ')
+}
+
+export function formatDuration(statement) {
+  return formatMinutes(durationMinutes(statement))
 }
 
 // Builds a spec-shaped xAPI statement from the guided-form fields.

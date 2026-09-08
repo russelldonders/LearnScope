@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildStatement,
+  durationMinutes,
   experienceTrail,
+  formatDuration,
+  formatMinutes,
   provenanceFromStatement,
   relatedExperienceFromStatement,
   relatedSkillsFromStatement,
@@ -101,6 +104,38 @@ describe('provenance', () => {
     })
 
     expect(provenanceFromStatement(statement)).toBeNull()
+  })
+})
+
+describe('duration', () => {
+  it('parses a statement duration into total minutes', () => {
+    expect(durationMinutes({ result: { duration: 'PT1H30M' } })).toBe(90)
+    expect(durationMinutes({ result: { duration: 'PT45M' } })).toBe(45)
+    expect(durationMinutes({ result: { duration: 'PT2H' } })).toBe(120)
+  })
+
+  it('is zero when there is no duration or it does not parse', () => {
+    expect(durationMinutes({})).toBe(0)
+    expect(durationMinutes({ result: { duration: 'garbage' } })).toBe(0)
+  })
+
+  it('formats a raw minute total the same way formatDuration formats a single statement', () => {
+    expect(formatMinutes(90)).toBe('1h 30m')
+    expect(formatMinutes(45)).toBe('45m')
+    expect(formatMinutes(120)).toBe('2h')
+    expect(formatMinutes(0)).toBeNull()
+    expect(formatDuration({ result: { duration: 'PT1H30M' } })).toBe('1h 30m')
+    expect(formatDuration({})).toBeNull()
+  })
+
+  it('sums durations across several statements for a grouped Timeline summary', () => {
+    const statements = [
+      { result: { duration: 'PT35M' } },
+      { result: { duration: 'PT17M' } },
+      {},
+    ]
+    const total = statements.reduce((sum, s) => sum + durationMinutes(s), 0)
+    expect(formatMinutes(total)).toBe('52m')
   })
 })
 

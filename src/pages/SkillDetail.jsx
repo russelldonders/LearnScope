@@ -17,7 +17,7 @@ import TrackingReasonPicker from '../components/TrackingReasonPicker'
 import { LEVEL_LABELS, LEVEL_DESCRIPTIONS, KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
 import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
-import { activityName, verbLabel, formatDuration, isDiagnosticStatement, isPeerRatingStatement, relatedExperienceFromStatement, experienceTrail, provenanceFromStatement, PROVENANCE_SOURCE_LABELS } from '../lib/xapiStatement'
+import { activityName, verbLabel, formatDuration, durationMinutes, formatMinutes, isDiagnosticStatement, isPeerRatingStatement, relatedExperienceFromStatement, experienceTrail, provenanceFromStatement, PROVENANCE_SOURCE_LABELS } from '../lib/xapiStatement'
 import { applyCurrentRoleSelection, getCurrentRoleTrackingStatus, trackUnderCurrentRole } from '../lib/currentRole'
 import { fetchStatementsForSkill, insertStatementSkillLinks } from '../lib/activitySkillLinks'
 import CurrentRoleSelectModal from '../components/CurrentRoleSelectModal'
@@ -1439,7 +1439,50 @@ function SelfAssessModal({
   )
 }
 
-const TIMELINE_DETAIL_TYPES = new Set(['assessment', 'peer', 'relationship', 'activity', 'training'])
+const TIMELINE_DETAIL_TYPES = new Set(['assessment', 'peer', 'relationship', 'activity', 'activity-group', 'training'])
+
+// Frequent syncs (e.g. Strava logging a run most days) can flood the
+// Timeline with dozens of near-identical rows. Same verb + same calendar
+// year collapses into one summary row ("Practiced it 12 times this year")
+// that expands to the full list on click (see TimelineDetailModal); a verb
+// that only happened once that year stays a normal single 'activity' row,
+// unchanged from before this grouping existed.
+function groupActivityEvents(practicalStatements) {
+  const byGroup = new Map()
+  for (const s of practicalStatements) {
+    const verbId = s.statement.verb?.id ?? 'unknown'
+    const year = new Date(s.recorded_at).getFullYear()
+    const key = `${verbId}::${year}`
+    if (!byGroup.has(key)) byGroup.set(key, [])
+    byGroup.get(key).push(s)
+  }
+
+  const events = []
+  for (const group of byGroup.values()) {
+    if (group.length === 1) {
+      const s = group[0]
+      events.push({ type: 'activity', date: s.recorded_at, createdAt: s.created_at, statement: s })
+      continue
+    }
+    const sorted = [...group].sort((a, b) => new Date(b.recorded_at) - new Date(a.recorded_at))
+    const latestCreatedAt = sorted.reduce(
+      (latest, s) => (new Date(s.created_at) > new Date(latest) ? s.created_at : latest),
+      sorted[0].created_at
+    )
+    events.push({
+      type: 'activity-group',
+      date: sorted[0].recorded_at,
+      createdAt: latestCreatedAt,
+      verbId: sorted[0].statement.verb?.id,
+      verbLabel: verbLabel(sorted[0].statement),
+      year: new Date(sorted[0].recorded_at).getFullYear(),
+      count: sorted.length,
+      totalMinutes: sorted.reduce((sum, s) => sum + durationMinutes(s.statement), 0),
+      statements: sorted,
+    })
+  }
+  return events
+}
 
 function HistorySection({
   skill,
@@ -1508,7 +1551,7 @@ function HistorySection({
               createdAt: link.created_at,
               link,
             })),
-          ...practicalStatements.map((s) => ({ type: 'activity', date: s.recorded_at, createdAt: s.created_at, statement: s })),
+          ...groupActivityEvents(practicalStatements),
           ...courseLinks
             .filter((link) => link.courses?.completed_date)
             .map((link) => ({
@@ -1577,7 +1620,7 @@ function HistorySection({
               <TimelineEntry
                 key={
                   event.entry?.id ?? event.rating?.id ?? event.link?.id ?? event.statement?.id ??
-                  event.request?.id ?? event.type
+                  event.request?.id ?? (event.type === 'activity-group' ? `${event.verbId}::${event.year}` : event.type)
                 }
                 event={event}
                 isLast={i === events.length - 1}
@@ -1724,6 +1767,32 @@ function TimelineEntry({
           {relatedExperience && (
             <p className="font-mono text-[10px] text-secondary mt-0.5 truncate">{experienceTrail(relatedExperience)}</p>
           )}
+        </div>
+      </div>
+    )
+  }
+
+  if (event.type === 'activity-group') {
+    const totalLabel = formatMinutes(event.totalMinutes)
+    const yearLabel = event.year === new Date().getFullYear() ? 'this year' : `in ${event.year}`
+    return (
+      <div className="flex gap-3">
+        <div className="flex flex-col items-center w-12 shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-secondary/40 shrink-0 mt-1.5" />
+          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
+        </div>
+        <div
+          className={`min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3 ${onSelect ? 'cursor-pointer hover:border-moss/60 transition-colors' : ''}`}
+          {...clickableProps}
+        >
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">{event.verbLabel}</span>
+            <p className="text-sm font-medium text-ink truncate min-w-0">{event.count} times {yearLabel}</p>
+          </div>
+          <p className="font-mono text-xs text-secondary mt-0.5">
+            {totalLabel ? `Total ${totalLabel}` : `${event.count} activities`}
+          </p>
+          {onSelect && <p className="font-mono text-[10px] text-moss mt-1">View all →</p>}
         </div>
       </div>
     )
@@ -2106,6 +2175,27 @@ function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assesso
             </div>
           </div>
         )}
+      </div>
+    )
+  } else if (event.type === 'activity-group') {
+    title = `${event.verbLabel} · ${event.count} times`
+    body = (
+      <div className="space-y-2">
+        {event.statements.map((s) => {
+          const relatedExperience = relatedExperienceFromStatement(s.statement)
+          return (
+            <div key={s.id} className="rounded-md border border-hairline bg-paper p-2">
+              <p className="text-sm font-medium text-ink">{activityName(s.statement)}</p>
+              <p className="font-mono text-xs text-secondary mt-0.5">
+                {new Date(s.recorded_at).toLocaleDateString()}
+                {formatDuration(s.statement) ? ` · ${formatDuration(s.statement)}` : ''}
+              </p>
+              {relatedExperience && (
+                <p className="font-mono text-[10px] text-secondary mt-0.5">{experienceTrail(relatedExperience)}</p>
+              )}
+            </div>
+          )
+        })}
       </div>
     )
   }
