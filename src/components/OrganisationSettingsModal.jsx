@@ -4,15 +4,16 @@ import AccessibleDialog from './AccessibleDialog'
 
 const MAX_LOGO_BYTES = 5 * 1024 * 1024
 
-// Mirrors src/index.css's --color-moss/--color-slate/--color-gold light
-// values -- shown as each field's placeholder swatch/value so "unset" reads
-// as "currently using the default LearnScope colours" rather than a blank
-// picker, and used to seed the <input type="color"> since that control
-// can't display a true empty state.
+// Mirrors src/index.css's --color-moss/--color-slate/--color-gold/
+// --color-paper light values -- shown as each field's placeholder
+// swatch/value so "unset" reads as "currently using the default LearnScope
+// colours" rather than a blank picker, and used to seed the
+// <input type="color"> since that control can't display a true empty state.
 const BRAND_COLOR_FIELDS = [
   { key: 'brandPrimaryColor', label: 'Primary', hint: 'Buttons and links', fallback: '#4a6741' },
   { key: 'brandSecondaryColor', label: 'Secondary', hint: 'Accents', fallback: '#3d5a73' },
   { key: 'brandHoverColor', label: 'Hover', hint: 'Button hover state', fallback: '#80651d' },
+  { key: 'brandBackgroundColor', label: 'Background', hint: 'Page background', fallback: '#eef0e7' },
 ]
 
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/
@@ -30,6 +31,7 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
   const [brandPrimaryColor, setBrandPrimaryColor] = useState(organisation.brand_primary_color ?? '')
   const [brandSecondaryColor, setBrandSecondaryColor] = useState(organisation.brand_secondary_color ?? '')
   const [brandHoverColor, setBrandHoverColor] = useState(organisation.brand_hover_color ?? '')
+  const [brandBackgroundColor, setBrandBackgroundColor] = useState(organisation.brand_background_color ?? '')
   const [colorError, setColorError] = useState(null)
   const [publicProfileEnabled, setPublicProfileEnabled] = useState(organisation.public_profile_enabled ?? false)
   // Tracks what's actually persisted, separately from the checkbox above --
@@ -91,7 +93,7 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
     e.preventDefault()
     setColorError(null)
     for (const field of BRAND_COLOR_FIELDS) {
-      const value = { brandPrimaryColor, brandSecondaryColor, brandHoverColor }[field.key]
+      const value = { brandPrimaryColor, brandSecondaryColor, brandHoverColor, brandBackgroundColor }[field.key]
       if (value && !HEX_COLOR_RE.test(value)) {
         setColorError(`${field.label} colour must be a hex value like ${field.fallback}.`)
         return
@@ -107,6 +109,7 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
         brandPrimaryColor: brandPrimaryColor || null,
         brandSecondaryColor: brandSecondaryColor || null,
         brandHoverColor: brandHoverColor || null,
+        brandBackgroundColor: brandBackgroundColor || null,
       })
       setSavedPublicProfileEnabled(publicProfileEnabled)
       // Stay open when the public page is (now) enabled, so there's a
@@ -209,16 +212,24 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
           <div className="border-t border-hairline pt-4">
             <label className="block text-sm text-secondary mb-1">Brand colours</label>
             <p className="text-xs text-secondary mb-2">
-              Used on your public page below. Leave any of these blank to use LearnScope's default colours. Buttons
-              use white text on your Primary/Hover colours, so pick shades dark enough to stay readable.
+              Used on your public page below, and on Sign up/Log in for visitors arriving from it. Leave any of
+              these blank to use LearnScope's default colours. Buttons use white text on your Primary/Hover
+              colours, so pick shades dark enough to stay readable. Page text stays dark, so pick a light
+              Background colour too.
             </p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               {BRAND_COLOR_FIELDS.map((field) => {
-                const value = { brandPrimaryColor, brandSecondaryColor, brandHoverColor }[field.key]
+                const value = {
+                  brandPrimaryColor,
+                  brandSecondaryColor,
+                  brandHoverColor,
+                  brandBackgroundColor,
+                }[field.key]
                 const setValue = {
                   brandPrimaryColor: setBrandPrimaryColor,
                   brandSecondaryColor: setBrandSecondaryColor,
                   brandHoverColor: setBrandHoverColor,
+                  brandBackgroundColor: setBrandBackgroundColor,
                 }[field.key]
                 const inputId = `orgSettings-${field.key}`
                 return (

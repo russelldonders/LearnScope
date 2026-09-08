@@ -12,13 +12,15 @@ import { getProviderProfile } from './providerProfile'
 export async function getOrganisationBranding(slug) {
   const data = await getProviderProfile(slug)
   if (!data) return null
-  const { name, logoUrl, brandPrimaryColor, brandSecondaryColor, brandHoverColor } = data.organisation
+  const { name, logoUrl, brandPrimaryColor, brandSecondaryColor, brandHoverColor, brandBackgroundColor } =
+    data.organisation
   return {
     name,
     logoUrl,
     primaryColor: brandPrimaryColor,
     secondaryColor: brandSecondaryColor,
     hoverColor: brandHoverColor,
+    backgroundColor: brandBackgroundColor,
   }
 }
 
@@ -31,5 +33,6 @@ export function orgBrandStyle(branding) {
     '--org-primary': branding?.primaryColor || undefined,
     '--org-secondary': branding?.secondaryColor || undefined,
     '--org-hover': branding?.hoverColor || undefined,
+    '--org-background': branding?.backgroundColor || undefined,
   }
 }

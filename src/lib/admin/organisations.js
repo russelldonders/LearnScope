@@ -35,7 +35,16 @@ export async function setOrganisationStatus(id, status) {
 // without needing platform-admin rights.
 export async function updateOrganisation(
   id,
-  { name, url, about, publicProfileEnabled, brandPrimaryColor, brandSecondaryColor, brandHoverColor } = {}
+  {
+    name,
+    url,
+    about,
+    publicProfileEnabled,
+    brandPrimaryColor,
+    brandSecondaryColor,
+    brandHoverColor,
+    brandBackgroundColor,
+  } = {}
 ) {
   const fields = { updated_at: new Date().toISOString() }
   if (name !== undefined) fields.name = name.trim()
@@ -45,6 +54,7 @@ export async function updateOrganisation(
   if (brandPrimaryColor !== undefined) fields.brand_primary_color = brandPrimaryColor || null
   if (brandSecondaryColor !== undefined) fields.brand_secondary_color = brandSecondaryColor || null
   if (brandHoverColor !== undefined) fields.brand_hover_color = brandHoverColor || null
+  if (brandBackgroundColor !== undefined) fields.brand_background_color = brandBackgroundColor || null
 
   const { data, error } = await supabase.from('organisations').update(fields).eq('id', id).select().single()
   if (error) throw error

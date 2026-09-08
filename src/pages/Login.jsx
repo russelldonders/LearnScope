@@ -92,7 +92,10 @@ export default function Login() {
   const ctaTextClass = branding?.primaryColor ? 'text-white' : 'text-paper'
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-paper px-4" style={orgBrandStyle(branding)}>
+    <div
+      className="min-h-screen flex items-center justify-center bg-[var(--org-background,var(--color-paper))] px-4"
+      style={orgBrandStyle(branding)}
+    >
       <div className="w-full max-w-sm bg-card border border-hairline rounded-lg p-8">
         <Link
           to={branding?.logoUrl ? `/providers/${orgSlug}` : '/'}
