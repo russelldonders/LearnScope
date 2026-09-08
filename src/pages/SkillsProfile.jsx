@@ -352,6 +352,7 @@ export default function SkillsProfile() {
         <RateSkillDialog
           skill={ratingSkill}
           initialLevel={myRatingBySkillId[ratingSkill.id]?.level}
+          lastRatedAt={myRatingBySkillId[ratingSkill.id]?.ratedAt}
           onClose={() => setRatingSkill(null)}
           onSubmit={handleSubmitRating}
         />
@@ -412,7 +413,7 @@ export default function SkillsProfile() {
 // it before; otherwise starts at the lowest level rather than the
 // skill-owner's level or a mid-scale guess -- an unrated skill shouldn't
 // default toward "I already think this is Capable."
-function RateSkillDialog({ skill, initialLevel, onClose, onSubmit }) {
+function RateSkillDialog({ skill, initialLevel, lastRatedAt, onClose, onSubmit }) {
   const [level, setLevel] = useState(initialLevel ?? LEVELS[0])
   const [comments, setComments] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -454,6 +455,7 @@ function RateSkillDialog({ skill, initialLevel, onClose, onSubmit }) {
               >
                 <GrowthRing level={l} size={36} />
                 <span className="font-mono text-[10px] text-secondary">{LEVEL_LABELS[l]}</span>
+                <span className="font-mono text-[9px] text-secondary/70 h-3">{l === initialLevel ? 'Most recent' : ''}</span>
               </button>
             ))}
           </div>
@@ -469,6 +471,12 @@ function RateSkillDialog({ skill, initialLevel, onClose, onSubmit }) {
         />
 
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+
+        {lastRatedAt && (
+          <p className="text-[11px] text-secondary/70" title={formatAbsoluteDate(lastRatedAt)}>
+            Last rated {formatRelativeDate(lastRatedAt)}
+          </p>
+        )}
 
         <div className="flex justify-end gap-2">
           <button
