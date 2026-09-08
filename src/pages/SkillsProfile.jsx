@@ -252,6 +252,7 @@ export default function SkillsProfile() {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {filteredSkills.map((skill) => {
+                      const lastRatedAt = myRatingBySkillId[skill.id]?.ratedAt
                       const content = <>
                         <GrowthRing level={skill.level} size={48} />
                         <div className="min-w-0 flex-1">
@@ -267,6 +268,11 @@ export default function SkillsProfile() {
                                 </span>
                               ))}
                             </div>
+                          )}
+                          {canRate && lastRatedAt && (
+                            <p className="text-xs text-secondary mt-1" title={formatAbsoluteDate(lastRatedAt)}>
+                              You last rated this skill {formatRelativeDate(lastRatedAt)}
+                            </p>
                           )}
                         </div>
                       </>
