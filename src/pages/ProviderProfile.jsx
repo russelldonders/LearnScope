@@ -128,11 +128,10 @@ export default function ProviderProfile() {
   return (
     <div className="min-h-screen bg-paper" style={brandStyle}>
       {authLoading ? null : user ? (
-        <AppHeader
-          hideNavLinks
-          brandLogoUrl={profile?.organisation.logoUrl}
-          brandName={profile?.organisation.name}
-        />
+        // brandName intentionally omitted: this page's own hero section
+        // (below) already introduces the org by name, so the header shows
+        // just its logo mark rather than repeating the name.
+        <AppHeader hideNavLinks brandLogoUrl={profile?.organisation.logoUrl} />
       ) : (
         <PublicHeader organisation={profile?.organisation} slug={slug} />
       )}
@@ -305,11 +304,15 @@ export default function ProviderProfile() {
   )
 }
 
-// Swaps in the org's own logo/name once its profile has loaded, and links
-// Log in/Sign up onward with ?org=:slug so Login.jsx/Signup.jsx can pick up
-// the same branding -- until then (profile still loading, or an org with no
+// Swaps in the org's own logo once its profile has loaded, and links Log
+// in/Sign up onward with ?org=:slug so Login.jsx/Signup.jsx can pick up the
+// same branding -- until then (profile still loading, or an org with no
 // logo of its own), this renders exactly as before: the plain LearnScope
-// mark linking home.
+// mark linking home. Drops the wordmark next to a custom logo (unlike the
+// LearnScope default, which pairs its favicon with the "LearnScope" text) --
+// the page's own hero section a few lines below already introduces the org
+// by its full name, so repeating it here would just be the same name twice
+// in the same viewport.
 function PublicHeader({ organisation, slug }) {
   const authLinkSuffix = slug ? `?org=${slug}` : ''
   // Same theme-flip reasoning as the main component's ctaTextClass.
@@ -322,7 +325,7 @@ function PublicHeader({ organisation, slug }) {
           alt=""
           className="w-7 h-7 object-contain rounded"
         />
-        {organisation?.logoUrl ? organisation.name : 'LearnScope'}
+        {!organisation?.logoUrl && 'LearnScope'}
       </Link>
       <nav className="flex items-center gap-3">
         <Link to={`/login${authLinkSuffix}`} className="text-sm text-secondary hover:text-ink">
