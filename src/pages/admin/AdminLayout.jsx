@@ -26,7 +26,17 @@ export default function AdminLayout({ children }) {
           nav (below) for switching between admin sections. */}
       <AppHeader hideNavLinks />
       <main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 py-8">
-        <h1 className="font-display text-xl text-ink mb-1">Platform console</h1>
+        <div className="flex items-start justify-between gap-4 mb-1">
+          <h1 className="font-display text-xl text-ink">Platform console</h1>
+          <a
+            href="https://github.com/russelldonders/LearnScope/blob/staging/docs/admin-guide/README.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 text-sm text-moss font-medium hover:underline"
+          >
+            Admin guide ↗
+          </a>
+        </div>
         <p className="text-sm text-secondary mb-6">
           Manage users, provider organisations, and the shared courses, skill library and
           tags.
