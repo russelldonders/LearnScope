@@ -256,7 +256,7 @@ export default function Connections() {
               value={connectionQuery}
               onChange={(e) => setConnectionQuery(e.target.value)}
               placeholder="Search by name…"
-              className="w-full max-w-sm mb-4 rounded-md border border-hairline bg-card px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+              className="w-full max-w-sm mb-4 rounded-md border border-hairline bg-card px-3 py-2 text-ink text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-moss"
             />
           )}
 
@@ -354,7 +354,7 @@ export default function Connections() {
   )
 }
 
-const VISIBLE_EVENTS = 5
+const VISIBLE_EVENTS = 1
 
 // One connection's card -- broken out from the list above so its "show
 // more history" state is scoped per-card instead of one shared array of
@@ -440,7 +440,7 @@ function ConnectionCard({ connection: c, sharedSkillCount, sharedTeams, showTeam
             onClick={() => setExpanded(true)}
             className="text-sm text-secondary hover:text-ink hover:underline"
           >
-            Show {hiddenCount} more
+            Show all ({hiddenCount} more)
           </button>
         )}
         {expanded && c.events.length > VISIBLE_EVENTS && (
@@ -453,7 +453,7 @@ function ConnectionCard({ connection: c, sharedSkillCount, sharedTeams, showTeam
           </button>
         )}
       </div>
-      {showTeamInvite && (
+      {showTeamInvite && active.length === 0 && (
         <ConnectionTeamInviteControl connection={c} teams={ledTeams} onInvite={onInviteToTeam} onCreateTeam={onCreateTeam} />
       )}
     </div>

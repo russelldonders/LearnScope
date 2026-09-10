@@ -607,19 +607,43 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
               readOnly={isArchived} />
           )}
           {activePanel === 'settings' && (
-            <div className="space-y-4">
-              {!isArchived && !transferOpen && <button type="button" disabled={busy || membersLoading || membersError} onClick={() => setTransferOpen(true)} className={buttonClass}>Change team leader</button>}
-              {!isArchived && transferOpen && <form onSubmit={handleTransfer} className="space-y-3 border-t border-hairline pt-4">
-                <label className="block text-sm text-ink">New team leader<select value={successorId} disabled={busy} onChange={(e) => setSuccessorId(e.target.value)} className={fieldClass}>
-                  <option value="">Choose a team member</option>
-                  {roster.filter((person) => person.role === 'member').map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
-                </select></label>
-                <p className="text-sm text-secondary">Choose a member who has accepted their invitation. You’ll remain a member and lose leader controls. Members will need to share their skills with the new leader.</p>
-                <div className="flex gap-2"><button type="submit" disabled={busy || !successorId} className={buttonClass}>{busy ? 'Changing…' : 'Transfer leadership'}</button>
-                  <button type="button" disabled={busy} onClick={() => setTransferOpen(false)} className={buttonClass}>Cancel</button></div>
-              </form>}
+            <div className="space-y-6 max-w-lg">
+              <div className="bg-card border border-hairline rounded-lg p-6">
+                <h3 className="font-display text-lg text-ink mb-1">Team leadership</h3>
+                <p className="text-sm text-secondary mb-4">
+                  {isArchived
+                    ? 'Restore this team to change who leads it.'
+                    : 'Hand this team over to another member. You’ll remain a member but lose leader controls.'}
+                </p>
+                {!isArchived && !transferOpen && (
+                  <button type="button" disabled={busy || membersLoading || membersError} onClick={() => setTransferOpen(true)} className={buttonClass}>
+                    Change team leader
+                  </button>
+                )}
+                {!isArchived && transferOpen && (
+                  <form onSubmit={handleTransfer} className="space-y-3">
+                    <label className="block text-sm text-ink">New team leader
+                      <select value={successorId} disabled={busy} onChange={(e) => setSuccessorId(e.target.value)} className={fieldClass}>
+                        <option value="">Choose a team member</option>
+                        {roster.filter((person) => person.role === 'member').map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+                      </select>
+                    </label>
+                    <p className="text-sm text-secondary">Choose a member who has accepted their invitation. Members will need to share their skills with the new leader.</p>
+                    <div className="flex gap-2">
+                      <button type="submit" disabled={busy || !successorId} className={buttonClass}>{busy ? 'Changing…' : 'Transfer leadership'}</button>
+                      <button type="button" disabled={busy} onClick={() => setTransferOpen(false)} className={buttonClass}>Cancel</button>
+                    </div>
+                  </form>
+                )}
+              </div>
 
-              <div className="border-t border-hairline pt-4">
+              <div className={`bg-card border rounded-lg p-6 ${isArchived ? 'border-hairline' : 'border-red-200'}`}>
+                <h3 className="font-display text-lg text-ink mb-1">{isArchived ? 'Restore team' : 'Archive team'}</h3>
+                <p className="text-sm text-secondary mb-4">
+                  {isArchived
+                    ? 'Bring this team back so members can be invited, skills rated, and new activity logged again.'
+                    : 'Members, ratings and history stay viewable, but no one can invite new members, rate skills, or log new activities or collaboration records until you restore it.'}
+                </p>
                 {isArchived ? (
                   <button type="button" disabled={archiving} onClick={handleRestore} className={buttonClass}>{archiving ? 'Restoring…' : 'Restore team'}</button>
                 ) : (
