@@ -119,6 +119,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
   const [name, setName] = useState('')
   const [nameEdited, setNameEdited] = useState(false)
   const [initialMemberIds, setInitialMemberIds] = useState(new Set())
+  const [memberQuery, setMemberQuery] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState('')
@@ -266,6 +267,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     setNameEdited(false)
     setCreating(true)
     setNotice('')
+    setMemberQuery('')
   }
 
   function toggleInitialMember(connectionId) {
@@ -445,6 +447,15 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
 
   const collaborationMemberOptions = teamMemberSummaries.map((m) => ({ id: m.id, name: m.name }))
   const isArchived = selected?.teamStatus === 'archived'
+  // Gives a leader an at-a-glance sense of which tabs actually have
+  // anything in them before clicking through each one -- Settings has no
+  // natural count, so it's just omitted (panelCounts[key] stays undefined).
+  const panelCounts = {
+    skills: teamSkills.length,
+    members: teamMemberSummaries.length,
+    learning: learningRecords.length,
+    collaboration: collaborationRecords.length,
+  }
 
   return <section aria-labelledby="connections-teams-title" className="space-y-4 border-b border-hairline pb-8">
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -452,6 +463,23 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       {!creating && <button type="button" disabled={busy || loading} onClick={startCreating} className={buttonClass}>{ledTeams.length === 0 ? 'Form team' : 'Create a team'}</button>}
     </div>
     <p className="text-sm text-secondary">Create and lead multiple teams, or join teams led by others. Invite your connections to learn together. Members choose which skills to share with their team leader.</p>
+
+    {/* Surfaced up here rather than at the bottom of the whole section --
+        these need a response, unlike everything below them, and previously
+        sat past a create-team form and a whole team's worth of tabs where
+        it was easy to never scroll far enough to notice. */}
+    {pendingInvites.length > 0 && (
+      <div className="rounded-lg border border-gold/40 bg-gold/10 p-4 space-y-3">
+        <h3 className="font-display text-lg text-ink">Team invitations waiting on you</h3>
+        <ul className="divide-y divide-hairline">{pendingInvites.map((membership) => (
+          <li key={membership.id} className="flex flex-wrap items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+            <div><p className="text-sm font-medium text-ink">{membership.teamName}</p><p className="text-sm text-secondary">Led by {membership.managerName}</p></div>
+            <Link className="text-sm text-moss underline underline-offset-4" to="/actions">Respond to invitation</Link>
+          </li>
+        ))}</ul>
+      </div>
+    )}
+
     {loading && <p role="status" className="text-sm text-secondary">Loading your teams…</p>}
     <MutationFeedback status="error" message={error} />
     {error && <button type="button" disabled={busy} className={buttonClass} onClick={() => setRetry((n) => n + 1)}>Reload teams</button>}
@@ -463,14 +491,21 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       </label>
       {connections.length > 0 && <fieldset>
         <legend className="text-sm text-ink">Add members (optional)</legend>
+        {connections.length > 6 && (
+          <input type="text" value={memberQuery} disabled={busy} placeholder="Search connections…"
+            onChange={(e) => setMemberQuery(e.target.value)}
+            className="mt-1 mb-1 block w-full rounded-md border border-hairline bg-card px-3 py-1.5 text-sm text-ink" />
+        )}
         <div className="mt-1 max-h-40 overflow-y-auto rounded-md border border-hairline bg-card divide-y divide-hairline">
-          {connections.map((connection) => (
-            <label key={connection.id} className="flex items-center gap-2 px-3 py-1.5 text-sm text-ink">
-              <input type="checkbox" checked={initialMemberIds.has(connection.id)} disabled={busy}
-                onChange={() => toggleInitialMember(connection.id)} className="rounded border-hairline accent-moss" />
-              {connection.name}
-            </label>
-          ))}
+          {connections
+            .filter((connection) => connection.name?.toLowerCase().includes(memberQuery.trim().toLowerCase()))
+            .map((connection) => (
+              <label key={connection.id} className="flex items-center gap-2 px-3 py-1.5 text-sm text-ink">
+                <input type="checkbox" checked={initialMemberIds.has(connection.id)} disabled={busy}
+                  onChange={() => toggleInitialMember(connection.id)} className="rounded border-hairline accent-moss" />
+                {connection.name}
+              </label>
+            ))}
         </div>
       </fieldset>}
       <div className="flex gap-2"><button type="submit" disabled={busy || !name.trim()} className={buttonClass}>{busy ? 'Creating…' : 'Create team'}</button>
@@ -483,12 +518,30 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     {teamOptions.length > 0 && <div className="space-y-4">
       {teamOptions.length > 1 ? (
         <label className="block max-w-sm text-sm text-ink">Team
+          {/* Grouped by role rather than left as one flat list -- leading a
+              team and merely belonging to one lead to genuinely different
+              screens below (a 5-tab admin console vs. one sharing panel), so
+              that distinction needs to be visible at a glance, not just
+              readable in each option's own trailing text. */}
           <select disabled={busy} value={selectedKey} onChange={(e) => { setSelectedKey(e.target.value); setNotice(''); setError(null) }} className={fieldClass}>
-            {teamOptions.map((t) => (
-              <option key={t.key} value={t.key}>
-                {t.name}{t.role === 'member' ? ` · led by ${t.membership.managerName}` : ''}{t.teamStatus === 'archived' ? ' (Archived)' : ''}
-              </option>
-            ))}
+            {teamOptions.some((t) => t.role === 'leader') && (
+              <optgroup label="Teams you lead">
+                {teamOptions.filter((t) => t.role === 'leader').map((t) => (
+                  <option key={t.key} value={t.key}>
+                    {t.name}{t.teamStatus === 'archived' ? ' (Archived)' : ''}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {teamOptions.some((t) => t.role === 'member') && (
+              <optgroup label="Teams you've joined">
+                {teamOptions.filter((t) => t.role === 'member').map((t) => (
+                  <option key={t.key} value={t.key}>
+                    {t.name} · led by {t.membership.managerName}{t.teamStatus === 'archived' ? ' (Archived)' : ''}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </label>
       ) : (
@@ -498,13 +551,13 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       )}
 
       {isArchived && (
-        <p role="status" className="text-sm text-secondary bg-paper border border-hairline rounded-md px-3 py-2">
+        <p role="status" className="text-sm text-ink bg-gold/10 border border-gold/40 rounded-md px-3 py-2">
           This team has been archived -- you can still view it below, but nothing new can be added.
           {selected.role === 'leader' && ' Restore it to make changes again.'}
         </p>
       )}
 
-      {selected?.role === 'leader' && <div className={`space-y-4 ${isArchived ? 'opacity-75' : ''}`}>
+      {selected?.role === 'leader' && <div className={`space-y-4 ${isArchived ? 'opacity-75 border-l-2 border-gold/40 pl-4' : ''}`}>
         <div role="tablist" aria-label="Team section" className="flex items-center flex-wrap gap-1 border-b border-hairline">
           {PANELS.map((panel) => (
             <button key={panel.key} type="button" role="tab"
@@ -512,6 +565,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
               id={`team-panel-tab-${panel.key}`}
               aria-selected={activePanel === panel.key}
               aria-controls={`team-panel-${panel.key}`}
+              aria-label={panel.label}
               tabIndex={activePanel === panel.key ? 0 : -1}
               onClick={() => setActivePanel(panel.key)}
               onKeyDown={(event) => handleTabListKeyDown(event, {
@@ -521,6 +575,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
                 ? 'border-moss text-ink font-medium'
                 : 'border-transparent text-secondary hover:text-ink'}`}>
               {panel.label}
+              {panelCounts[panel.key] != null && <span aria-hidden="true"> ({panelCounts[panel.key]})</span>}
             </button>
           ))}
         </div>
@@ -615,14 +670,5 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       />
     )}
 
-    {pendingInvites.length > 0 && <div className="space-y-3 pt-4">
-      <h3 className="font-display text-lg text-ink">Invitations</h3>
-      <ul className="divide-y divide-hairline">{pendingInvites.map((membership) => (
-        <li key={membership.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-          <div><p className="text-sm font-medium text-ink">{membership.teamName}</p><p className="text-sm text-secondary">Led by {membership.managerName} · Invitation pending</p></div>
-          <Link className="text-sm text-moss underline underline-offset-4" to="/actions">Respond to invitation</Link>
-        </li>
-      ))}</ul>
-    </div>}
   </section>
 }

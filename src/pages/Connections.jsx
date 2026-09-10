@@ -132,6 +132,12 @@ export default function Connections() {
     [invites]
   )
 
+  const [connectionQuery, setConnectionQuery] = useState('')
+  const filteredConnections = useMemo(() => {
+    const q = connectionQuery.trim().toLowerCase()
+    return q ? connections.filter((c) => c.name?.toLowerCase().includes(q)) : connections
+  }, [connections, connectionQuery])
+
   function handleCopy(invite) {
     navigator.clipboard.writeText(invite.url)
     setCopiedId(invite.id)
@@ -243,82 +249,33 @@ export default function Connections() {
             </div>
           )}
 
+          {!loading && connections.length > 0 && (
+            <input
+              type="text"
+              aria-label="Search connections"
+              value={connectionQuery}
+              onChange={(e) => setConnectionQuery(e.target.value)}
+              placeholder="Search by name…"
+              className="w-full max-w-sm mb-4 rounded-md border border-hairline bg-card px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
+            />
+          )}
+
+          {!loading && connections.length > 0 && filteredConnections.length === 0 && (
+            <p className="text-sm text-secondary">No connections match "{connectionQuery}".</p>
+          )}
+
           <div className="space-y-4">
-            {connections.map((c) => (
-              <div key={c.id} className="bg-card border border-hairline rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-3 flex-wrap">
-                  <Link to={`/skills-profile/${c.id}`} className="flex items-center gap-2 group w-fit">
-                    <ConnectionAvatar name={c.name} avatarUrl={c.avatarUrl} />
-                    <span className="font-display text-lg text-ink group-hover:text-moss group-hover:underline">
-                      {c.name}
-                    </span>
-                  </Link>
-                  {sharedSkillCounts[c.id] > 0 && (
-                    <span className="font-mono text-xs text-secondary border border-hairline rounded-full px-2 py-0.5">
-                      {sharedSkillCounts[c.id]} shared skill{sharedSkillCounts[c.id] === 1 ? '' : 's'}
-                    </span>
-                  )}
-                  {(() => {
-                    const active = sharedTeamsByConnection[c.id]?.active ?? []
-                    const pending = sharedTeamsByConnection[c.id]?.pending ?? []
-                    return <>
-                      {active.length === 1 && (
-                        <Link
-                          to={`/connections?section=teams&team=${active[0].id}`}
-                          className="font-mono text-xs text-moss border border-hairline rounded-full px-2 py-0.5 hover:underline"
-                        >
-                          {active[0].name}
-                        </Link>
-                      )}
-                      {active.length > 1 && (
-                        <Link
-                          to="/connections?section=teams"
-                          className="font-mono text-xs text-moss border border-hairline rounded-full px-2 py-0.5 hover:underline"
-                        >
-                          {active.length} teams
-                        </Link>
-                      )}
-                      {pending.length > 0 && (
-                        <Link
-                          to="/connections?section=teams"
-                          className="font-mono text-xs text-secondary border border-hairline rounded-full px-2 py-0.5 hover:underline"
-                        >
-                          Invited to {pending.length} team{pending.length === 1 ? '' : 's'}
-                        </Link>
-                      )}
-                    </>
-                  })()}
-                </div>
-                <div className="space-y-3">
-                  {c.events.length === 0 && <p className="text-sm text-secondary">Connected</p>}
-                  {c.events.map((e, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <GrowthRing level={e.level} size={28} />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm text-ink">
-                          {e.direction === 'given' ? (
-                            <>
-                              You rated their <strong>{e.skillName}</strong>: {LEVEL_LABELS[e.level]}
-                            </>
-                          ) : (
-                            <>
-                              They rated your <strong>{e.skillName}</strong>: {LEVEL_LABELS[e.level]}
-                            </>
-                          )}
-                        </p>
-                        <p className="font-mono text-xs text-secondary">
-                          {new Date(e.date).toLocaleDateString()}
-                          {e.skillCategory ? ` · ${e.skillCategory}` : ''}
-                        </p>
-                        {e.comments && <p className="text-sm text-secondary mt-0.5">{e.comments}</p>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {allConnectionIds.includes(c.id) && <div className="mt-4 border-t border-hairline pt-3">
-                  <ConnectionTeamInviteControl connection={c} teams={ledTeams} onInvite={inviteConnectionToManagerTeam} onCreateTeam={handleCreateTeam} />
-                </div>}
-              </div>
+            {filteredConnections.map((c) => (
+              <ConnectionCard
+                key={c.id}
+                connection={c}
+                sharedSkillCount={sharedSkillCounts[c.id] ?? 0}
+                sharedTeams={sharedTeamsByConnection[c.id]}
+                showTeamInvite={allConnectionIds.includes(c.id)}
+                ledTeams={ledTeams}
+                onInviteToTeam={inviteConnectionToManagerTeam}
+                onCreateTeam={handleCreateTeam}
+              />
             ))}
           </div>
         </div>
@@ -392,6 +349,112 @@ export default function Connections() {
           onCancel={() => setPendingRevoke(null)}
           confirming={revokingId === pendingRevoke.id}
         />
+      )}
+    </div>
+  )
+}
+
+const VISIBLE_EVENTS = 5
+
+// One connection's card -- broken out from the list above so its "show
+// more history" state is scoped per-card instead of one shared array of
+// expanded ids the parent would otherwise have to track.
+function ConnectionCard({ connection: c, sharedSkillCount, sharedTeams, showTeamInvite, ledTeams, onInviteToTeam, onCreateTeam }) {
+  const [expanded, setExpanded] = useState(false)
+  const active = sharedTeams?.active ?? []
+  const pending = sharedTeams?.pending ?? []
+  const visibleEvents = expanded ? c.events : c.events.slice(0, VISIBLE_EVENTS)
+  const hiddenCount = c.events.length - visibleEvents.length
+
+  return (
+    <div className="bg-card border border-hairline rounded-lg p-4">
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <Link to={`/skills-profile/${c.id}`} className="flex items-center gap-2 group w-fit">
+          <ConnectionAvatar name={c.name} avatarUrl={c.avatarUrl} />
+          <span className="font-display text-lg text-ink group-hover:text-moss group-hover:underline">
+            {c.name}
+          </span>
+        </Link>
+        {/* Purely informational facts about this connection (neutral) are
+            kept visually distinct from the pending-invite pill below, which
+            is something to act on -- previously all three badge types shared
+            the same low-contrast styling with nothing to tell them apart. */}
+        {sharedSkillCount > 0 && (
+          <span className="font-mono text-xs text-secondary border border-hairline rounded-full px-2 py-0.5">
+            {sharedSkillCount} shared skill{sharedSkillCount === 1 ? '' : 's'}
+          </span>
+        )}
+        {active.length === 1 && (
+          <Link
+            to={`/connections?section=teams&team=${active[0].id}`}
+            className="font-mono text-xs text-moss border border-hairline rounded-full px-2 py-0.5 hover:underline"
+          >
+            {active[0].name}
+          </Link>
+        )}
+        {active.length > 1 && (
+          <Link
+            to="/connections?section=teams"
+            className="font-mono text-xs text-moss border border-hairline rounded-full px-2 py-0.5 hover:underline"
+          >
+            {active.length} teams
+          </Link>
+        )}
+        {pending.length > 0 && (
+          <Link
+            to="/connections?section=teams"
+            className="font-mono text-xs text-gold border border-gold/40 bg-gold/10 rounded-full px-2 py-0.5 hover:underline"
+          >
+            Invited to {pending.length} team{pending.length === 1 ? '' : 's'}
+          </Link>
+        )}
+      </div>
+      <div className="space-y-3">
+        {c.events.length === 0 && <p className="text-sm text-secondary">Connected</p>}
+        {visibleEvents.map((e, i) => (
+          <div key={i} className="flex items-center gap-3">
+            <GrowthRing level={e.level} size={28} />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-ink">
+                {e.direction === 'given' ? (
+                  <>
+                    You rated their <strong>{e.skillName}</strong>: {LEVEL_LABELS[e.level]}
+                  </>
+                ) : (
+                  <>
+                    They rated your <strong>{e.skillName}</strong>: {LEVEL_LABELS[e.level]}
+                  </>
+                )}
+              </p>
+              <p className="font-mono text-xs text-secondary">
+                {new Date(e.date).toLocaleDateString()}
+                {e.skillCategory ? ` · ${e.skillCategory}` : ''}
+              </p>
+              {e.comments && <p className="text-sm text-secondary mt-0.5">{e.comments}</p>}
+            </div>
+          </div>
+        ))}
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            className="text-sm text-secondary hover:text-ink hover:underline"
+          >
+            Show {hiddenCount} more
+          </button>
+        )}
+        {expanded && c.events.length > VISIBLE_EVENTS && (
+          <button
+            type="button"
+            onClick={() => setExpanded(false)}
+            className="text-sm text-secondary hover:text-ink hover:underline"
+          >
+            Show less
+          </button>
+        )}
+      </div>
+      {showTeamInvite && (
+        <ConnectionTeamInviteControl connection={c} teams={ledTeams} onInvite={onInviteToTeam} onCreateTeam={onCreateTeam} />
       )}
     </div>
   )
