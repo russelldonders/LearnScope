@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import { listOrganisations } from '../../lib/admin/organisations'
 import { getProviderSkillAlignment, listOrganisationOfferedSkills, setResourceSkillAlignment, setTrainingSkillAlignment } from '../../lib/admin/providerSkills'
 import SkillCompositionSection from '../admin/SkillCompositionSection'
+import SkillIconUpload from '../../components/SkillIconUpload'
 
 const BASE_TABS = [{ key: 'training', label: 'Training' }, { key: 'resources', label: 'Resources' }]
 
@@ -129,6 +130,14 @@ export default function ProviderSkillDetail() {
           <>
             <header className="mt-3 mb-7 max-w-3xl">
               <p className="text-sm text-secondary mb-1">{organisation?.name || 'Provider organisation'}</p>
+              {canManageComponents && (
+                <div className="mb-3">
+                  <SkillIconUpload
+                    skill={{ id: skill.skillLibraryId, name: skill.name, icon_url: skill.iconUrl }}
+                    onUpdated={load}
+                  />
+                </div>
+              )}
               <h1 className="font-display text-2xl sm:text-3xl text-ink text-balance">{skill.name}</h1>
               <p className="text-sm text-secondary mt-2">{[skill.category, skill.description].filter(Boolean).join(' · ') || 'Align this skill with your organisation’s published learning offer.'}</p>
             </header>

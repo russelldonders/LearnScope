@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AdminLayout from './AdminLayout'
-import { getLibrarySkill, listCoursesForSkill } from '../../lib/admin/skills'
+import { getLibrarySkill, listCoursesForSkill, promoteSkillToGlobal } from '../../lib/admin/skills'
 import {
   countSkillTrackers,
   getSkillLevelStats,
@@ -11,8 +11,10 @@ import {
 } from '../../lib/skillStats'
 import { LEVEL_LABELS, LEVEL_DESCRIPTIONS, KNOWLEDGE_LEVEL_LABELS, LEVELS } from '../../lib/levels'
 import { SKILL_TYPE_LABELS } from '../../lib/statusLabels'
+import ConfirmDialog from '../../components/ConfirmDialog'
 import SkillTestQuestionsModal from '../../components/SkillTestQuestionsModal'
 import StatusBadge from '../../components/StatusBadge'
+import SkillIconUpload from '../../components/SkillIconUpload'
 import SkillCompositionSection from './SkillCompositionSection'
 
 // Read-only overview for a platform admin drilling into one skill_library
@@ -38,6 +40,9 @@ export default function AdminSkillDetail() {
   const [error, setError] = useState(null)
   const [openAbilityLevel, setOpenAbilityLevel] = useState(null)
   const [questionsLevel, setQuestionsLevel] = useState(null)
+  const [confirmingPromote, setConfirmingPromote] = useState(false)
+  const [promoting, setPromoting] = useState(false)
+  const [promoteError, setPromoteError] = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -61,6 +66,21 @@ export default function AdminSkillDetail() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }, [skillId])
+
+  async function handlePromote() {
+    setPromoting(true)
+    setPromoteError(null)
+    try {
+      await promoteSkillToGlobal(skillId)
+      const refreshed = await getLibrarySkill(skillId)
+      setSkill(refreshed)
+      setConfirmingPromote(false)
+    } catch (err) {
+      setPromoteError(err.message)
+    } finally {
+      setPromoting(false)
+    }
+  }
 
   const countByLevel = new Map(levelStats.map((s) => [s.level, s.tracker_count]))
   const knowledgeStatsByLevel = new Map(knowledgeStats.map((s) => [s.level, s]))
@@ -91,9 +111,27 @@ export default function AdminSkillDetail() {
         ) : (
           <>
             <div className="bg-card border border-hairline rounded-lg p-6">
-              <h2 className="font-display text-xl text-ink mb-1">{skill.name}</h2>
-              <p className="font-mono text-xs text-secondary">{skill.skill_code}</p>
-              {skill.description && <p className="text-sm text-secondary mb-3">{skill.description}</p>}
+              {!skill.is_private && (
+                <div className="mb-4">
+                  <SkillIconUpload skill={skill} onUpdated={async () => setSkill(await getLibrarySkill(skillId))} />
+                </div>
+              )}
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="font-display text-xl text-ink mb-1">{skill.name}</h2>
+                  <p className="font-mono text-xs text-secondary">{skill.skill_code}</p>
+                </div>
+                {skill.organisation_id && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingPromote(true)}
+                    className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper whitespace-nowrap"
+                  >
+                    Promote to global
+                  </button>
+                )}
+              </div>
+              {skill.description && <p className="text-sm text-secondary mb-3 mt-2">{skill.description}</p>}
               <div className="flex flex-wrap gap-2 text-xs">
                 <StatusBadge size="inherit" label={SKILL_TYPE_LABELS[skill.type]} />
                 {skill.ownerName && <StatusBadge size="inherit" label={skill.ownerName} />}
@@ -104,6 +142,7 @@ export default function AdminSkillDetail() {
                   tone={skill.status === 'inactive' ? 'danger' : 'neutral'}
                 />
               </div>
+              {promoteError && <p role="alert" className="text-sm text-red-700 mt-3">{promoteError}</p>}
             </div>
 
             {!skill.is_private && (
@@ -231,6 +270,16 @@ export default function AdminSkillDetail() {
             skillName={skill?.name}
             level={questionsLevel}
             onClose={() => setQuestionsLevel(null)}
+          />
+        )}
+
+        {confirmingPromote && (
+          <ConfirmDialog
+            message={`Promote "${skill.name}" to a global skill? It will become visible and offerable by every organisation on the platform, not just ${skill.ownerName ?? 'its current owner'}. This can't be undone from here.`}
+            confirmLabel="Promote"
+            confirming={promoting}
+            onConfirm={handlePromote}
+            onCancel={() => setConfirmingPromote(false)}
           />
         )}
       </div>

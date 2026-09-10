@@ -1,5 +1,36 @@
 import { supabase } from './supabaseClient'
 
+// Same upsert-in-place-at-a-fixed-path pattern as uploadCourseImage
+// (admin/catalogue.js) -- re-uploading just replaces the file rather than
+// accumulating old ones. The row write goes through set_skill_icon (RPC)
+// rather than a direct .update(), since skill_library has no RLS update
+// policy for anyone but a platform admin (see 20260909100000).
+export async function uploadSkillIcon(skillId, fileOrBlob) {
+  const path = `${skillId}/icon.webp`
+
+  const { error: uploadError } = await supabase.storage
+    .from('skill-icons')
+    .upload(path, fileOrBlob, { upsert: true, contentType: fileOrBlob.type })
+  if (uploadError) throw uploadError
+
+  const { data } = supabase.storage.from('skill-icons').getPublicUrl(path)
+  const url = `${data.publicUrl}?t=${Date.now()}`
+
+  const { error } = await supabase.rpc('set_skill_icon', { p_skill_id: skillId, p_icon_url: url })
+  if (error) throw error
+
+  return url
+}
+
+export async function removeSkillIcon(skillId) {
+  const paths = ['webp', 'jpeg', 'jpg', 'png'].map((extension) => `${skillId}/icon.${extension}`)
+  const { error: storageError } = await supabase.storage.from('skill-icons').remove(paths)
+  if (storageError) throw storageError
+
+  const { error } = await supabase.rpc('set_skill_icon', { p_skill_id: skillId, p_icon_url: null })
+  if (error) throw error
+}
+
 // Learner-facing search: deactivated entries (platform-admin moderation,
 // see AdminSkills) shouldn't be findable/reusable here.
 export async function listLibrarySkills() {

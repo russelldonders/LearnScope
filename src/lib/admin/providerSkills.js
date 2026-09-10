@@ -10,7 +10,7 @@ import { supabase } from '../supabaseClient'
 export async function listOrganisationOfferedSkills(organisationId) {
   const { data, error } = await supabase
     .from('organisation_offered_skills')
-    .select('id, skill_library:skill_library_id(id, skill_code, name, category, description, organisation_id)')
+    .select('id, skill_library:skill_library_id(id, skill_code, name, category, description, organisation_id, icon_url)')
     .eq('organisation_id', organisationId)
     .order('created_at', { ascending: false })
   if (error) throw error
@@ -25,6 +25,7 @@ export async function listOrganisationOfferedSkills(organisationId) {
       description: r.skill_library.description,
       organisationId: r.skill_library.organisation_id,
       isOwnOrgSkill: r.skill_library.organisation_id === organisationId,
+      iconUrl: r.skill_library.icon_url,
     }))
 }
 

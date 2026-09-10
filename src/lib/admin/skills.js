@@ -2,7 +2,7 @@ import { supabase } from '../supabaseClient'
 
 // Admin listing -- every status, unlike src/lib/skillLibrary.js's
 // listLibrarySkills (learner-facing, active-only).
-const ADMIN_SKILL_SELECT = 'id, skill_code, name, category, description, status, is_private, organisation_id, created_by'
+const ADMIN_SKILL_SELECT = 'id, skill_code, name, category, description, status, is_private, organisation_id, created_by, icon_url'
 
 // skill_library.created_by only references auth.users, and organisation_id
 // references organisations -- neither is a foreign key PostgREST can embed
@@ -101,4 +101,14 @@ export async function updateLibrarySkill(id, fields) {
 
 export async function setLibrarySkillStatus(id, status) {
   return updateLibrarySkill(id, { status })
+}
+
+// A provider skill can only ever be offered by its own organisation (0077's
+// organisation_offered_skills check) -- promoting it to global (organisation_id
+// -> null) is the way to make it offerable by every organisation, same rule
+// a global skill already gets. One-way in the UI (no "demote" affordance):
+// once other orgs may have offered or composited against it as global,
+// reverting would be a much bigger, RLS-relevant decision than this action.
+export async function promoteSkillToGlobal(id) {
+  return updateLibrarySkill(id, { organisation_id: null })
 }

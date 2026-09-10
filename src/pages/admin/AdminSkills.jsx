@@ -7,6 +7,7 @@ import { listAllLibrarySkills, updateLibrarySkill, setLibrarySkillStatus } from 
 import { SKILL_TYPE_LABELS } from '../../lib/statusLabels'
 import { useColumnPreferences, useRowSelection, useSortedPage, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
 import { BulkActionBar, ColumnCustomizer, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
+import SkillIcon from '../../components/SkillIcon'
 
 const SKILL_SORT_ACCESSORS = {
   code: (s) => s.skill_code?.toLowerCase() ?? '',
@@ -23,6 +24,14 @@ const SKILL_SORT_ACCESSORS = {
 // Customizable data columns only -- the selection checkbox (first) and the
 // per-row action buttons (last) stay pinned outside this list.
 const SKILL_COLUMNS = [
+  {
+    key: 'icon',
+    label: '',
+    sortable: false,
+    thClassName: 'w-10',
+    cellClassName: 'px-4 py-3',
+    renderCell: (s) => <SkillIcon name={s.name} iconUrl={s.icon_url} size="sm" />,
+  },
   {
     key: 'provider',
     label: 'Provider',
