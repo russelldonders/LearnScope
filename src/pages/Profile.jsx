@@ -148,14 +148,14 @@ export default function Profile() {
               <p className="text-sm text-secondary mb-4">
                 Choose how LearnScope looks. This follows your account to any device you sign in on.
               </p>
-              <div className="inline-flex rounded-md border border-hairline overflow-hidden" role="group" aria-label="Appearance">
+              <div className="max-w-full inline-flex rounded-md border border-hairline overflow-x-auto scrollbar-hide" role="group" aria-label="Appearance">
                 {THEME_OPTIONS.map(({ value, label }) => (
                   <button
                     key={value}
                     type="button"
                     onClick={() => setThemePreference(value)}
                     aria-pressed={themePreference === value}
-                    className={`py-1.5 px-3 text-sm font-medium border-r border-hairline last:border-r-0 ${
+                    className={`shrink-0 whitespace-nowrap py-1.5 px-3 text-sm font-medium border-r border-hairline last:border-r-0 ${
                       themePreference === value
                         ? 'bg-moss text-paper'
                         : 'text-ink hover:bg-paper'
@@ -170,14 +170,18 @@ export default function Profile() {
             <div className="bg-card border border-hairline rounded-lg p-6">
               <h3 className="font-display text-lg text-ink mb-1">{t('profile.language.title')}</h3>
               <p className="text-sm text-secondary mb-4">{t('profile.language.description')}</p>
-              <div className="inline-flex rounded-md border border-hairline overflow-hidden" role="group" aria-label={t('profile.language.title')}>
+              <div
+                className="max-w-full inline-flex rounded-md border border-hairline overflow-x-auto scrollbar-hide"
+                role="group"
+                aria-label={t('profile.language.title')}
+              >
                 {INTERFACE_LANGUAGES.map(({ value, label }) => (
                   <button
                     key={value}
                     type="button"
                     onClick={() => setInterfaceLanguage(value)}
                     aria-pressed={interfaceLanguage === value}
-                    className={`py-1.5 px-3 text-sm font-medium border-r border-hairline last:border-r-0 ${
+                    className={`shrink-0 whitespace-nowrap py-1.5 px-3 text-sm font-medium border-r border-hairline last:border-r-0 ${
                       interfaceLanguage === value
                         ? 'bg-moss text-paper'
                         : 'text-ink hover:bg-paper'
