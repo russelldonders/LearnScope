@@ -19,6 +19,7 @@ const USER_SORT_ACCESSORS = {
   fullName: (u) => u.fullName?.toLowerCase() ?? '',
   email: (u) => u.email?.toLowerCase() ?? '',
   accountStatus: (u) => u.accountStatus ?? '',
+  lastSignInAt: (u) => u.lastSignInAt ?? '',
 }
 
 // Customizable data columns only -- the row-action buttons stay a fixed,
@@ -70,6 +71,14 @@ const USER_COLUMNS = [
     thClassName: 'whitespace-nowrap',
     cellClassName: 'px-4 py-2 text-secondary whitespace-nowrap',
     renderCell: (u) => (u.isPlatformAdmin ? 'Yes' : '—'),
+  },
+  {
+    key: 'lastSignInAt',
+    label: 'Last login',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-2 text-secondary whitespace-nowrap',
+    renderCell: (u) => (u.lastSignInAt ? new Date(u.lastSignInAt).toLocaleString() : 'Never'),
   },
   {
     key: 'organisationMemberships',
