@@ -20873,3 +20873,15 @@ begin
   update skill_library set icon_url = p_icon_url where id = p_skill_id;
 end;
 $$;
+
+
+
+-- =============================================================================
+-- 20260910100000_more_interface_languages.sql
+-- =============================================================================
+
+-- Widen 20260909110000's language_preference check to the additional
+-- interface languages being translated (see src/lib/i18n/translations.js).
+alter table profiles drop constraint profiles_language_preference_check;
+alter table profiles add constraint profiles_language_preference_check
+  check (language_preference in ('en', 'es', 'fr', 'de', 'it', 'nl', 'zh'));
