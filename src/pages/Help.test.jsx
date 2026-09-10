@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import Help from './Help'
+import { LanguageProvider } from '../context/LanguageContext'
 
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ signOut: vi.fn(), user: { id: 'user-1' }, isPlatformAdmin: false, organisationMemberships: [], employerMemberships: [] }),
@@ -21,7 +22,9 @@ afterEach(cleanup)
 function renderHelp() {
   return render(
     <MemoryRouter initialEntries={['/help']}>
-      <Help />
+      <LanguageProvider>
+        <Help />
+      </LanguageProvider>
     </MemoryRouter>
   )
 }

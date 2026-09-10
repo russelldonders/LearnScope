@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
+import { useLanguage } from '../context/LanguageContext'
+import { INTERFACE_LANGUAGES } from '../lib/i18n/translations'
 import AppHeader from '../components/AppHeader'
 import ProfilePhoto from '../components/ProfilePhoto'
 import { COUNTRIES } from '../lib/countries'
@@ -17,6 +19,7 @@ const THEME_OPTIONS = [
 export default function Profile() {
   const { user, updateEmail, signOut, refreshNeedsName } = useAuth()
   const { preference: themePreference, setPreference: setThemePreference } = useTheme()
+  const { language: interfaceLanguage, setLanguage: setInterfaceLanguage, t } = useLanguage()
   const navigate = useNavigate()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -154,6 +157,28 @@ export default function Profile() {
                     aria-pressed={themePreference === value}
                     className={`py-1.5 px-3 text-sm font-medium border-r border-hairline last:border-r-0 ${
                       themePreference === value
+                        ? 'bg-moss text-paper'
+                        : 'text-ink hover:bg-paper'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-card border border-hairline rounded-lg p-6">
+              <h3 className="font-display text-lg text-ink mb-1">{t('profile.language.title')}</h3>
+              <p className="text-sm text-secondary mb-4">{t('profile.language.description')}</p>
+              <div className="inline-flex rounded-md border border-hairline overflow-hidden" role="group" aria-label={t('profile.language.title')}>
+                {INTERFACE_LANGUAGES.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setInterfaceLanguage(value)}
+                    aria-pressed={interfaceLanguage === value}
+                    className={`py-1.5 px-3 text-sm font-medium border-r border-hairline last:border-r-0 ${
+                      interfaceLanguage === value
                         ? 'bg-moss text-paper'
                         : 'text-ink hover:bg-paper'
                     }`}

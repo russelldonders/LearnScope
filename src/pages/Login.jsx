@@ -5,9 +5,11 @@ import { getPendingInviteCode, clearPendingInviteCode } from '../lib/connections
 import { getPendingEnrolCourseId, clearPendingEnrolCourseId, resumePendingEnrolment } from '../lib/courseCatalogue'
 import { getOrganisationBranding, orgBrandStyle } from '../lib/orgBranding'
 import GoogleSignInButton from '../components/GoogleSignInButton'
+import { useLanguage } from '../context/LanguageContext'
 
 export default function Login() {
   const { signIn, signInWithGoogle, user, loading } = useAuth()
+  const { t } = useLanguage()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const orgSlug = searchParams.get('org')
@@ -104,7 +106,7 @@ export default function Login() {
           <img src={branding?.logoUrl || '/favicon.svg'} alt="" className="w-8 h-8 object-contain rounded" />
           {branding?.logoUrl ? branding.name : 'LearnScope'}
         </Link>
-        <p className="text-secondary text-sm mb-6">Log in to your growth log.</p>
+        <p className="text-secondary text-sm mb-6">{t('auth.login.tagline')}</p>
 
         <GoogleSignInButton onClick={handleGoogleSignIn} disabled={googleSubmitting} />
 
@@ -117,7 +119,7 @@ export default function Login() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm text-secondary mb-1" htmlFor="email">
-              Email
+              {t('auth.email')}
             </label>
             <input
               id="email"
@@ -131,10 +133,10 @@ export default function Login() {
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-sm text-secondary" htmlFor="password">
-                Password
+                {t('auth.password')}
               </label>
               <Link to="/forgot-password" className="text-sm text-[var(--org-primary,var(--color-moss))] font-medium">
-                Forgot password?
+                {t('auth.login.forgotPassword')}
               </Link>
             </div>
             <input
@@ -154,14 +156,14 @@ export default function Login() {
             disabled={submitting}
             className={`w-full rounded-md bg-[var(--org-primary,var(--color-moss))] hover:bg-[var(--org-hover,var(--org-primary,var(--color-moss)))] ${ctaTextClass} py-2 font-medium hover:opacity-90 disabled:opacity-60`}
           >
-            {submitting ? 'Logging in…' : 'Log in'}
+            {submitting ? t('auth.login.submitting') : t('auth.login.submit')}
           </button>
         </form>
 
         <p className="text-sm text-secondary mt-6 text-center">
-          No account yet?{' '}
+          {t('auth.login.noAccount')}{' '}
           <Link to={orgSlug ? `/signup?org=${orgSlug}` : '/signup'} className="text-[var(--org-primary,var(--color-moss))] font-medium">
-            Sign up
+            {t('auth.login.signUp')}
           </Link>
         </p>
       </div>

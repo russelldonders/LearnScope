@@ -3,22 +3,26 @@ import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePendingActions } from '../context/PendingActionsContext'
 import { useNavVisibility } from '../context/NavVisibilityContext'
+import { useLanguage } from '../context/LanguageContext'
 import { supabase } from '../lib/supabaseClient'
 
+// label is a translation key (LanguageContext) rather than literal text --
+// resolved per-item below so this nav/menu stays in one place regardless of
+// which language is active.
 const NAV_LINKS = [
-  { to: '/dashboard', label: 'Home' },
-  { to: '/skills', label: 'Skills', requires: 'hasSkills' },
-  { to: '/experience', label: 'Experience' },
-  { to: '/learning', label: 'Learning', requires: 'hasCourses' },
+  { to: '/dashboard', label: 'nav.home' },
+  { to: '/skills', label: 'nav.skills', requires: 'hasSkills' },
+  { to: '/experience', label: 'nav.experience' },
+  { to: '/learning', label: 'nav.learning', requires: 'hasCourses' },
 ]
 
 const MENU_ITEMS = [
-  { to: '/profile', label: 'Profile' },
-  { to: '/connections', label: 'Connections', requires: 'hasConnectionsActivity' },
-  { to: '/profile/connected-accounts', label: 'Connected Apps' },
-  { to: '/profile/privacy', label: 'Privacy Settings' },
-  { to: '/profile/import', label: 'Import Skills & Experience' },
-  { to: '/help', label: 'Help' },
+  { to: '/profile', label: 'menu.profile' },
+  { to: '/connections', label: 'menu.connections', requires: 'hasConnectionsActivity' },
+  { to: '/profile/connected-accounts', label: 'menu.connectedApps' },
+  { to: '/profile/privacy', label: 'menu.privacySettings' },
+  { to: '/profile/import', label: 'menu.importSkills' },
+  { to: '/help', label: 'menu.help' },
 ]
 
 // brandLogoUrl/brandName/brandHomeHref let a page whitelabel this header for
@@ -33,6 +37,7 @@ export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandNam
   const { signOut, user, isPlatformAdmin, organisationMemberships, employerMemberships } = useAuth()
   const { pendingActionCount } = usePendingActions()
   const { navVisibility } = useNavVisibility()
+  const { t } = useLanguage()
   const location = useLocation()
   const [avatarUrl, setAvatarUrl] = useState(null)
   const [fullName, setFullName] = useState(null)
@@ -83,7 +88,7 @@ export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandNam
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-ink focus:px-4 focus:py-2 focus:text-paper"
       >
-        Skip to main content
+        {t('header.skipToMain')}
       </a>
       <div className="max-w-4xl mx-auto px-4 py-3">
         <div className="flex items-center justify-between gap-4">
@@ -94,7 +99,7 @@ export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandNam
           <div className="flex items-center gap-2 shrink-0">
             <Link
               to="/actions"
-              aria-label={pendingActionCount > 0 ? `Actions, ${pendingActionCount} pending` : 'Actions'}
+              aria-label={pendingActionCount > 0 ? `${t('nav.actions')}, ${pendingActionCount} pending` : t('nav.actions')}
               className={`relative flex items-center justify-center w-9 h-9 rounded-full border shrink-0 ${
                 location.pathname === '/actions'
                   ? 'border-[var(--org-primary,var(--color-moss))] text-ink'
@@ -152,7 +157,7 @@ export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandNam
                       onClick={() => setMenuOpen(false)}
                       className="block px-4 py-2 text-sm text-ink hover:bg-paper"
                     >
-                      {item.label}
+                      {t(item.label)}
                     </Link>
                   ))}
                   {isPlatformAdmin && (
@@ -161,7 +166,7 @@ export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandNam
                       onClick={() => setMenuOpen(false)}
                       className="block px-4 py-2 text-sm text-ink hover:bg-paper"
                     >
-                      {location.pathname.startsWith('/admin') ? 'Switch to learner mode' : 'Platform console'}
+                      {location.pathname.startsWith('/admin') ? t('menu.switchToLearner') : t('menu.platformConsole')}
                     </Link>
                   )}
                   {organisationMemberships?.length > 0 && (
@@ -170,7 +175,7 @@ export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandNam
                       onClick={() => setMenuOpen(false)}
                       className="block px-4 py-2 text-sm text-ink hover:bg-paper"
                     >
-                      {location.pathname.startsWith('/provider') ? 'Switch to learner mode' : 'Provider console'}
+                      {location.pathname.startsWith('/provider') ? t('menu.switchToLearner') : t('menu.providerConsole')}
                     </Link>
                   )}
                   {employerMemberships?.some((m) => m.role === 'admin') && (
@@ -179,7 +184,7 @@ export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandNam
                       onClick={() => setMenuOpen(false)}
                       className="block px-4 py-2 text-sm text-ink hover:bg-paper"
                     >
-                      {location.pathname.startsWith('/employer') ? 'Switch to learner mode' : 'Employer console'}
+                      {location.pathname.startsWith('/employer') ? t('menu.switchToLearner') : t('menu.employerConsole')}
                     </Link>
                   )}
                   <div className="my-1 border-t border-hairline" />
@@ -191,7 +196,7 @@ export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandNam
                     }}
                     className="block w-full text-left px-4 py-2 text-sm text-ink hover:bg-paper"
                   >
-                    Log out
+                    {t('menu.logout')}
                   </button>
                 </div>
               )}
@@ -210,7 +215,7 @@ export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandNam
                     : 'text-secondary hover:text-ink'
                 }`}
               >
-                {link.label}
+                {t(link.label)}
               </Link>
             ))}
           </nav>

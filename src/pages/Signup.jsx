@@ -5,9 +5,11 @@ import { getPendingInviteCode, clearPendingInviteCode } from '../lib/connections
 import { getPendingEnrolCourseId, clearPendingEnrolCourseId, resumePendingEnrolment } from '../lib/courseCatalogue'
 import { getOrganisationBranding, orgBrandStyle } from '../lib/orgBranding'
 import GoogleSignInButton from '../components/GoogleSignInButton'
+import { useLanguage } from '../context/LanguageContext'
 
 export default function Signup() {
   const { signUp, signInWithGoogle, user, loading } = useAuth()
+  const { t } = useLanguage()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const orgSlug = searchParams.get('org')
@@ -129,7 +131,7 @@ export default function Signup() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm text-secondary mb-1" htmlFor="firstName">
-                  First name
+                  {t('auth.firstName')}
                 </label>
                 <input
                   id="firstName"
@@ -143,7 +145,7 @@ export default function Signup() {
               </div>
               <div>
                 <label className="block text-sm text-secondary mb-1" htmlFor="lastName">
-                  Last name
+                  {t('auth.lastName')}
                 </label>
                 <input
                   id="lastName"
@@ -158,7 +160,7 @@ export default function Signup() {
             </div>
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="email">
-                Email
+                {t('auth.email')}
               </label>
               <input
                 id="email"
@@ -171,7 +173,7 @@ export default function Signup() {
             </div>
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="password">
-                Password
+                {t('auth.password')}
               </label>
               <input
                 id="password"
@@ -191,16 +193,16 @@ export default function Signup() {
               disabled={submitting}
               className={`w-full rounded-md bg-[var(--org-primary,var(--color-moss))] hover:bg-[var(--org-hover,var(--org-primary,var(--color-moss)))] ${ctaTextClass} py-2 font-medium hover:opacity-90 disabled:opacity-60`}
             >
-              {submitting ? 'Creating account…' : 'Sign up'}
+              {submitting ? t('auth.signup.submitting') : t('auth.signup.submit')}
             </button>
           </form>
         )}
 
         {!confirmationSent && (
           <p className="text-sm text-secondary mt-6 text-center">
-            Already have an account?{' '}
+            {t('auth.signup.haveAccount')}{' '}
             <Link to={orgSlug ? `/login?org=${orgSlug}` : '/login'} className="text-[var(--org-primary,var(--color-moss))] font-medium">
-              Log in
+              {t('auth.signup.logIn')}
             </Link>
           </p>
         )}
