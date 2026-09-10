@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
+import { LanguageProvider } from './context/LanguageContext'
 import { PendingActionsProvider } from './context/PendingActionsContext'
 import { NavVisibilityProvider } from './context/NavVisibilityContext'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -44,6 +45,7 @@ import AdminUserDetail from './pages/admin/AdminUserDetail'
 import AdminProviders from './pages/admin/AdminProviders'
 import AdminEmployers from './pages/admin/AdminEmployers'
 import AdminCatalogue from './pages/admin/AdminCatalogue'
+import AdminCourseDetail from './pages/admin/AdminCourseDetail'
 import AdminSkills from './pages/admin/AdminSkills'
 import AdminSkillDetail from './pages/admin/AdminSkillDetail'
 import AdminTags from './pages/admin/AdminTags'
@@ -63,6 +65,7 @@ function App() {
       <RouteTitle />
       <AuthProvider>
         <ThemeProvider>
+        <LanguageProvider>
         <PendingActionsProvider>
         <NavVisibilityProvider>
         <Routes>
@@ -341,6 +344,14 @@ function App() {
             }
           />
           <Route
+            path="/admin/catalogue/:courseId"
+            element={
+              <PlatformAdminRoute>
+                <AdminCourseDetail />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
             path="/admin/skills"
             element={
               <PlatformAdminRoute>
@@ -384,6 +395,7 @@ function App() {
         </Routes>
         </NavVisibilityProvider>
         </PendingActionsProvider>
+        </LanguageProvider>
         </ThemeProvider>
       </AuthProvider>
     </BrowserRouter>

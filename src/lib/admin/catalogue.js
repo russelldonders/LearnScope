@@ -1,6 +1,7 @@
 import { supabase } from '../supabaseClient'
 import { listProviderCatalogues } from '../catalogues'
 import { composeDurationText } from '../courseDuration'
+import { listCourseSections, listCourseResources } from '../courseContent'
 
 const ADMIN_CATALOGUE_SELECT = `*, organisations(id, name),
   course_catalogue_publications(catalogue_id, published_at, catalogues(id, name, is_global))`
@@ -15,7 +16,21 @@ export async function listAllCatalogueCourses() {
     .select(ADMIN_CATALOGUE_SELECT)
     .order('created_at', { ascending: false })
   if (error) throw error
-  return data ?? []
+  const courses = data ?? []
+  const counts = await countCourseParticipantsBulk(courses.map((c) => c.id))
+  return courses.map((c) => ({ ...c, participantCount: counts.get(c.id) ?? 0 }))
+}
+
+// Count-only, no raw enrolment rows -- see 20260909090000's
+// count_course_participants_bulk for why a platform admin can't just query
+// `courses` directly (it's a learner's own personal record, not admin data).
+export async function countCourseParticipantsBulk(catalogueCourseIds) {
+  if (catalogueCourseIds.length === 0) return new Map()
+  const { data, error } = await supabase.rpc('count_course_participants_bulk', {
+    p_catalogue_course_ids: catalogueCourseIds,
+  })
+  if (error) throw error
+  return new Map((data ?? []).map((row) => [row.catalogue_course_id, Number(row.participant_count)]))
 }
 
 // Platform admins can create a catalogue entry that's immediately live
@@ -195,13 +210,65 @@ export async function listOrganisationCatalogueCourses(organisationId) {
   return [...byGroup.values()]
 }
 
+// Read-only drill-in for a platform admin -- course metadata, its content
+// structure (grouped by section, same shape the learner/provider editors
+// use), skills it targets, its version history, and a participant *count*
+// (not the named list -- listCourseParticipants below is provider-console
+// only, since courses' RLS never grants a platform admin standing access to
+// every learner's personal courses rows; see count_course_participants_bulk).
+export async function getAdminCourseDetail(id) {
+  const [{ data: course, error: courseError }, sections, resources, versions, counts] = await Promise.all([
+    supabase
+      .from('course_catalogue')
+      .select(`*, organisations(id, name),
+        course_catalogue_skills(id, level, skill_library(id, name)),
+        course_catalogue_publications(catalogue_id, published_at, catalogues(id, name, is_global))`)
+      .eq('id', id)
+      .maybeSingle(),
+    listCourseSections(id),
+    listCourseResources(id),
+    listCourseVersionHistory(id),
+    countCourseParticipantsBulk([id]),
+  ])
+  if (courseError) throw courseError
+  if (!course) return null
+
+  const resourcesBySection = new Map()
+  const ungrouped = []
+  for (const resource of resources) {
+    if (resource.sectionId) {
+      const list = resourcesBySection.get(resource.sectionId) ?? []
+      list.push(resource)
+      resourcesBySection.set(resource.sectionId, list)
+    } else {
+      ungrouped.push(resource)
+    }
+  }
+
+  return {
+    ...course,
+    skills: (course.course_catalogue_skills ?? [])
+      .filter((entry) => entry.skill_library)
+      .map((entry) => ({ id: entry.skill_library.id, name: entry.skill_library.name, level: entry.level })),
+    sections: sections.map((section) => ({ ...section, resources: resourcesBySection.get(section.id) ?? [] })),
+    ungroupedResources: ungrouped,
+    versions,
+    participantCount: counts.get(id) ?? 0,
+  }
+}
+
 export async function listCourseVersionHistory(courseId) {
   const { data: selectedCourse, error: selectedCourseError } = await supabase
     .from('course_catalogue')
     .select('version_group_id')
     .eq('id', courseId)
-    .single()
+    .maybeSingle()
   if (selectedCourseError) throw selectedCourseError
+  // A nonexistent/invalid id (bad UUID, deleted row) is the caller's job to
+  // report as "not found" -- this just returns no history rather than
+  // throwing, so it can safely run alongside a course-existence check in
+  // the same Promise.all (see getAdminCourseDetail) without racing it.
+  if (!selectedCourse) return []
 
   const { data: versions, error: versionError } = await supabase
     .from('course_catalogue')

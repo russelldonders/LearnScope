@@ -27,6 +27,9 @@ const CATALOGUE_SORT_ACCESSORS = {
   rejection_reason: (c) => c.rejection_reason?.toLowerCase() ?? '',
   destinations: (c) => (c.course_catalogue_publications ?? []).map((p) => p.catalogues?.name).filter(Boolean).join(', ').toLowerCase(),
   price: (c) => (c.price_amount === null || c.price_amount === undefined ? -1 : Number(c.price_amount)),
+  participants: (c) => c.participantCount ?? 0,
+  created_at: (c) => c.created_at ?? '',
+  updated_at: (c) => c.updated_at ?? '',
 }
 
 // Customizable data columns only -- the trailing Reject/Deactivate
@@ -46,7 +49,11 @@ const CATALOGUE_COLUMNS = [
     label: 'Course',
     sortable: true,
     cellClassName: 'px-4 py-3 text-ink font-medium whitespace-nowrap',
-    renderCell: (c) => c.name,
+    renderCell: (c) => (
+      <Link to={`/admin/catalogue/${c.id}`} className="hover:text-moss hover:underline">
+        {c.name}
+      </Link>
+    ),
   },
   {
     key: 'provider',
@@ -105,6 +112,30 @@ const CATALOGUE_COLUMNS = [
       const destinations = (c.course_catalogue_publications ?? []).map((p) => p.catalogues?.name).filter(Boolean)
       return destinations.length > 0 ? destinations.join(', ') : '—'
     },
+  },
+  {
+    key: 'participants',
+    label: 'Participants',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-3 text-secondary whitespace-nowrap',
+    renderCell: (c) => c.participantCount ?? 0,
+  },
+  {
+    key: 'created_at',
+    label: 'Created',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-3 text-secondary whitespace-nowrap',
+    renderCell: (c) => (c.created_at ? new Date(c.created_at).toLocaleDateString() : '—'),
+  },
+  {
+    key: 'updated_at',
+    label: 'Last updated',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-3 text-secondary whitespace-nowrap',
+    renderCell: (c) => (c.updated_at ? new Date(c.updated_at).toLocaleDateString() : '—'),
   },
 ]
 

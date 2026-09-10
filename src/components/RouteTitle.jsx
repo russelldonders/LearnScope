@@ -31,6 +31,7 @@ const TITLES = [
   [/^\/employer\/roles\/[^/]+$/, 'Role profile details'],
   [/^\/admin\/users\/[^/]+$/, 'Admin user details'],
   [/^\/admin\/providers$/, 'Admin providers'],
+  [/^\/admin\/catalogue\/[^/]+$/, 'Admin course details'],
   [/^\/admin\/catalogue$/, 'Admin courses'],
   [/^\/admin\/skills\/[^/]+$/, 'Admin skill details'],
   [/^\/admin\/skills$/, 'Admin skills'],
