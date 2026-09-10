@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
+import { useLanguage } from '../context/LanguageContext'
 import SkillCard from './SkillCard'
 import FindSkillModal from './FindSkillModal'
 import FilterRow from './FilterRow'
@@ -13,14 +14,15 @@ import { LEVEL_LABELS } from '../lib/levels'
 import { isSelfAssessmentDue } from '../lib/checkin'
 
 const SKILL_VIEWS = [
-  { value: 'all', label: 'All' },
-  { value: 'current', label: 'Current role' },
-  { value: 'developing', label: 'Developing' },
-  { value: 'review', label: 'Needs review' },
+  { value: 'all', labelKey: 'skills.views.all' },
+  { value: 'current', labelKey: 'skills.views.current' },
+  { value: 'developing', labelKey: 'skills.views.developing' },
+  { value: 'review', labelKey: 'skills.views.review' },
 ]
 
 export default function SkillsSection() {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const navigate = useNavigate()
   const [skills, setSkills] = useState([])
   const [currentRoles, setCurrentRoles] = useState([])
@@ -191,16 +193,16 @@ export default function SkillsSection() {
     <section>
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between mb-8">
         <div className="max-w-2xl">
-          <h1 className="font-display text-3xl sm:text-4xl text-ink text-balance">Your skills</h1>
+          <h1 className="font-display text-3xl sm:text-4xl text-ink text-balance">{t('skills.heading')}</h1>
           <p className="text-secondary mt-2 text-pretty">
-            Track what you know, where you are growing, and what needs attention next.
+            {t('skills.subheading')}
           </p>
         </div>
         <button
           onClick={() => setAddOpen(true)}
           className="rounded-md bg-moss text-paper py-2.5 px-4 font-medium hover:opacity-90 shrink-0 self-start"
         >
-          Add skill
+          {t('skills.addSkill')}
         </button>
       </div>
 
@@ -213,14 +215,14 @@ export default function SkillsSection() {
 
       {!loading && !error && activeSkills.length === 0 && archivedSkills.length === 0 && (
         <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
-          <h2 className="font-display text-xl text-ink">Start with a skill that matters now</h2>
-          <p className="text-secondary mt-2 mb-5">Add your first skill to assess it, set a target, and track progress.</p>
+          <h2 className="font-display text-xl text-ink">{t('skills.emptyState.title')}</h2>
+          <p className="text-secondary mt-2 mb-5">{t('skills.emptyState.description')}</p>
           <button
             type="button"
             onClick={() => setAddOpen(true)}
             className="rounded-md bg-moss text-paper py-2.5 px-4 font-medium hover:opacity-90"
           >
-            Add your first skill
+            {t('skills.emptyState.button')}
           </button>
         </div>
       )}
@@ -229,12 +231,12 @@ export default function SkillsSection() {
         <div className="border-y border-hairline py-4 mb-8 space-y-4">
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
             <label className="min-w-0">
-              <span className="sr-only">Search skills</span>
+              <span className="sr-only">{t('skills.searchPlaceholder')}</span>
               <input
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search your skills"
+                placeholder={t('skills.searchPlaceholder')}
                 className="w-full rounded-md border border-hairline bg-card px-3 py-2.5 text-ink placeholder:text-secondary"
               />
             </label>
@@ -244,7 +246,7 @@ export default function SkillsSection() {
               aria-expanded={showFilters}
               className="rounded-md border border-hairline bg-card px-3 py-2.5 text-sm font-medium text-ink hover:border-moss"
             >
-              Filters{activeMoreFilterCount > 0 ? ` (${activeMoreFilterCount})` : ''}
+              {t('skills.filters')}{activeMoreFilterCount > 0 ? ` (${activeMoreFilterCount})` : ''}
             </button>
           </div>
 
@@ -259,7 +261,7 @@ export default function SkillsSection() {
                   view === option.value ? 'bg-moss text-paper' : 'text-secondary hover:bg-card hover:text-ink'
                 }`}
               >
-                {option.label}
+                {t(option.labelKey)}
               </button>
             ))}
           </div>
@@ -306,8 +308,8 @@ export default function SkillsSection() {
 
       {!loading && !error && view === 'all' && !query && !tagFilter && !trackingReasonFilter && skillGaps.length > 0 && (
         <div className="mb-10">
-          <h2 className="font-display text-xl text-ink">Skills to develop</h2>
-          <p className="text-sm text-secondary mt-1 mb-4">The clearest opportunities to move toward your targets.</p>
+          <h2 className="font-display text-xl text-ink">{t('skills.toDevelop.title')}</h2>
+          <p className="text-sm text-secondary mt-1 mb-4">{t('skills.toDevelop.description')}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {skillGaps.slice(0, 3).map((skill) => (
               <button
@@ -338,10 +340,10 @@ export default function SkillsSection() {
 
       {!loading && !error && activeSkills.length > 0 && filteredSkills.length === 0 && (
         <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
-          <h2 className="font-display text-xl text-ink">No skills match this view</h2>
-          <p className="text-secondary mt-2 mb-5">Try another search or remove the active filters.</p>
+          <h2 className="font-display text-xl text-ink">{t('skills.noMatch.title')}</h2>
+          <p className="text-secondary mt-2 mb-5">{t('skills.noMatch.description')}</p>
           <button type="button" onClick={clearFilters} className="text-sm font-medium text-moss hover:underline">
-            Clear filters
+            {t('skills.noMatch.clearFilters')}
           </button>
         </div>
       )}

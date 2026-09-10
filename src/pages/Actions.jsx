@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePendingActions } from '../context/PendingActionsContext'
+import { useLanguage } from '../context/LanguageContext'
 import AppHeader from '../components/AppHeader'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import { listIncomingRateInvites, listIncomingRecommendInvites, listUnseenPeerRatings, markPeerRatingsSeen, getProfiles } from '../lib/connections'
@@ -42,6 +43,7 @@ import { loadActionSources } from '../lib/actionLoading'
 export default function Actions() {
   const { user, refreshOrganisationMemberships, refreshEmployerMemberships } = useAuth()
   const { refreshPendingActionCount } = usePendingActions()
+  const { t } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [incomingRateInvites, setIncomingRateInvites] = useState([])
@@ -439,7 +441,7 @@ export default function Actions() {
       <AppHeader />
 
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-10">
-        <h1 className="font-display text-2xl text-ink">Actions</h1>
+        <h1 className="font-display text-2xl text-ink">{t('actions.heading')}</h1>
 
         {loading && <p className="text-secondary">Loading…</p>}
         {error && (
@@ -459,7 +461,7 @@ export default function Actions() {
 
         {unseenRatings.length > 0 && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-6">Ratings received</h2>
+            <h2 className="font-display text-xl text-ink mb-6">{t('actions.ratingsReceived')}</h2>
             <div className="space-y-3">
               {unseenRatings.map((rating) => (
                 <Link
@@ -483,7 +485,7 @@ export default function Actions() {
 
         {incomingRateInvites.length > 0 && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-6">Invitations to rate</h2>
+            <h2 className="font-display text-xl text-ink mb-6">{t('actions.invitationsToRate')}</h2>
             <div className="space-y-3">
               {incomingRateInvites.map((invite) => (
                 <Link
@@ -507,7 +509,7 @@ export default function Actions() {
 
         {incomingRecommendInvites.length > 0 && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-6">Skill recommendations</h2>
+            <h2 className="font-display text-xl text-ink mb-6">{t('actions.skillRecommendations')}</h2>
             <div className="space-y-3">
               {incomingRecommendInvites.map((invite) => (
                 <Link
@@ -531,7 +533,7 @@ export default function Actions() {
 
         {connectionRequests.length > 0 && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-6">Connection requests</h2>
+            <h2 className="font-display text-xl text-ink mb-6">{t('actions.connectionRequests')}</h2>
             <div className="space-y-3">
               {connectionRequests.map((request) => (
                 <div key={request.id} className="bg-card border border-hairline rounded-lg p-4">
@@ -578,7 +580,7 @@ export default function Actions() {
 
         {skillAccessRequests.length > 0 && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-6">Skill access requests</h2>
+            <h2 className="font-display text-xl text-ink mb-6">{t('actions.skillAccessRequests')}</h2>
             <div className="space-y-3">
               {skillAccessRequests.map((request) => (
                 <div key={request.id} className="bg-card border border-hairline rounded-lg p-4">
@@ -618,7 +620,7 @@ export default function Actions() {
 
         {orgInvites.length > 0 && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-6">Provider invitations</h2>
+            <h2 className="font-display text-xl text-ink mb-6">{t('actions.providerInvitations')}</h2>
             <div className="space-y-3">
               {orgInvites.map((invite) => (
                 <div key={invite.id} className="bg-card border border-hairline rounded-lg p-4">
@@ -658,7 +660,7 @@ export default function Actions() {
 
         {employerInvites.length > 0 && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-6">Employer invitations</h2>
+            <h2 className="font-display text-xl text-ink mb-6">{t('actions.employerInvitations')}</h2>
             <div className="space-y-3">
               {employerInvites.map((invite) => (
                 <div key={invite.id} className="bg-card border border-hairline rounded-lg p-4">
@@ -699,7 +701,7 @@ export default function Actions() {
         {managerTeamInvites.length > 0 && (
           <section aria-labelledby="manager-team-invitations-heading">
             <h2 id="manager-team-invitations-heading" className="font-display text-xl text-ink mb-6">
-              Manager team invitations
+              {t('actions.managerTeamInvitations')}
             </h2>
             <div className="space-y-3">
               {managerTeamInvites.map((invite) => (
@@ -718,7 +720,7 @@ export default function Actions() {
 
         {dataAccessRequests.length > 0 && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-6">Data access requests</h2>
+            <h2 className="font-display text-xl text-ink mb-6">{t('actions.dataAccessRequests')}</h2>
             <div className="space-y-3">
               {dataAccessRequests.map((request) => (
                 <div key={request.id} className="bg-card border border-hairline rounded-lg p-4">
@@ -759,7 +761,7 @@ export default function Actions() {
 
         {courseAssignments.length > 0 && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-6">Assigned training</h2>
+            <h2 className="font-display text-xl text-ink mb-6">{t('actions.assignedTraining')}</h2>
             <div className="space-y-3">
               {courseAssignments.map((assignment) => (
                 <div key={assignment.id} className="bg-card border border-hairline rounded-lg p-4">
@@ -799,7 +801,7 @@ export default function Actions() {
 
         {skillSuggestions.length > 0 && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-6">Skill suggestions</h2>
+            <h2 className="font-display text-xl text-ink mb-6">{t('actions.skillSuggestions')}</h2>
             <div className="space-y-3">
               {skillSuggestions.map((suggestion) => (
                 <div key={suggestion.id} className="bg-card border border-hairline rounded-lg p-4">
@@ -922,7 +924,7 @@ export default function Actions() {
 
         {validationRequests.length > 0 && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-6">Requests to validate</h2>
+            <h2 className="font-display text-xl text-ink mb-6">{t('actions.requestsToValidate')}</h2>
             <div className="space-y-3">
               {validationRequests.map((request) => (
                 <Link

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
+import { useLanguage } from '../context/LanguageContext'
 import { EXPERIENCE_TYPES } from '../lib/experienceTypes'
 import TimelineItem from './TimelineItem'
 import ExperienceModal from './ExperienceModal'
@@ -14,6 +15,7 @@ const ADD_EXPERIENCE_TYPES = EXPERIENCE_TYPES
 
 export default function ExperienceSection() {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const navigate = useNavigate()
   const location = useLocation()
   const [items, setItems] = useState([])
@@ -168,9 +170,9 @@ export default function ExperienceSection() {
 
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between mb-8 print:hidden">
         <div className="max-w-2xl">
-          <h1 className="font-display text-3xl sm:text-4xl text-ink text-balance">Experience timeline</h1>
+          <h1 className="font-display text-3xl sm:text-4xl text-ink text-balance">{t('experience.heading')}</h1>
           <p className="text-secondary mt-2 text-pretty">
-            Your employment, education, and other milestones, in order.
+            {t('experience.subheading')}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0 self-start">
@@ -179,7 +181,7 @@ export default function ExperienceSection() {
             onClick={() => window.print()}
             className="rounded-md border border-hairline text-ink py-2 px-3 text-sm font-medium hover:bg-paper"
           >
-            Download as PDF
+            {t('experience.downloadPdf')}
           </button>
           <AddExperienceButton types={ADD_EXPERIENCE_TYPES} onSelect={setModalType} />
         </div>
@@ -190,7 +192,7 @@ export default function ExperienceSection() {
 
       {!loading && rootItems.length === 0 && (
         <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
-          <p className="text-secondary">No education or employment history yet. Add your first one.</p>
+          <p className="text-secondary">{t('experience.emptyState')}</p>
         </div>
       )}
 

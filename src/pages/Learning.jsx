@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
+import { useLanguage } from '../context/LanguageContext'
 import { listCourseProgressByCatalogueId } from '../lib/courseContent'
 import { listMyAssignedCourseEmployers } from '../lib/courseCatalogue'
 import AppHeader from '../components/AppHeader'
@@ -10,6 +11,7 @@ import ProgressBar from '../components/ProgressBar'
 
 export default function Learning() {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const [courses, setCourses] = useState([])
   const [skillsByCourse, setSkillsByCourse] = useState(new Map())
   const [progressByCatalogueId, setProgressByCatalogueId] = useState({})
@@ -67,16 +69,16 @@ export default function Learning() {
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between mb-8">
           <div className="max-w-2xl">
-            <h1 className="font-display text-3xl sm:text-4xl text-ink text-balance">Your learning</h1>
+            <h1 className="font-display text-3xl sm:text-4xl text-ink text-balance">{t('learning.heading')}</h1>
             <p className="text-secondary mt-2 text-pretty">
-              Courses you're taking or have completed, and where to find more.
+              {t('learning.subheading')}
             </p>
           </div>
           <Link
             to="/training"
             className="rounded-md bg-moss text-paper py-2.5 px-4 font-medium hover:opacity-90 shrink-0 self-start"
           >
-            Find training
+            {t('learning.findTraining')}
           </Link>
         </div>
 
@@ -85,13 +87,13 @@ export default function Learning() {
 
         {!loading && courses.length === 0 && (
           <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
-            <p className="text-secondary">No courses logged yet. Find something to enrol in.</p>
+            <p className="text-secondary">{t('learning.emptyState')}</p>
           </div>
         )}
 
         {inProgress.length > 0 && (
           <div className="mb-8">
-            <h3 className="font-display text-base text-ink mb-4">In progress</h3>
+            <h3 className="font-display text-base text-ink mb-4">{t('learning.inProgress')}</h3>
             <CourseGrid
               courses={inProgress}
               skillsByCourse={skillsByCourse}
@@ -103,7 +105,7 @@ export default function Learning() {
 
         {completed.length > 0 && (
           <div>
-            <h3 className="font-display text-base text-ink mb-4">Completed</h3>
+            <h3 className="font-display text-base text-ink mb-4">{t('learning.completed')}</h3>
             <CourseGrid
               courses={completed}
               skillsByCourse={skillsByCourse}
@@ -118,6 +120,7 @@ export default function Learning() {
 }
 
 function CourseGrid({ courses, skillsByCourse, progressByCatalogueId, assignedByCatalogueId }) {
+  const { t } = useLanguage()
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       {courses.map((course) => {
@@ -142,11 +145,11 @@ function CourseGrid({ courses, skillsByCourse, progressByCatalogueId, assignedBy
             <div className="p-4 flex flex-col flex-1">
               {assignedByEmployer ? (
                 <span className="self-start font-mono text-[10px] uppercase tracking-wide text-paper bg-moss rounded-full px-2 py-0.5 mb-1.5">
-                  Assigned by {assignedByEmployer}
+                  {t('learning.assignedByPrefix')} {assignedByEmployer}
                 </span>
               ) : (
                 <span className="self-start font-mono text-[10px] uppercase tracking-wide text-secondary mb-1.5">
-                  Personal
+                  {t('learning.personal')}
                 </span>
               )}
               <h3 className="font-display text-lg text-ink">{course.name}</h3>
@@ -156,17 +159,17 @@ function CourseGrid({ courses, skillsByCourse, progressByCatalogueId, assignedBy
               <p className="font-mono text-xs mt-2">
                 {course.completed_date ? (
                   <span className="text-moss">
-                    Completed {new Date(course.completed_date).toLocaleDateString()}
+                    {t('learning.completed')} {new Date(course.completed_date).toLocaleDateString()}
                   </span>
                 ) : (
-                  <span className="text-secondary">In progress</span>
+                  <span className="text-secondary">{t('learning.inProgress')}</span>
                 )}
               </p>
               {percent != null && (
                 <div className="mt-2">
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
-                      {percent}% complete
+                      {percent}% {t('learning.percentCompleteSuffix')}
                     </span>
                     <span className="font-mono text-[10px] text-secondary">
                       {progress.completed}/{progress.total}

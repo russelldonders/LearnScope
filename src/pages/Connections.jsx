@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useLanguage } from '../context/LanguageContext'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -27,6 +28,7 @@ import {
 
 export default function Connections() {
   const { user, refreshWorkspaces } = useAuth()
+  const { t } = useLanguage()
   const [searchParams, setSearchParams] = useSearchParams()
   const activeSection = searchParams.get('section') === 'teams' ? 'teams' : 'people'
   const tabRefs = useRef({})
@@ -191,13 +193,13 @@ export default function Connections() {
       <AppHeader />
 
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
-        <h1 className="font-display text-xl text-ink mb-1">Connections</h1>
-        <p className="text-sm text-secondary mb-6">Stay connected with people you trust, and organise learning together in teams.</p>
+        <h1 className="font-display text-xl text-ink mb-1">{t('connections.heading')}</h1>
+        <p className="text-sm text-secondary mb-6">{t('connections.subheading')}</p>
 
         <div role="tablist" aria-label="Connections sections" className="flex items-center gap-1 mb-8 border-b border-hairline">
           {[
-            { key: 'people', label: 'People' },
-            { key: 'teams', label: 'Teams' },
+            { key: 'people', label: t('connections.tabs.people') },
+            { key: 'teams', label: t('connections.tabs.teams') },
           ].map((section) => (
             <button key={section.key} type="button" role="tab"
               ref={(element) => { tabRefs.current[section.key] = element }}
@@ -228,7 +230,7 @@ export default function Connections() {
         )}
         {activeSection === 'people' && <div className="space-y-10">
         <div>
-          <h2 className="font-display text-xl text-ink mb-6">Your connections</h2>
+          <h2 className="font-display text-xl text-ink mb-6">{t('connections.yourConnections')}</h2>
 
           {loading && <p className="text-secondary">Loading…</p>}
           {error && <p role="alert" className="text-red-700 text-sm">{error}</p>}
@@ -236,8 +238,7 @@ export default function Connections() {
           {!loading && connections.length === 0 && (
             <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
               <p className="text-secondary">
-                No connections yet. Invite someone to rate a skill, or connect with people tracking
-                the same skill from that skill's detail view.
+                {t('connections.emptyState')}
               </p>
             </div>
           )}
@@ -324,7 +325,7 @@ export default function Connections() {
 
         {pendingInvites.length > 0 && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-6">Pending invites</h2>
+            <h2 className="font-display text-xl text-ink mb-6">{t('connections.pendingInvites')}</h2>
             <div className="space-y-3">
               {pendingInvites.map((invite) => (
                 <div

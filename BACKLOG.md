@@ -16,14 +16,19 @@ or just delete it.
   (see playwright.config.ts's placeholder-credentials comment).
 
 - general
-1. Multi-language: infrastructure now exists (LanguageContext.jsx, a
-   lightweight custom t() translator rather than a new dependency, a
-   profiles.language_preference column mirroring theme_preference, a picker
-   on Profile). Only AppHeader nav/menu and the Login/Signup/ForgotPassword
-   pages are actually translated (en/es) as a proof it works end to end —
-   the rest of the app's strings (skills, courses, every admin console,
-   etc.) still need translating, key by key, surface by surface. That's a
-   large amount of ongoing work, not something to treat as finished.
+1. Multi-language: now 7 languages (en, es, fr, de, it, nl, zh) across
+   AppHeader nav/menu, Login/Signup/ForgotPassword, and the learner area's
+   page-level shell text (headings, subheadings, primary buttons, empty
+   states, tab/section labels) on Dashboard, Skills, Connections, Learning,
+   Actions, Activity, Experience, and SkillDetail's core Knowledge/
+   Application/Learn/Verify/Demonstrate/Validate structure. Not translated:
+   admin/provider/employer consoles, most modals and secondary dialogs,
+   deeply dynamic/AI-generated content (level guides, diagnostic questions),
+   and most of SkillDetail's ~2800 lines beyond that core structure —
+   still a meaningful amount of ongoing work, not something to treat as
+   finished. `t()` has no string-interpolation support yet (params), so a
+   few spots (e.g. "Assigned by {name}") were split into a prefix key
+   concatenated with the raw value rather than a single templated string.
 2. "Proxy as another user" — deliberately NOT built as literal session
    impersonation. The only way to make RLS-scoped queries genuinely return
    another learner's data is to hold a real, fully-privileged session as

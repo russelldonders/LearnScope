@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
+import { useLanguage } from '../context/LanguageContext'
 import { uploadEvidenceFiles } from '../lib/skillEvidence'
 import { isSelfAssessmentDue, todayDateString } from '../lib/checkin'
 import { formatMonthYear } from '../lib/dates'
@@ -50,6 +51,7 @@ export default function SkillDetail() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user } = useAuth()
+  const { t } = useLanguage()
   const backTo = location.state?.from ?? '/skills'
   const backLabel = location.state?.from ? '← Back to experience' : '← Back to skills'
   const [skill, setSkill] = useState(null)
@@ -461,7 +463,7 @@ export default function SkillDetail() {
                       ? LEVEL_LABELS[displayedPracticalLevel]
                       : skill.lifecycle_stage
                         ? SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]
-                        : 'Not yet self-assessed'}
+                        : t('skillDetail.notYetSelfAssessed')}
                   </p>
                 </div>
               </div>
@@ -502,7 +504,7 @@ export default function SkillDetail() {
 
             {nextMilestone && (
               <div className="rounded-md border border-hairline bg-paper px-3 py-2 mt-3">
-                <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Next milestone</p>
+                <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">{t('skillDetail.nextMilestone')}</p>
                 <p className="text-sm text-ink mt-0.5">{nextMilestone.label}</p>
                 <p className="text-xs text-secondary mt-0.5">{nextMilestone.description}</p>
                 {nextMilestoneAction && (
@@ -511,7 +513,7 @@ export default function SkillDetail() {
                     onClick={nextMilestoneAction}
                     className="mt-2 rounded-md bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90"
                   >
-                    Start
+                    {t('skillDetail.start')}
                   </button>
                 )}
               </div>
@@ -519,7 +521,7 @@ export default function SkillDetail() {
 
             <div className="mt-4 pt-4 border-t border-hairline grid grid-cols-1 sm:grid-cols-2 gap-4">
               <SkillPanel
-                title="Knowledge"
+                title={t('skillDetail.knowledge')}
                 accent="slate"
                 status={
                   <button
@@ -538,7 +540,7 @@ export default function SkillDetail() {
                       <p className="text-sm text-secondary">
                         {displayedKnowledgeLevel
                           ? KNOWLEDGE_LEVEL_LABELS[displayedKnowledgeLevel]
-                          : 'Not yet self-assessed'}
+                          : t('skillDetail.notYetSelfAssessed')}
                       </p>
                       <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
                         {knowledgeVerification ?? 'Knowledge foundation'}
@@ -550,7 +552,7 @@ export default function SkillDetail() {
                 nested={
                   <div className="space-y-3">
                     <NestedSkillPanel
-                      title="Learn"
+                      title={t('skillDetail.stages.learn')}
                       status={
                         <div>
                           {completedCourseLinksCount > 0 && (
@@ -590,7 +592,7 @@ export default function SkillDetail() {
                       ]}
                     />
                     <NestedSkillPanel
-                      title="Verify"
+                      title={t('skillDetail.stages.verify')}
                       status={
                         <p className="text-sm text-secondary">
                           {knowledgeConfirmed ? 'Confirmed' : 'Not yet confirmed'}
@@ -606,7 +608,7 @@ export default function SkillDetail() {
               />
 
               <SkillPanel
-                title="Application"
+                title={t('skillDetail.application')}
                 status={
                   <button
                     type="button"
@@ -621,7 +623,7 @@ export default function SkillDetail() {
                     />
                     <div>
                       <p className="text-sm text-secondary">
-                        {displayedPracticalLevel ? LEVEL_LABELS[displayedPracticalLevel] : 'Not yet self-assessed'}
+                        {displayedPracticalLevel ? LEVEL_LABELS[displayedPracticalLevel] : t('skillDetail.notYetSelfAssessed')}
                       </p>
                       <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
                         {practicalVerification ?? 'Practical foundation'}
@@ -633,7 +635,7 @@ export default function SkillDetail() {
                 nested={
                   <div className="space-y-3">
                     <NestedSkillPanel
-                      title="Demonstrate"
+                      title={t('skillDetail.stages.demonstrate')}
                       status={
                         practicalStatements.length > 0 ? (
                           <button
@@ -666,7 +668,7 @@ export default function SkillDetail() {
                       ]}
                     />
                     <NestedSkillPanel
-                      title="Validate"
+                      title={t('skillDetail.stages.validate')}
                       status={
                         <p className="text-sm text-secondary">
                           {peerRatings.length > 0
@@ -1235,6 +1237,7 @@ function LevelDetailModal({
   onSetTarget,
   onGuideGenerated,
 }) {
+  const { t } = useLanguage()
   const isKnowledge = axis === 'knowledge'
   const labels = isKnowledge ? KNOWLEDGE_LEVEL_LABELS : LEVEL_LABELS
   // A newer self-assessment can claim higher than the last confirmed
@@ -1277,7 +1280,7 @@ function LevelDetailModal({
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6"
     >
         <div className="flex items-center justify-between mb-4">
-          <h2 id="axis-summary-dialog-title" className="font-display text-2xl text-ink">{isKnowledge ? 'Knowledge' : 'Application'}</h2>
+          <h2 id="axis-summary-dialog-title" className="font-display text-2xl text-ink">{isKnowledge ? t('skillDetail.knowledge') : t('skillDetail.application')}</h2>
           <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
             Close
           </button>
@@ -1290,7 +1293,7 @@ function LevelDetailModal({
           )}
           <div>
             <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Current level</p>
-            <p className="text-base font-medium text-ink">{level ? labels[level] : 'Not yet self-assessed'}</p>
+            <p className="text-base font-medium text-ink">{level ? labels[level] : t('skillDetail.notYetSelfAssessed')}</p>
           </div>
         </div>
         {level ? (

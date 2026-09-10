@@ -8,6 +8,16 @@ import * as managerApi from '../lib/managerTeams'
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'me', email: 'me@example.com' }, refreshWorkspaces: vi.fn().mockResolvedValue() }),
 }))
+// Resolves against the real English dictionary (rather than a key-passthrough
+// stub) so assertions on rendered text (e.g. 'People', 'No connections yet')
+// stay meaningful -- translations.js has no side effects/imports of its own,
+// so this doesn't pull in the real supabaseClient the way useLanguage's own
+// module does.
+vi.mock('../context/LanguageContext', async () => {
+  const { translations } = await import('../lib/i18n/translations')
+  const t = (key) => key.split('.').reduce((value, part) => value?.[part], translations.en) ?? key
+  return { useLanguage: () => ({ language: 'en', setLanguage: vi.fn(), t }) }
+})
 vi.mock('../components/AppHeader', () => ({ default: () => <header>Header</header> }))
 vi.mock('../components/ConnectionsTeams', () => ({ default: () => <section>Team controls</section> }))
 vi.mock('../lib/connections', () => ({

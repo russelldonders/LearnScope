@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useNavVisibility } from '../context/NavVisibilityContext'
+import { useLanguage } from '../context/LanguageContext'
 import { supabase } from '../lib/supabaseClient'
 import {
   listConnections,
@@ -331,6 +332,7 @@ async function loadUpNextRecommendations(userId) {
 export default function Dashboard() {
   const { user } = useAuth()
   const { refreshNavVisibility } = useNavVisibility()
+  const { t } = useLanguage()
   const navigate = useNavigate()
   const [addSkillOpen, setAddSkillOpen] = useState(false)
   const [counts, setCounts] = useState(null)
@@ -440,10 +442,10 @@ export default function Dashboard() {
         <section aria-labelledby="dashboard-heading">
           <div className="max-w-2xl mb-7">
             <h1 id="dashboard-heading" className="font-display text-3xl sm:text-4xl text-ink text-balance">
-              Keep your skills moving
+              {t('dashboard.heading')}
             </h1>
             <p className="text-secondary mt-2 text-pretty">
-              Focus on one useful step, then see how the rest of your learning is taking shape.
+              {t('dashboard.subheading')}
             </p>
           </div>
 
@@ -452,14 +454,14 @@ export default function Dashboard() {
           ) : counts.skills + counts.experience + counts.courses + counts.connections === 0 ? (
             <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
               <p className="text-secondary mb-4">
-                Your profile is empty. Start by adding a skill you already have.
+                {t('dashboard.emptyState')}
               </p>
               <button
                 type="button"
                 onClick={() => setAddSkillOpen(true)}
                 className="inline-block rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
               >
-                Add your first skill
+                {t('dashboard.addFirstSkill')}
               </button>
             </div>
           ) : (
@@ -475,7 +477,7 @@ export default function Dashboard() {
           counts.skills + counts.courses + counts.connections > 0 &&
           !importBanner?.current_role_banner_dismissed_at && (
             <div className="rounded-lg border border-dashed border-hairline bg-card p-6 text-center">
-              <h2 className="font-display text-xl text-ink mb-1">Add your current role</h2>
+              <h2 className="font-display text-xl text-ink mb-1">{t('dashboard.addCurrentRole.title')}</h2>
               <p className="text-sm text-secondary mb-4 max-w-md mx-auto text-pretty">
                 Your Experience timeline is empty. Record the job you're in now so LearnScope can
                 start linking your skills, courses and achievements to it.
@@ -486,14 +488,14 @@ export default function Dashboard() {
                   onClick={() => navigate('/experience', { state: { autoOpenType: 'employment' } })}
                   className="inline-block rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
                 >
-                  Record your current role
+                  {t('dashboard.addCurrentRole.recordButton')}
                 </button>
                 <button
                   type="button"
                   onClick={dismissCurrentRoleBanner}
                   className="text-sm text-secondary hover:text-ink whitespace-nowrap"
                 >
-                  Don't show this again
+                  {t('dashboard.addCurrentRole.dismiss')}
                 </button>
               </div>
             </div>
@@ -502,7 +504,7 @@ export default function Dashboard() {
         {!loading &&
           (upcomingSelfAssessments.length > 0 || upcomingTargets.length > 0 || pendingReviewTasks.length > 0) && (
             <div>
-              <h2 className="font-display text-xl text-ink mb-6">Needs your attention</h2>
+              <h2 className="font-display text-xl text-ink mb-6">{t('dashboard.needsAttention')}</h2>
               <div className="space-y-6">
                 {upcomingSelfAssessments.length > 0 && (
                   <ReminderGroup title="Self-assessments due">
@@ -543,7 +545,7 @@ export default function Dashboard() {
 
         {!loading && upNext.length > 1 && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-2">More ways to make progress</h2>
+            <h2 className="font-display text-xl text-ink mb-2">{t('dashboard.moreWaysToProgress')}</h2>
             <p className="text-sm text-secondary mb-6">Useful next steps across your other skills.</p>
             <UpNextSlider recommendations={upNext.slice(1)} onActionComplete={refreshUpNext} />
           </div>
@@ -551,14 +553,14 @@ export default function Dashboard() {
 
         {!loading && currentLearning.length > 0 && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-6">Current learning</h2>
+            <h2 className="font-display text-xl text-ink mb-6">{t('dashboard.currentLearning')}</h2>
             <CurrentLearningPanel courses={currentLearning} assignedByCatalogueId={assignedByCatalogueId} />
           </div>
         )}
 
         {!loading && recentGrowth.length > 1 && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-6">More recent progress</h2>
+            <h2 className="font-display text-xl text-ink mb-6">{t('dashboard.moreRecentProgress')}</h2>
             <div className="space-y-3">
               {recentGrowth.slice(1).map((row) => (
                 <Link
@@ -603,7 +605,7 @@ export default function Dashboard() {
 
         {!loading && (connectionsActivity.length > 0 || connectionsActivityError) && (
           <div>
-            <h2 className="font-display text-xl text-ink mb-6">What your connections are up to</h2>
+            <h2 className="font-display text-xl text-ink mb-6">{t('dashboard.connectionsActivity')}</h2>
             {connectionsActivityError ? (
               <div className="flex items-center justify-between gap-3 bg-card border border-hairline rounded-lg px-4 py-3">
                 <p className="text-sm text-secondary">Couldn't load your connections' activity.</p>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
+import { useLanguage } from '../context/LanguageContext'
 import AppHeader from '../components/AppHeader'
 import ActivityRow from '../components/ActivityRow'
 import FilterRow from '../components/FilterRow'
@@ -9,13 +10,14 @@ import { relatedSkillsFromStatement, relatedExperienceFromStatement } from '../l
 import { XAPI_VERBS, XAPI_VERB_BY_IRI } from '../lib/xapiVerbs'
 
 const SORT_OPTIONS = [
-  { value: 'happened_desc', label: 'Date happened (newest first)' },
-  { value: 'happened_asc', label: 'Date happened (oldest first)' },
-  { value: 'logged_desc', label: 'Recently logged' },
+  { value: 'happened_desc', labelKey: 'activity.sort.newest' },
+  { value: 'happened_asc', labelKey: 'activity.sort.oldest' },
+  { value: 'logged_desc', labelKey: 'activity.sort.recentlyLogged' },
 ]
 
 export default function Activity() {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const navigate = useNavigate()
   const [statements, setStatements] = useState([])
   const [skills, setSkills] = useState([])
@@ -96,13 +98,13 @@ export default function Activity() {
       <AppHeader />
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
         <Link to="/dashboard" className="text-sm text-secondary hover:text-ink mb-6 inline-block">
-          ← Back to dashboard
+          {t('activity.backToDashboard')}
         </Link>
 
         <div className="max-w-2xl mb-7">
-          <h1 className="font-display text-3xl sm:text-4xl text-ink text-balance">Skill activity</h1>
+          <h1 className="font-display text-3xl sm:text-4xl text-ink text-balance">{t('activity.heading')}</h1>
           <p className="text-secondary mt-2 text-pretty">
-            Everything you've logged, in one place.
+            {t('activity.subheading')}
           </p>
         </div>
 
@@ -115,7 +117,7 @@ export default function Activity() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-3">
                   <label className="flex items-center gap-2">
-                    <span className="text-xs text-secondary shrink-0">From</span>
+                    <span className="text-xs text-secondary shrink-0">{t('activity.from')}</span>
                     <input
                       type="date"
                       value={dateFrom}
@@ -124,7 +126,7 @@ export default function Activity() {
                     />
                   </label>
                   <label className="flex items-center gap-2">
-                    <span className="text-xs text-secondary shrink-0">To</span>
+                    <span className="text-xs text-secondary shrink-0">{t('activity.to')}</span>
                     <input
                       type="date"
                       value={dateTo}
@@ -133,13 +135,13 @@ export default function Activity() {
                     />
                   </label>
                   <label>
-                    <span className="sr-only">Filter by skill</span>
+                    <span className="sr-only">{t('activity.filterBySkill')}</span>
                     <select
                       value={skillFilter ?? ''}
                       onChange={(e) => setSkillFilter(e.target.value || null)}
                       className="rounded-md border border-hairline bg-card px-3 py-1.5 text-sm text-ink"
                     >
-                      <option value="">All skills</option>
+                      <option value="">{t('activity.allSkills')}</option>
                       {skills.map((s) => (
                         <option key={s.id} value={s.id}>
                           {s.name}
@@ -153,12 +155,12 @@ export default function Activity() {
                       onClick={clearFilters}
                       className="text-xs text-secondary hover:text-ink underline"
                     >
-                      Clear filters ({activeFilterCount})
+                      {t('activity.clearFilters')} ({activeFilterCount})
                     </button>
                   )}
                 </div>
                 <label className="shrink-0">
-                  <span className="sr-only">Sort activity</span>
+                  <span className="sr-only">{t('activity.sortActivity')}</span>
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
@@ -166,7 +168,7 @@ export default function Activity() {
                   >
                     {SORT_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
-                        {option.label}
+                        {t(option.labelKey)}
                       </option>
                     ))}
                   </select>
@@ -183,10 +185,10 @@ export default function Activity() {
 
             {statements.length === 0 ? (
               <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
-                <p className="text-secondary">Nothing recorded yet.</p>
+                <p className="text-secondary">{t('activity.emptyState')}</p>
               </div>
             ) : filteredStatements.length === 0 ? (
-              <p className="text-sm text-secondary">No activity matches these filters.</p>
+              <p className="text-sm text-secondary">{t('activity.noMatch')}</p>
             ) : (
               <div className="space-y-2">
                 {filteredStatements.map((row) => {
