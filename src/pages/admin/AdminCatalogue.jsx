@@ -8,9 +8,11 @@ import {
 } from '../../lib/admin/catalogue'
 import { formatCoursePrice } from '../../lib/courseCatalogue'
 import { COURSE_STATUS_LABELS } from '../../lib/statusLabels'
-import { useColumnPreferences, useSortedPage, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
-import { ColumnCustomizer, SortableTh, TablePagination } from '../../components/TableControls'
+import { useColumnPreferences, useRowSelection, useSortedPage, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
+import { BulkActionBar, ColumnCustomizer, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 import MutationFeedback from '../../components/MutationFeedback'
+import AccessibleDialog from '../../components/AccessibleDialog'
+import ConfirmDialog from '../../components/ConfirmDialog'
 
 // 'all' is this filter's default -- stable, simple values otherwise match the
 // database status column directly (see useSortedPage.js's ?status= param
@@ -213,6 +215,57 @@ export default function AdminCatalogue() {
     useSortedPage(filtered, CATALOGUE_SORT_ACCESSORS, { urlSync: { searchParams, setSearchParams } })
   const { columns, visibleColumns, toggleColumn, moveColumn, resetToDefault } =
     useColumnPreferences('admin-catalogue', CATALOGUE_COLUMNS)
+  const selection = useRowSelection(filtered.map((c) => c.id))
+  const selectedCourses = useMemo(() => filtered.filter((c) => selection.selected.has(c.id)), [filtered, selection.selected])
+  // Same status eligibility as each row's own Reject/Deactivate button --
+  // bulk moderation shouldn't act on anything a single-row action wouldn't.
+  const selectedToReject = useMemo(
+    () => selectedCourses.filter((c) => c.status === 'pending_approval' || c.status === 'draft'),
+    [selectedCourses]
+  )
+  const selectedToDeactivate = useMemo(() => selectedCourses.filter((c) => c.status === 'approved'), [selectedCourses])
+  const pageIds = pageItems.map((c) => c.id)
+  const selectedOnPage = pageIds.filter((id) => selection.selected.has(id)).length
+  const [bulkRejectTargets, setBulkRejectTargets] = useState(null)
+  const [bulkDeactivateTargets, setBulkDeactivateTargets] = useState(null)
+  const [bulkActing, setBulkActing] = useState(false)
+
+  async function runBulkAction(targets, action, describeFailure) {
+    setBulkActing(true)
+    setError(null)
+    try {
+      const results = await Promise.allSettled(targets.map(action))
+      const failures = results
+        .map((result, index) => ({ result, target: targets[index] }))
+        .filter(({ result }) => result.status === 'rejected')
+      const succeededIds = targets.filter((_, index) => results[index].status === 'fulfilled').map((c) => c.id)
+      if (failures.length > 0) selection.clearIds(succeededIds)
+      else selection.clear()
+      await load()
+      if (failures.length > 0) {
+        setError(
+          `${failures.length} of ${targets.length} courses couldn't be ${describeFailure}: ` +
+            failures.map(({ target, result }) => `"${target.name}" (${result.reason?.message ?? 'unknown error'})`).join('; ')
+        )
+      }
+    } catch (err) {
+      setError(`Couldn't update courses: ${err.message}`)
+    } finally {
+      setBulkActing(false)
+    }
+  }
+
+  async function handleBulkDeactivate() {
+    const targets = bulkDeactivateTargets
+    await runBulkAction(targets, (c) => deactivateCatalogueCourse(c.id), 'deactivated')
+    setBulkDeactivateTargets(null)
+  }
+
+  async function handleBulkReject(reason) {
+    const targets = bulkRejectTargets
+    await runBulkAction(targets, (c) => rejectCatalogueCourse(c.id, reason), 'rejected')
+    setBulkRejectTargets(null)
+  }
 
   async function handleReject(course) {
     // The Confirm reject button is already disabled while the reason is
@@ -334,10 +387,37 @@ export default function AdminCatalogue() {
           </div>
         ) : (
           <div className="bg-card border border-hairline rounded-lg">
+            <div className="p-3 pb-0">
+              <BulkActionBar
+                count={selection.selected.size}
+                onClear={selection.clear}
+                busy={bulkActing}
+                actions={[
+                  {
+                    label: `Reject selected (${selectedToReject.length})`,
+                    disabled: selectedToReject.length === 0,
+                    title: selectedToReject.length === 0 ? 'None of the selected courses can be rejected' : undefined,
+                    onClick: () => setBulkRejectTargets(selectedToReject),
+                  },
+                  {
+                    label: `Deactivate selected (${selectedToDeactivate.length})`,
+                    disabled: selectedToDeactivate.length === 0,
+                    title: selectedToDeactivate.length === 0 ? 'None of the selected courses can be deactivated' : undefined,
+                    onClick: () => setBulkDeactivateTargets(selectedToDeactivate),
+                  },
+                ]}
+              />
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-hairline text-left text-secondary">
+                    <SelectionTh
+                      idPrefix="admin-catalogue"
+                      checked={selection.isAllSelected(pageIds)}
+                      indeterminate={selectedOnPage > 0 && selectedOnPage < pageIds.length}
+                      onChange={() => selection.toggleAll(pageIds)}
+                    />
                     {visibleColumns.map((col) =>
                       col.sortable ? (
                         <SortableTh key={col.key} label={col.label} columnKey={col.key} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className={col.thClassName} />
@@ -354,6 +434,8 @@ export default function AdminCatalogue() {
                       key={course.id}
                       course={course}
                       visibleColumns={visibleColumns}
+                      selected={selection.selected.has(course.id)}
+                      onToggleSelected={() => selection.toggle(course.id)}
                       actioning={actioningId === course.id}
                       rejecting={rejectingId === course.id}
                       rejectionReason={rejectionReason}
@@ -374,13 +456,90 @@ export default function AdminCatalogue() {
           </div>
         )}
       </div>
+
+      {bulkDeactivateTargets && (
+        <ConfirmDialog
+          message={`Deactivate ${bulkDeactivateTargets.length} ${bulkDeactivateTargets.length === 1 ? 'course' : 'courses'}? Learners already enrolled keep their progress, but it stops appearing in the catalogue.`}
+          confirmLabel="Deactivate"
+          confirming={bulkActing}
+          onConfirm={handleBulkDeactivate}
+          onCancel={() => setBulkDeactivateTargets(null)}
+        />
+      )}
+
+      {bulkRejectTargets && (
+        <BulkRejectDialog
+          targets={bulkRejectTargets}
+          rejecting={bulkActing}
+          onConfirm={handleBulkReject}
+          onCancel={() => setBulkRejectTargets(null)}
+        />
+      )}
     </AdminLayout>
+  )
+}
+
+// Same required-reason rule as the single-row reject flow above (Confirm
+// reject stays disabled until non-empty) -- one shared reason applies to
+// every course in this batch, which is the normal case for a moderation
+// pass (e.g. rejecting several duplicate/policy-violating submissions at
+// once) rather than a per-course rationale.
+function BulkRejectDialog({ targets, rejecting, onConfirm, onCancel }) {
+  const [reason, setReason] = useState('')
+
+  return (
+    <AccessibleDialog
+      labelledBy="bulk-reject-title"
+      onClose={rejecting ? undefined : onCancel}
+      closeOnBackdrop={!rejecting}
+      overlayClassName="z-[60]"
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6"
+    >
+      <h2 id="bulk-reject-title" className="font-display text-lg text-ink mb-1">
+        Reject {targets.length} {targets.length === 1 ? 'course' : 'courses'}
+      </h2>
+      <p className="text-sm text-secondary mb-4">
+        {targets.map((c) => c.name).join(', ')}
+      </p>
+      <label className="block text-sm text-ink mb-1" htmlFor="bulk-reject-reason">
+        Rejection reason (required, applies to all selected)
+      </label>
+      <input
+        id="bulk-reject-reason"
+        required
+        aria-required="true"
+        disabled={rejecting}
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink mb-4 focus:outline-none focus:ring-2 focus:ring-moss"
+      />
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={rejecting}
+          className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => onConfirm(reason.trim())}
+          disabled={rejecting || !reason.trim()}
+          className="rounded-md bg-red-700 text-white py-2 px-4 text-sm font-medium hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {rejecting ? 'Rejecting…' : 'Confirm reject'}
+        </button>
+      </div>
+    </AccessibleDialog>
   )
 }
 
 function CatalogueRow({
   course,
   visibleColumns,
+  selected,
+  onToggleSelected,
   actioning,
   rejecting,
   rejectionReason,
@@ -393,6 +552,16 @@ function CatalogueRow({
   return (
     <>
       <tr className="border-b border-hairline last:border-0">
+        <td className="px-4 py-3">
+          <label className="sr-only" htmlFor={`select-course-${course.id}`}>Select {course.name}</label>
+          <input
+            id={`select-course-${course.id}`}
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelected}
+            className="rounded border-hairline accent-moss"
+          />
+        </td>
         {visibleColumns.map((col) => (
           <td key={col.key} className={col.cellClassName} {...(col.cellProps ? col.cellProps(course) : {})}>
             {col.renderCell(course)}
@@ -425,7 +594,7 @@ function CatalogueRow({
       </tr>
       {rejecting && (
         <tr className="border-b border-hairline last:border-0">
-          <td colSpan={visibleColumns.length + 1} className="px-4 pb-3">
+          <td colSpan={visibleColumns.length + 2} className="px-4 pb-3">
             <div className="flex flex-wrap items-end gap-2 border-t border-hairline pt-3">
               <div className="flex-1 min-w-[200px]">
                 <label className="block text-xs text-secondary mb-1" htmlFor={`reject-reason-${course.id}`}>Rejection reason (required)</label>

@@ -421,27 +421,42 @@ export default function Actions() {
   const connectionRequests = incomingRequests.filter((r) => r.request_type !== 'skill_access')
   const skillAccessRequests = incomingRequests.filter((r) => r.request_type === 'skill_access')
 
+  const actionableCount =
+    incomingRateInvites.length +
+    incomingRecommendInvites.length +
+    incomingRequests.length +
+    orgInvites.length +
+    employerInvites.length +
+    managerTeamInvites.length +
+    dataAccessRequests.length +
+    courseAssignments.length +
+    skillSuggestions.length +
+    validationRequests.length
+
   const hasNothingPending =
     !loading &&
     !error &&
-    incomingRateInvites.length === 0 &&
-    incomingRecommendInvites.length === 0 &&
-    incomingRequests.length === 0 &&
-    orgInvites.length === 0 &&
-    employerInvites.length === 0 &&
-    managerTeamInvites.length === 0 &&
-    dataAccessRequests.length === 0 &&
-    courseAssignments.length === 0 &&
-    skillSuggestions.length === 0 &&
-    validationRequests.length === 0 &&
+    actionableCount === 0 &&
     unseenRatings.length === 0
 
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
 
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-10">
-        <h1 className="font-display text-2xl text-ink">{t('actions.heading')}</h1>
+      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8 space-y-10">
+        <div>
+          <h1 className="font-display text-2xl text-ink">{t('actions.heading')}</h1>
+          {!loading && !error && (actionableCount > 0 || unseenRatings.length > 0) && (
+            <p className="text-sm text-secondary mt-1">
+              {actionableCount > 0
+                ? `${actionableCount} item${actionableCount === 1 ? '' : 's'} need${actionableCount === 1 ? 's' : ''} your response`
+                : 'Nothing needs a response right now'}
+              {unseenRatings.length > 0
+                ? `${actionableCount > 0 ? ' · ' : ''}${unseenRatings.length} new rating${unseenRatings.length === 1 ? '' : 's'} received`
+                : ''}
+            </p>
+          )}
+        </div>
 
         {loading && <p className="text-secondary">Loading…</p>}
         {error && (
@@ -459,29 +474,9 @@ export default function Actions() {
           </div>
         )}
 
-        {unseenRatings.length > 0 && (
-          <div>
-            <h2 className="font-display text-xl text-ink mb-6">{t('actions.ratingsReceived')}</h2>
-            <div className="space-y-3">
-              {unseenRatings.map((rating) => (
-                <Link
-                  key={rating.id}
-                  to={`/skills/${rating.skill_id}`}
-                  className="block bg-card border border-hairline rounded-lg p-4 hover:border-moss/60 transition-colors"
-                >
-                  <p className="text-sm text-ink">
-                    <strong>{rating.rater_name || 'A connection'}</strong> rated your skill{' '}
-                    <strong>{rating.skill_name}</strong>: {LEVEL_LABELS[rating.level]}
-                  </p>
-                  {rating.comments && <p className="text-sm text-secondary mt-1">{rating.comments}</p>}
-                  <p className="font-mono text-xs text-secondary mt-1" title={formatAbsoluteDate(rating.rated_at)}>
-                    {formatRelativeDate(rating.rated_at)}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
+        {actionableCount > 0 && (
+        <div className="space-y-10">
+        <p className="font-mono text-[10px] uppercase tracking-wide text-secondary -mb-6">Needs your response</p>
 
         {incomingRateInvites.length > 0 && (
           <div>
@@ -944,6 +939,35 @@ export default function Actions() {
               ))}
             </div>
           </div>
+        )}
+        </div>
+        )}
+
+        {unseenRatings.length > 0 && (
+        <div className={actionableCount > 0 ? 'pt-10 border-t border-hairline' : ''}>
+        <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-4">For your information</p>
+          <div>
+            <h2 className="font-display text-xl text-ink mb-6">{t('actions.ratingsReceived')}</h2>
+            <div className="space-y-3">
+              {unseenRatings.map((rating) => (
+                <Link
+                  key={rating.id}
+                  to={`/skills/${rating.skill_id}`}
+                  className="block bg-card border border-hairline rounded-lg p-4 hover:border-moss/60 transition-colors"
+                >
+                  <p className="text-sm text-ink">
+                    <strong>{rating.rater_name || 'A connection'}</strong> rated your skill{' '}
+                    <strong>{rating.skill_name}</strong>: {LEVEL_LABELS[rating.level]}
+                  </p>
+                  {rating.comments && <p className="text-sm text-secondary mt-1">{rating.comments}</p>}
+                  <p className="font-mono text-xs text-secondary mt-1" title={formatAbsoluteDate(rating.rated_at)}>
+                    {formatRelativeDate(rating.rated_at)}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
         )}
       </main>
 

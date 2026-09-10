@@ -230,6 +230,7 @@ export default function EmployerRoleProfileDetail() {
                 {tab === 'users' && (
                   <RoleProfileLinkedEmployeesPanel
                     employees={profile.linkedEmployees}
+                    members={members}
                     requiredSkills={profile.requiredSkills}
                     training={profile.training}
                     readiness={readiness}

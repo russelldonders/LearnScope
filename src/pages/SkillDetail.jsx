@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
-import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { useParams, useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom'
+import { handleTabListKeyDown } from '../lib/tabsKeyboard'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
@@ -46,6 +47,11 @@ import { countSkillTrackers, listConnectionsWithSkill } from '../lib/skillStats'
 import { getLearnerCompositeProgress } from '../lib/skillComposites'
 import CompositeSkillProgress from '../components/CompositeSkillProgress'
 
+const SKILL_DETAIL_TABS = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'history', label: 'History' },
+]
+
 export default function SkillDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -54,6 +60,27 @@ export default function SkillDetail() {
   const { t } = useLanguage()
   const backTo = location.state?.from ?? '/skills'
   const backLabel = location.state?.from ? '← Back to experience' : '← Back to skills'
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedTab = searchParams.get('tab')
+  // A deep link that highlights a specific timeline entry (from Activity.jsx
+  // or elsewhere) needs to land on History by default, or the highlighted
+  // entry is hidden behind the Overview tab.
+  const tab = SKILL_DETAIL_TABS.some((d) => d.key === requestedTab)
+    ? requestedTab
+    : location.state?.highlightActivityId
+      ? 'history'
+      : 'overview'
+  const tabRefs = useRef({})
+
+  function buildTabParams(overrides) {
+    const next = new URLSearchParams(searchParams)
+    Object.entries(overrides).forEach(([key, value]) => {
+      if (value === null || value === undefined) next.delete(key)
+      else next.set(key, value)
+    })
+    return next
+  }
+
   const [skill, setSkill] = useState(null)
   const [loadingSkill, setLoadingSkill] = useState(true)
   const [notFound, setNotFound] = useState(false)
@@ -519,6 +546,43 @@ export default function SkillDetail() {
               </div>
             )}
 
+            <div
+              role="tablist"
+              aria-label="Skill sections"
+              className="flex items-center gap-1 mt-4 border-b border-hairline"
+            >
+              {SKILL_DETAIL_TABS.map((tabDef) => (
+                <button
+                  key={tabDef.key}
+                  type="button"
+                  ref={(el) => { tabRefs.current[tabDef.key] = el }}
+                  id={`skill-detail-tab-${tabDef.key}`}
+                  role="tab"
+                  aria-selected={tab === tabDef.key}
+                  aria-controls={`skill-detail-panel-${tabDef.key}`}
+                  tabIndex={tab === tabDef.key ? 0 : -1}
+                  onClick={() => setSearchParams(buildTabParams({ tab: tabDef.key }))}
+                  onKeyDown={(event) =>
+                    handleTabListKeyDown(event, {
+                      keys: SKILL_DETAIL_TABS.map((d) => d.key),
+                      activeKey: tab,
+                      refs: tabRefs,
+                      onChange: (key) => setSearchParams(buildTabParams({ tab: key })),
+                    })
+                  }
+                  className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
+                    tab === tabDef.key
+                      ? 'border-moss text-ink font-medium'
+                      : 'border-transparent text-secondary hover:text-ink'
+                  }`}
+                >
+                  {tabDef.label}
+                </button>
+              ))}
+            </div>
+
+            {tab === 'overview' && (
+            <div id="skill-detail-panel-overview" role="tabpanel" aria-labelledby="skill-detail-tab-overview">
             <div className="mt-4 pt-4 border-t border-hairline grid grid-cols-1 sm:grid-cols-2 gap-4">
               <SkillPanel
                 title={t('skillDetail.knowledge')}
@@ -727,6 +791,8 @@ export default function SkillDetail() {
                   </button>
                 </div>
               </div>
+            )}
+            </div>
             )}
             </div>
 
@@ -1039,6 +1105,8 @@ export default function SkillDetail() {
               </div>
             )}
 
+            {tab === 'history' && (
+            <div id="skill-detail-panel-history" role="tabpanel" aria-labelledby="skill-detail-tab-history">
             <HistorySection
               skill={skill}
               assessorName={assessorName}
@@ -1053,6 +1121,8 @@ export default function SkillDetail() {
               raterAvatars={raterAvatars}
               highlightActivityId={location.state?.highlightActivityId}
             />
+            </div>
+            )}
           </div>
         )}
       </main>

@@ -27,7 +27,7 @@ export const ACTIVITY_ACTION_LABELS = {
   'org_member.removed': 'Provider staff member removed',
 }
 
-const ENTITY_TYPE_LABELS = {
+export const ENTITY_TYPE_LABELS = {
   course_catalogue: 'Course',
   profile: 'User',
   skill_library: 'Skill',

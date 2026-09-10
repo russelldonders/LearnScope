@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AdminLayout from './AdminLayout'
 import { listUsers, inviteUser, setUserBlocked, getUserLinkages, deleteUser } from '../../lib/admin/users'
 import AccessibleDialog from '../../components/AccessibleDialog'
+import ConfirmDialog from '../../components/ConfirmDialog'
 import StatusBadge from '../../components/StatusBadge'
-import { useColumnPreferences, useSortedPage, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
-import { ColumnCustomizer, SortableTh, TablePagination } from '../../components/TableControls'
+import { useColumnPreferences, useRowSelection, useSortedPage, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
+import { BulkActionBar, ColumnCustomizer, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 
 const STATUS_FILTERS = [
   { value: '', label: 'All' },
@@ -106,6 +107,8 @@ export default function AdminUsers() {
 
   const [actioningId, setActioningId] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [bulkAction, setBulkAction] = useState(null)
+  const [bulkActing, setBulkActing] = useState(false)
 
   // Search text, status filter, sort, page and pageSize all live in the URL
   // together (?q=&status=&sort=&dir=&page=&pageSize=) via useSortedPage's
@@ -134,6 +137,50 @@ export default function AdminUsers() {
     useSortedPage(filteredUsers, USER_SORT_ACCESSORS, { urlSync: { searchParams, setSearchParams } })
   const { columns, visibleColumns, toggleColumn, moveColumn, resetToDefault } =
     useColumnPreferences('admin-users', USER_COLUMNS)
+  const selection = useRowSelection(filteredUsers.map((u) => u.id))
+  const selectedUsers = useMemo(
+    () => filteredUsers.filter((u) => selection.selected.has(u.id)),
+    [filteredUsers, selection.selected]
+  )
+  // Self-exclusion mirrors the single-row Block button's own disabled state
+  // above -- bulk block never gets to touch the acting admin's own account
+  // either, same reasoning, not a new restriction.
+  const selectedToBlock = useMemo(
+    () => selectedUsers.filter((u) => u.accountStatus !== 'blocked' && u.id !== user.id),
+    [selectedUsers, user.id]
+  )
+  const selectedToUnblock = useMemo(() => selectedUsers.filter((u) => u.accountStatus === 'blocked'), [selectedUsers])
+  const pageIds = pageItems.map((u) => u.id)
+  const selectedOnPage = pageIds.filter((id) => selection.selected.has(id)).length
+
+  async function handleBulkToggle() {
+    const { targets, blocked } = bulkAction
+    setBulkActing(true)
+    setError(null)
+    try {
+      const results = await Promise.allSettled(targets.map((u) => setUserBlocked(u.id, blocked)))
+      const failures = results
+        .map((result, index) => ({ result, target: targets[index] }))
+        .filter(({ result }) => result.status === 'rejected')
+      const succeededIds = targets
+        .filter((_, index) => results[index].status === 'fulfilled')
+        .map((u) => u.id)
+      setBulkAction(null)
+      if (failures.length > 0) selection.clearIds(succeededIds)
+      else selection.clear()
+      await load()
+      if (failures.length > 0) {
+        setError(
+          `${failures.length} of ${targets.length} users couldn't be updated: ` +
+            failures.map(({ target, result }) => `"${target.fullName || target.email}" (${result.reason?.message ?? 'unknown error'})`).join('; ')
+        )
+      }
+    } catch (err) {
+      setError(`Couldn't update users: ${err.message}`)
+    } finally {
+      setBulkActing(false)
+    }
+  }
 
   useEffect(() => {
     load()
@@ -275,10 +322,37 @@ export default function AdminUsers() {
           <p className="text-secondary">Loading…</p>
         ) : (
           <div className="bg-card border border-hairline rounded-lg">
+          <div className="p-3 pb-0">
+            <BulkActionBar
+              count={selection.selected.size}
+              onClear={selection.clear}
+              busy={bulkActing}
+              actions={[
+                {
+                  label: `Block selected (${selectedToBlock.length})`,
+                  disabled: selectedToBlock.length === 0,
+                  title: selectedToBlock.length === 0 ? 'None of the selected users can be blocked' : undefined,
+                  onClick: () => setBulkAction({ targets: selectedToBlock, blocked: true }),
+                },
+                {
+                  label: `Unblock selected (${selectedToUnblock.length})`,
+                  disabled: selectedToUnblock.length === 0,
+                  title: selectedToUnblock.length === 0 ? 'None of the selected users are blocked' : undefined,
+                  onClick: () => setBulkAction({ targets: selectedToUnblock, blocked: false }),
+                },
+              ]}
+            />
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-hairline text-left text-secondary">
+                  <SelectionTh
+                    idPrefix="admin-users"
+                    checked={selection.isAllSelected(pageIds)}
+                    indeterminate={selectedOnPage > 0 && selectedOnPage < pageIds.length}
+                    onChange={() => selection.toggleAll(pageIds)}
+                  />
                   {visibleColumns.map((col) =>
                     col.sortable ? (
                       <SortableTh key={col.key} label={col.label} columnKey={col.key} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className={col.thClassName} />
@@ -292,6 +366,16 @@ export default function AdminUsers() {
               <tbody>
                 {pageItems.map((u) => (
                   <tr key={u.id} className="border-b border-hairline last:border-0">
+                    <td className="px-4 py-2.5">
+                      <label className="sr-only" htmlFor={`select-user-${u.id}`}>Select {u.fullName || u.email}</label>
+                      <input
+                        id={`select-user-${u.id}`}
+                        type="checkbox"
+                        checked={selection.selected.has(u.id)}
+                        onChange={() => selection.toggle(u.id)}
+                        className="rounded border-hairline accent-moss"
+                      />
+                    </td>
                     {visibleColumns.map((col) => (
                       <td key={col.key} className={col.cellClassName} {...(col.cellProps ? col.cellProps(u) : {})}>
                         {col.renderCell(u)}
@@ -327,7 +411,7 @@ export default function AdminUsers() {
                 ))}
                 {filteredUsers.length === 0 && (
                   <tr>
-                    <td colSpan={visibleColumns.length + 1} className="px-4 py-6 text-center text-secondary">
+                    <td colSpan={visibleColumns.length + 2} className="px-4 py-6 text-center text-secondary">
                       {users.length === 0 ? 'No users yet.' : 'No users match your search or filter.'}
                     </td>
                   </tr>
@@ -348,6 +432,20 @@ export default function AdminUsers() {
             setDeleteTarget(null)
             load()
           }}
+        />
+      )}
+
+      {bulkAction && (
+        <ConfirmDialog
+          message={
+            bulkAction.blocked
+              ? `Block ${bulkAction.targets.length} ${bulkAction.targets.length === 1 ? 'user' : 'users'}? They won't be able to sign in until unblocked.`
+              : `Unblock ${bulkAction.targets.length} ${bulkAction.targets.length === 1 ? 'user' : 'users'}?`
+          }
+          confirmLabel={bulkAction.blocked ? 'Block' : 'Unblock'}
+          confirming={bulkActing}
+          onConfirm={handleBulkToggle}
+          onCancel={() => setBulkAction(null)}
         />
       )}
     </AdminLayout>

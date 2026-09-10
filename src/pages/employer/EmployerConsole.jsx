@@ -763,6 +763,13 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
   }
 
   const requestableMembers = selectedMembers.filter((m) => m.employerMember && m.status === 'active' && (!dataAccessByLearner[m.user_id] || ['declined', 'revoked'].includes(dataAccessByLearner[m.user_id].status)))
+  // Same "active employer member" eligibility rule as the buttons' own
+  // disabled condition previously enforced by blocking the whole action --
+  // now the action narrows to just the eligible subset instead, matching
+  // requestableMembers' own pattern above, so a mixed selection doesn't
+  // force manually deselecting the ineligible rows first.
+  const assignableMembers = selectedMembers.filter((m) => m.employerMember && m.status === 'active')
+  const assignSkippedCount = selectedMembers.length - assignableMembers.length
 
   async function handleBulkRequestDataAccess(options) {
     setDataAccessError(null)
@@ -1021,10 +1028,10 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
         onClear={selection.clear}
         actions={[
           { label: 'Request data access', title: "Ask selected active users for permission to view their learning data. Pending or granted requests are skipped.", onClick: () => setAssignModal('data-access'), disabled: requestableMembers.length === 0 },
-          { label: 'Assign training', title: "Assign a course to the selected users. All selected users must be active employer members.", onClick: () => setAssignModal('training'), disabled: selectedMembers.some((m) => !m.employerMember || m.status !== 'active') },
-          { label: 'Assign skill', title: "Suggest a skill and target level to the selected users. All selected users must be active employer members.", onClick: () => setAssignModal('skill'), disabled: selectedMembers.some((m) => !m.employerMember || m.status !== 'active') },
+          { label: 'Assign training', title: "Assign a course to the selected users. Only active employer members are eligible; others in the selection are skipped.", onClick: () => setAssignModal('training'), disabled: assignableMembers.length === 0 },
+          { label: 'Assign skill', title: "Suggest a skill and target level to the selected users. Only active employer members are eligible; others in the selection are skipped.", onClick: () => setAssignModal('skill'), disabled: assignableMembers.length === 0 },
           ...(attachedProviderOrg ? [{ label: 'Training team access', title: "Manage the selected users’ administrator or trainer access to the training catalogue.", onClick: () => setAssignModal('access'), disabled: trainingStaffLoading || Boolean(trainingStaffError) }] : []),
-          { label: 'Assign role profile', title: "Propose a role profile for the selected users to review and accept. All selected users must be active employer members.", onClick: () => setAssignModal('role'), disabled: selectedMembers.some((m) => !m.employerMember || m.status !== 'active') },
+          { label: 'Assign role profile', title: "Propose a role profile for the selected users to review and accept. Only active employer members are eligible; others in the selection are skipped.", onClick: () => setAssignModal('role'), disabled: assignableMembers.length === 0 },
           { label: 'Remove', title: "Remove the selected users from this employer after confirmation. Only employer members can be removed.", onClick: () => setRemoveTarget([...selectedMembers]), variant: 'danger', disabled: selectedMembers.some((m) => !m.employerMember) },
         ]}
       />
@@ -1109,12 +1116,20 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
                           {m.trainingAccess ? `${m.trainingAccess.role === 'admin' ? 'Admin' : 'Trainer'}${m.trainingAccess.status === 'pending' ? ' (pending)' : ''}` : 'None'}
                         </td>
                       )}
-                      <td className="px-4 py-2 text-xs whitespace-nowrap">
-                        <div className="flex flex-col gap-1 items-start" title={dataAccess ? `Requested: ${requestedDataSummary(dataAccess)}${dataAccess.status === 'approved' ? `. Approved: ${(dataAccess.approved_data || ['skills']).join(', ')}` : ''}` : undefined}>
+                      <td className="px-4 py-2 text-xs max-w-[220px]">
+                        <div className="flex flex-col gap-1 items-start">
                           <StatusBadge
                             label={!m.employerMember ? 'Not applicable' : dataAccess ? DATA_ACCESS_STATUS_LABELS[dataAccess.status] : 'No request yet'}
                             tone={dataAccess?.status === 'declined' || dataAccess?.status === 'revoked' ? 'danger' : 'neutral'}
                           />
+                          {dataAccess && (
+                            <p className="text-[10px] text-secondary leading-snug">
+                              Requested: {requestedDataSummary(dataAccess)}
+                              {dataAccess.status === 'approved' && (
+                                <>. Approved: {(dataAccess.approved_data || ['skills']).join(', ')}</>
+                              )}
+                            </p>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1156,7 +1171,8 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
       {assignModal === 'training' && (
         <AssignTrainingModal
           employer={employer}
-          members={selectedMembers}
+          members={assignableMembers}
+          skippedCount={assignSkippedCount}
           onClose={() => setAssignModal(null)}
           onAssigned={handleAssignDone}
         />
@@ -1164,7 +1180,8 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
       {assignModal === 'skill' && (
         <AssignSkillModal
           employer={employer}
-          members={selectedMembers}
+          members={assignableMembers}
+          skippedCount={assignSkippedCount}
           onClose={() => setAssignModal(null)}
           onAssigned={handleAssignDone}
         />
@@ -1172,7 +1189,8 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
       {assignModal === 'role' && (
         <AssignRoleModal
           employer={employer}
-          members={selectedMembers}
+          members={assignableMembers}
+          skippedCount={assignSkippedCount}
           onClose={() => setAssignModal(null)}
           onAssigned={handleAssignDone}
         />
@@ -1193,7 +1211,7 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
 // assign_course_to_employer_members only creates a course_assignments row;
 // the learner still has to click "Start" on their own /actions page
 // (respondToCourseAssignment) to create the real enrolment.
-function AssignTrainingModal({ employer, members, onClose, onAssigned }) {
+function AssignTrainingModal({ employer, members, skippedCount = 0, onClose, onAssigned }) {
   const [historyParams, setHistoryParams] = useState(() => new URLSearchParams())
   const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1243,6 +1261,11 @@ function AssignTrainingModal({ employer, members, onClose, onAssigned }) {
         They'll see it on their Actions page and choose whether to start it -- this doesn't enrol anyone
         automatically.
       </p>
+      {skippedCount > 0 && (
+        <p className="text-xs text-secondary mb-4">
+          {skippedCount} of the selected user{skippedCount === 1 ? '' : 's'} {skippedCount === 1 ? 'is' : 'are'} not an active employer member and won't be included.
+        </p>
+      )}
 
       <MutationFeedback status="error" message={error} size="xs" className="mb-3" />
 
@@ -1451,7 +1474,7 @@ function EmployerTrainingAssignmentsHistory({ employer, members, searchParams, s
 // rather than the platform-admin-only listAllLibrarySkills
 // (src/lib/admin/skills.js), which surfaces inactive/moderated entries and
 // pulls in owner-identity fields that have no place in this picker.
-function AssignSkillModal({ employer, members, onClose, onAssigned }) {
+function AssignSkillModal({ employer, members, skippedCount = 0, onClose, onAssigned }) {
   const [historyParams, setHistoryParams] = useState(() => new URLSearchParams())
   const [librarySkills, setLibrarySkills] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1536,6 +1559,11 @@ function AssignSkillModal({ employer, members, onClose, onAssigned }) {
         They'll see it on their Actions page and decide whether to add it to their own profile -- this doesn't
         touch their skills automatically.
       </p>
+      {skippedCount > 0 && (
+        <p className="text-xs text-secondary mb-4">
+          {skippedCount} of the selected user{skippedCount === 1 ? '' : 's'} {skippedCount === 1 ? 'is' : 'are'} not an active employer member and won't be included.
+        </p>
+      )}
 
       <MutationFeedback status="error" message={error} size="xs" className="mb-3" />
 
@@ -1678,7 +1706,7 @@ function AssignSkillModal({ employer, members, onClose, onAssigned }) {
 // here isn't filtered to exclude them (the roster's own "active" filter is
 // shared across all three bulk actions), so that's reported the same way as
 // an already-live assignment rather than distinguished.
-function AssignRoleModal({ employer, members, onClose, onAssigned }) {
+function AssignRoleModal({ employer, members, skippedCount = 0, onClose, onAssigned }) {
   const [profiles, setProfiles] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -1724,6 +1752,11 @@ function AssignRoleModal({ employer, members, onClose, onAssigned }) {
         They'll see it on their Actions page and choose whether to link it to one of their own current roles --
         this doesn't change their profile automatically.
       </p>
+      {skippedCount > 0 && (
+        <p className="text-xs text-secondary mb-4">
+          {skippedCount} of the selected user{skippedCount === 1 ? '' : 's'} {skippedCount === 1 ? 'is' : 'are'} not an active employer member and won't be included.
+        </p>
+      )}
 
       <MutationFeedback status="error" message={error} size="xs" className="mb-3" />
 

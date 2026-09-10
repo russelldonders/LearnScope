@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import AppHeader from '../components/AppHeader'
+import { handleTabListKeyDown } from '../lib/tabsKeyboard'
 import ConfirmDialog from '../components/ConfirmDialog'
 import StravaConnectButton from '../components/StravaConnectButton'
 import StravaIcon from '../components/StravaIcon'
@@ -51,9 +52,15 @@ import {
 
 const OAUTH_STATE_KEY = 'stravaOAuthState'
 
+const CONNECTED_ACCOUNTS_TABS = [
+  { key: 'apps', label: 'Connected apps' },
+  { key: 'accounts', label: 'Accounts & data transfer' },
+]
+
 export default function ConnectedAccounts() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabRefs = useRef({})
   const [connection, setConnection] = useState(null)
   const [loading, setLoading] = useState(true)
   const [connecting, setConnecting] = useState(false)
@@ -78,6 +85,24 @@ export default function ConnectedAccounts() {
   // LinkedAccountsList's per-dialog error display.
   const [workspaceAccessErrors, setWorkspaceAccessErrors] = useState({})
   const [linkToken] = useState(() => readAccountLinkToken())
+  const requestedTab = searchParams.get('tab')
+  // A redeem-invitation link or an incoming workspace-access/transfer flow
+  // is only relevant on the accounts tab -- default there so it isn't
+  // hidden behind the apps tab that most direct nav visits land on.
+  const tab = CONNECTED_ACCOUNTS_TABS.some((d) => d.key === requestedTab)
+    ? requestedTab
+    : linkToken
+      ? 'accounts'
+      : 'apps'
+
+  function buildTabParams(overrides) {
+    const next = new URLSearchParams(searchParams)
+    Object.entries(overrides).forEach(([key, value]) => {
+      if (value === null || value === undefined) next.delete(key)
+      else next.set(key, value)
+    })
+    return next
+  }
   const [redeemingLink, setRedeemingLink] = useState(false)
   const [linkRedeemed, setLinkRedeemed] = useState(false)
   const [redeemLinkError, setRedeemLinkError] = useState(null)
@@ -432,15 +457,47 @@ export default function ConnectedAccounts() {
         <div>
           <h1 className="font-display text-2xl text-ink">Connected accounts and apps</h1>
           <p className="text-secondary mt-1 text-sm">
-            Bring in activity from other services so it can count as skill evidence, without typing it in by
-            hand. You choose what gets imported and which skill it counts toward — nothing is added
-            automatically.
+            Manage the external services and logins connected to your profile.
           </p>
         </div>
 
-        {error && <p className="text-sm text-red-700">{error}</p>}
-        {successMessage && <p className="text-sm text-moss">{successMessage}</p>}
+        <div
+          role="tablist"
+          aria-label="Connected accounts sections"
+          className="flex items-center gap-1 border-b border-hairline"
+        >
+          {CONNECTED_ACCOUNTS_TABS.map((tabDef) => (
+            <button
+              key={tabDef.key}
+              type="button"
+              ref={(el) => { tabRefs.current[tabDef.key] = el }}
+              id={`connected-accounts-tab-${tabDef.key}`}
+              role="tab"
+              aria-selected={tab === tabDef.key}
+              aria-controls={`connected-accounts-panel-${tabDef.key}`}
+              tabIndex={tab === tabDef.key ? 0 : -1}
+              onClick={() => setSearchParams(buildTabParams({ tab: tabDef.key }))}
+              onKeyDown={(event) =>
+                handleTabListKeyDown(event, {
+                  keys: CONNECTED_ACCOUNTS_TABS.map((d) => d.key),
+                  activeKey: tab,
+                  refs: tabRefs,
+                  onChange: (key) => setSearchParams(buildTabParams({ tab: key })),
+                })
+              }
+              className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
+                tab === tabDef.key
+                  ? 'border-moss text-ink font-medium'
+                  : 'border-transparent text-secondary hover:text-ink'
+              }`}
+            >
+              {tabDef.label}
+            </button>
+          ))}
+        </div>
 
+        {tab === 'accounts' && (
+        <div id="connected-accounts-panel-accounts" role="tabpanel" aria-labelledby="connected-accounts-tab-accounts" className="space-y-6">
         {linkToken && (
           <RedeemInvitationPanel
             token={linkToken}
@@ -520,6 +577,19 @@ export default function ConnectedAccounts() {
             />
           )}
         </section>
+        </div>
+        )}
+
+        {tab === 'apps' && (
+        <div id="connected-accounts-panel-apps" role="tabpanel" aria-labelledby="connected-accounts-tab-apps" className="space-y-6">
+        <p className="text-sm text-secondary -mt-2">
+          Bring in activity from other services so it can count as skill evidence, without typing it in by
+          hand. You choose what gets imported and which skill it counts toward — nothing is added
+          automatically.
+        </p>
+
+        {error && <p className="text-sm text-red-700">{error}</p>}
+        {successMessage && <p className="text-sm text-moss">{successMessage}</p>}
 
         <div className="bg-card border border-hairline rounded-lg p-6">
           <h3 className="flex items-center gap-2 font-display text-lg text-ink mb-1">
@@ -588,6 +658,8 @@ export default function ConnectedAccounts() {
               setSuccessMessage(`Imported ${count} ${count === 1 ? 'activity' : 'activities'}.`)
             }}
           />
+        )}
+        </div>
         )}
       </main>
     </div>

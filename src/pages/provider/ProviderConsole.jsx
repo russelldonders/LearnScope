@@ -10,6 +10,7 @@ import OrganisationSettingsModal from '../../components/OrganisationSettingsModa
 import AccessibleDialog from '../../components/AccessibleDialog'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import ProgressBar from '../../components/ProgressBar'
+import StatusBadge from '../../components/StatusBadge'
 import {
   createProviderCatalogue,
   deleteProviderCatalogue,
@@ -305,20 +306,33 @@ export default function ProviderConsole() {
                       </>
                     )}
                   </div>
-                  {myRole === 'admin' && (
-                    <button
-                      type="button"
-                      onClick={() => setShowSettings(true)}
-                      title="Organisation settings"
-                      aria-label="Organisation settings"
-                      className="shrink-0 mb-2 w-11 h-11 rounded-md border border-hairline text-secondary hover:text-ink hover:bg-paper flex items-center justify-center"
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="12" cy="12" r="3" />
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                      </svg>
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {selectedOrg.slug && (
+                      <a
+                        href={`/providers/${selectedOrg.slug}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mb-2 text-sm text-secondary hover:text-ink whitespace-nowrap"
+                        title="Opens the public catalogue page learners and visitors see for this organisation, in a new tab"
+                      >
+                        View public profile ↗
+                      </a>
+                    )}
+                    {myRole === 'admin' && (
+                      <button
+                        type="button"
+                        onClick={() => setShowSettings(true)}
+                        title="Organisation settings"
+                        aria-label="Organisation settings"
+                        className="shrink-0 mb-2 w-11 h-11 rounded-md border border-hairline text-secondary hover:text-ink hover:bg-paper flex items-center justify-center"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="3" />
+                          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div
@@ -791,6 +805,7 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
   const [participantCourse, setParticipantCourse] = useState(null)
   const [historyCourse, setHistoryCourse] = useState(null)
   const [creatingDraftCourseId, setCreatingDraftCourseId] = useState(null)
+  const [confirmingNewVersionCourse, setConfirmingNewVersionCourse] = useState(null)
   const [query, setQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
   const [statusFilter, setStatusFilter] = useUrlParam(searchParams, setSearchParams, 'status', 'all', { resetParams: ['page'] })
   const [bulkPush, setBulkPush] = useState(null)
@@ -880,19 +895,29 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
     }
   }
 
-  async function handleEditCourse(course) {
+  function handleEditCourse(course) {
     if (course.status !== 'approved') {
       navigate(`/provider/training/${course.id}`)
       return
     }
+    // Editing an approved course forks a new draft version rather than
+    // editing it in place (approved content stays stable for anyone already
+    // enrolled/relying on it) -- that's not obvious from an "Edit course"
+    // label alone, so it's confirmed here rather than happening silently.
+    setConfirmingNewVersionCourse(course)
+  }
 
+  async function handleConfirmCreateDraftVersion() {
+    const course = confirmingNewVersionCourse
     setCreatingDraftCourseId(course.id)
     setError(null)
     try {
       const draftId = await createDraftCourseVersion(course.id)
+      setConfirmingNewVersionCourse(null)
       navigate(`/provider/training/${draftId}`)
     } catch (err) {
       setError(`Couldn’t create a new course version. ${err.message}`)
+      setConfirmingNewVersionCourse(null)
       setCreatingDraftCourseId(null)
     }
   }
@@ -1170,6 +1195,16 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
           }}
         />
       )}
+
+      {confirmingNewVersionCourse && (
+        <ConfirmDialog
+          message={`"${confirmingNewVersionCourse.name}" is approved. Editing it creates a new draft version to work on -- the approved version stays exactly as-is (and published) until this new one is submitted and approved in turn.`}
+          confirmLabel="Create new version"
+          onConfirm={handleConfirmCreateDraftVersion}
+          onCancel={() => setConfirmingNewVersionCourse(null)}
+          confirming={creatingDraftCourseId === confirmingNewVersionCourse.id}
+        />
+      )}
     </div>
   )
 }
@@ -1184,6 +1219,14 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
 // AdminUsers.jsx's list) rather than the card grid this replaced -- a
 // provider with more than a handful of courses could no longer scan
 // name/code/status across many cards at once.
+const COURSE_STATUS_TONES = {
+  approved: 'success',
+  pending_approval: 'warning',
+  rejected: 'danger',
+  draft: 'neutral',
+  inactive: 'neutral',
+}
+
 function CourseRow({
   course,
   selected,
@@ -1233,7 +1276,7 @@ function CourseRow({
           <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{course.version_number}</span>
         </td>
         <td className="px-4 py-3 whitespace-nowrap">
-          <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{COURSE_STATUS_LABELS[course.status] ?? course.status}</span>
+          <StatusBadge label={COURSE_STATUS_LABELS[course.status] ?? course.status} tone={COURSE_STATUS_TONES[course.status] ?? 'neutral'} />
         </td>
         <td className="px-4 py-3 text-red-700 truncate max-w-[180px]">{course.rejection_reason || '—'}</td>
         <td className="px-4 py-3 text-secondary truncate max-w-xs">{course.synopsis || '—'}</td>
@@ -1253,11 +1296,11 @@ function CourseRow({
                 View course
               </Link>
             )}
-            <button type="button" onClick={onViewHistory} className="text-xs font-medium text-moss hover:underline whitespace-nowrap">
+            <button type="button" onClick={onViewHistory} className="text-xs text-secondary hover:text-ink hover:underline whitespace-nowrap">
               Version history
             </button>
             {canViewParticipants && (
-              <button type="button" onClick={onViewParticipants} className="text-xs font-medium text-moss hover:underline whitespace-nowrap">
+              <button type="button" onClick={onViewParticipants} className="text-xs text-secondary hover:text-ink hover:underline whitespace-nowrap">
                 View participants
               </button>
             )}

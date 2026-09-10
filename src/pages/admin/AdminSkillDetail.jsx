@@ -11,7 +11,7 @@ import {
 } from '../../lib/skillStats'
 import { LEVEL_LABELS, LEVEL_DESCRIPTIONS, KNOWLEDGE_LEVEL_LABELS, LEVELS } from '../../lib/levels'
 import { SKILL_TYPE_LABELS } from '../../lib/statusLabels'
-import ConfirmDialog from '../../components/ConfirmDialog'
+import AccessibleDialog from '../../components/AccessibleDialog'
 import SkillTestQuestionsModal from '../../components/SkillTestQuestionsModal'
 import StatusBadge from '../../components/StatusBadge'
 import SkillIconUpload from '../../components/SkillIconUpload'
@@ -274,15 +274,70 @@ export default function AdminSkillDetail() {
         )}
 
         {confirmingPromote && (
-          <ConfirmDialog
-            message={`Promote "${skill.name}" to a global skill? It will become visible and offerable by every organisation on the platform, not just ${skill.ownerName ?? 'its current owner'}. This can't be undone from here.`}
-            confirmLabel="Promote"
-            confirming={promoting}
+          <PromoteSkillDialog
+            skill={skill}
+            promoting={promoting}
+            error={promoteError}
             onConfirm={handlePromote}
             onCancel={() => setConfirmingPromote(false)}
           />
         )}
       </div>
     </AdminLayout>
+  )
+}
+
+// One-way and platform-wide -- there's no demote path (see promoteSkillToGlobal's
+// own comment in lib/admin/skills.js) -- so this gets the same typed-word
+// friction as AdminUsers.jsx's account deletion, not the lighter one-click
+// ConfirmDialog used for routine reversible toggles like activate/deactivate.
+function PromoteSkillDialog({ skill, promoting, error, onConfirm, onCancel }) {
+  const [confirmText, setConfirmText] = useState('')
+
+  return (
+    <AccessibleDialog
+      labelledBy="promote-skill-title"
+      describedBy="promote-skill-description"
+      onClose={promoting ? undefined : onCancel}
+      closeOnBackdrop={!promoting}
+      overlayClassName="z-[60]"
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6"
+    >
+      <h2 id="promote-skill-title" className="font-display text-lg text-ink mb-1">Promote "{skill.name}" to global</h2>
+      <p id="promote-skill-description" className="text-sm text-secondary mb-4">
+        It will become visible and offerable by every organisation on the platform, not just{' '}
+        {skill.ownerName ?? 'its current owner'}. There is no way to demote it back from here afterwards.
+      </p>
+      <label htmlFor="promote-skill-confirmation" className="block text-sm text-ink mb-2">
+        Type <span className="font-mono font-semibold">PROMOTE</span> to confirm
+      </label>
+      <input
+        id="promote-skill-confirmation"
+        type="text"
+        value={confirmText}
+        disabled={promoting}
+        onChange={(e) => setConfirmText(e.target.value)}
+        className="w-full rounded-md border border-hairline px-3 py-1.5 text-sm mb-4"
+      />
+      {error && <p role="alert" className="text-sm text-red-700 mb-3">{error}</p>}
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={promoting}
+          className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={promoting || confirmText !== 'PROMOTE'}
+          className="rounded-md bg-red-700 text-white py-2 px-4 text-sm font-medium hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {promoting ? 'Promoting…' : 'Promote to global'}
+        </button>
+      </div>
+    </AccessibleDialog>
   )
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import MutationFeedback from '../../../components/MutationFeedback'
 import StatusBadge from '../../../components/StatusBadge'
 import { formatAbsoluteDate } from '../../../lib/dates'
@@ -25,6 +25,7 @@ const TRAINING_STATUS_LABELS = {
 // state.
 export default function RoleProfileLinkedEmployeesPanel({
   employees,
+  members = [],
   requiredSkills = [],
   training = [],
   readiness = {},
@@ -34,7 +35,28 @@ export default function RoleProfileLinkedEmployeesPanel({
   onWithdrawAssignment,
 }) {
   const [email, setEmail] = useState('')
+  const [showMatches, setShowMatches] = useState(false)
   const hasRequirements = requiredSkills.length > 0 || training.length > 0
+
+  // Same live-filtered-dropdown pattern as EmployerConsole.jsx's skill/
+  // organisation pickers, scoped to this employer's own active members --
+  // handleAssignEmployee (the caller) still re-validates against that same
+  // roster server-side, this is only the picker's convenience list, same
+  // relationship as AssignTrainingModal's course dropdown to its RPC.
+  // listEmployerMembers has no display name (just email/userCode -- see its
+  // own comment in api/admin/actions.js), so this only matches on those.
+  const matches = useMemo(() => {
+    const q = email.trim().toLowerCase()
+    if (!q) return []
+    return members
+      .filter((m) => m.status === 'active' && (m.email?.toLowerCase().includes(q) || m.userCode?.toLowerCase().includes(q)))
+      .slice(0, 8)
+  }, [members, email])
+
+  function chooseMember(member) {
+    setEmail(member.email)
+    setShowMatches(false)
+  }
 
   function handleAssign(e) {
     e.preventDefault()
@@ -42,6 +64,7 @@ export default function RoleProfileLinkedEmployeesPanel({
     if (!trimmed) return
     onAssignEmployee?.(trimmed)
     setEmail('')
+    setShowMatches(false)
   }
 
   return (
@@ -90,7 +113,7 @@ export default function RoleProfileLinkedEmployeesPanel({
       <MutationFeedback status="error" message={error} className="mb-3" />
 
       <form onSubmit={handleAssign} className="flex flex-wrap items-end gap-2">
-        <div className="flex-1 min-w-[10rem]">
+        <div className="relative flex-1 min-w-[10rem]">
           <label htmlFor="role-profile-assign-email" className="block text-xs text-secondary mb-1">
             Assign by email
           </label>
@@ -99,10 +122,32 @@ export default function RoleProfileLinkedEmployeesPanel({
             type="email"
             value={email}
             disabled={assigning}
-            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="off"
+            onChange={(e) => {
+              setEmail(e.target.value)
+              setShowMatches(true)
+            }}
+            onFocus={() => setShowMatches(true)}
+            onBlur={() => setShowMatches(false)}
             placeholder="name@company.example"
             className="w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink"
           />
+          {showMatches && matches.length > 0 && (
+            <div className="absolute z-10 mt-1 w-full bg-card border border-hairline rounded-md shadow-sm max-h-56 overflow-y-auto">
+              {matches.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => chooseMember(m)}
+                  className="block w-full text-left px-3 py-2 text-sm text-ink hover:bg-paper"
+                >
+                  {m.email}
+                  {m.userCode && <span className="text-xs text-secondary ml-1.5">({m.userCode})</span>}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <button
           type="submit"

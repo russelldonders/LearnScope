@@ -11,6 +11,7 @@ const TONE_CLASSES = {
   neutral: 'border-hairline text-secondary',
   danger: 'border-red-300 text-red-700',
   success: 'border-moss/40 text-moss',
+  warning: 'border-gold/40 text-gold',
 }
 
 // size 'sm' (default) matches the list-table pills, which set their own
