@@ -4,6 +4,7 @@ import AdminLayout from './AdminLayout'
 import StatusBadge from '../../components/StatusBadge'
 import { getUserProfile } from '../../lib/admin/users'
 import { formatMonthYear } from '../../lib/dates'
+import GrowthRing from '../../components/GrowthRing'
 
 const EXPERIENCE_TYPE_LABELS = { employment: 'Employment', education: 'Education' }
 
@@ -105,17 +106,20 @@ export default function AdminUserDetail() {
               ) : (
                 <ul className="divide-y divide-hairline">
                   {data.skills.map((s) => (
-                    <li key={s.id} className="px-4 py-2 text-sm flex items-center justify-between gap-2">
-                      {s.library_skill_id ? (
-                        <Link to={`/admin/skills/${s.library_skill_id}`} className="text-moss font-medium hover:underline">
-                          {s.name}
-                        </Link>
-                      ) : (
-                        <span className="text-ink">{s.name}</span>
-                      )}
-                      <span className="text-secondary text-xs">
-                        {[s.category, `Level ${s.level}`].filter(Boolean).join(' · ')}
-                      </span>
+                    <li key={s.id} className="px-4 py-2 text-sm flex items-center gap-3">
+                      <GrowthRing level={s.level} size={32} />
+                      <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
+                        {s.library_skill_id ? (
+                          <Link to={`/admin/skills/${s.library_skill_id}`} className="text-moss font-medium hover:underline">
+                            {s.name}
+                          </Link>
+                        ) : (
+                          <span className="text-ink">{s.name}</span>
+                        )}
+                        <span className="text-secondary text-xs shrink-0">
+                          {[s.category, s.level ? `Level ${s.level}` : 'Not yet self-assessed'].filter(Boolean).join(' · ')}
+                        </span>
+                      </div>
                     </li>
                   ))}
                 </ul>
