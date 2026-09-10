@@ -202,8 +202,21 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
   // team" would immediately bounce the leader away from the Settings tab
   // they were just on. Kept as its own effect, keyed only on teamId, so it
   // doesn't fire on the `retry` bumps below.
+  //
+  // Guarded on an actual previous team id (not just "teamId changed") so
+  // the very first resolution of the initial team-list load -- teamId
+  // going from '' to the first real id, which happens asynchronously after
+  // mount, activePanel already defaults to 'skills' -- doesn't re-fire this
+  // reset. Without the guard, a click on another tab that lands in the
+  // narrow window before that initial load resolves gets silently
+  // reverted back to Skills once it does (this was flaky in
+  // ConnectionsTeams.test.jsx for exactly this reason).
+  const previousTeamId = useRef(teamId)
   useEffect(() => {
-    setActivePanel('skills')
+    if (previousTeamId.current && previousTeamId.current !== teamId) {
+      setActivePanel('skills')
+    }
+    previousTeamId.current = teamId
   }, [teamId])
 
   useEffect(() => {
