@@ -464,7 +464,7 @@ export default function ConnectedAccounts() {
         <div
           role="tablist"
           aria-label="Connected accounts sections"
-          className="flex items-center gap-1 border-b border-hairline"
+          className="flex items-center flex-wrap gap-1 border-b border-hairline"
         >
           {CONNECTED_ACCOUNTS_TABS.map((tabDef) => (
             <button

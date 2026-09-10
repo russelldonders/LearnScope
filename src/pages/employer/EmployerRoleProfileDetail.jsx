@@ -192,7 +192,7 @@ export default function EmployerRoleProfileDetail() {
               <div className="space-y-6">
                 <RoleProfileDetailsForm roleProfile={profile} saving={saving} onSave={handleSaveDetails} />
 
-                <div className="flex items-center gap-1 border-b border-hairline">
+                <div className="flex items-center flex-wrap gap-1 border-b border-hairline">
                   {TABS.map((t) => (
                     <button
                       key={t.id}

@@ -263,7 +263,7 @@ export default function ProviderConsole() {
                     }
                   : {})}
               >
-                <div className="flex items-center justify-between gap-2 mb-6 border-b border-hairline">
+                <div className="flex items-center justify-between flex-wrap gap-x-2 gap-y-2 mb-6 border-b border-hairline">
                   <div className="flex items-center flex-wrap gap-1">
                     <div role="tablist" aria-label="Console section" className="flex items-center flex-wrap gap-1">
                       {visibleSections.map((section) => (
@@ -295,7 +295,11 @@ export default function ProviderConsole() {
                       ))}
                     </div>
                     {linkedEmployer && (
-                      <>
+                      // A single inline-flex unit rather than two separate flex
+                      // children -- otherwise flex-wrap can split the divider
+                      // from its link when this row wraps on a narrow viewport,
+                      // leaving a lone "|" stranded on its own line.
+                      <span className="inline-flex items-center">
                         <span className="mx-1 h-5 w-px bg-hairline shrink-0" aria-hidden="true" />
                         <Link
                           to={`/employer?employer=${linkedEmployer.id}`}
@@ -303,7 +307,7 @@ export default function ProviderConsole() {
                         >
                           ← {linkedEmployer.name} employer console
                         </Link>
-                      </>
+                      </span>
                     )}
                   </div>
                   {myRole === 'admin' && (

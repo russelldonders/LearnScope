@@ -725,7 +725,7 @@ export default function ProviderCourseEditor() {
               />
             )}
 
-            <div className="flex items-center gap-1 border-b border-hairline">
+            <div className="flex items-center flex-wrap gap-1 border-b border-hairline">
               {TABS.map((t) => (
                 <button
                   key={t.id}

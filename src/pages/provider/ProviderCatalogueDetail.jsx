@@ -217,7 +217,7 @@ export default function ProviderCatalogueDetail() {
 
       {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
 
-      <div role="tablist" aria-label="Catalogue sections" className="mt-7 flex gap-1 border-b border-hairline">
+      <div role="tablist" aria-label="Catalogue sections" className="mt-7 flex flex-wrap gap-1 border-b border-hairline">
         {TABS.map((tab) => (
           <Link
             key={tab.key}

@@ -549,7 +549,7 @@ export default function SkillDetail() {
             <div
               role="tablist"
               aria-label="Skill sections"
-              className="flex items-center gap-1 mt-4 border-b border-hairline"
+              className="flex items-center flex-wrap gap-1 mt-4 border-b border-hairline"
             >
               {SKILL_DETAIL_TABS.map((tabDef) => (
                 <button
