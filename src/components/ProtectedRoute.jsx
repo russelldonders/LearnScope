@@ -25,7 +25,13 @@ export default function ProtectedRoute({ children }) {
     return <Navigate to="/profile" replace />
   }
 
-  if (needsOnboarding && location.pathname !== '/onboarding') {
+  // Guarded on !needsName too: without it, a brand-new account (which has
+  // neither a name nor onboarding_completed_at set) ping-pongs forever --
+  // this check sends it to /onboarding, then the needsName check above
+  // sends it right back to /profile once it lands there, tripping Safari's
+  // history.replaceState() rate limit and blanking the page. Name must be
+  // resolved first; onboarding is only offered once it is.
+  if (needsOnboarding && !needsName && location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />
   }
 
