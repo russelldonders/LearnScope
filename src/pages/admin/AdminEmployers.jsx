@@ -1,11 +1,22 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AdminLayout from './AdminLayout'
-import { listEmployers, createEmployer, addEmployerMember } from '../../lib/admin/employers'
+import {
+  listEmployers,
+  createEmployer,
+  addEmployerMember,
+  listGlobalFieldDefinitions,
+  createFieldDefinition,
+  updateFieldDefinition,
+  deleteFieldDefinition,
+  reorderFieldDefinitions,
+} from '../../lib/admin/employers'
 import { listOrganisations } from '../../lib/admin/organisations'
+import { useAuth } from '../../context/AuthContext'
 import { useColumnPreferences, useSortedPage } from '../../lib/useSortedPage'
 import { ColumnCustomizer, SortableTh, TablePagination } from '../../components/TableControls'
 import MutationFeedback from '../../components/MutationFeedback'
+import FieldDefinitionsManager from '../../components/FieldDefinitionsManager'
 
 const EMPLOYER_SORT_ACCESSORS = {
   name: (e) => e.name?.toLowerCase() ?? '',
@@ -84,10 +95,13 @@ function employerColumns(organisationById) {
 // provider-only staff (not employer admins) still go through the existing
 // Providers -> Manage users panel.
 export default function AdminEmployers() {
+  const { user } = useAuth()
   const [employers, setEmployers] = useState([])
   const [organisations, setOrganisations] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [fieldDefinitions, setFieldDefinitions] = useState([])
+  const [showFieldSettings, setShowFieldSettings] = useState(false)
 
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newName, setNewName] = useState('')
@@ -114,14 +128,44 @@ export default function AdminEmployers() {
     setLoading(true)
     setError(null)
     try {
-      const [employerList, organisationList] = await Promise.all([listEmployers(), listOrganisations()])
+      const [employerList, organisationList, fields] = await Promise.all([
+        listEmployers(),
+        listOrganisations(),
+        listGlobalFieldDefinitions(),
+      ])
       setEmployers(employerList)
       setOrganisations(organisationList)
+      setFieldDefinitions(fields)
     } catch (err) {
       setError(`Couldn't load employers: ${err.message}`)
     } finally {
       setLoading(false)
     }
+  }
+
+  async function handleCreateField(payload) {
+    await createFieldDefinition({
+      ...payload,
+      employerId: null,
+      createdBy: user.id,
+      sortOrder: fieldDefinitions.length > 0 ? Math.max(...fieldDefinitions.map((f) => f.sort_order)) + 10 : 10,
+    })
+    setFieldDefinitions(await listGlobalFieldDefinitions())
+  }
+
+  async function handleUpdateField(id, payload) {
+    await updateFieldDefinition(id, payload)
+    setFieldDefinitions(await listGlobalFieldDefinitions())
+  }
+
+  async function handleDeleteField(id) {
+    await deleteFieldDefinition(id)
+    setFieldDefinitions(await listGlobalFieldDefinitions())
+  }
+
+  async function handleReorderFields(updates) {
+    await reorderFieldDefinitions(updates)
+    setFieldDefinitions(await listGlobalFieldDefinitions())
   }
 
   async function handleCreate(e) {
@@ -224,6 +268,37 @@ export default function AdminEmployers() {
           user) to the employer console. A brand-new account gets an invite email and working Training-tab access
           right away; an existing user needs to accept the invite from their Actions page first.
         </p>
+
+        <div className="bg-card border border-hairline rounded-lg p-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h3 className="font-display text-base text-ink">Member field settings</h3>
+              <p className="text-xs text-secondary mt-0.5">
+                The base fields every employer's roster starts with. Rename, reorder, remove, or add to this list --
+                employers can also add their own fields on top of these, from their own console.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowFieldSettings((v) => !v)}
+              className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper shrink-0"
+            >
+              {showFieldSettings ? 'Hide' : 'Manage'}
+            </button>
+          </div>
+          {showFieldSettings && (
+            <div className="mt-4 border-t border-hairline pt-4">
+              <FieldDefinitionsManager
+                fields={fieldDefinitions}
+                scopeLabel="base field"
+                onCreate={handleCreateField}
+                onUpdate={handleUpdateField}
+                onDelete={handleDeleteField}
+                onReorder={handleReorderFields}
+              />
+            </div>
+          )}
+        </div>
 
         <MutationFeedback status="error" message={error} />
 
