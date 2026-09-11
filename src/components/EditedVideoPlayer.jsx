@@ -49,8 +49,14 @@ export default function EditedVideoPlayer({ resource, onEnded, className = '', c
             >
               {o.kind === 'text' ? (
                 <span
-                  style={{ color: o.color, fontSize: OVERLAY_SIZE_PX[o.size] }}
-                  className="font-bold whitespace-pre-wrap [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]"
+                  style={{
+                    color: o.color,
+                    fontSize: OVERLAY_SIZE_PX[o.size],
+                    backgroundColor: o.background || undefined,
+                    padding: o.background ? '0.25em 0.6em' : undefined,
+                    borderRadius: o.background ? '999px' : undefined,
+                  }}
+                  className={`font-bold whitespace-pre-wrap ${o.background ? '' : '[text-shadow:0_1px_3px_rgba(0,0,0,0.8)]'}`}
                 >
                   {o.content}
                 </span>

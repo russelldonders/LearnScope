@@ -41,7 +41,7 @@ describe('VideoEditorModal', () => {
     render(<VideoEditorModal resource={resource} onClose={onClose} onSaved={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Add Text' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close editor' }))
 
     expect(onClose).not.toHaveBeenCalled()
     expect(screen.getByRole('alertdialog', { name: 'Discard Your Changes?' })).toBeInTheDocument()
@@ -49,7 +49,7 @@ describe('VideoEditorModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Keep Editing' }))
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close editor' }))
     fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
     expect(onClose).toHaveBeenCalledOnce()
   })

@@ -5,6 +5,8 @@ import {
   OVERLAY_SIZE_PX,
   PLAYBACK_RATES,
   STICKER_EMOJI,
+  TEXT_BACKGROUND_PRESETS,
+  TEXT_COLOR_PRESETS,
   buildFilterCss,
   clamp,
   createIconOverlay,
@@ -14,14 +16,83 @@ import {
   useTrimPlayback,
 } from '../lib/videoEdit'
 
+function TextToolIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="4 7 4 4 20 4 20 7" /><line x1="9" y1="20" x2="15" y2="20" /><line x1="12" y1="4" x2="12" y2="20" />
+    </svg>
+  )
+}
+function StickerToolIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><line x1="9" y1="9" x2="9" y2="9.5" /><line x1="15" y1="9" x2="15" y2="9.5" />
+    </svg>
+  )
+}
+function TrimToolIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><line x1="20" y1="4" x2="8.12" y2="15.88" /><line x1="14.47" y1="14.48" x2="20" y2="20" /><line x1="8.12" y1="8.12" x2="12" y2="12" />
+    </svg>
+  )
+}
+function AdjustToolIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" /><line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" /><line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" />
+      <line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" />
+    </svg>
+  )
+}
+
 const TABS = [
-  { id: 'text', label: 'Text' },
-  { id: 'icons', label: 'Icons' },
-  { id: 'trim', label: 'Trim' },
-  { id: 'adjust', label: 'Adjust' },
+  { id: 'text', label: 'Text', Icon: TextToolIcon },
+  { id: 'icons', label: 'Stickers', Icon: StickerToolIcon },
+  { id: 'trim', label: 'Trim', Icon: TrimToolIcon },
+  { id: 'adjust', label: 'Adjust', Icon: AdjustToolIcon },
 ]
 
 const SIZES = ['small', 'medium', 'large']
+
+// Preset color circles plus a dashed "custom" swatch that wraps a hidden
+// native <input type="color"> -- clicking it opens the OS color picker the
+// same way the plain input used to, without needing its own always-visible
+// square. Shared by text color and the new background-pill color.
+function ColorSwatchRow({ label, presets, value, onChange, hideLabel = false }) {
+  return (
+    <div>
+      {!hideLabel && <p className="text-xs font-medium text-secondary mb-1.5">{label}</p>}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {presets.map((color) => (
+          <button
+            key={color}
+            type="button"
+            onClick={() => onChange(color)}
+            aria-label={`${label}: ${color}`}
+            aria-pressed={value === color}
+            className={`h-8 w-8 shrink-0 rounded-full ring-2 ring-offset-2 ring-offset-card transition-transform active:scale-90 ${
+              value === color ? 'ring-moss' : 'ring-transparent'
+            }`}
+            style={{ backgroundColor: color, boxShadow: '0 0 0 1px var(--color-hairline) inset' }}
+          />
+        ))}
+        <label className="relative flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-dashed border-hairline text-secondary hover:text-ink" title="Custom color">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 20l9-9-4-4-9 9v4h4z" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L18 8l-3-3z" />
+          </svg>
+          <input
+            type="color"
+            aria-label={`${label}: custom`}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+          />
+        </label>
+      </div>
+    </div>
+  )
+}
 
 // A basic Instagram-style editor for one video resource: drag text/sticker
 // overlays onto the preview, trim in/out points, and adjust color/speed --
@@ -163,14 +234,18 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
       overlayClassName="p-0 sm:p-4"
       panelClassName="relative flex h-full w-full flex-col overflow-hidden bg-card sm:h-[min(92vh,900px)] sm:max-w-6xl sm:rounded-2xl sm:border sm:border-hairline"
     >
-        <header className="flex min-h-16 shrink-0 flex-wrap items-center gap-2 border-b border-hairline px-3 py-3 sm:flex-nowrap sm:gap-3 sm:px-6">
+        <header className="flex min-h-16 shrink-0 flex-wrap items-center gap-2 border-b border-hairline bg-card px-3 py-3 shadow-sm sm:flex-nowrap sm:gap-3 sm:px-6">
           <button
             type="button"
             onClick={requestClose}
             disabled={saving}
-            className="min-h-11 rounded-md px-3 text-sm font-medium text-ink hover:bg-paper disabled:opacity-60"
+            aria-label="Close editor"
+            title="Close"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink transition-transform hover:bg-paper active:scale-90 disabled:opacity-60"
           >
-            Back
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" aria-hidden="true">
+              <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
+            </svg>
           </button>
           <div className="order-2 min-w-0 basis-full sm:order-none sm:flex-1 sm:basis-auto">
             <div className="flex items-center gap-2">
@@ -179,18 +254,24 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
             </div>
             <p className="truncate text-xs text-secondary sm:text-sm">{resource.title}</p>
           </div>
-          <div className="ml-auto flex items-center gap-1">
-            <button type="button" onClick={undo} disabled={!past.length || saving} className="min-h-11 rounded-md px-3 text-sm font-medium text-ink hover:bg-paper disabled:opacity-40">
-              Undo
+          <div className="ml-auto flex items-center gap-1.5">
+            <button type="button" onClick={undo} disabled={!past.length || saving} aria-label="Undo" title="Undo"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink transition-transform hover:bg-paper active:scale-90 disabled:opacity-30">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+              </svg>
             </button>
-            <button type="button" onClick={redo} disabled={!future.length || saving} className="min-h-11 rounded-md px-3 text-sm font-medium text-ink hover:bg-paper disabled:opacity-40">
-              Redo
+            <button type="button" onClick={redo} disabled={!future.length || saving} aria-label="Redo" title="Redo"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink transition-transform hover:bg-paper active:scale-90 disabled:opacity-30">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M15 14 20 9l-5-5" /><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
+              </svg>
             </button>
             <button
               type="button"
               onClick={handleSave}
               disabled={saving || !dirty}
-              className="min-h-11 rounded-md bg-moss px-4 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-50"
+              className="min-h-11 rounded-full bg-moss px-5 text-sm font-semibold text-paper shadow-sm transition-transform hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:active:scale-100"
             >
               {saving ? 'Saving…' : 'Done'}
             </button>
@@ -267,15 +348,21 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
                       updateOverlay(o.id, movement)
                     }
                   }}
-                  className={`absolute -translate-x-1/2 -translate-y-1/2 cursor-move select-none max-w-[80%] text-center px-1 rounded pointer-events-auto ${
-                    isSelected ? 'ring-2 ring-gold' : ''
+                  className={`absolute -translate-x-1/2 -translate-y-1/2 cursor-move select-none max-w-[80%] text-center px-1 rounded pointer-events-auto transition-[opacity,box-shadow] ${
+                    isSelected ? 'ring-2 ring-gold ring-offset-2 ring-offset-black/40' : ''
                   } ${!inWindow ? 'opacity-40' : ''}`}
                   style={{ left: `${o.x}%`, top: `${o.y}%` }}
                 >
                   {o.kind === 'text' ? (
                     <span
-                      style={{ color: o.color, fontSize: OVERLAY_SIZE_PX[o.size] }}
-                      className="font-bold whitespace-pre-wrap [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]"
+                      style={{
+                        color: o.color,
+                        fontSize: OVERLAY_SIZE_PX[o.size],
+                        backgroundColor: o.background || undefined,
+                        padding: o.background ? '0.25em 0.6em' : undefined,
+                        borderRadius: o.background ? '999px' : undefined,
+                      }}
+                      className={`font-bold whitespace-pre-wrap ${o.background ? '' : '[text-shadow:0_1px_3px_rgba(0,0,0,0.8)]'}`}
                     >
                       {o.content}
                     </span>
@@ -301,13 +388,21 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
                   end={edit.trimEnd ?? duration}
                   currentTime={currentTime}
                   label="Video trim"
+                  dark
                   onChange={({ start, end }) => changeEdit((prev) => ({ ...prev, trimStart: start, trimEnd: end }))}
                 />
               ) : <p className="text-xs text-white/60">Loading video…</p>}
             </div>
           </section>
 
-          <aside className="min-h-0 overflow-y-auto overscroll-contain bg-card" aria-label="Editing tools">
+          <aside className="min-h-0 overflow-y-auto overscroll-contain rounded-t-2xl bg-card shadow-[0_-8px_24px_rgba(0,0,0,0.08)] lg:rounded-none lg:shadow-none" aria-label="Editing tools">
+            {/* Purely a visual cue that this panel is a bottom sheet on
+                mobile (where the grid stacks video-on-top) -- there's no
+                swipe-to-dismiss gesture behind it, closing still only
+                happens via the header's Close button. */}
+            <div className="flex justify-center pt-2 lg:hidden">
+              <div className="h-1 w-10 rounded-full bg-hairline" />
+            </div>
             <div className="p-4 sm:p-6">
 
         {edit.overlays.length > 0 && (
@@ -318,7 +413,7 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
                 type="button"
                 onClick={() => setSelectedOverlayId(o.id)}
                 aria-pressed={selectedOverlayId === o.id}
-                className={`min-h-11 rounded-full border px-3 text-xs font-medium ${
+                className={`min-h-11 rounded-full border px-3 text-xs font-medium transition-transform active:scale-95 ${
                   selectedOverlayId === o.id
                     ? 'border-gold bg-gold/10 text-ink'
                     : 'border-hairline text-secondary hover:text-ink'
@@ -330,19 +425,20 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
           </div>
         )}
 
-        <div className="grid grid-cols-4 gap-1 border-b border-hairline" role="tablist" aria-label="Video editing tools">
-          {TABS.map((t) => (
+        <div className="grid grid-cols-4 gap-1.5 rounded-2xl bg-paper p-1.5" role="tablist" aria-label="Video editing tools">
+          {TABS.map(({ id, label, Icon }) => (
             <button
-              key={t.id}
+              key={id}
               type="button"
-              onClick={() => setTab(t.id)}
+              onClick={() => setTab(id)}
               role="tab"
-              aria-selected={tab === t.id}
-              className={`min-h-11 px-2 py-2 text-sm font-medium border-b-2 -mb-px ${
-                tab === t.id ? 'border-moss text-ink' : 'border-transparent text-secondary hover:text-ink'
+              aria-selected={tab === id}
+              className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-xs font-medium transition-all active:scale-95 ${
+                tab === id ? 'bg-moss text-paper shadow-sm' : 'text-secondary hover:bg-card hover:text-ink'
               }`}
             >
-              {t.id === 'icons' ? 'Stickers' : t.label}
+              <Icon />
+              {label}
             </button>
           ))}
         </div>
@@ -352,20 +448,23 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
             <button
               type="button"
               onClick={() => addOverlay(createTextOverlay(edit.trimEnd ?? duration))}
-              className="min-h-11 rounded-md border border-hairline px-4 text-sm font-medium text-ink hover:bg-paper"
+              className="flex min-h-11 items-center gap-2 rounded-full bg-moss px-5 text-sm font-semibold text-paper shadow-sm transition-transform hover:opacity-90 active:scale-95"
             >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
               Add Text
             </button>
           )}
 
           {tab === 'icons' && (
-            <div className="grid grid-cols-4 gap-2 sm:grid-cols-6" aria-label="Stickers">
+            <div className="grid grid-cols-4 gap-2.5 sm:grid-cols-6" aria-label="Stickers">
               {STICKER_EMOJI.map((emoji) => (
                 <button
                   key={emoji}
                   type="button"
                   onClick={() => addOverlay(createIconOverlay(emoji, edit.trimEnd ?? duration))}
-                  className="min-h-11 rounded-md border border-hairline text-xl hover:bg-paper"
+                  className="flex aspect-square min-h-11 items-center justify-center rounded-full bg-paper text-2xl shadow-sm transition-transform hover:bg-hairline/40 active:scale-90"
                   aria-label={`Add ${emoji} sticker`}
                 >
                   {emoji}
@@ -396,17 +495,21 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
           )}
 
           {selectedOverlay && (
-            <div className="rounded-md border border-hairline p-3 space-y-3">
+            <div className="rounded-2xl border border-hairline bg-card p-4 shadow-sm space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-ink">
+                <p className="text-sm font-semibold text-ink">
                   Editing {selectedOverlay.kind === 'text' ? 'text' : 'sticker'}
                 </p>
                 <button
                   type="button"
                   onClick={() => removeOverlay(selectedOverlay.id)}
-                  className="text-xs text-red-700 hover:underline"
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-red-700 transition-transform hover:bg-red-700/10 active:scale-90"
+                  aria-label="Delete overlay"
+                  title="Delete"
                 >
-                  Delete
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                  </svg>
                 </button>
               </div>
 
@@ -417,44 +520,64 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
                     value={selectedOverlay.content}
                     onChange={(e) => updateOverlay(selectedOverlay.id, { content: e.target.value })}
                     rows={2}
-                    className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                    className="w-full rounded-xl border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
                   />
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-secondary" htmlFor="overlayColor">
-                      Color
-                    </label>
-                    <input
-                      id="overlayColor"
-                      type="color"
-                      value={selectedOverlay.color}
-                      onChange={(e) => updateOverlay(selectedOverlay.id, { color: e.target.value })}
-                      className="h-11 w-14 rounded border border-hairline bg-paper"
-                    />
+                  <ColorSwatchRow
+                    label="Text color"
+                    presets={TEXT_COLOR_PRESETS}
+                    value={selectedOverlay.color}
+                    onChange={(color) => updateOverlay(selectedOverlay.id, { color })}
+                  />
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-medium text-secondary">Background pill</span>
+                      <button
+                        type="button"
+                        onClick={() => updateOverlay(selectedOverlay.id, { background: selectedOverlay.background ? null : TEXT_BACKGROUND_PRESETS[0] })}
+                        aria-pressed={Boolean(selectedOverlay.background)}
+                        className={`min-h-8 rounded-full px-3 text-xs font-medium transition-colors ${
+                          selectedOverlay.background ? 'bg-moss text-paper' : 'bg-paper text-secondary hover:text-ink'
+                        }`}
+                      >
+                        {selectedOverlay.background ? 'On' : 'Off'}
+                      </button>
+                    </div>
+                    {selectedOverlay.background && (
+                      <ColorSwatchRow
+                        label="Background color"
+                        presets={TEXT_BACKGROUND_PRESETS}
+                        value={selectedOverlay.background}
+                        onChange={(background) => updateOverlay(selectedOverlay.id, { background })}
+                        hideLabel
+                      />
+                    )}
                   </div>
                 </>
               )}
 
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-secondary">Size</span>
-                {SIZES.map((size) => (
-                  <button
-                    key={size}
-                    type="button"
-                    onClick={() => updateOverlay(selectedOverlay.id, { size })}
-                    aria-pressed={selectedOverlay.size === size}
-                    className={`min-h-11 rounded-md border px-3 text-xs font-medium capitalize ${
-                      selectedOverlay.size === size
-                        ? 'border-moss bg-moss text-paper'
-                        : 'border-hairline text-ink hover:bg-paper'
-                    }`}
-                  >
-                    {size}
-                  </button>
-                ))}
+              <div>
+                <p className="text-xs font-medium text-secondary mb-1.5">Size</p>
+                <div className="flex items-center gap-1.5">
+                  {SIZES.map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => updateOverlay(selectedOverlay.id, { size })}
+                      aria-pressed={selectedOverlay.size === size}
+                      className={`min-h-9 rounded-full border px-3.5 text-xs font-medium capitalize transition-transform active:scale-95 ${
+                        selectedOverlay.size === size
+                          ? 'border-moss bg-moss text-paper'
+                          : 'border-hairline text-ink hover:bg-paper'
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div>
-                <p className="text-xs text-secondary mb-1">Show on video from…until</p>
+                <p className="text-xs font-medium text-secondary mb-1.5">Show on video from…until</p>
                 {duration ? (
                   <TimelineRangeSlider
                     duration={duration}
@@ -481,7 +604,7 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
                 <button
                   type="button"
                   onClick={() => changeEdit(initialEdit)}
-                  className="mt-3 min-h-11 rounded-md px-3 text-sm font-medium text-secondary hover:bg-paper hover:text-ink"
+                  className="mt-3 min-h-11 rounded-full px-3 text-sm font-medium text-secondary transition-transform hover:bg-paper hover:text-ink active:scale-95"
                 >
                   Restore Original
                 </button>
@@ -494,14 +617,14 @@ export default function VideoEditorModal({ resource, onClose, onSaved }) {
 
         {confirmDiscard && (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/55 p-4">
-            <div role="alertdialog" aria-modal="true" aria-labelledby="discard-title" className="w-full max-w-sm rounded-xl bg-card p-5 shadow-xl">
+            <div role="alertdialog" aria-modal="true" aria-labelledby="discard-title" className="w-full max-w-sm rounded-2xl bg-card p-5 shadow-xl">
               <h3 id="discard-title" className="font-display text-lg text-ink">Discard Your Changes?</h3>
               <p className="mt-2 text-sm text-secondary">Your video has unsaved edits. You can keep editing or discard them and return to the library.</p>
               <div className="mt-5 flex justify-end gap-2">
-                <button type="button" onClick={() => setConfirmDiscard(false)} className="min-h-11 rounded-md border border-hairline px-4 text-sm font-medium text-ink hover:bg-paper" autoFocus>
+                <button type="button" onClick={() => setConfirmDiscard(false)} className="min-h-11 rounded-full border border-hairline px-4 text-sm font-medium text-ink transition-transform hover:bg-paper active:scale-95" autoFocus>
                   Keep Editing
                 </button>
-                <button type="button" onClick={onClose} className="min-h-11 rounded-md bg-red-700 px-4 text-sm font-medium text-white hover:opacity-90">
+                <button type="button" onClick={onClose} className="min-h-11 rounded-full bg-red-700 px-4 text-sm font-medium text-white transition-transform hover:opacity-90 active:scale-95">
                   Discard
                 </button>
               </div>
@@ -524,18 +647,18 @@ function TrimTab({ edit, duration, currentTime, onChange, getCurrentTime }) {
         label="Video trim"
         onChange={({ start, end }) => onChange({ trimStart: start, trimEnd: end })}
       />
-      <div className="flex items-center gap-4 mt-1">
+      <div className="flex items-center gap-2 mt-2">
         <button
           type="button"
           onClick={() => onChange({ trimStart: clamp(getCurrentTime(), 0, (edit.trimEnd ?? duration) - MIN_RANGE_GAP) })}
-          className="min-h-11 rounded-md px-2 text-xs font-medium text-moss hover:bg-paper"
+          className="min-h-9 rounded-full bg-paper px-3.5 text-xs font-medium text-moss transition-transform hover:bg-hairline/40 active:scale-95"
         >
           Set Start Here
         </button>
         <button
           type="button"
           onClick={() => onChange({ trimEnd: clamp(getCurrentTime(), edit.trimStart + MIN_RANGE_GAP, duration) })}
-          className="min-h-11 rounded-md px-2 text-xs font-medium text-moss hover:bg-paper"
+          className="min-h-9 rounded-full bg-paper px-3.5 text-xs font-medium text-moss transition-transform hover:bg-hairline/40 active:scale-95"
         >
           Set End Here
         </button>
@@ -554,7 +677,7 @@ function TrimTab({ edit, duration, currentTime, onChange, getCurrentTime }) {
 // used for positioning overlays on the video canvas above.
 const MIN_RANGE_GAP = 0.1
 
-function TimelineRangeSlider({ duration, start, end, currentTime, onChange, label = 'Timeline range' }) {
+function TimelineRangeSlider({ duration, start, end, currentTime, onChange, label = 'Timeline range', dark = false }) {
   const trackRef = useRef(null)
 
   function timeAtClientX(clientX) {
@@ -589,14 +712,14 @@ function TimelineRangeSlider({ duration, start, end, currentTime, onChange, labe
 
   return (
     <div>
-      <div ref={trackRef} className="relative h-6" style={{ touchAction: 'none' }}>
-        <div className="absolute top-1/2 -translate-y-1/2 w-full h-1.5 rounded-full bg-hairline" />
+      <div ref={trackRef} className="relative h-7" style={{ touchAction: 'none' }}>
+        <div className={`absolute top-1/2 -translate-y-1/2 w-full h-2 rounded-full ${dark ? 'bg-white/15' : 'bg-hairline'}`} />
         <div
-          className="absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-moss"
+          className="absolute top-1/2 -translate-y-1/2 h-2 rounded-full bg-gradient-to-r from-moss to-emerald-400 shadow-[0_0_10px_rgba(74,103,65,0.6)]"
           style={{ left: `${startPct}%`, width: `${Math.max(0, endPct - startPct)}%` }}
         />
         <div
-          className="absolute top-1/2 -translate-y-1/2 w-px h-4 bg-gold"
+          className="absolute top-0 bottom-0 w-0.5 rounded-full bg-gold shadow-[0_0_6px_var(--color-gold)]"
           style={{ left: `${playheadPct}%` }}
           title={`Playhead: ${formatTime(currentTime)}`}
         />
@@ -619,12 +742,12 @@ function TimelineRangeSlider({ duration, start, end, currentTime, onChange, labe
             aria-valuemax={duration}
             aria-valuenow={key === 'start' ? start : end}
             aria-valuetext={formatTime(key === 'start' ? start : end)}
-            className="absolute top-1/2 h-11 w-11 -translate-x-1/2 -translate-y-1/2 touch-none rounded-full bg-transparent before:absolute before:left-1/2 before:top-1/2 before:h-5 before:w-5 before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-full before:border-2 before:border-card before:bg-moss before:shadow cursor-ew-resize"
+            className={`absolute top-1/2 h-11 w-11 -translate-x-1/2 -translate-y-1/2 touch-none rounded-full bg-transparent transition-transform active:scale-110 before:absolute before:left-1/2 before:top-1/2 before:h-6 before:w-6 before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-full before:border-2 before:bg-moss before:shadow-[0_2px_8px_rgba(0,0,0,0.4)] cursor-ew-resize ${dark ? 'before:border-white' : 'before:border-card'}`}
             style={{ left: `${pct}%` }}
           />
         ))}
       </div>
-      <div className="flex items-center justify-between text-[10px] font-mono text-secondary mt-0.5">
+      <div className={`flex items-center justify-between text-[10px] font-mono mt-0.5 ${dark ? 'text-white/60' : 'text-secondary'}`}>
         <span>{formatTime(start)}</span>
         <span>{formatTime(end)}</span>
       </div>
@@ -640,31 +763,37 @@ const FILTER_CONTROLS = [
 
 function AdjustTab({ edit, onFilterChange, onSpeedChange }) {
   return (
-    <div className="space-y-4">
-      {FILTER_CONTROLS.map(({ key, label }) => (
-        <div key={key}>
-          <div className="flex items-center justify-between text-sm text-ink mb-1">
-            <label htmlFor={`video-filter-${key}`}>{label}</label>
-            <span className="text-secondary">{edit.filter[key]}%</span>
-          </div>
-          <input
-            id={`video-filter-${key}`}
-            type="range"
-            min={50}
-            max={150}
-            value={edit.filter[key]}
-            onChange={(e) => onFilterChange({ [key]: Number(e.target.value) })}
-            className="w-full accent-moss"
-          />
-        </div>
-      ))}
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-hairline bg-card p-4 shadow-sm space-y-4">
+        {FILTER_CONTROLS.map(({ key, label }) => {
+          const pct = ((edit.filter[key] - 50) / 100) * 100
+          return (
+            <div key={key}>
+              <div className="flex items-center justify-between text-sm text-ink mb-1">
+                <label htmlFor={`video-filter-${key}`} className="font-medium">{label}</label>
+                <span className="rounded-full bg-paper px-2 py-0.5 text-xs font-mono text-secondary">{edit.filter[key]}%</span>
+              </div>
+              <input
+                id={`video-filter-${key}`}
+                type="range"
+                min={50}
+                max={150}
+                value={edit.filter[key]}
+                onChange={(e) => onFilterChange({ [key]: Number(e.target.value) })}
+                className="w-full accent-moss"
+                style={{ background: `linear-gradient(to right, var(--color-moss) ${pct}%, var(--color-hairline) ${pct}%)`, height: '6px', borderRadius: '999px', appearance: 'none' }}
+              />
+            </div>
+          )
+        })}
+      </div>
 
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={() => onFilterChange({ grayscale: edit.filter.grayscale > 0 ? 0 : 100 })}
           aria-pressed={edit.filter.grayscale > 0}
-          className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
+          className={`min-h-10 rounded-full border px-4 text-sm font-medium transition-transform active:scale-95 ${
             edit.filter.grayscale > 0 ? 'border-moss bg-moss text-paper' : 'border-hairline text-ink hover:bg-paper'
           }`}
         >
@@ -674,7 +803,7 @@ function AdjustTab({ edit, onFilterChange, onSpeedChange }) {
           type="button"
           onClick={() => onFilterChange({ sepia: edit.filter.sepia > 0 ? 0 : 100 })}
           aria-pressed={edit.filter.sepia > 0}
-          className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
+          className={`min-h-10 rounded-full border px-4 text-sm font-medium transition-transform active:scale-95 ${
             edit.filter.sepia > 0 ? 'border-moss bg-moss text-paper' : 'border-hairline text-ink hover:bg-paper'
           }`}
         >
@@ -683,7 +812,7 @@ function AdjustTab({ edit, onFilterChange, onSpeedChange }) {
       </div>
 
       <div>
-        <p className="text-sm text-ink mb-1">Playback speed</p>
+        <p className="text-sm font-medium text-ink mb-1.5">Playback speed</p>
         <div className="flex items-center gap-1.5 flex-wrap">
           {PLAYBACK_RATES.map((rate) => (
             <button
@@ -691,7 +820,7 @@ function AdjustTab({ edit, onFilterChange, onSpeedChange }) {
               type="button"
               onClick={() => onSpeedChange(rate)}
               aria-pressed={edit.playbackRate === rate}
-              className={`min-h-11 rounded-md border px-3 text-xs font-medium ${
+              className={`min-h-11 rounded-full border px-3.5 text-xs font-medium transition-transform active:scale-95 ${
                 edit.playbackRate === rate
                   ? 'border-moss bg-moss text-paper'
                   : 'border-hairline text-ink hover:bg-paper'

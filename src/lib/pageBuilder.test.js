@@ -20,6 +20,13 @@ describe('page builder content', () => {
     expect(normaliseMediaUrl('javascript:alert(1)', 'image')).toBe('')
   })
 
+  it('accepts an existing library resource\'s own storage path (picked via "Choose from library")', () => {
+    const path = '/course-content/org-1/8b6e9e0e-1c2b-4a3d-9f3a-000000000001/My Recording (final).mp4'
+    expect(normaliseMediaUrl(path, 'video')).toBe(path)
+    // Still no traversing out of that resource's own path via the filename segment.
+    expect(normaliseMediaUrl('/course-content/org-1/8b6e9e0e-1c2b-4a3d-9f3a-000000000001/../secret.mp4', 'video')).toBe('')
+  })
+
   it('keeps list and strikethrough markup (needed for the format bar\'s list/strike buttons)', () => {
     expect(sanitiseRichText('<ul><li>One</li><li>Two</li></ul><strike>gone</strike>')).toBe(
       '<ul><li>One</li><li>Two</li></ul><strike>gone</strike>'

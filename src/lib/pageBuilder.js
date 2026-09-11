@@ -55,9 +55,17 @@ export function sanitiseRichText(value = '') {
   return root.innerHTML
 }
 
+// The middle segment matches either page-media's own uploads (literally
+// "page-media") or an existing library resource's storage path (its item
+// id, a UUID) -- picking an existing video/screen-recording resource from
+// the library (MediaEditor's "Choose from library") points a block
+// straight at that resource's own file rather than copying it, so this has
+// to accept both shapes. No "/" allowed in either segment, so a traversal
+// attempt embedded in the final one (e.g. "../secret.png") can never match
+// as a single segment -- see pageBuilder.test.js.
 export function normaliseMediaUrl(value = '', type = 'image') {
   const rawValue = String(value).trim()
-  if (/^\/course-content\/[a-zA-Z0-9-]+\/page-media\/[a-zA-Z0-9._-]+$/.test(rawValue)) return rawValue
+  if (/^\/course-content\/[a-zA-Z0-9-]+\/[a-zA-Z0-9-]+\/[^/]+$/.test(rawValue)) return rawValue
   let parsed
   try {
     parsed = new URL(rawValue)
@@ -98,7 +106,7 @@ export function normalisePageDocument(document) {
       ...(block.type === 'callout' ? { variant: CALLOUT_VARIANTS.includes(block.variant) ? block.variant : 'info' } : {}),
       ...(['image', 'video'].includes(block.type) ? {
         url: normaliseMediaUrl(block.url, block.type),
-        storagePath: /^[-a-zA-Z0-9]+\/page-media\/[a-zA-Z0-9._-]+$/.test(block.storagePath || '') ? block.storagePath : '',
+        storagePath: /^[-a-zA-Z0-9]+\/[-a-zA-Z0-9]+\/[^/]+$/.test(block.storagePath || '') ? block.storagePath : '',
         alt: String(block.alt || '').slice(0, 300),
         caption: String(block.caption || '').slice(0, 500),
         size: MEDIA_SIZES.includes(block.size) ? block.size : 'full',

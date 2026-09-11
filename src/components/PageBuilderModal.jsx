@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPageResource, removePageMediaAsset, updatePageResource, uploadPageMediaAsset } from '../lib/courseContent'
+import { contentFileUrl, createPageResource, listOrganisationResources, removePageMediaAsset, updatePageResource, uploadPageMediaAsset } from '../lib/courseContent'
 import {
   CALLOUT_VARIANTS,
   EMPTY_PAGE_DOCUMENT,
@@ -11,6 +11,8 @@ import {
 } from '../lib/pageBuilder'
 import PageContent, { PageMedia } from './PageContent'
 import AccessibleDialog from './AccessibleDialog'
+import { DragHandle } from './DragHandle'
+import { sideOf, findDropTarget } from '../lib/dragReorder'
 
 const BLOCK_LABELS = {
   heading: 'Heading',
@@ -46,26 +48,140 @@ function newBlock(type) {
 
 // Reusable pill-button group for a block's own settings (heading level,
 // alignment, callout style, media size) -- kept as one small generic
-// component rather than four near-identical ones.
+// component rather than four near-identical ones. Always shown inside
+// BlockSettingsMenu's popover now, so the group label is rendered visibly
+// (not just as an aria-label) -- with several of these stacked in one
+// popover, an icon-only reader would have no way to tell them apart.
 function OptionPicker({ label, options, value, onChange, formatOption = (option) => option }) {
   return (
-    <div className="page-block-options" role="group" aria-label={label}>
-      {options.map((option) => (
-        <button
-          key={option}
-          type="button"
-          onClick={() => onChange(option)}
-          className={value === option ? 'is-selected' : ''}
-          aria-pressed={value === option}
-        >
-          {formatOption(option)}
-        </button>
-      ))}
+    <div role="group" aria-label={label}>
+      <p className="text-[10px] uppercase tracking-wide text-secondary mb-1">{label}</p>
+      <div className="page-block-options">
+        {options.map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => onChange(option)}
+            className={value === option ? 'is-selected' : ''}
+            aria-pressed={value === option}
+          >
+            {formatOption(option)}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
 
-function MediaEditor({ block, onChange, onSizeChange, onUpload, uploading }) {
+function SettingsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  )
+}
+
+// Tucks a block's own settings (heading level, alignment, callout style,
+// media size) behind a gear button instead of showing them directly on the
+// page -- with several stacked (e.g. an image's size *and* alignment),
+// having them all visible any time the block was merely selected made the
+// canvas feel like a form, not a page. Same outside-click/Escape-to-close
+// popover pattern as TableControls.jsx's ColumnCustomizer.
+function BlockSettingsMenu({ block, onChangeWithHistory }) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handleOutside(event) {
+      if (containerRef.current && !containerRef.current.contains(event.target)) setOpen(false)
+    }
+    function handleEscape(event) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', handleOutside)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handleOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [open])
+
+  const isMedia = block.type === 'image' || block.type === 'video'
+  const isAlignable = ['heading', 'text', 'callout', 'quote'].includes(block.type)
+  const hasSettings = block.type === 'heading' || block.type === 'callout' || isAlignable || (isMedia && block.url)
+  if (!hasSettings) return null
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button type="button" onClick={() => setOpen((current) => !current)} aria-expanded={open} aria-label={`${BLOCK_LABELS[block.type]} settings`} title="Settings">
+        <SettingsIcon />
+      </button>
+      {open && (
+        <div className="page-block-settings-popover">
+          {block.type === 'heading' && (
+            <OptionPicker label="Heading level" options={[1, 2, 3]} value={block.level}
+              onChange={(level) => onChangeWithHistory({ level })} formatOption={(level) => `H${level}`} />
+          )}
+          {block.type === 'callout' && (
+            <OptionPicker label="Callout style" options={CALLOUT_VARIANTS} value={block.variant}
+              onChange={(variant) => onChangeWithHistory({ variant })}
+              formatOption={(variant) => variant[0].toUpperCase() + variant.slice(1)} />
+          )}
+          {isAlignable && (
+            <OptionPicker label="Text alignment" options={TEXT_ALIGNMENTS} value={block.align}
+              onChange={(align) => onChangeWithHistory({ align })} formatOption={(align) => ALIGN_LABELS[align]} />
+          )}
+          {isMedia && block.url && (
+            <OptionPicker label={`${block.type === 'image' ? 'Image' : 'Video'} size`} options={MEDIA_SIZES} value={block.size}
+              onChange={(size) => onChangeWithHistory({ size })} formatOption={(size) => size[0].toUpperCase() + size.slice(1)} />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Video/screen-recording resources already in the org's library -- images
+// have no equivalent library concept (content_resources' own type list is
+// video/screen_recording/file/scorm/xapi/external_video/web_url, nothing
+// image-shaped), so "Choose from library" only ever appears for a video
+// block. Picking one points the block straight at that resource's own
+// storage path (see normaliseMediaUrl in lib/pageBuilder.js) rather than
+// copying the file -- it's never added to this editor's own session-
+// upload tracking, so removing or replacing this block later never
+// deletes a file the library resource itself still needs.
+function LibraryVideoPicker({ resources, onPick }) {
+  const [selectedId, setSelectedId] = useState('')
+  if (resources.length === 0) return null
+  return (
+    <>
+      <div className="page-media-separator"><span>or choose from your library</span></div>
+      <div className="page-media-upload">
+        <select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
+          <option value="">Choose a video or screen recording…</option>
+          {resources.map((resource) => (
+            <option key={resource.id} value={resource.id}>{resource.title}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          disabled={!selectedId}
+          onClick={() => {
+            const resource = resources.find((item) => item.id === selectedId)
+            if (resource) onPick(resource)
+            setSelectedId('')
+          }}
+        >
+          Use this
+        </button>
+      </div>
+    </>
+  )
+}
+
+function MediaEditor({ block, onChange, onUpload, uploading, libraryResources, onPickFromLibrary }) {
   const inputRef = useRef(null)
   return (
     <div className="page-media-editor">
@@ -83,6 +199,9 @@ function MediaEditor({ block, onChange, onSizeChange, onUpload, uploading }) {
         </button>
         <span>Up to 50 MB</span>
       </div>
+      {block.type === 'video' && libraryResources?.length > 0 && (
+        <LibraryVideoPicker resources={libraryResources} onPick={onPickFromLibrary} />
+      )}
       <div className="page-media-separator"><span>or use a URL</span></div>
       <div className="page-media-fields">
         <label>
@@ -98,15 +217,6 @@ function MediaEditor({ block, onChange, onSizeChange, onUpload, uploading }) {
           <input value={block.caption} onChange={(event) => onChange({ caption: event.target.value })} placeholder="Add context for learners" />
         </label>
       </div>
-      {block.url && (
-        <OptionPicker
-          label={`${block.type === 'image' ? 'Image' : 'Video'} size`}
-          options={MEDIA_SIZES}
-          value={block.size}
-          onChange={onSizeChange}
-          formatOption={(size) => size[0].toUpperCase() + size.slice(1)}
-        />
-      )}
     </div>
   )
 }
@@ -162,19 +272,35 @@ function InsertMenu({ onInsert, label = 'Add content' }) {
   )
 }
 
-function sideOf(element, clientY) {
-  const rect = element.getBoundingClientRect()
-  return clientY - rect.top < rect.height / 2 ? 'above' : 'below'
-}
-
 export default function PageBuilderModal({ organisationId, userId, resource, initialTitle, onClose, onSaved }) {
   const [title, setTitle] = useState(resource?.title || initialTitle?.trim() || 'Untitled page')
   const [pageDocument, setPageDocument] = useState(() => normalisePageDocument(resource?.page_content || EMPTY_PAGE_DOCUMENT))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [draggedId, setDraggedId] = useState(null)
-  const [dropTarget, setDropTarget] = useState(null) // { id, side: 'above' | 'below' }
+  const [dropTarget, setDropTarget] = useState(null) // { id, side: 'before' | 'after' }
+  // Registry of each block wrapper's own DOM node, keyed by block id -- lets
+  // touch dragging resolve its drop target by comparing the finger's
+  // position against each block's own getBoundingClientRect (see
+  // findDropTarget in lib/dragReorder.js) instead of relying on native HTML5
+  // drag events, which touch browsers never fire.
+  const blockNodeRefsRef = useRef(new Map())
+  function registerBlockNode(id) {
+    return (node) => {
+      if (node) blockNodeRefsRef.current.set(id, node)
+      else blockNodeRefsRef.current.delete(id)
+    }
+  }
   const [activeBlockId, setActiveBlockId] = useState(null)
+  // For MediaEditor's "Choose from library" -- loaded once, best-effort
+  // (a failure here shouldn't block the editor from opening, since upload
+  // and URL entry still work without it).
+  const [libraryVideoResources, setLibraryVideoResources] = useState([])
+  useEffect(() => {
+    listOrganisationResources(organisationId)
+      .then((resources) => setLibraryVideoResources(resources.filter((item) => item.type === 'video' || item.type === 'screen_recording')))
+      .catch(() => {})
+  }, [organisationId])
   const [uploadingBlockId, setUploadingBlockId] = useState(null)
   const [newlyInsertedId, setNewlyInsertedId] = useState(null)
   const [previewing, setPreviewing] = useState(false)
@@ -315,7 +441,7 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
         const blocks = current.blocks.filter((block) => block.id !== draggedId)
         const block = current.blocks.find((item) => item.id === draggedId)
         let index = blocks.findIndex((item) => item.id === targetId)
-        if (side === 'below') index += 1
+        if (side === 'after') index += 1
         blocks.splice(index, 0, block)
         return { ...current, blocks }
       })
@@ -465,42 +591,41 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
                 const isActive = activeBlockId === block.id
                 const isMedia = block.type === 'image' || block.type === 'video'
                 return (
-                  <div key={block.id} className="page-inline-block-wrap"
+                  <div key={block.id} className="page-inline-block-wrap" ref={registerBlockNode(block.id)}
                     onDragOver={(event) => {
                       if (!draggedId || draggedId === block.id) return
                       event.preventDefault()
                       setDropTarget({ id: block.id, side: sideOf(event.currentTarget, event.clientY) })
                     }}
                     onDragLeave={() => setDropTarget((current) => (current?.id === block.id ? null : current))}
-                    onDrop={(event) => { event.preventDefault(); handleDrop(block.id, dropTarget?.side ?? 'above') }}
+                    onDrop={(event) => { event.preventDefault(); handleDrop(block.id, dropTarget?.side ?? 'before') }}
                   >
                     {dropTarget?.id === block.id && <div className={`page-drop-indicator page-drop-indicator--${dropTarget.side}`} aria-hidden="true" />}
-                    <section draggable onClick={(event) => { event.stopPropagation(); setActiveBlockId(block.id) }}
-                      onDragStart={() => setDraggedId(block.id)} onDragEnd={() => { setDraggedId(null); setDropTarget(null) }}
+                    <section onClick={(event) => { event.stopPropagation(); setActiveBlockId(block.id) }}
                       className={`page-inline-block ${isActive ? 'is-active' : ''}`}>
                       <div className="page-block-controls" aria-label={`${BLOCK_LABELS[block.type]} controls`}>
-                        <span className="page-drag-handle" title="Drag to reorder">Drag</span>
+                        <DragHandle
+                          label={`Move ${BLOCK_LABELS[block.type]}`}
+                          dragLabel={BLOCK_LABELS[block.type]}
+                          onDragStart={() => setDraggedId(block.id)}
+                          onDragEnd={() => { setDraggedId(null); setDropTarget(null) }}
+                          onPointerDragStart={() => setDraggedId(block.id)}
+                          onPointerDragMove={(event) => {
+                            const hit = findDropTarget(blockNodeRefsRef.current, event.clientX, event.clientY)
+                            if (hit && hit.id !== block.id) setDropTarget(hit)
+                          }}
+                          onPointerDragEnd={(event) => {
+                            const hit = findDropTarget(blockNodeRefsRef.current, event.clientX, event.clientY)
+                            if (hit && hit.id !== block.id) handleDrop(hit.id, hit.side)
+                            else { setDraggedId(null); setDropTarget(null) }
+                          }}
+                        />
                         <button type="button" onClick={() => moveBlock(block.id, -1)} disabled={index === 0} aria-label="Move block up">Up</button>
                         <button type="button" onClick={() => moveBlock(block.id, 1)} disabled={index === pageDocument.blocks.length - 1} aria-label="Move block down">Down</button>
                         {!isMedia && <button type="button" onClick={() => duplicateBlock(block)} aria-label="Duplicate block">Duplicate</button>}
+                        <BlockSettingsMenu block={block} onChangeWithHistory={(changes) => updateBlockWithHistory(block.id, changes)} />
                         <button type="button" onClick={() => void removeBlock(block)} className="text-red-700">Remove</button>
                       </div>
-
-                      {isActive && block.type === 'heading' && (
-                        <OptionPicker label="Heading level" options={[1, 2, 3]} value={block.level}
-                          onChange={(level) => updateBlockWithHistory(block.id, { level })}
-                          formatOption={(level) => `H${level}`} />
-                      )}
-                      {isActive && block.type === 'callout' && (
-                        <OptionPicker label="Callout style" options={CALLOUT_VARIANTS} value={block.variant}
-                          onChange={(variant) => updateBlockWithHistory(block.id, { variant })}
-                          formatOption={(variant) => variant[0].toUpperCase() + variant.slice(1)} />
-                      )}
-                      {isActive && ['heading', 'text', 'callout', 'quote'].includes(block.type) && (
-                        <OptionPicker label="Text alignment" options={TEXT_ALIGNMENTS} value={block.align}
-                          onChange={(align) => updateBlockWithHistory(block.id, { align })}
-                          formatOption={(align) => ALIGN_LABELS[align]} />
-                      )}
 
                       {block.type === 'divider' && <hr className="page-divider" />}
                       {block.type === 'heading' && (
@@ -535,8 +660,14 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
                       )}
                       {isMedia && (
                         <MediaEditor block={block} onChange={(changes) => updateBlock(block.id, changes)}
-                          onSizeChange={(size) => updateBlockWithHistory(block.id, { size })}
-                          onUpload={(file) => uploadMedia(block, file)} uploading={uploadingBlockId === block.id} />
+                          onUpload={(file) => uploadMedia(block, file)} uploading={uploadingBlockId === block.id}
+                          libraryResources={libraryVideoResources}
+                          onPickFromLibrary={(resource) => updateBlockWithHistory(block.id, {
+                            url: contentFileUrl(resource),
+                            storagePath: resource.storage_path,
+                            alt: block.alt || resource.title,
+                          })}
+                        />
                       )}
                     </section>
                     {isActive && <InsertMenu label="Insert below" onInsert={(type) => insertBlock(type, index + 1)} />}

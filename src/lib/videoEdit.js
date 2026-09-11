@@ -17,6 +17,13 @@ export const STICKER_EMOJI = [
 
 export const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2]
 
+// Quick-pick swatches for text overlay color/background -- the native
+// <input type="color"> stays available for anything outside this set, but a
+// one-tap preset row (the standard caption-tool pattern) is what most
+// choices actually are in practice.
+export const TEXT_COLOR_PRESETS = ['#ffffff', '#000000', '#fde047', '#f472b6', '#60a5fa', '#4ade80', '#fb923c']
+export const TEXT_BACKGROUND_PRESETS = ['#000000', '#ffffff', '#111827', '#dc2626', '#2563eb', '#16a34a', '#f59e0b']
+
 export function defaultFilter() {
   return { brightness: 100, contrast: 100, saturate: 100, grayscale: 0, sepia: 0 }
 }
@@ -49,6 +56,10 @@ export function createTextOverlay(duration) {
     x: 50,
     y: 50,
     color: '#ffffff',
+    // null == no pill, just the text-shadow'd caption style every overlay
+    // already had. Set to a hex value for the Snapchat/IG-story "pill behind
+    // the text" look.
+    background: null,
     size: 'medium',
     startTime: 0,
     endTime: duration || 0,
