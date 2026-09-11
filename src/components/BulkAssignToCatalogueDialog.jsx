@@ -23,6 +23,11 @@ export default function BulkAssignToCatalogueDialog({
   onAssign,
   onClose,
   onDone,
+  // Global excluded when the underlying onAssign RPC requires already being
+  // an approver of the target catalogue (e.g. assign_course_to_catalogue),
+  // which no ordinary provider is for Global -- opt-in since not every
+  // onAssign this dialog is shared across necessarily has that constraint.
+  excludeGlobal = false,
 }) {
   const singular = itemLabel
   const plural = itemLabelPlural || `${itemLabel}s`
@@ -34,10 +39,10 @@ export default function BulkAssignToCatalogueDialog({
 
   useEffect(() => {
     listPublicationCatalogueOptions(organisationId)
-      .then(setCatalogues)
+      .then((options) => setCatalogues(excludeGlobal ? options.filter((option) => !option.is_global) : options))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
-  }, [organisationId])
+  }, [organisationId, excludeGlobal])
 
   async function handleSubmit() {
     if (!catalogueId || items.length === 0) return

@@ -16,6 +16,7 @@ import {
   deleteProviderCatalogue,
 } from '../../lib/catalogues'
 import BulkAssignToCatalogueDialog from '../../components/BulkAssignToCatalogueDialog'
+import BulkPublishCourseDialog from '../../components/BulkPublishCourseDialog'
 // listProviderCatalogues specifically comes from admin/providerCatalogues.js,
 // not the same-named function in lib/catalogues.js -- only this version
 // attaches courseCount (course_catalogue_publications count) to each row,
@@ -31,12 +32,12 @@ import {
 } from '../../lib/admin/providerCatalogues'
 import { listOrganisations } from '../../lib/admin/organisations'
 import { listEmployers } from '../../lib/admin/employers'
-import { useRowSelection, useSortedPage, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
+import { useColumnPreferences, useRowSelection, useSortedPage, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
 import { handleTabListKeyDown } from '../../lib/tabsKeyboard'
 import { COURSE_STATUS_LABELS } from '../../lib/statusLabels'
 import { COURSE_TYPES } from '../../lib/courseTypes'
 import { DURATION_UNITS } from '../../lib/courseDuration'
-import { BulkActionBar, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
+import { BulkActionBar, ColumnCustomizer, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 import {
   listOrganisationCatalogueCourses,
   createProviderCourse,
@@ -47,6 +48,7 @@ import {
   approveCatalogueCourse,
   rejectCatalogueCourse,
   deactivateCatalogueCourse,
+  submitCatalogueCourseForApproval,
 } from '../../lib/admin/catalogue'
 
 const COURSE_SORT_ACCESSORS = {
@@ -537,13 +539,8 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate, rea
 
   return (
     <section aria-labelledby="provider-catalogues-heading">
-      <div className="mb-5 flex items-start justify-between gap-3">
-        <div>
-          <h2 id="provider-catalogues-heading" className="font-display text-lg text-ink">Provider catalogues</h2>
-          <p className="text-sm text-secondary mt-1 max-w-2xl">
-            Organise published training into named collections. Your catalogues and the platform-managed Global catalogue are available whenever a course is submitted. Each catalogue can have its own approvers, picked from your organisation's own users, so training destined for it can be approved without a platform admin.
-          </p>
-        </div>
+      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <h2 id="provider-catalogues-heading" className="font-display text-lg text-ink">Provider catalogues</h2>
         {showCreateUI && (
           <button
             type="button"
@@ -554,6 +551,9 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate, rea
           </button>
         )}
       </div>
+      <p className="text-sm text-secondary mb-5 max-w-2xl">
+        Organise published training into named collections. Your catalogues and the platform-managed Global catalogue are available whenever a course is submitted. Each catalogue can have its own approvers, picked from your organisation's own users, so training destined for it can be approved without a platform admin.
+      </p>
 
       {error && <p role="alert" className="text-sm text-red-700 mb-4">{error}</p>}
 
@@ -783,6 +783,9 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate, rea
 // section/employer.
 export function ProviderTrainingSection({ organisation, userId, canViewParticipants, readOnly = false, searchParams, setSearchParams }) {
   const navigate = useNavigate()
+  const { isPlatformAdmin } = useAuth()
+  const { columns, visibleColumns, toggleColumn, moveColumn, resetToDefault } =
+    useColumnPreferences('provider-training', COURSE_COLUMNS)
   const [courses, setCourses] = useState([])
   const [isApprover, setIsApprover] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -800,6 +803,7 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
   const [query, setQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
   const [statusFilter, setStatusFilter] = useUrlParam(searchParams, setSearchParams, 'status', 'all', { resetParams: ['page'] })
   const [bulkPush, setBulkPush] = useState(null)
+  const [bulkPublish, setBulkPublish] = useState(null)
 
   useEffect(() => {
     load()
@@ -945,20 +949,41 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
     () => courses.filter((c) => selection.selected.has(c.id) && !(c.status === 'approved' && c.is_current_published)),
     [courses, selection.selected]
   )
+  // Mirrors CourseRow's own `editable` check -- only a draft or rejected
+  // version can be submitted via submit_course_for_publication.
+  const selectedPublishableCourses = useMemo(
+    () => courses.filter((c) => selection.selected.has(c.id) && (c.status === 'draft' || c.status === 'rejected')),
+    [courses, selection.selected]
+  )
+  const selectedUnpublishableCourses = useMemo(
+    () => courses.filter((c) => selection.selected.has(c.id) && !(c.status === 'draft' || c.status === 'rejected')),
+    [courses, selection.selected]
+  )
 
   return (
     <div>
       <div className="flex items-center justify-between gap-3 mb-3">
         <h3 className="font-display text-lg text-ink">Training</h3>
-        {!readOnly && (
-          <button
-            type="button"
-            onClick={() => setShowForm((v) => !v)}
-            className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
-          >
-            {showForm ? 'Cancel' : '+ Create training'}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {isPlatformAdmin && (
+            <ColumnCustomizer
+              idPrefix="provider-training"
+              columns={columns}
+              onToggle={toggleColumn}
+              onMove={moveColumn}
+              onReset={resetToDefault}
+            />
+          )}
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => setShowForm((v) => !v)}
+              className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
+            >
+              {showForm ? 'Cancel' : '+ Create training'}
+            </button>
+          )}
+        </div>
       </div>
 
       {!readOnly && showForm && (
@@ -1082,6 +1107,19 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
                 onClear={selection.clear}
                 actions={[
                   {
+                    label: `Publish (${selectedPublishableCourses.length})`,
+                    disabled: selectedPublishableCourses.length === 0,
+                    title:
+                      selectedPublishableCourses.length === 0
+                        ? "None of the selected training is a draft or rejected version"
+                        : undefined,
+                    onClick: () =>
+                      setBulkPublish({
+                        courses: selectedPublishableCourses,
+                        excludedCourses: selectedUnpublishableCourses,
+                      }),
+                  },
+                  {
                     label: `Push to catalogue (${selectedEligibleCourses.length})`,
                     disabled: selectedEligibleCourses.length === 0,
                     title:
@@ -1110,12 +1148,13 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
                       onChange={() => selection.toggleAll(coursePageIds)}
                     />
                   )}
-                  <SortableTh label="ID" columnKey="course_code" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                  <SortableTh label="Training" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                  <SortableTh label="Version" columnKey="version" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                  <SortableTh label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                  <SortableTh label="Rejection reason" columnKey="rejection_reason" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                  <SortableTh label="Synopsis" columnKey="synopsis" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  {visibleColumns.map((col) =>
+                    col.sortable ? (
+                      <SortableTh key={col.key} label={col.label} columnKey={col.key} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className={col.thClassName} />
+                    ) : (
+                      <th key={col.key} className={`px-4 py-2 font-medium ${col.thClassName || ''}`}>{col.label}</th>
+                    )
+                  )}
                   <th className="px-4 py-2 font-medium"></th>
                 </tr>
               </thead>
@@ -1124,6 +1163,7 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
                   <CourseRow
                     key={course.id}
                     course={course}
+                    columns={visibleColumns}
                     selected={selection.selected.has(course.id)}
                     onToggleSelected={() => selection.toggle(course.id)}
                     canModerate={isApprover && !readOnly}
@@ -1160,6 +1200,19 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
       {historyCourse && (
         <CourseVersionHistoryDialog course={historyCourse} onClose={() => setHistoryCourse(null)} />
       )}
+      {bulkPublish && (
+        <BulkPublishCourseDialog
+          courses={bulkPublish.courses}
+          excludedCourses={bulkPublish.excludedCourses}
+          onPublish={(courseId) => submitCatalogueCourseForApproval(courseId, [])}
+          onClose={() => setBulkPublish(null)}
+          onDone={(succeededCourseIds, hadFailures) => {
+            if (hadFailures) selection.clearIds(succeededCourseIds)
+            else selection.clear()
+            load()
+          }}
+        />
+      )}
       {bulkPush && (
         <BulkAssignToCatalogueDialog
           organisationId={organisation.id}
@@ -1167,7 +1220,8 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
           excludedItems={bulkPush.excludedCourses}
           excludedReason="an approved, currently published version"
           itemLabel="course"
-          description="Choose one catalogue to add the selected courses to. Each becomes visible there as soon as it's added -- a platform admin still has to approve anything added to the global catalogue."
+          description={'Choose one of your own catalogues to add the selected courses to. Each becomes visible there as soon as it\'s added. To submit a course to the platform-wide Global catalogue, use its own "Submit to Global catalogue" action instead.'}
+          excludeGlobal
           onAssign={(catalogueId, course) => assignProviderCourseToCatalogue(catalogueId, course.id)}
           onClose={() => setBulkPush(null)}
           onDone={(succeededCourseIds, hadFailures) => {
@@ -1218,8 +1272,71 @@ const COURSE_STATUS_TONES = {
   inactive: 'neutral',
 }
 
+// Customizable data columns only -- the leading selection checkbox and the
+// trailing actions column (Edit/View history/participants/Approve/Reject/
+// Deactivate) stay pinned outside this list, exactly like AdminEmployers.jsx
+// pins its own "Add admin" actions column. No external dependency needed
+// (unlike AdminEmployers.jsx's organisationById), so this is a plain
+// constant rather than a factory function.
+const COURSE_COLUMNS = [
+  {
+    key: 'course_code',
+    label: 'ID',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap',
+    renderCell: (course) => course.course_code || 'Not set',
+  },
+  {
+    key: 'name',
+    label: 'Training',
+    sortable: true,
+    cellClassName: 'px-4 py-3 whitespace-nowrap',
+    renderCell: (course) => (
+      <Link to={`/provider/training/${course.id}`} className="text-ink font-medium hover:text-moss hover:underline">
+        {course.name}
+      </Link>
+    ),
+  },
+  {
+    key: 'version',
+    label: 'Version',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-3 whitespace-nowrap',
+    renderCell: (course) => (
+      <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{course.version_number}</span>
+    ),
+  },
+  {
+    key: 'status',
+    label: 'Status',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-3 whitespace-nowrap',
+    renderCell: (course) => (
+      <StatusBadge label={COURSE_STATUS_LABELS[course.status] ?? course.status} tone={COURSE_STATUS_TONES[course.status] ?? 'neutral'} />
+    ),
+  },
+  {
+    key: 'rejection_reason',
+    label: 'Rejection reason',
+    sortable: true,
+    cellClassName: 'px-4 py-3 text-red-700 truncate max-w-[180px]',
+    renderCell: (course) => course.rejection_reason || '—',
+  },
+  {
+    key: 'synopsis',
+    label: 'Synopsis',
+    sortable: true,
+    cellClassName: 'px-4 py-3 text-secondary truncate max-w-xs',
+    renderCell: (course) => course.synopsis || '—',
+  },
+]
+
 function CourseRow({
   course,
+  columns,
   selected,
   onToggleSelected,
   canViewParticipants,
@@ -1241,7 +1358,7 @@ function CourseRow({
 }) {
   const editable = course.status === 'draft' || course.status === 'rejected'
   const canStartEditing = !readOnly && (editable || course.status === 'approved')
-  const columnCount = readOnly ? 7 : 8
+  const columnCount = (readOnly ? 0 : 1) + columns.length + 1
   return (
     <>
       <tr className="border-b border-hairline last:border-0">
@@ -1257,20 +1374,11 @@ function CourseRow({
             />
           </td>
         )}
-        <td className="px-4 py-3 font-mono text-xs text-secondary whitespace-nowrap">{course.course_code || 'Not set'}</td>
-        <td className="px-4 py-3 whitespace-nowrap">
-          <Link to={`/provider/training/${course.id}`} className="text-ink font-medium hover:text-moss hover:underline">
-            {course.name}
-          </Link>
-        </td>
-        <td className="px-4 py-3 whitespace-nowrap">
-          <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{course.version_number}</span>
-        </td>
-        <td className="px-4 py-3 whitespace-nowrap">
-          <StatusBadge label={COURSE_STATUS_LABELS[course.status] ?? course.status} tone={COURSE_STATUS_TONES[course.status] ?? 'neutral'} />
-        </td>
-        <td className="px-4 py-3 text-red-700 truncate max-w-[180px]">{course.rejection_reason || '—'}</td>
-        <td className="px-4 py-3 text-secondary truncate max-w-xs">{course.synopsis || '—'}</td>
+        {columns.map((col) => (
+          <td key={col.key} className={col.cellClassName}>
+            {col.renderCell(course)}
+          </td>
+        ))}
         <td className="px-4 py-3">
           <div className="flex items-center justify-end gap-x-3 whitespace-nowrap">
             {canStartEditing ? (

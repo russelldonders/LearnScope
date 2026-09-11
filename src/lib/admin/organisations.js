@@ -44,6 +44,7 @@ export async function updateOrganisation(
     brandSecondaryColor,
     brandHoverColor,
     brandBackgroundColor,
+    brandTextColor,
   } = {}
 ) {
   const fields = { updated_at: new Date().toISOString() }
@@ -55,6 +56,7 @@ export async function updateOrganisation(
   if (brandSecondaryColor !== undefined) fields.brand_secondary_color = brandSecondaryColor || null
   if (brandHoverColor !== undefined) fields.brand_hover_color = brandHoverColor || null
   if (brandBackgroundColor !== undefined) fields.brand_background_color = brandBackgroundColor || null
+  if (brandTextColor !== undefined) fields.brand_text_color = brandTextColor || null
 
   const { data, error } = await supabase.from('organisations').update(fields).eq('id', id).select().single()
   if (error) throw error

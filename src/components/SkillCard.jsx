@@ -61,21 +61,10 @@ export default function SkillCard({ skill, onEdit, compact = false }) {
           )}
         </div>
         {compact && (
-          <>
-            <p className="text-sm text-secondary mt-1">
-              {displayedLevel ? LEVEL_LABELS[displayedLevel] : 'Not yet assessed'}
-              {skill.targetLevel ? ` → target ${LEVEL_LABELS[skill.targetLevel]}` : ''}
-            </p>
-            <p className="text-sm font-medium text-moss mt-2">
-              {due
-                ? 'Update your self-assessment'
-                : !displayedLevel
-                  ? 'Assess your current level'
-                  : skill.targetLevel && displayedLevel < skill.targetLevel
-                    ? `Work toward ${LEVEL_LABELS[skill.targetLevel]}`
-                    : 'View skill'}
-            </p>
-          </>
+          <p className="text-sm text-secondary mt-1">
+            {displayedLevel ? LEVEL_LABELS[displayedLevel] : 'Not yet assessed'}
+            {skill.targetLevel ? ` → target ${LEVEL_LABELS[skill.targetLevel]}` : ''}
+          </p>
         )}
         {!compact && skill.lifecycle_stage && SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage] && (
           <p className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide text-secondary mt-0.5">

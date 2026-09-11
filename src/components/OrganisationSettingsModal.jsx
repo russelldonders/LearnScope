@@ -14,6 +14,7 @@ const BRAND_COLOR_FIELDS = [
   { key: 'brandSecondaryColor', label: 'Secondary', hint: 'Accents', fallback: '#3d5a73' },
   { key: 'brandHoverColor', label: 'Hover', hint: 'Button hover state', fallback: '#80651d' },
   { key: 'brandBackgroundColor', label: 'Background', hint: 'Page background', fallback: '#eef0e7' },
+  { key: 'brandTextColor', label: 'Text', hint: 'Headings and labels', fallback: '#20301f' },
 ]
 
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/
@@ -32,6 +33,7 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
   const [brandSecondaryColor, setBrandSecondaryColor] = useState(organisation.brand_secondary_color ?? '')
   const [brandHoverColor, setBrandHoverColor] = useState(organisation.brand_hover_color ?? '')
   const [brandBackgroundColor, setBrandBackgroundColor] = useState(organisation.brand_background_color ?? '')
+  const [brandTextColor, setBrandTextColor] = useState(organisation.brand_text_color ?? '')
   const [colorError, setColorError] = useState(null)
   const [publicProfileEnabled, setPublicProfileEnabled] = useState(organisation.public_profile_enabled ?? false)
   // Tracks what's actually persisted, separately from the checkbox above --
@@ -93,7 +95,7 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
     e.preventDefault()
     setColorError(null)
     for (const field of BRAND_COLOR_FIELDS) {
-      const value = { brandPrimaryColor, brandSecondaryColor, brandHoverColor, brandBackgroundColor }[field.key]
+      const value = { brandPrimaryColor, brandSecondaryColor, brandHoverColor, brandBackgroundColor, brandTextColor }[field.key]
       if (value && !HEX_COLOR_RE.test(value)) {
         setColorError(`${field.label} colour must be a hex value like ${field.fallback}.`)
         return
@@ -110,6 +112,7 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
         brandSecondaryColor: brandSecondaryColor || null,
         brandHoverColor: brandHoverColor || null,
         brandBackgroundColor: brandBackgroundColor || null,
+        brandTextColor: brandTextColor || null,
       })
       setSavedPublicProfileEnabled(publicProfileEnabled)
       // Stay open when the public page is (now) enabled, so there's a
@@ -214,8 +217,8 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
             <p className="text-xs text-secondary mb-2">
               Used on your public page below, and on Sign up/Log in for visitors arriving from it. Leave any of
               these blank to use LearnScope's default colours. Buttons use white text on your Primary/Hover
-              colours, so pick shades dark enough to stay readable. Page text stays dark, so pick a light
-              Background colour too.
+              colours, so pick shades dark enough to stay readable. If you pick a dark Background, set a light
+              Text colour too so headings and labels stay readable against it.
             </p>
             <div className="grid grid-cols-2 gap-3">
               {BRAND_COLOR_FIELDS.map((field) => {
@@ -224,12 +227,14 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
                   brandSecondaryColor,
                   brandHoverColor,
                   brandBackgroundColor,
+                  brandTextColor,
                 }[field.key]
                 const setValue = {
                   brandPrimaryColor: setBrandPrimaryColor,
                   brandSecondaryColor: setBrandSecondaryColor,
                   brandHoverColor: setBrandHoverColor,
                   brandBackgroundColor: setBrandBackgroundColor,
+                  brandTextColor: setBrandTextColor,
                 }[field.key]
                 const inputId = `orgSettings-${field.key}`
                 return (

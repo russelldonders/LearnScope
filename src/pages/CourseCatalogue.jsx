@@ -178,6 +178,11 @@ export default function CourseCatalogue() {
 
   const q = query.trim().toLowerCase()
   const filtered = catalogue.filter((course) => {
+    // Already-enrolled courses belong on the learner's own Training record,
+    // not this browse-and-enrol list -- keeping them here just to show a
+    // disabled "Enrolled"/"Completed" button added noise without letting the
+    // learner do anything new with them.
+    if (enrolledIds.has(course.id)) return false
     if (q && ![course.name, course.provider, course.synopsis].filter(Boolean).some((v) => v.toLowerCase().includes(q))) {
       return false
     }

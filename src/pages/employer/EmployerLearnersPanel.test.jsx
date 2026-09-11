@@ -4,6 +4,15 @@ import { MemoryRouter, useSearchParams } from 'react-router-dom'
 import { EmployerLearnersPanel } from './EmployerConsole'
 import { listEmployerMembers, listEmployerDataAccessRequests, requestEmployerDataAccess, removeEmployerMember } from '../../lib/admin/employers'
 
+// EmployerLearnersPanel reads isPlatformAdmin (to gate the Columns
+// customizer button) -- stub the context like Connections.test.jsx does
+// rather than rendering a real AuthProvider, since this test doesn't
+// exercise auth itself. false mirrors this test's non-admin scenario, so
+// the table renders exactly as it always has here.
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ isPlatformAdmin: false }),
+}))
+
 vi.mock('../../lib/skillLibrary', () => ({ listLibrarySkills: vi.fn().mockResolvedValue([]) }))
 
 vi.mock('../../lib/supabaseClient', () => ({ supabase: {} }))

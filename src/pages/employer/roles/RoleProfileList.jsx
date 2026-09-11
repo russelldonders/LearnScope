@@ -37,14 +37,8 @@ export default function RoleProfileList({
 }) {
   return (
     <section aria-labelledby="employer-role-profiles-heading">
-      <div className="flex items-center justify-between gap-3 mb-5">
-        <div>
-          <h2 id="employer-role-profiles-heading" className="font-display text-lg text-ink">Role profiles</h2>
-          <p className="text-sm text-secondary mt-1 max-w-2xl">
-            Define the skills, courses and linked employees expected for a role. Open one to manage each from its
-            own page.
-          </p>
-        </div>
+      <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
+        <h2 id="employer-role-profiles-heading" className="font-display text-lg text-ink">Role profiles</h2>
         <button
           type="button"
           onClick={() => onCreate?.()}

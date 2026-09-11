@@ -110,6 +110,7 @@ export default function ProviderProfile() {
         secondaryColor: profile.organisation.brandSecondaryColor,
         hoverColor: profile.organisation.brandHoverColor,
         backgroundColor: profile.organisation.brandBackgroundColor,
+        textColor: profile.organisation.brandTextColor,
       })
     : undefined
   // text-paper (the default CTA text colour) is itself a theme-dependent
@@ -185,7 +186,7 @@ export default function ProviderProfile() {
             )}
 
             <section className="mb-10">
-              <h2 className="font-display text-xl text-ink mb-4 pb-1 border-b-2 border-[var(--org-primary,transparent)]">
+              <h2 className="font-display text-xl text-[var(--org-text,var(--color-ink))] mb-4 pb-1 border-b-2 border-[var(--org-primary,transparent)]">
                 Skills offered
               </h2>
               {profile.skills.length === 0 ? (
@@ -196,7 +197,7 @@ export default function ProviderProfile() {
                     <span
                       key={skill.id}
                       title={skill.description || undefined}
-                      className="font-mono text-xs uppercase tracking-wide text-ink border border-[var(--org-primary,var(--color-hairline))] rounded-full px-3 py-1"
+                      className="font-mono text-xs uppercase tracking-wide text-[var(--org-text,var(--color-ink))] border border-[var(--org-primary,var(--color-hairline))] rounded-full px-3 py-1"
                     >
                       {skill.name}
                       {skill.category ? ` · ${skill.category}` : ''}
@@ -207,7 +208,7 @@ export default function ProviderProfile() {
             </section>
 
             <section>
-              <h2 className="font-display text-xl text-ink mb-4 pb-1 border-b-2 border-[var(--org-primary,transparent)]">
+              <h2 className="font-display text-xl text-[var(--org-text,var(--color-ink))] mb-4 pb-1 border-b-2 border-[var(--org-primary,transparent)]">
                 Training offered
               </h2>
               {profile.courses.length === 0 ? (
@@ -229,7 +230,7 @@ export default function ProviderProfile() {
                         className="h-24 w-full shrink-0"
                       />
                       <div className="p-4 flex flex-col flex-1">
-                        <h3 className="font-display text-lg text-ink">{course.name}</h3>
+                        <h3 className="font-display text-lg text-[var(--org-text,var(--color-ink))]">{course.name}</h3>
                         <p className="font-mono text-xs text-secondary mt-0.5">
                           {[course.courseType, course.duration].filter(Boolean).join(' · ')}
                         </p>
@@ -322,7 +323,7 @@ function PublicHeader({ organisation, slug }) {
   const ctaTextClass = organisation?.brandPrimaryColor ? 'text-white' : 'text-paper'
   return (
     <header className="max-w-4xl mx-auto px-4 py-6 flex items-center justify-between">
-      <Link to={organisation?.logoUrl ? `/providers/${slug}` : '/'} className="flex items-center gap-2 font-display text-2xl text-ink">
+      <Link to={organisation?.logoUrl ? `/providers/${slug}` : '/'} className="flex items-center gap-2 font-display text-2xl text-[var(--org-text,var(--color-ink))]">
         <img
           src={organisation?.logoUrl || '/favicon.svg'}
           alt=""

@@ -31,9 +31,9 @@ import { listOrganisationMembers, listOrganisations } from '../../lib/admin/orga
 import { listLibrarySkills } from '../../lib/skillLibrary'
 import { listEmployerRoleProfiles, assignEmployerRoleProfile } from '../../lib/employerRoleProfiles'
 import { LEVELS, LEVEL_LABELS } from '../../lib/levels'
-import { useSortedPage, useRowSelection, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
+import { useColumnPreferences, useSortedPage, useRowSelection, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
 import { handleTabListKeyDown } from '../../lib/tabsKeyboard'
-import { SortableTh, TablePagination, SelectionTh, BulkActionBar } from '../../components/TableControls'
+import { ColumnCustomizer, SortableTh, TablePagination, SelectionTh, BulkActionBar } from '../../components/TableControls'
 import MutationFeedback from '../../components/MutationFeedback'
 import StatusBadge from '../../components/StatusBadge'
 import EmployerRoleProfilesSection from './EmployerRoleProfilesSection'
@@ -107,6 +107,119 @@ const LINKED_PROVIDER_SORT_ACCESSORS = {
   org_code: (p) => p.organisations?.org_code?.toLowerCase() ?? '',
   created_at: (p) => p.created_at ?? '',
 }
+
+// Customizable data columns only -- the leading selection checkbox stays
+// pinned outside this list (EmployerLearnersPanel has no trailing actions
+// column). "Training access" only exists at all when attachedProviderOrg is
+// truthy, so it's built conditionally into the array itself rather than
+// left always-visible-and-toggleable -- mirrors AdminEmployers.jsx's
+// employerColumns(organisationById) factory, just with two closed-over
+// values (attachedProviderOrg, dataAccessByLearner) instead of one.
+function employerLearnerColumns(attachedProviderOrg, dataAccessByLearner) {
+  const trainingAccessColumn = {
+    key: 'training_access',
+    label: 'Training access',
+    sortable: false,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-2 text-xs whitespace-nowrap',
+    renderCell: (m) =>
+      m.trainingAccess
+        ? `${m.trainingAccess.role === 'admin' ? 'Admin' : 'Trainer'}${m.trainingAccess.status === 'pending' ? ' (pending)' : ''}`
+        : 'None',
+  }
+  return [
+    {
+      key: 'id',
+      label: 'ID',
+      sortable: true,
+      thClassName: 'whitespace-nowrap',
+      cellClassName: 'px-4 py-2 font-mono text-xs text-secondary whitespace-nowrap',
+      renderCell: (m) => m.userCode || '—',
+    },
+    {
+      key: 'email',
+      label: 'User',
+      sortable: true,
+      cellClassName: 'px-4 py-2 text-ink text-xs truncate max-w-[220px]',
+      renderCell: (m) => m.email || m.user_id,
+    },
+    {
+      key: 'role',
+      label: 'Role',
+      sortable: true,
+      thClassName: 'whitespace-nowrap',
+      cellClassName: 'px-4 py-2 whitespace-nowrap',
+      renderCell: (m) => (
+        <StatusBadge label={!m.employerMember ? 'Training team' : m.role === 'admin' ? 'Admin' : 'Member'} tone="neutral" />
+      ),
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      sortable: true,
+      thClassName: 'whitespace-nowrap',
+      cellClassName: 'px-4 py-2 whitespace-nowrap',
+      renderCell: (m) => <StatusBadge label={m.status === 'pending' ? 'Pending' : 'Active'} tone="neutral" />,
+    },
+    ...(attachedProviderOrg ? [trainingAccessColumn] : []),
+    {
+      key: 'data_access',
+      label: 'Data access',
+      sortable: false,
+      thClassName: 'whitespace-nowrap',
+      cellClassName: 'px-4 py-2 text-xs max-w-[220px]',
+      renderCell: (m) => {
+        const dataAccess = dataAccessByLearner[m.user_id]
+        return (
+          <div className="flex flex-col gap-1 items-start">
+            <StatusBadge
+              label={!m.employerMember ? 'Not applicable' : dataAccess ? DATA_ACCESS_STATUS_LABELS[dataAccess.status] : 'No request yet'}
+              tone={dataAccess?.status === 'declined' || dataAccess?.status === 'revoked' ? 'danger' : 'neutral'}
+            />
+            {dataAccess && (
+              <p className="text-[10px] text-secondary leading-snug">
+                Requested: {requestedDataSummary(dataAccess)}
+                {dataAccess.status === 'approved' && (
+                  <>. Approved: {(dataAccess.approved_data || ['skills']).join(', ')}</>
+                )}
+              </p>
+            )}
+          </div>
+        )
+      },
+    },
+  ]
+}
+
+// Customizable data columns only -- the trailing "Unlink" actions column
+// stays pinned outside this list, same as AdminEmployers.jsx's "Add admin"
+// column. No external dependency needed, so a plain constant rather than a
+// factory function.
+const EMPLOYER_PROVIDER_COLUMNS = [
+  {
+    key: 'name',
+    label: 'Provider',
+    sortable: true,
+    cellClassName: 'px-4 py-2 text-ink text-xs truncate max-w-[220px]',
+    renderCell: (p) => p.organisations?.name || 'Deleted organisation',
+  },
+  {
+    key: 'org_code',
+    label: 'Code',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-2 text-secondary text-xs whitespace-nowrap font-mono',
+    renderCell: (p) => p.organisations?.org_code || '—',
+  },
+  {
+    key: 'created_at',
+    label: 'Linked',
+    sortable: true,
+    thClassName: 'whitespace-nowrap',
+    cellClassName: 'px-4 py-2 text-secondary text-xs whitespace-nowrap',
+    renderCell: (p) => new Date(p.created_at).toLocaleDateString(),
+  },
+]
 
 // Every panel below (Users, Providers) keeps its own search/sort/page state
 // in the URL, same convention as the Training tab's ProviderTrainingSection.
@@ -645,6 +758,7 @@ function EmployerUsersPanel({ employer, attachedProviderOrg, canManageTrainingTe
 }
 
 export function EmployerLearnersPanel({ employer, searchParams, setSearchParams, attachedProviderOrg }) {
+  const { isPlatformAdmin } = useAuth()
   const [members, setMembers] = useState([])
   const [trainingStaff, setTrainingStaff] = useState([])
   const [trainingStaffError, setTrainingStaffError] = useState(null)
@@ -686,6 +800,13 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
   const [dataAccessByLearner, setDataAccessByLearner] = useState({})
   const [dataAccessRequestingId, setDataAccessRequestingId] = useState(null)
   const [dataAccessError, setDataAccessError] = useState(null)
+
+  const EMPLOYER_LEARNER_COLUMNS = useMemo(
+    () => employerLearnerColumns(attachedProviderOrg, dataAccessByLearner),
+    [attachedProviderOrg, dataAccessByLearner]
+  )
+  const { columns, visibleColumns, toggleColumn, moveColumn, resetToDefault } =
+    useColumnPreferences('employer-learners', EMPLOYER_LEARNER_COLUMNS)
 
   // Search/sort/page all live in the URL (?q=&sort=&dir=&page=&pageSize=),
   // same convention as AdminCatalogue.jsx/AdminTags.jsx -- this is this
@@ -993,7 +1114,18 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
     <section aria-labelledby="employer-learners-heading">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <h2 id="employer-learners-heading" className="font-display text-lg text-ink">Users</h2>
-        {selection.selected.size === 0 && <Link to={`?${addParams}`} className="rounded-md bg-moss text-paper px-3 py-2 text-sm font-medium hover:opacity-90">Add users</Link>}
+        <div className="flex items-center gap-2">
+          {isPlatformAdmin && (
+            <ColumnCustomizer
+              idPrefix="employer-learners"
+              columns={columns}
+              onToggle={toggleColumn}
+              onMove={moveColumn}
+              onReset={resetToDefault}
+            />
+          )}
+          {selection.selected.size === 0 && <Link to={`?${addParams}`} className="rounded-md bg-moss text-paper px-3 py-2 text-sm font-medium hover:opacity-90">Add users</Link>}
+        </div>
       </div>
 
       <MutationFeedback status="success" message={message} size="xs" className="mb-3" />
@@ -1080,18 +1212,17 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
                     indeterminate={selectedOnPage > 0 && selectedOnPage < eligiblePageIds.length}
                     onChange={() => selection.toggleAll(eligiblePageIds)}
                   />
-                  <SortableTh label="ID" columnKey="id" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                  <SortableTh label="User" columnKey="email" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                  <SortableTh label="Role" columnKey="role" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                  <SortableTh label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                  {attachedProviderOrg && <th className="px-4 py-2 font-medium whitespace-nowrap">Training access</th>}
-                  <th className="px-4 py-2 font-medium whitespace-nowrap">Data access</th>
-
+                  {visibleColumns.map((col) =>
+                    col.sortable ? (
+                      <SortableTh key={col.key} label={col.label} columnKey={col.key} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className={col.thClassName} />
+                    ) : (
+                      <th key={col.key} className={`px-4 py-2 font-medium ${col.thClassName || ''}`}>{col.label}</th>
+                    )
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {pageItems.map((m) => {
-                  const dataAccess = dataAccessByLearner[m.user_id]
                   return (
                     <tr key={m.id} className="border-b border-hairline last:border-0">
                       <td className="px-4 py-2">
@@ -1103,35 +1234,11 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
                           className="rounded border-hairline accent-moss disabled:opacity-30"
                         />
                       </td>
-                      <td className="px-4 py-2 font-mono text-xs text-secondary whitespace-nowrap">{m.userCode || '—'}</td>
-                      <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">{m.email || m.user_id}</td>
-                      <td className="px-4 py-2 whitespace-nowrap">
-                        <StatusBadge label={!m.employerMember ? 'Training team' : m.role === 'admin' ? 'Admin' : 'Member'} tone="neutral" />
-                      </td>
-                      <td className="px-4 py-2 whitespace-nowrap">
-                        <StatusBadge label={m.status === 'pending' ? 'Pending' : 'Active'} tone="neutral" />
-                      </td>
-                      {attachedProviderOrg && (
-                        <td className="px-4 py-2 text-xs whitespace-nowrap">
-                          {m.trainingAccess ? `${m.trainingAccess.role === 'admin' ? 'Admin' : 'Trainer'}${m.trainingAccess.status === 'pending' ? ' (pending)' : ''}` : 'None'}
+                      {visibleColumns.map((col) => (
+                        <td key={col.key} className={col.cellClassName}>
+                          {col.renderCell(m)}
                         </td>
-                      )}
-                      <td className="px-4 py-2 text-xs max-w-[220px]">
-                        <div className="flex flex-col gap-1 items-start">
-                          <StatusBadge
-                            label={!m.employerMember ? 'Not applicable' : dataAccess ? DATA_ACCESS_STATUS_LABELS[dataAccess.status] : 'No request yet'}
-                            tone={dataAccess?.status === 'declined' || dataAccess?.status === 'revoked' ? 'danger' : 'neutral'}
-                          />
-                          {dataAccess && (
-                            <p className="text-[10px] text-secondary leading-snug">
-                              Requested: {requestedDataSummary(dataAccess)}
-                              {dataAccess.status === 'approved' && (
-                                <>. Approved: {(dataAccess.approved_data || ['skills']).join(', ')}</>
-                              )}
-                            </p>
-                          )}
-                        </div>
-                      </td>
+                      ))}
                     </tr>
                   )
                 })}
@@ -1959,6 +2066,9 @@ function EmployerSkillAssignmentsHistory({ employer, members, searchParams, setS
 // functionality on top of employer_linked_providers without changing its
 // shape.
 function EmployerProvidersPanel({ employer, user, searchParams, setSearchParams }) {
+  const { isPlatformAdmin } = useAuth()
+  const { columns, visibleColumns, toggleColumn, moveColumn, resetToDefault } =
+    useColumnPreferences('employer-providers', EMPLOYER_PROVIDER_COLUMNS)
   const [linkedProviders, setLinkedProviders] = useState([])
   const [allOrganisations, setAllOrganisations] = useState([])
   const [loading, setLoading] = useState(true)
@@ -2059,7 +2169,18 @@ function EmployerProvidersPanel({ employer, user, searchParams, setSearchParams 
   return (
     <section aria-labelledby="employer-providers-heading">
       <div className="mb-5">
-        <h2 id="employer-providers-heading" className="font-display text-lg text-ink">Providers</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="employer-providers-heading" className="font-display text-lg text-ink">Providers</h2>
+          {isPlatformAdmin && (
+            <ColumnCustomizer
+              idPrefix="employer-providers"
+              columns={columns}
+              onToggle={toggleColumn}
+              onMove={moveColumn}
+              onReset={resetToDefault}
+            />
+          )}
+        </div>
         <p className="text-sm text-secondary mt-1 max-w-2xl">
           Link additional provider organisations to {employer.name}. This just records the association for now --
           it doesn't change course assignment or grant the provider any access to {employer.name}'s data.
@@ -2146,24 +2267,24 @@ function EmployerProvidersPanel({ employer, user, searchParams, setSearchParams 
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-hairline text-left text-secondary">
-                      <SortableTh label="Provider" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                      <SortableTh label="Code" columnKey="org_code" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
-                      <SortableTh label="Linked" columnKey="created_at" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="whitespace-nowrap" />
+                      {visibleColumns.map((col) =>
+                        col.sortable ? (
+                          <SortableTh key={col.key} label={col.label} columnKey={col.key} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className={col.thClassName} />
+                        ) : (
+                          <th key={col.key} className={`px-4 py-2 font-medium ${col.thClassName || ''}`}>{col.label}</th>
+                        )
+                      )}
                       <th className="px-4 py-2 font-medium"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {pageItems.map((p) => (
                       <tr key={p.id} className="border-b border-hairline last:border-0">
-                        <td className="px-4 py-2 text-ink text-xs truncate max-w-[220px]">
-                          {p.organisations?.name || 'Deleted organisation'}
-                        </td>
-                        <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap font-mono">
-                          {p.organisations?.org_code || '—'}
-                        </td>
-                        <td className="px-4 py-2 text-secondary text-xs whitespace-nowrap">
-                          {new Date(p.created_at).toLocaleDateString()}
-                        </td>
+                        {visibleColumns.map((col) => (
+                          <td key={col.key} className={col.cellClassName}>
+                            {col.renderCell(p)}
+                          </td>
+                        ))}
                         <td className="px-4 py-2 text-right">
                           <button
                             type="button"

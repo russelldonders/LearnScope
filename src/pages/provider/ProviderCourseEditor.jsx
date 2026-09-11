@@ -293,26 +293,8 @@ export function DragHandle({
 // rejected submission being fixed and resent) opens with those same
 // catalogues still ticked, rather than silently dropping them and making
 // resubmission look like starting over.
-function PublishCourseDialog({ organisationId, currentCatalogues, assignedCatalogueIds, submitting, onClose, onPublish }) {
-  const [catalogues, setCatalogues] = useState([])
-  const [selectedIds, setSelectedIds] = useState(() => assignedCatalogueIds ?? [])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    listPublicationCatalogueOptions(organisationId)
-      .then((options) => setCatalogues(options))
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
-  }, [organisationId])
-
-  function toggleCatalogue(id) {
-    setSelectedIds((current) =>
-      current.includes(id) ? current.filter((catalogueId) => catalogueId !== id) : [...current, id]
-    )
-  }
-
-  const willLeaveCurrentCatalogues = selectedIds.length === 0 && (currentCatalogues?.length ?? 0) > 0
+function PublishCourseDialog({ currentCatalogues, submitting, onClose, onPublish }) {
+  const hasCurrentCatalogues = (currentCatalogues?.length ?? 0) > 0
 
   return (
     <AccessibleDialog
@@ -323,46 +305,16 @@ function PublishCourseDialog({ organisationId, currentCatalogues, assignedCatalo
       panelClassName="w-full max-w-lg rounded-xl bg-card border border-hairline p-5 shadow-xl"
     >
       <h2 id="publish-course-title" className="font-display text-lg text-ink">Publish this version</h2>
-      <p id="publish-course-description" className="text-sm text-secondary mt-1 mb-5">
-        Publishing makes this the course's live version for your organisation. Optionally, choose one or more
-        catalogues to also submit it to for approval -- you can push it to a catalogue later instead if you'd
-        rather publish first.
+      <p id="publish-course-description" className="text-sm text-secondary mt-1 mb-3">
+        Publishing makes this the course's live version for your organisation. Adding it to one of your catalogues,
+        or submitting it to the platform-wide Global catalogue, are separate steps you can take afterwards.
       </p>
 
-      {error && <p role="alert" className="text-sm text-red-700 mb-3">{error}</p>}
-      {loading ? (
-        <p role="status" className="text-sm text-secondary">Loading catalogues…</p>
-      ) : catalogues.length === 0 ? (
-        <p className="text-sm text-secondary">No publishing destinations are available.</p>
-      ) : (
-        <div className="divide-y divide-hairline border-y border-hairline">
-          {catalogues.map((catalogue) => (
-            <label key={catalogue.id} className="flex items-start gap-3 py-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={selectedIds.includes(catalogue.id)}
-                onChange={() => toggleCatalogue(catalogue.id)}
-                className="mt-0.5 h-4 w-4 accent-moss"
-              />
-              <span className="min-w-0">
-                <span className="block text-sm font-medium text-ink">{catalogue.name}</span>
-                <span className="block text-xs text-secondary mt-0.5">
-                  {catalogue.is_global
-                    ? 'Visible platform-wide -- always needs a platform admin to approve.'
-                    : (catalogue.description ? `${catalogue.description} -- ` : '') +
-                      "can be approved by this catalogue's own approvers, without a platform admin."}
-                </span>
-              </span>
-            </label>
-          ))}
-        </div>
-      )}
-
-      {willLeaveCurrentCatalogues && (
-        <p className="text-xs text-amber-700 mt-3">
+      {hasCurrentCatalogues && (
+        <p className="text-xs text-amber-700 mb-3">
           This course is currently visible in {currentCatalogues.map((c) => c.name).join(', ')}. Publishing this
-          version with no catalogue selected will replace it there, and it won't be discoverable again until you
-          push this version to a catalogue.
+          version will replace it there, and it won't be discoverable again until you push this version to a
+          catalogue.
         </p>
       )}
       <div className="flex justify-end gap-2 mt-5">
@@ -371,11 +323,68 @@ function PublishCourseDialog({ organisationId, currentCatalogues, assignedCatalo
         </button>
         <button
           type="button"
-          onClick={() => onPublish(selectedIds)}
-          disabled={submitting || loading}
+          onClick={onPublish}
+          disabled={submitting}
           className="rounded-md bg-moss px-3 py-1.5 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-50"
         >
-          {submitting ? 'Publishing…' : selectedIds.length === 0 ? 'Publish' : 'Submit for approval'}
+          {submitting ? 'Publishing…' : 'Publish'}
+        </button>
+      </div>
+    </AccessibleDialog>
+  )
+}
+
+// The one platform-wide review channel that isn't reachable through the
+// catalogue-free Publish above or the post-publish "Push to catalogue" step
+// (assign_course_to_catalogue requires already being an approver of the
+// target catalogue, which no ordinary provider is for Global) --
+// submit_course_for_publication with just the Global catalogue's id is the
+// only path left, so this is a single-purpose confirm rather than a picker:
+// there's exactly one Global catalogue (0090's system-provider migration).
+function SubmitToGlobalCatalogueDialog({ organisationId, submitting, onClose, onSubmit }) {
+  const [globalCatalogueId, setGlobalCatalogueId] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    listPublicationCatalogueOptions(organisationId)
+      .then((options) => {
+        const global = options.find((option) => option.is_global)
+        if (!global) throw new Error('The Global catalogue could not be found.')
+        setGlobalCatalogueId(global.id)
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false))
+  }, [organisationId])
+
+  return (
+    <AccessibleDialog
+      labelledBy="submit-global-catalogue-title"
+      describedBy="submit-global-catalogue-description"
+      onClose={submitting ? undefined : onClose}
+      closeOnBackdrop={!submitting}
+      panelClassName="w-full max-w-lg rounded-xl bg-card border border-hairline p-5 shadow-xl"
+    >
+      <h2 id="submit-global-catalogue-title" className="font-display text-lg text-ink">Submit to Global catalogue</h2>
+      <p id="submit-global-catalogue-description" className="text-sm text-secondary mt-1 mb-3">
+        Sends this version for review by a platform admin. It becomes visible platform-wide, and this course's own
+        live version for your organisation, once approved.
+      </p>
+
+      {error && <p role="alert" className="text-sm text-red-700 mb-3">{error}</p>}
+      {loading && <p role="status" className="text-sm text-secondary">Loading…</p>}
+
+      <div className="flex justify-end gap-2 mt-5">
+        <button type="button" onClick={onClose} disabled={submitting} className="rounded-md border border-hairline px-3 py-1.5 text-sm text-ink hover:bg-paper disabled:opacity-50">
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => onSubmit(globalCatalogueId)}
+          disabled={submitting || loading || !globalCatalogueId}
+          className="rounded-md bg-moss px-3 py-1.5 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-50"
+        >
+          {submitting ? 'Submitting…' : 'Submit'}
         </button>
       </div>
     </AccessibleDialog>
@@ -397,7 +406,13 @@ function PushToCatalogueDialog({ organisationId, courseId, alreadyPublishedIds, 
 
   useEffect(() => {
     listPublicationCatalogueOptions(organisationId)
-      .then((options) => setCatalogues(options.filter((option) => !alreadyPublishedIds.includes(option.id))))
+      .then((options) =>
+        // Global excluded -- assign_course_to_catalogue requires already
+        // being an approver of the target catalogue, which no ordinary
+        // provider is for Global. Submitting there is the separate
+        // "Submit to Global catalogue" action instead.
+        setCatalogues(options.filter((option) => !option.is_global && !alreadyPublishedIds.includes(option.id)))
+      )
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
     // alreadyPublishedIds is derived fresh from the loaded course each
@@ -438,8 +453,9 @@ function PushToCatalogueDialog({ organisationId, courseId, alreadyPublishedIds, 
     >
       <h2 id="push-catalogue-title" className="font-display text-lg text-ink">Push to catalogue</h2>
       <p id="push-catalogue-description" className="text-sm text-secondary mt-1 mb-5">
-        Choose one or more catalogues to add this published version to. It becomes visible there as soon as it's
-        added -- a platform admin still has to approve anything added to the global catalogue.
+        Choose one or more of your own catalogues to add this published version to. It becomes visible there as
+        soon as it's added. To submit it platform-wide instead, use "Submit to Global catalogue" on the course
+        itself.
       </p>
 
       {error && <p role="alert" className="text-sm text-red-700 mb-3">{error}</p>}
@@ -523,6 +539,7 @@ export default function ProviderCourseEditor() {
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showPublishDialog, setShowPublishDialog] = useState(false)
+  const [showGlobalSubmitDialog, setShowGlobalSubmitDialog] = useState(false)
   const [showCatalogueDialog, setShowCatalogueDialog] = useState(false)
   const [saveError, setSaveError] = useState(null)
   // Whichever version is currently live for this course (which may not be
@@ -591,13 +608,28 @@ export default function ProviderCourseEditor() {
     }
   }
 
-  async function handleSubmitForApproval(catalogueIds) {
+  async function handlePublish() {
     setSubmitting(true)
     setSaveError(null)
     try {
       await updateProviderCourse(course.id, form)
-      await submitCatalogueCourseForApproval(course.id, catalogueIds)
+      await submitCatalogueCourseForApproval(course.id, [])
       setShowPublishDialog(false)
+      await load()
+    } catch (err) {
+      setSaveError(err.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleSubmitToGlobal(globalCatalogueId) {
+    setSubmitting(true)
+    setSaveError(null)
+    try {
+      await updateProviderCourse(course.id, form)
+      await submitCatalogueCourseForApproval(course.id, [globalCatalogueId])
+      setShowGlobalSubmitDialog(false)
       await load()
     } catch (err) {
       setSaveError(err.message)
@@ -612,12 +644,6 @@ export default function ProviderCourseEditor() {
     .filter((publication) => publication.published_at && publication.catalogues)
     .map((publication) => publication.catalogues)
   const publishedCatalogueIds = publishedCatalogues.map((catalogue) => catalogue.id)
-  // Unlike publishedCatalogueIds above, this isn't filtered to published_at
-  // -- while this version is still draft/rejected its own publication rows
-  // (if any, from an earlier submission) never have a published_at yet, so
-  // filtering on that would always come back empty and lose the prior
-  // selection the publish dialog needs to restore.
-  const assignedCatalogueIds = (course?.course_catalogue_publications ?? []).map((publication) => publication.catalogue_id)
 
   async function handleCreateDraftVersion() {
     setSaveError(null)
@@ -671,7 +697,7 @@ export default function ProviderCourseEditor() {
                 </p>
                 {canEdit && (
                   <p className="text-sm text-red-700 mt-2">
-                    Revise the course below, then resubmit it for approval.
+                    Revise the course below, then publish it or submit it to the Global catalogue again.
                   </p>
                 )}
               </div>
@@ -695,7 +721,15 @@ export default function ProviderCourseEditor() {
                     disabled={saving || submitting}
                     className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
                   >
-                    {course.status === 'rejected' ? 'Resubmit for approval' : 'Publish'}
+                    Publish
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowGlobalSubmitDialog(true)}
+                    disabled={saving || submitting}
+                    className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+                  >
+                    {course.status === 'rejected' ? 'Resubmit to Global catalogue' : 'Submit to Global catalogue'}
                   </button>
                 </div>
               </div>
@@ -703,12 +737,19 @@ export default function ProviderCourseEditor() {
 
             {showPublishDialog && (
               <PublishCourseDialog
-                organisationId={course.organisation_id}
                 currentCatalogues={currentCatalogues}
-                assignedCatalogueIds={assignedCatalogueIds}
                 submitting={submitting}
                 onClose={() => setShowPublishDialog(false)}
-                onPublish={handleSubmitForApproval}
+                onPublish={handlePublish}
+              />
+            )}
+
+            {showGlobalSubmitDialog && (
+              <SubmitToGlobalCatalogueDialog
+                organisationId={course.organisation_id}
+                submitting={submitting}
+                onClose={() => setShowGlobalSubmitDialog(false)}
+                onSubmit={handleSubmitToGlobal}
               />
             )}
 
@@ -1685,7 +1726,7 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                   </div>
                 )
               })}
-              {ungroupedItems.length > 0 && (!isFocused || focusedSectionId === 'ungrouped') && (
+              {(canEdit || ungroupedItems.length > 0) && (!isFocused || focusedSectionId === 'ungrouped') && (
                 <div
                   ref={registerSectionNode('ungrouped')}
                   data-outline-section-id="ungrouped"
@@ -1704,16 +1745,31 @@ function CourseSections({ courseId, organisationId, userId, canEdit }) {
                   }`}
                 >
                   {!isFocused && (
-                  <button
-                    type="button"
-                    onClick={() => toggleSection('ungrouped')}
-                    aria-expanded={openSectionIds.has('ungrouped')}
-                    className="w-full flex items-center gap-2 px-2.5 py-2 text-left text-sm text-secondary hover:text-ink"
-                  >
-                    <span className="min-w-0 flex-1 truncate font-medium">Ungrouped content</span>
-                    <span className="font-mono text-[10px] tabular-nums text-secondary shrink-0">{ungroupedItems.length}</span>
-                    <Chevron open={openSectionIds.has('ungrouped')} />
-                  </button>
+                  <div className="flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => toggleSection('ungrouped')}
+                      aria-expanded={openSectionIds.has('ungrouped')}
+                      className="min-w-0 flex-1 flex items-center gap-2 px-2.5 py-2 text-left text-sm text-secondary hover:text-ink"
+                    >
+                      <span className="min-w-0 flex-1 truncate font-medium">Ungrouped content</span>
+                      <span className="font-mono text-[10px] tabular-nums text-secondary shrink-0">{ungroupedItems.length}</span>
+                      <Chevron open={openSectionIds.has('ungrouped')} />
+                    </button>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => setAddingResourceToSection({ id: null, title: 'Ungrouped content' })}
+                        aria-label="Add content to Ungrouped content"
+                        title="Add content"
+                        className="inline-flex h-11 w-11 md:h-7 md:w-7 shrink-0 items-center justify-center rounded-md text-secondary hover:bg-paper hover:text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                      >
+                        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+                          <path d="M8 3v10M3 8h10" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
                   )}
                   {openSectionIds.has('ungrouped') && (
                   <ul className={`space-y-0.5 ${isFocused ? '' : 'mt-1 ml-7'}`} aria-label="Ungrouped resources">
@@ -2044,7 +2100,11 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
   const [showScreenRecorder, setShowScreenRecorder] = useState(false)
   const [recordedFileName, setRecordedFileName] = useState('')
   const [webUrl, setWebUrl] = useState('')
+  const [selectedFileName, setSelectedFileName] = useState('')
+  const [dragging, setDragging] = useState(false)
+  const dragCounterRef = useRef(0)
   const fileInputRef = useRef(null)
+  const cameraInputRef = useRef(null)
 
   function setRecordedFile(file) {
     if (!fileInputRef.current) return
@@ -2053,6 +2113,51 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
     fileInputRef.current.files = transfer.files
     setRecordedFileName(file.name)
     if (!uploadTitle.trim()) setUploadTitle('Screen recording')
+  }
+
+  // Shared by drag-drop and "Take video" -- both hand this a File that isn't
+  // (and for a camera capture, can't be) the file input's own native
+  // selection, so it's copied onto fileInputRef the same way setRecordedFile
+  // already does, keeping handleUpload's single `fileInputRef.current.
+  // files[0]` read path unchanged regardless of how the file was chosen.
+  function setChosenFile(file) {
+    if (!fileInputRef.current) return
+    const transfer = new DataTransfer()
+    transfer.items.add(file)
+    fileInputRef.current.files = transfer.files
+    setSelectedFileName(file.name)
+  }
+
+  function handleFileInputChange(e) {
+    const file = e.target.files?.[0]
+    if (file) setSelectedFileName(file.name)
+  }
+
+  function handleDragEnter(e) {
+    e.preventDefault()
+    dragCounterRef.current += 1
+    setDragging(true)
+  }
+
+  function handleDragLeave(e) {
+    e.preventDefault()
+    dragCounterRef.current -= 1
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0
+      setDragging(false)
+    }
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault()
+  }
+
+  function handleFileDrop(e) {
+    e.preventDefault()
+    dragCounterRef.current = 0
+    setDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) setChosenFile(file)
   }
 
   async function handleAttach() {
@@ -2268,6 +2373,7 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
                   setUploadType(e.target.value)
                   if (fileInputRef.current) fileInputRef.current.value = ''
                   setRecordedFileName('')
+                  setSelectedFileName('')
                   setWebUrl('')
                 }}
                 className="rounded-md border border-hairline bg-card px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
@@ -2324,7 +2430,51 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
                 <input ref={fileInputRef} type="file" accept="video/*" className="sr-only" tabIndex={-1} />
               </div>
             ) : (
-              <div>
+              <div className="min-w-[220px]">
+                <span className="block text-xs text-secondary mb-1">File</span>
+                <div
+                  onDragEnter={handleDragEnter}
+                  onDragLeave={handleDragLeave}
+                  onDragOver={handleDragOver}
+                  onDrop={handleFileDrop}
+                  className={`flex flex-col items-center justify-center gap-1.5 rounded-md border-2 border-dashed px-3 py-4 text-center transition-colors ${
+                    dragging ? 'border-moss bg-moss/10' : 'border-hairline'
+                  }`}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-secondary">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                  <p className="text-xs text-secondary">
+                    Drag and drop {uploadType === 'video' ? 'a video' : 'a file'} here, or
+                  </p>
+                  <div className="flex items-center gap-2 flex-wrap justify-center">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+                    >
+                      Browse files
+                    </button>
+                    {uploadType === 'video' && (
+                      <button
+                        type="button"
+                        onClick={() => cameraInputRef.current?.click()}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-moss text-moss px-3 py-1.5 text-sm font-medium hover:bg-moss/5"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M23 7l-7 5 7 5V7z" />
+                          <rect x="1" y="5" width="15" height="14" rx="2" />
+                        </svg>
+                        Take video
+                      </button>
+                    )}
+                  </div>
+                  {selectedFileName && (
+                    <p className="text-xs text-secondary mt-1 max-w-[260px] truncate">Selected: {selectedFileName}</p>
+                  )}
+                </div>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -2335,8 +2485,22 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
                         ? 'video/*'
                         : undefined
                   }
-                  className="text-xs text-secondary"
+                  onChange={handleFileInputChange}
+                  className="hidden"
                 />
+                {uploadType === 'video' && (
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="video/*"
+                    capture="environment"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) setChosenFile(file)
+                    }}
+                    className="hidden"
+                  />
+                )}
               </div>
             )}
             <button
