@@ -59,11 +59,13 @@ import ProviderCourseEditor from './pages/provider/ProviderCourseEditor'
 import ProviderCatalogueDetail from './pages/provider/ProviderCatalogueDetail'
 import ProviderSkillDetail from './pages/provider/ProviderSkillDetail'
 import RouteTitle from './components/RouteTitle'
+import ErrorBoundary from './components/ErrorBoundary'
 
 function App() {
   return (
     <BrowserRouter>
       <RouteTitle />
+      <ErrorBoundary>
       <AuthProvider>
         <ThemeProvider>
         <LanguageProvider>
@@ -407,6 +409,7 @@ function App() {
         </LanguageProvider>
         </ThemeProvider>
       </AuthProvider>
+      </ErrorBoundary>
     </BrowserRouter>
   )
 }
