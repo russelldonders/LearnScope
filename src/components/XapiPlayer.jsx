@@ -1,54 +1,10 @@
-import { useEffect, useState } from 'react'
-import { scormLaunchUrl, createXapiLaunchSession, xapiActivityId } from '../lib/courseContent'
+import { useAdlLaunchUrl } from '../lib/adlLaunch'
 
-// Launches an xAPI (Tin Can) package via the ADL Launch convention -- a
-// query-string payload (endpoint/auth/actor/registration/activity_id), not
-// a shared JS object like SCORM's window.API, since that's how the xAPI
-// spec's own launch method works. The package sends its statements to
-// api/xapi/[...path].js (see that file's own comments for what it does and
-// doesn't implement), authenticating with the embedded launch token rather
-// than a Supabase session -- the sandboxed iframe below has none to give it.
+// Launches an xAPI (Tin Can) package via the ADL Launch convention -- see
+// useAdlLaunchUrl (lib/adlLaunch.js, shared with Cmi5Player.jsx) for how
+// the launch URL itself is built.
 export default function XapiPlayer({ contentItem, userId, courseId = null }) {
-  const [launchUrl, setLaunchUrl] = useState(null)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    let cancelled = false
-    setLaunchUrl(null)
-    setError(null)
-
-    const baseUrl = scormLaunchUrl(contentItem)
-    if (!baseUrl) {
-      setError('This xAPI package has no launch page.')
-      return
-    }
-
-    createXapiLaunchSession(contentItem.id, userId, courseId)
-      .then((session) => {
-        if (cancelled) return
-        const params = new URLSearchParams({
-          endpoint: `${window.location.origin}/api/xapi/`,
-          // Basic auth, per the ADL Launch spec -- username is the session
-          // token, password left empty (the LRS endpoint only checks the
-          // token half, see resolveSession() there).
-          auth: `Basic ${btoa(`${session.token}:`)}`,
-          actor: JSON.stringify({
-            objectType: 'Agent',
-            // account.name, not mbox -- avoids handing the learner's email
-            // to arbitrary uploaded package code just to identify them.
-            account: { homePage: 'https://learnscope.app', name: userId },
-          }),
-          registration: session.id,
-          activity_id: xapiActivityId(contentItem),
-        })
-        setLaunchUrl(`${baseUrl}?${params.toString()}`)
-      })
-      .catch((err) => !cancelled && setError(err.message))
-
-    return () => {
-      cancelled = true
-    }
-  }, [contentItem.id, userId, courseId])
+  const { launchUrl, error } = useAdlLaunchUrl(contentItem, userId, courseId)
 
   if (error) return <p className="text-sm text-red-700">{error}</p>
   if (!launchUrl) return <p className="text-sm text-secondary">Loading…</p>

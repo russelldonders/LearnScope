@@ -38,7 +38,9 @@ export const RESOURCE_TYPE_LABELS = {
   file: 'File',
   scorm: 'SCORM package',
   xapi: 'xAPI package',
+  cmi5: 'cmi5 package',
   external_video: 'External video',
   web_url: 'Web link',
   page: 'Page',
+  lti: 'LTI tool',
 }

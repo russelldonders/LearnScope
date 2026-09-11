@@ -8,6 +8,7 @@ import AccessibleDialog from '../../components/AccessibleDialog'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import ResourceLibrarySection from '../../components/ResourceLibrarySection'
 import ProviderSkillsSection from '../../components/ProviderSkillsSection'
+import ProviderLtiToolsSection from '../../components/ProviderLtiToolsSection'
 import OrganisationSettingsModal from '../../components/OrganisationSettingsModal'
 import { ProviderTrainingSection, ProviderCataloguesSection } from '../provider/ProviderConsole'
 import TrainingTeamAccessDialog from './TrainingTeamAccessDialog'
@@ -64,6 +65,7 @@ const SECTIONS = [
   { key: 'skills', label: 'Skills', providerOnly: true, providerTab: true },
   { key: 'provider-catalogues', label: 'Catalogues', providerTab: true },
   { key: 'provider-resources', label: 'Resources', providerTab: true },
+  { key: 'provider-lti-tools', label: 'LTI tools', adminOnly: true, providerTab: true },
   { key: 'users', label: 'Users' },
   { key: 'roles', label: 'Role profiles' },
   { key: 'providers', label: 'Providers' },
@@ -607,6 +609,13 @@ export default function EmployerConsole() {
                         readOnly={!myProviderRole}
                       />
                     </div>
+                  )}
+                  {currentSection === 'provider-lti-tools' && myProviderRole === 'admin' && (
+                    <ProviderLtiToolsSection
+                      key={`${selectedEmployer.id}-lti-tools`}
+                      organisationId={selectedEmployer.provider_organisation_id}
+                      userId={user.id}
+                    />
                   )}
                   {currentSection === 'skills' && myProviderRole && (
                     <ProviderSkillsSection

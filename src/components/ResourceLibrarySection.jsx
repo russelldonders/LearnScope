@@ -6,6 +6,7 @@ import {
   uploadFileResource,
   uploadScormResource,
   uploadXapiResource,
+  uploadCmi5Resource,
   addExternalVideoResource,
   addWebResource,
   deleteResource,
@@ -13,9 +14,13 @@ import {
   listResourceVersions,
   publishResourceVersion,
   contentFileUrl,
+  listLtiTools,
+  createLtiResource,
 } from '../lib/courseContent'
 import ScormPlayer from './ScormPlayer'
 import XapiPlayer from './XapiPlayer'
+import Cmi5Player from './Cmi5Player'
+import LtiPlayer from './LtiPlayer'
 import ConfirmDialog from './ConfirmDialog'
 import EditedVideoPlayer from './EditedVideoPlayer'
 import VideoEditorModal from './VideoEditorModal'
@@ -76,6 +81,8 @@ export default function ResourceLibrarySection({ organisationId, userId, readOnl
   const [query, setQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [bulkPush, setBulkPush] = useState(null)
+  const [ltiTools, setLtiTools] = useState([])
+  const [selectedLtiToolId, setSelectedLtiToolId] = useState('')
   const fileInputRef = useRef(null)
 
   const filteredResources = useMemo(() => {
@@ -111,6 +118,10 @@ export default function ResourceLibrarySection({ organisationId, userId, readOnl
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [organisationId])
 
+  useEffect(() => {
+    listLtiTools(organisationId).then(setLtiTools).catch(() => {})
+  }, [organisationId])
+
   async function load() {
     setLoading(true)
     setError(null)
@@ -127,6 +138,26 @@ export default function ResourceLibrarySection({ organisationId, userId, readOnl
     if (type === 'page') {
       setShowUploadForm(false)
       setEditingPage({ isNew: true, title })
+      return
+    }
+    if (type === 'lti') {
+      if (!selectedLtiToolId) {
+        setError('Choose an LTI tool first.')
+        return
+      }
+      setUploading(true)
+      setError(null)
+      try {
+        await createLtiResource(organisationId, userId, { title, ltiToolId: selectedLtiToolId })
+        setTitle('')
+        setSelectedLtiToolId('')
+        setShowUploadForm(false)
+        await load()
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setUploading(false)
+      }
       return
     }
     if (type === 'external_video' || type === 'web_url') {
@@ -163,7 +194,8 @@ export default function ResourceLibrarySection({ organisationId, userId, readOnl
       else if (type === 'screen_recording') await uploadScreenRecordingResource(organisationId, userId, file, title)
       else if (type === 'file') await uploadFileResource(organisationId, userId, file, title)
       else if (type === 'scorm') await uploadScormResource(organisationId, userId, file, title)
-      else await uploadXapiResource(organisationId, userId, file, title)
+      else if (type === 'xapi') await uploadXapiResource(organisationId, userId, file, title)
+      else await uploadCmi5Resource(organisationId, userId, file, title)
       setTitle('')
       if (fileInputRef.current) fileInputRef.current.value = ''
       setFileName('')
@@ -349,6 +381,7 @@ export default function ResourceLibrarySection({ organisationId, userId, readOnl
               if (fileInputRef.current) fileInputRef.current.value = ''
               setFileName('')
               setVideoUrl('')
+              setSelectedLtiToolId('')
             }}
             className="rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
           >
@@ -357,9 +390,11 @@ export default function ResourceLibrarySection({ organisationId, userId, readOnl
             <option value="file">File</option>
             <option value="scorm">SCORM package (.zip)</option>
             <option value="xapi">xAPI package (.zip)</option>
+            <option value="cmi5">cmi5 package (.zip)</option>
             <option value="external_video">External video (YouTube/Vimeo)</option>
             <option value="web_url">Web link</option>
             <option value="page">Content page</option>
+            <option value="lti">LTI tool</option>
           </select>
         </div>
         <div className="flex-1 min-w-[160px]">
@@ -373,7 +408,23 @@ export default function ResourceLibrarySection({ organisationId, userId, readOnl
             className="w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
           />
         </div>
-        {type === 'page' ? (
+        {type === 'lti' ? (
+          <div className="flex-1 min-w-[180px]">
+            <label className="block text-xs text-secondary mb-1" htmlFor="resourceLtiTool">
+              Tool
+            </label>
+            <select
+              id="resourceLtiTool"
+              value={selectedLtiToolId}
+              onChange={(e) => setSelectedLtiToolId(e.target.value)}
+              disabled={ltiTools.length === 0}
+              className="w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss disabled:opacity-60"
+            >
+              <option value="">{ltiTools.length === 0 ? 'No LTI tools set up yet' : 'Choose a tool…'}</option>
+              {ltiTools.map((tool) => <option key={tool.id} value={tool.id}>{tool.name}</option>)}
+            </select>
+          </div>
+        ) : type === 'page' ? (
           <div className="flex-1 min-w-[220px] rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-secondary">
             Opens the visual page builder. Add and reorder content after continuing.
           </div>
@@ -452,7 +503,7 @@ export default function ResourceLibrarySection({ organisationId, userId, readOnl
             id="resourceFile"
             ref={fileInputRef}
             type="file"
-            accept={type === 'scorm' || type === 'xapi' ? '.zip' : type === 'video' ? 'video/*' : undefined}
+            accept={type === 'scorm' || type === 'xapi' || type === 'cmi5' ? '.zip' : type === 'video' ? 'video/*' : undefined}
             onChange={(e) => setFileName(e.target.files?.[0]?.name || '')}
             className="sr-only"
           />
@@ -772,6 +823,8 @@ function ResourceRow({
             )}
             {resource.type === 'scorm' && <ScormPlayer contentItem={resource} userId={userId} />}
             {resource.type === 'xapi' && <XapiPlayer contentItem={resource} userId={userId} />}
+            {resource.type === 'cmi5' && <Cmi5Player contentItem={resource} userId={userId} />}
+            {resource.type === 'lti' && <LtiPlayer contentItem={resource} userId={userId} />}
             {resource.type === 'external_video' && (
               <iframe
                 src={resource.external_url}

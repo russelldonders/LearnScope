@@ -1,5 +1,6 @@
-import { randomUUID } from 'node:crypto'
+import { randomUUID, createHmac } from 'node:crypto'
 import { supabaseAdmin } from '../_lib/supabaseAdmin.js'
+import { verifySupabaseUser } from '../_lib/auth.js'
 
 // A minimal Learning Record Store for uploaded xAPI/Tin Can packages (see
 // 0079_xapi_resources.sql). This is NOT a spec-conformant LRS -- it
@@ -14,7 +15,10 @@ import { supabaseAdmin } from '../_lib/supabaseAdmin.js'
 // this project sits at the Hobby plan's 12-function cap (see
 // api/admin/actions.js and api/send-email.js), so this reuses the same
 // "one file, many routes/actions" shape rather than one file per xAPI
-// resource.
+// resource. The same cap is also why LTI 1.1 launch signing (the
+// 'lti-launch' route below) lives here rather than its own file -- it
+// isn't an xAPI concern, but this is the nearest existing "sign/authorize
+// a content-resource launch" home with a function slot to spare.
 //
 // This file briefly also served course-content bytes (a proxy for
 // SCORM/xAPI package assets) to work around the same function-count cap.
@@ -182,6 +186,160 @@ async function handleStatements(req, res) {
   res.status(405).json({ error: 'Method not allowed' })
 }
 
+// RFC 3986 percent-encoding -- encodeURIComponent leaves !*'() unescaped,
+// which the OAuth 1.0a signature-base-string spec requires encoded too.
+function oauthEncode(value) {
+  return encodeURIComponent(value).replace(/[!*'()]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
+}
+
+// Two-legged OAuth 1.0a signing (LTI 1.1's launch method) -- every launch
+// parameter, not just the oauth_* ones, is part of what gets signed. No
+// separate "token secret" half (LTI has no token credential, just the
+// consumer key/secret), so the signing key's second segment is always empty.
+function buildOauthSignature({ method, url, params, consumerSecret }) {
+  const normalized = Object.keys(params)
+    .sort()
+    .map((key) => `${oauthEncode(key)}=${oauthEncode(params[key])}`)
+    .join('&')
+  const baseString = `${method.toUpperCase()}&${oauthEncode(url)}&${oauthEncode(normalized)}`
+  const signingKey = `${oauthEncode(consumerSecret)}&`
+  return createHmac('sha1', signingKey).update(baseString).digest('base64')
+}
+
+// Builds a signed LTI 1.1 launch for one 'lti'-type content_resources row.
+// Authenticated with the caller's own Supabase session (not an embedded
+// launch token like SCORM/xAPI/cmi5) -- this reads the tool's secret with
+// the service role, bypassing RLS entirely, so it has to independently
+// verify the caller actually has access to the resource rather than
+// leaning on an RLS policy the way xapi_launch_sessions' own insert policy
+// does for those other launches. This is deliberately LTI 1.1, not 1.3/
+// Advantage (OIDC + JWT) -- see the lti_consumer migration's own comment.
+async function handleLtiLaunch(req, res) {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' })
+    return
+  }
+
+  const authHeader = req.headers.authorization
+  if (!authHeader?.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'Missing authorization' })
+    return
+  }
+  const user = await verifySupabaseUser(authHeader.slice(7))
+  if (!user) {
+    res.status(401).json({ error: 'Invalid or expired session' })
+    return
+  }
+
+  const { resourceId, courseId } = req.body ?? {}
+  if (!resourceId) {
+    res.status(400).json({ error: 'Missing resourceId' })
+    return
+  }
+
+  const admin = supabaseAdmin()
+
+  const { data: resource, error: resourceError } = await admin
+    .from('content_resources')
+    .select('id, title, organisation_id, lti_tool_id, lti_tools(name, launch_url, consumer_key)')
+    .eq('id', resourceId)
+    .eq('type', 'lti')
+    .maybeSingle()
+  if (resourceError) throw resourceError
+  if (!resource || !resource.lti_tools) {
+    res.status(404).json({ error: 'LTI resource not found.' })
+    return
+  }
+
+  // Authorized either as staff of the resource's own organisation
+  // (previewing it from the provider console) or as the learner who owns
+  // the course it's being launched from -- "owns courseId" alone isn't
+  // enough (courses is a learner's freely self-created personal record,
+  // RLS-gated only by auth.uid() = user_id, no enrollment/approval check;
+  // see 0003_courses_experience.sql), so this also has to confirm this
+  // specific resourceId is actually attached to that course's catalogue
+  // course via course_content_links -- otherwise any authenticated user
+  // could launch (and get a validly signed request for) any other org's
+  // LTI tool just by owning *some* courses row and knowing the resource's
+  // id, which content_resources' own select RLS can expose to any
+  // authenticated user once it's linked into an approved course.
+  let authorized = false
+  if (courseId) {
+    // Two plain queries rather than one nested-embed select -- courses has
+    // no direct FK to course_content_links (it goes through
+    // courses.catalogue_course_id -> course_catalogue.id <-
+    // course_content_links.course_id), and a two-level embedded filter on
+    // that path is fragile to get right with PostgREST's dot-notation
+    // filters. This is easier to read and to verify correct.
+    const { data: course } = await admin
+      .from('courses')
+      .select('catalogue_course_id')
+      .eq('id', courseId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (course?.catalogue_course_id) {
+      const { data: link } = await admin
+        .from('course_content_links')
+        .select('id')
+        .eq('course_id', course.catalogue_course_id)
+        .eq('resource_id', resourceId)
+        .maybeSingle()
+      authorized = Boolean(link)
+    }
+  }
+  if (!authorized) {
+    const { data: isMember } = await admin.rpc('is_org_member', { org_id: resource.organisation_id, check_user_id: user.id })
+    authorized = Boolean(isMember)
+  }
+  if (!authorized) {
+    res.status(403).json({ error: 'Not authorized to launch this resource.' })
+    return
+  }
+
+  const { data: secretRow, error: secretError } = await admin
+    .from('lti_tool_secrets')
+    .select('consumer_secret')
+    .eq('tool_id', resource.lti_tool_id)
+    .maybeSingle()
+  if (secretError) throw secretError
+  if (!secretRow) {
+    res.status(500).json({ error: 'This tool has no configured secret yet.' })
+    return
+  }
+
+  // account.name-style identifier, not email -- same reasoning as
+  // XapiPlayer.jsx's actor: enough for the tool to personalize/track the
+  // learner without handing arbitrary external tool code their contact info.
+  const { data: profile } = await admin.from('profiles').select('full_name').eq('id', user.id).maybeSingle()
+
+  const tool = resource.lti_tools
+  const params = {
+    lti_message_type: 'basic-lti-launch-request',
+    lti_version: 'LTI-1p0',
+    resource_link_id: resource.id,
+    resource_link_title: resource.title || tool.name,
+    user_id: user.id,
+    roles: 'urn:lti:role:ims/lis/Learner',
+    oauth_callback: 'about:blank',
+    oauth_consumer_key: tool.consumer_key,
+    oauth_nonce: randomUUID(),
+    oauth_signature_method: 'HMAC-SHA1',
+    oauth_timestamp: String(Math.floor(Date.now() / 1000)),
+    oauth_version: '1.0',
+  }
+  if (courseId) params.context_id = courseId
+  if (profile?.full_name) params.lis_person_name_full = profile.full_name
+
+  params.oauth_signature = buildOauthSignature({
+    method: 'POST',
+    url: tool.launch_url,
+    params,
+    consumerSecret: secretRow.consumer_secret,
+  })
+
+  res.status(200).json({ launchUrl: tool.launch_url, toolName: tool.name, params })
+}
+
 export default async function handler(req, res) {
   setCorsHeaders(res)
   if (req.method === 'OPTIONS') {
@@ -209,9 +367,13 @@ export default async function handler(req, res) {
       await handleStatements(req, res)
       return
     }
+    if (resource === 'lti-launch') {
+      await handleLtiLaunch(req, res)
+      return
+    }
     res.status(404).json({ error: 'Not found' })
   } catch (err) {
     console.error(`xapi (${resource}) error:`, err)
-    res.status(500).json({ error: 'LRS request failed.' })
+    res.status(500).json({ error: resource === 'lti-launch' ? 'Could not launch this tool.' : 'LRS request failed.' })
   }
 }

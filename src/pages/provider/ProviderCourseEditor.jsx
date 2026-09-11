@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
 import ScormPlayer from '../../components/ScormPlayer'
 import XapiPlayer from '../../components/XapiPlayer'
+import Cmi5Player from '../../components/Cmi5Player'
+import LtiPlayer from '../../components/LtiPlayer'
 import EditedVideoPlayer from '../../components/EditedVideoPlayer'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import AccessibleDialog from '../../components/AccessibleDialog'
@@ -56,9 +58,12 @@ import {
   uploadFileResource,
   uploadScormResource,
   uploadXapiResource,
+  uploadCmi5Resource,
   addWebResource,
   addExternalVideoResource,
   contentFileUrl,
+  listLtiTools,
+  createLtiResource,
 } from '../../lib/courseContent'
 import { optimizeCourseImage, COURSE_IMAGE_MAX_INPUT_BYTES } from '../../lib/optimizeImage'
 import { useIsDesktop } from '../../lib/device'
@@ -1939,6 +1944,12 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
   const dragCounterRef = useRef(0)
   const fileInputRef = useRef(null)
   const cameraInputRef = useRef(null)
+  const [ltiTools, setLtiTools] = useState([])
+  const [selectedLtiToolId, setSelectedLtiToolId] = useState('')
+
+  useEffect(() => {
+    listLtiTools(organisationId).then(setLtiTools).catch(() => {})
+  }, [organisationId])
 
   function setRecordedFile(file) {
     if (!fileInputRef.current) return
@@ -2009,6 +2020,25 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
   }
 
   async function handleUpload() {
+    if (uploadType === 'lti') {
+      if (!selectedLtiToolId) {
+        setError('Choose an LTI tool first.')
+        return
+      }
+      setUploading(true)
+      setError(null)
+      try {
+        const resource = await createLtiResource(organisationId, userId, { title: uploadTitle, ltiToolId: selectedLtiToolId })
+        await linkResourceToCourse(courseId, resource.id, section.id)
+        await onChanged()
+        onClose()
+      } catch (err) {
+        setError(err.message)
+        setUploading(false)
+      }
+      return
+    }
+
     if (uploadType === 'web_url' || uploadType === 'external_video') {
       if (!webUrl.trim()) {
         setError(uploadType === 'web_url' ? 'Enter a web address first.' : 'Paste a YouTube or Vimeo link first.')
@@ -2048,7 +2078,9 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
             ? await uploadFileResource(organisationId, userId, file, uploadTitle)
             : uploadType === 'scorm'
               ? await uploadScormResource(organisationId, userId, file, uploadTitle)
-              : await uploadXapiResource(organisationId, userId, file, uploadTitle)
+              : uploadType === 'xapi'
+                ? await uploadXapiResource(organisationId, userId, file, uploadTitle)
+                : await uploadCmi5Resource(organisationId, userId, file, uploadTitle)
       await linkResourceToCourse(courseId, resource.id, section.id)
       await onChanged()
       onClose()
@@ -2217,8 +2249,10 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
                 <option value="file">File</option>
                 <option value="scorm">SCORM package (.zip)</option>
                 <option value="xapi">xAPI package (.zip)</option>
+                <option value="cmi5">cmi5 package (.zip)</option>
                 <option value="external_video">External video (YouTube/Vimeo)</option>
                 <option value="web_url">Web link</option>
+                <option value="lti">LTI tool</option>
               </select>
             </div>
             <div className="flex-1 min-w-[140px]">
@@ -2232,7 +2266,25 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
                 className="w-full rounded-md border border-hairline bg-card px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
               />
             </div>
-            {uploadType === 'web_url' || uploadType === 'external_video' ? (
+            {uploadType === 'lti' ? (
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-xs text-secondary mb-1" htmlFor={`ltiTool-${section.id}`}>
+                  Tool
+                </label>
+                <select
+                  id={`ltiTool-${section.id}`}
+                  value={selectedLtiToolId}
+                  onChange={(e) => setSelectedLtiToolId(e.target.value)}
+                  disabled={ltiTools.length === 0}
+                  className="w-full rounded-md border border-hairline bg-card px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss disabled:opacity-60"
+                >
+                  <option value="">{ltiTools.length === 0 ? 'No LTI tools set up yet' : 'Choose a tool…'}</option>
+                  {ltiTools.map((tool) => (
+                    <option key={tool.id} value={tool.id}>{tool.name}</option>
+                  ))}
+                </select>
+              </div>
+            ) : uploadType === 'web_url' || uploadType === 'external_video' ? (
               <div className="flex-1 min-w-[220px]">
                 <label className="block text-xs text-secondary mb-1" htmlFor={`webUrl-${section.id}`}>
                   {uploadType === 'web_url' ? 'Web address' : 'Video link'}
@@ -2313,7 +2365,7 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
                   ref={fileInputRef}
                   type="file"
                   accept={
-                    uploadType === 'scorm' || uploadType === 'xapi'
+                    uploadType === 'scorm' || uploadType === 'xapi' || uploadType === 'cmi5'
                       ? '.zip'
                       : uploadType === 'video'
                         ? 'video/*'
@@ -2349,7 +2401,9 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
                   ? 'Add recording'
                   : uploadType === 'web_url' || uploadType === 'external_video'
                     ? 'Add link'
-                    : 'Upload & add'}
+                    : uploadType === 'lti'
+                      ? 'Add tool'
+                      : 'Upload & add'}
             </button>
           </div>
 
@@ -2419,6 +2473,10 @@ function ItemPreviewBody({ item, userId, canEdit, onChanged }) {
       {item.type === 'scorm' && <ScormPlayer key={item.id} contentItem={item} userId={userId} />}
 
       {item.type === 'xapi' && <XapiPlayer key={item.id} contentItem={item} userId={userId} />}
+
+      {item.type === 'cmi5' && <Cmi5Player key={item.id} contentItem={item} userId={userId} />}
+
+      {item.type === 'lti' && <LtiPlayer key={item.id} contentItem={item} userId={userId} />}
 
       {item.type === 'external_video' && (
         <iframe

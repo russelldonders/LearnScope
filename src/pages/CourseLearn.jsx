@@ -14,6 +14,8 @@ import { getCourseCohort, cohortDisplayName, formatCohortDateTime } from '../lib
 import { RESOURCE_TYPE_LABELS } from '../lib/statusLabels'
 import ScormPlayer from '../components/ScormPlayer'
 import XapiPlayer from '../components/XapiPlayer'
+import Cmi5Player from '../components/Cmi5Player'
+import LtiPlayer from '../components/LtiPlayer'
 import EditedVideoPlayer from '../components/EditedVideoPlayer'
 import AppHeader from '../components/AppHeader'
 import ProgressBar from '../components/ProgressBar'
@@ -81,6 +83,10 @@ function CourseItemPlayer({
       )}
 
       {item.type === 'xapi' && <XapiPlayer key={item.id} contentItem={item} userId={userId} courseId={courseId} />}
+
+      {item.type === 'cmi5' && <Cmi5Player key={item.id} contentItem={item} userId={userId} courseId={courseId} />}
+
+      {item.type === 'lti' && <LtiPlayer key={item.id} contentItem={item} userId={userId} courseId={courseId} />}
 
       {item.type === 'external_video' && (
         <iframe

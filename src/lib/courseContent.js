@@ -658,6 +658,59 @@ export async function uploadXapiResource(organisationId, userId, zipFile, title)
   return data
 }
 
+// cmi5 packages -- same zip-of-files shape as SCORM/xAPI, but the manifest
+// is cmi5.xml (a <courseStructure> of <block>s and <au>s, not imsmanifest's
+// <organizations> or tincan's <activity>). Played back via Cmi5Player.jsx,
+// which reuses XapiPlayer.jsx's own simplified launch (see that file) --
+// this is not a spec-compliant cmi5 fetch-URL/token-exchange launch.
+export async function uploadCmi5Resource(organisationId, userId, zipFile, title) {
+  const zip = await JSZip.loadAsync(zipFile)
+
+  const manifestEntry = zip.file(/^cmi5\.xml$/i)[0]
+  if (!manifestEntry) {
+    throw new Error('This doesn\'t look like a cmi5 package -- no cmi5.xml found in the zip.')
+  }
+  const manifestXml = await manifestEntry.async('string')
+  const launchPath = parseCmi5LaunchPath(manifestXml)
+  if (!launchPath) {
+    throw new Error('Could not determine a launch page from cmi5.xml.')
+  }
+
+  const itemId = crypto.randomUUID()
+  const folderPrefix = `${organisationId}/${itemId}`
+  await uploadZipEntries(zip, folderPrefix)
+
+  const { data, error } = await supabase
+    .from('content_resources')
+    .insert({
+      id: itemId,
+      organisation_id: organisationId,
+      type: 'cmi5',
+      title: title?.trim() || zipFile.name,
+      storage_path: folderPrefix,
+      file_name: zipFile.name,
+      launch_path: launchPath,
+      created_by: userId,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+// Takes the first <au> (assignable unit) found anywhere in the course
+// structure, however deeply nested under <block> elements -- same
+// "represents one launchable thing" simplification as parseTincanLaunchPath
+// below, just for cmi5's own manifest shape.
+function parseCmi5LaunchPath(manifestXml) {
+  const doc = new DOMParser().parseFromString(manifestXml, 'application/xml')
+  if (doc.querySelector('parsererror')) return null
+
+  const au = doc.getElementsByTagName('au')[0]
+  const href = au?.getElementsByTagName('url')[0]?.textContent?.trim()
+  return href && isSafeRelativePath(href) ? href : null
+}
+
 // Takes the first <activity>'s <launch> element -- multi-activity packages
 // exist, but a content_resources row always represents one launchable
 // thing, same as SCORM's single launch_path.
@@ -787,7 +840,7 @@ async function removeStorageFolder(prefix) {
 // the DB level (0073), so it disappears from every course it was attached
 // to, not just the one you were looking at when you deleted it.
 export async function deleteResource(resource) {
-  if (!['external_video', 'web_url', 'page'].includes(resource.type)) {
+  if (!['external_video', 'web_url', 'page', 'lti'].includes(resource.type)) {
     const { count, error: countError } = await supabase
       .from('content_resources')
       .select('id', { count: 'exact', head: true })
@@ -798,4 +851,105 @@ export async function deleteResource(resource) {
   }
   const { error } = await supabase.from('content_resources').delete().eq('id', resource.id)
   if (error) throw error
+}
+
+// LTI 1.1 tool config -- org-scoped, reusable across every course/resource
+// that launches it (0090's lti_consumer migration). name/launchUrl/
+// consumerKey are readable by any org member (they need to pick a tool
+// when attaching a resource); the consumer secret lives in a separate,
+// admin-only table and is written but never read back through this file
+// -- see lti_tool_secrets' own RLS policy for why.
+export async function listLtiTools(organisationId) {
+  const { data, error } = await supabase
+    .from('lti_tools')
+    .select('id, name, launch_url, consumer_key, created_at')
+    .eq('organisation_id', organisationId)
+    .order('name')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function createLtiTool(organisationId, userId, { name, launchUrl, consumerKey, consumerSecret }) {
+  const { data, error } = await supabase
+    .from('lti_tools')
+    .insert({ organisation_id: organisationId, name: name.trim(), launch_url: launchUrl.trim(), consumer_key: consumerKey.trim(), created_by: userId })
+    .select()
+    .single()
+  if (error) throw error
+  // Two inserts, not one RPC -- a failure here leaves a tool with no
+  // secret, which the "Update secret" flow below can always fill in
+  // afterwards, so there's no genuinely broken/unrecoverable state to
+  // guard against with a transaction.
+  const { error: secretError } = await supabase
+    .from('lti_tool_secrets')
+    .insert({ tool_id: data.id, consumer_secret: consumerSecret.trim() })
+  if (secretError) throw secretError
+  return data
+}
+
+export async function updateLtiTool(id, { name, launchUrl, consumerKey }) {
+  const { data, error } = await supabase
+    .from('lti_tools')
+    .update({ name: name.trim(), launch_url: launchUrl.trim(), consumer_key: consumerKey.trim(), updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+// Upsert rather than update -- a tool created before this flow existed (or
+// whose first secret insert above failed) has no lti_tool_secrets row yet.
+export async function updateLtiToolSecret(toolId, consumerSecret) {
+  const { error } = await supabase
+    .from('lti_tool_secrets')
+    .upsert({ tool_id: toolId, consumer_secret: consumerSecret.trim(), updated_at: new Date().toISOString() })
+  if (error) throw error
+}
+
+// Blocked outright (not-null FK, default no-action) while any content_
+// resources row still references this tool -- surfaced as a plain
+// Postgres error message rather than a friendlier pre-check, same as a
+// handful of other still-referenced-record deletes in this codebase.
+export async function deleteLtiTool(id) {
+  const { error } = await supabase.from('lti_tools').delete().eq('id', id)
+  if (error) throw error
+}
+
+// The resource itself -- no storage_path/external_url/page_content, just a
+// pointer at the tool it launches (see content_resources_storage_or_
+// external_check). Signing the actual launch happens server-side, on
+// demand, via signLtiLaunch below -- this only ever creates the row.
+export async function createLtiResource(organisationId, userId, { title, ltiToolId }) {
+  const { data, error } = await supabase
+    .from('content_resources')
+    .insert({ organisation_id: organisationId, type: 'lti', title: title?.trim() || 'LTI tool', lti_tool_id: ltiToolId, created_by: userId })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+// Asks api/xapi/[...path].js's 'lti-launch' route (shares that file's
+// serverless function slot -- see its own header comment on why) to build
+// a signed OAuth 1.0a launch for this resource. Unlike SCORM/xAPI/cmi5's
+// launch, this needs the caller's own Supabase session (not an embedded
+// launch token) since the signing endpoint has to independently verify
+// the caller actually has access to this resource -- it reads the
+// tool's secret with the service role, bypassing RLS entirely, so RLS
+// can't do that check for it the way xapi_launch_sessions' own insert
+// policy does.
+export async function signLtiLaunch(resourceId, courseId = null) {
+  const { data: sessionData } = await supabase.auth.getSession()
+  const accessToken = sessionData?.session?.access_token
+  if (!accessToken) throw new Error('Not signed in.')
+
+  const res = await fetch('/api/xapi/lti-launch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ resourceId, courseId }),
+  })
+  const body = await res.json()
+  if (!res.ok) throw new Error(body.error || 'Could not launch this tool.')
+  return body
 }
