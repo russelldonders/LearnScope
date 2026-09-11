@@ -52,8 +52,9 @@ const SKILL_DETAIL_TABS = [
   { key: 'history', label: 'History' },
 ]
 
-export default function SkillDetail() {
-  const { id } = useParams()
+export default function SkillDetail({ skillId, embedded = false }) {
+  const { id: routeId } = useParams()
+  const id = skillId ?? routeId
   const navigate = useNavigate()
   const location = useLocation()
   const { user } = useAuth()
@@ -457,8 +458,8 @@ export default function SkillDetail() {
 
   return (
     <div className="min-h-screen bg-paper">
-      <AppHeader />
-      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
+      {!embedded && <AppHeader />}
+      <main id={embedded ? "lti-skill-content" : "main-content"} tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
         <Link
           to={backTo}
           state={{ tab: 'skills' }}

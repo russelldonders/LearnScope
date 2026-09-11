@@ -1,3 +1,4 @@
+import { SkillLtiObjectsPanel } from './LtiConfiguration'
 import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import AppHeader from '../../components/AppHeader'
@@ -7,12 +8,13 @@ import { getProviderSkillAlignment, listOrganisationOfferedSkills, setResourceSk
 import SkillCompositionSection from '../admin/SkillCompositionSection'
 import SkillIconUpload from '../../components/SkillIconUpload'
 
-const BASE_TABS = [{ key: 'training', label: 'Training' }, { key: 'resources', label: 'Resources' }]
+const BASE_TABS = [{ key: 'training', label: 'Training' }, { key: 'resources', label: 'Resources' }, { key: 'lti', label: 'LTI objects' }]
 
 export default function ProviderSkillDetail() {
   const { organisationId, skillId } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { user } = useAuth()
+  const { user, organisationMemberships } = useAuth()
+  const canManageLti = organisationMemberships?.some((m) => m.organisation_id === organisationId && m.role === 'admin')
   const [skill, setSkill] = useState(null)
   const [organisation, setOrganisation] = useState(null)
   const [alignment, setAlignment] = useState({ courses: [], resources: [] })
@@ -150,7 +152,7 @@ export default function ProviderSkillDetail() {
               })}
             </div></div>
 
-            {activeTab === 'training' ? (
+            {activeTab === 'lti' ? <SkillLtiObjectsPanel key={`${organisationId}-${skillId}`} organisationId={organisationId} skillId={skillId} skillName={skill.name} canManage={canManageLti} /> : activeTab === 'training' ? (
               <AlignmentSection id="training-panel" title="Training aligned to this skill" description="Add from your organisation’s current published training and set the level learners can work towards." addLabel={showAdd ? 'Close add form' : '+ Add training'} onAdd={() => setShowAdd((value) => !value)}>
                 {showAdd && <TrainingAddForm items={availableTraining} selectedId={selectedCourseId} level={targetLevel} saving={Boolean(savingKey)} onSelect={setSelectedCourseId} onLevel={setTargetLevel} onAdd={addTraining} onCancel={() => setShowAdd(false)} />}
                 <AlignedList empty="No published training is aligned yet.">

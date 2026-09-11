@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useRef, useState } from 'react'
 import { updateOrganisation, uploadOrganisationLogo, removeOrganisationLogo } from '../lib/admin/organisations'
 import AccessibleDialog from './AccessibleDialog'
@@ -134,6 +135,8 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
       panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
         <h2 id="organisation-settings-dialog-title" className="font-display text-lg text-ink mb-4">Organisation settings</h2>
+
+        <Link to={`/provider/organisations/${organisation.id}/lms-connections`} onClick={onClose} className="inline-block text-sm text-moss hover:underline mb-5">LMS connections</Link>
 
         <form onSubmit={handleSave} className="space-y-4">
           <div>

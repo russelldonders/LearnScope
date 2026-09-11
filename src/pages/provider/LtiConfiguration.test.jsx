@@ -1,0 +1,56 @@
+vi.mock('../../lib/supabaseClient',()=>({supabase:{auth:{getSession:vi.fn()}}}))
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { LmsConnectionsPanel, SkillLtiObjectsPanel } from './LtiConfiguration'
+import { listLmsConnections, listSkillLtiObjects, saveLmsConnection, saveSkillLtiObject } from '../../lib/lti/configuration'
+vi.mock('../../lib/lti/configuration', () => ({ listLmsConnections: vi.fn(), listSkillLtiObjects: vi.fn(), saveLmsConnection: vi.fn(), saveSkillLtiObject: vi.fn() }))
+vi.mock('../../context/AuthContext', () => ({ useAuth: () => ({ organisationMemberships: [] }) }))
+vi.mock('../../components/AppHeader', () => ({ default: () => null }))
+afterEach(cleanup)
+beforeEach(() => { vi.clearAllMocks(); listLmsConnections.mockResolvedValue([]); listSkillLtiObjects.mockResolvedValue([]) })
+it('saves a new connection and displays its server-assigned reference', async () => {
+  saveLmsConnection.mockImplementation(async (_, __, form) => ({ ...form, id: 'connection', code: 'LMS-00001', deployment_ids: ['deploy'] }))
+  render(<MemoryRouter><LmsConnectionsPanel organisationId="org" /></MemoryRouter>)
+  await screen.findByText('No LMS connections yet.')
+  fireEvent.click(screen.getByRole('button', { name: 'Add LMS connection' }))
+  for (const [name,value] of [['Connection name','My LMS'],['Client ID','client'],['Issuer URL','https://lms.example'],['Authentication URL','https://lms.example/auth'],['Public keyset URL (JWKS)','https://lms.example/jwks'],['Access token URL','https://lms.example/token'],['Deployment IDs (one per line)','deploy']]) fireEvent.change(screen.getByLabelText(name), { target: { value } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save connection' }))
+  expect(await screen.findByText('LMS-00001')).toBeVisible()
+  expect(saveLmsConnection).toHaveBeenCalledWith('org', null, expect.objectContaining({ issuer: 'https://lms.example', name: 'My LMS' }))
+})
+it('creates a skill object for multiple LMS connections with proficiency grades', async () => {
+  listLmsConnections.mockResolvedValue([{ id: 'a', name: 'LMS A', status: 'draft' }, { id: 'b', name: 'LMS B', status: 'draft' }])
+  saveSkillLtiObject.mockImplementation(async (_, __, ___, form) => ({ ...form, id: 'object', code: 'LTI-00001' }))
+  render(<MemoryRouter><SkillLtiObjectsPanel organisationId="org" skillId="skill" skillName="SQL" canManage /></MemoryRouter>)
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Create LTI object' })).toBeEnabled())
+  fireEvent.click(screen.getByRole('button', { name: 'Create LTI object' }))
+  expect(screen.getByLabelText('Send proficiency grades to the LMS')).toBeChecked()
+  fireEvent.change(screen.getByLabelText('Target proficiency'), { target: { value: '4' } })
+  fireEvent.click(screen.getByLabelText('LMS A')); fireEvent.click(screen.getByLabelText('LMS B'))
+  fireEvent.click(screen.getByRole('button', { name: 'Save object' }))
+  expect(await screen.findByText('LTI-00001')).toBeVisible()
+  expect(saveSkillLtiObject).toHaveBeenCalledWith('org','skill',null,expect.objectContaining({ target_level: 4, grade_passback: true, title: 'SQL', status: 'draft' }),['a','b'])
+  expect(screen.getByText('LMS A, LMS B')).toBeVisible()
+})
+it('does not offer mutations to read-only provider staff', async () => {
+  render(<MemoryRouter><SkillLtiObjectsPanel organisationId="org" skillId="skill" skillName="SQL" canManage={false} /></MemoryRouter>)
+  await screen.findByText('No LTI objects for this skill yet.')
+  expect(screen.queryByRole('button', { name: 'Create LTI object' })).toBeNull()
+})
+it('blocks creation after a failed configuration load', async () => {
+  listLmsConnections.mockRejectedValue(new Error('Connection access unavailable'))
+  render(<MemoryRouter><SkillLtiObjectsPanel organisationId="org" skillId="skill" skillName="SQL" canManage /></MemoryRouter>)
+  expect(await screen.findByRole('alert')).toHaveTextContent('Connection access unavailable')
+  expect(screen.getByRole('button', { name: 'Create LTI object' })).toBeDisabled()
+})
+it('preserves object form values after a save failure', async () => {
+  saveSkillLtiObject.mockRejectedValue(new Error('Save failed'))
+  render(<MemoryRouter><SkillLtiObjectsPanel organisationId="org" skillId="skill" skillName="SQL" canManage /></MemoryRouter>)
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Create LTI object' })).toBeEnabled())
+  fireEvent.click(screen.getByRole('button', { name: 'Create LTI object' }))
+  fireEvent.change(screen.getByLabelText('Object title'), { target: { value: 'SQL foundations' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save object' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Save failed')
+  expect(screen.getByLabelText('Object title')).toHaveValue('SQL foundations')
+})

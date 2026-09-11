@@ -1,3 +1,4 @@
+import LtiAccounts from './account-linking/LtiAccounts'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import AppHeader from '../components/AppHeader'
@@ -659,6 +660,7 @@ export default function ConnectedAccounts() {
             }}
           />
         )}
+        <LtiAccounts />
         </div>
         )}
       </main>

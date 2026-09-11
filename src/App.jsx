@@ -1,3 +1,5 @@
+import LtiSession from './pages/LtiSession'
+import LmsConnectionsPage from './pages/provider/LtiConfiguration'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
@@ -73,6 +75,9 @@ function App() {
         <NavVisibilityProvider>
         <Routes>
           <Route path="/" element={<Landing />} />
+          <Route path="/lti/session" element={<LtiSession />} />
+          <Route path="/lti/deep-link" element={<LtiSession />} />
+          <Route path="/lti/resources/:objectId" element={<LtiSession />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -273,6 +278,10 @@ function App() {
                 <ProviderCourseEditor />
               </ProviderAdminRoute>
             }
+          />
+          <Route
+            path="/provider/organisations/:organisationId/lms-connections"
+            element={<ProviderAdminRoute><LmsConnectionsPage /></ProviderAdminRoute>}
           />
           <Route
             path="/provider/organisations/:organisationId/skills/:skillId"

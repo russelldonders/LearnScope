@@ -1,3 +1,4 @@
+import ltiHandler from '../_lib/lti/handler.js'
 import { verifySupabaseUser } from '../_lib/auth.js'
 import { supabaseAdmin } from '../_lib/supabaseAdmin.js'
 import { deleteUserEvidenceFiles } from '../_lib/evidenceStorage.js'
@@ -30,6 +31,7 @@ function inviteRedirectTo() {
 }
 
 export default async function handler(req, res) {
+  if (req.query?.lti) return ltiHandler(req, res)
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
     return

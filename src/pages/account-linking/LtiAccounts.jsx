@@ -1,0 +1,8 @@
+import { useEffect, useState } from 'react'
+import { ltiRequest } from '../../lib/lti/session'
+export default function LtiAccounts() {
+  const [accounts,setAccounts]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(null)
+  useEffect(()=>{let live=true;ltiRequest('accounts').then(result=>{if(live)setAccounts(result.accounts)}).catch(err=>{if(live)setError(err.message)});return()=>{live=false}},[])
+  async function disconnect(id){setBusy(id);setError('');try{await ltiRequest('disconnect-account',{id});setAccounts(rows=>rows.filter(row=>row.id!==id))}catch(err){setError(err.message)}finally{setBusy(null)}}
+  return <section aria-labelledby="lti-accounts-title" className="border border-hairline rounded-lg p-5 my-6"><h2 id="lti-accounts-title" className="font-display text-xl mb-2">LMS accounts</h2><p className="text-sm text-secondary mb-4">Manage LMS identities linked to your account. Disconnecting stops future proficiency sharing for that identity.</p>{error&&<p role="alert" className="text-sm text-red-700">{error}</p>}{accounts===null&&!error?<p role="status">Loading LMS accounts…</p>:accounts?.length?<ul className="divide-y divide-hairline">{accounts.map(row=><li key={row.id} className="flex items-center justify-between flex-wrap gap-3 py-3"><span>{row.name}</span><button disabled={busy!==null} className="rounded-md border border-hairline px-3 py-2 text-sm hover:bg-paper disabled:opacity-50" onClick={()=>disconnect(row.id)}>{busy===row.id?'Disconnecting…':'Disconnect and stop sharing'}</button></li>)}</ul>:accounts&&<p className="text-sm text-secondary">No LMS accounts connected.</p>}</section>
+}
