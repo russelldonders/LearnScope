@@ -28,11 +28,14 @@ export default class ErrorBoundary extends Component {
             <p className="text-secondary text-sm mb-4">
               Try reloading the page. If this keeps happening, please let us know.
             </p>
-            {import.meta.env.DEV && (
-              <pre className="text-left text-xs text-red-700 bg-paper border border-hairline rounded p-2 mb-4 overflow-auto max-h-48">
-                {String(this.state.error?.stack || this.state.error)}
-              </pre>
-            )}
+            {/* The message alone (no stack) is shown in every build, not just
+                dev -- it's not sensitive, and it's often the only way to read
+                a crash on a mobile device with no attached devtools. */}
+            <pre className="text-left text-xs text-red-700 bg-paper border border-hairline rounded p-2 mb-4 overflow-auto max-h-48 whitespace-pre-wrap">
+              {import.meta.env.DEV
+                ? String(this.state.error?.stack || this.state.error)
+                : String(this.state.error?.message || this.state.error)}
+            </pre>
             <button
               type="button"
               onClick={() => window.location.reload()}
