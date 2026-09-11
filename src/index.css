@@ -120,31 +120,10 @@ body {
 }
 
 @layer components {
-  .page-builder-shell,
-  .page-builder-block {
+  .page-builder-shell {
     border: 1px solid var(--color-hairline);
     border-radius: 12px;
     box-shadow: 0 18px 55px color-mix(in srgb, var(--color-ink) 14%, transparent);
-  }
-
-  .page-builder-block {
-    box-shadow: 0 6px 22px color-mix(in srgb, var(--color-ink) 7%, transparent);
-  }
-
-  .page-editable {
-    min-height: 1.75rem;
-    border-radius: 6px;
-    color: var(--color-ink);
-    outline: none;
-  }
-
-  .page-editable:empty::before {
-    content: attr(data-placeholder);
-    color: var(--color-secondary);
-  }
-
-  .page-editable:focus {
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-gold) 48%, transparent);
   }
 
   .page-live-canvas {
@@ -154,6 +133,7 @@ body {
 
   .page-format-bar {
     display: flex;
+    flex-wrap: wrap;
     min-height: 42px;
     align-items: center;
     justify-content: center;
@@ -312,13 +292,58 @@ body {
   .page-content > * + * { margin-top: 1.5rem; }
   .page-content .page-heading { font-family: var(--font-display); font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1.04; }
   .page-content .page-subheading { margin-top: 2.75rem; font-family: var(--font-display); font-size: clamp(1.5rem, 3vw, 2.15rem); line-height: 1.15; }
+  .page-content .page-subheading--sm { margin-top: 2rem; font-size: clamp(1.15rem, 2.2vw, 1.5rem); }
   .page-content .page-paragraph { font-size: 1rem; line-height: 1.75; }
   .page-content .page-callout { border-radius: 12px; background: color-mix(in srgb, var(--color-moss) 12%, var(--color-card)); padding: 1.25rem; line-height: 1.65; }
+  .page-content .page-callout--warning { background: color-mix(in srgb, var(--color-gold) 20%, var(--color-card)); }
+  .page-content .page-callout--success { background: color-mix(in srgb, #2f8a4b 16%, var(--color-card)); }
+  .page-content .page-callout--tip { background: color-mix(in srgb, var(--color-slate) 16%, var(--color-card)); }
+  .page-content .page-quote { padding-left: 1.25rem; border-left: 3px solid var(--color-moss); font-style: italic; line-height: 1.7; color: var(--color-secondary); }
   .page-content .page-divider { margin-block: 2.75rem; border: 0; border-top: 1px solid var(--color-hairline); }
   .page-content .page-columns { display: grid; gap: 2rem; line-height: 1.7; }
   .page-content a { color: var(--color-moss); text-decoration: underline; text-underline-offset: 3px; }
+  .page-content ul, .page-content ol { margin: 0.5rem 0 0 1.25rem; }
+  .page-content ul { list-style: disc; }
+  .page-content ol { list-style: decimal; }
+  .page-content li { margin-top: 0.25rem; }
+  .page-content .page-align-center { text-align: center; }
+  .page-content .page-align-right { text-align: right; }
 
   @media (min-width: 640px) {
     .page-content .page-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
+
+  .page-media--small { max-width: 20rem; margin-inline: auto; }
+  .page-media--medium { max-width: 32rem; margin-inline: auto; }
+  .page-media--large { max-width: 48rem; margin-inline: auto; }
+  .page-media--full { max-width: none; }
+
+  .page-block-options { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-bottom: 0.6rem; }
+  .page-block-options button {
+    border-radius: 999px;
+    border: 1px solid var(--color-hairline);
+    padding: 0.2rem 0.6rem;
+    font-size: 0.68rem;
+    color: var(--color-secondary);
+    background: var(--color-card);
+  }
+  .page-block-options button:hover { border-color: var(--color-moss); color: var(--color-ink); }
+  .page-block-options button.is-selected {
+    border-color: var(--color-moss);
+    background: color-mix(in srgb, var(--color-moss) 16%, var(--color-card));
+    color: var(--color-ink);
+    font-weight: 600;
+  }
+
+  .page-drop-indicator {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 3px;
+    border-radius: 999px;
+    background: var(--color-moss);
+    pointer-events: none;
+  }
+  .page-drop-indicator--above { top: -6px; }
+  .page-drop-indicator--below { bottom: -6px; }
 }

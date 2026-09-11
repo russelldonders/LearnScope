@@ -1,4 +1,5 @@
 import { verifySupabaseUser } from './_lib/auth.js'
+import { supabaseAdmin } from './_lib/supabaseAdmin.js'
 
 // Single dispatcher for the app's two Resend-backed transactional emails,
 // rather than one function per email type -- Vercel's Hobby plan caps
@@ -6,11 +7,63 @@ import { verifySupabaseUser } from './_lib/auth.js'
 // same reasoning), and freeing a slot here is what made room for the new
 // xAPI LRS endpoint. Both emails shared near-identical shape (auth check,
 // escapeHtml, Resend call) before this merge.
+//
+// Subject/body for each of these three now come from the notification_
+// templates table (editable via /admin/notifications) rather than being
+// hardcoded here -- DEFAULT_TEMPLATES below is only a fallback for a
+// missing/not-yet-migrated row, so sending never breaks on a stale DB.
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
   ))
+}
+
+// {{token}} substitution, HTML-escaped -- safe both as inline text and
+// inside a double-quoted href, which is all these templates ever use it for.
+function renderTemplate(template, vars) {
+  return String(template).replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => (key in vars ? escapeHtml(vars[key]) : match))
+}
+
+const DEFAULT_TEMPLATES = {
+  peer_rating_invite: {
+    subject_template: '{{fromName}} wants your rating on "{{skillName}}"',
+    body_template: `
+    <p>{{fromName}} would like your take on their skill <strong>{{skillName}}</strong> on LearnScope.</p>
+    <p><a href="{{url}}">Rate {{skillName}}</a></p>
+    <p style="color:#666;font-size:13px">If you don't recognize this, you can safely ignore this email.</p>
+  `,
+  },
+  skill_recommend: {
+    subject_template: '{{fromName}} recommends you track "{{skillName}}"',
+    body_template: `
+    <p>{{fromName}} thinks you'd be a good fit to develop <strong>{{skillName}}</strong> and recommends you start tracking it on LearnScope.</p>
+    <p><a href="{{url}}">Add {{skillName}} to your profile</a></p>
+    <p style="color:#666;font-size:13px">If you don't recognize this, you can safely ignore this email.</p>
+  `,
+  },
+  skill_validation_request: {
+    subject_template: '{{fromName}} asked you to validate "{{skillName}}"',
+    body_template: `
+    <p>{{fromName}} has asked you to validate their skill <strong>{{skillName}}</strong> on LearnScope.</p>
+    <p>You'll be able to review their evidence for this skill and confirm whether they've reached their target level, or decline with feedback.</p>
+    <p><a href="{{url}}">Review the request</a></p>
+    <p style="color:#666;font-size:13px">If you don't recognize this, you can safely ignore this email.</p>
+  `,
+  },
+}
+
+async function getTemplate(key) {
+  try {
+    const { data } = await supabaseAdmin()
+      .from('notification_templates')
+      .select('subject_template, body_template')
+      .eq('key', key)
+      .maybeSingle()
+    return data || DEFAULT_TEMPLATES[key]
+  } catch {
+    return DEFAULT_TEMPLATES[key]
+  }
 }
 
 async function sendResendEmail(res, { to, subject, html }) {
@@ -44,12 +97,11 @@ async function sendInvite(res, { toEmail, inviterName, skillName, shareUrl }) {
     return
   }
   const fromName = inviterName?.trim() || 'A LearnScope user'
-  const html = `
-    <p>${escapeHtml(fromName)} would like your take on their skill <strong>${escapeHtml(skillName)}</strong> on LearnScope.</p>
-    <p><a href="${escapeHtml(shareUrl)}">Rate ${escapeHtml(skillName)}</a></p>
-    <p style="color:#666;font-size:13px">If you don't recognize this, you can safely ignore this email.</p>
-  `
-  if (await sendResendEmail(res, { to: toEmail, subject: `${fromName} wants your rating on "${skillName}"`, html })) {
+  const vars = { fromName, skillName, url: shareUrl }
+  const template = await getTemplate('peer_rating_invite')
+  const subject = renderTemplate(template.subject_template, vars)
+  const html = renderTemplate(template.body_template, vars)
+  if (await sendResendEmail(res, { to: toEmail, subject, html })) {
     res.status(200).json({ ok: true })
   }
 }
@@ -60,14 +112,11 @@ async function sendRecommend(res, { toEmail, inviterName, skillName, shareUrl })
     return
   }
   const fromName = inviterName?.trim() || 'A LearnScope user'
-  const html = `
-    <p>${escapeHtml(fromName)} thinks you'd be a good fit to develop <strong>${escapeHtml(skillName)}</strong> and recommends you start tracking it on LearnScope.</p>
-    <p><a href="${escapeHtml(shareUrl)}">Add ${escapeHtml(skillName)} to your profile</a></p>
-    <p style="color:#666;font-size:13px">If you don't recognize this, you can safely ignore this email.</p>
-  `
-  if (
-    await sendResendEmail(res, { to: toEmail, subject: `${fromName} recommends you track "${skillName}"`, html })
-  ) {
+  const vars = { fromName, skillName, url: shareUrl }
+  const template = await getTemplate('skill_recommend')
+  const subject = renderTemplate(template.subject_template, vars)
+  const html = renderTemplate(template.body_template, vars)
+  if (await sendResendEmail(res, { to: toEmail, subject, html })) {
     res.status(200).json({ ok: true })
   }
 }
@@ -78,13 +127,11 @@ async function sendValidationRequest(res, { toEmail, requesterName, skillName, r
     return
   }
   const fromName = requesterName?.trim() || 'A LearnScope user'
-  const html = `
-    <p>${escapeHtml(fromName)} has asked you to validate their skill <strong>${escapeHtml(skillName)}</strong> on LearnScope.</p>
-    <p>You'll be able to review their evidence for this skill and confirm whether they've reached their target level, or decline with feedback.</p>
-    <p><a href="${escapeHtml(reviewUrl)}">Review the request</a></p>
-    <p style="color:#666;font-size:13px">If you don't recognize this, you can safely ignore this email.</p>
-  `
-  if (await sendResendEmail(res, { to: toEmail, subject: `${fromName} asked you to validate "${skillName}"`, html })) {
+  const vars = { fromName, skillName, url: reviewUrl }
+  const template = await getTemplate('skill_validation_request')
+  const subject = renderTemplate(template.subject_template, vars)
+  const html = renderTemplate(template.body_template, vars)
+  if (await sendResendEmail(res, { to: toEmail, subject, html })) {
     res.status(200).json({ ok: true })
   }
 }

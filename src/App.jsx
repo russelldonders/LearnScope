@@ -51,6 +51,7 @@ import AdminSkillDetail from './pages/admin/AdminSkillDetail'
 import AdminTags from './pages/admin/AdminTags'
 import AdminActivityLog from './pages/admin/AdminActivityLog'
 import AdminOnboarding from './pages/admin/AdminOnboarding'
+import AdminNotifications from './pages/admin/AdminNotifications'
 import ProviderConsole from './pages/provider/ProviderConsole'
 import EmployerConsole from './pages/employer/EmployerConsole'
 import EmployerRoleProfileDetail from './pages/employer/EmployerRoleProfileDetail'
@@ -388,6 +389,14 @@ function App() {
             element={
               <PlatformAdminRoute>
                 <AdminOnboarding />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/notifications"
+            element={
+              <PlatformAdminRoute>
+                <AdminNotifications />
               </PlatformAdminRoute>
             }
           />

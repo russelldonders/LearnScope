@@ -13199,6 +13199,7 @@ create policy "Authentication accounts can view accessible workspaces"
 
 
 
+
 -- =============================================================================
 -- 20260903120000_distinct_workspace_types.sql
 -- =============================================================================
@@ -13257,6 +13258,7 @@ alter table workspaces
 create index workspaces_provider_organisation_idx
   on workspaces (provider_organisation_id, status)
   where provider_organisation_id is not null;
+
 
 
 
@@ -20885,3 +20887,257 @@ $$;
 alter table profiles drop constraint profiles_language_preference_check;
 alter table profiles add constraint profiles_language_preference_check
   check (language_preference in ('en', 'es', 'fr', 'de', 'it', 'nl', 'zh'));
+
+
+
+-- =============================================================================
+-- 20260910110000_employer_members_account_deletion_cascade.sql
+-- =============================================================================
+
+-- Fixes admin deleteUser failing with an FK violation for any user who was
+-- ever added as an employer member. 0064_account_deletion_cascades.sql gave
+-- every FK to auth.users(id) that existed at the time an explicit ON DELETE
+-- action so auth.admin.deleteUser() wouldn't be blocked -- employers/
+-- employer_members (20260902090000) were added after that migration and
+-- were missed, so their user_id/created_by/invited_by columns still have no
+-- ON DELETE action (the default NO ACTION), which is exactly what
+-- api/admin/actions.js's deleteUser handler already documents as a known
+-- gap. Same two categories 0064 used:
+--   - employer_members.user_id: CASCADE. A membership row has no meaning
+--     once the member no longer exists (mirrors organisation_members.user_id
+--     on delete cascade, 0065).
+--   - employers.created_by / employer_members.invited_by: SET NULL
+--     (already nullable). Pure attribution -- the employer/membership itself
+--     stays meaningful without it, same treatment as tags.created_by and
+--     skill_library.created_by in 0064.
+
+alter table employer_members drop constraint employer_members_user_id_fkey,
+  add constraint employer_members_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade;
+
+alter table employer_members drop constraint employer_members_invited_by_fkey,
+  add constraint employer_members_invited_by_fkey foreign key (invited_by) references auth.users(id) on delete set null;
+
+alter table employers drop constraint employers_created_by_fkey,
+  add constraint employers_created_by_fkey foreign key (created_by) references auth.users(id) on delete set null;
+
+
+
+-- =============================================================================
+-- 20260910120000_organisation_brand_text_colour.sql
+-- =============================================================================
+
+-- Fifth brand colour: page text, alongside primary/secondary/hover/
+-- background from 20260908100000/20260908110000. Those two already let an
+-- org pick a custom (possibly dark) page background while every heading/
+-- label on the public page stayed hardcoded text-ink (a fixed dark tone) --
+-- readable on the default light background, but not guaranteed against a
+-- dark custom one. Same nullable-hex, opt-in, no-RLS-change pattern as the
+-- other four -- see 20260908100000's own comment for the reasoning
+-- (column-agnostic is_org_admin update policy from 0081 already covers
+-- this too).
+alter table organisations add column brand_text_color text;
+
+alter table organisations add constraint organisations_brand_text_color_hex
+  check (brand_text_color is null or brand_text_color ~ '^#[0-9a-fA-F]{6}$');
+
+-- Re-published with the text colour added alongside the other four.
+create or replace function get_provider_profile(p_slug text)
+returns json
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select json_build_object(
+    'organisation', (
+      select json_build_object(
+        'id', o.id, 'name', o.name, 'about', o.about, 'logoUrl', o.logo_url, 'url', o.url,
+        'brandPrimaryColor', o.brand_primary_color,
+        'brandSecondaryColor', o.brand_secondary_color,
+        'brandHoverColor', o.brand_hover_color,
+        'brandBackgroundColor', o.brand_background_color,
+        'brandTextColor', o.brand_text_color
+      )
+      from organisations o
+      where o.slug = p_slug and o.status = 'active' and o.public_profile_enabled = true
+    ),
+    'skills', (
+      select coalesce(json_agg(json_build_object(
+        'id', sl.id, 'name', sl.name, 'category', sl.category, 'description', sl.description
+      ) order by sl.name), '[]'::json)
+      from organisation_offered_skills oos
+      join skill_library sl on sl.id = oos.skill_library_id
+      join organisations o on o.id = oos.organisation_id
+      where o.slug = p_slug and o.status = 'active' and o.public_profile_enabled = true
+    ),
+    'courses', (
+      select coalesce(json_agg(entry.course_json order by entry.course_name), '[]'::json)
+      from (
+        -- This org's own approved courses, published to at least one of
+        -- its own learner-visible catalogues.
+        select cc.name as course_name, json_build_object(
+          'id', cc.id, 'name', cc.name, 'synopsis', cc.synopsis,
+          'courseType', cc.course_type, 'duration', cc.duration,
+          'imageUrl', cc.image_url, 'courseCode', cc.course_code,
+          'versionNumber', cc.version_number,
+          'skillEntries', (
+            select coalesce(json_agg(json_build_object(
+              'skillId', ccs.skill_library_id, 'skillName', sl2.name, 'level', ccs.level
+            )), '[]'::json)
+            from course_catalogue_skills ccs
+            join skill_library sl2 on sl2.id = ccs.skill_library_id
+            where ccs.course_catalogue_id = cc.id
+          ),
+          'tags', (
+            select coalesce(json_agg(json_build_object('id', t.id, 'name', t.name)), '[]'::json)
+            from course_catalogue_tags cct
+            join tags t on t.id = cct.tag_id
+            where cct.course_catalogue_id = cc.id
+          ),
+          'catalogues', (
+            select coalesce(json_agg(json_build_object('id', cat.id, 'name', cat.name) order by cat.name), '[]'::json)
+            from course_catalogue_publications ccp
+            join catalogues cat on cat.id = ccp.catalogue_id
+            where ccp.course_id = cc.id
+              and ccp.published_at is not null
+              and cat.learner_visible
+              and cat.organisation_id = cc.organisation_id
+          )
+        ) as course_json
+        from course_catalogue cc
+        join organisations o on o.id = cc.organisation_id
+        where o.slug = p_slug and o.status = 'active' and o.public_profile_enabled = true
+          and cc.status = 'approved' and cc.is_current_published
+          and exists (
+            select 1
+            from course_catalogue_publications ccp2
+            join catalogues cat2 on cat2.id = ccp2.catalogue_id
+            where ccp2.course_id = cc.id
+              and ccp2.published_at is not null
+              and cat2.learner_visible
+              and cat2.organisation_id = cc.organisation_id
+          )
+
+        -- union all, not union: json has no equality operator to dedupe
+        -- with, and a genuine duplicate here would need this org to have
+        -- linked two different catalogues that both happen to carry the
+        -- exact same course -- rare enough not to be worth casting every
+        -- json_build_object result to jsonb just to dedupe against it.
+        union all
+
+        -- Another provider's course, reached because this org has linked
+        -- one of that provider's own learner-visible catalogues -- "offer
+        -- alongside their own".
+        select cc3.name, json_build_object(
+          'id', cc3.id, 'name', cc3.name, 'synopsis', cc3.synopsis,
+          'courseType', cc3.course_type, 'duration', cc3.duration,
+          'imageUrl', cc3.image_url, 'courseCode', cc3.course_code,
+          'versionNumber', cc3.version_number,
+          'skillEntries', (
+            select coalesce(json_agg(json_build_object(
+              'skillId', ccs3.skill_library_id, 'skillName', sl3.name, 'level', ccs3.level
+            )), '[]'::json)
+            from course_catalogue_skills ccs3
+            join skill_library sl3 on sl3.id = ccs3.skill_library_id
+            where ccs3.course_catalogue_id = cc3.id
+          ),
+          'tags', (
+            select coalesce(json_agg(json_build_object('id', t3.id, 'name', t3.name)), '[]'::json)
+            from course_catalogue_tags cct3
+            join tags t3 on t3.id = cct3.tag_id
+            where cct3.course_catalogue_id = cc3.id
+          ),
+          'catalogues', json_build_array(json_build_object('id', linked_cat.id, 'name', linked_cat.name))
+        )
+        from organisations o4
+        join catalogue_links cl on cl.organisation_id = o4.id
+        join catalogues linked_cat on linked_cat.id = cl.catalogue_id and linked_cat.learner_visible
+        join course_catalogue_publications ccp3 on ccp3.catalogue_id = linked_cat.id and ccp3.published_at is not null
+        join course_catalogue cc3 on cc3.id = ccp3.course_id and cc3.status = 'approved' and cc3.is_current_published
+        where o4.slug = p_slug and o4.status = 'active' and o4.public_profile_enabled = true
+      ) entry
+    )
+  )
+$$;
+
+grant execute on function get_provider_profile(text) to anon, authenticated;
+
+
+
+-- =============================================================================
+-- 20260910130000_notification_templates.sql
+-- =============================================================================
+
+-- Platform-admin notification template manager: lets a platform admin see
+-- and edit the subject/body of every custom transactional email the app
+-- sends (api/send-email.js), instead of those being hardcoded strings only
+-- a code change could touch. Seeded with the three email types that
+-- function already sends, using the exact text it used before this
+-- migration -- editing a template changes future sends only, api/send-
+-- email.js falls back to its own hardcoded copy if a row is ever missing.
+--
+-- Deliberately no insert/delete policy: api/send-email.js only ever looks
+-- up one of these three fixed keys by name, so a platform admin can adapt
+-- the wording of an existing template but can't create an orphaned template
+-- with no code path that would ever send it, or delete one out from under
+-- a still-live email type.
+--
+-- Out of scope here: Supabase Auth's own built-in emails (signup
+-- confirmation, invite, password reset, magic link) are configured through
+-- Supabase's own auth email template settings, not this table -- they're
+-- listed for visibility in the admin UI, but editing them needs the
+-- Supabase dashboard/Management API, a separate integration this migration
+-- doesn't add.
+create table notification_templates (
+  id uuid primary key default gen_random_uuid(),
+  key text not null unique,
+  label text not null,
+  description text,
+  subject_template text not null,
+  body_template text not null,
+  placeholders text[] not null default '{}',
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users(id) on delete set null
+);
+
+alter table notification_templates enable row level security;
+
+create policy "Platform admins can view notification templates"
+  on notification_templates for select
+  to authenticated
+  using (is_platform_admin(auth.uid()));
+
+create policy "Platform admins can update notification templates"
+  on notification_templates for update
+  to authenticated
+  using (is_platform_admin(auth.uid()))
+  with check (is_platform_admin(auth.uid()));
+
+insert into notification_templates (key, label, description, subject_template, body_template, placeholders) values
+(
+  'peer_rating_invite',
+  'Peer rating invite',
+  'Sent when a learner invites someone -- who may not have a LearnScope account -- to rate one of their skills.',
+  '{{fromName}} wants your rating on "{{skillName}}"',
+  E'<p>{{fromName}} would like your take on their skill <strong>{{skillName}}</strong> on LearnScope.</p>\n<p><a href="{{url}}">Rate {{skillName}}</a></p>\n<p style="color:#666;font-size:13px">If you don''t recognize this, you can safely ignore this email.</p>',
+  array['fromName', 'skillName', 'url']
+),
+(
+  'skill_recommend',
+  'Skill recommendation',
+  'Sent when a learner recommends that a connection start tracking a skill.',
+  '{{fromName}} recommends you track "{{skillName}}"',
+  E'<p>{{fromName}} thinks you''d be a good fit to develop <strong>{{skillName}}</strong> and recommends you start tracking it on LearnScope.</p>\n<p><a href="{{url}}">Add {{skillName}} to your profile</a></p>\n<p style="color:#666;font-size:13px">If you don''t recognize this, you can safely ignore this email.</p>',
+  array['fromName', 'skillName', 'url']
+),
+(
+  'skill_validation_request',
+  'Skill validation request',
+  'Sent when a learner asks someone to validate one of their skills against their evidence.',
+  '{{fromName}} asked you to validate "{{skillName}}"',
+  E'<p>{{fromName}} has asked you to validate their skill <strong>{{skillName}}</strong> on LearnScope.</p>\n<p>You''ll be able to review their evidence for this skill and confirm whether they''ve reached their target level, or decline with feedback.</p>\n<p><a href="{{url}}">Review the request</a></p>\n<p style="color:#666;font-size:13px">If you don''t recognize this, you can safely ignore this email.</p>',
+  array['fromName', 'skillName', 'url']
+);
+
+
+
