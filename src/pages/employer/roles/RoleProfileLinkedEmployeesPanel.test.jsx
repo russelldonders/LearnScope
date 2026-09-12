@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import RoleProfileLinkedEmployeesPanel from './RoleProfileLinkedEmployeesPanel'
-import { FIXTURE_LINKED_EMPLOYEES } from './roleProfileFixtures'
+import { FIXTURE_LINKED_EMPLOYEES, FIXTURE_MEMBERS } from './roleProfileFixtures'
 
 afterEach(cleanup)
 
@@ -18,19 +18,25 @@ describe('RoleProfileLinkedEmployeesPanel', () => {
     expect(screen.getByText('No employees assigned to this role profile yet.')).toBeInTheDocument()
   })
 
-  it('calls onAssignEmployee with the trimmed email and clears the field', () => {
-    const onAssignEmployee = vi.fn()
-    render(<RoleProfileLinkedEmployeesPanel employees={[]} onAssignEmployee={onAssignEmployee} />)
-    const input = screen.getByLabelText('Assign by email')
-    fireEvent.change(input, { target: { value: '  new.hire@acme.example  ' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Assign' }))
-    expect(onAssignEmployee).toHaveBeenCalledWith('new.hire@acme.example')
-    expect(input).toHaveValue('')
+  it('calls onAssignEmployees with every checked member and clears the selection', () => {
+    const onAssignEmployees = vi.fn()
+    render(<RoleProfileLinkedEmployeesPanel employees={[]} members={FIXTURE_MEMBERS} onAssignEmployees={onAssignEmployees} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: /priya@acme.example/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /new.hire@acme.example/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Assign 2 selected' }))
+    expect(onAssignEmployees).toHaveBeenCalledWith(expect.arrayContaining(['member-1', 'member-3']))
+    expect(onAssignEmployees.mock.calls[0][0]).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'Assign' })).toBeDisabled()
   })
 
-  it('does not call onAssignEmployee for a blank email', () => {
-    const onAssignEmployee = vi.fn()
-    render(<RoleProfileLinkedEmployeesPanel employees={[]} onAssignEmployee={onAssignEmployee} />)
+  it('excludes an already-linked member from the picker', () => {
+    render(<RoleProfileLinkedEmployeesPanel employees={FIXTURE_LINKED_EMPLOYEES} members={FIXTURE_MEMBERS} />)
+    expect(screen.queryByRole('checkbox', { name: /priya@acme.example/ })).toBeNull()
+    expect(screen.getByRole('checkbox', { name: /new.hire@acme.example/ })).toBeInTheDocument()
+  })
+
+  it('disables Assign with nothing selected', () => {
+    render(<RoleProfileLinkedEmployeesPanel employees={[]} members={FIXTURE_MEMBERS} />)
     expect(screen.getByRole('button', { name: 'Assign' })).toBeDisabled()
   })
 
@@ -43,8 +49,8 @@ describe('RoleProfileLinkedEmployeesPanel', () => {
   })
 
   it('disables assigning and withdrawing while a request is in flight', () => {
-    render(<RoleProfileLinkedEmployeesPanel employees={FIXTURE_LINKED_EMPLOYEES} assigning />)
-    expect(screen.getByLabelText('Assign by email')).toBeDisabled()
+    render(<RoleProfileLinkedEmployeesPanel employees={FIXTURE_LINKED_EMPLOYEES} members={FIXTURE_MEMBERS} assigning />)
+    expect(screen.getByLabelText('Add employees')).toBeDisabled()
     expect(screen.getAllByRole('button', { name: 'Withdraw' })[0]).toBeDisabled()
   })
 

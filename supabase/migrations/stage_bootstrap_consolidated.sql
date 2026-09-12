@@ -21588,6 +21588,420 @@ create index lti_sessions_connection_subject_idx on public.lti_launch_sessions(c
 
 
 -- =============================================================================
+-- 20260911150000_employer_member_field_definitions.sql
+-- =============================================================================
+
+-- Employer-configurable fields for an employer's managed-learner roster.
+--
+-- Deliberately separate from `profiles` -- an employer admin entering a
+-- member's name/email/location/language here is NOT writing to the
+-- learner's own profile (which stays exclusively learner-owned, per
+-- CLAUDE.md's learner-ownership principle and Profile.jsx's owner-only
+-- RLS). This is the employer's own HR-style record about the person --
+-- useful even before they've signed up -- kept as a genuinely separate
+-- table so it never overrides anything the learner controls themselves.
+--
+-- One field-definition table serves both tiers the product needs:
+--   - employer_id is null: a "base" field, owned and fully managed
+--     (create/rename/reorder/remove) by platform admins, visible to every
+--     employer.
+--   - employer_id is set: that employer's own additional field, managed
+--     only by that employer's admins, visible only to them.
+-- Values live in a separate table keyed to employer_members + the field
+-- definition, same owned-vs-shared split organisation_members/employers
+-- already established for other employer-domain concepts.
+
+create table employer_field_definitions (
+  id uuid primary key default gen_random_uuid(),
+  employer_id uuid references employers(id) on delete cascade,
+  key text not null,
+  label text not null,
+  field_type text not null check (field_type in ('text', 'textarea', 'number', 'date', 'select', 'boolean', 'email')),
+  options jsonb,
+  required boolean not null default false,
+  sort_order integer not null default 0,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Key must be unique within its own scope: once among the global/base
+-- fields, once within each employer's own additional fields -- but the
+-- same key may exist in both scopes (an employer could theoretically shadow
+-- a base field's key, though the app UI won't offer to).
+create unique index employer_field_definitions_global_key_unique_idx
+  on employer_field_definitions (key) where employer_id is null;
+create unique index employer_field_definitions_employer_key_unique_idx
+  on employer_field_definitions (employer_id, key) where employer_id is not null;
+
+create index employer_field_definitions_employer_idx on employer_field_definitions (employer_id);
+
+create table employer_member_field_values (
+  id uuid primary key default gen_random_uuid(),
+  employer_member_id uuid not null references employer_members(id) on delete cascade,
+  field_definition_id uuid not null references employer_field_definitions(id) on delete cascade,
+  value text,
+  updated_by uuid references auth.users(id) on delete set null,
+  updated_at timestamptz not null default now(),
+  unique (employer_member_id, field_definition_id)
+);
+
+create index employer_member_field_values_member_idx on employer_member_field_values (employer_member_id);
+create index employer_member_field_values_field_idx on employer_member_field_values (field_definition_id);
+
+-- ----------------------------------------------------------------------------
+-- RLS
+-- ----------------------------------------------------------------------------
+
+alter table employer_field_definitions enable row level security;
+
+-- Any employer admin needs to see the base fields to render their roster
+-- form, even though no single employer_id "owns" a base row -- hence the
+-- separate any-employer-admin check for employer_id is null, rather than
+-- reusing is_employer_admin(employer_id, ...) which requires a real row to
+-- match against.
+create policy "Admins can view field definitions"
+  on employer_field_definitions for select
+  to authenticated
+  using (
+    is_platform_admin(auth.uid())
+    or (employer_id is not null and is_employer_admin(employer_id, auth.uid()))
+    or (employer_id is null and exists (
+      select 1 from employer_members em
+      where em.user_id = auth.uid() and em.role = 'admin' and em.status = 'active'
+    ))
+  );
+
+create policy "Platform admins can add base field definitions"
+  on employer_field_definitions for insert
+  to authenticated
+  with check (employer_id is null and is_platform_admin(auth.uid()));
+
+create policy "Platform admins can update base field definitions"
+  on employer_field_definitions for update
+  to authenticated
+  using (employer_id is null and is_platform_admin(auth.uid()))
+  with check (employer_id is null and is_platform_admin(auth.uid()));
+
+create policy "Platform admins can delete base field definitions"
+  on employer_field_definitions for delete
+  to authenticated
+  using (employer_id is null and is_platform_admin(auth.uid()));
+
+create policy "Employer admins can add their own field definitions"
+  on employer_field_definitions for insert
+  to authenticated
+  with check (employer_id is not null and is_employer_admin(employer_id, auth.uid()));
+
+create policy "Employer admins can update their own field definitions"
+  on employer_field_definitions for update
+  to authenticated
+  using (employer_id is not null and is_employer_admin(employer_id, auth.uid()))
+  with check (employer_id is not null and is_employer_admin(employer_id, auth.uid()));
+
+create policy "Employer admins can delete their own field definitions"
+  on employer_field_definitions for delete
+  to authenticated
+  using (employer_id is not null and is_employer_admin(employer_id, auth.uid()));
+
+alter table employer_member_field_values enable row level security;
+
+-- Deliberately no learner-select policy -- this is the employer's own
+-- roster record about the person, not part of the learner's own profile,
+-- so the member being described has no special access to it here (same
+-- reasoning that kept this out of `profiles` entirely).
+create policy "Employer admins can view their members' field values"
+  on employer_member_field_values for select
+  to authenticated
+  using (
+    exists (
+      select 1 from employer_members em
+      where em.id = employer_member_id and is_employer_admin(em.employer_id, auth.uid())
+    )
+  );
+
+-- The join to employer_field_definitions in the with-check clauses stops an
+-- employer admin from attaching a value to a field definition owned by a
+-- *different* employer -- only global fields or that employer's own fields
+-- are valid targets.
+create policy "Employer admins can set their members' field values"
+  on employer_member_field_values for insert
+  to authenticated
+  with check (
+    exists (
+      select 1 from employer_members em
+      join employer_field_definitions fd
+        on fd.id = field_definition_id and (fd.employer_id is null or fd.employer_id = em.employer_id)
+      where em.id = employer_member_id and is_employer_admin(em.employer_id, auth.uid())
+    )
+  );
+
+create policy "Employer admins can update their members' field values"
+  on employer_member_field_values for update
+  to authenticated
+  using (
+    exists (
+      select 1 from employer_members em
+      where em.id = employer_member_id and is_employer_admin(em.employer_id, auth.uid())
+    )
+  )
+  with check (
+    exists (
+      select 1 from employer_members em
+      join employer_field_definitions fd
+        on fd.id = field_definition_id and (fd.employer_id is null or fd.employer_id = em.employer_id)
+      where em.id = employer_member_id and is_employer_admin(em.employer_id, auth.uid())
+    )
+  );
+
+create policy "Employer admins can remove their members' field values"
+  on employer_member_field_values for delete
+  to authenticated
+  using (
+    exists (
+      select 1 from employer_members em
+      where em.id = employer_member_id and is_employer_admin(em.employer_id, auth.uid())
+    )
+  );
+
+-- ----------------------------------------------------------------------------
+-- Seed the ten requested base fields as global definitions -- platform
+-- admins can rename, reorder, remove, or add to these afterward via the
+-- same admin UI/table; this is a starting point, not a fixed list.
+-- ----------------------------------------------------------------------------
+
+insert into employer_field_definitions (employer_id, key, label, field_type, options, required, sort_order) values
+  (null, 'first_name', 'First name', 'text', null, true, 10),
+  (null, 'last_name', 'Last name', 'text', null, true, 20),
+  (null, 'email', 'Email', 'email', null, true, 30),
+  (null, 'employment_status', 'Status', 'select', '["Active", "On leave", "Inactive"]'::jsonb, false, 40),
+  (null, 'location', 'Location', 'text', null, false, 50),
+  (null, 'language', 'Language', 'text', null, false, 60),
+  (null, 'department', 'Department', 'text', null, false, 70),
+  (null, 'job_title', 'Job title', 'text', null, false, 80),
+  (null, 'start_date', 'Start date', 'date', null, false, 90),
+  (null, 'end_date', 'End date', 'date', null, false, 100);
+
+
+
+-- =============================================================================
+-- 20260912090000_employer_login_context.sql
+-- =============================================================================
+
+-- Resolves an organisation slug to the employer it belongs to (if any),
+-- for gating login on an employer's own URL. Employers get a dedicated
+-- organisation 1:1 (employers_provider_organisation_id_unique_idx,
+-- 20260902090000's create_employer()) and that organisation already has
+-- the public/branded page at /providers/:slug reused for login
+-- (?org=:slug, Login.jsx) -- but until now that link carried branding
+-- only, with no check that the signing-in account is actually a member of
+-- that employer.
+--
+-- Deliberately a new, minimal RPC rather than reusing get_provider_profile
+-- (0090+): that one is gated on public_profile_enabled (default false, an
+-- opt-in marketing flag), but the login gate has to work regardless of
+-- whether an employer has opted into a public storefront page. It also
+-- can't be read from the client table directly -- employers' own select
+-- policy ("Employer members can view employer members" / is_employer_member)
+-- only allows a member to see their employer's row, which is exactly the
+-- distinction Login.jsx needs to draw (an employer's own URL exists vs. the
+-- signed-in account isn't a member of it), so a security-definer function is
+-- required here the same way get_provider_profile needed one to bypass
+-- organisations' own membership-scoped RLS for its public page.
+create or replace function get_employer_login_context(p_slug text)
+returns json
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select json_build_object('id', e.id, 'name', e.name)
+  from employers e
+  join organisations o on o.id = e.provider_organisation_id
+  where o.slug = p_slug
+$$;
+
+grant execute on function get_employer_login_context(text) to anon, authenticated;
+
+
+
+-- =============================================================================
+-- 20260912100000_seed_profile_name_from_employer_roster.sql
+-- =============================================================================
+
+-- An employer admin entering a member's name via the roster fields
+-- (employer_member_field_values, 20260911150000) never touched that
+-- learner's own profiles.first_name/last_name -- deliberately, per that
+-- migration's own comment, since the roster is the employer's separate
+-- HR-style record, not the learner's profile. But ProtectedRoute's
+-- needsName gate (src/components/ProtectedRoute.jsx) reads profiles
+-- directly, so an employer-invited account with no self-entered name stayed
+-- stuck on /profile forever no matter what the employer recorded about
+-- them -- there was no path for that name to ever reach the field
+-- ProtectedRoute actually checks.
+--
+-- This seeds it, but only ever fills a blank -- it never overwrites a name
+-- the learner has already set themselves, the same "fill blanks, never
+-- clobber" rule Onboarding.jsx's persistProfileFields already applies to
+-- CV-imported profile fields. A trigger (rather than an app-code call at
+-- each write site) covers every path that can write a first_name/last_name
+-- roster value uniformly -- the "Edit details" modal, the add-user flow,
+-- and CSV import (once built) all funnel through the same
+-- employer_member_field_values upsert, so one rule here is enough for all
+-- three rather than three call sites that each have to remember it.
+--
+-- security definer is required here the same way create_employer/
+-- decide_employer_invite already need it: profiles' own RLS ("Users manage
+-- their own profile", 0002) only lets a learner update their own row, but
+-- this update is initiated by whichever employer admin wrote the roster
+-- value, not by the learner themselves.
+create or replace function sync_employer_field_value_to_profile()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_key text;
+  v_user_id uuid;
+begin
+  select key into v_key from employer_field_definitions where id = new.field_definition_id;
+  if v_key not in ('first_name', 'last_name') or new.value is null or btrim(new.value) = '' then
+    return new;
+  end if;
+
+  select user_id into v_user_id from employer_members where id = new.employer_member_id;
+
+  if v_key = 'first_name' then
+    update profiles set first_name = new.value, updated_at = now()
+      where id = v_user_id and (first_name is null or btrim(first_name) = '');
+  else
+    update profiles set last_name = new.value, updated_at = now()
+      where id = v_user_id and (last_name is null or btrim(last_name) = '');
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger sync_employer_field_value_to_profile_trigger
+  after insert or update of value on employer_member_field_values
+  for each row execute procedure sync_employer_field_value_to_profile();
+
+-- One-off backfill for rows already saved before this trigger existed --
+-- without this, a name entered via "Edit details" prior to this migration
+-- would stay invisible to ProtectedRoute until that same field happened to
+-- be re-saved.
+do $$
+declare
+  r record;
+begin
+  for r in
+    select v.id, v.field_definition_id, v.value, v.employer_member_id
+    from employer_member_field_values v
+    join employer_field_definitions d on d.id = v.field_definition_id
+    where d.key in ('first_name', 'last_name')
+      and v.value is not null and btrim(v.value) <> ''
+  loop
+    update employer_member_field_values set value = value where id = r.id;
+  end loop;
+end $$;
+
+
+
+-- =============================================================================
+-- 20260912110000_roster_field_selects_and_status_access.sql
+-- =============================================================================
+
+-- Three roster-field improvements (20260911150000's base fields), all
+-- requested together: language and location become proper selection lists
+-- instead of free text, and the roster's own "Status" field becomes the
+-- thing that actually controls an employer member's access -- previously
+-- it was purely informational, disconnected from employer_members.status
+-- (the column every access check in the app actually reads).
+
+-- ----------------------------------------------------------------------------
+-- Language / Location as select fields
+-- ----------------------------------------------------------------------------
+
+-- Mirrors src/lib/i18n/translations.js's INTERFACE_LANGUAGES labels -- kept
+-- as a static snapshot here rather than read from that file at render time,
+-- same tradeoff the pre-existing employment_status options already made
+-- (a real value/label mapping would need the field-input renderer to carry
+-- both, which nothing else in this feature needs yet).
+update employer_field_definitions
+set field_type = 'select',
+    options = '["English", "Español", "Français", "Deutsch", "Italiano", "Nederlands", "中文"]'::jsonb
+where employer_id is null and key = 'language';
+
+-- Mirrors src/lib/countries.js's COUNTRIES list.
+update employer_field_definitions
+set field_type = 'select',
+    options = '["Afghanistan","Albania","Algeria","Andorra","Angola","Antigua and Barbuda","Argentina","Armenia","Australia","Austria","Azerbaijan","Bahamas","Bahrain","Bangladesh","Barbados","Belarus","Belgium","Belize","Benin","Bhutan","Bolivia","Bosnia and Herzegovina","Botswana","Brazil","Brunei","Bulgaria","Burkina Faso","Burundi","Côte d''Ivoire","Cabo Verde","Cambodia","Cameroon","Canada","Central African Republic","Chad","Chile","China","Colombia","Comoros","Congo (Congo-Brazzaville)","Costa Rica","Croatia","Cuba","Cyprus","Czechia","Democratic Republic of the Congo","Denmark","Djibouti","Dominica","Dominican Republic","Ecuador","Egypt","El Salvador","Equatorial Guinea","Eritrea","Estonia","Eswatini","Ethiopia","Fiji","Finland","France","Gabon","Gambia","Georgia","Germany","Ghana","Greece","Grenada","Guatemala","Guinea","Guinea-Bissau","Guyana","Haiti","Holy See","Honduras","Hong Kong","Hungary","Iceland","India","Indonesia","Iran","Iraq","Ireland","Israel","Italy","Jamaica","Japan","Jordan","Kazakhstan","Kenya","Kiribati","Kuwait","Kyrgyzstan","Laos","Latvia","Lebanon","Lesotho","Liberia","Libya","Liechtenstein","Lithuania","Luxembourg","Madagascar","Malawi","Malaysia","Maldives","Mali","Malta","Marshall Islands","Mauritania","Mauritius","Mexico","Micronesia","Moldova","Monaco","Mongolia","Montenegro","Morocco","Mozambique","Myanmar","Namibia","Nauru","Nepal","Netherlands","New Zealand","Nicaragua","Niger","Nigeria","North Korea","North Macedonia","Norway","Oman","Pakistan","Palau","Palestine","Panama","Papua New Guinea","Paraguay","Peru","Philippines","Poland","Portugal","Qatar","Romania","Russia","Rwanda","Saint Kitts and Nevis","Saint Lucia","Saint Vincent and the Grenadines","Samoa","San Marino","Sao Tome and Principe","Saudi Arabia","Senegal","Serbia","Seychelles","Sierra Leone","Singapore","Slovakia","Slovenia","Solomon Islands","Somalia","South Africa","South Korea","South Sudan","Spain","Sri Lanka","Sudan","Suriname","Sweden","Switzerland","Syria","Taiwan","Tajikistan","Tanzania","Thailand","Timor-Leste","Togo","Tonga","Trinidad and Tobago","Tunisia","Turkey","Turkmenistan","Tuvalu","Uganda","Ukraine","United Arab Emirates","United Kingdom","United States of America","Uruguay","Uzbekistan","Vanuatu","Venezuela","Vietnam","Yemen","Zambia","Zimbabwe"]'::jsonb
+where employer_id is null and key = 'location';
+
+-- ----------------------------------------------------------------------------
+-- Roster "Status" (employment_status) now actually controls access
+-- ----------------------------------------------------------------------------
+
+-- 'inactive' is new -- 'pending' is untouched and stays exclusively the
+-- separate invite-acceptance state (decide_employer_invite, 20260902160000);
+-- this trigger below never writes 'pending' and skips a pending row
+-- entirely, so the two states can't collide.
+alter table employer_members drop constraint employer_members_status_check;
+alter table employer_members add constraint employer_members_status_check
+  check (status in ('active', 'pending', 'inactive'));
+
+-- Every access check that matters already reads employer_members.status --
+-- AuthContext.refreshEmployerMemberships (and so EmployerAdminRoute/
+-- EmployerMemberRoute), and Login.jsx's own employer-membership gate
+-- (20260912090000) both already filter to status = 'active'. So syncing
+-- employment_status into this column is enough to actually cut off
+-- employer-scoped access for 'Inactive' -- deliberately doesn't touch
+-- is_employer_member/is_employer_admin (used throughout this domain's RLS),
+-- since neither currently distinguishes active from pending either; that's
+-- a separate, wider-blast-radius tightening this migration isn't making.
+--
+-- 'On leave' intentionally still counts as active (only "Inactive" itself
+-- revokes access) -- someone on leave is still employed, and this field
+-- only ever affects employer-linked visibility, never the learner's own
+-- LearnScope account otherwise (same boundary sync_employer_field_value_to_
+-- profile, 20260912100000, already keeps for the name-seeding case).
+create or replace function sync_employment_status_to_employer_member()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_key text;
+  v_current_status text;
+begin
+  select key into v_key from employer_field_definitions where id = new.field_definition_id;
+  if v_key <> 'employment_status' then
+    return new;
+  end if;
+
+  select status into v_current_status from employer_members where id = new.employer_member_id;
+  if v_current_status = 'pending' then
+    return new;
+  end if;
+
+  update employer_members
+  set status = case when new.value = 'Inactive' then 'inactive' else 'active' end
+  where id = new.employer_member_id;
+
+  return new;
+end;
+$$;
+
+create trigger sync_employment_status_to_employer_member_trigger
+  after insert or update of value on employer_member_field_values
+  for each row execute procedure sync_employment_status_to_employer_member();
+
+
+
+-- =============================================================================
 -- 20260912152917_provider_employer_sharing.sql
 -- =============================================================================
 

@@ -204,6 +204,24 @@ export async function listMyCourseAssignments(userId) {
   return (data ?? []).filter((a) => a.course_catalogue)
 }
 
+// Every one of this learner's course_assignments for one employer,
+// regardless of status -- unlike listMyCourseAssignments above (which is
+// deliberately just the still-pending ones, for the /actions inbox), this
+// is for a status *display* (EmployerHome.jsx's "Assigned training"), so it
+// needs 'enrolled' rows too. Excludes 'dismissed' -- the learner already
+// declined those, nothing useful to show on an ongoing dashboard.
+export async function listMyCourseAssignmentsForEmployer(userId, employerId) {
+  const { data, error } = await supabase
+    .from('course_assignments')
+    .select('id, catalogue_course_id, status, created_at, course_catalogue(id, name, provider, course_type, duration)')
+    .eq('assigned_to', userId)
+    .eq('employer_id', employerId)
+    .neq('status', 'dismissed')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).filter((a) => a.course_catalogue)
+}
+
 // The learner's own response to a pushed assignment -- never enrols them
 // silently. "Start" calls the existing, unchanged enrolInCatalogueCourse to
 // create the real courses row (that's still the only thing that puts

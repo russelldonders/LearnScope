@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import ImportProfileDataButton from '../components/ImportProfileDataButton'
@@ -13,6 +13,10 @@ const DEFAULT_STEP_KEYS = ['import', 'skills']
 export default function Onboarding() {
   const { user, markOnboardingComplete } = useAuth()
   const navigate = useNavigate()
+  // Where ProtectedRoute bounced in from, if this wizard was reached via its
+  // needsOnboarding redirect (see ProtectedRoute.jsx) -- falls through to
+  // /dashboard for the normal case where nothing set it.
+  const redirectFrom = useLocation().state?.from
   // null = not yet loaded from onboarding_steps. Platform-admin-configurable
   // (see /admin/onboarding) -- only the steps an admin has enabled, in
   // order, ever get shown; an empty list finishes onboarding immediately.
@@ -70,7 +74,7 @@ export default function Onboarding() {
       setError("Couldn't finish setup — check your connection and try again.")
       return
     }
-    navigate('/dashboard')
+    navigate(redirectFrom ?? '/dashboard', { replace: true })
   }
 
   // Shared by every step's "done" action -- moves to whatever's next in the

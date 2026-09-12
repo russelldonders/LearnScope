@@ -16,13 +16,19 @@ const TRAINING_STATUS_LABELS = {
 
 // Employer-side roster for a role profile -- each row is a proposed or
 // accepted assignment, never the employee's full profile. Assigning here
-// only *proposes* the role (mirrors addEmployerMember's add-by-email
-// pattern in EmployerConsole.jsx): the employee still has to accept it
-// themselves from their own side (see
-// src/pages/roles/employer-link/PendingAssignmentsPanel.jsx) before it
-// shows as "Linked" -- this panel can never accept on their behalf, only
-// propose (onAssignEmployee) or withdraw (onWithdrawAssignment) either
-// state.
+// only *proposes* the role (mirrors addEmployerMember's own semantics in
+// EmployerConsole.jsx): the employee still has to accept it themselves from
+// their own side (see src/pages/roles/employer-link/PendingAssignmentsPanel
+// .jsx) before it shows as "Linked" -- this panel can never accept on their
+// behalf, only propose (onAssignEmployees) or withdraw
+// (onWithdrawAssignment) either state.
+//
+// Picks from this employer's own active roster (a real multi-select, not a
+// free-text email one at a time) rather than typing an email -- there's
+// already a definitive list of who's eligible (listEmployerMembers), so
+// asking for a name to type and hope it resolves server-side was never
+// actually necessary here the way it is for EmployerConsole's own "Add
+// users" (which invites someone who may not have an account yet at all).
 export default function RoleProfileLinkedEmployeesPanel({
   employees,
   members = [],
@@ -31,40 +37,42 @@ export default function RoleProfileLinkedEmployeesPanel({
   readiness = {},
   assigning = false,
   error = null,
-  onAssignEmployee,
+  onAssignEmployees,
   onWithdrawAssignment,
 }) {
-  const [email, setEmail] = useState('')
-  const [showMatches, setShowMatches] = useState(false)
+  const [search, setSearch] = useState('')
+  const [selectedIds, setSelectedIds] = useState(new Set())
   const hasRequirements = requiredSkills.length > 0 || training.length > 0
 
-  // Same live-filtered-dropdown pattern as EmployerConsole.jsx's skill/
-  // organisation pickers, scoped to this employer's own active members --
-  // handleAssignEmployee (the caller) still re-validates against that same
-  // roster server-side, this is only the picker's convenience list, same
-  // relationship as AssignTrainingModal's course dropdown to its RPC.
-  // listEmployerMembers has no display name (just email/userCode -- see its
-  // own comment in api/admin/actions.js), so this only matches on those.
-  const matches = useMemo(() => {
-    const q = email.trim().toLowerCase()
-    if (!q) return []
-    return members
-      .filter((m) => m.status === 'active' && (m.email?.toLowerCase().includes(q) || m.userCode?.toLowerCase().includes(q)))
-      .slice(0, 8)
-  }, [members, email])
+  const alreadyLinkedUserIds = useMemo(() => new Set(employees.map((e) => e.userId)), [employees])
 
-  function chooseMember(member) {
-    setEmail(member.email)
-    setShowMatches(false)
+  // Excludes anyone already proposed/linked -- re-proposing them isn't a
+  // meaningful action here (they either already have this role pending or
+  // accepted), so they're just not offered rather than left to fail server-
+  // side.
+  const assignableMembers = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return members.filter((m) =>
+      m.status === 'active' &&
+      !alreadyLinkedUserIds.has(m.user_id) &&
+      (!q || m.email?.toLowerCase().includes(q) || m.userCode?.toLowerCase().includes(q))
+    )
+  }, [members, search, alreadyLinkedUserIds])
+
+  function toggle(memberId) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(memberId)) next.delete(memberId)
+      else next.add(memberId)
+      return next
+    })
   }
 
   function handleAssign(e) {
     e.preventDefault()
-    const trimmed = email.trim()
-    if (!trimmed) return
-    onAssignEmployee?.(trimmed)
-    setEmail('')
-    setShowMatches(false)
+    if (selectedIds.size === 0) return
+    onAssignEmployees?.([...selectedIds])
+    setSelectedIds(new Set())
   }
 
   return (
@@ -112,49 +120,46 @@ export default function RoleProfileLinkedEmployeesPanel({
 
       <MutationFeedback status="error" message={error} className="mb-3" />
 
-      <form onSubmit={handleAssign} className="flex flex-wrap items-end gap-2">
-        <div className="relative flex-1 min-w-[10rem]">
-          <label htmlFor="role-profile-assign-email" className="block text-xs text-secondary mb-1">
-            Assign by email
-          </label>
-          <input
-            id="role-profile-assign-email"
-            type="email"
-            value={email}
-            disabled={assigning}
-            autoComplete="off"
-            onChange={(e) => {
-              setEmail(e.target.value)
-              setShowMatches(true)
-            }}
-            onFocus={() => setShowMatches(true)}
-            onBlur={() => setShowMatches(false)}
-            placeholder="name@company.example"
-            className="w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink"
-          />
-          {showMatches && matches.length > 0 && (
-            <div className="absolute z-10 mt-1 w-full bg-card border border-hairline rounded-md shadow-sm max-h-56 overflow-y-auto">
-              {matches.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => chooseMember(m)}
-                  className="block w-full text-left px-3 py-2 text-sm text-ink hover:bg-paper"
-                >
-                  {m.email}
-                  {m.userCode && <span className="text-xs text-secondary ml-1.5">({m.userCode})</span>}
-                </button>
-              ))}
-            </div>
+      <form onSubmit={handleAssign}>
+        <label htmlFor="role-profile-assign-search" className="block text-xs text-secondary mb-1">
+          Add employees
+        </label>
+        <input
+          id="role-profile-assign-search"
+          type="text"
+          value={search}
+          disabled={assigning}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by email…"
+          className="w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink mb-2"
+        />
+        <div className="border border-hairline rounded-md divide-y divide-hairline max-h-56 overflow-y-auto mb-2">
+          {assignableMembers.length === 0 ? (
+            <p className="text-sm text-secondary px-3 py-2">
+              {search.trim() ? 'No matching active employees.' : 'No more active employees to add.'}
+            </p>
+          ) : (
+            assignableMembers.map((m) => (
+              <label key={m.id} className="flex items-center gap-2 px-3 py-1.5 text-sm text-ink hover:bg-paper cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(m.id)}
+                  disabled={assigning}
+                  onChange={() => toggle(m.id)}
+                  className="rounded border-hairline accent-moss"
+                />
+                {m.email}
+                {m.userCode && <span className="text-xs text-secondary">({m.userCode})</span>}
+              </label>
+            ))
           )}
         </div>
         <button
           type="submit"
-          disabled={assigning || !email.trim()}
+          disabled={assigning || selectedIds.size === 0}
           className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
         >
-          {assigning ? 'Assigning…' : 'Assign'}
+          {assigning ? 'Assigning…' : selectedIds.size > 0 ? `Assign ${selectedIds.size} selected` : 'Assign'}
         </button>
       </form>
     </div>

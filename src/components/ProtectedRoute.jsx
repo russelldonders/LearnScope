@@ -21,8 +21,16 @@ export default function ProtectedRoute({ children }) {
   // the one Signup.jsx's own required fields don't close -- an account
   // created via an admin/provider invite skips Signup entirely and can
   // otherwise reach the rest of the app with no name ever set.
+  //
+  // Carries the originally-requested location through as router state so
+  // Profile.jsx can send the learner back where they were actually headed
+  // (e.g. an employer's own dashboard URL) once the name is filled in,
+  // instead of stranding them on /profile -- without this, an
+  // employer-invited account can never reach anywhere but /profile no
+  // matter what link it followed in, since the destination was never
+  // recorded anywhere.
   if (needsName && location.pathname !== '/profile') {
-    return <Navigate to="/profile" replace />
+    return <Navigate to="/profile" state={{ from: location }} replace />
   }
 
   // Guarded on !needsName too: without it, a brand-new account (which has
@@ -32,7 +40,7 @@ export default function ProtectedRoute({ children }) {
   // history.replaceState() rate limit and blanking the page. Name must be
   // resolved first; onboarding is only offered once it is.
   if (needsOnboarding && !needsName && location.pathname !== '/onboarding') {
-    return <Navigate to="/onboarding" replace />
+    return <Navigate to="/onboarding" state={{ from: location }} replace />
   }
 
   return children

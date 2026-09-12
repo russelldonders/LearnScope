@@ -45,8 +45,8 @@ export async function listEmployerMembers(employerId) {
 // invite email, lands 'active' immediately). Response is
 // { ok, userId, alreadyExisted } -- alreadyExisted distinguishes "invited a
 // new account" from "added an existing user, pending their acceptance".
-export async function addEmployerMember(employerId, email, role) {
-  return callAdminApi('addEmployerMember', { employerId, email, role })
+export async function addEmployerMember(employerId, email, role, fieldValues) {
+  return callAdminApi('addEmployerMember', { employerId, email, role, fieldValues })
 }
 
 export async function removeEmployerMember(memberRowId) {
@@ -85,6 +85,33 @@ export async function listEmployerCatalogueCourses(employerId) {
   const { data, error } = await supabase.rpc('list_employer_shared_courses', { p_employer: employerId })
   if (error) throw error
   return data ?? []
+}
+
+// Scopes a role profile's skill picker to this employer's own offered-
+// skills roster (organisation_offered_skills, 0076) -- mirrors
+// listEmployerCatalogueCourses' own scoping for training above, rather than
+// the platform's entire global skill catalogue (listLibrarySkills), which
+// is what an employer admin was picking role-profile requirements from
+// before this. Same {id, name, category, description, isComposite,
+// componentCount} shape listLibrarySkills already returns, so it's a
+// drop-in replacement everywhere availableSkills is consumed.
+export async function listEmployerCatalogueSkills(providerOrganisationId) {
+  const { data, error } = await supabase
+    .from('organisation_offered_skills')
+    .select('skill_library:skill_library_id(id, name, category, description, skill_composite_definitions(status, skill_composite_components(id)))')
+    .eq('organisation_id', providerOrganisationId)
+  if (error) throw error
+  return (data ?? [])
+    .filter((r) => r.skill_library)
+    .map((r) => {
+      const { skill_composite_definitions: definitions, ...skill } = r.skill_library
+      const publishedComposite = definitions?.find((d) => d.status === 'published')
+      return {
+        ...skill,
+        isComposite: Boolean(publishedComposite),
+        componentCount: publishedComposite?.skill_composite_components?.length ?? 0,
+      }
+    })
 }
 
 // assign_course_to_employer_members (20260902180000) is security definer:
@@ -297,4 +324,127 @@ export async function listEmployerSkillSuggestions(employerId) {
     .order('created_at', { ascending: false })
   if (error) throw error
   return data ?? []
+}
+
+// Member roster fields (20260911130000): a single table serves both tiers --
+// employer_id null rows are platform-admin-owned "base" fields visible to
+// every employer, employer_id-scoped rows are that employer's own additional
+// fields. Deliberately separate from `profiles` -- these values describe the
+// employer's own record of the person, not the learner's own profile, which
+// stays untouched. Plain table calls throughout: RLS (20260911130000) already
+// fully expresses who can read/write which rows, no RPC needed.
+
+// Platform admin's own view -- base fields only, for AdminEmployers.jsx's
+// "Member field settings" panel.
+export async function listGlobalFieldDefinitions() {
+  const { data, error } = await supabase
+    .from('employer_field_definitions')
+    .select('*')
+    .is('employer_id', null)
+    .order('sort_order')
+  if (error) throw error
+  return data ?? []
+}
+
+// An employer admin's view -- base fields plus this employer's own, in
+// display order, for both EmployerMemberFieldsSection.jsx (managing their
+// own additional fields) and EmployerLearnersPanel.jsx (filling in values).
+// Two parameterized queries merged client-side, rather than interpolating
+// employerId into a single .or() filter string -- RLS is what actually
+// enforces access here regardless, but there's no reason to build a filter
+// out of unparameterized string concatenation when a clean alternative
+// exists.
+export async function listFieldDefinitionsForEmployer(employerId) {
+  const [globalResult, employerResult] = await Promise.all([
+    supabase.from('employer_field_definitions').select('*').is('employer_id', null),
+    supabase.from('employer_field_definitions').select('*').eq('employer_id', employerId),
+  ])
+  if (globalResult.error) throw globalResult.error
+  if (employerResult.error) throw employerResult.error
+  return [...(globalResult.data ?? []), ...(employerResult.data ?? [])].sort((a, b) => a.sort_order - b.sort_order)
+}
+
+// employerId omitted (null) creates a platform-admin-owned base field --
+// RLS (20260911130000) only allows that combination for an actual platform
+// admin, and only allows a non-null employerId for that employer's own admin.
+export async function createFieldDefinition({ employerId = null, key, label, fieldType, options = null, required = false, sortOrder = 0, createdBy }) {
+  const { data, error } = await supabase
+    .from('employer_field_definitions')
+    .insert({
+      employer_id: employerId,
+      key,
+      label,
+      field_type: fieldType,
+      options,
+      required,
+      sort_order: sortOrder,
+      created_by: createdBy,
+    })
+    .select('*')
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function updateFieldDefinition(id, { label, fieldType, options, required, sortOrder }) {
+  const { data, error } = await supabase
+    .from('employer_field_definitions')
+    .update({
+      label,
+      field_type: fieldType,
+      options,
+      required,
+      sort_order: sortOrder,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select('*')
+    .single()
+  if (error) throw error
+  return data
+}
+
+// Cascades to remove any employer_member_field_values already recorded
+// against this field -- there's no learner-owned history to preserve here
+// (this is the employer's own roster metadata, not skill/achievement
+// history), so a straight delete is the right shape, not a soft-archive.
+export async function deleteFieldDefinition(id) {
+  const { error } = await supabase.from('employer_field_definitions').delete().eq('id', id)
+  if (error) throw error
+}
+
+// Bulk reorder after an up/down move -- one update per changed row; small
+// lists (base fields, or one employer's own additions) so no batch RPC
+// needed.
+export async function reorderFieldDefinitions(updates) {
+  await Promise.all(
+    updates.map(({ id, sortOrder }) =>
+      supabase.from('employer_field_definitions').update({ sort_order: sortOrder }).eq('id', id)
+    )
+  )
+}
+
+// Every recorded value for this employer's roster, across all members and
+// fields -- EmployerLearnersPanel.jsx cross-references by employer_member_id
+// itself (already has the roster loaded via listEmployerMembers).
+export async function listEmployerMemberFieldValues(employerId) {
+  const { data, error } = await supabase
+    .from('employer_member_field_values')
+    .select('id, employer_member_id, field_definition_id, value, updated_at, employer_members!inner(employer_id)')
+    .eq('employer_members.employer_id', employerId)
+  if (error) throw error
+  return (data ?? []).map(({ employer_members: _employerMembers, ...row }) => row)
+}
+
+// Upserts one field's value for one member -- called once per changed field
+// when an admin saves the "edit member details" form, not the whole form at
+// once, so a partial failure doesn't silently drop unrelated edits.
+export async function upsertEmployerMemberFieldValue(employerMemberId, fieldDefinitionId, value, updatedBy) {
+  const { error } = await supabase
+    .from('employer_member_field_values')
+    .upsert(
+      { employer_member_id: employerMemberId, field_definition_id: fieldDefinitionId, value, updated_by: updatedBy, updated_at: new Date().toISOString() },
+      { onConflict: 'employer_member_id,field_definition_id' }
+    )
+  if (error) throw error
 }

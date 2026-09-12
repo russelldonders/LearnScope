@@ -10,6 +10,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import PlatformAdminRoute from './components/PlatformAdminRoute'
 import ProviderAdminRoute from './components/ProviderAdminRoute'
 import EmployerAdminRoute from './components/EmployerAdminRoute'
+import EmployerMemberRoute from './components/EmployerMemberRoute'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
@@ -56,6 +57,7 @@ import AdminOnboarding from './pages/admin/AdminOnboarding'
 import AdminNotifications from './pages/admin/AdminNotifications'
 import ProviderConsole from './pages/provider/ProviderConsole'
 import EmployerConsole from './pages/employer/EmployerConsole'
+import EmployerHome from './pages/employer/EmployerHome'
 import EmployerRoleProfileDetail from './pages/employer/EmployerRoleProfileDetail'
 import ProviderCourseEditor from './pages/provider/ProviderCourseEditor'
 import ProviderCatalogueDetail from './pages/provider/ProviderCatalogueDetail'
@@ -337,6 +339,14 @@ function App() {
               <EmployerAdminRoute>
                 <EmployerConsole />
               </EmployerAdminRoute>
+            }
+          />
+          <Route
+            path="/employer/home"
+            element={
+              <EmployerMemberRoute>
+                <EmployerHome />
+              </EmployerMemberRoute>
             }
           />
           <Route
