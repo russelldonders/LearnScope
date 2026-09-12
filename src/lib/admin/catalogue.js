@@ -330,6 +330,11 @@ export async function approveCatalogueCourse(id) {
   if (error) throw error
 }
 
+export async function approveGlobalCataloguePublication(id) {
+  const { error } = await supabase.rpc('approve_global_catalogue_publication', { p_course_id: id })
+  if (error) throw error
+}
+
 export async function submitCatalogueCourseForApproval(id, catalogueIds) {
   const { error } = await supabase.rpc('submit_course_for_publication', {
     p_course_id: id,
@@ -352,6 +357,14 @@ export async function createDraftCourseVersion(id) {
 // submitted to.
 export async function rejectCatalogueCourse(id, reason) {
   const { error } = await supabase.rpc('reject_course_submission', { p_course_id: id, p_reason: reason || null })
+  if (error) throw error
+}
+
+export async function rejectGlobalCataloguePublication(id, reason) {
+  const { error } = await supabase.rpc('reject_global_catalogue_publication', {
+    p_course_id: id,
+    p_reason: reason || null,
+  })
   if (error) throw error
 }
 

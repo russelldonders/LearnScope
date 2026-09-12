@@ -25,7 +25,10 @@ import {
   listCurrentVersionCatalogues,
 } from '../../lib/admin/catalogue'
 import { listPublicationCatalogueOptions } from '../../lib/catalogues'
-import { assignProviderCourseToCatalogue } from '../../lib/admin/providerCatalogues'
+import {
+  assignProviderCourseToCatalogue,
+  requestProviderGlobalCataloguePublication,
+} from '../../lib/admin/providerCatalogues'
 import {
   listCourseCohorts,
   createCourseCohort,
@@ -233,10 +236,10 @@ function SubmitToGlobalCatalogueDialog({ organisationId, submitting, onClose, on
 // Standalone catalogue-push, independent of publishing (PublishCourseDialog
 // above) -- lets an already-published version be added to a catalogue at
 // any later point, not just at the moment it was first published. Mirrors
-// ProviderCatalogueDetail's own "Add course" flow (same
-// assignProviderCourseToCatalogue call), just reachable from the course's
-// own page instead of requiring a trip through a specific catalogue.
-function PushToCatalogueDialog({ organisationId, courseId, alreadyPublishedIds, onClose, onDone }) {
+// ProviderCatalogueDetail's own "Add course" flow for provider-owned
+// catalogues, with the platform-moderated Global destination presented in
+// the same picker so providers choose every destination in one place.
+function PushToCatalogueDialog({ organisationId, courseId, alreadySelectedIds, onClose, onDone }) {
   const [catalogues, setCatalogues] = useState([])
   const [selectedIds, setSelectedIds] = useState([])
   const [loading, setLoading] = useState(true)
@@ -245,16 +248,10 @@ function PushToCatalogueDialog({ organisationId, courseId, alreadyPublishedIds, 
 
   useEffect(() => {
     listPublicationCatalogueOptions(organisationId)
-      .then((options) =>
-        // Global excluded -- assign_course_to_catalogue requires already
-        // being an approver of the target catalogue, which no ordinary
-        // provider is for Global. Submitting there is the separate
-        // "Submit to Global catalogue" action instead.
-        setCatalogues(options.filter((option) => !option.is_global && !alreadyPublishedIds.includes(option.id)))
-      )
+      .then((options) => setCatalogues(options.filter((option) => !alreadySelectedIds.includes(option.id))))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
-    // alreadyPublishedIds is derived fresh from the loaded course each
+    // alreadySelectedIds is derived fresh from the loaded course each
     // render -- re-running this on every identity change would refetch for
     // no reason, and the dialog is remounted (key-less) whenever it's
     // reopened anyway.
@@ -271,8 +268,9 @@ function PushToCatalogueDialog({ organisationId, courseId, alreadyPublishedIds, 
     setSubmitting(true)
     setError(null)
     try {
-      for (const catalogueId of selectedIds) {
-        await assignProviderCourseToCatalogue(catalogueId, courseId)
+      for (const catalogue of catalogues.filter((option) => selectedIds.includes(option.id))) {
+        if (catalogue.is_global) await requestProviderGlobalCataloguePublication(courseId)
+        else await assignProviderCourseToCatalogue(catalogue.id, courseId)
       }
       onDone()
     } catch (err) {
@@ -292,9 +290,8 @@ function PushToCatalogueDialog({ organisationId, courseId, alreadyPublishedIds, 
     >
       <h2 id="push-catalogue-title" className="font-display text-lg text-ink">Push to catalogue</h2>
       <p id="push-catalogue-description" className="text-sm text-secondary mt-1 mb-5">
-        Choose one or more of your own catalogues to add this published version to. It becomes visible there as
-        soon as it's added. To submit it platform-wide instead, use "Submit to Global catalogue" on the course
-        itself.
+        Choose where this published version should appear. Your own catalogues update immediately; the Global
+        catalogue makes it available platform-wide after a platform admin approves it.
       </p>
 
       {error && <p role="alert" className="text-sm text-red-700 mb-3">{error}</p>}
@@ -313,10 +310,20 @@ function PushToCatalogueDialog({ organisationId, courseId, alreadyPublishedIds, 
                 className="mt-0.5 h-4 w-4 accent-moss"
               />
               <span className="min-w-0">
-                <span className="block text-sm font-medium text-ink">{catalogue.name}</span>
+                <span className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-medium text-ink break-words">{catalogue.name}</span>
+                  {catalogue.is_global && (
+                    <span className="rounded-full border border-gold/40 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-gold">
+                      Approval required
+                    </span>
+                  )}
+                </span>
                 {catalogue.description && (
-                  <span className="block text-xs text-secondary mt-0.5">{catalogue.description}</span>
+                  <span className="block text-xs text-secondary mt-0.5 break-words">{catalogue.description}</span>
                 )}
+                <span className="block text-xs text-secondary mt-0.5">
+                  {catalogue.is_global ? 'Platform-wide catalogue' : 'Your catalogue · Available immediately'}
+                </span>
               </span>
             </label>
           ))}
@@ -333,7 +340,7 @@ function PushToCatalogueDialog({ organisationId, courseId, alreadyPublishedIds, 
           disabled={submitting || loading || selectedIds.length === 0}
           className="rounded-md bg-moss px-3 py-1.5 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-50"
         >
-          {submitting ? 'Adding…' : 'Add to catalogue'}
+          {submitting ? 'Pushing…' : 'Push to selected'}
         </button>
       </div>
     </AccessibleDialog>
@@ -482,7 +489,10 @@ export default function ProviderCourseEditor() {
   const publishedCatalogues = (course?.course_catalogue_publications ?? [])
     .filter((publication) => publication.published_at && publication.catalogues)
     .map((publication) => publication.catalogues)
-  const publishedCatalogueIds = publishedCatalogues.map((catalogue) => catalogue.id)
+  const selectedCatalogueIds = (course?.course_catalogue_publications ?? []).map((publication) => publication.catalogue_id)
+  const globalCataloguePending = (course?.course_catalogue_publications ?? []).some(
+    (publication) => publication.catalogues?.is_global && !publication.published_at
+  )
 
   async function handleCreateDraftVersion() {
     setSaveError(null)
@@ -596,7 +606,7 @@ export default function ProviderCourseEditor() {
               <PushToCatalogueDialog
                 organisationId={course.organisation_id}
                 courseId={course.id}
-                alreadyPublishedIds={publishedCatalogueIds}
+                alreadySelectedIds={selectedCatalogueIds}
                 onClose={() => setShowCatalogueDialog(false)}
                 onDone={() => {
                   setShowCatalogueDialog(false)
@@ -634,6 +644,7 @@ export default function ProviderCourseEditor() {
                   onCreateDraftVersion={handleCreateDraftVersion}
                   creatingDraft={saving}
                   publishedCatalogues={publishedCatalogues}
+                  globalCataloguePending={globalCataloguePending}
                   onPushToCatalogue={() => setShowCatalogueDialog(true)}
                 />
                 <CourseTrainers courseCatalogueId={course.id} organisationId={course.organisation_id} canManage={Boolean(myRole)} />
@@ -652,7 +663,7 @@ export default function ProviderCourseEditor() {
   )
 }
 
-function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCreateDraftVersion, creatingDraft, publishedCatalogues, onPushToCatalogue }) {
+function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCreateDraftVersion, creatingDraft, publishedCatalogues, globalCataloguePending, onPushToCatalogue }) {
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
       <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
@@ -673,6 +684,11 @@ function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCre
               ? "Not in any catalogue yet -- it's only visible within your organisation."
               : `Published to: ${publishedCatalogues.map((c) => c.name).join(', ')}.`}
           </p>
+          {globalCataloguePending && (
+            <p role="status" className="text-sm text-gold mb-2">
+              Global catalogue submission pending platform approval.
+            </p>
+          )}
           <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"

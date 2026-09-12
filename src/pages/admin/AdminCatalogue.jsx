@@ -3,7 +3,9 @@ import { Link, useSearchParams } from 'react-router-dom'
 import AdminLayout from './AdminLayout'
 import {
   listAllCatalogueCourses,
+  approveGlobalCataloguePublication,
   rejectCatalogueCourse,
+  rejectGlobalCataloguePublication,
   deactivateCatalogueCourse,
 } from '../../lib/admin/catalogue'
 import { formatCoursePrice } from '../../lib/courseCatalogue'
@@ -19,6 +21,12 @@ import ConfirmDialog from '../../components/ConfirmDialog'
 // below), since an upcoming Overview page will deep-link straight to e.g.
 // /admin/catalogue?status=pending_approval.
 const STATUS_FILTERS = ['all', 'draft', 'pending_approval', 'approved', 'rejected', 'inactive']
+
+function hasPendingGlobalPublication(course) {
+  return (course.course_catalogue_publications ?? []).some(
+    (publication) => publication.catalogues?.is_global && !publication.published_at
+  )
+}
 
 const CATALOGUE_SORT_ACCESSORS = {
   course_code: (c) => c.course_code?.toLowerCase() ?? '',
@@ -85,7 +93,11 @@ const CATALOGUE_COLUMNS = [
     sortable: true,
     thClassName: 'whitespace-nowrap',
     cellClassName: 'px-4 py-3 whitespace-nowrap',
-    renderCell: (c) => <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{COURSE_STATUS_LABELS[c.status] ?? c.status}</span>,
+    renderCell: (c) => (
+      <span className={`font-mono text-[10px] uppercase tracking-wide ${hasPendingGlobalPublication(c) ? 'text-gold' : 'text-secondary'}`}>
+        {hasPendingGlobalPublication(c) ? 'Global review pending' : (COURSE_STATUS_LABELS[c.status] ?? c.status)}
+      </span>
+    ),
   },
   {
     key: 'rejection_reason',
@@ -183,7 +195,11 @@ export default function AdminCatalogue() {
   const filtered = useMemo(
     () =>
       courses.filter((c) => {
-        if (statusFilter !== 'all' && c.status !== statusFilter) return false
+        if (
+          statusFilter !== 'all' &&
+          c.status !== statusFilter &&
+          !(statusFilter === 'pending_approval' && hasPendingGlobalPublication(c))
+        ) return false
         if (orgFilter && c.organisation_id !== orgFilter) return false
         if (q && !(c.name?.toLowerCase().includes(q) || c.course_code?.toLowerCase().includes(q))) return false
         return true
@@ -220,10 +236,13 @@ export default function AdminCatalogue() {
   // Same status eligibility as each row's own Reject/Deactivate button --
   // bulk moderation shouldn't act on anything a single-row action wouldn't.
   const selectedToReject = useMemo(
-    () => selectedCourses.filter((c) => c.status === 'pending_approval' || c.status === 'draft'),
+    () => selectedCourses.filter((c) => c.status === 'pending_approval' || c.status === 'draft' || hasPendingGlobalPublication(c)),
     [selectedCourses]
   )
-  const selectedToDeactivate = useMemo(() => selectedCourses.filter((c) => c.status === 'approved'), [selectedCourses])
+  const selectedToDeactivate = useMemo(
+    () => selectedCourses.filter((c) => c.status === 'approved' && !hasPendingGlobalPublication(c)),
+    [selectedCourses]
+  )
   const pageIds = pageItems.map((c) => c.id)
   const selectedOnPage = pageIds.filter((id) => selection.selected.has(id)).length
   const [bulkRejectTargets, setBulkRejectTargets] = useState(null)
@@ -263,7 +282,13 @@ export default function AdminCatalogue() {
 
   async function handleBulkReject(reason) {
     const targets = bulkRejectTargets
-    await runBulkAction(targets, (c) => rejectCatalogueCourse(c.id, reason), 'rejected')
+    await runBulkAction(
+      targets,
+      (c) => hasPendingGlobalPublication(c)
+        ? rejectGlobalCataloguePublication(c.id, reason)
+        : rejectCatalogueCourse(c.id, reason),
+      'rejected'
+    )
     setBulkRejectTargets(null)
   }
 
@@ -276,12 +301,29 @@ export default function AdminCatalogue() {
     setActioningId(course.id)
     setError(null)
     try {
-      await rejectCatalogueCourse(course.id, rejectionReason.trim())
+      if (hasPendingGlobalPublication(course)) {
+        await rejectGlobalCataloguePublication(course.id, rejectionReason.trim())
+      } else {
+        await rejectCatalogueCourse(course.id, rejectionReason.trim())
+      }
       setRejectingId(null)
       setRejectionReason('')
       await load()
     } catch (err) {
       setError(`Couldn't reject this course: ${err.message}`)
+    } finally {
+      setActioningId(null)
+    }
+  }
+
+  async function handleApproveGlobal(course) {
+    setActioningId(course.id)
+    setError(null)
+    try {
+      await approveGlobalCataloguePublication(course.id)
+      await load()
+    } catch (err) {
+      setError(`Couldn't approve this Global catalogue request: ${err.message}`)
     } finally {
       setActioningId(null)
     }
@@ -446,6 +488,7 @@ export default function AdminCatalogue() {
                         setRejectionReason('')
                       }}
                       onReject={() => handleReject(course)}
+                      onApproveGlobal={() => handleApproveGlobal(course)}
                       onDeactivate={() => handleDeactivate(course)}
                     />
                   ))}
@@ -547,6 +590,7 @@ function CatalogueRow({
   onStartReject,
   onCancelReject,
   onReject,
+  onApproveGlobal,
   onDeactivate,
 }) {
   return (
@@ -569,7 +613,17 @@ function CatalogueRow({
         ))}
         <td className="px-4 py-3">
           <div className="flex items-center gap-2 justify-end whitespace-nowrap">
-            {(course.status === 'pending_approval' || course.status === 'draft') && (
+            {hasPendingGlobalPublication(course) && (
+              <button
+                type="button"
+                disabled={actioning}
+                onClick={onApproveGlobal}
+                className="rounded-md bg-moss text-paper py-1 px-3 text-xs font-medium hover:opacity-90 disabled:opacity-50"
+              >
+                Approve Global
+              </button>
+            )}
+            {(course.status === 'pending_approval' || course.status === 'draft' || hasPendingGlobalPublication(course)) && (
                 <button
                   type="button"
                   disabled={actioning}
@@ -579,7 +633,7 @@ function CatalogueRow({
                   Reject
                 </button>
             )}
-            {course.status === 'approved' && (
+            {course.status === 'approved' && !hasPendingGlobalPublication(course) && (
               <button
                 type="button"
                 disabled={actioning}

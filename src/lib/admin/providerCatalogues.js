@@ -182,6 +182,17 @@ export async function assignProviderCourseToCatalogue(catalogueId, courseId) {
   if (error) throw error
 }
 
+// Global is moderated by platform admins, so an ordinary provider cannot use
+// assign_course_to_catalogue for it. This dedicated request keeps the live
+// course and its existing provider-catalogue publications untouched while
+// the additional Global destination waits for approval.
+export async function requestProviderGlobalCataloguePublication(courseId) {
+  const { error } = await supabase.rpc('request_global_catalogue_publication', {
+    p_course_id: courseId,
+  })
+  if (error) throw error
+}
+
 export async function listProviderCatalogueResources(catalogueId) {
   const { data, error } = await supabase
     .from('catalogue_resources')
