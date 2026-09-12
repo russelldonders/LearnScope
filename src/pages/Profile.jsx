@@ -7,7 +7,6 @@ import { useLanguage } from '../context/LanguageContext'
 import { INTERFACE_LANGUAGES } from '../lib/i18n/translations'
 import AppHeader from '../components/AppHeader'
 import ProfilePhoto from '../components/ProfilePhoto'
-import AddPersonalOwnershipModal from '../components/AddPersonalOwnershipModal'
 import { COUNTRIES } from '../lib/countries'
 import { LANGUAGES } from '../lib/languages'
 import { getMyAccountOwnership } from '../lib/accountOwnership'
@@ -44,7 +43,6 @@ export default function Profile() {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
   const [accountOwnership, setAccountOwnership] = useState(null)
-  const [addPersonalOwnershipOpen, setAddPersonalOwnershipOpen] = useState(false)
 
   useEffect(() => {
     loadProfile()
@@ -180,22 +178,22 @@ export default function Profile() {
                 </p>
                 {accountOwnership.personalOwnershipClaimedAt ? (
                   <p className="text-sm text-moss">
-                    You added personal ownership on {formatAbsoluteDate(accountOwnership.personalOwnershipClaimedAt)}.
-                    You can sign in with your own email and password regardless of your employer relationship.
+                    You verified a personal login on {formatAbsoluteDate(accountOwnership.personalOwnershipClaimedAt)}.
+                    You can sign in there and choose what to carry over, regardless of your employer relationship.
                   </p>
                 ) : (
                   <>
                     <p className="text-sm text-secondary mb-4">
                       If you end your relationship with this employer, you may lose access to this account.
-                      Add personal ownership to keep control of your profile and data no matter what happens.
+                      Add personal ownership to verify a personal login and choose what carries over to it, so
+                      you keep access no matter what happens.
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => setAddPersonalOwnershipOpen(true)}
-                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+                    <Link
+                      to="/profile/connected-accounts?tab=accounts"
+                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper inline-block"
                     >
                       Add personal ownership
-                    </button>
+                    </Link>
                   </>
                 )}
               </div>
@@ -413,17 +411,6 @@ export default function Profile() {
               {deleteError && <p className="text-sm text-red-700 mt-3">{deleteError}</p>}
             </div>
           </div>
-        )}
-
-        {addPersonalOwnershipOpen && (
-          <AddPersonalOwnershipModal
-            onClose={() => setAddPersonalOwnershipOpen(false)}
-            onClaimed={() => {
-              setAddPersonalOwnershipOpen(false)
-              setSavedMessage('Personal ownership added. Check your new email address for a link to confirm it.')
-              getMyAccountOwnership().then(setAccountOwnership).catch(() => {})
-            }}
-          />
         )}
       </main>
     </div>

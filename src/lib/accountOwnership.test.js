@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const rpc = vi.fn()
 vi.mock('./supabaseClient', () => ({ supabase: { rpc } }))
 
-const { getMyAccountOwnership, claimPersonalAccountOwnership } = await import('./accountOwnership')
+const { getMyAccountOwnership } = await import('./accountOwnership')
 
 describe('accountOwnership service', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -51,14 +51,8 @@ describe('accountOwnership service', () => {
     expect(result.personalOwnershipClaimedAt).toBe('2026-09-01T00:00:00Z')
   })
 
-  it('calls the claim RPC with no arguments', async () => {
-    rpc.mockResolvedValue({ error: null })
-    await claimPersonalAccountOwnership()
-    expect(rpc).toHaveBeenCalledWith('claim_personal_account_ownership')
-  })
-
-  it('throws when the claim RPC errors', async () => {
-    rpc.mockResolvedValue({ error: { message: 'Not authorised' } })
-    await expect(claimPersonalAccountOwnership()).rejects.toEqual({ message: 'Not authorised' })
+  it('throws when the RPC errors', async () => {
+    rpc.mockResolvedValue({ data: null, error: { message: 'Not authorised' } })
+    await expect(getMyAccountOwnership()).rejects.toEqual({ message: 'Not authorised' })
   })
 })
