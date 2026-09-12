@@ -83,12 +83,12 @@ function SettingsIcon() {
 }
 
 // Tucks a block's own settings (heading level, alignment, callout style,
-// media size) behind a gear button instead of showing them directly on the
-// page -- with several stacked (e.g. an image's size *and* alignment),
-// having them all visible any time the block was merely selected made the
-// canvas feel like a form, not a page. Same outside-click/Escape-to-close
-// popover pattern as TableControls.jsx's ColumnCustomizer.
-function BlockSettingsMenu({ block, onChangeWithHistory }) {
+// and every media property/action) behind a gear button. Media blocks show
+// only their rendered image/video and caption on the canvas once a source
+// exists, keeping the editing surface faithful to the learner-facing page.
+// Same outside-click/Escape-to-close popover pattern as TableControls.jsx's
+// ColumnCustomizer.
+export function BlockSettingsMenu({ block, onChange, onChangeWithHistory, onUpload, uploading, libraryResources, onPickFromLibrary }) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef(null)
 
@@ -119,7 +119,7 @@ function BlockSettingsMenu({ block, onChangeWithHistory }) {
         <SettingsIcon />
       </button>
       {open && (
-        <div className="page-block-settings-popover">
+        <div className={`page-block-settings-popover ${isMedia ? 'page-block-settings-popover--media' : ''}`}>
           {block.type === 'heading' && (
             <OptionPicker label="Heading level" options={[1, 2, 3]} value={block.level}
               onChange={(level) => onChangeWithHistory({ level })} formatOption={(level) => `H${level}`} />
@@ -134,11 +134,50 @@ function BlockSettingsMenu({ block, onChangeWithHistory }) {
               onChange={(align) => onChangeWithHistory({ align })} formatOption={(align) => ALIGN_LABELS[align]} />
           )}
           {isMedia && block.url && (
-            <OptionPicker label={`${block.type === 'image' ? 'Image' : 'Video'} size`} options={MEDIA_SIZES} value={block.size}
-              onChange={(size) => onChangeWithHistory({ size })} formatOption={(size) => size[0].toUpperCase() + size.slice(1)} />
+            <>
+              <OptionPicker label={`${block.type === 'image' ? 'Image' : 'Video'} size`} options={MEDIA_SIZES} value={block.size}
+                onChange={(size) => onChangeWithHistory({ size })} formatOption={(size) => size[0].toUpperCase() + size.slice(1)} />
+              <MediaSettingsFields block={block} onChange={onChange} />
+              <MediaSourceControls
+                block={block}
+                onChange={onChange}
+                onUpload={onUpload}
+                uploading={uploading}
+                libraryResources={libraryResources}
+                onPickFromLibrary={onPickFromLibrary}
+                compact
+              />
+            </>
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function isManagedMedia(block) {
+  return Boolean(block.storagePath || block.url?.startsWith('/course-content/'))
+}
+
+function MediaSettingsFields({ block, onChange }) {
+  return (
+    <div className="page-media-settings-fields">
+      <label>
+        <span>{block.type === 'image' ? 'Alternative text' : 'Accessible title'}</span>
+        <input
+          value={block.alt}
+          onChange={(event) => onChange({ alt: event.target.value })}
+          placeholder={block.type === 'image' ? 'Describe the image' : 'Describe the video'}
+        />
+      </label>
+      <label>
+        <span>Caption (optional)</span>
+        <input
+          value={block.caption}
+          onChange={(event) => onChange({ caption: event.target.value })}
+          placeholder="Add context for learners"
+        />
+      </label>
     </div>
   )
 }
@@ -152,13 +191,13 @@ function BlockSettingsMenu({ block, onChangeWithHistory }) {
 // copying the file -- it's never added to this editor's own session-
 // upload tracking, so removing or replacing this block later never
 // deletes a file the library resource itself still needs.
-function LibraryVideoPicker({ resources, onPick }) {
+function LibraryVideoPicker({ resources, onPick, compact = false }) {
   const [selectedId, setSelectedId] = useState('')
   if (resources.length === 0) return null
   return (
     <>
-      <div className="page-media-separator"><span>or choose from your library</span></div>
-      <div className="page-media-upload">
+      <div className={compact ? 'page-media-settings-separator' : 'page-media-separator'}><span>or choose from your library</span></div>
+      <div className={compact ? 'page-media-settings-source' : 'page-media-upload'}>
         <select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
           <option value="">Choose a video or screen recording…</option>
           {resources.map((resource) => (
@@ -181,42 +220,68 @@ function LibraryVideoPicker({ resources, onPick }) {
   )
 }
 
-function MediaEditor({ block, onChange, onUpload, uploading, libraryResources, onPickFromLibrary }) {
+function MediaSourceControls({ block, onChange, onUpload, uploading, libraryResources, onPickFromLibrary, compact = false }) {
   const inputRef = useRef(null)
+  const managed = isManagedMedia(block)
   return (
-    <div className="page-media-editor">
-      {block.url ? <PageMedia block={block} /> : (
-        <div className="page-media-placeholder">
-          <strong>{block.type === 'image' ? 'Add an image' : 'Add a video'}</strong>
-          <span>Upload a file, paste a YouTube/Vimeo link, or use any web address below.</span>
+    <div>
+      {compact && (
+        <div>
+          <p className="mb-1 text-[10px] uppercase tracking-wide text-secondary">Source</p>
+          {managed && <p className="mb-2 text-xs text-secondary">Uploaded file · path managed by LearnScope</p>}
         </div>
       )}
-      <div className="page-media-upload">
+      <div className={compact ? 'page-media-settings-source' : 'page-media-upload'}>
         <input ref={inputRef} className="sr-only" type="file" accept={block.type === 'image' ? 'image/*' : 'video/*'}
           onChange={(event) => { const file = event.target.files?.[0]; if (file) onUpload(file); event.target.value = '' }} />
         <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading}>
-          {uploading ? 'Uploading…' : `Upload ${block.type}`}
+          {uploading ? 'Uploading…' : `${block.url ? 'Replace' : 'Upload'} ${block.type}`}
         </button>
-        <span>Up to 50 MB</span>
+        {!compact && <span>Up to 50 MB</span>}
       </div>
       {block.type === 'video' && libraryResources?.length > 0 && (
-        <LibraryVideoPicker resources={libraryResources} onPick={onPickFromLibrary} />
+        <LibraryVideoPicker resources={libraryResources} onPick={onPickFromLibrary} compact={compact} />
       )}
-      <div className="page-media-separator"><span>or use a URL</span></div>
-      <div className="page-media-fields">
+      {!managed && (
+        <>
+          {!compact && <div className="page-media-separator"><span>or use a URL</span></div>}
         <label>
-          <span>{block.type === 'image' ? 'Image URL' : 'Video URL'}</span>
-          <input type="url" value={block.url} onChange={(event) => onChange({ url: event.target.value })} placeholder="https://…" />
+          {compact && (
+            <span className="mb-1 mt-2 block text-[10px] uppercase tracking-wide text-secondary">
+              {block.type === 'image' ? 'Image URL' : 'Video URL'}
+            </span>
+          )}
+          <input
+            type="url"
+            aria-label={block.type === 'image' ? 'Image URL' : 'Video URL'}
+            value={block.url}
+            onChange={(event) => onChange({ url: event.target.value, storagePath: '' })}
+            placeholder="https://…"
+            className={compact ? 'w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-xs text-ink' : 'mt-2 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink'}
+          />
         </label>
-        <label>
-          <span>{block.type === 'image' ? 'Alternative text' : 'Accessible title'}</span>
-          <input value={block.alt} onChange={(event) => onChange({ alt: event.target.value })} placeholder={block.type === 'image' ? 'Describe the image' : 'Describe the video'} />
-        </label>
-        <label className="sm:col-span-2">
-          <span>Caption (optional)</span>
-          <input value={block.caption} onChange={(event) => onChange({ caption: event.target.value })} placeholder="Add context for learners" />
-        </label>
+        </>
+      )}
+    </div>
+  )
+}
+
+export function MediaEditor({ block, onChange, onUpload, uploading, libraryResources, onPickFromLibrary }) {
+  if (block.url) return <PageMedia block={block} />
+  return (
+    <div className="page-media-editor">
+      <div className="page-media-placeholder">
+        <strong>{block.type === 'image' ? 'Add an image' : 'Add a video'}</strong>
+        <span>Upload a file, paste a YouTube/Vimeo link, or use any web address below.</span>
       </div>
+      <MediaSourceControls
+        block={block}
+        onChange={onChange}
+        onUpload={onUpload}
+        uploading={uploading}
+        libraryResources={libraryResources}
+        onPickFromLibrary={onPickFromLibrary}
+      />
     </div>
   )
 }
@@ -361,8 +426,9 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
   }
 
   // Plain per-keystroke update -- no history entry (see the note above the
-  // past/future state). Used by Editable's live typing and by MediaEditor's
-  // URL/alt/caption text fields, which fire on every keystroke the same way.
+  // past/future state). Used by Editable's live typing and by the media
+  // settings panel's URL/alternative-text/caption fields, which fire on
+  // every keystroke the same way.
   function updateBlock(id, changes) {
     setPageDocument((current) => ({ ...current, blocks: current.blocks.map((block) => block.id === id ? { ...block, ...changes } : block) }))
   }
@@ -623,7 +689,19 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
                         <button type="button" onClick={() => moveBlock(block.id, -1)} disabled={index === 0} aria-label="Move block up">Up</button>
                         <button type="button" onClick={() => moveBlock(block.id, 1)} disabled={index === pageDocument.blocks.length - 1} aria-label="Move block down">Down</button>
                         {!isMedia && <button type="button" onClick={() => duplicateBlock(block)} aria-label="Duplicate block">Duplicate</button>}
-                        <BlockSettingsMenu block={block} onChangeWithHistory={(changes) => updateBlockWithHistory(block.id, changes)} />
+                        <BlockSettingsMenu
+                          block={block}
+                          onChange={(changes) => updateBlock(block.id, changes)}
+                          onChangeWithHistory={(changes) => updateBlockWithHistory(block.id, changes)}
+                          onUpload={(file) => uploadMedia(block, file)}
+                          uploading={uploadingBlockId === block.id}
+                          libraryResources={libraryVideoResources}
+                          onPickFromLibrary={(resource) => updateBlockWithHistory(block.id, {
+                            url: contentFileUrl(resource),
+                            storagePath: resource.storage_path,
+                            alt: block.alt || resource.title,
+                          })}
+                        />
                         <button type="button" onClick={() => void removeBlock(block)} className="text-red-700">Remove</button>
                       </div>
 
