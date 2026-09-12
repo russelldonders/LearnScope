@@ -25,7 +25,11 @@ function toAssignment(assignment) {
   }
 }
 
-export default function LearnerRoleAlignmentContainer() {
+// employerId optionally scopes this down to one employer's own assignments
+// (EmployerHome.jsx, reached via that employer's own URL) instead of every
+// employer the learner has ever connected a role to (Experience.jsx's own
+// usage, which omits it and keeps showing all of them, unchanged).
+export default function LearnerRoleAlignmentContainer({ employerId } = {}) {
   const { user } = useAuth()
   const [currentRoles, setCurrentRoles] = useState([])
   const [assignments, setAssignments] = useState([])
@@ -39,7 +43,7 @@ export default function LearnerRoleAlignmentContainer() {
     setLoading(true)
     setError(null)
     try {
-      const [roles, roleAssignments, skillsResult, coursesResult] = await Promise.all([
+      const [roles, allRoleAssignments, skillsResult, coursesResult] = await Promise.all([
         listCurrentRoleExperiences(user.id),
         listMyEmployerRoleAssignments(user.id),
         supabase.from('skills').select('id, name, level, library_skill_id').eq('user_id', user.id),
@@ -47,6 +51,9 @@ export default function LearnerRoleAlignmentContainer() {
       ])
       if (skillsResult.error) throw skillsResult.error
       if (coursesResult.error) throw coursesResult.error
+      const roleAssignments = employerId
+        ? allRoleAssignments.filter((assignment) => assignment.employer?.id === employerId)
+        : allRoleAssignments
       const compositeSkillIds = [...new Set(roleAssignments.flatMap((assignment) =>
         assignment.roleProfile.skillRequirements
           .filter((requirement) => requirement.isComposite)
@@ -63,7 +70,7 @@ export default function LearnerRoleAlignmentContainer() {
     } finally {
       setLoading(false)
     }
-  }, [user.id])
+  }, [user.id, employerId])
 
   useEffect(() => { load() }, [load])
 

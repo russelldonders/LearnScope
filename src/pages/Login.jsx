@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext'
 import { getPendingInviteCode, clearPendingInviteCode } from '../lib/connections'
 import { getPendingEnrolCourseId, clearPendingEnrolCourseId, resumePendingEnrolment } from '../lib/courseCatalogue'
 import { getOrganisationBranding, orgBrandStyle } from '../lib/orgBranding'
+import { getEmployerLoginContext, getMyActiveEmployerMembership } from '../lib/employerRoleProfiles'
+import { supabase } from '../lib/supabaseClient'
 import GoogleSignInButton from '../components/GoogleSignInButton'
 import { useLanguage } from '../context/LanguageContext'
 
@@ -14,6 +16,11 @@ export default function Login() {
   const [searchParams] = useSearchParams()
   const orgSlug = searchParams.get('org')
   const [branding, setBranding] = useState(null)
+  // null until resolved; {id, name} if orgSlug belongs to an employer's own
+  // dedicated organisation, otherwise null -- see get_employer_login_context
+  // (20260912090000). A plain training-provider org's ?org=slug link
+  // resolves to null here and behaves exactly as before this feature.
+  const [employerContext, setEmployerContext] = useState(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
@@ -29,6 +36,7 @@ export default function Login() {
   useEffect(() => {
     if (!orgSlug) return
     getOrganisationBranding(orgSlug).then(setBranding).catch(() => {})
+    getEmployerLoginContext(orgSlug).then(setEmployerContext).catch(() => {})
   }, [orgSlug])
 
   if (loading) {
@@ -39,7 +47,13 @@ export default function Login() {
     )
   }
 
-  if (user) {
+  // Suppressed while handleSubmit's own post-signIn checks are still running
+  // (submitting stays true until it decides where to go) -- otherwise
+  // AuthContext's session updating mid-check (the auth-state-change listener
+  // can fire before an employer-membership rejection gets to sign back out)
+  // would race this in ahead of that decision, bouncing straight to
+  // /dashboard for an account handleSubmit is about to reject.
+  if (user && !submitting) {
     return <Navigate to="/dashboard" replace />
   }
 
@@ -47,12 +61,39 @@ export default function Login() {
     e.preventDefault()
     setError(null)
     setSubmitting(true)
-    const { data, error } = await signIn(email, password)
-    setSubmitting(false)
+    // Resolved fresh here rather than trusting the mount-time effect's
+    // employerContext state to have settled yet -- a learner submitting the
+    // form before that fetch resolves must still get the membership check
+    // below, not slip through because the state update hadn't landed.
+    const [{ data, error }, employer] = await Promise.all([
+      signIn(email, password),
+      orgSlug ? getEmployerLoginContext(orgSlug).catch(() => null) : Promise.resolve(null),
+    ])
     if (error) {
+      setSubmitting(false)
       setError(error.message)
       return
     }
+
+    // This link belongs to a specific employer -- only that employer's own
+    // members get to sign in through it (see get_employer_login_context's
+    // comment). A valid LearnScope account that isn't one is turned away
+    // right back out rather than landing signed-in on an unrelated area, the
+    // same way the credentials themselves would be rejected if wrong.
+    if (employer) {
+      const membership = await getMyActiveEmployerMembership(employer.id, data.user.id).catch(() => null)
+      if (!membership) {
+        await supabase.auth.signOut()
+        setSubmitting(false)
+        setError(`This account isn't linked to ${employer.name}. Ask your employer admin for an invite, or sign in without this link.`)
+        return
+      }
+      setSubmitting(false)
+      navigate(membership.role === 'admin' ? '/employer' : `/employer/home?org=${orgSlug}`)
+      return
+    }
+
+    setSubmitting(false)
     const pendingCode = getPendingInviteCode()
     if (pendingCode) {
       clearPendingInviteCode()
@@ -108,13 +149,28 @@ export default function Login() {
         </Link>
         <p className="text-secondary text-sm mb-6">{t('auth.login.tagline')}</p>
 
-        <GoogleSignInButton onClick={handleGoogleSignIn} disabled={googleSubmitting} />
+        {employerContext && (
+          <p className="text-xs font-medium text-secondary mb-4">
+            For {employerContext.name} team members only.
+          </p>
+        )}
 
-        <div className="flex items-center gap-3 my-5">
-          <span className="flex-1 h-px bg-hairline" />
-          <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">or</span>
-          <span className="flex-1 h-px bg-hairline" />
-        </div>
+        {/* Google sign-in is a full-page redirect with no session to check
+            membership against beforehand (see handleGoogleSignIn's own
+            comment), so there's no point in the flow to apply the
+            employer-membership gate below to it -- left out entirely here
+            rather than let it bypass that gate. */}
+        {!employerContext && (
+          <>
+            <GoogleSignInButton onClick={handleGoogleSignIn} disabled={googleSubmitting} />
+
+            <div className="flex items-center gap-3 my-5">
+              <span className="flex-1 h-px bg-hairline" />
+              <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">or</span>
+              <span className="flex-1 h-px bg-hairline" />
+            </div>
+          </>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -160,12 +216,18 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="text-sm text-secondary mt-6 text-center">
-          {t('auth.login.noAccount')}{' '}
-          <Link to={orgSlug ? `/signup?org=${orgSlug}` : '/signup'} className="text-[var(--org-primary,var(--color-moss))] font-medium">
-            {t('auth.login.signUp')}
-          </Link>
-        </p>
+        {/* Self-signup can't ever grant employer membership -- it's provisioned
+            by that employer's own admin -- so this offers no useful path for
+            an employer-gated link and is left out rather than send someone
+            into a dead end where they'd sign up but still be rejected here. */}
+        {!employerContext && (
+          <p className="text-sm text-secondary mt-6 text-center">
+            {t('auth.login.noAccount')}{' '}
+            <Link to={orgSlug ? `/signup?org=${orgSlug}` : '/signup'} className="text-[var(--org-primary,var(--color-moss))] font-medium">
+              {t('auth.login.signUp')}
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   )

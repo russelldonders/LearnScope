@@ -311,4 +311,36 @@ export async function getEmployerRoleProfileReadiness(employerId, profile, emplo
   return readiness
 }
 
+// Resolves an organisation slug (Login.jsx's ?org=:slug) to the employer it
+// belongs to, if any -- see get_employer_login_context's own comment
+// (20260912090000) for why this can't just be a table read. Returns null
+// for a slug with no employer attached (a plain training-provider org),
+// which Login.jsx treats as "not an employer-gated login" rather than an
+// error.
+export async function getEmployerLoginContext(slug) {
+  const { data, error } = await supabase.rpc('get_employer_login_context', { p_slug: slug })
+  if (error) throw error
+  return data ?? null
+}
+
+// A direct row read rather than going through AuthContext's own
+// employerMemberships -- that only refreshes on the auth-state-change
+// listener firing, which Login.jsx's own signIn() call can't reliably await
+// before deciding whether to let an employer-gated sign-in through. RLS
+// (is_employer_member) already scopes this to rows the caller can actually
+// see, so a member of a *different* employer querying this employerId just
+// gets no row back, same as a non-member -- filtering on status here only
+// excludes this account's own not-yet-active row for this employer.
+export async function getMyActiveEmployerMembership(employerId, userId) {
+  const { data, error } = await supabase
+    .from('employer_members')
+    .select('role')
+    .eq('employer_id', employerId)
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
 export { mapRoleProfile }

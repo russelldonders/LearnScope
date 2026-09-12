@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
@@ -21,6 +21,11 @@ export default function Profile() {
   const { preference: themePreference, setPreference: setThemePreference } = useTheme()
   const { language: interfaceLanguage, setLanguage: setInterfaceLanguage, t } = useLanguage()
   const navigate = useNavigate()
+  // Where ProtectedRoute bounced in from (see its own comment) -- only set
+  // when this page was reached via the needsName/needsOnboarding redirect,
+  // never for a learner who opened Profile from the menu themselves.
+  const routerLocation = useLocation()
+  const redirectFrom = routerLocation.state?.from
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
@@ -101,6 +106,14 @@ export default function Profile() {
       )
     } else {
       setSavedMessage('Profile saved.')
+      // Only once there's nothing further to show them here (an email change
+      // still needs the confirmation-link message above to stay visible) --
+      // sends a learner who was bounced here by ProtectedRoute's needsName
+      // gate on to wherever they were originally headed, rather than
+      // stranding them on this page now that the gap is closed.
+      if (redirectFrom) {
+        navigate(redirectFrom, { replace: true })
+      }
     }
 
     setSaving(false)
