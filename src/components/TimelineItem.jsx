@@ -4,13 +4,16 @@ import OrganizationLogo from './OrganizationLogo'
 import ChildExperienceEntry from './ChildExperienceEntry'
 import RoleProfileAlignmentDetail from './RoleProfileAlignmentDetail'
 
-// roleAssignment is only set for an experience entry decide_employer_role_
-// assignment (20260912120000) created on accept -- carries the badge/
+// roleAssignments is only set for an experience entry linked to at least
+// one accepted role profile (decide_employer_role_assignment,
+// 20260912170000) -- an array, since accepting can target an existing
+// experience instead of always creating a new one, so more than one role
+// profile can legitimately point at the same entry. Carries the badge/
 // alignment content RoleAlignmentSummary used to render in its own separate
 // section at the bottom of the Experience page; this is that same
 // information, just attached to the timeline entry it actually belongs to
 // instead of split off on its own.
-export default function TimelineItem({ item, summary, childExperiences, onEdit, isLast, roleAssignment }) {
+export default function TimelineItem({ item, summary, childExperiences, onEdit, isLast, roleAssignments }) {
   return (
     <div className="flex gap-4 print:break-inside-avoid">
       <div className="flex flex-col items-center">
@@ -74,7 +77,9 @@ export default function TimelineItem({ item, summary, childExperiences, onEdit, 
             )}
           </div>
         )}
-        {roleAssignment && <RoleProfileAlignmentDetail {...roleAssignment} />}
+        {roleAssignments?.map((roleAssignment, i) => (
+          <RoleProfileAlignmentDetail key={`${roleAssignment.employerName}-${roleAssignment.roleProfileName}-${i}`} {...roleAssignment} />
+        ))}
       </div>
     </div>
   )

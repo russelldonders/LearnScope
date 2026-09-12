@@ -39,7 +39,7 @@ export default function ExperienceSection() {
   // proposal/link from any of them shows up right here on the one timeline
   // rather than needing its own separate section per employer.
   const {
-    pendingAssignments, linkedAssignments, alignmentByAssignmentId,
+    currentRoles, pendingAssignments, linkedAssignments, alignmentByAssignmentId,
     loading: assignmentsLoading, error: assignmentsError,
     acceptAssignment, declineAssignment, disconnectAssignment,
   } = useMyRoleAssignments()
@@ -158,13 +158,14 @@ export default function ExperienceSection() {
     setExistingCurrentJob(null)
   }
 
-  // Accepting creates a new experience row server-side (decide_employer_
-  // role_assignment, 20260912120000) that this component's own `items`
-  // state has no way to know about yet -- reloads the timeline so it shows
-  // up immediately instead of only after the next full page visit.
-  // Declining never touches experience, so no reload needed there.
-  async function handleAcceptAssignment(assignmentId) {
-    await acceptAssignment(assignmentId)
+  // Accepting either creates a new experience row or (when experienceId is
+  // given) links to one that already exists (decide_employer_role_
+  // assignment, 20260912170000) -- either way this component's own `items`
+  // state has no way to know about that until reloaded, so a newly-created
+  // row shows up immediately instead of only after the next full page
+  // visit. Declining never touches experience, so no reload needed there.
+  async function handleAcceptAssignment(assignmentId, experienceId) {
+    await acceptAssignment(assignmentId, experienceId)
     await loadExperience()
   }
 
@@ -180,26 +181,33 @@ export default function ExperienceSection() {
     childrenByParent[i.parent_experience_id].push(i)
   }
 
-  // Keyed by the experience id decide_employer_role_assignment created for
-  // each accepted assignment -- matched onto whichever TimelineItem that
-  // turns out to be, however far down the (start_date-ordered) list it
-  // lands, rather than assuming it's always the first/most recent entry.
-  const roleAssignmentByExperienceId = useMemo(() => Object.fromEntries(
-    linkedAssignments
-      .filter((assignment) => assignment.linkedExperienceId)
-      .map((assignment) => {
-        const alignment = alignmentByAssignmentId[assignment.assignmentId] ?? { aligned: [], gaps: [], training: [] }
-        return [assignment.linkedExperienceId, {
-          employerName: assignment.employerName,
-          roleProfileName: assignment.roleProfile.name,
-          aligned: alignment.aligned,
-          gaps: alignment.gaps,
-          training: alignment.training,
-          disconnecting: assignmentsLoading,
-          onDisconnect: () => disconnectAssignment(assignment.assignmentId),
-        }]
-      })
-  ), [linkedAssignments, alignmentByAssignmentId, assignmentsLoading, disconnectAssignment])
+  // Keyed by the experience id each accepted assignment is linked to --
+  // an array, not a single entry: since accepting can now target an
+  // existing experience instead of always creating a new one
+  // (decide_employer_role_assignment, 20260912170000), more than one role
+  // profile can legitimately point at the same job entry. Matched onto
+  // whichever TimelineItem that turns out to be, however far down the
+  // (start_date-ordered) list it lands, rather than assuming it's always
+  // the first/most recent entry.
+  const roleAssignmentsByExperienceId = useMemo(() => {
+    const map = {}
+    for (const assignment of linkedAssignments) {
+      if (!assignment.linkedExperienceId) continue
+      const alignment = alignmentByAssignmentId[assignment.assignmentId] ?? { aligned: [], gaps: [], training: [] }
+      const entry = {
+        employerName: assignment.employerName,
+        roleProfileName: assignment.roleProfile.name,
+        aligned: alignment.aligned,
+        gaps: alignment.gaps,
+        training: alignment.training,
+        disconnecting: assignmentsLoading,
+        onDisconnect: () => disconnectAssignment(assignment.assignmentId),
+      }
+      if (!map[assignment.linkedExperienceId]) map[assignment.linkedExperienceId] = []
+      map[assignment.linkedExperienceId].push(entry)
+    }
+    return map
+  }, [linkedAssignments, alignmentByAssignmentId, assignmentsLoading, disconnectAssignment])
 
   return (
     <section>
@@ -245,6 +253,7 @@ export default function ExperienceSection() {
           <PendingRoleTimelineCard
             key={assignment.assignmentId}
             assignment={assignment}
+            currentRoles={currentRoles}
             responding={assignmentsLoading}
             onAccept={handleAcceptAssignment}
             onDecline={declineAssignment}
@@ -259,7 +268,7 @@ export default function ExperienceSection() {
             childExperiences={childrenByParent[item.id]}
             onEdit={(item) => navigate(`/experience/${item.id}`)}
             isLast={i === rootItems.length - 1}
-            roleAssignment={roleAssignmentByExperienceId[item.id]}
+            roleAssignments={roleAssignmentsByExperienceId[item.id]}
           />
         ))}
       </div>

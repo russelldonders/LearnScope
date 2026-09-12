@@ -54,6 +54,14 @@ export default function SkillCard({ skill, onEdit, compact = false }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <h3 className="font-display text-lg text-ink truncate min-w-0">{skill.name}</h3>
+          {skill.source === 'role_profile' && (
+            <span
+              title="Required by a role profile you accepted"
+              className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-moss border border-moss/40 rounded-full px-2 py-0.5"
+            >
+              Role profile
+            </span>
+          )}
           {due && (
             <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-gold border border-gold rounded-full px-2 py-0.5">
               Self-assessment due

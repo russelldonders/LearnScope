@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import PendingAssignmentsPanel from './PendingAssignmentsPanel'
-import { FIXTURE_PENDING_ASSIGNMENTS } from './roleAlignmentFixtures'
+import { FIXTURE_CURRENT_ROLES, FIXTURE_PENDING_ASSIGNMENTS } from './roleAlignmentFixtures'
 
 afterEach(cleanup)
 
@@ -17,13 +17,28 @@ describe('PendingAssignmentsPanel', () => {
     expect(screen.getByText('No role assignments from your employer right now.')).toBeInTheDocument()
   })
 
-  it('calls onAcceptAssignment with just the assignmentId -- no current role to choose', () => {
+  it('with no current role, accepting calls onAcceptAssignment with no target -- no picker shown', () => {
     const onAcceptAssignment = vi.fn()
     render(<PendingAssignmentsPanel pendingAssignments={FIXTURE_PENDING_ASSIGNMENTS} onAcceptAssignment={onAcceptAssignment} />)
-    expect(screen.queryByLabelText('Link to which current role?')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Accept' })).not.toBeDisabled()
+    expect(screen.queryByLabelText('Link to')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
-    expect(onAcceptAssignment).toHaveBeenCalledWith('assignment-2')
+    expect(onAcceptAssignment).toHaveBeenCalledWith('assignment-2', undefined)
+  })
+
+  it('with a current role available, defaults to creating a new one but lets the learner pick it instead', () => {
+    const onAcceptAssignment = vi.fn()
+    render(
+      <PendingAssignmentsPanel
+        pendingAssignments={FIXTURE_PENDING_ASSIGNMENTS}
+        currentRoles={FIXTURE_CURRENT_ROLES}
+        onAcceptAssignment={onAcceptAssignment}
+      />
+    )
+    // Not required to choose -- Accept already works before touching the picker.
+    expect(screen.getByRole('button', { name: 'Accept' })).not.toBeDisabled()
+    fireEvent.change(screen.getByLabelText('Link to'), { target: { value: 'experience-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
+    expect(onAcceptAssignment).toHaveBeenCalledWith('assignment-2', 'experience-1')
   })
 
   it('calls onDeclineAssignment with the assignmentId', () => {
@@ -33,7 +48,7 @@ describe('PendingAssignmentsPanel', () => {
     expect(onDeclineAssignment).toHaveBeenCalledWith('assignment-2')
   })
 
-  it('disables both buttons while responding', () => {
+  it('disables both actions while responding', () => {
     render(<PendingAssignmentsPanel pendingAssignments={FIXTURE_PENDING_ASSIGNMENTS} responding />)
     expect(screen.getByRole('button', { name: 'Accept' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Decline' })).toBeDisabled()

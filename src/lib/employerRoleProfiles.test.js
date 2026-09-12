@@ -47,11 +47,27 @@ describe('employer role profile service', () => {
     })
   })
 
-  it('accepts or declines without a learner-selected experience -- the server creates one itself', async () => {
+  it('accepts with no experience id -- the server creates one itself', async () => {
     rpc.mockResolvedValue({ error: null })
     await decideEmployerRoleAssignment('assignment-1', true)
     expect(rpc).toHaveBeenCalledWith('decide_employer_role_assignment', {
-      p_assignment_id: 'assignment-1', p_accept: true,
+      p_assignment_id: 'assignment-1', p_accept: true, p_learner_experience_id: null,
+    })
+  })
+
+  it('accepts linking to an existing experience when one is chosen', async () => {
+    rpc.mockResolvedValue({ error: null })
+    await decideEmployerRoleAssignment('assignment-1', true, 'experience-1')
+    expect(rpc).toHaveBeenCalledWith('decide_employer_role_assignment', {
+      p_assignment_id: 'assignment-1', p_accept: true, p_learner_experience_id: 'experience-1',
+    })
+  })
+
+  it('never sends an experience id when declining', async () => {
+    rpc.mockResolvedValue({ error: null })
+    await decideEmployerRoleAssignment('assignment-1', false, 'experience-1')
+    expect(rpc).toHaveBeenCalledWith('decide_employer_role_assignment', {
+      p_assignment_id: 'assignment-1', p_accept: false, p_learner_experience_id: null,
     })
   })
 

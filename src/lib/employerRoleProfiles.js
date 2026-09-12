@@ -128,14 +128,19 @@ export async function assignEmployerRoleProfile(profileId, employerMemberId) {
   return data
 }
 
-// Accepting no longer takes a target experience -- decide_employer_role_
-// assignment (20260912120000) creates one itself (titled after the role
-// profile, at the employer's name) rather than requiring the learner to
-// already have a current role to pick from.
-export async function decideEmployerRoleAssignment(assignmentId, accept) {
+// learnerExperienceId is optional -- omitted (or null), the server creates
+// a new employment experience itself (titled after the role profile, at
+// the employer's name); passed, it links to that existing experience
+// instead (decide_employer_role_assignment, 20260912170000, validates it's
+// actually one of the caller's own employment entries). Either way, every
+// required skill lands on the learner's own record too (reusing an
+// already-tracked one where it matches, source:'role_profile' when newly
+// created) -- see that migration's own comment.
+export async function decideEmployerRoleAssignment(assignmentId, accept, learnerExperienceId = null) {
   const { error } = await supabase.rpc('decide_employer_role_assignment', {
     p_assignment_id: assignmentId,
     p_accept: accept,
+    p_learner_experience_id: accept ? learnerExperienceId : null,
   })
   if (error) throw error
 }

@@ -122,7 +122,7 @@ export function useMyRoleAssignments(employerId) {
     alignmentByAssignmentId,
     loading,
     error,
-    acceptAssignment: (assignmentId) => mutate(() => decideEmployerRoleAssignment(assignmentId, true)),
+    acceptAssignment: (assignmentId, experienceId) => mutate(() => decideEmployerRoleAssignment(assignmentId, true, experienceId)),
     declineAssignment: (assignmentId) => mutate(() => decideEmployerRoleAssignment(assignmentId, false)),
     disconnectAssignment: (assignmentId) => mutate(() => disconnectEmployerRoleAssignment(assignmentId)),
   }

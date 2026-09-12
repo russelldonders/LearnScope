@@ -31,11 +31,11 @@ describe('LearnerRoleAlignmentSection (controlled)', () => {
     expect(screen.getByText(/Field Operations Lead/)).toBeInTheDocument()
   })
 
-  it('accepting a pending assignment calls onAcceptAssignment with just its id, and does not fabricate a new linked assignment locally', () => {
+  it('accepting a pending assignment without picking a target creates a new role, and does not fabricate a new linked assignment locally', () => {
     const onAcceptAssignment = vi.fn()
     renderSection({ onAcceptAssignment })
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
-    expect(onAcceptAssignment).toHaveBeenCalledWith('assignment-2')
+    expect(onAcceptAssignment).toHaveBeenCalledWith('assignment-2', undefined)
     // Nothing changes on screen -- the caller must feed the updated
     // pendingAssignments/linkedAssignments back down for anything to move.
     expect(screen.getByText(/Field Operations Lead/)).toBeInTheDocument()

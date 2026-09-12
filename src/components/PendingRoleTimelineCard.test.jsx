@@ -10,6 +10,7 @@ const assignment = {
   roleProfile: { name: 'Field Operations Lead', description: 'Coordinates on-site teams.' },
   proposedAt: '2026-08-20',
 }
+const currentRoles = [{ id: 'experience-1', title: 'Senior Support Engineer', organization: 'Acme Corp' }]
 
 describe('PendingRoleTimelineCard', () => {
   it('shows the proposing employer and role profile', () => {
@@ -18,11 +19,21 @@ describe('PendingRoleTimelineCard', () => {
     expect(screen.getByText('Field Operations Lead')).toBeInTheDocument()
   })
 
-  it('calls onAccept with the assignmentId', () => {
+  it('with no current roles, shows no picker and accepts with no target', () => {
     const onAccept = vi.fn()
     render(<PendingRoleTimelineCard assignment={assignment} onAccept={onAccept} />)
+    expect(screen.queryByLabelText('Link to')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
-    expect(onAccept).toHaveBeenCalledWith('assignment-2')
+    expect(onAccept).toHaveBeenCalledWith('assignment-2', undefined)
+  })
+
+  it('with a current role available, defaults to creating a new one but lets the learner pick it instead', () => {
+    const onAccept = vi.fn()
+    render(<PendingRoleTimelineCard assignment={assignment} currentRoles={currentRoles} onAccept={onAccept} />)
+    expect(screen.getByRole('button', { name: 'Accept' })).not.toBeDisabled()
+    fireEvent.change(screen.getByLabelText('Link to'), { target: { value: 'experience-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
+    expect(onAccept).toHaveBeenCalledWith('assignment-2', 'experience-1')
   })
 
   it('calls onDecline with the assignmentId', () => {
