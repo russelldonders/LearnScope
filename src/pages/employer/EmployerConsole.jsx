@@ -36,6 +36,7 @@ import {
 import EmployerMemberFieldsModal from '../../components/EmployerMemberFieldsModal'
 import EmployerMemberFieldInputs from '../../components/EmployerMemberFieldInputs'
 import EmployerMemberDetailModal from '../../components/EmployerMemberDetailModal'
+import EmployerMemberRoleProfilesModal from './EmployerMemberRoleProfilesModal'
 import EmployerRosterUploadPanel from './EmployerRosterUploadPanel'
 import FieldDefinitionsManager from '../../components/FieldDefinitionsManager'
 import { listOrganisationMembers, listOrganisations } from '../../lib/admin/organisations'
@@ -909,6 +910,7 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
   const [fieldValuesByMember, setFieldValuesByMember] = useState({})
   const [editingFieldsMember, setEditingFieldsMember] = useState(null)
   const [viewingMember, setViewingMember] = useState(null)
+  const [managingRoleProfilesMember, setManagingRoleProfilesMember] = useState(null)
   // The base 'email' field (20260911150000's seed) is what actually invites
   // the account -- the add form has no separate email input of its own
   // anymore, it's just this field rendered like every other one.
@@ -1307,6 +1309,13 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
                             >
                               Edit details
                             </button>
+                            <button
+                              type="button"
+                              onClick={() => setManagingRoleProfilesMember(m)}
+                              className="text-xs font-medium text-moss hover:underline"
+                            >
+                              Role profiles
+                            </button>
                           </>
                         )}
                       </td>
@@ -1349,6 +1358,14 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
           dataAccessSummary={dataAccessByLearner[viewingMember.user_id] ? requestedDataSummary(dataAccessByLearner[viewingMember.user_id]) : null}
           onClose={() => setViewingMember(null)}
           onEdit={() => { setEditingFieldsMember(viewingMember); setViewingMember(null) }}
+        />
+      )}
+
+      {managingRoleProfilesMember && (
+        <EmployerMemberRoleProfilesModal
+          employer={employer}
+          member={managingRoleProfilesMember}
+          onClose={() => setManagingRoleProfilesMember(null)}
         />
       )}
 

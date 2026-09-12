@@ -175,6 +175,47 @@ export async function listEmployerRoleAssignments(profileId) {
   }))
 }
 
+// One employee's own role profiles, whatever their status -- the inverse
+// of listEmployerRoleAssignments above (one role profile's roster of
+// people). Powers EmployerMemberRoleProfilesModal.jsx, reached from a
+// user's own row on the Users tab instead of only from each role profile's
+// own Users tab.
+export async function listRoleAssignmentsForMember(employerMemberId) {
+  const { data, error } = await supabase.rpc('list_employer_role_assignments_for_member', {
+    p_employer_member_id: employerMemberId,
+  })
+  if (error) throw error
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    roleProfileId: row.role_profile_id,
+    roleProfileName: row.role_profile_name,
+    status: row.status,
+    proposedAt: row.proposed_at,
+    linkedAt: row.decided_at,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    currentRole: row.learner_experience_id ? {
+      id: row.learner_experience_id,
+      title: row.current_role_title,
+      organization: row.current_role_organization,
+    } : null,
+  }))
+}
+
+// The employer's own record of when an assignment is meant to apply --
+// never the learner's linked experience dates (which stay exclusively
+// learner-owned, same as every other roster-vs-profile split in this
+// domain). Works regardless of the assignment's accept status, so an admin
+// can plan dates before it's even been accepted.
+export async function setEmployerRoleAssignmentDates(assignmentId, startDate, endDate) {
+  const { error } = await supabase.rpc('set_employer_role_assignment_dates', {
+    p_assignment_id: assignmentId,
+    p_start_date: startDate || null,
+    p_end_date: endDate || null,
+  })
+  if (error) throw error
+}
+
 export async function listMyEmployerRoleAssignments(userId) {
   const { data, error } = await supabase
     .from('employer_role_assignments')
