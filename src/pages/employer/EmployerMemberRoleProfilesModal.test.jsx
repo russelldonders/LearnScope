@@ -5,7 +5,6 @@ import {
   listEmployerRoleProfiles,
   listRoleAssignmentsForMember,
   assignEmployerRoleProfile,
-  disconnectEmployerRoleAssignment,
   withdrawEmployerRoleAssignment,
   setEmployerRoleAssignmentDates,
 } from '../../lib/employerRoleProfiles'
@@ -14,7 +13,6 @@ vi.mock('../../lib/employerRoleProfiles', () => ({
   listEmployerRoleProfiles: vi.fn(),
   listRoleAssignmentsForMember: vi.fn(),
   assignEmployerRoleProfile: vi.fn(),
-  disconnectEmployerRoleAssignment: vi.fn(),
   withdrawEmployerRoleAssignment: vi.fn(),
   setEmployerRoleAssignmentDates: vi.fn(),
 }))
@@ -31,7 +29,6 @@ beforeEach(() => {
   vi.clearAllMocks()
   listEmployerRoleProfiles.mockResolvedValue(profiles)
   assignEmployerRoleProfile.mockResolvedValue(undefined)
-  disconnectEmployerRoleAssignment.mockResolvedValue(undefined)
   withdrawEmployerRoleAssignment.mockResolvedValue(undefined)
   setEmployerRoleAssignmentDates.mockResolvedValue(undefined)
 })
@@ -63,7 +60,13 @@ describe('EmployerMemberRoleProfilesModal', () => {
     await waitFor(() => expect(assignEmployerRoleProfile).toHaveBeenCalledWith('profile-1', 'member-1'))
   })
 
-  it('withdraws a still-proposed assignment, disconnects a linked one', async () => {
+  // withdraw_employer_role_assignment (server-side) already handles both
+  // statuses itself, gated on the caller being an employer admin --
+  // disconnect_employer_role_assignment is the learner-only equivalent
+  // (checks the caller IS the assignee), which an admin acting on someone
+  // else's assignment can never satisfy. So this always calls withdraw,
+  // regardless of the assignment's own status.
+  it('removes either a still-proposed or an already-linked assignment via withdraw', async () => {
     listRoleAssignmentsForMember.mockResolvedValue([
       { id: 'assignment-1', roleProfileId: 'profile-1', roleProfileName: 'Senior Groundskeeper', status: 'proposed', startDate: null, endDate: null },
       { id: 'assignment-2', roleProfileId: 'profile-2', roleProfileName: 'Kit Manager', status: 'linked', startDate: null, endDate: null },
@@ -73,7 +76,7 @@ describe('EmployerMemberRoleProfilesModal', () => {
     fireEvent.click(removeButtons[0])
     await waitFor(() => expect(withdrawEmployerRoleAssignment).toHaveBeenCalledWith('assignment-1'))
     fireEvent.click(removeButtons[1])
-    await waitFor(() => expect(disconnectEmployerRoleAssignment).toHaveBeenCalledWith('assignment-2'))
+    await waitFor(() => expect(withdrawEmployerRoleAssignment).toHaveBeenCalledWith('assignment-2'))
   })
 
   it('sets start/end dates on an assignment', async () => {

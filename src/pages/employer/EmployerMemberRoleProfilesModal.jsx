@@ -7,7 +7,6 @@ import {
   listEmployerRoleProfiles,
   listRoleAssignmentsForMember,
   assignEmployerRoleProfile,
-  disconnectEmployerRoleAssignment,
   withdrawEmployerRoleAssignment,
   setEmployerRoleAssignmentDates,
 } from '../../lib/employerRoleProfiles'
@@ -85,12 +84,13 @@ export default function EmployerMemberRoleProfilesModal({ employer, member, onCl
     setPendingProfileId('')
   }
 
+  // withdraw_employer_role_assignment (20260903170000) already handles both
+  // 'proposed' and 'linked' -- it's gated on is_employer_admin, unlike
+  // disconnect_employer_role_assignment, which only the learner themselves
+  // can call (auth.uid() must equal the assignment's own user_id). This is
+  // an admin acting on someone else's assignment, so it's always this one.
   function handleRemove(assignment) {
-    mutate(() => (
-      assignment.status === 'linked'
-        ? disconnectEmployerRoleAssignment(assignment.id)
-        : withdrawEmployerRoleAssignment(assignment.id)
-    ))
+    mutate(() => withdrawEmployerRoleAssignment(assignment.id))
   }
 
   function startEditingDates(assignment) {

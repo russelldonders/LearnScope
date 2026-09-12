@@ -164,6 +164,8 @@ export default function ExperienceSection() {
   // state has no way to know about that until reloaded, so a newly-created
   // row shows up immediately instead of only after the next full page
   // visit. Declining never touches experience, so no reload needed there.
+  // (useMyRoleAssignments' own acceptAssignment already refreshes nav
+  // visibility -- see its own comment for why.)
   async function handleAcceptAssignment(assignmentId, experienceId) {
     await acceptAssignment(assignmentId, experienceId)
     await loadExperience()

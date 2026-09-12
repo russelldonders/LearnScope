@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
+import { useNavVisibility } from '../../context/NavVisibilityContext'
 import { supabase } from '../../lib/supabaseClient'
 import { listCurrentRoleExperiences } from '../../lib/currentRole'
 import {
@@ -35,6 +36,7 @@ function toAssignment(assignment) {
 // usage -- a learner's timeline covers every employer, not just one).
 export function useMyRoleAssignments(employerId) {
   const { user } = useAuth()
+  const { refreshNavVisibility } = useNavVisibility()
   const [currentRoles, setCurrentRoles] = useState([])
   const [assignments, setAssignments] = useState([])
   const [personalSkills, setPersonalSkills] = useState([])
@@ -122,7 +124,16 @@ export function useMyRoleAssignments(employerId) {
     alignmentByAssignmentId,
     loading,
     error,
-    acceptAssignment: (assignmentId, experienceId) => mutate(() => decideEmployerRoleAssignment(assignmentId, true, experienceId)),
+    // NavVisibilityContext's Skills nav link is fetched once per session,
+    // not reactively (see its own comment) -- accepting can create this
+    // learner's very first skill, so without this refresh the link stays
+    // hidden until an unrelated full page reload happens to remount it.
+    // Same pattern Dashboard.jsx's own FindSkillModal.onCreated already
+    // uses for the exact same reason.
+    acceptAssignment: (assignmentId, experienceId) => mutate(async () => {
+      await decideEmployerRoleAssignment(assignmentId, true, experienceId)
+      refreshNavVisibility()
+    }),
     declineAssignment: (assignmentId) => mutate(() => decideEmployerRoleAssignment(assignmentId, false)),
     disconnectAssignment: (assignmentId) => mutate(() => disconnectEmployerRoleAssignment(assignmentId)),
   }
