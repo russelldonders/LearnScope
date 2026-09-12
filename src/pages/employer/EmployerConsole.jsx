@@ -1927,6 +1927,7 @@ function AssignRoleModal({ employer, members, skippedCount = 0, onClose, onAssig
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selectedProfileId, setSelectedProfileId] = useState('')
+  const [assignDates, setAssignDates] = useState({ start: '', end: '' })
   const [assigning, setAssigning] = useState(false)
 
   useEffect(() => {
@@ -1943,7 +1944,12 @@ function AssignRoleModal({ employer, members, skippedCount = 0, onClose, onAssig
     setError(null)
     try {
       const results = await Promise.allSettled(
-        members.map((member) => assignEmployerRoleProfile(selectedProfileId, member.id))
+        members.map((member) => assignEmployerRoleProfile(
+          selectedProfileId,
+          member.id,
+          assignDates.start || null,
+          assignDates.end || null
+        ))
       )
       const skippedEmails = members
         .filter((_, index) => results[index].status === 'rejected')
@@ -2000,6 +2006,28 @@ function AssignRoleModal({ employer, members, skippedCount = 0, onClose, onAssig
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-xs text-secondary">
+              Start date (optional)
+              <input
+                type="date"
+                value={assignDates.start}
+                disabled={assigning}
+                onChange={(e) => setAssignDates((prev) => ({ ...prev, start: e.target.value }))}
+                className="mt-1 block rounded-md border border-hairline bg-paper px-2 py-1 text-sm text-ink"
+              />
+            </label>
+            <label className="text-xs text-secondary">
+              End date (optional)
+              <input
+                type="date"
+                value={assignDates.end}
+                disabled={assigning}
+                onChange={(e) => setAssignDates((prev) => ({ ...prev, end: e.target.value }))}
+                className="mt-1 block rounded-md border border-hairline bg-paper px-2 py-1 text-sm text-ink"
+              />
+            </label>
           </div>
           <div className="flex justify-end gap-2">
             <button

@@ -43,7 +43,15 @@ describe('employer role profile service', () => {
     rpc.mockResolvedValue({ data: 'assignment-1', error: null })
     await assignEmployerRoleProfile('role-1', 'member-1')
     expect(rpc).toHaveBeenCalledWith('assign_employer_role_profile', {
-      p_role_profile_id: 'role-1', p_employer_member_id: 'member-1',
+      p_role_profile_id: 'role-1', p_employer_member_id: 'member-1', p_start_date: null, p_end_date: null,
+    })
+  })
+
+  it('proposes with an optional start/end date set at assignment time', async () => {
+    rpc.mockResolvedValue({ data: 'assignment-1', error: null })
+    await assignEmployerRoleProfile('role-1', 'member-1', '2026-10-01', '2027-01-01')
+    expect(rpc).toHaveBeenCalledWith('assign_employer_role_profile', {
+      p_role_profile_id: 'role-1', p_employer_member_id: 'member-1', p_start_date: '2026-10-01', p_end_date: '2027-01-01',
     })
   })
 

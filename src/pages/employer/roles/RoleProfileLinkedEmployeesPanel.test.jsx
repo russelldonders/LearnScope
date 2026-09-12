@@ -18,15 +18,25 @@ describe('RoleProfileLinkedEmployeesPanel', () => {
     expect(screen.getByText('No employees assigned to this role profile yet.')).toBeInTheDocument()
   })
 
-  it('calls onAssignEmployees with every checked member and clears the selection', () => {
+  it('calls onAssignEmployees with every checked member, no dates by default, and clears the selection', () => {
     const onAssignEmployees = vi.fn()
     render(<RoleProfileLinkedEmployeesPanel employees={[]} members={FIXTURE_MEMBERS} onAssignEmployees={onAssignEmployees} />)
     fireEvent.click(screen.getByRole('checkbox', { name: /priya@acme.example/ }))
     fireEvent.click(screen.getByRole('checkbox', { name: /new.hire@acme.example/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Assign 2 selected' }))
-    expect(onAssignEmployees).toHaveBeenCalledWith(expect.arrayContaining(['member-1', 'member-3']))
+    expect(onAssignEmployees).toHaveBeenCalledWith(expect.arrayContaining(['member-1', 'member-3']), { startDate: null, endDate: null })
     expect(onAssignEmployees.mock.calls[0][0]).toHaveLength(2)
     expect(screen.getByRole('button', { name: 'Assign' })).toBeDisabled()
+  })
+
+  it('passes the chosen start/end dates through to onAssignEmployees', () => {
+    const onAssignEmployees = vi.fn()
+    render(<RoleProfileLinkedEmployeesPanel employees={[]} members={FIXTURE_MEMBERS} onAssignEmployees={onAssignEmployees} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: /priya@acme.example/ }))
+    fireEvent.change(screen.getByLabelText('Start date (optional)'), { target: { value: '2026-10-01' } })
+    fireEvent.change(screen.getByLabelText('End date (optional)'), { target: { value: '2027-01-01' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Assign 1 selected' }))
+    expect(onAssignEmployees).toHaveBeenCalledWith(['member-1'], { startDate: '2026-10-01', endDate: '2027-01-01' })
   })
 
   it('excludes an already-linked member from the picker', () => {

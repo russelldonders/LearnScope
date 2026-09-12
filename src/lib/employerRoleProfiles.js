@@ -119,10 +119,12 @@ export async function replaceEmployerRoleTrainingRequirements(profileId, require
   if (error) throw error
 }
 
-export async function assignEmployerRoleProfile(profileId, employerMemberId) {
+export async function assignEmployerRoleProfile(profileId, employerMemberId, startDate = null, endDate = null) {
   const { data, error } = await supabase.rpc('assign_employer_role_profile', {
     p_role_profile_id: profileId,
     p_employer_member_id: employerMemberId,
+    p_start_date: startDate,
+    p_end_date: endDate,
   })
   if (error) throw error
   return data

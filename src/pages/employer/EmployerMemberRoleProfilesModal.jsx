@@ -33,6 +33,7 @@ export default function EmployerMemberRoleProfilesModal({ employer, member, onCl
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [pendingProfileId, setPendingProfileId] = useState('')
+  const [newAssignmentDates, setNewAssignmentDates] = useState({ start: '', end: '' })
   const [editingDatesFor, setEditingDatesFor] = useState(null)
   const [dateDraft, setDateDraft] = useState({ start: '', end: '' })
 
@@ -80,8 +81,14 @@ export default function EmployerMemberRoleProfilesModal({ employer, member, onCl
   function handleAdd(e) {
     e.preventDefault()
     if (!pendingProfileId) return
-    mutate(() => assignEmployerRoleProfile(pendingProfileId, member.id))
+    mutate(() => assignEmployerRoleProfile(
+      pendingProfileId,
+      member.id,
+      newAssignmentDates.start || null,
+      newAssignmentDates.end || null
+    ))
     setPendingProfileId('')
+    setNewAssignmentDates({ start: '', end: '' })
   }
 
   // withdraw_employer_role_assignment (20260903170000) already handles both
@@ -210,6 +217,26 @@ export default function EmployerMemberRoleProfilesModal({ employer, member, onCl
                 {addableProfiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
+            <label className="text-xs text-secondary">
+              Start date (optional)
+              <input
+                type="date"
+                value={newAssignmentDates.start}
+                disabled={saving}
+                onChange={(e) => setNewAssignmentDates((prev) => ({ ...prev, start: e.target.value }))}
+                className="mt-1 block rounded-md border border-hairline bg-paper px-2 py-1 text-sm text-ink"
+              />
+            </label>
+            <label className="text-xs text-secondary">
+              End date (optional)
+              <input
+                type="date"
+                value={newAssignmentDates.end}
+                disabled={saving}
+                onChange={(e) => setNewAssignmentDates((prev) => ({ ...prev, end: e.target.value }))}
+                className="mt-1 block rounded-md border border-hairline bg-paper px-2 py-1 text-sm text-ink"
+              />
+            </label>
             <button
               type="submit"
               disabled={saving || !pendingProfileId}

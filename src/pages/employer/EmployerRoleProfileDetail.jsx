@@ -171,9 +171,11 @@ export default function EmployerRoleProfileDetail() {
   // .jsx's own bulk actions) rather than a single all-or-nothing call, so
   // one already-linked/removed-mid-session member doesn't block the rest of
   // a multi-select batch.
-  function handleAssignEmployees(memberIds) {
+  function handleAssignEmployees(memberIds, { startDate = null, endDate = null } = {}) {
     mutate(async () => {
-      const results = await Promise.allSettled(memberIds.map((id) => assignEmployerRoleProfile(roleProfileId, id)))
+      const results = await Promise.allSettled(
+        memberIds.map((id) => assignEmployerRoleProfile(roleProfileId, id, startDate, endDate))
+      )
       const failures = results.filter((r) => r.status === 'rejected')
       if (failures.length === results.length) {
         throw new Error(failures[0]?.reason?.message || 'Failed to assign the selected employees.')

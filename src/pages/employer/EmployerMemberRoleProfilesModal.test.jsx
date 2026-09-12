@@ -51,13 +51,24 @@ describe('EmployerMemberRoleProfilesModal', () => {
     expect(await screen.findByText('No role profiles assigned yet.')).toBeInTheDocument()
   })
 
-  it('adds a role profile via assignEmployerRoleProfile', async () => {
+  it('adds a role profile via assignEmployerRoleProfile with no dates by default', async () => {
     listRoleAssignmentsForMember.mockResolvedValue([])
     render(<EmployerMemberRoleProfilesModal employer={employer} member={member} onClose={() => {}} />)
     await screen.findByText('No role profiles assigned yet.')
     fireEvent.change(screen.getByLabelText('Add a role profile'), { target: { value: 'profile-1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add' }))
-    await waitFor(() => expect(assignEmployerRoleProfile).toHaveBeenCalledWith('profile-1', 'member-1'))
+    await waitFor(() => expect(assignEmployerRoleProfile).toHaveBeenCalledWith('profile-1', 'member-1', null, null))
+  })
+
+  it('adds a role profile with start/end dates set in the same action', async () => {
+    listRoleAssignmentsForMember.mockResolvedValue([])
+    render(<EmployerMemberRoleProfilesModal employer={employer} member={member} onClose={() => {}} />)
+    await screen.findByText('No role profiles assigned yet.')
+    fireEvent.change(screen.getByLabelText('Add a role profile'), { target: { value: 'profile-1' } })
+    fireEvent.change(screen.getByLabelText('Start date (optional)'), { target: { value: '2026-10-01' } })
+    fireEvent.change(screen.getByLabelText('End date (optional)'), { target: { value: '2027-01-01' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(assignEmployerRoleProfile).toHaveBeenCalledWith('profile-1', 'member-1', '2026-10-01', '2027-01-01'))
   })
 
   // withdraw_employer_role_assignment (server-side) already handles both

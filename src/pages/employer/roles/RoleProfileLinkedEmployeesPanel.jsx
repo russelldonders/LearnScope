@@ -44,6 +44,7 @@ export default function RoleProfileLinkedEmployeesPanel({
 }) {
   const [search, setSearch] = useState('')
   const [selectedIds, setSelectedIds] = useState(new Set())
+  const [assignDates, setAssignDates] = useState({ start: '', end: '' })
   const hasRequirements = requiredSkills.length > 0 || training.length > 0
 
   const alreadyLinkedUserIds = useMemo(() => new Set(employees.map((e) => e.userId)), [employees])
@@ -73,8 +74,9 @@ export default function RoleProfileLinkedEmployeesPanel({
   function handleAssign(e) {
     e.preventDefault()
     if (selectedIds.size === 0) return
-    onAssignEmployees?.([...selectedIds])
+    onAssignEmployees?.([...selectedIds], { startDate: assignDates.start || null, endDate: assignDates.end || null })
     setSelectedIds(new Set())
+    setAssignDates({ start: '', end: '' })
   }
 
   return (
@@ -159,6 +161,28 @@ export default function RoleProfileLinkedEmployeesPanel({
               </label>
             ))
           )}
+        </div>
+        <div className="flex flex-wrap items-end gap-2 mb-2">
+          <label className="text-xs text-secondary">
+            Start date (optional)
+            <input
+              type="date"
+              value={assignDates.start}
+              disabled={assigning}
+              onChange={(e) => setAssignDates((prev) => ({ ...prev, start: e.target.value }))}
+              className="mt-1 block rounded-md border border-hairline bg-paper px-2 py-1 text-sm text-ink"
+            />
+          </label>
+          <label className="text-xs text-secondary">
+            End date (optional)
+            <input
+              type="date"
+              value={assignDates.end}
+              disabled={assigning}
+              onChange={(e) => setAssignDates((prev) => ({ ...prev, end: e.target.value }))}
+              className="mt-1 block rounded-md border border-hairline bg-paper px-2 py-1 text-sm text-ink"
+            />
+          </label>
         </div>
         <button
           type="submit"
