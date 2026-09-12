@@ -27,7 +27,16 @@ import {
   listEmployerLinkedProviders,
   linkProviderToEmployer,
   unlinkProviderFromEmployer,
+  listFieldDefinitionsForEmployer,
+  listEmployerMemberFieldValues,
+  upsertEmployerMemberFieldValue,
+  createFieldDefinition,
+  updateFieldDefinition,
+  deleteFieldDefinition,
+  reorderFieldDefinitions,
 } from '../../lib/admin/employers'
+import EmployerMemberFieldsModal from '../../components/EmployerMemberFieldsModal'
+import FieldDefinitionsManager from '../../components/FieldDefinitionsManager'
 import { listOrganisationMembers, listOrganisations } from '../../lib/admin/organisations'
 import { listLibrarySkills } from '../../lib/skillLibrary'
 import { listEmployerRoleProfiles, assignEmployerRoleProfile } from '../../lib/employerRoleProfiles'
@@ -67,6 +76,7 @@ const SECTIONS = [
   { key: 'provider-resources', label: 'Resources', providerTab: true },
   { key: 'provider-lti-tools', label: 'LTI tools', adminOnly: true, providerTab: true },
   { key: 'users', label: 'Users' },
+  { key: 'member-fields', label: 'Member fields' },
   { key: 'roles', label: 'Role profiles' },
   { key: 'providers', label: 'Providers' },
 ]
@@ -634,6 +644,13 @@ export default function EmployerConsole() {
                       setSearchParams={setSearchParams}
                     />
                   )}
+                  {currentSection === 'member-fields' && (
+                    <EmployerMemberFieldsSection
+                      key={selectedEmployer.id}
+                      employer={selectedEmployer}
+                      userId={user.id}
+                    />
+                  )}
                   {currentSection === 'roles' && (
                     <EmployerRoleProfilesSection
                       key={selectedEmployer.id}
@@ -752,6 +769,105 @@ const DATA_ACCESS_STATUS_LABELS = {
   revoked: 'Access revoked',
 }
 
+// Lets this employer's own admins manage their own additional roster
+// fields, on top of the platform-admin-owned base fields (AdminEmployers.jsx)
+// every employer starts with -- reuses FieldDefinitionsManager verbatim,
+// scoped to employer.id instead of the global (employer_id null) set.
+function EmployerMemberFieldsSection({ employer, userId }) {
+  const [fields, setFields] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    load()
+  }, [employer.id])
+
+  async function load() {
+    setLoading(true)
+    setError(null)
+    try {
+      setFields(await listFieldDefinitionsForEmployer(employer.id))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const baseFields = fields.filter((f) => f.employer_id === null)
+  const ownFields = fields.filter((f) => f.employer_id !== null)
+
+  async function handleCreate(payload) {
+    await createFieldDefinition({
+      ...payload,
+      employerId: employer.id,
+      createdBy: userId,
+      sortOrder: ownFields.length > 0 ? Math.max(...ownFields.map((f) => f.sort_order)) + 10 : 1000,
+    })
+    await load()
+  }
+
+  async function handleUpdate(id, payload) {
+    await updateFieldDefinition(id, payload)
+    await load()
+  }
+
+  async function handleDelete(id) {
+    await deleteFieldDefinition(id)
+    await load()
+  }
+
+  async function handleReorder(updates) {
+    await reorderFieldDefinitions(updates)
+    await load()
+  }
+
+  return (
+    <div>
+      <h2 className="font-display text-lg text-ink mb-1">Member fields</h2>
+      <p className="text-sm text-secondary mb-5 max-w-2xl">
+        These fields appear when editing a user's details from the Users tab. Base fields (set by LearnScope) apply
+        to every employer; add your own below for anything specific to {employer.name}.
+      </p>
+
+      {error && <p role="alert" className="text-sm text-red-700 mb-4">{error}</p>}
+
+      {loading ? (
+        <p className="text-secondary">Loading…</p>
+      ) : (
+        <div className="space-y-8">
+          <div>
+            <h3 className="text-sm font-medium text-ink mb-2">Base fields</h3>
+            <div className="space-y-2">
+              {baseFields.map((field) => (
+                <div key={field.id} className="bg-card border border-hairline rounded-lg p-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm text-ink">{field.label}{field.required && <span className="ml-1.5 text-xs text-secondary">(required)</span>}</p>
+                    <p className="text-xs text-secondary mt-0.5">{field.field_type}</p>
+                  </div>
+                  <span className="text-[10px] uppercase tracking-wide text-secondary">Set by LearnScope</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-medium text-ink mb-2">Your own fields</h3>
+            <FieldDefinitionsManager
+              fields={ownFields}
+              scopeLabel="field"
+              onCreate={handleCreate}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+              onReorder={handleReorder}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function EmployerUsersPanel({ employer, attachedProviderOrg, canManageTrainingTeam, searchParams, setSearchParams }) {
   return (
     <div>
@@ -767,7 +883,7 @@ function EmployerUsersPanel({ employer, attachedProviderOrg, canManageTrainingTe
 }
 
 export function EmployerLearnersPanel({ employer, searchParams, setSearchParams, attachedProviderOrg }) {
-  const { isPlatformAdmin } = useAuth()
+  const { isPlatformAdmin, user } = useAuth()
   const [members, setMembers] = useState([])
   const [trainingStaff, setTrainingStaff] = useState([])
   const [trainingStaffError, setTrainingStaffError] = useState(null)
@@ -809,6 +925,14 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
   const [dataAccessByLearner, setDataAccessByLearner] = useState({})
   const [dataAccessRequestingId, setDataAccessRequestingId] = useState(null)
   const [dataAccessError, setDataAccessError] = useState(null)
+
+  // Roster field values (20260911130000) -- the employer's own record about
+  // each member, separate from their actual LearnScope profile. Keyed by
+  // employer_member_id (not user_id) since that's what the values table
+  // itself is keyed to.
+  const [fieldDefinitions, setFieldDefinitions] = useState([])
+  const [fieldValuesByMember, setFieldValuesByMember] = useState({})
+  const [editingFieldsMember, setEditingFieldsMember] = useState(null)
 
   const EMPLOYER_LEARNER_COLUMNS = useMemo(
     () => employerLearnerColumns(attachedProviderOrg, dataAccessByLearner),
@@ -879,17 +1003,37 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
     setLoading(true)
     setError(null)
     try {
-      const [membersData, dataAccessData] = await Promise.all([
+      const [membersData, dataAccessData, fields, values] = await Promise.all([
         listEmployerMembers(employer.id),
         listEmployerDataAccessRequests(employer.id),
+        listFieldDefinitionsForEmployer(employer.id),
+        listEmployerMemberFieldValues(employer.id),
       ])
       setMembers(membersData)
       setDataAccessByLearner(Object.fromEntries(dataAccessData.map((r) => [r.learner_id, r])))
+      setFieldDefinitions(fields)
+      const byMember = {}
+      for (const v of values) {
+        byMember[v.employer_member_id] = { ...byMember[v.employer_member_id], [v.field_definition_id]: v.value }
+      }
+      setFieldValuesByMember(byMember)
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
+  }
+
+  // Saves every field one at a time (not a single batched call) so a
+  // failure on one field doesn't silently drop edits to the others -- same
+  // Promise.allSettled reasoning as handleBulkRequestDataAccess above.
+  async function handleSaveMemberFields(values) {
+    const results = await Promise.allSettled(
+      fieldDefinitions.map((f) => upsertEmployerMemberFieldValue(editingFieldsMember.id, f.id, values[f.id] || null, user.id))
+    )
+    const failed = results.find((r) => r.status === 'rejected')
+    if (failed) throw new Error(failed.reason?.message || 'Some fields failed to save.')
+    setFieldValuesByMember((prev) => ({ ...prev, [editingFieldsMember.id]: values }))
   }
 
   const requestableMembers = selectedMembers.filter((m) => m.employerMember && m.status === 'active' && (!dataAccessByLearner[m.user_id] || ['declined', 'revoked'].includes(dataAccessByLearner[m.user_id].status)))
@@ -1228,6 +1372,7 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
                       <th key={col.key} className={`px-4 py-2 font-medium ${col.thClassName || ''}`}>{col.label}</th>
                     )
                   )}
+                  <th className="px-4 py-2 font-medium"></th>
                 </tr>
               </thead>
               <tbody>
@@ -1248,6 +1393,17 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
                           {col.renderCell(m)}
                         </td>
                       ))}
+                      <td className="px-4 py-2 text-right whitespace-nowrap">
+                        {m.employerMember && (
+                          <button
+                            type="button"
+                            onClick={() => setEditingFieldsMember(m)}
+                            className="text-xs font-medium text-moss hover:underline"
+                          >
+                            Edit details
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   )
                 })}
@@ -1265,6 +1421,16 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
           onConfirm={handleRemove}
           onCancel={() => setRemoveTarget(null)}
           confirming={removing}
+        />
+      )}
+
+      {editingFieldsMember && (
+        <EmployerMemberFieldsModal
+          memberLabel={editingFieldsMember.email || editingFieldsMember.user_id}
+          fields={fieldDefinitions}
+          initialValues={fieldValuesByMember[editingFieldsMember.id] || {}}
+          onSave={handleSaveMemberFields}
+          onClose={() => setEditingFieldsMember(null)}
         />
       )}
 
