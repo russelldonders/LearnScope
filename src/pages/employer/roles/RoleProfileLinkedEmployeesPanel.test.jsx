@@ -75,6 +75,35 @@ describe('RoleProfileLinkedEmployeesPanel', () => {
     expect(screen.getByText('Started')).toBeInTheDocument()
   })
 
+  it('lets an admin confirm a reported skill level, and hides the button once confirmed at that level', () => {
+    const onConfirmSkill = vi.fn()
+    const { rerender } = render(
+      <RoleProfileLinkedEmployeesPanel
+        employees={FIXTURE_LINKED_EMPLOYEES}
+        requiredSkills={[{ skillId: 'skill-1', name: 'Facilitation', targetLevel: 3 }]}
+        readiness={{ 'user-1': { skills: { 'skill-1': 3 }, training: {} } }}
+        confirmations={{}}
+        onConfirmSkill={onConfirmSkill}
+      />
+    )
+    fireEvent.click(screen.getByText('1/1 skills met'))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm level 3' }))
+    expect(onConfirmSkill).toHaveBeenCalledWith('user-1', 'skill-1', 3)
+
+    rerender(
+      <RoleProfileLinkedEmployeesPanel
+        employees={FIXTURE_LINKED_EMPLOYEES}
+        requiredSkills={[{ skillId: 'skill-1', name: 'Facilitation', targetLevel: 3 }]}
+        readiness={{ 'user-1': { skills: { 'skill-1': 3 }, training: {} } }}
+        confirmations={{ 'user-1:skill-1': 3 }}
+        onConfirmSkill={onConfirmSkill}
+      />
+    )
+    fireEvent.click(screen.getByText('1/1 skills met'))
+    expect(screen.queryByRole('button', { name: 'Confirm level 3' })).toBeNull()
+    expect(screen.getByText('Confirmed')).toBeInTheDocument()
+  })
+
   it('shows unshared skills and unassigned training distinctly from a pending employee with no readiness at all', () => {
     render(
       <RoleProfileLinkedEmployeesPanel

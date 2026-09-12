@@ -13,6 +13,7 @@ import {
   toRoleProfileViewModel,
   getEmployerRoleProfileReadiness,
 } from '../../lib/employerRoleProfiles'
+import { listEmployerSkillConfirmations, confirmEmployerSkillLevel } from '../../lib/employerSkillTargets'
 import { getEmployer, listEmployerCatalogueCourses, listEmployerCatalogueSkills, listEmployerMembers } from '../../lib/admin/employers'
 import RoleProfileDetailsForm from './roles/RoleProfileDetailsForm'
 import RoleProfileSkillsPanel from './roles/RoleProfileSkillsPanel'
@@ -42,6 +43,7 @@ export default function EmployerRoleProfileDetail() {
   const [availableSkills, setAvailableSkills] = useState([])
   const [availableCourses, setAvailableCourses] = useState([])
   const [readiness, setReadiness] = useState({})
+  const [confirmations, setConfirmations] = useState({})
   const [tab, setTab] = useState('skills')
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
@@ -85,6 +87,13 @@ export default function EmployerRoleProfileDetail() {
         .filter((employee) => employee.status === 'accepted')
         .map((employee) => employee.userId)
       setReadiness(await getEmployerRoleProfileReadiness(rawProfile.employerId, nextProfile, acceptedUserIds))
+      setConfirmations(
+        await listEmployerSkillConfirmations(
+          rawProfile.employerId,
+          acceptedUserIds,
+          nextProfile.requiredSkills.map((s) => s.skillId)
+        )
+      )
     } catch (err) {
       setError(err.message)
     } finally {
@@ -176,6 +185,17 @@ export default function EmployerRoleProfileDetail() {
     mutate(() => withdrawEmployerRoleAssignment(assignmentId))
   }
 
+  // Records the reported level shown here as employer-confirmed -- this is
+  // what makes a role profile's required target actually "met" on the
+  // employee's own skills page, rather than a bare self-assessment (see
+  // computeVisibleTarget in skillTargetPrecedence.js). Passes the exact
+  // level currently shown rather than re-reading it server-side, so the
+  // confirmation stays historically accurate even if the employee's own
+  // self-assessment changes later.
+  function handleConfirmSkill(userId, librarySkillId, level) {
+    mutate(() => confirmEmployerSkillLevel(employer.id, userId, librarySkillId, level))
+  }
+
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader hideNavLinks />
@@ -248,9 +268,11 @@ export default function EmployerRoleProfileDetail() {
                     requiredSkills={profile.requiredSkills}
                     training={profile.training}
                     readiness={readiness}
+                    confirmations={confirmations}
                     assigning={saving}
                     onAssignEmployees={handleAssignEmployees}
                     onWithdrawAssignment={handleWithdrawAssignment}
+                    onConfirmSkill={handleConfirmSkill}
                   />
                 )}
               </div>

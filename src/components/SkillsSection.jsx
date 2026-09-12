@@ -12,6 +12,8 @@ import GrowthRing from './GrowthRing'
 import { TRACKING_REASONS } from '../lib/trackingReasons'
 import { LEVEL_LABELS } from '../lib/levels'
 import { isSelfAssessmentDue } from '../lib/checkin'
+import { getEmployerTargetsForUser, getLatestEmployerSkillConfirmations } from '../lib/employerSkillTargets'
+import { computeVisibleTarget } from '../lib/skillTargetPrecedence'
 
 const SKILL_VIEWS = [
   { value: 'all', labelKey: 'skills.views.all' },
@@ -55,26 +57,34 @@ export default function SkillsSection() {
 
   async function loadSkills() {
     setLoading(true)
-    const [{ data, error }, { data: tagLinks }, { data: practicalAssessments }, { data: skillTargets }] =
-      await Promise.all([
-        supabase
-          .from('skills')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('date_added', { ascending: false }),
-        supabase.from('skill_tags').select('skill_id, tags(name)').eq('user_id', user.id),
-        supabase
-          .from('skill_assessments')
-          .select('skill_id, level, source, assessed_at')
-          .eq('user_id', user.id)
-          .eq('axis', 'practical')
-          .order('assessed_at', { ascending: false }),
-        supabase
-          .from('skill_targets')
-          .select('skill_id, target_level, created_at')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false }),
-      ])
+    const [
+      { data, error },
+      { data: tagLinks },
+      { data: practicalAssessments },
+      { data: skillTargets },
+      employerTargetsByLibraryId,
+      employerConfirmationsByKey,
+    ] = await Promise.all([
+      supabase
+        .from('skills')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('date_added', { ascending: false }),
+      supabase.from('skill_tags').select('skill_id, tags(name)').eq('user_id', user.id),
+      supabase
+        .from('skill_assessments')
+        .select('skill_id, level, source, assessed_at')
+        .eq('user_id', user.id)
+        .eq('axis', 'practical')
+        .order('assessed_at', { ascending: false }),
+      supabase
+        .from('skill_targets')
+        .select('skill_id, target_level, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false }),
+      getEmployerTargetsForUser(),
+      getLatestEmployerSkillConfirmations(),
+    ])
     if (error) {
       setError(error.message)
     } else {
@@ -103,12 +113,26 @@ export default function SkillsSection() {
         if (!latestTargetLevelBySkillId.has(t.skill_id)) latestTargetLevelBySkillId.set(t.skill_id, t.target_level)
       }
       setSkills(
-        data.map((s) => ({
-          ...s,
-          displayedLevel: s.level ?? latestPracticalBySkillId.get(s.id) ?? null,
-          displayedLevelIsSelfAssessed: selfAssessedSkillIds.has(s.id),
-          targetLevel: latestTargetLevelBySkillId.get(s.id) ?? null,
-        }))
+        data.map((s) => {
+          const employerTarget = s.library_skill_id ? employerTargetsByLibraryId.get(s.library_skill_id) : null
+          const employerConfirmedLevel = employerTarget
+            ? employerConfirmationsByKey.get(`${employerTarget.employerId}:${s.library_skill_id}`) ?? null
+            : null
+          const visibleTarget = computeVisibleTarget({
+            employerTargetLevel: employerTarget?.level ?? null,
+            employerConfirmedLevel,
+            personalTargetLevel: latestTargetLevelBySkillId.get(s.id) ?? null,
+          })
+          return {
+            ...s,
+            displayedLevel: s.level ?? latestPracticalBySkillId.get(s.id) ?? null,
+            displayedLevelIsSelfAssessed: selfAssessedSkillIds.has(s.id),
+            targetLevel: visibleTarget?.level ?? null,
+            targetSource: visibleTarget?.source ?? null,
+            employerTargetLevel: visibleTarget?.employerTargetLevel ?? null,
+            employerTargetMet: visibleTarget?.employerTargetMet ?? false,
+          }
+        })
       )
       const map = new Map()
       for (const link of tagLinks ?? []) {

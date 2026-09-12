@@ -35,10 +35,12 @@ export default function RoleProfileLinkedEmployeesPanel({
   requiredSkills = [],
   training = [],
   readiness = {},
+  confirmations = {},
   assigning = false,
   error = null,
   onAssignEmployees,
   onWithdrawAssignment,
+  onConfirmSkill,
 }) {
   const [search, setSearch] = useState('')
   const [selectedIds, setSelectedIds] = useState(new Set())
@@ -102,6 +104,10 @@ export default function RoleProfileLinkedEmployeesPanel({
                     requiredSkills={requiredSkills}
                     training={training}
                     readiness={readiness[employee.userId]}
+                    confirmations={confirmations}
+                    userId={employee.userId}
+                    confirming={assigning}
+                    onConfirmSkill={onConfirmSkill}
                   />
                 )}
               </div>
@@ -173,7 +179,7 @@ export default function RoleProfileLinkedEmployeesPanel({
 // (getEmployerRoleProfileReadiness relies on RLS to enforce that silently);
 // training only reflects this employer's own assignment records
 // (assigned/started/dismissed), never a completion reached independently.
-function RoleReadinessDetail({ requiredSkills, training, readiness }) {
+function RoleReadinessDetail({ requiredSkills, training, readiness, confirmations = {}, userId, confirming = false, onConfirmSkill }) {
   const skillsMet = requiredSkills.filter((requirement) => {
     const level = readiness?.skills?.[requirement.skillId]
     return typeof level === 'number' && level >= requirement.targetLevel
@@ -191,6 +197,8 @@ function RoleReadinessDetail({ requiredSkills, training, readiness }) {
         {requiredSkills.map((requirement) => {
           const level = readiness?.skills?.[requirement.skillId]
           const met = typeof level === 'number' && level >= requirement.targetLevel
+          const confirmedLevel = confirmations[`${userId}:${requirement.skillId}`]
+          const isConfirmedAtLevel = typeof level === 'number' && confirmedLevel === level
           return (
             <div key={`skill-${requirement.skillId}`} className="flex items-center gap-2 text-xs">
               <span className="text-secondary truncate max-w-[12rem]" title={requirement.name}>{requirement.name}</span>
@@ -198,6 +206,20 @@ function RoleReadinessDetail({ requiredSkills, training, readiness }) {
                 label={typeof level !== 'number' ? 'Not shared' : met ? `Meets target (${level})` : `Below target (${level} of ${requirement.targetLevel})`}
                 tone={typeof level !== 'number' ? 'neutral' : met ? 'success' : 'danger'}
               />
+              {typeof level === 'number' && (
+                isConfirmedAtLevel ? (
+                  <span className="text-secondary">Confirmed</span>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={confirming}
+                    onClick={() => onConfirmSkill?.(userId, requirement.skillId, level)}
+                    className="text-moss hover:underline disabled:opacity-60 whitespace-nowrap"
+                  >
+                    Confirm level {level}
+                  </button>
+                )
+              )}
             </div>
           )
         })}
