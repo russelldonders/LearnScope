@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
@@ -22,6 +22,8 @@ import { insertStatementSkillLinks } from '../lib/activitySkillLinks'
 import { uploadEvidenceFiles } from '../lib/skillEvidence'
 import { linkSkillToExperiences } from '../lib/currentRole'
 import { addRecommendedSkills, recommendExperienceSkills } from '../lib/experienceSkillRecommendations'
+import { useMyRoleAssignments } from './roles/useMyRoleAssignments'
+import RoleProfileAlignmentDetail from '../components/RoleProfileAlignmentDetail'
 
 // Keeps a nested experience's dates from silently
 // drifting outside the parent role's dates -- an open-ended parent
@@ -126,6 +128,32 @@ export default function ExperienceDetail() {
   const [recommendationError, setRecommendationError] = useState(null)
   const [recommendationNotice, setRecommendationNotice] = useState(null)
 
+  // Every employer role profile linked to THIS experience -- can be more
+  // than one (accepting a proposal can target an existing experience
+  // instead of always creating a new one, decide_employer_role_assignment,
+  // 20260912170000). Same hook/shape ExperienceSection.jsx's timeline uses,
+  // reused rather than re-fetching+re-computing alignment a second way.
+  const {
+    linkedAssignments, alignmentByAssignmentId,
+    loading: assignmentsLoading, disconnectAssignment,
+  } = useMyRoleAssignments()
+  const roleProfilesForThisExperience = useMemo(() => (
+    linkedAssignments
+      .filter((assignment) => assignment.linkedExperienceId === item?.id)
+      .map((assignment) => {
+        const alignment = alignmentByAssignmentId[assignment.assignmentId] ?? { aligned: [], gaps: [], training: [] }
+        return {
+          employerName: assignment.employerName,
+          roleProfileName: assignment.roleProfile.name,
+          aligned: alignment.aligned,
+          gaps: alignment.gaps,
+          training: alignment.training,
+          disconnecting: assignmentsLoading,
+          onDisconnect: () => disconnectAssignment(assignment.assignmentId),
+        }
+      })
+  ), [linkedAssignments, alignmentByAssignmentId, assignmentsLoading, disconnectAssignment, item?.id])
+
   useEffect(() => {
     loadItem()
   }, [id])
@@ -180,7 +208,7 @@ export default function ExperienceDetail() {
         .eq('experience_id', item.id),
       supabase
         .from('skill_experience_links')
-        .select('id, skill_id, skills(id, name, level)')
+        .select('id, skill_id, skills(id, name, level, source)')
         .in('experience_id', experienceIds)
         .order('created_at'),
       supabase
@@ -472,6 +500,13 @@ export default function ExperienceDetail() {
                 onClose={() => setChildModalType(null)}
               />
             )}
+
+            {roleProfilesForThisExperience.map((roleProfile, i) => (
+              <RoleProfileAlignmentDetail
+                key={`${roleProfile.employerName}-${roleProfile.roleProfileName}-${i}`}
+                {...roleProfile}
+              />
+            ))}
 
             <div className="flex items-center gap-1 border-b border-hairline mt-4 mb-4">
               {getExperienceTabs(item, linkedCourses).map((t) => (

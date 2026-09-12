@@ -482,7 +482,17 @@ export default function SkillDetail({ skillId, embedded = false }) {
                   color={TRUST_STATUS_COLORS[practicalVerification]}
                 />
                 <div>
-                  <h2 className="font-display text-2xl text-ink">{skill.name}</h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-display text-2xl text-ink">{skill.name}</h2>
+                    {skill.source === 'role_profile' && (
+                      <span
+                        title="Required by a role profile you accepted"
+                        className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-moss border border-moss/40 rounded-full px-2 py-0.5"
+                      >
+                        Role profile
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-secondary flex items-center gap-1.5">
                     {!displayedPracticalLevel && skill.lifecycle_stage && (
                       <LifecycleStageIcon stage={skill.lifecycle_stage} />
