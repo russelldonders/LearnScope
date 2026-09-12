@@ -46,8 +46,8 @@ export async function listEmployerMembers(employerId) {
 // invite email, lands 'active' immediately). Response is
 // { ok, userId, alreadyExisted } -- alreadyExisted distinguishes "invited a
 // new account" from "added an existing user, pending their acceptance".
-export async function addEmployerMember(employerId, email, role) {
-  return callAdminApi('addEmployerMember', { employerId, email, role })
+export async function addEmployerMember(employerId, email, role, fieldValues) {
+  return callAdminApi('addEmployerMember', { employerId, email, role, fieldValues })
 }
 
 export async function removeEmployerMember(memberRowId) {

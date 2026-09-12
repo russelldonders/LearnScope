@@ -36,6 +36,9 @@ import {
   reorderFieldDefinitions,
 } from '../../lib/admin/employers'
 import EmployerMemberFieldsModal from '../../components/EmployerMemberFieldsModal'
+import EmployerMemberFieldInputs from '../../components/EmployerMemberFieldInputs'
+import EmployerMemberDetailModal from '../../components/EmployerMemberDetailModal'
+import EmployerRosterUploadPanel from './EmployerRosterUploadPanel'
 import FieldDefinitionsManager from '../../components/FieldDefinitionsManager'
 import { listOrganisationMembers, listOrganisations } from '../../lib/admin/organisations'
 import { listLibrarySkills } from '../../lib/skillLibrary'
@@ -891,7 +894,11 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const [email, setEmail] = useState('')
+  // Keyed by field_definition_id, same shape EmployerMemberFieldsModal
+  // already uses for editing an existing member -- the add form captures
+  // every roster field up front now instead of leaving them for a separate
+  // "Edit details" pass afterward.
+  const [addValues, setAddValues] = useState({})
   const [role, setRole] = useState('member')
   const [adding, setAdding] = useState(false)
   const [message, setMessage] = useState(null)
@@ -914,11 +921,6 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
   const [assignModal, setAssignModal] = useState(null)
   const [assignResult, setAssignResult] = useState(null)
 
-  const [bulkEmails, setBulkEmails] = useState('')
-  const [bulkRole, setBulkRole] = useState('member')
-  const [bulkSubmitting, setBulkSubmitting] = useState(false)
-  const [bulkResults, setBulkResults] = useState(null)
-
   // Phase 5: employer-side view of each member's data-access consent state.
   // Keyed by learner_id -- there's at most one row per (employer, learner)
   // pair (unique constraint), so a plain map is enough.
@@ -933,6 +935,11 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
   const [fieldDefinitions, setFieldDefinitions] = useState([])
   const [fieldValuesByMember, setFieldValuesByMember] = useState({})
   const [editingFieldsMember, setEditingFieldsMember] = useState(null)
+  const [viewingMember, setViewingMember] = useState(null)
+  // The base 'email' field (20260911150000's seed) is what actually invites
+  // the account -- the add form has no separate email input of its own
+  // anymore, it's just this field rendered like every other one.
+  const emailFieldId = fieldDefinitions.find((f) => f.key === 'email')?.id
 
   const EMPLOYER_LEARNER_COLUMNS = useMemo(
     () => employerLearnerColumns(attachedProviderOrg, dataAccessByLearner),
@@ -1066,61 +1073,21 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
     setMessage(null)
     setError(null)
     try {
-      const result = await addEmployerMember(employer.id, email.trim(), role)
+      const email = (addValues[emailFieldId] || '').trim()
+      const missing = fieldDefinitions.find((f) => f.required && !String(addValues[f.id] ?? '').trim())
+      if (missing) throw new Error(`"${missing.label}" is required.`)
+      const result = await addEmployerMember(employer.id, email, role, addValues)
       setMessage(
         result.alreadyExisted
-          ? `${email.trim()} added, pending their acceptance (see their Actions page).`
-          : `${email.trim()} invited. They'll get access once they accept the invite email.`
+          ? `${email} added, pending their acceptance (see their Actions page).`
+          : `${email} invited. They'll get access once they accept the invite email.`
       )
-      setEmail('')
+      setAddValues({})
       await load()
     } catch (err) {
       setError(err.message)
     } finally {
       setAdding(false)
-    }
-  }
-
-  // Bulk-invite path alongside the one-at-a-time form above -- one
-  // addEmployerMember call per email via Promise.allSettled, same partial-
-  // failure shape as ProviderConsole.jsx's own bulk handlers (e.g.
-  // handleBulkDelete), just reporting per-row outcomes instead of only
-  // failures since a successful add here can mean either "invited" (new
-  // account) or "added, pending acceptance" (existing account) -- both
-  // worth surfacing distinctly, not just "succeeded".
-  async function handleBulkImport(e) {
-    e.preventDefault()
-    const emails = Array.from(new Set(bulkEmails.split(/[\n,]+/).map((entry) => entry.trim()).filter(Boolean)))
-    if (emails.length === 0) return
-
-    setBulkSubmitting(true)
-    setBulkResults(null)
-    setError(null)
-    try {
-      const results = await Promise.allSettled(emails.map((addr) => addEmployerMember(employer.id, addr, bulkRole)))
-      setBulkResults(
-        emails.map((addr, index) => {
-          const result = results[index]
-          if (result.status === 'fulfilled') {
-            return result.value.alreadyExisted
-              ? { email: addr, outcome: 'added', detail: 'Added -- pending their acceptance' }
-              : { email: addr, outcome: 'invited', detail: 'Invited -- new account created' }
-          }
-          const reason = result.reason?.message ?? 'Unknown error'
-          // addEmployerMember's own 409 message (api/admin/actions.js) --
-          // matched here only to give this one expected failure its own
-          // clearer label instead of lumping it in with unexpected ones.
-          return reason === 'This person is already a member of this employer.'
-            ? { email: addr, outcome: 'already-member', detail: 'Already a member' }
-            : { email: addr, outcome: 'failed', detail: `Failed -- ${reason}` }
-        })
-      )
-      setBulkEmails('')
-      await load()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setBulkSubmitting(false)
     }
   }
 
@@ -1154,33 +1121,24 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
       <h2 id="employer-add-users-heading" className="font-display text-lg text-ink mb-5">Add users</h2>
       <MutationFeedback status="success" message={message} size="xs" className="mb-3" />
       <MutationFeedback status="error" message={error} size="xs" className="mb-3" />
-      <form onSubmit={handleAdd} className="bg-card border border-hairline rounded-lg p-4 flex flex-wrap items-end gap-2 mb-4">
-        <div className="flex-1 min-w-[180px]">
-          <label className="block text-xs text-secondary mb-1" htmlFor="employerMemberEmail">
-            Add or invite by email
-          </label>
-          <input
-            id="employerMemberEmail"
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+      <form onSubmit={handleAdd} className="bg-card border border-hairline rounded-lg p-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+          <EmployerMemberFieldInputs
+            fields={fieldDefinitions}
+            values={addValues}
+            onChange={(fieldId, value) => setAddValues((prev) => ({ ...prev, [fieldId]: value }))}
           />
-        </div>
-        <div>
-          <label className="block text-xs text-secondary mb-1" htmlFor="employerMemberRole">
+          <label className="block text-xs text-secondary">
             Role
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className="mt-1 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+            >
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+            </select>
           </label>
-          <select
-            id="employerMemberRole"
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            className="rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-          >
-            <option value="member">Member</option>
-            <option value="admin">Admin</option>
-          </select>
         </div>
         <button
           type="submit"
@@ -1191,75 +1149,7 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
         </button>
       </form>
 
-
-
-      <details className="bg-card border border-hairline rounded-lg p-4 mb-4">
-        <summary className="text-sm font-medium text-ink cursor-pointer">Bulk import learners</summary>
-        <form onSubmit={handleBulkImport} className="mt-3 space-y-3">
-          <div>
-            <label className="block text-xs text-secondary mb-1" htmlFor="employerBulkEmails">
-              Emails (one per line, or comma-separated)
-            </label>
-            <textarea
-              id="employerBulkEmails"
-              rows={4}
-              value={bulkEmails}
-              onChange={(e) => setBulkEmails(e.target.value)}
-              placeholder={'jane@example.com\njohn@example.com'}
-              className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-            />
-          </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <div>
-              <label className="block text-xs text-secondary mb-1" htmlFor="employerBulkRole">
-                Role
-              </label>
-              <select
-                id="employerBulkRole"
-                value={bulkRole}
-                onChange={(e) => setBulkRole(e.target.value)}
-                className="rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-              >
-                <option value="member">Member</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-            <button
-              type="submit"
-              disabled={bulkSubmitting || !bulkEmails.trim()}
-              className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-            >
-              {bulkSubmitting ? 'Importing…' : 'Bulk import'}
-            </button>
-          </div>
-        </form>
-
-        {bulkResults && (
-          <div className="mt-3 border-t border-hairline pt-3">
-            <p className="text-xs text-secondary mb-2">
-              {bulkResults.length} {bulkResults.length === 1 ? 'result' : 'results'}:
-            </p>
-            <ul className="space-y-1">
-              {bulkResults.map((r) => (
-                <li key={r.email} className="text-xs flex flex-wrap gap-1">
-                  <span className="font-mono text-ink">{r.email}</span>
-                  <span
-                    className={
-                      r.outcome === 'failed'
-                        ? 'text-red-700'
-                        : r.outcome === 'already-member'
-                          ? 'text-secondary'
-                          : 'text-moss'
-                    }
-                  >
-                    {r.detail}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </details>
+      <EmployerRosterUploadPanel employerId={employer.id} fields={fieldDefinitions} onImported={load} />
     </section>
   )
 
@@ -1393,15 +1283,24 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
                           {col.renderCell(m)}
                         </td>
                       ))}
-                      <td className="px-4 py-2 text-right whitespace-nowrap">
+                      <td className="px-4 py-2 text-right whitespace-nowrap space-x-3">
                         {m.employerMember && (
-                          <button
-                            type="button"
-                            onClick={() => setEditingFieldsMember(m)}
-                            className="text-xs font-medium text-moss hover:underline"
-                          >
-                            Edit details
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setViewingMember(m)}
+                              className="text-xs font-medium text-moss hover:underline"
+                            >
+                              View
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingFieldsMember(m)}
+                              className="text-xs font-medium text-moss hover:underline"
+                            >
+                              Edit details
+                            </button>
+                          </>
                         )}
                       </td>
                     </tr>
@@ -1431,6 +1330,18 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
           initialValues={fieldValuesByMember[editingFieldsMember.id] || {}}
           onSave={handleSaveMemberFields}
           onClose={() => setEditingFieldsMember(null)}
+        />
+      )}
+
+      {viewingMember && (
+        <EmployerMemberDetailModal
+          member={viewingMember}
+          fields={fieldDefinitions}
+          values={fieldValuesByMember[viewingMember.id] || {}}
+          dataAccessLabel={dataAccessByLearner[viewingMember.user_id] ? DATA_ACCESS_STATUS_LABELS[dataAccessByLearner[viewingMember.user_id].status] : 'No request yet'}
+          dataAccessSummary={dataAccessByLearner[viewingMember.user_id] ? requestedDataSummary(dataAccessByLearner[viewingMember.user_id]) : null}
+          onClose={() => setViewingMember(null)}
+          onEdit={() => { setEditingFieldsMember(viewingMember); setViewingMember(null) }}
         />
       )}
 

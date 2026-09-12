@@ -863,13 +863,35 @@ const VALID_EMPLOYER_ROLES = ['admin', 'member']
 // employer (or its attached provider org) until they explicitly accept via
 // decide_employer_invite (20260902160000), surfaced to them on /actions
 // (see PendingActionsContext, listMyPendingEmployerInvites).
-async function addEmployerMember(admin, caller, { employerId, email, role }, res) {
+async function addEmployerMember(admin, caller, { employerId, email, role, fieldValues }, res) {
   if (!employerId || !email || !VALID_EMPLOYER_ROLES.includes(role)) {
     res.status(400).json({ error: 'Missing or invalid employerId, email, or role' })
     return
   }
 
   if (!(await requireEmployerAdmin(admin, caller, employerId, res))) return
+
+  // The add-user form (individual and CSV upload alike) already enforces
+  // required roster fields client-side, but this is the actual write path
+  // -- reachable directly -- so that can't be the only check. Two separate
+  // .eq()/.is() queries rather than one .or() filter string built from
+  // employerId: this is the service-role client (RLS doesn't scope it), so
+  // interpolating caller-controlled input into a raw PostgREST filter
+  // string here would be a real injection risk, not just a correctness one.
+  if (fieldValues) {
+    const [{ data: globalFields, error: globalFieldsError }, { data: employerFields, error: employerFieldsError }] = await Promise.all([
+      admin.from('employer_field_definitions').select('id, label, required').is('employer_id', null),
+      admin.from('employer_field_definitions').select('id, label, required').eq('employer_id', employerId),
+    ])
+    if (globalFieldsError) throw globalFieldsError
+    if (employerFieldsError) throw employerFieldsError
+    const missing = [...(globalFields ?? []), ...(employerFields ?? [])]
+      .find((f) => f.required && !String(fieldValues[f.id] ?? '').trim())
+    if (missing) {
+      res.status(400).json({ error: `"${missing.label}" is required.` })
+      return
+    }
+  }
 
   const existingUserId = await findUserIdByEmail(admin, email.trim())
   let userId = existingUserId
@@ -899,6 +921,28 @@ async function addEmployerMember(admin, caller, { employerId, email, role }, res
       return
     }
     throw memberInsertError
+  }
+
+  // Saved in the same request as the member itself, rather than a separate
+  // "edit details" round trip afterward -- one insert (not per-field
+  // upserts; there's nothing to conflict with on a brand-new member) covers
+  // every roster field this add captured. sync_employer_field_value_to_profile
+  // (20260912100000) picks up first_name/last_name from these rows on
+  // insert and seeds the learner's own profile if it's still blank, which
+  // is what actually clears ProtectedRoute's needsName gate for them.
+  if (fieldValues && Object.keys(fieldValues).length > 0) {
+    const fieldValueRows = Object.entries(fieldValues)
+      .filter(([, value]) => String(value ?? '').trim())
+      .map(([fieldDefinitionId, value]) => ({
+        employer_member_id: insertedMember.id,
+        field_definition_id: fieldDefinitionId,
+        value: String(value).trim(),
+        updated_by: caller.id,
+      }))
+    if (fieldValueRows.length > 0) {
+      const { error: fieldValuesError } = await admin.from('employer_member_field_values').insert(fieldValueRows)
+      if (fieldValuesError) throw fieldValuesError
+    }
   }
 
   // employer_member.removed (the delete side) is logged by a DB trigger

@@ -35,6 +35,13 @@ const members = [
   { id: 'membership-a', user_id: 'a', userCode: 'USR-000001', email: 'a@example.com', status: 'active', role: 'member' },
   { id: 'membership-b', user_id: 'b', userCode: 'USR-000002', email: 'b@example.com', status: 'pending', role: 'member' },
 ]
+// Add users now renders one input per roster field definition (the email
+// address is just this field, not a separate hardcoded input) -- a single
+// unrequired field keeps this fixture's accessible name plain ("Email"
+// rather than "Email *") since these tests aren't exercising validation.
+const fieldDefinitions = [
+  { id: 'field-email', key: 'email', label: 'Email', field_type: 'email', required: false, options: null },
+]
 function Panel() {
   const [searchParams, setSearchParams] = useSearchParams()
   return <EmployerLearnersPanel employer={{ id: 'employer', name: 'Acme' }} searchParams={searchParams} setSearchParams={setSearchParams} />
@@ -45,23 +52,23 @@ beforeEach(() => {
   listEmployerDataAccessRequests.mockResolvedValue([])
   requestEmployerDataAccess.mockResolvedValue({ learner_id: 'a', status: 'pending' })
   removeEmployerMember.mockResolvedValue(undefined)
-  listFieldDefinitionsForEmployer.mockResolvedValue([])
+  listFieldDefinitionsForEmployer.mockResolvedValue(fieldDefinitions)
   listEmployerMemberFieldValues.mockResolvedValue([])
 })
 afterEach(cleanup)
 it('reveals invitations through Add users and uses the account code', async () => {
   render(<MemoryRouter><Panel /></MemoryRouter>)
   expect(await screen.findByText('USR-000001')).toBeVisible()
-  expect(screen.queryByRole('textbox', { name: 'Add or invite by email' })).toBeNull()
+  expect(screen.queryByRole('textbox', { name: 'Email' })).toBeNull()
   fireEvent.click(screen.getByRole('link', { name: 'Add users' }))
-  expect(screen.getByRole('textbox', { name: 'Add or invite by email' })).toBeVisible()
+  expect(await screen.findByRole('textbox', { name: 'Email' })).toBeVisible()
   expect(screen.queryByRole('table')).toBeNull()
   expect(screen.getByRole('heading', { name: 'Add users' })).toBeVisible()
   fireEvent.click(screen.getByRole('link', { name: 'Back to users' }))
   expect(screen.getByRole('table')).toBeVisible()
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select a@example.com' }))
   expect(screen.queryByRole('link', { name: 'Add users' })).toBeNull()
-  expect(screen.queryByRole('textbox', { name: 'Add or invite by email' })).toBeNull()
+  expect(screen.queryByRole('textbox', { name: 'Email' })).toBeNull()
 })
 it('requests access for eligible selections and removes active and pending users after confirmation', async () => {
   render(<MemoryRouter><Panel /></MemoryRouter>)
