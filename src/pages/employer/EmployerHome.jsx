@@ -4,6 +4,7 @@ import AppHeader from '../../components/AppHeader'
 import { getOrganisationBranding, orgBrandStyle } from '../../lib/orgBranding'
 import { getEmployerLoginContext } from '../../lib/employerRoleProfiles'
 import LearnerRoleAlignmentContainer from '../roles/LearnerRoleAlignmentContainer'
+import EmployerAssignedTrainingPanel from './EmployerAssignedTrainingPanel'
 
 // The learner-facing counterpart to EmployerConsole.jsx (which is admin-only,
 // see EmployerAdminRoute's own comment) -- reached via the same employer URL
@@ -64,7 +65,10 @@ export default function EmployerHome() {
           </h1>
         </div>
         {employer ? (
-          <LearnerRoleAlignmentContainer employerId={employer.id} />
+          <>
+            <EmployerAssignedTrainingPanel employerId={employer.id} />
+            <LearnerRoleAlignmentContainer employerId={employer.id} />
+          </>
         ) : (
           <p className="text-secondary">Loading…</p>
         )}

@@ -13,8 +13,7 @@ import {
   toRoleProfileViewModel,
   getEmployerRoleProfileReadiness,
 } from '../../lib/employerRoleProfiles'
-import { getEmployer, listEmployerCatalogueCourses, listEmployerMembers } from '../../lib/admin/employers'
-import { listLibrarySkills } from '../../lib/skillLibrary'
+import { getEmployer, listEmployerCatalogueCourses, listEmployerCatalogueSkills, listEmployerMembers } from '../../lib/admin/employers'
 import RoleProfileDetailsForm from './roles/RoleProfileDetailsForm'
 import RoleProfileSkillsPanel from './roles/RoleProfileSkillsPanel'
 import RoleProfileTrainingPanel from './roles/RoleProfileTrainingPanel'
@@ -58,13 +57,18 @@ export default function EmployerRoleProfileDetail() {
         setNotFound(true)
         return
       }
-      const [employerData, membersData, skillsData, assignments] = await Promise.all([
+      const [employerData, membersData, assignments] = await Promise.all([
         getEmployer(rawProfile.employerId),
         listEmployerMembers(rawProfile.employerId),
-        listLibrarySkills(),
         listEmployerRoleAssignments(roleProfileId),
       ])
-      const coursesData = await listEmployerCatalogueCourses(employerData.provider_organisation_id)
+      // Both scoped to the employer's attached provider org's own catalogue
+      // -- not the platform's global skill library/course catalogue -- once
+      // employerData (and so provider_organisation_id) is actually known.
+      const [skillsData, coursesData] = await Promise.all([
+        listEmployerCatalogueSkills(employerData.provider_organisation_id),
+        listEmployerCatalogueCourses(employerData.provider_organisation_id),
+      ])
       const memberByUserId = new Map(membersData.map((m) => [m.user_id, m]))
       const nextProfile = toRoleProfileViewModel(rawProfile, assignments, memberByUserId)
       setProfile(nextProfile)
@@ -149,12 +153,18 @@ export default function EmployerRoleProfileDetail() {
     ))
   }
 
-  function handleAssignEmployee(email) {
+  // Proposes the role to every selected employer_member id -- one RPC call
+  // each (Promise.allSettled, same partial-failure shape as EmployerConsole
+  // .jsx's own bulk actions) rather than a single all-or-nothing call, so
+  // one already-linked/removed-mid-session member doesn't block the rest of
+  // a multi-select batch.
+  function handleAssignEmployees(memberIds) {
     mutate(async () => {
-      const normalizedEmail = email.trim().toLowerCase()
-      const member = members.find((m) => m.email?.trim().toLowerCase() === normalizedEmail && m.status === 'active')
-      if (!member) throw new Error('Choose an active learner from this employer using their account email.')
-      await assignEmployerRoleProfile(roleProfileId, member.id)
+      const results = await Promise.allSettled(memberIds.map((id) => assignEmployerRoleProfile(roleProfileId, id)))
+      const failures = results.filter((r) => r.status === 'rejected')
+      if (failures.length === results.length) {
+        throw new Error(failures[0]?.reason?.message || 'Failed to assign the selected employees.')
+      }
     })
   }
 
@@ -235,7 +245,7 @@ export default function EmployerRoleProfileDetail() {
                     training={profile.training}
                     readiness={readiness}
                     assigning={saving}
-                    onAssignEmployee={handleAssignEmployee}
+                    onAssignEmployees={handleAssignEmployees}
                     onWithdrawAssignment={handleWithdrawAssignment}
                   />
                 )}

@@ -2,7 +2,7 @@
 // These are ONLY optional default prop values for an isolated/demo render
 // of EmployerRoleProfilesConsole and its leaf panels -- the console never
 // substitutes this data back in after a real onSelectRoleProfile/
-// onSaveRoleProfile/onReplaceSkills/onReplaceTraining/onAssignEmployee/
+// onSaveRoleProfile/onReplaceSkills/onReplaceTraining/onAssignEmployees/
 // onWithdrawAssignment call; it only ever renders whatever roleProfiles/
 // linkedEmployees props it's actually given. Not imported by anything
 // outside src/pages/employer/roles/.
@@ -67,4 +67,13 @@ export const FIXTURE_COURSE_CATALOGUE = [
 export const FIXTURE_LINKED_EMPLOYEES = [
   { assignmentId: 'assignment-1', userId: 'user-1', name: 'Priya Natarajan', email: 'priya@acme.example', status: 'accepted', assignedAt: '2026-06-01' },
   { assignmentId: 'assignment-2', userId: 'user-2', name: 'Owen McAllister', email: 'owen@acme.example', status: 'pending', assignedAt: '2026-07-14' },
+]
+
+// This employer's own active roster (listEmployerMembers' shape) --
+// RoleProfileLinkedEmployeesPanel's multi-select picker offers whichever of
+// these aren't already in linkedEmployees above.
+export const FIXTURE_MEMBERS = [
+  { id: 'member-1', user_id: 'user-1', email: 'priya@acme.example', userCode: 'USR-000001', status: 'active' },
+  { id: 'member-2', user_id: 'user-2', email: 'owen@acme.example', userCode: 'USR-000002', status: 'active' },
+  { id: 'member-3', user_id: 'user-3', email: 'new.hire@acme.example', userCode: 'USR-000003', status: 'active' },
 ]

@@ -21,7 +21,10 @@ export default function EmployerMemberDetailModal({ member, fields, values, data
 
       <dl className="space-y-3 text-sm">
         <Row label="Role" value={member.role === 'admin' ? 'Admin' : member.role === 'member' ? 'Member' : '—'} />
-        <Row label="Status" value={member.status === 'pending' ? 'Pending' : member.status === 'active' ? 'Active' : member.status || '—'} />
+        <Row
+          label="Status"
+          value={member.status === 'pending' ? 'Pending' : member.status === 'inactive' ? 'Inactive' : member.status === 'active' ? 'Active' : member.status || '—'}
+        />
         <Row label="Added" value={member.created_at ? formatAbsoluteDate(member.created_at) : '—'} />
         <Row label="Data access" value={dataAccessLabel} detail={dataAccessSummary} />
 

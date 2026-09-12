@@ -174,7 +174,12 @@ function employerLearnerColumns(attachedProviderOrg, dataAccessByLearner) {
       sortable: true,
       thClassName: 'whitespace-nowrap',
       cellClassName: 'px-4 py-2 whitespace-nowrap',
-      renderCell: (m) => <StatusBadge label={m.status === 'pending' ? 'Pending' : 'Active'} tone="neutral" />,
+      renderCell: (m) => (
+        <StatusBadge
+          label={m.status === 'pending' ? 'Pending' : m.status === 'inactive' ? 'Inactive' : 'Active'}
+          tone={m.status === 'inactive' ? 'danger' : 'neutral'}
+        />
+      ),
     },
     ...(attachedProviderOrg ? [trainingAccessColumn] : []),
     {
@@ -941,6 +946,24 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
   // anymore, it's just this field rendered like every other one.
   const emailFieldId = fieldDefinitions.find((f) => f.key === 'email')?.id
 
+  // Pre-fills a fresh add form's language/status the same way a brand-new
+  // employer_members row already defaults to -- only when addValues is
+  // still empty, so this never overwrites what an admin is mid-typing (it
+  // re-fires after a successful add, once fieldDefinitions is refetched by
+  // load(), re-priming the form for the next one).
+  useEffect(() => {
+    if (fieldDefinitions.length === 0) return
+    setAddValues((prev) => {
+      if (Object.keys(prev).length > 0) return prev
+      const defaults = {}
+      const languageField = fieldDefinitions.find((f) => f.key === 'language')
+      if (languageField) defaults[languageField.id] = 'English'
+      const statusField = fieldDefinitions.find((f) => f.key === 'employment_status')
+      if (statusField) defaults[statusField.id] = 'Active'
+      return defaults
+    })
+  }, [fieldDefinitions])
+
   const EMPLOYER_LEARNER_COLUMNS = useMemo(
     () => employerLearnerColumns(attachedProviderOrg, dataAccessByLearner),
     [attachedProviderOrg, dataAccessByLearner]
@@ -1084,6 +1107,9 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
       )
       setAddValues({})
       await load()
+      // Back to the roster on success -- message stays set, so the list
+      // view's own MutationFeedback shows the same confirmation there.
+      setSearchParams(listParams)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -1117,7 +1143,12 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
 
   if (showAddUsers) return (
     <section aria-labelledby="employer-add-users-heading" className="max-w-3xl">
-      <Link to={`?${listParams}`} className="inline-block mb-4 text-sm text-moss hover:underline">Back to users</Link>
+      <Link
+        to={`?${listParams}`}
+        className="inline-block mb-4 rounded-md border border-hairline px-3 py-1.5 text-sm font-medium text-ink hover:bg-card"
+      >
+        ← Back to users
+      </Link>
       <h2 id="employer-add-users-heading" className="font-display text-lg text-ink mb-5">Add users</h2>
       <MutationFeedback status="success" message={message} size="xs" className="mb-3" />
       <MutationFeedback status="error" message={error} size="xs" className="mb-3" />
@@ -1140,13 +1171,21 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
             </select>
           </label>
         </div>
-        <button
-          type="submit"
-          disabled={adding}
-          className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-        >
-          {adding ? 'Adding…' : 'Add'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={adding}
+            className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
+          >
+            {adding ? 'Saving…' : 'Save'}
+          </button>
+          <Link
+            to={`?${listParams}`}
+            className="rounded-md border border-hairline px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper"
+          >
+            Cancel
+          </Link>
+        </div>
       </form>
 
       <EmployerRosterUploadPanel employerId={employer.id} fields={fieldDefinitions} onImported={load} />
@@ -1889,10 +1928,10 @@ function AssignSkillModal({ employer, members, skippedCount = 0, onClose, onAssi
 // AssignSkillModal's shape, except assign_employer_role_profile only takes
 // one employer_member_id at a time (no bulk RPC, unlike course/skill
 // assignment), so this calls it once per selected member via
-// Promise.allSettled and reports failures as skipped the same way
-// handleBulkImport (above) already does for invites. Assigning only
+// Promise.allSettled and reports failures as skipped, same partial-failure
+// shape as EmployerRosterUploadPanel's CSV import. Assigning only
 // *proposes* the role (same as RoleProfileLinkedEmployeesPanel's own
-// onAssignEmployee) -- each employee still has to accept it themselves and
+// onAssignEmployees) -- each employee still has to accept it themselves and
 // link it to one of their own current roles before it's linked. The RPC
 // also only accepts an active employer_members row with role='member', so a
 // selected employer admin always lands in the skipped bucket -- selection

@@ -64,7 +64,7 @@ it('reveals invitations through Add users and uses the account code', async () =
   expect(await screen.findByRole('textbox', { name: 'Email' })).toBeVisible()
   expect(screen.queryByRole('table')).toBeNull()
   expect(screen.getByRole('heading', { name: 'Add users' })).toBeVisible()
-  fireEvent.click(screen.getByRole('link', { name: 'Back to users' }))
+  fireEvent.click(screen.getByRole('link', { name: '← Back to users' }))
   expect(screen.getByRole('table')).toBeVisible()
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select a@example.com' }))
   expect(screen.queryByRole('link', { name: 'Add users' })).toBeNull()

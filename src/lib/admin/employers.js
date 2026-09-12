@@ -96,6 +96,33 @@ export async function listEmployerCatalogueCourses(providerOrganisationId) {
   return listPublishedProviderCourses(providerOrganisationId)
 }
 
+// Scopes a role profile's skill picker to this employer's own offered-
+// skills roster (organisation_offered_skills, 0076) -- mirrors
+// listEmployerCatalogueCourses' own scoping for training above, rather than
+// the platform's entire global skill catalogue (listLibrarySkills), which
+// is what an employer admin was picking role-profile requirements from
+// before this. Same {id, name, category, description, isComposite,
+// componentCount} shape listLibrarySkills already returns, so it's a
+// drop-in replacement everywhere availableSkills is consumed.
+export async function listEmployerCatalogueSkills(providerOrganisationId) {
+  const { data, error } = await supabase
+    .from('organisation_offered_skills')
+    .select('skill_library:skill_library_id(id, name, category, description, skill_composite_definitions(status, skill_composite_components(id)))')
+    .eq('organisation_id', providerOrganisationId)
+  if (error) throw error
+  return (data ?? [])
+    .filter((r) => r.skill_library)
+    .map((r) => {
+      const { skill_composite_definitions: definitions, ...skill } = r.skill_library
+      const publishedComposite = definitions?.find((d) => d.status === 'published')
+      return {
+        ...skill,
+        isComposite: Boolean(publishedComposite),
+        componentCount: publishedComposite?.skill_composite_components?.length ?? 0,
+      }
+    })
+}
+
 // assign_course_to_employer_members (20260902180000) is security definer:
 // validates the caller's admin status and the course's catalogue
 // eligibility server-side, then inserts one course_assignments row per
