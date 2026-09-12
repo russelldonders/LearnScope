@@ -36,6 +36,7 @@ insert into course_catalogue_publications(catalogue_id,course_id) values('${id(3
 await db.exec(await readFile(new URL('../migrations/20260902310000_employer_linked_providers.sql',import.meta.url),'utf8'))
 await db.exec('alter table employer_linked_providers drop constraint employer_linked_providers_linked_by_fkey, add constraint employer_linked_providers_linked_by_fkey foreign key(linked_by) references auth.users(id) on delete set null')
 await db.exec(await readFile(new URL('../migrations/20260912152917_provider_employer_sharing.sql',import.meta.url),'utf8'))
+await db.exec(await readFile(new URL('../migrations/20260912160737_allow_provider_sharing_selection_updates.sql',import.meta.url),'utf8'))
 const actor = async n => db.exec(`reset role; set test.uid='${n ? id(n):''}'; set role ${n ? 'authenticated':'anon'};`)
 let checks=0
 async function denied(fn,re) { await assert.rejects(fn,re); checks++ }
@@ -43,6 +44,8 @@ async function enabled(course,expected) { const r=await db.query('select employe
 const specific={all:false,catalogues:[{id:id(31),all:false,courses:[id(41)]}]}
 async function request(side='employer',sharing=specific,provider=11) { return (await db.query(`insert into employer_linked_providers(employer_id,provider_organisation_id,linked_by,initiated_by,sharing) values($1,$2,auth.uid(),$3,$4) returning *`,[id(20),id(provider),side,sharing])).rows[0] }
 const decide = (row,status='accepted') => db.query('update employer_linked_providers set status=$2 where id=$1 returning *',[row.id,status])
+const propose = (row,side,sharing) => db.query('update employer_linked_providers set pending_sharing=$2,pending_initiated_by=$3 where id=$1 returning *',[row.id,sharing,side])
+const decideDelta = (row,accept) => db.query(`update employer_linked_providers set sharing=case when $2 then pending_sharing else sharing end,pending_sharing=null,pending_initiated_by=null,pending_requested_at=null where id=$1 returning *`,[row.id,accept])
 await actor(null); await denied(()=>request(),/permission denied|Not authorized/)
 await actor(3); await denied(()=>request(),/row-level security|Not authorized/)
 await actor(1); await enabled(40,true); await enabled(41,false)
@@ -53,7 +56,9 @@ await denied(()=>request('employer',{all:false,catalogues:[{id:id(30),all:true,c
 await denied(()=>request('employer',{all:false,catalogues:[{id:id(31),all:false,courses:[id(40)]}]}),/published course/)
 let row=await request(); await enabled(41,false)
 await denied(()=>decide(row),/receiving/)
-await denied(()=>db.query('update employer_linked_providers set sharing=$2 where id=$1',[row.id,{all:true,catalogues:[]}]),/cannot change/)
+await db.query('update employer_linked_providers set sharing=$2 where id=$1',[row.id,{all:true,catalogues:[]}]); checks++
+await actor(2); await db.query('update employer_linked_providers set sharing=$2 where id=$1',[row.id,specific]); checks++
+await actor(1)
 await denied(()=>db.query('select * from assign_course_to_employer_members($1,$2,$3)',[id(20),id(41),[id(4)]]),/confirmed/)
 await actor(2); assert.equal((await db.query('select * from sharing_employer_directory($1)',[id(11)])).rows.length,1); checks++
 await decide(row)
@@ -61,6 +66,15 @@ await denied(()=>decide(row),/already been decided/)
 await actor(1); await enabled(41,true); await enabled(42,false)
 assert.equal((await db.query('select * from list_employer_shared_courses($1)',[id(20)])).rows.length,2); checks++
 assert.equal((await db.query('select * from assign_course_to_employer_members($1,$2,$3)',[id(20),id(41),[id(4),id(3)]])).rows.length,1); checks++
+row=(await propose(row,'employer',{all:true,catalogues:[]})).rows[0]
+await enabled(42,false)
+await denied(()=>decideDelta(row,true),/receiving/)
+await actor(2); row=(await decideDelta(row,true)).rows[0]
+await actor(1); await enabled(42,true)
+await actor(2)
+row=(await propose(row,'provider',specific)).rows[0]
+await denied(()=>decideDelta(row,false),/receiving/)
+await actor(1); row=(await decideDelta(row,false)).rows[0]; await enabled(42,true)
 await db.query('delete from employer_linked_providers where id=$1',[row.id]); await enabled(41,false)
 await actor(2); row=await request('provider',{all:false,catalogues:[{id:id(31),all:true,courses:[]}]}); await denied(()=>decide(row),/receiving/)
 await actor(1); await decide(row); await enabled(42,true)
@@ -75,6 +89,8 @@ await actor(3); assert.equal((await db.query('select * from employer_linked_prov
 await denied(()=>db.query('select * from sharing_employer_directory($1)',[id(11)]),/Not authorized/)
 await actor(1); await db.query('delete from employer_linked_providers where id=$1',[row.id]); row=await request()
 await actor(2); await decide(row,'declined'); await actor(1); await enabled(41,false)
+row=(await db.query('update employer_linked_providers set status=\'pending\',sharing=$2,initiated_by=\'employer\',linked_by=auth.uid(),decided_at=null,decided_by=null where id=$1 returning *',[row.id,specific])).rows[0]; checks++
+await actor(2); row=(await decide(row)).rows[0]; await actor(1); await enabled(41,true)
 await db.exec('reset role; set test.uid=\'\'')
 await db.query('delete from auth.users where id=$1',[id(1)])
 assert.equal((await db.query('select linked_by from employer_linked_providers where id=$1',[row.id])).rows[0].linked_by,null); checks++

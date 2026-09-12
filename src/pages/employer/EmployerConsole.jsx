@@ -79,7 +79,7 @@ const SECTIONS = [
   { key: 'users', label: 'Users' },
   { key: 'member-fields', label: 'Member fields' },
   { key: 'roles', label: 'Role profiles' },
-  { key: 'providers', label: 'Providers' },
+  { key: 'providers', label: 'Linked providers' },
 ]
 
 const LEARNER_SORT_ACCESSORS = {

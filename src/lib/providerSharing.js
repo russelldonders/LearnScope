@@ -17,12 +17,29 @@ export function listSharingCatalogues(providerId) {
     .select('id,name,course_catalogue_publications(course_id,published_at,course_catalogue(id,name,status,is_current_published))')
     .eq('organisation_id', providerId).eq('is_global', false).order('name'))
 }
-export function sendSharingRequest({ employerId, providerId, userId, side, sharing }) {
-  return result(supabase.from('employer_linked_providers').insert({ employer_id: employerId,
-    provider_organisation_id: providerId, linked_by: userId, initiated_by: side, sharing, status: 'pending' }).select().single())
+export function sendSharingRequest({ employerId, providerId, userId, side, sharing, requestId }) {
+  const fields = { linked_by: userId, initiated_by: side, sharing, status: 'pending', decided_at: null, decided_by: null }
+  const request = requestId
+    ? supabase.from('employer_linked_providers').update(fields).eq('id', requestId)
+    : supabase.from('employer_linked_providers').insert({ employer_id: employerId, provider_organisation_id: providerId, ...fields })
+  return result(request.select().single())
 }
-export function decideSharing(id, accept) {
-  return result(supabase.from('employer_linked_providers').update({ status: accept ? 'accepted' : 'declined' }).eq('id', id).select().single())
+export function updateSharingSelection(row, sharing, side) {
+  const fields = row.status === 'accepted'
+    ? { pending_sharing: sharing, pending_initiated_by: side }
+    : { sharing }
+  return result(supabase.from('employer_linked_providers').update(fields).eq('id', row.id).select().single())
+}
+export function decideSharing(row, accept) {
+  const fields = row.pending_sharing
+    ? {
+        sharing: accept ? row.pending_sharing : row.sharing,
+        pending_sharing: null,
+        pending_initiated_by: null,
+        pending_requested_at: null,
+      }
+    : { status: accept ? 'accepted' : 'declined' }
+  return result(supabase.from('employer_linked_providers').update(fields).eq('id', row.id).select().single())
 }
 export function removeSharing(id) {
   return result(supabase.from('employer_linked_providers').delete().eq('id', id).select().single())
