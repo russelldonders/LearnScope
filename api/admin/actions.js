@@ -899,6 +899,20 @@ async function addEmployerMember(admin, caller, { employerId, email, role, field
     const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email.trim(), inviteRedirectTo())
     if (inviteError) throw inviteError
     userId = invited.user.id
+
+    // Marks this account's origin as employer-provisioned (person_auth_accounts,
+    // 20260913130000) -- only for a brand-new account created by this invite,
+    // never for an existing account that's simply joining another employer
+    // (that person may already personally own their account, or be
+    // work-managed by a different employer; this add shouldn't relabel it).
+    // Best-effort: the bootstrap_personal_context trigger (20260903110000)
+    // already inserted this row as 'personal' by the time inviteUserByEmail
+    // returns, so this is a follow-up update, not a first insert.
+    const { error: accountTypeError } = await admin
+      .from('person_auth_accounts')
+      .update({ account_type: 'work_managed', employer_id: employerId })
+      .eq('auth_user_id', userId)
+    if (accountTypeError) throw accountTypeError
   }
 
   const { data: insertedMember, error: memberInsertError } = await admin
