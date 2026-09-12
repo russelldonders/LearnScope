@@ -2908,8 +2908,12 @@ function CourseCohorts({ courseCatalogueId, organisationId, canManage }) {
 
 function CohortForm({ initial, candidates = [], busy, submitLabel, onSubmit, onCancel, showEnrolmentToggle }) {
   const [name, setName] = useState(initial?.name ?? '')
-  const [startDate, setStartDate] = useState(toLocalInputValue(initial?.start_date))
-  const [endDate, setEndDate] = useState(toLocalInputValue(initial?.end_date))
+  const initialStart = splitLocalValue(toLocalInputValue(initial?.start_date))
+  const initialEnd = splitLocalValue(toLocalInputValue(initial?.end_date))
+  const [startDate, setStartDate] = useState(initialStart.date)
+  const [startTime, setStartTime] = useState(initialStart.time)
+  const [endDate, setEndDate] = useState(initialEnd.date)
+  const [endTime, setEndTime] = useState(initialEnd.time)
   const [capacity, setCapacity] = useState(initial?.capacity ?? '')
   const [location, setLocation] = useState(initial?.location ?? '')
   const [enrolmentOpen, setEnrolmentOpen] = useState(initial?.enrolment_open ?? true)
@@ -2927,7 +2931,9 @@ function CohortForm({ initial, candidates = [], busy, submitLabel, onSubmit, onC
   function handleSubmit(e) {
     e.preventDefault()
     onSubmit({
-      name, startDate: toIsoOrNull(startDate), endDate: toIsoOrNull(endDate),
+      name,
+      startDate: toIsoOrNull(combineDateAndTime(startDate, startTime)),
+      endDate: toIsoOrNull(combineDateAndTime(endDate, endTime)),
       capacity, location, enrolmentOpen, trainerIds: [...trainerIds],
     })
   }
@@ -2952,25 +2958,47 @@ function CohortForm({ initial, candidates = [], busy, submitLabel, onSubmit, onC
           <label className="block text-xs text-secondary mb-1" htmlFor="cohortStartDate">
             Starts
           </label>
-          <input
-            id="cohortStartDate"
-            type="datetime-local"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-          />
+          <div className="flex gap-2">
+            <input
+              id="cohortStartDate"
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+            />
+            <input
+              type="time"
+              aria-label="Start time (optional)"
+              value={startTime}
+              disabled={!startDate}
+              onChange={(e) => setStartTime(e.target.value)}
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss disabled:opacity-60"
+            />
+          </div>
+          <p className="text-xs text-secondary mt-1">Time is optional.</p>
         </div>
         <div>
           <label className="block text-xs text-secondary mb-1" htmlFor="cohortEndDate">
             Ends
           </label>
-          <input
-            id="cohortEndDate"
-            type="datetime-local"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-          />
+          <div className="flex gap-2">
+            <input
+              id="cohortEndDate"
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+            />
+            <input
+              type="time"
+              aria-label="End time (optional)"
+              value={endTime}
+              disabled={!endDate}
+              onChange={(e) => setEndTime(e.target.value)}
+              className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss disabled:opacity-60"
+            />
+          </div>
+          <p className="text-xs text-secondary mt-1">Time is optional.</p>
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -3054,6 +3082,26 @@ function toLocalInputValue(isoValue) {
   const d = new Date(isoValue)
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+// Splits a toLocalInputValue()-shaped string into its date and time parts
+// for CohortForm's separate date/time inputs -- a cohort's own start/end can
+// be entered as just a date (see that form's own comment), unlike a
+// session's, which always needs a specific time. A midnight time is treated
+// as "none entered" here too, so re-opening a date-only cohort to edit it
+// doesn't show a misleading 00:00 in the time field.
+function splitLocalValue(localValue) {
+  if (!localValue) return { date: '', time: '' }
+  const [date, time] = localValue.split('T')
+  return { date, time: time === '00:00' ? '' : time }
+}
+
+// The inverse: combines CohortForm's separate date/time inputs back into
+// the local-datetime shape toIsoOrNull expects, defaulting a blank time to
+// midnight -- the same "date-only" stand-in formatCohortDateRange already
+// knows to display without a time (src/lib/courseCatalogue.js).
+function combineDateAndTime(date, time) {
+  return date ? `${date}T${time || '00:00'}` : ''
 }
 
 function SessionForm({ initial, busy, submitLabel, onSubmit, onCancel }) {

@@ -286,20 +286,36 @@ export function formatCohortDateTime(dateStr) {
   return `${formatCohortDate(dateStr)}, ${formatCohortTime(dateStr)}`
 }
 
-// start_date/end_date carry a time now (20260907240000 -- a cohort can run
-// entirely within one day, e.g. a one-day workshop), so a same-day range
-// collapses to one date with a time range, the same shape
+// A cohort saved with no time entered stores midnight (local to whoever set
+// it -- see CohortForm) as a stand-in for "just a date"; shown as a plain
+// date rather than a misleading "12:00 AM" or "Ends 12:00 AM" line. Only
+// cohorts saved without a time end up exactly here, so this can't mistake a
+// genuinely-scheduled midnight start/end for a date-only one in practice.
+function isDateOnly(dateStr) {
+  const d = new Date(dateStr)
+  return d.getHours() === 0 && d.getMinutes() === 0
+}
+
+function formatCohortMoment(dateStr) {
+  return isDateOnly(dateStr) ? formatCohortDate(dateStr) : formatCohortDateTime(dateStr)
+}
+
+// start_date/end_date carry an optional time now (20260907240000 -- a
+// cohort can run entirely within one day, e.g. a one-day workshop), so a
+// same-day range collapses to one date with a time range, the same shape
 // formatSessionDateTime already uses for a single session's start/end.
 export function formatCohortDateRange(startDate, endDate) {
   if (!startDate && !endDate) return 'No dates set'
   if (startDate && endDate) {
     const sameDay = new Date(startDate).toDateString() === new Date(endDate).toDateString()
-    return sameDay
-      ? `${formatCohortDate(startDate)} · ${formatCohortTime(startDate)}–${formatCohortTime(endDate)}`
-      : `${formatCohortDateTime(startDate)} – ${formatCohortDateTime(endDate)}`
+    if (sameDay) {
+      if (isDateOnly(startDate) && isDateOnly(endDate)) return formatCohortDate(startDate)
+      return `${formatCohortDate(startDate)} · ${formatCohortTime(startDate)}–${formatCohortTime(endDate)}`
+    }
+    return `${formatCohortMoment(startDate)} – ${formatCohortMoment(endDate)}`
   }
-  if (startDate) return `Starts ${formatCohortDateTime(startDate)}`
-  return `Ends ${formatCohortDateTime(endDate)}`
+  if (startDate) return `Starts ${formatCohortMoment(startDate)}`
+  return `Ends ${formatCohortMoment(endDate)}`
 }
 
 // Name is optional (20260907230000) -- a cohort with no name is identified
