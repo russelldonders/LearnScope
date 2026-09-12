@@ -55,6 +55,7 @@ import AdminTags from './pages/admin/AdminTags'
 import AdminActivityLog from './pages/admin/AdminActivityLog'
 import AdminOnboarding from './pages/admin/AdminOnboarding'
 import AdminNotifications from './pages/admin/AdminNotifications'
+import AdminReleases from './pages/admin/AdminReleases'
 import ProviderConsole from './pages/provider/ProviderConsole'
 import EmployerConsole from './pages/employer/EmployerConsole'
 import EmployerHome from './pages/employer/EmployerHome'
@@ -418,6 +419,14 @@ function App() {
             element={
               <PlatformAdminRoute>
                 <AdminNotifications />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/releases"
+            element={
+              <PlatformAdminRoute>
+                <AdminReleases />
               </PlatformAdminRoute>
             }
           />

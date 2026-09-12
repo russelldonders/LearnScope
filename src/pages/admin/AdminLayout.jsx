@@ -11,6 +11,7 @@ const SECTIONS = [
   { to: '/admin/tags', label: 'Tags' },
   { to: '/admin/notifications', label: 'Notifications' },
   { to: '/admin/activity', label: 'Activity log' },
+  { to: '/admin/releases', label: "What's new" },
   { to: '/admin/onboarding', label: 'Settings' },
 ]
 
