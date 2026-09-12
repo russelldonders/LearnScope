@@ -2,8 +2,15 @@ import { formatMonthYear } from '../lib/dates'
 import { experienceTypeLabel } from '../lib/experienceTypes'
 import OrganizationLogo from './OrganizationLogo'
 import ChildExperienceEntry from './ChildExperienceEntry'
+import RoleProfileAlignmentDetail from './RoleProfileAlignmentDetail'
 
-export default function TimelineItem({ item, summary, childExperiences, onEdit, isLast }) {
+// roleAssignment is only set for an experience entry decide_employer_role_
+// assignment (20260912120000) created on accept -- carries the badge/
+// alignment content RoleAlignmentSummary used to render in its own separate
+// section at the bottom of the Experience page; this is that same
+// information, just attached to the timeline entry it actually belongs to
+// instead of split off on its own.
+export default function TimelineItem({ item, summary, childExperiences, onEdit, isLast, roleAssignment }) {
   return (
     <div className="flex gap-4 print:break-inside-avoid">
       <div className="flex flex-col items-center">
@@ -67,6 +74,7 @@ export default function TimelineItem({ item, summary, childExperiences, onEdit, 
             )}
           </div>
         )}
+        {roleAssignment && <RoleProfileAlignmentDetail {...roleAssignment} />}
       </div>
     </div>
   )

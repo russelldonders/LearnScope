@@ -128,11 +128,14 @@ export async function assignEmployerRoleProfile(profileId, employerMemberId) {
   return data
 }
 
-export async function decideEmployerRoleAssignment(assignmentId, accept, learnerExperienceId = null) {
+// Accepting no longer takes a target experience -- decide_employer_role_
+// assignment (20260912120000) creates one itself (titled after the role
+// profile, at the employer's name) rather than requiring the learner to
+// already have a current role to pick from.
+export async function decideEmployerRoleAssignment(assignmentId, accept) {
   const { error } = await supabase.rpc('decide_employer_role_assignment', {
     p_assignment_id: assignmentId,
     p_accept: accept,
-    p_learner_experience_id: accept ? learnerExperienceId : null,
   })
   if (error) throw error
 }

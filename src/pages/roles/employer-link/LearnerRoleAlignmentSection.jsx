@@ -63,7 +63,6 @@ export default function LearnerRoleAlignmentSection({
 
       <PendingAssignmentsPanel
         pendingAssignments={pendingAssignments}
-        currentRoles={currentRoles}
         responding={linking}
         onAcceptAssignment={onAcceptAssignment}
         onDeclineAssignment={onDeclineAssignment}

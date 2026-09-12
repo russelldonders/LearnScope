@@ -47,11 +47,11 @@ describe('employer role profile service', () => {
     })
   })
 
-  it('requires the learner-selected experience only when accepting', async () => {
+  it('accepts or declines without a learner-selected experience -- the server creates one itself', async () => {
     rpc.mockResolvedValue({ error: null })
-    await decideEmployerRoleAssignment('assignment-1', true, 'experience-1')
+    await decideEmployerRoleAssignment('assignment-1', true)
     expect(rpc).toHaveBeenCalledWith('decide_employer_role_assignment', {
-      p_assignment_id: 'assignment-1', p_accept: true, p_learner_experience_id: 'experience-1',
+      p_assignment_id: 'assignment-1', p_accept: true,
     })
   })
 

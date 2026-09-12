@@ -62,12 +62,16 @@ export default function EmployerRoleProfileDetail() {
         listEmployerMembers(rawProfile.employerId),
         listEmployerRoleAssignments(roleProfileId),
       ])
-      // Both scoped to the employer's attached provider org's own catalogue
-      // -- not the platform's global skill library/course catalogue -- once
-      // employerData (and so provider_organisation_id) is actually known.
+      // Skills: scoped to the employer's attached provider org's own offered-
+      // skills roster, not the platform's global skill library. Courses:
+      // listEmployerCatalogueCourses now takes the employer id itself (not
+      // provider_organisation_id) -- it resolves to whatever this provider
+      // has actually confirmed sharing with this employer
+      // (list_employer_shared_courses, 20260912152917), not just anything
+      // published in the attached org.
       const [skillsData, coursesData] = await Promise.all([
         listEmployerCatalogueSkills(employerData.provider_organisation_id),
-        listEmployerCatalogueCourses(employerData.provider_organisation_id),
+        listEmployerCatalogueCourses(employerData.id),
       ])
       const memberByUserId = new Map(membersData.map((m) => [m.user_id, m]))
       const nextProfile = toRoleProfileViewModel(rawProfile, assignments, memberByUserId)

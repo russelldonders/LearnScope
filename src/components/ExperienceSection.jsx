@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import { EXPERIENCE_TYPES } from '../lib/experienceTypes'
+import { useMyRoleAssignments } from '../pages/roles/useMyRoleAssignments'
 import TimelineItem from './TimelineItem'
+import PendingRoleTimelineCard from './PendingRoleTimelineCard'
 import ExperienceModal from './ExperienceModal'
 import AddExperienceButton from './AddExperienceButton'
 import AccessibleDialog from './AccessibleDialog'
@@ -31,6 +33,16 @@ export default function ExperienceSection() {
   const [pendingJob, setPendingJob] = useState(null)
   const [existingCurrentJob, setExistingCurrentJob] = useState(null)
   const [fullName, setFullName] = useState(null)
+
+  // Every employer this learner has ever connected a role to (no employerId
+  // -- unlike EmployerHome.jsx's own scoped usage of this same hook), so a
+  // proposal/link from any of them shows up right here on the one timeline
+  // rather than needing its own separate section per employer.
+  const {
+    pendingAssignments, linkedAssignments, alignmentByAssignmentId,
+    loading: assignmentsLoading, error: assignmentsError,
+    acceptAssignment, declineAssignment, disconnectAssignment,
+  } = useMyRoleAssignments()
 
   useEffect(() => {
     loadExperience()
@@ -146,6 +158,16 @@ export default function ExperienceSection() {
     setExistingCurrentJob(null)
   }
 
+  // Accepting creates a new experience row server-side (decide_employer_
+  // role_assignment, 20260912120000) that this component's own `items`
+  // state has no way to know about yet -- reloads the timeline so it shows
+  // up immediately instead of only after the next full page visit.
+  // Declining never touches experience, so no reload needed there.
+  async function handleAcceptAssignment(assignmentId) {
+    await acceptAssignment(assignmentId)
+    await loadExperience()
+  }
+
   // Sub-experiences (including subjects nested under education) render
   // inside their parent's card rather than as their own entry
   // on the main timeline -- items is already ordered by start_date, so each
@@ -157,6 +179,27 @@ export default function ExperienceSection() {
     if (!childrenByParent[i.parent_experience_id]) childrenByParent[i.parent_experience_id] = []
     childrenByParent[i.parent_experience_id].push(i)
   }
+
+  // Keyed by the experience id decide_employer_role_assignment created for
+  // each accepted assignment -- matched onto whichever TimelineItem that
+  // turns out to be, however far down the (start_date-ordered) list it
+  // lands, rather than assuming it's always the first/most recent entry.
+  const roleAssignmentByExperienceId = useMemo(() => Object.fromEntries(
+    linkedAssignments
+      .filter((assignment) => assignment.linkedExperienceId)
+      .map((assignment) => {
+        const alignment = alignmentByAssignmentId[assignment.assignmentId] ?? { aligned: [], gaps: [], training: [] }
+        return [assignment.linkedExperienceId, {
+          employerName: assignment.employerName,
+          roleProfileName: assignment.roleProfile.name,
+          aligned: alignment.aligned,
+          gaps: alignment.gaps,
+          training: alignment.training,
+          disconnecting: assignmentsLoading,
+          onDisconnect: () => disconnectAssignment(assignment.assignmentId),
+        }]
+      })
+  ), [linkedAssignments, alignmentByAssignmentId, assignmentsLoading, disconnectAssignment])
 
   return (
     <section>
@@ -189,14 +232,25 @@ export default function ExperienceSection() {
 
       {loading && <p className="text-secondary">Loading…</p>}
       {error && <p className="text-red-700 text-sm">{error}</p>}
+      {assignmentsError && <p className="text-red-700 text-sm">{assignmentsError}</p>}
 
-      {!loading && rootItems.length === 0 && (
+      {!loading && rootItems.length === 0 && pendingAssignments.length === 0 && (
         <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
           <p className="text-secondary">{t('experience.emptyState')}</p>
         </div>
       )}
 
       <div>
+        {pendingAssignments.map((assignment, i) => (
+          <PendingRoleTimelineCard
+            key={assignment.assignmentId}
+            assignment={assignment}
+            responding={assignmentsLoading}
+            onAccept={handleAcceptAssignment}
+            onDecline={declineAssignment}
+            isLast={i === pendingAssignments.length - 1 && rootItems.length === 0}
+          />
+        ))}
         {rootItems.map((item, i) => (
           <TimelineItem
             key={item.id}
@@ -205,6 +259,7 @@ export default function ExperienceSection() {
             childExperiences={childrenByParent[item.id]}
             onEdit={(item) => navigate(`/experience/${item.id}`)}
             isLast={i === rootItems.length - 1}
+            roleAssignment={roleAssignmentByExperienceId[item.id]}
           />
         ))}
       </div>
