@@ -1,3 +1,4 @@
+import ProviderSharingPanel from '../../components/ProviderSharingPanel'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
@@ -89,6 +90,7 @@ const SECTIONS = [
   { key: 'skills', label: 'Skills' },
   { key: 'catalogues', label: 'Catalogues' },
   { key: 'staff', label: 'Users', adminOnly: true },
+  { key: 'employers', label: 'Employers', adminOnly: true },
   { key: 'resources', label: 'Resources' },
   { key: 'lti-tools', label: 'LTI tools', adminOnly: true },
 ]
@@ -355,6 +357,9 @@ export default function ProviderConsole() {
                   )}
                   {currentSection === 'catalogues' && (
                     <ProviderCataloguesSection key={selectedOrg.id} organisation={selectedOrg} userId={user.id} canCreate={myRole === 'admin'} />
+                  )}
+                  {currentSection === 'employers' && myRole === 'admin' && (
+                    <ProviderSharingPanel key={selectedOrg.id} side="provider" organisation={selectedOrg} userId={user.id} />
                   )}
                   {currentSection === 'staff' && myRole === 'admin' && (
                     <OrganisationStaffPanel key={selectedOrg.id} organisation={selectedOrg} />

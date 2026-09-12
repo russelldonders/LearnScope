@@ -1,6 +1,5 @@
 import { supabase } from '../supabaseClient'
 import { callAdminApi } from './adminApi'
-import { listPublishedProviderCourses } from './providerCatalogues'
 
 // Mirrors src/lib/admin/organisations.js's shape/conventions. employers'
 // RLS select policy (is_employer_member, unlike organisations' open
@@ -81,19 +80,11 @@ export async function decideEmployerInvite(memberId, accept) {
   if (error) throw error
 }
 
-// Phase 3: course assignment ("push training" rather than 100%
-// learner-initiated browse/enrol -- courseCatalogue.js's
-// listCatalogueCourses/enrolInCatalogueCourse are untouched by this phase).
-//
-// Reuses listPublishedProviderCourses (providerCatalogues.js) as-is rather
-// than writing a new query -- it already lists an organisation's own
-// approved + currently-published course_catalogue rows, the same picker
-// source ProviderCataloguesSection uses for "assign to catalogue". The RPC
-// below is the actual authority on eligibility (published in one of this
-// employer's own catalogues specifically, not just authored by the org) --
-// this is only the convenience list for the picker UI.
-export async function listEmployerCatalogueCourses(providerOrganisationId) {
-  return listPublishedProviderCourses(providerOrganisationId)
+// The picker and assignment RPC use the same confirmed-sharing eligibility.
+export async function listEmployerCatalogueCourses(employerId) {
+  const { data, error } = await supabase.rpc('list_employer_shared_courses', { p_employer: employerId })
+  if (error) throw error
+  return data ?? []
 }
 
 // assign_course_to_employer_members (20260902180000) is security definer:
@@ -306,38 +297,4 @@ export async function listEmployerSkillSuggestions(employerId) {
     .order('created_at', { ascending: false })
   if (error) throw error
   return data ?? []
-}
-
-// Providers tab (20260902310000): purely a listing/linking mechanism for
-// additional provider organisations beyond the employer's one auto-
-// provisioned attached provider org (employers.provider_organisation_id) --
-// linking has no functional effect elsewhere yet (doesn't widen course-
-// assignment eligibility, grants no access, needs no consent from the
-// linked org). RLS alone (is_employer_member for select, is_employer_admin
-// for insert/delete) fully expresses this, so these are plain table calls,
-// no RPC needed. Joined to organisations(id, name, org_code) for display --
-// mirrors listEmployerCourseAssignments' join-for-display shape.
-export async function listEmployerLinkedProviders(employerId) {
-  const { data, error } = await supabase
-    .from('employer_linked_providers')
-    .select('id, provider_organisation_id, linked_by, created_at, organisations(id, name, org_code)')
-    .eq('employer_id', employerId)
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  return data ?? []
-}
-
-export async function linkProviderToEmployer(employerId, providerOrganisationId, linkedBy) {
-  const { data, error } = await supabase
-    .from('employer_linked_providers')
-    .insert({ employer_id: employerId, provider_organisation_id: providerOrganisationId, linked_by: linkedBy })
-    .select('id, provider_organisation_id, linked_by, created_at, organisations(id, name, org_code)')
-    .single()
-  if (error) throw error
-  return data
-}
-
-export async function unlinkProviderFromEmployer(linkId) {
-  const { error } = await supabase.from('employer_linked_providers').delete().eq('id', linkId)
-  if (error) throw error
 }

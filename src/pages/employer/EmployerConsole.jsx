@@ -1,3 +1,4 @@
+import ProviderSharingPanel from '../../components/ProviderSharingPanel'
 import { requestedDataSummary } from '../../lib/employerDataAccess'
 import RequestDataAccessDialog from './RequestDataAccessDialog'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -24,9 +25,6 @@ import {
   listEmployerDataAccessRequests,
   suggestSkillToEmployerMembers,
   listEmployerSkillSuggestions,
-  listEmployerLinkedProviders,
-  linkProviderToEmployer,
-  unlinkProviderFromEmployer,
 } from '../../lib/admin/employers'
 import { listOrganisationMembers, listOrganisations } from '../../lib/admin/organisations'
 import { listLibrarySkills } from '../../lib/skillLibrary'
@@ -104,11 +102,6 @@ const SKILL_SUGGESTION_STATUS_LABELS = {
   dismissed: 'Dismissed',
 }
 
-const LINKED_PROVIDER_SORT_ACCESSORS = {
-  name: (p) => p.organisations?.name?.toLowerCase() ?? '',
-  org_code: (p) => p.organisations?.org_code?.toLowerCase() ?? '',
-  created_at: (p) => p.created_at ?? '',
-}
 
 // Customizable data columns only -- the leading selection checkbox stays
 // pinned outside this list (EmployerLearnersPanel has no trailing actions
@@ -197,31 +190,6 @@ function employerLearnerColumns(attachedProviderOrg, dataAccessByLearner) {
 // stays pinned outside this list, same as AdminEmployers.jsx's "Add admin"
 // column. No external dependency needed, so a plain constant rather than a
 // factory function.
-const EMPLOYER_PROVIDER_COLUMNS = [
-  {
-    key: 'name',
-    label: 'Provider',
-    sortable: true,
-    cellClassName: 'px-4 py-2 text-ink text-xs truncate max-w-[220px]',
-    renderCell: (p) => p.organisations?.name || 'Deleted organisation',
-  },
-  {
-    key: 'org_code',
-    label: 'Code',
-    sortable: true,
-    thClassName: 'whitespace-nowrap',
-    cellClassName: 'px-4 py-2 text-secondary text-xs whitespace-nowrap font-mono',
-    renderCell: (p) => p.organisations?.org_code || '—',
-  },
-  {
-    key: 'created_at',
-    label: 'Linked',
-    sortable: true,
-    thClassName: 'whitespace-nowrap',
-    cellClassName: 'px-4 py-2 text-secondary text-xs whitespace-nowrap',
-    renderCell: (p) => new Date(p.created_at).toLocaleDateString(),
-  },
-]
 
 // Every panel below (Users, Providers) keeps its own search/sort/page state
 // in the URL, same convention as the Training tab's ProviderTrainingSection.
@@ -1321,7 +1289,7 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
 // from a selection made on that one roster instead, so there's a single
 // place to pick "who" (see EmployerLearnersPanel) and this only has to ask
 // "which course". Course choices are scoped to courses actually published
-// in one of this employer's own catalogues (listEmployerCatalogueCourses --
+// in this employer's enabled catalogues (listEmployerCatalogueCourses --
 // the RPC re-validates this server-side regardless, this is only the
 // picker's convenience list). Assigning never enrols anyone by itself --
 // assign_course_to_employer_members only creates a course_assignments row;
@@ -1336,11 +1304,11 @@ function AssignTrainingModal({ employer, members, skippedCount = 0, onClose, onA
   const [assigning, setAssigning] = useState(false)
 
   useEffect(() => {
-    listEmployerCatalogueCourses(employer.provider_organisation_id)
+    listEmployerCatalogueCourses(employer.id)
       .then(setCourses)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
-  }, [employer.provider_organisation_id])
+  }, [employer.id])
 
   async function handleAssign(e) {
     e.preventDefault()
@@ -1389,8 +1357,7 @@ function AssignTrainingModal({ employer, members, skippedCount = 0, onClose, onA
         <p className="text-sm text-secondary">Loading courses…</p>
       ) : courses.length === 0 ? (
         <p className="text-sm text-secondary">
-          No published courses yet -- publish a course to one of this employer's own catalogues from the Training
-          tab first.
+          No enabled courses yet. Publish courses in your main provider’s catalogues or approve a provider sharing connection.
         </p>
       ) : (
         <form onSubmit={handleAssign} className="space-y-4">
@@ -2060,270 +2027,7 @@ function EmployerSkillAssignmentsHistory({ employer, members, searchParams, setS
   )
 }
 
-// Phase 7 foundation: purely a listing/linking mechanism for now -- linking
-// an additional provider organisation to this employer has no functional
-// effect elsewhere yet (doesn't widen assign_course_to_employer_members'
-// eligibility, doesn't grant the linked provider any access, needs no
-// consent from it). This is deliberately separate from the employer's own
-// auto-provisioned attached provider org (employer.provider_organisation_id,
-// create_employer), which stays filtered out of the linkable list below --
-// linking it to itself would be meaningless. organisations is already an
-// openly browsable directory to any authenticated user ("Authenticated
-// users can view organisations", 0065), so listOrganisations() (unmodified,
-// same as AdminProviders.jsx's own use of it) is reused directly here rather
-// than a new platform-admin-gated listing. A later phase can build real
-// functionality on top of employer_linked_providers without changing its
-// shape.
-function EmployerProvidersPanel({ employer, user, searchParams, setSearchParams }) {
-  const { isPlatformAdmin } = useAuth()
-  const { columns, visibleColumns, toggleColumn, moveColumn, resetToDefault } =
-    useColumnPreferences('employer-providers', EMPLOYER_PROVIDER_COLUMNS)
-  const [linkedProviders, setLinkedProviders] = useState([])
-  const [allOrganisations, setAllOrganisations] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-
-  // Transient "search all organisations to link" widget -- not a listing of
-  // this panel's own persisted data (mirrors the Suggest-skills tab's
-  // skillQuery autocomplete, also left as local state rather than
-  // URL-synced).
-  const [query, setQuery] = useState('')
-  const [linkingId, setLinkingId] = useState(null)
-  const [unlinkTarget, setUnlinkTarget] = useState(null)
-  const [unlinking, setUnlinking] = useState(false)
-
-  // The already-linked-providers roster below is this panel's own URL-synced
-  // collection (?q=&sort=&dir=&page=&pageSize=), same convention as every
-  // other panel's primary table.
-  const [rosterQuery, setRosterQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
-  const rq = rosterQuery.trim().toLowerCase()
-  const filteredLinkedProviders = useMemo(
-    () =>
-      rq
-        ? linkedProviders.filter(
-            (p) => p.organisations?.name?.toLowerCase().includes(rq) || (p.organisations?.org_code || '').toLowerCase().includes(rq)
-          )
-        : linkedProviders,
-    [linkedProviders, rq]
-  )
-  const rosterFiltersActive = rosterQuery !== ''
-
-  function resetRosterFilters() {
-    writeUrlParams(searchParams, setSearchParams, { q: null, page: null })
-  }
-
-  const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
-    useSortedPage(filteredLinkedProviders, LINKED_PROVIDER_SORT_ACCESSORS, { urlSync: { searchParams, setSearchParams } })
-
-  useEffect(() => {
-    load()
-  }, [employer.id])
-
-  async function load() {
-    setLoading(true)
-    setError(null)
-    try {
-      const [linked, orgs] = await Promise.all([listEmployerLinkedProviders(employer.id), listOrganisations()])
-      setLinkedProviders(linked)
-      setAllOrganisations(orgs)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const linkedOrgIds = useMemo(
-    () => new Set(linkedProviders.map((p) => p.provider_organisation_id)),
-    [linkedProviders]
-  )
-
-  const linkableMatches = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return []
-    return allOrganisations
-      .filter((o) => o.id !== employer.provider_organisation_id && !linkedOrgIds.has(o.id))
-      .filter((o) => o.name.toLowerCase().includes(q) || (o.org_code || '').toLowerCase().includes(q))
-      .slice(0, 20)
-  }, [allOrganisations, linkedOrgIds, employer.provider_organisation_id, query])
-
-  async function handleLink(org) {
-    setLinkingId(org.id)
-    setError(null)
-    try {
-      await linkProviderToEmployer(employer.id, org.id, user.id)
-      setQuery('')
-      await load()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLinkingId(null)
-    }
-  }
-
-  async function handleUnlink() {
-    setError(null)
-    setUnlinking(true)
-    try {
-      await unlinkProviderFromEmployer(unlinkTarget.id)
-      setUnlinkTarget(null)
-      await load()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setUnlinking(false)
-    }
-  }
-
-  return (
-    <section aria-labelledby="employer-providers-heading">
-      <div className="mb-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 id="employer-providers-heading" className="font-display text-lg text-ink">Providers</h2>
-          {isPlatformAdmin && (
-            <ColumnCustomizer
-              idPrefix="employer-providers"
-              columns={columns}
-              onToggle={toggleColumn}
-              onMove={moveColumn}
-              onReset={resetToDefault}
-            />
-          )}
-        </div>
-        <p className="text-sm text-secondary mt-1 max-w-2xl">
-          Link additional provider organisations to {employer.name}. This just records the association for now --
-          it doesn't change course assignment or grant the provider any access to {employer.name}'s data.
-        </p>
-      </div>
-
-      <MutationFeedback status="error" message={error} className="mb-3" />
-
-      {loading ? (
-        <p className="text-secondary">Loading…</p>
-      ) : (
-        <>
-          <div className="bg-card border border-hairline rounded-lg p-4 mb-8 relative">
-            <label className="block text-xs text-secondary mb-1" htmlFor="employerLinkProviderSearch">
-              Link a provider organisation
-            </label>
-            <input
-              id="employerLinkProviderSearch"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search organisations by name or code…"
-              autoComplete="off"
-              className="w-full max-w-md rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-            />
-            {query.trim() && (
-              <div className="mt-1 w-full max-w-md bg-card border border-hairline rounded-md max-h-56 overflow-y-auto">
-                {linkableMatches.length === 0 ? (
-                  <p className="px-3 py-2 text-xs text-secondary">No matching organisations to link.</p>
-                ) : (
-                  linkableMatches.map((org) => (
-                    <div
-                      key={org.id}
-                      className="flex items-center justify-between gap-2 px-3 py-2 text-sm border-b border-hairline last:border-0"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-ink truncate">{org.name}</p>
-                        {org.org_code && <p className="text-[10px] font-mono text-secondary">{org.org_code}</p>}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleLink(org)}
-                        disabled={linkingId === org.id}
-                        className="text-xs text-moss hover:underline disabled:opacity-60 shrink-0"
-                      >
-                        {linkingId === org.id ? 'Linking…' : 'Link'}
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-
-          {linkedProviders.length === 0 ? (
-            <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
-              <p className="text-secondary">No additional providers linked yet.</p>
-            </div>
-          ) : (
-            <div className="bg-card border border-hairline rounded-lg">
-              <div className="flex flex-wrap items-center gap-2 p-3">
-                <input
-                  aria-label="Search linked providers"
-                  type="text"
-                  value={rosterQuery}
-                  onChange={(e) => setRosterQuery(e.target.value)}
-                  placeholder="Search by name or code…"
-                  className="flex-1 min-w-[220px] rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
-                />
-                {rosterFiltersActive && (
-                  <button
-                    type="button"
-                    onClick={resetRosterFilters}
-                    className="text-xs text-secondary hover:text-ink py-1.5 px-2 whitespace-nowrap"
-                  >
-                    Reset filters
-                  </button>
-                )}
-              </div>
-              {filteredLinkedProviders.length === 0 ? (
-                <p className="text-center text-xs text-secondary py-8">No linked providers match your search.</p>
-              ) : (
-              <>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-hairline text-left text-secondary">
-                      {visibleColumns.map((col) =>
-                        col.sortable ? (
-                          <SortableTh key={col.key} label={col.label} columnKey={col.key} sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className={col.thClassName} />
-                        ) : (
-                          <th key={col.key} className={`px-4 py-2 font-medium ${col.thClassName || ''}`}>{col.label}</th>
-                        )
-                      )}
-                      <th className="px-4 py-2 font-medium"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pageItems.map((p) => (
-                      <tr key={p.id} className="border-b border-hairline last:border-0">
-                        {visibleColumns.map((col) => (
-                          <td key={col.key} className={col.cellClassName}>
-                            {col.renderCell(p)}
-                          </td>
-                        ))}
-                        <td className="px-4 py-2 text-right">
-                          <button
-                            type="button"
-                            onClick={() => setUnlinkTarget(p)}
-                            className="text-xs text-red-700 hover:underline whitespace-nowrap"
-                          >
-                            Unlink
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <TablePagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalItems={totalItems} idPrefix={`employer-linked-providers-${employer.id}`} />
-              </>
-              )}
-            </div>
-          )}
-        </>
-      )}
-
-      {unlinkTarget && (
-        <ConfirmDialog
-          message={`Unlink ${unlinkTarget.organisations?.name || 'this provider'} from ${employer.name}? This only removes the association -- the provider organisation itself isn't affected.`}
-          onConfirm={handleUnlink}
-          onCancel={() => setUnlinkTarget(null)}
-          confirming={unlinking}
-        />
-      )}
-    </section>
-  )
+// The main provider is permanent; additional providers require confirmed sharing.
+function EmployerProvidersPanel({ employer, user }) {
+  return <ProviderSharingPanel key={employer.id} employer={employer} userId={user.id} />
 }
