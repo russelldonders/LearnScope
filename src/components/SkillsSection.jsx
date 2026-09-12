@@ -12,6 +12,8 @@ import GrowthRing from './GrowthRing'
 import { TRACKING_REASONS } from '../lib/trackingReasons'
 import { LEVEL_LABELS } from '../lib/levels'
 import { isSelfAssessmentDue } from '../lib/checkin'
+import { getEmployerTargetsForUser, getLatestEmployerSkillConfirmations } from '../lib/employerSkillTargets'
+import { computeVisibleTarget } from '../lib/skillTargetPrecedence'
 
 const SKILL_VIEWS = [
   { value: 'all', labelKey: 'skills.views.all' },
@@ -37,10 +39,38 @@ export default function SkillsSection() {
   const [sortBy, setSortBy] = useState('attention')
   const [view, setView] = useState('all')
 
+  const [currentRoleSkillIdsByExperienceId, setCurrentRoleSkillIdsByExperienceId] = useState({})
+
   useEffect(() => {
     loadSkills()
     loadCurrentRoles()
   }, [])
+
+  // Which specific current role(s) each current-role skill actually belongs
+  // to -- used both to split the "Current role(s)" grid per role and to
+  // drop a current role from the list entirely once it turns out to have no
+  // skills linked to it.
+  useEffect(() => {
+    if (currentRoles.length === 0) {
+      setCurrentRoleSkillIdsByExperienceId({})
+      return
+    }
+    let active = true
+    supabase
+      .from('skill_experience_links')
+      .select('skill_id, experience_id')
+      .in('experience_id', currentRoles.map((r) => r.id))
+      .then(({ data }) => {
+        if (!active) return
+        const map = {}
+        for (const row of data ?? []) {
+          if (!map[row.experience_id]) map[row.experience_id] = new Set()
+          map[row.experience_id].add(row.skill_id)
+        }
+        setCurrentRoleSkillIdsByExperienceId(map)
+      })
+    return () => { active = false }
+  }, [currentRoles])
 
   async function loadCurrentRoles() {
     const { data } = await supabase
@@ -55,26 +85,34 @@ export default function SkillsSection() {
 
   async function loadSkills() {
     setLoading(true)
-    const [{ data, error }, { data: tagLinks }, { data: practicalAssessments }, { data: skillTargets }] =
-      await Promise.all([
-        supabase
-          .from('skills')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('date_added', { ascending: false }),
-        supabase.from('skill_tags').select('skill_id, tags(name)').eq('user_id', user.id),
-        supabase
-          .from('skill_assessments')
-          .select('skill_id, level, source, assessed_at')
-          .eq('user_id', user.id)
-          .eq('axis', 'practical')
-          .order('assessed_at', { ascending: false }),
-        supabase
-          .from('skill_targets')
-          .select('skill_id, target_level, created_at')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false }),
-      ])
+    const [
+      { data, error },
+      { data: tagLinks },
+      { data: practicalAssessments },
+      { data: skillTargets },
+      employerTargetsByLibraryId,
+      employerConfirmationsByKey,
+    ] = await Promise.all([
+      supabase
+        .from('skills')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('date_added', { ascending: false }),
+      supabase.from('skill_tags').select('skill_id, tags(name)').eq('user_id', user.id),
+      supabase
+        .from('skill_assessments')
+        .select('skill_id, level, source, assessed_at')
+        .eq('user_id', user.id)
+        .eq('axis', 'practical')
+        .order('assessed_at', { ascending: false }),
+      supabase
+        .from('skill_targets')
+        .select('skill_id, target_level, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false }),
+      getEmployerTargetsForUser(),
+      getLatestEmployerSkillConfirmations(),
+    ])
     if (error) {
       setError(error.message)
     } else {
@@ -103,12 +141,26 @@ export default function SkillsSection() {
         if (!latestTargetLevelBySkillId.has(t.skill_id)) latestTargetLevelBySkillId.set(t.skill_id, t.target_level)
       }
       setSkills(
-        data.map((s) => ({
-          ...s,
-          displayedLevel: s.level ?? latestPracticalBySkillId.get(s.id) ?? null,
-          displayedLevelIsSelfAssessed: selfAssessedSkillIds.has(s.id),
-          targetLevel: latestTargetLevelBySkillId.get(s.id) ?? null,
-        }))
+        data.map((s) => {
+          const employerTarget = s.library_skill_id ? employerTargetsByLibraryId.get(s.library_skill_id) : null
+          const employerConfirmedLevel = employerTarget
+            ? employerConfirmationsByKey.get(`${employerTarget.employerId}:${s.library_skill_id}`) ?? null
+            : null
+          const visibleTarget = computeVisibleTarget({
+            employerTargetLevel: employerTarget?.level ?? null,
+            employerConfirmedLevel,
+            personalTargetLevel: latestTargetLevelBySkillId.get(s.id) ?? null,
+          })
+          return {
+            ...s,
+            displayedLevel: s.level ?? latestPracticalBySkillId.get(s.id) ?? null,
+            displayedLevelIsSelfAssessed: selfAssessedSkillIds.has(s.id),
+            targetLevel: visibleTarget?.level ?? null,
+            targetSource: visibleTarget?.source ?? null,
+            employerTargetLevel: visibleTarget?.employerTargetLevel ?? null,
+            employerTargetMet: visibleTarget?.employerTargetMet ?? false,
+          }
+        })
       )
       const map = new Map()
       for (const link of tagLinks ?? []) {
@@ -176,6 +228,23 @@ export default function SkillsSection() {
     [filteredSkills]
   )
   const hasSplit = currentRoleSkills.length > 0
+
+  // Roles the skill-to-experience map has actually confirmed have at least
+  // one linked skill -- a current role with none isn't worth listing here.
+  // Before the map has loaded (or if a skill's is_current_role is somehow
+  // stale relative to it), falls back to every current role rather than
+  // silently showing none.
+  const currentRoleGroups = useMemo(() => {
+    if (Object.keys(currentRoleSkillIdsByExperienceId).length === 0) {
+      return currentRoles.map((role) => ({ role, skills: currentRoleSkills }))
+    }
+    return currentRoles
+      .map((role) => ({
+        role,
+        skills: currentRoleSkills.filter((s) => currentRoleSkillIdsByExperienceId[role.id]?.has(s.id)),
+      }))
+      .filter((group) => group.skills.length > 0)
+  }, [currentRoles, currentRoleSkills, currentRoleSkillIdsByExperienceId])
 
   const availableTags = useMemo(
     () => [...new Set([...tagsBySkill.values()].flat())].sort(),
@@ -350,22 +419,42 @@ export default function SkillsSection() {
 
       {hasSplit && (
         <div className="mb-10">
-          <div className="mb-4">
-            <h3 className="font-display text-base text-ink">Current role</h3>
-            {currentRoles.map((role) => (
-              <p key={role.id} className="flex items-center gap-1.5 text-sm text-secondary mt-1">
-                {role.organization_url && <OrganizationLogo organizationUrl={role.organization_url} size={18} />}
-                <span>
-                  {role.title}
-                  {role.organization ? ` · ${role.organization}` : ''}
-                </span>
-              </p>
-            ))}
-          </div>
-          <SkillGrid
-            skills={currentRoleSkills}
-            onEdit={(skill) => navigate(`/skills/${skill.id}`)}
-          />
+          {currentRoleGroups.length > 1 ? (
+            <>
+              <h3 className="font-display text-base text-ink mb-4">Current roles</h3>
+              {currentRoleGroups.map(({ role, skills }) => (
+                <div key={role.id} className="mb-6 last:mb-0">
+                  <p className="flex items-center gap-1.5 text-sm text-secondary mb-3">
+                    {role.organization_url && <OrganizationLogo organizationUrl={role.organization_url} size={18} />}
+                    <span>
+                      {role.title}
+                      {role.organization ? ` · ${role.organization}` : ''}
+                    </span>
+                  </p>
+                  <SkillGrid skills={skills} onEdit={(skill) => navigate(`/skills/${skill.id}`)} />
+                </div>
+              ))}
+            </>
+          ) : (
+            <>
+              <div className="mb-4">
+                <h3 className="font-display text-base text-ink">Current role</h3>
+                {currentRoleGroups.map(({ role }) => (
+                  <p key={role.id} className="flex items-center gap-1.5 text-sm text-secondary mt-1">
+                    {role.organization_url && <OrganizationLogo organizationUrl={role.organization_url} size={18} />}
+                    <span>
+                      {role.title}
+                      {role.organization ? ` · ${role.organization}` : ''}
+                    </span>
+                  </p>
+                ))}
+              </div>
+              <SkillGrid
+                skills={currentRoleSkills}
+                onEdit={(skill) => navigate(`/skills/${skill.id}`)}
+              />
+            </>
+          )}
         </div>
       )}
 

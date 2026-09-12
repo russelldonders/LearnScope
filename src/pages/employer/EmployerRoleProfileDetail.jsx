@@ -13,6 +13,7 @@ import {
   toRoleProfileViewModel,
   getEmployerRoleProfileReadiness,
 } from '../../lib/employerRoleProfiles'
+import { listEmployerSkillConfirmations, confirmEmployerSkillLevel } from '../../lib/employerSkillTargets'
 import { getEmployer, listEmployerCatalogueCourses, listEmployerCatalogueSkills, listEmployerMembers } from '../../lib/admin/employers'
 import RoleProfileDetailsForm from './roles/RoleProfileDetailsForm'
 import RoleProfileSkillsPanel from './roles/RoleProfileSkillsPanel'
@@ -42,6 +43,7 @@ export default function EmployerRoleProfileDetail() {
   const [availableSkills, setAvailableSkills] = useState([])
   const [availableCourses, setAvailableCourses] = useState([])
   const [readiness, setReadiness] = useState({})
+  const [confirmations, setConfirmations] = useState({})
   const [tab, setTab] = useState('skills')
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
@@ -62,12 +64,16 @@ export default function EmployerRoleProfileDetail() {
         listEmployerMembers(rawProfile.employerId),
         listEmployerRoleAssignments(roleProfileId),
       ])
-      // Both scoped to the employer's attached provider org's own catalogue
-      // -- not the platform's global skill library/course catalogue -- once
-      // employerData (and so provider_organisation_id) is actually known.
+      // Skills: scoped to the employer's attached provider org's own offered-
+      // skills roster, not the platform's global skill library. Courses:
+      // listEmployerCatalogueCourses now takes the employer id itself (not
+      // provider_organisation_id) -- it resolves to whatever this provider
+      // has actually confirmed sharing with this employer
+      // (list_employer_shared_courses, 20260912152917), not just anything
+      // published in the attached org.
       const [skillsData, coursesData] = await Promise.all([
         listEmployerCatalogueSkills(employerData.provider_organisation_id),
-        listEmployerCatalogueCourses(employerData.provider_organisation_id),
+        listEmployerCatalogueCourses(employerData.id),
       ])
       const memberByUserId = new Map(membersData.map((m) => [m.user_id, m]))
       const nextProfile = toRoleProfileViewModel(rawProfile, assignments, memberByUserId)
@@ -81,6 +87,13 @@ export default function EmployerRoleProfileDetail() {
         .filter((employee) => employee.status === 'accepted')
         .map((employee) => employee.userId)
       setReadiness(await getEmployerRoleProfileReadiness(rawProfile.employerId, nextProfile, acceptedUserIds))
+      setConfirmations(
+        await listEmployerSkillConfirmations(
+          rawProfile.employerId,
+          acceptedUserIds,
+          nextProfile.requiredSkills.map((s) => s.skillId)
+        )
+      )
     } catch (err) {
       setError(err.message)
     } finally {
@@ -158,9 +171,11 @@ export default function EmployerRoleProfileDetail() {
   // .jsx's own bulk actions) rather than a single all-or-nothing call, so
   // one already-linked/removed-mid-session member doesn't block the rest of
   // a multi-select batch.
-  function handleAssignEmployees(memberIds) {
+  function handleAssignEmployees(memberIds, { startDate = null, endDate = null } = {}) {
     mutate(async () => {
-      const results = await Promise.allSettled(memberIds.map((id) => assignEmployerRoleProfile(roleProfileId, id)))
+      const results = await Promise.allSettled(
+        memberIds.map((id) => assignEmployerRoleProfile(roleProfileId, id, startDate, endDate))
+      )
       const failures = results.filter((r) => r.status === 'rejected')
       if (failures.length === results.length) {
         throw new Error(failures[0]?.reason?.message || 'Failed to assign the selected employees.')
@@ -170,6 +185,17 @@ export default function EmployerRoleProfileDetail() {
 
   function handleWithdrawAssignment(assignmentId) {
     mutate(() => withdrawEmployerRoleAssignment(assignmentId))
+  }
+
+  // Records the reported level shown here as employer-confirmed -- this is
+  // what makes a role profile's required target actually "met" on the
+  // employee's own skills page, rather than a bare self-assessment (see
+  // computeVisibleTarget in skillTargetPrecedence.js). Passes the exact
+  // level currently shown rather than re-reading it server-side, so the
+  // confirmation stays historically accurate even if the employee's own
+  // self-assessment changes later.
+  function handleConfirmSkill(userId, librarySkillId, level) {
+    mutate(() => confirmEmployerSkillLevel(employer.id, userId, librarySkillId, level))
   }
 
   return (
@@ -244,9 +270,11 @@ export default function EmployerRoleProfileDetail() {
                     requiredSkills={profile.requiredSkills}
                     training={profile.training}
                     readiness={readiness}
+                    confirmations={confirmations}
                     assigning={saving}
                     onAssignEmployees={handleAssignEmployees}
                     onWithdrawAssignment={handleWithdrawAssignment}
+                    onConfirmSkill={handleConfirmSkill}
                   />
                 )}
               </div>

@@ -5,23 +5,22 @@ import { formatAbsoluteDate, formatRelativeDate } from '../../../lib/dates'
 // learner can never fabricate or freely browse-and-link a role profile
 // themselves; this only ever responds to what an employer has already
 // proposed (see src/pages/employer/roles/RoleProfileLinkedEmployeesPanel's
-// "Assign by email").
+// own multi-select add).
 //
-// Accepting always carries a specific currentRoleExperienceId: with exactly
-// one current role, that one is used without asking -- same convention as
-// src/lib/currentRole.js's enableCurrentRole/trackUnderCurrentRole, no
-// decision to make when it's unambiguous; with more than one, the learner
-// must explicitly choose before Accept is enabled; with none, Accept stays
-// disabled since there's nothing to link the assignment to.
+// Accepting no longer *requires* an existing current role -- with none,
+// this just creates one (decide_employer_role_assignment, 20260912170000,
+// titled after the role profile, at the employer's name). With at least
+// one, the learner can choose to link to it instead of creating a new
+// entry -- a genuine choice, not a blocker: Accept works either way.
 export default function PendingAssignmentsPanel({
   pendingAssignments,
-  currentRoles,
+  currentRoles = [],
   responding = false,
   error = null,
   onAcceptAssignment,
   onDeclineAssignment,
 }) {
-  const [selectedRoleByAssignment, setSelectedRoleByAssignment] = useState({})
+  const [targetByAssignment, setTargetByAssignment] = useState({})
 
   if (pendingAssignments.length === 0) {
     return (
@@ -35,9 +34,7 @@ export default function PendingAssignmentsPanel({
   return (
     <div className="space-y-4">
       {pendingAssignments.map((assignment) => {
-        const chosenCurrentRoleId =
-          currentRoles.length === 1 ? currentRoles[0].id : selectedRoleByAssignment[assignment.assignmentId]
-
+        const target = targetByAssignment[assignment.assignmentId] ?? ''
         return (
           <div key={assignment.assignmentId} className="bg-card border border-hairline rounded-lg p-4">
             <p className="text-sm text-ink">
@@ -50,52 +47,46 @@ export default function PendingAssignmentsPanel({
             <p className="font-mono text-xs text-secondary mt-1" title={formatAbsoluteDate(assignment.proposedAt)}>
               {formatRelativeDate(assignment.proposedAt)}
             </p>
-            <p className="text-sm text-secondary mt-2">
-              Accepting adds an alignment view against your own skills -- it doesn't replace or hand over your
-              current role, and you can disconnect at any time.
-            </p>
 
-            {currentRoles.length === 0 ? (
-              <p className="text-xs text-red-700 mt-3">
-                Add a current role from your Experience before you can accept this.
-              </p>
-            ) : (
-              currentRoles.length > 1 && (
-                <div className="mt-3">
-                  <label
-                    htmlFor={`assignment-current-role-${assignment.assignmentId}`}
-                    className="block text-xs text-secondary mb-1"
-                  >
-                    Link to which current role?
-                  </label>
-                  <select
-                    id={`assignment-current-role-${assignment.assignmentId}`}
-                    value={chosenCurrentRoleId ?? ''}
-                    disabled={responding}
-                    onChange={(e) =>
-                      setSelectedRoleByAssignment((prev) => ({
-                        ...prev,
-                        [assignment.assignmentId]: e.target.value,
-                      }))
-                    }
-                    className="w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink"
-                  >
-                    <option value="">Choose a current role…</option>
-                    {currentRoles.map((role) => (
-                      <option key={role.id} value={role.id}>
-                        {role.title} -- {role.organization}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )
+            {currentRoles.length > 0 && (
+              <div className="mt-3">
+                <label
+                  htmlFor={`assignment-target-${assignment.assignmentId}`}
+                  className="block text-xs text-secondary mb-1"
+                >
+                  Link to
+                </label>
+                <select
+                  id={`assignment-target-${assignment.assignmentId}`}
+                  value={target}
+                  disabled={responding}
+                  onChange={(e) =>
+                    setTargetByAssignment((prev) => ({ ...prev, [assignment.assignmentId]: e.target.value }))
+                  }
+                  className="w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink"
+                >
+                  <option value="">Create a new role for this</option>
+                  {currentRoles.map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {role.title} -- {role.organization}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
+
+            <p className="text-sm text-secondary mt-2">
+              {target
+                ? 'Accepting links this to the role you chose above, with an alignment view against your own skills.'
+                : "Accepting adds a new current role to your Experience timeline (titled after this role profile) and an alignment view against your own skills."}
+              {' '}Its required skills are added to your own skill list too. You can disconnect at any time.
+            </p>
 
             <div className="flex flex-wrap items-center gap-2 mt-3">
               <button
                 type="button"
-                onClick={() => onAcceptAssignment?.(assignment.assignmentId, chosenCurrentRoleId)}
-                disabled={responding || !chosenCurrentRoleId}
+                onClick={() => onAcceptAssignment?.(assignment.assignmentId, target || undefined)}
+                disabled={responding}
                 className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
               >
                 Accept

@@ -43,15 +43,39 @@ describe('employer role profile service', () => {
     rpc.mockResolvedValue({ data: 'assignment-1', error: null })
     await assignEmployerRoleProfile('role-1', 'member-1')
     expect(rpc).toHaveBeenCalledWith('assign_employer_role_profile', {
-      p_role_profile_id: 'role-1', p_employer_member_id: 'member-1',
+      p_role_profile_id: 'role-1', p_employer_member_id: 'member-1', p_start_date: null, p_end_date: null,
     })
   })
 
-  it('requires the learner-selected experience only when accepting', async () => {
+  it('proposes with an optional start/end date set at assignment time', async () => {
+    rpc.mockResolvedValue({ data: 'assignment-1', error: null })
+    await assignEmployerRoleProfile('role-1', 'member-1', '2026-10-01', '2027-01-01')
+    expect(rpc).toHaveBeenCalledWith('assign_employer_role_profile', {
+      p_role_profile_id: 'role-1', p_employer_member_id: 'member-1', p_start_date: '2026-10-01', p_end_date: '2027-01-01',
+    })
+  })
+
+  it('accepts with no experience id -- the server creates one itself', async () => {
+    rpc.mockResolvedValue({ error: null })
+    await decideEmployerRoleAssignment('assignment-1', true)
+    expect(rpc).toHaveBeenCalledWith('decide_employer_role_assignment', {
+      p_assignment_id: 'assignment-1', p_accept: true, p_learner_experience_id: null,
+    })
+  })
+
+  it('accepts linking to an existing experience when one is chosen', async () => {
     rpc.mockResolvedValue({ error: null })
     await decideEmployerRoleAssignment('assignment-1', true, 'experience-1')
     expect(rpc).toHaveBeenCalledWith('decide_employer_role_assignment', {
       p_assignment_id: 'assignment-1', p_accept: true, p_learner_experience_id: 'experience-1',
+    })
+  })
+
+  it('never sends an experience id when declining', async () => {
+    rpc.mockResolvedValue({ error: null })
+    await decideEmployerRoleAssignment('assignment-1', false, 'experience-1')
+    expect(rpc).toHaveBeenCalledWith('decide_employer_role_assignment', {
+      p_assignment_id: 'assignment-1', p_accept: false, p_learner_experience_id: null,
     })
   })
 

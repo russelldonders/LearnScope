@@ -7,8 +7,11 @@ import { useLanguage } from '../context/LanguageContext'
 import { INTERFACE_LANGUAGES } from '../lib/i18n/translations'
 import AppHeader from '../components/AppHeader'
 import ProfilePhoto from '../components/ProfilePhoto'
+import AddPersonalOwnershipModal from '../components/AddPersonalOwnershipModal'
 import { COUNTRIES } from '../lib/countries'
 import { LANGUAGES } from '../lib/languages'
+import { getMyAccountOwnership } from '../lib/accountOwnership'
+import { formatAbsoluteDate } from '../lib/dates'
 
 const THEME_OPTIONS = [
   { value: 'light', label: 'Light' },
@@ -40,9 +43,12 @@ export default function Profile() {
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
+  const [accountOwnership, setAccountOwnership] = useState(null)
+  const [addPersonalOwnershipOpen, setAddPersonalOwnershipOpen] = useState(false)
 
   useEffect(() => {
     loadProfile()
+    getMyAccountOwnership().then(setAccountOwnership).catch(() => setAccountOwnership(null))
   }, [])
 
   async function loadProfile() {
@@ -155,6 +161,45 @@ export default function Profile() {
             <div className="bg-card border border-hairline rounded-lg p-6">
               <ProfilePhoto avatarUrl={avatarUrl} onUploaded={setAvatarUrl} />
             </div>
+
+            {accountOwnership && (
+              <div className="bg-card border border-gold rounded-lg p-6">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="font-display text-lg text-ink">Account ownership</h3>
+                  <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-gold border border-gold rounded-full px-2 py-0.5">
+                    Employer owned
+                  </span>
+                </div>
+                <p className="text-sm text-secondary mb-3">
+                  {accountOwnership.originEmployerName
+                    ? `This account was created by ${accountOwnership.originEmployerName} using your work details.`
+                    : 'This account was created by an employer using your work details.'}
+                  {accountOwnership.activeEmployerNames.length > 0 && (
+                    <> Currently linked to {accountOwnership.activeEmployerNames.join(', ')}.</>
+                  )}
+                </p>
+                {accountOwnership.personalOwnershipClaimedAt ? (
+                  <p className="text-sm text-moss">
+                    You added personal ownership on {formatAbsoluteDate(accountOwnership.personalOwnershipClaimedAt)}.
+                    You can sign in with your own email and password regardless of your employer relationship.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-sm text-secondary mb-4">
+                      If you end your relationship with this employer, you may lose access to this account.
+                      Add personal ownership to keep control of your profile and data no matter what happens.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setAddPersonalOwnershipOpen(true)}
+                      className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+                    >
+                      Add personal ownership
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
 
             <div className="bg-card border border-hairline rounded-lg p-6">
               <h3 className="font-display text-lg text-ink mb-1">Appearance</h3>
@@ -368,6 +413,17 @@ export default function Profile() {
               {deleteError && <p className="text-sm text-red-700 mt-3">{deleteError}</p>}
             </div>
           </div>
+        )}
+
+        {addPersonalOwnershipOpen && (
+          <AddPersonalOwnershipModal
+            onClose={() => setAddPersonalOwnershipOpen(false)}
+            onClaimed={() => {
+              setAddPersonalOwnershipOpen(false)
+              setSavedMessage('Personal ownership added. Check your new email address for a link to confirm it.')
+              getMyAccountOwnership().then(setAccountOwnership).catch(() => {})
+            }}
+          />
         )}
       </main>
     </div>

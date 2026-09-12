@@ -2,8 +2,18 @@ import { formatMonthYear } from '../lib/dates'
 import { experienceTypeLabel } from '../lib/experienceTypes'
 import OrganizationLogo from './OrganizationLogo'
 import ChildExperienceEntry from './ChildExperienceEntry'
+import RoleProfileAlignmentDetail from './RoleProfileAlignmentDetail'
 
-export default function TimelineItem({ item, summary, childExperiences, onEdit, isLast }) {
+// roleAssignments is only set for an experience entry linked to at least
+// one accepted role profile (decide_employer_role_assignment,
+// 20260912170000) -- an array, since accepting can target an existing
+// experience instead of always creating a new one, so more than one role
+// profile can legitimately point at the same entry. Carries the badge/
+// alignment content RoleAlignmentSummary used to render in its own separate
+// section at the bottom of the Experience page; this is that same
+// information, just attached to the timeline entry it actually belongs to
+// instead of split off on its own.
+export default function TimelineItem({ item, summary, childExperiences, onEdit, isLast, roleAssignments }) {
   return (
     <div className="flex gap-4 print:break-inside-avoid">
       <div className="flex flex-col items-center">
@@ -61,12 +71,15 @@ export default function TimelineItem({ item, summary, childExperiences, onEdit, 
             )}
             {summary.skillNames.length > 0 && (
               <p className="text-xs text-secondary">
-                <span className="font-mono uppercase tracking-wide">Skills developed:</span>{' '}
+                <span className="font-mono uppercase tracking-wide">Linked skills:</span>{' '}
                 {summary.skillNames.join(', ')}
               </p>
             )}
           </div>
         )}
+        {roleAssignments?.map((roleAssignment, i) => (
+          <RoleProfileAlignmentDetail key={`${roleAssignment.employerName}-${roleAssignment.roleProfileName}-${i}`} {...roleAssignment} />
+        ))}
       </div>
     </div>
   )

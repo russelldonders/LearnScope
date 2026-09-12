@@ -3,4 +3,5 @@ export const SKILL_SOURCE_LABELS = {
   cv_import: 'Imported from CV',
   recommend: 'Recommended by a connection',
   external_import: 'Imported automatically',
+  role_profile: 'Required by a role profile',
 }

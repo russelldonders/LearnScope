@@ -44,7 +44,9 @@ import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
 import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
 import { computeTrustStatus, TRUST_STATUS, TRUST_STATUS_COLORS } from '../lib/skillProficiencyModel'
 import { countSkillTrackers, listConnectionsWithSkill } from '../lib/skillStats'
-import { getLearnerCompositeProgress } from '../lib/skillComposites'
+import { getLearnerCompositeProgress, getParentCompositesForSkill } from '../lib/skillComposites'
+import { getEmployerTargetsForUser, getLatestEmployerSkillConfirmations } from '../lib/employerSkillTargets'
+import { computeVisibleTarget } from '../lib/skillTargetPrecedence'
 import CompositeSkillProgress from '../components/CompositeSkillProgress'
 
 const SKILL_DETAIL_TABS = [
@@ -60,7 +62,14 @@ export default function SkillDetail({ skillId, embedded = false }) {
   const { user } = useAuth()
   const { t } = useLanguage()
   const backTo = location.state?.from ?? '/skills'
-  const backLabel = location.state?.from ? '← Back to experience' : '← Back to skills'
+  // fromLabel carries a specific destination name (e.g. the parent
+  // composite skill a component was started from) -- falls back to the
+  // previous two-way generic wording when it's not set, so every existing
+  // caller that only ever passed `from` (never `fromLabel`) keeps reading
+  // exactly as it did before.
+  const backLabel = location.state?.fromLabel
+    ? `← Back to ${location.state.fromLabel}`
+    : location.state?.from ? '← Back to experience' : '← Back to skills'
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedTab = searchParams.get('tab')
   // A deep link that highlights a specific timeline entry (from Activity.jsx
@@ -122,6 +131,11 @@ export default function SkillDetail({ skillId, embedded = false }) {
   const [composite, setComposite] = useState(null)
   const [loadingComposite, setLoadingComposite] = useState(false)
   const [compositeError, setCompositeError] = useState(null)
+  const [startingComponentId, setStartingComponentId] = useState(null)
+  const [startComponentError, setStartComponentError] = useState(null)
+  const [parentComposites, setParentComposites] = useState([])
+  const [employerTargetLevel, setEmployerTargetLevel] = useState(null)
+  const [employerConfirmedLevel, setEmployerConfirmedLevel] = useState(null)
 
   useEffect(() => {
     loadSkill()
@@ -164,6 +178,85 @@ export default function SkillDetail({ skillId, embedded = false }) {
       })
     return () => { active = false }
   }, [skill?.library_skill_id, user.id])
+
+  useEffect(() => {
+    let active = true
+    if (!skill?.library_skill_id) {
+      setParentComposites([])
+      return undefined
+    }
+    getParentCompositesForSkill(skill.library_skill_id, user.id)
+      .then((result) => {
+        if (active) setParentComposites(result)
+      })
+      .catch(() => {
+        if (active) setParentComposites([])
+      })
+    return () => { active = false }
+  }, [skill?.library_skill_id, user.id])
+
+  // Employer target = the higher of any accepted role profile's required
+  // level and any active direct suggestion for this skill (see
+  // getEmployerTargetsForUser); only counts as met once an employer admin
+  // has actually confirmed the learner's level (employerConfirmedLevel),
+  // never from a self-assessment alone -- see computeVisibleTarget.
+  useEffect(() => {
+    let active = true
+    if (!skill?.library_skill_id) {
+      setEmployerTargetLevel(null)
+      setEmployerConfirmedLevel(null)
+      return undefined
+    }
+    Promise.all([getEmployerTargetsForUser(), getLatestEmployerSkillConfirmations()])
+      .then(([targetsByLibraryId, confirmationsByKey]) => {
+        if (!active) return
+        const target = targetsByLibraryId.get(skill.library_skill_id)
+        setEmployerTargetLevel(target?.level ?? null)
+        setEmployerConfirmedLevel(
+          target ? confirmationsByKey.get(`${target.employerId}:${skill.library_skill_id}`) ?? null : null
+        )
+      })
+      .catch(() => {
+        if (active) {
+          setEmployerTargetLevel(null)
+          setEmployerConfirmedLevel(null)
+        }
+      })
+    return () => { active = false }
+  }, [skill?.library_skill_id])
+
+  // Starts tracking a not-yet-tracked composite component directly from
+  // here, instead of sending the learner off to find and add it themselves
+  // from the Skills page. Same shape FindSkillModal's own insert already
+  // uses for a fresh manual add (level/lifecycle_stage null/'identified',
+  // never pre-filled at the requirement's target level -- creating the row
+  // isn't evidence that level is already met). Navigates straight to the
+  // new skill's own page since there's nothing left to do on this one.
+  async function handleStartComponent(component) {
+    setStartComponentError(null)
+    setStartingComponentId(component.id)
+    try {
+      const { data, error } = await supabase
+        .from('skills')
+        .insert({
+          name: component.name,
+          category: component.category,
+          level: null,
+          is_current_role: false,
+          tracking_reason: 'career_development',
+          lifecycle_stage: 'identified',
+          library_skill_id: component.librarySkillId,
+          user_id: user.id,
+        })
+        .select('id')
+        .single()
+      if (error) throw error
+      navigate(`/skills/${data.id}`, { state: { from: `/skills/${skill.id}`, fromLabel: skill.name } })
+    } catch (err) {
+      setStartComponentError(isDuplicateSkillNameError(err) ? duplicateSkillMessage(component.name) : err.message)
+      setStartingComponentId(null)
+    }
+  }
 
   async function loadSkill() {
     setLoadingSkill(true)
@@ -447,6 +540,11 @@ export default function SkillDetail({ skillId, embedded = false }) {
   const pendingCourseLinks = courseLinks.filter((l) => l.courses && !l.courses.completed_date)
   const completedCourseLinksCount = courseLinks.filter((l) => l.courses?.completed_date).length
   const currentTarget = targets[0] ?? null
+  const visibleTarget = computeVisibleTarget({
+    employerTargetLevel,
+    employerConfirmedLevel,
+    personalTargetLevel: currentTarget?.target_level ?? null,
+  })
   const pendingValidationRequestsCount = validationRequests.filter((r) => r.status === 'pending').length
   const decidedValidationRequestsCount = validationRequests.length - pendingValidationRequestsCount
   // "Demonstrate skill" / "Move to validating" do advance lifecycle_stage,
@@ -482,7 +580,17 @@ export default function SkillDetail({ skillId, embedded = false }) {
                   color={TRUST_STATUS_COLORS[practicalVerification]}
                 />
                 <div>
-                  <h2 className="font-display text-2xl text-ink">{skill.name}</h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-display text-2xl text-ink">{skill.name}</h2>
+                    {skill.source === 'role_profile' && (
+                      <span
+                        title="Required by a role profile you accepted"
+                        className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-moss border border-moss/40 rounded-full px-2 py-0.5"
+                      >
+                        Role profile
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-secondary flex items-center gap-1.5">
                     {!displayedPracticalLevel && skill.lifecycle_stage && (
                       <LifecycleStageIcon stage={skill.lifecycle_stage} />
@@ -493,6 +601,23 @@ export default function SkillDetail({ skillId, embedded = false }) {
                         ? SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]
                         : t('skillDetail.notYetSelfAssessed')}
                   </p>
+                  {parentComposites.length > 0 && (
+                    <p className="text-xs text-secondary mt-0.5">
+                      Part of{' '}
+                      {parentComposites.map((parent, index) => (
+                        <span key={parent.librarySkillId}>
+                          {index > 0 && ', '}
+                          {parent.trackedSkillId ? (
+                            <Link to={`/skills/${parent.trackedSkillId}`} className="text-moss hover:underline underline-offset-2">
+                              {parent.name}
+                            </Link>
+                          ) : (
+                            parent.name
+                          )}
+                        </span>
+                      ))}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -683,7 +808,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
                     <GrowthRing
                       level={displayedPracticalLevel}
                       size={35}
-                      targetLevel={currentTarget?.target_level}
+                      targetLevel={visibleTarget?.level}
                       color={TRUST_STATUS_COLORS[practicalVerification]}
                     />
                     <div>
@@ -760,7 +885,14 @@ export default function SkillDetail({ skillId, embedded = false }) {
               />
             </div>
 
-            <CompositeSkillProgress composite={composite} loading={loadingComposite} error={compositeError} />
+            <CompositeSkillProgress
+              composite={composite}
+              loading={loadingComposite}
+              error={compositeError}
+              onStartComponent={handleStartComponent}
+              startingComponentId={startingComponentId}
+              startError={startComponentError}
+            />
 
             {skill.library_skill_id && (
               <div className="mt-4 pt-4 border-t border-hairline">
@@ -1063,10 +1195,27 @@ export default function SkillDetail({ skillId, embedded = false }) {
               </AccessibleDialog>
             )}
 
-            {(skill.next_checkin_date || currentTarget) && (
+            {(skill.next_checkin_date || currentTarget || employerTargetLevel) && (
               <div className="mt-4 pt-4 border-t border-hairline">
                 <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-3">Upcoming</h3>
                 <div className="space-y-2">
+                  {employerTargetLevel && (
+                    <div className="flex items-center justify-between rounded-md border border-hairline bg-paper px-3 py-2">
+                      <span className="font-mono text-xs uppercase tracking-wide text-secondary">
+                        Employer target {LEVEL_LABELS[employerTargetLevel]}
+                      </span>
+                      <span className={`text-sm font-medium ${visibleTarget?.employerTargetMet ? 'text-moss' : 'text-ink'}`}>
+                        {visibleTarget?.employerTargetMet
+                          ? 'Met'
+                          : 'Working towards — needs employer confirmation'}
+                      </span>
+                    </div>
+                  )}
+                  {employerTargetLevel && visibleTarget?.employerTargetMet && visibleTarget.source === 'personal' && (
+                    <p className="text-xs text-secondary px-1">
+                      Employer target met — now working toward your own higher target below.
+                    </p>
+                  )}
                   {skill.next_checkin_date && (
                     <div
                       className={`flex items-center justify-between rounded-md border px-3 py-2 ${

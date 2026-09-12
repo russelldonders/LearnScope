@@ -18,15 +18,25 @@ describe('RoleProfileLinkedEmployeesPanel', () => {
     expect(screen.getByText('No employees assigned to this role profile yet.')).toBeInTheDocument()
   })
 
-  it('calls onAssignEmployees with every checked member and clears the selection', () => {
+  it('calls onAssignEmployees with every checked member, no dates by default, and clears the selection', () => {
     const onAssignEmployees = vi.fn()
     render(<RoleProfileLinkedEmployeesPanel employees={[]} members={FIXTURE_MEMBERS} onAssignEmployees={onAssignEmployees} />)
     fireEvent.click(screen.getByRole('checkbox', { name: /priya@acme.example/ }))
     fireEvent.click(screen.getByRole('checkbox', { name: /new.hire@acme.example/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Assign 2 selected' }))
-    expect(onAssignEmployees).toHaveBeenCalledWith(expect.arrayContaining(['member-1', 'member-3']))
+    expect(onAssignEmployees).toHaveBeenCalledWith(expect.arrayContaining(['member-1', 'member-3']), { startDate: null, endDate: null })
     expect(onAssignEmployees.mock.calls[0][0]).toHaveLength(2)
     expect(screen.getByRole('button', { name: 'Assign' })).toBeDisabled()
+  })
+
+  it('passes the chosen start/end dates through to onAssignEmployees', () => {
+    const onAssignEmployees = vi.fn()
+    render(<RoleProfileLinkedEmployeesPanel employees={[]} members={FIXTURE_MEMBERS} onAssignEmployees={onAssignEmployees} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: /priya@acme.example/ }))
+    fireEvent.change(screen.getByLabelText('Start date (optional)'), { target: { value: '2026-10-01' } })
+    fireEvent.change(screen.getByLabelText('End date (optional)'), { target: { value: '2027-01-01' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Assign 1 selected' }))
+    expect(onAssignEmployees).toHaveBeenCalledWith(['member-1'], { startDate: '2026-10-01', endDate: '2027-01-01' })
   })
 
   it('excludes an already-linked member from the picker', () => {
@@ -73,6 +83,35 @@ describe('RoleProfileLinkedEmployeesPanel', () => {
     expect(screen.getByText('Meets target (3)')).toBeInTheDocument()
     expect(screen.getByText('Below target (2 of 4)')).toBeInTheDocument()
     expect(screen.getByText('Started')).toBeInTheDocument()
+  })
+
+  it('lets an admin confirm a reported skill level, and hides the button once confirmed at that level', () => {
+    const onConfirmSkill = vi.fn()
+    const { rerender } = render(
+      <RoleProfileLinkedEmployeesPanel
+        employees={FIXTURE_LINKED_EMPLOYEES}
+        requiredSkills={[{ skillId: 'skill-1', name: 'Facilitation', targetLevel: 3 }]}
+        readiness={{ 'user-1': { skills: { 'skill-1': 3 }, training: {} } }}
+        confirmations={{}}
+        onConfirmSkill={onConfirmSkill}
+      />
+    )
+    fireEvent.click(screen.getByText('1/1 skills met'))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm level 3' }))
+    expect(onConfirmSkill).toHaveBeenCalledWith('user-1', 'skill-1', 3)
+
+    rerender(
+      <RoleProfileLinkedEmployeesPanel
+        employees={FIXTURE_LINKED_EMPLOYEES}
+        requiredSkills={[{ skillId: 'skill-1', name: 'Facilitation', targetLevel: 3 }]}
+        readiness={{ 'user-1': { skills: { 'skill-1': 3 }, training: {} } }}
+        confirmations={{ 'user-1:skill-1': 3 }}
+        onConfirmSkill={onConfirmSkill}
+      />
+    )
+    fireEvent.click(screen.getByText('1/1 skills met'))
+    expect(screen.queryByRole('button', { name: 'Confirm level 3' })).toBeNull()
+    expect(screen.getByText('Confirmed')).toBeInTheDocument()
   })
 
   it('shows unshared skills and unassigned training distinctly from a pending employee with no readiness at all', () => {

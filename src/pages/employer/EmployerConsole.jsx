@@ -36,6 +36,7 @@ import {
 import EmployerMemberFieldsModal from '../../components/EmployerMemberFieldsModal'
 import EmployerMemberFieldInputs from '../../components/EmployerMemberFieldInputs'
 import EmployerMemberDetailModal from '../../components/EmployerMemberDetailModal'
+import EmployerMemberRoleProfilesModal from './EmployerMemberRoleProfilesModal'
 import EmployerRosterUploadPanel from './EmployerRosterUploadPanel'
 import FieldDefinitionsManager from '../../components/FieldDefinitionsManager'
 import { listOrganisationMembers, listOrganisations } from '../../lib/admin/organisations'
@@ -909,6 +910,7 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
   const [fieldValuesByMember, setFieldValuesByMember] = useState({})
   const [editingFieldsMember, setEditingFieldsMember] = useState(null)
   const [viewingMember, setViewingMember] = useState(null)
+  const [managingRoleProfilesMember, setManagingRoleProfilesMember] = useState(null)
   // The base 'email' field (20260911150000's seed) is what actually invites
   // the account -- the add form has no separate email input of its own
   // anymore, it's just this field rendered like every other one.
@@ -1307,6 +1309,13 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
                             >
                               Edit details
                             </button>
+                            <button
+                              type="button"
+                              onClick={() => setManagingRoleProfilesMember(m)}
+                              className="text-xs font-medium text-moss hover:underline"
+                            >
+                              Role profiles
+                            </button>
                           </>
                         )}
                       </td>
@@ -1349,6 +1358,14 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
           dataAccessSummary={dataAccessByLearner[viewingMember.user_id] ? requestedDataSummary(dataAccessByLearner[viewingMember.user_id]) : null}
           onClose={() => setViewingMember(null)}
           onEdit={() => { setEditingFieldsMember(viewingMember); setViewingMember(null) }}
+        />
+      )}
+
+      {managingRoleProfilesMember && (
+        <EmployerMemberRoleProfilesModal
+          employer={employer}
+          member={managingRoleProfilesMember}
+          onClose={() => setManagingRoleProfilesMember(null)}
         />
       )}
 
@@ -1910,6 +1927,7 @@ function AssignRoleModal({ employer, members, skippedCount = 0, onClose, onAssig
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selectedProfileId, setSelectedProfileId] = useState('')
+  const [assignDates, setAssignDates] = useState({ start: '', end: '' })
   const [assigning, setAssigning] = useState(false)
 
   useEffect(() => {
@@ -1926,7 +1944,12 @@ function AssignRoleModal({ employer, members, skippedCount = 0, onClose, onAssig
     setError(null)
     try {
       const results = await Promise.allSettled(
-        members.map((member) => assignEmployerRoleProfile(selectedProfileId, member.id))
+        members.map((member) => assignEmployerRoleProfile(
+          selectedProfileId,
+          member.id,
+          assignDates.start || null,
+          assignDates.end || null
+        ))
       )
       const skippedEmails = members
         .filter((_, index) => results[index].status === 'rejected')
@@ -1983,6 +2006,28 @@ function AssignRoleModal({ employer, members, skippedCount = 0, onClose, onAssig
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-xs text-secondary">
+              Start date (optional)
+              <input
+                type="date"
+                value={assignDates.start}
+                disabled={assigning}
+                onChange={(e) => setAssignDates((prev) => ({ ...prev, start: e.target.value }))}
+                className="mt-1 block rounded-md border border-hairline bg-paper px-2 py-1 text-sm text-ink"
+              />
+            </label>
+            <label className="text-xs text-secondary">
+              End date (optional)
+              <input
+                type="date"
+                value={assignDates.end}
+                disabled={assigning}
+                onChange={(e) => setAssignDates((prev) => ({ ...prev, end: e.target.value }))}
+                className="mt-1 block rounded-md border border-hairline bg-paper px-2 py-1 text-sm text-ink"
+              />
+            </label>
           </div>
           <div className="flex justify-end gap-2">
             <button

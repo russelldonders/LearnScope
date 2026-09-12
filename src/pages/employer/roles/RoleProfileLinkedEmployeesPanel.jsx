@@ -35,13 +35,16 @@ export default function RoleProfileLinkedEmployeesPanel({
   requiredSkills = [],
   training = [],
   readiness = {},
+  confirmations = {},
   assigning = false,
   error = null,
   onAssignEmployees,
   onWithdrawAssignment,
+  onConfirmSkill,
 }) {
   const [search, setSearch] = useState('')
   const [selectedIds, setSelectedIds] = useState(new Set())
+  const [assignDates, setAssignDates] = useState({ start: '', end: '' })
   const hasRequirements = requiredSkills.length > 0 || training.length > 0
 
   const alreadyLinkedUserIds = useMemo(() => new Set(employees.map((e) => e.userId)), [employees])
@@ -71,8 +74,9 @@ export default function RoleProfileLinkedEmployeesPanel({
   function handleAssign(e) {
     e.preventDefault()
     if (selectedIds.size === 0) return
-    onAssignEmployees?.([...selectedIds])
+    onAssignEmployees?.([...selectedIds], { startDate: assignDates.start || null, endDate: assignDates.end || null })
     setSelectedIds(new Set())
+    setAssignDates({ start: '', end: '' })
   }
 
   return (
@@ -102,6 +106,10 @@ export default function RoleProfileLinkedEmployeesPanel({
                     requiredSkills={requiredSkills}
                     training={training}
                     readiness={readiness[employee.userId]}
+                    confirmations={confirmations}
+                    userId={employee.userId}
+                    confirming={assigning}
+                    onConfirmSkill={onConfirmSkill}
                   />
                 )}
               </div>
@@ -154,6 +162,28 @@ export default function RoleProfileLinkedEmployeesPanel({
             ))
           )}
         </div>
+        <div className="flex flex-wrap items-end gap-2 mb-2">
+          <label className="text-xs text-secondary">
+            Start date (optional)
+            <input
+              type="date"
+              value={assignDates.start}
+              disabled={assigning}
+              onChange={(e) => setAssignDates((prev) => ({ ...prev, start: e.target.value }))}
+              className="mt-1 block rounded-md border border-hairline bg-paper px-2 py-1 text-sm text-ink"
+            />
+          </label>
+          <label className="text-xs text-secondary">
+            End date (optional)
+            <input
+              type="date"
+              value={assignDates.end}
+              disabled={assigning}
+              onChange={(e) => setAssignDates((prev) => ({ ...prev, end: e.target.value }))}
+              className="mt-1 block rounded-md border border-hairline bg-paper px-2 py-1 text-sm text-ink"
+            />
+          </label>
+        </div>
         <button
           type="submit"
           disabled={assigning || selectedIds.size === 0}
@@ -173,7 +203,7 @@ export default function RoleProfileLinkedEmployeesPanel({
 // (getEmployerRoleProfileReadiness relies on RLS to enforce that silently);
 // training only reflects this employer's own assignment records
 // (assigned/started/dismissed), never a completion reached independently.
-function RoleReadinessDetail({ requiredSkills, training, readiness }) {
+function RoleReadinessDetail({ requiredSkills, training, readiness, confirmations = {}, userId, confirming = false, onConfirmSkill }) {
   const skillsMet = requiredSkills.filter((requirement) => {
     const level = readiness?.skills?.[requirement.skillId]
     return typeof level === 'number' && level >= requirement.targetLevel
@@ -191,6 +221,8 @@ function RoleReadinessDetail({ requiredSkills, training, readiness }) {
         {requiredSkills.map((requirement) => {
           const level = readiness?.skills?.[requirement.skillId]
           const met = typeof level === 'number' && level >= requirement.targetLevel
+          const confirmedLevel = confirmations[`${userId}:${requirement.skillId}`]
+          const isConfirmedAtLevel = typeof level === 'number' && confirmedLevel === level
           return (
             <div key={`skill-${requirement.skillId}`} className="flex items-center gap-2 text-xs">
               <span className="text-secondary truncate max-w-[12rem]" title={requirement.name}>{requirement.name}</span>
@@ -198,6 +230,20 @@ function RoleReadinessDetail({ requiredSkills, training, readiness }) {
                 label={typeof level !== 'number' ? 'Not shared' : met ? `Meets target (${level})` : `Below target (${level} of ${requirement.targetLevel})`}
                 tone={typeof level !== 'number' ? 'neutral' : met ? 'success' : 'danger'}
               />
+              {typeof level === 'number' && (
+                isConfirmedAtLevel ? (
+                  <span className="text-secondary">Confirmed</span>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={confirming}
+                    onClick={() => onConfirmSkill?.(userId, requirement.skillId, level)}
+                    className="text-moss hover:underline disabled:opacity-60 whitespace-nowrap"
+                  >
+                    Confirm level {level}
+                  </button>
+                )
+              )}
             </div>
           )
         })}

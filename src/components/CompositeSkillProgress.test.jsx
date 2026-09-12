@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import CompositeSkillProgress from './CompositeSkillProgress'
 
 const composite = {
@@ -32,6 +32,8 @@ const composite = {
   ],
 }
 
+afterEach(cleanup)
+
 describe('CompositeSkillProgress', () => {
   it('shows coverage, required targets, and links tracked component skills', () => {
     render(<MemoryRouter><CompositeSkillProgress composite={composite} /></MemoryRouter>)
@@ -48,5 +50,23 @@ describe('CompositeSkillProgress', () => {
   it('stays hidden when the skill has no published component set', () => {
     const { container } = render(<MemoryRouter><CompositeSkillProgress composite={null} /></MemoryRouter>)
     expect(container).toBeEmptyDOMElement()
+  })
+
+  it('offers to start a not-yet-tracked component, and calls onStartComponent with it', () => {
+    const onStartComponent = vi.fn()
+    render(<MemoryRouter><CompositeSkillProgress composite={composite} onStartComponent={onStartComponent} /></MemoryRouter>)
+    expect(screen.queryByText('Add it from your Skills page to begin.')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Start working on this skill now' }))
+    expect(onStartComponent).toHaveBeenCalledWith(composite.components[1])
+  })
+
+  it('disables and relabels the button for whichever component is currently starting', () => {
+    render(<MemoryRouter><CompositeSkillProgress composite={composite} startingComponentId="slicing-link" /></MemoryRouter>)
+    expect(screen.getByRole('button', { name: 'Starting…' })).toBeDisabled()
+  })
+
+  it('shows an inline error if starting a component fails', () => {
+    render(<MemoryRouter><CompositeSkillProgress composite={composite} startError="Couldn't add that skill." /></MemoryRouter>)
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't add that skill.")
   })
 })
