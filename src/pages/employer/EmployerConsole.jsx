@@ -10,9 +10,9 @@ import ConfirmDialog from '../../components/ConfirmDialog'
 import ResourceLibrarySection from '../../components/ResourceLibrarySection'
 import ProviderSkillsSection from '../../components/ProviderSkillsSection'
 import ProviderLtiToolsSection from '../../components/ProviderLtiToolsSection'
-import OrganisationSettingsModal from '../../components/OrganisationSettingsModal'
 import { ProviderTrainingSection, ProviderCataloguesSection } from '../provider/ProviderConsole'
 import TrainingTeamAccessDialog from './TrainingTeamAccessDialog'
+import EmployerSettingsDialog from './EmployerSettingsDialog'
 import {
   listEmployers,
   listEmployerMembers,
@@ -28,17 +28,12 @@ import {
   listFieldDefinitionsForEmployer,
   listEmployerMemberFieldValues,
   upsertEmployerMemberFieldValue,
-  createFieldDefinition,
-  updateFieldDefinition,
-  deleteFieldDefinition,
-  reorderFieldDefinitions,
 } from '../../lib/admin/employers'
 import EmployerMemberFieldsModal from '../../components/EmployerMemberFieldsModal'
 import EmployerMemberFieldInputs from '../../components/EmployerMemberFieldInputs'
 import EmployerMemberDetailModal from '../../components/EmployerMemberDetailModal'
 import EmployerMemberRoleProfilesModal from './EmployerMemberRoleProfilesModal'
 import EmployerRosterUploadPanel from './EmployerRosterUploadPanel'
-import FieldDefinitionsManager from '../../components/FieldDefinitionsManager'
 import { listOrganisationMembers, listOrganisations } from '../../lib/admin/organisations'
 import { listLibrarySkills } from '../../lib/skillLibrary'
 import { listEmployerRoleProfiles, assignEmployerRoleProfile } from '../../lib/employerRoleProfiles'
@@ -78,7 +73,6 @@ const SECTIONS = [
   { key: 'provider-resources', label: 'Resources', providerTab: true },
   { key: 'provider-lti-tools', label: 'LTI tools', adminOnly: true, providerTab: true },
   { key: 'users', label: 'Users' },
-  { key: 'member-fields', label: 'Member fields' },
   { key: 'roles', label: 'Role profiles' },
   { key: 'providers', label: 'Linked providers' },
 ]
@@ -263,12 +257,16 @@ export default function EmployerConsole() {
   // after folding the standalone Assign training/Suggest skills tabs into
   // bulk actions on the Users tab's learner roster (EmployerLearnersPanel)
   // -- old links to either now land on Users, where that functionality
-  // actually lives now.
+  // actually lives now. Member fields has moved into the settings cog, so
+  // an old tab URL safely returns to Overview instead of leaving an invalid
+  // tab selected.
   const activeSection = ['staff', 'learners', 'assign', 'suggest-skills'].includes(requestedSection)
     ? 'users'
-    : requestedSection === 'training'
-      ? 'provider-training'
-      : requestedSection
+    : requestedSection === 'member-fields'
+      ? 'overview'
+      : requestedSection === 'training'
+        ? 'provider-training'
+        : requestedSection
   const employerTabRefs = useRef({})
   const sectionTabRefs = useRef({})
 
@@ -513,25 +511,18 @@ export default function EmployerConsole() {
                       )
                     })}
                   </div>
-                  {myProviderRole === 'admin' && (
-                    <button
-                      type="button"
-                      onClick={() => setShowSettings(true)}
-                      title="Organisation settings"
-                      aria-label="Organisation settings"
-                      className="shrink-0 mb-2 w-11 h-11 rounded-md border border-hairline text-secondary hover:text-ink hover:bg-paper flex items-center justify-center"
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="12" cy="12" r="3" />
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                      </svg>
-                    </button>
-                  )}
-                  {myProviderRole !== 'admin' && (
-                    <p className="text-xs text-secondary shrink-0 mb-2">
-                      Organisation settings need provider admin access.
-                    </p>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowSettings(true)}
+                    title="Settings"
+                    aria-label="Settings"
+                    className="shrink-0 mb-2 w-11 h-11 rounded-md border border-hairline text-secondary hover:text-ink hover:bg-paper flex items-center justify-center"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09A1.65 1.65 0 0 0 19.4 15z" />
+                    </svg>
+                  </button>
                 </div>
 
                 <div
@@ -621,13 +612,6 @@ export default function EmployerConsole() {
                       setSearchParams={setSearchParams}
                     />
                   )}
-                  {currentSection === 'member-fields' && (
-                    <EmployerMemberFieldsSection
-                      key={selectedEmployer.id}
-                      employer={selectedEmployer}
-                      userId={user.id}
-                    />
-                  )}
                   {currentSection === 'roles' && (
                     <EmployerRoleProfilesSection
                       key={selectedEmployer.id}
@@ -654,13 +638,14 @@ export default function EmployerConsole() {
         )}
       </main>
 
-      {showSettings && attachedProviderOrg && (
-        <OrganisationSettingsModal
-          organisation={attachedProviderOrg}
-          onClose={() => {
-            setShowSettings(false)
-            reloadOrganisations()
-          }}
+      {showSettings && selectedEmployer && (
+        <EmployerSettingsDialog
+          employer={selectedEmployer}
+          userId={user.id}
+          providerOrganisation={attachedProviderOrg}
+          canManageOrganisation={myProviderRole === 'admin'}
+          onOrganisationUpdated={reloadOrganisations}
+          onClose={() => setShowSettings(false)}
         />
       )}
     </div>
@@ -744,105 +729,6 @@ const DATA_ACCESS_STATUS_LABELS = {
   approved: 'Access granted',
   declined: 'Access declined',
   revoked: 'Access revoked',
-}
-
-// Lets this employer's own admins manage their own additional roster
-// fields, on top of the platform-admin-owned base fields (AdminEmployers.jsx)
-// every employer starts with -- reuses FieldDefinitionsManager verbatim,
-// scoped to employer.id instead of the global (employer_id null) set.
-function EmployerMemberFieldsSection({ employer, userId }) {
-  const [fields, setFields] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    load()
-  }, [employer.id])
-
-  async function load() {
-    setLoading(true)
-    setError(null)
-    try {
-      setFields(await listFieldDefinitionsForEmployer(employer.id))
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const baseFields = fields.filter((f) => f.employer_id === null)
-  const ownFields = fields.filter((f) => f.employer_id !== null)
-
-  async function handleCreate(payload) {
-    await createFieldDefinition({
-      ...payload,
-      employerId: employer.id,
-      createdBy: userId,
-      sortOrder: ownFields.length > 0 ? Math.max(...ownFields.map((f) => f.sort_order)) + 10 : 1000,
-    })
-    await load()
-  }
-
-  async function handleUpdate(id, payload) {
-    await updateFieldDefinition(id, payload)
-    await load()
-  }
-
-  async function handleDelete(id) {
-    await deleteFieldDefinition(id)
-    await load()
-  }
-
-  async function handleReorder(updates) {
-    await reorderFieldDefinitions(updates)
-    await load()
-  }
-
-  return (
-    <div>
-      <h2 className="font-display text-lg text-ink mb-1">Member fields</h2>
-      <p className="text-sm text-secondary mb-5 max-w-2xl">
-        These fields appear when editing a user's details from the Users tab. Base fields (set by LearnScope) apply
-        to every employer; add your own below for anything specific to {employer.name}.
-      </p>
-
-      {error && <p role="alert" className="text-sm text-red-700 mb-4">{error}</p>}
-
-      {loading ? (
-        <p className="text-secondary">Loading…</p>
-      ) : (
-        <div className="space-y-8">
-          <div>
-            <h3 className="text-sm font-medium text-ink mb-2">Base fields</h3>
-            <div className="space-y-2">
-              {baseFields.map((field) => (
-                <div key={field.id} className="bg-card border border-hairline rounded-lg p-3 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm text-ink">{field.label}{field.required && <span className="ml-1.5 text-xs text-secondary">(required)</span>}</p>
-                    <p className="text-xs text-secondary mt-0.5">{field.field_type}</p>
-                  </div>
-                  <span className="text-[10px] uppercase tracking-wide text-secondary">Set by LearnScope</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-sm font-medium text-ink mb-2">Your own fields</h3>
-            <FieldDefinitionsManager
-              fields={ownFields}
-              scopeLabel="field"
-              onCreate={handleCreate}
-              onUpdate={handleUpdate}
-              onDelete={handleDelete}
-              onReorder={handleReorder}
-            />
-          </div>
-        </div>
-      )}
-    </div>
-  )
 }
 
 function EmployerUsersPanel({ employer, attachedProviderOrg, canManageTrainingTeam, searchParams, setSearchParams }) {
