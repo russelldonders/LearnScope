@@ -44,7 +44,7 @@ import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
 import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
 import { computeTrustStatus, TRUST_STATUS, TRUST_STATUS_COLORS } from '../lib/skillProficiencyModel'
 import { countSkillTrackers, listConnectionsWithSkill } from '../lib/skillStats'
-import { getLearnerCompositeProgress } from '../lib/skillComposites'
+import { getLearnerCompositeProgress, getParentCompositesForSkill } from '../lib/skillComposites'
 import CompositeSkillProgress from '../components/CompositeSkillProgress'
 
 const SKILL_DETAIL_TABS = [
@@ -131,6 +131,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
   const [compositeError, setCompositeError] = useState(null)
   const [startingComponentId, setStartingComponentId] = useState(null)
   const [startComponentError, setStartComponentError] = useState(null)
+  const [parentComposites, setParentComposites] = useState([])
 
   useEffect(() => {
     loadSkill()
@@ -170,6 +171,22 @@ export default function SkillDetail({ skillId, embedded = false }) {
       })
       .finally(() => {
         if (active) setLoadingComposite(false)
+      })
+    return () => { active = false }
+  }, [skill?.library_skill_id, user.id])
+
+  useEffect(() => {
+    let active = true
+    if (!skill?.library_skill_id) {
+      setParentComposites([])
+      return undefined
+    }
+    getParentCompositesForSkill(skill.library_skill_id, user.id)
+      .then((result) => {
+        if (active) setParentComposites(result)
+      })
+      .catch(() => {
+        if (active) setParentComposites([])
       })
     return () => { active = false }
   }, [skill?.library_skill_id, user.id])
@@ -545,6 +562,23 @@ export default function SkillDetail({ skillId, embedded = false }) {
                         ? SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage]
                         : t('skillDetail.notYetSelfAssessed')}
                   </p>
+                  {parentComposites.length > 0 && (
+                    <p className="text-xs text-secondary mt-0.5">
+                      Part of{' '}
+                      {parentComposites.map((parent, index) => (
+                        <span key={parent.librarySkillId}>
+                          {index > 0 && ', '}
+                          {parent.trackedSkillId ? (
+                            <Link to={`/skills/${parent.trackedSkillId}`} className="text-moss hover:underline underline-offset-2">
+                              {parent.name}
+                            </Link>
+                          ) : (
+                            parent.name
+                          )}
+                        </span>
+                      ))}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
