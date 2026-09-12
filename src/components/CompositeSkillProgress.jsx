@@ -1,7 +1,14 @@
 import { Link } from 'react-router-dom'
 import { LEVEL_LABELS } from '../lib/levels'
 
-export default function CompositeSkillProgress({ composite, loading = false, error = null }) {
+export default function CompositeSkillProgress({
+  composite,
+  loading = false,
+  error = null,
+  onStartComponent,
+  startingComponentId = null,
+  startError = null,
+}) {
   if (loading) {
     return <p role="status" className="mt-4 border-t border-hairline pt-4 text-sm text-secondary">Loading component progress…</p>
   }
@@ -35,6 +42,8 @@ export default function CompositeSkillProgress({ composite, loading = false, err
       </div>
       <span className="sr-only">{coverage.percentage}% component coverage</span>
 
+      {startError && <p role="alert" className="mt-3 text-sm text-red-700">{startError}</p>}
+
       <ul className="mt-4 divide-y divide-hairline border-y border-hairline">
         {components.map((component) => (
           <li key={component.id} className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
@@ -66,7 +75,16 @@ export default function CompositeSkillProgress({ composite, loading = false, err
                     ? `Level ${component.currentLevel} of ${component.targetLevel}`
                     : 'Not yet tracked'}
               </p>
-              {!component.trackedSkillId && <p className="text-xs text-secondary">Add it from your Skills page to begin.</p>}
+              {!component.trackedSkillId && (
+                <button
+                  type="button"
+                  onClick={() => onStartComponent?.(component)}
+                  disabled={startingComponentId === component.id}
+                  className="text-xs font-medium text-moss hover:underline disabled:opacity-60"
+                >
+                  {startingComponentId === component.id ? 'Starting…' : 'Start working on this skill now'}
+                </button>
+              )}
             </div>
           </li>
         ))}

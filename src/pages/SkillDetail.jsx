@@ -60,7 +60,14 @@ export default function SkillDetail({ skillId, embedded = false }) {
   const { user } = useAuth()
   const { t } = useLanguage()
   const backTo = location.state?.from ?? '/skills'
-  const backLabel = location.state?.from ? '← Back to experience' : '← Back to skills'
+  // fromLabel carries a specific destination name (e.g. the parent
+  // composite skill a component was started from) -- falls back to the
+  // previous two-way generic wording when it's not set, so every existing
+  // caller that only ever passed `from` (never `fromLabel`) keeps reading
+  // exactly as it did before.
+  const backLabel = location.state?.fromLabel
+    ? `← Back to ${location.state.fromLabel}`
+    : location.state?.from ? '← Back to experience' : '← Back to skills'
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedTab = searchParams.get('tab')
   // A deep link that highlights a specific timeline entry (from Activity.jsx
@@ -122,6 +129,8 @@ export default function SkillDetail({ skillId, embedded = false }) {
   const [composite, setComposite] = useState(null)
   const [loadingComposite, setLoadingComposite] = useState(false)
   const [compositeError, setCompositeError] = useState(null)
+  const [startingComponentId, setStartingComponentId] = useState(null)
+  const [startComponentError, setStartComponentError] = useState(null)
 
   useEffect(() => {
     loadSkill()
@@ -164,6 +173,39 @@ export default function SkillDetail({ skillId, embedded = false }) {
       })
     return () => { active = false }
   }, [skill?.library_skill_id, user.id])
+
+  // Starts tracking a not-yet-tracked composite component directly from
+  // here, instead of sending the learner off to find and add it themselves
+  // from the Skills page. Same shape FindSkillModal's own insert already
+  // uses for a fresh manual add (level/lifecycle_stage null/'identified',
+  // never pre-filled at the requirement's target level -- creating the row
+  // isn't evidence that level is already met). Navigates straight to the
+  // new skill's own page since there's nothing left to do on this one.
+  async function handleStartComponent(component) {
+    setStartComponentError(null)
+    setStartingComponentId(component.id)
+    try {
+      const { data, error } = await supabase
+        .from('skills')
+        .insert({
+          name: component.name,
+          category: component.category,
+          level: null,
+          is_current_role: false,
+          tracking_reason: 'career_development',
+          lifecycle_stage: 'identified',
+          library_skill_id: component.librarySkillId,
+          user_id: user.id,
+        })
+        .select('id')
+        .single()
+      if (error) throw error
+      navigate(`/skills/${data.id}`, { state: { from: `/skills/${skill.id}`, fromLabel: skill.name } })
+    } catch (err) {
+      setStartComponentError(isDuplicateSkillNameError(err) ? duplicateSkillMessage(component.name) : err.message)
+      setStartingComponentId(null)
+    }
+  }
 
   async function loadSkill() {
     setLoadingSkill(true)
@@ -770,7 +812,14 @@ export default function SkillDetail({ skillId, embedded = false }) {
               />
             </div>
 
-            <CompositeSkillProgress composite={composite} loading={loadingComposite} error={compositeError} />
+            <CompositeSkillProgress
+              composite={composite}
+              loading={loadingComposite}
+              error={compositeError}
+              onStartComponent={handleStartComponent}
+              startingComponentId={startingComponentId}
+              startError={startComponentError}
+            />
 
             {skill.library_skill_id && (
               <div className="mt-4 pt-4 border-t border-hairline">
