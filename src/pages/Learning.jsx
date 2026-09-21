@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import { listCourseProgressByCatalogueId } from '../lib/courseContent'
 import { listMyAssignedCourseEmployers } from '../lib/courseCatalogue'
+import { listMySkillDevelopmentTargets } from '../lib/skillDevelopmentTargets'
 import AppHeader from '../components/AppHeader'
 import CourseThumbnail from '../components/CourseThumbnail'
 import ProgressBar from '../components/ProgressBar'
@@ -16,6 +17,8 @@ export default function Learning() {
   const [skillsByCourse, setSkillsByCourse] = useState(new Map())
   const [progressByCatalogueId, setProgressByCatalogueId] = useState({})
   const [assignedByCatalogueId, setAssignedByCatalogueId] = useState(new Map())
+  const [developmentTargets, setDevelopmentTargets] = useState({ personal: [], employer: [] })
+  const [targetError, setTargetError] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -36,6 +39,13 @@ export default function Learning() {
       return
     }
     setCourses(data ?? [])
+
+    setTargetError(null)
+    try {
+      setDevelopmentTargets(await listMySkillDevelopmentTargets(user.id))
+    } catch (loadTargetError) {
+      setTargetError(loadTargetError.message || 'Your skill targets could not be loaded.')
+    }
 
     const ids = (data ?? []).map((c) => c.id)
     if (ids.length > 0) {
@@ -82,6 +92,10 @@ export default function Learning() {
           </Link>
         </div>
 
+        {!loading && (
+          <SkillDevelopmentTargets targets={developmentTargets} error={targetError} t={t} />
+        )}
+
         {loading && <p className="text-secondary">Loading…</p>}
         {error && <p role="alert" className="text-red-700 text-sm">{error}</p>}
 
@@ -117,6 +131,65 @@ export default function Learning() {
       </main>
     </div>
   )
+}
+
+function SkillDevelopmentTargets({ targets, error, t }) {
+  const activeEmployerTargets = targets.employer.filter((target) => target.status === 'active')
+  const hasTargets = targets.personal.length > 0 || activeEmployerTargets.length > 0
+
+  return (
+    <section aria-labelledby="skill-targets-heading" className="mb-10 border-y border-hairline py-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="max-w-2xl">
+          <h2 id="skill-targets-heading" className="font-display text-xl text-ink">{t('learning.skillTargets')}</h2>
+          <p className="mt-1 text-sm text-secondary">{t('learning.skillTargetsIntro')}</p>
+        </div>
+        <Link to="/skills" className="shrink-0 text-sm font-medium text-moss hover:underline">{t('learning.chooseSkill')}</Link>
+      </div>
+
+      {error ? (
+        <p role="alert" className="mt-5 text-sm text-red-700">{t('learning.skillTargetsLoadError')}</p>
+      ) : !hasTargets ? (
+        <p className="mt-5 text-sm text-secondary">{t('learning.skillTargetsEmpty')}</p>
+      ) : (
+        <div className="mt-5 divide-y divide-hairline border-t border-hairline">
+          {targets.personal.map((target) => (
+            <TargetRow key={`personal-${target.id}`} target={target} t={t} />
+          ))}
+          {activeEmployerTargets.map((target) => (
+            <TargetRow key={`employer-${target.id}`} target={target} t={t} />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function TargetRow({ target, t }) {
+  const content = (
+    <>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="font-medium text-ink">{target.skillName}</h3>
+          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${target.ownership === 'personal' ? 'border-moss text-moss' : 'border-slate text-slate'}`}>
+            {target.ownership === 'personal' ? t('learning.personalTarget') : target.employerName}
+          </span>
+        </div>
+        {target.notes && <p className="mt-1 line-clamp-2 text-sm text-secondary">{target.notes}</p>}
+      </div>
+      <p className="shrink-0 text-sm text-secondary">{t('learning.targetLevelPrefix')} {target.targetLevel} · {t('learning.targetDatePrefix')} {new Date(`${target.targetDate}T00:00:00`).toLocaleDateString()}</p>
+    </>
+  )
+
+  if (target.ownership === 'personal') {
+    return (
+      <Link to={`/skills/${target.skillId}`} className="flex flex-col gap-2 py-4 hover:text-moss sm:flex-row sm:items-start sm:justify-between">
+        {content}
+      </Link>
+    )
+  }
+
+  return <div className="flex flex-col gap-2 py-4 sm:flex-row sm:items-start sm:justify-between">{content}</div>
 }
 
 function CourseGrid({ courses, skillsByCourse, progressByCatalogueId, assignedByCatalogueId }) {

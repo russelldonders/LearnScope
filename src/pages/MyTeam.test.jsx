@@ -5,11 +5,14 @@ import MyTeam from './MyTeam'
 
 vi.mock('../lib/employerManagement', () => ({
   assignCourseToManagedEmployerMember: vi.fn(),
+  closeManagedEmployerSkillDevelopmentTarget: vi.fn(),
   confirmManagedEmployerSkillLevel: vi.fn(),
   getMyEmployerTeamMemberSnapshot: vi.fn(),
   listManagerAssignableCourses: vi.fn(),
+  listManagedEmployerSkillDevelopmentTargets: vi.fn(),
   listManagerSuggestibleSkills: vi.fn(),
   listMyEmployerTeam: vi.fn(),
+  setManagedEmployerSkillDevelopmentTarget: vi.fn(),
   suggestSkillToManagedEmployerMember: vi.fn(),
 }))
 
@@ -51,8 +54,14 @@ function buildServices(overrides = {}) {
     }),
     listManagerAssignableCourses: vi.fn().mockResolvedValue([{ id: 'course-1', name: 'Manager essentials' }]),
     listManagerSuggestibleSkills: vi.fn().mockResolvedValue([{ id: 'library-1', name: 'Coaching' }]),
+    listManagedEmployerSkillDevelopmentTargets: vi.fn().mockResolvedValue([{
+      id: 'target-1', skillLibraryId: 'library-1', skillName: 'Coaching', targetLevel: 4,
+      targetDate: '2027-01-15', notes: 'Lead a workshop', status: 'active',
+    }]),
     assignCourseToManagedEmployerMember: vi.fn().mockResolvedValue('assignment-2'),
     suggestSkillToManagedEmployerMember: vi.fn().mockResolvedValue('suggestion-1'),
+    setManagedEmployerSkillDevelopmentTarget: vi.fn().mockResolvedValue('target-2'),
+    closeManagedEmployerSkillDevelopmentTarget: vi.fn().mockResolvedValue(),
     confirmManagedEmployerSkillLevel: vi.fn().mockResolvedValue('confirmation-1'),
     ...overrides,
   }
@@ -136,5 +145,45 @@ describe('My Team', () => {
     expect(screen.queryByRole('heading', { name: 'Manager actions' })).not.toBeInTheDocument()
     expect(services.listManagerAssignableCourses).not.toHaveBeenCalled()
     expect(services.listManagerSuggestibleSkills).not.toHaveBeenCalled()
+    expect(services.listManagedEmployerSkillDevelopmentTargets).not.toHaveBeenCalled()
+  })
+
+  it('sets and completes employer-owned skill targets without presenting them as personal goals', async () => {
+    const services = buildServices()
+    renderRoute('/team/member-1?employer=employer-1', services)
+
+    expect(await screen.findByText('Lead a workshop')).toBeInTheDocument()
+    expect(screen.getByText(/does not create or change the learner’s personal skill/i)).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Skill', { selector: 'select' }), { target: { value: 'library-1' } })
+    fireEvent.change(screen.getAllByLabelText('Target level', { selector: 'select' })[1], { target: { value: '5' } })
+    fireEvent.change(screen.getAllByLabelText('Target date')[1], { target: { value: '2027-02-01' } })
+    fireEvent.change(screen.getByLabelText('Development context'), { target: { value: 'Own the programme' } })
+    expect(screen.getByText(/preserve the current target in history/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Update employer target' }))
+
+    await waitFor(() => expect(services.setManagedEmployerSkillDevelopmentTarget).toHaveBeenCalledWith(
+      'employer-1', 'member-1', 'library-1', {
+        targetLevel: 5, targetDate: '2027-02-01', notes: 'Own the programme',
+      }
+    ))
+    expect(screen.getByLabelText('Skill', { selector: 'select' })).toHaveValue('')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Complete' }))
+    await waitFor(() => expect(services.closeManagedEmployerSkillDevelopmentTarget)
+      .toHaveBeenCalledWith('target-1', 'completed'))
+  })
+
+  it('requires confirmation before ending an employer target', async () => {
+    const services = buildServices()
+    renderRoute('/team/member-1?employer=employer-1', services)
+
+    await screen.findByText('Lead a workshop')
+    fireEvent.click(screen.getByRole('button', { name: 'End target' }))
+    expect(services.closeManagedEmployerSkillDevelopmentTarget).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, end target' }))
+
+    await waitFor(() => expect(services.closeManagedEmployerSkillDevelopmentTarget)
+      .toHaveBeenCalledWith('target-1', 'cancelled'))
   })
 })

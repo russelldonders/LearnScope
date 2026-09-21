@@ -13,6 +13,7 @@ vi.mock('./supabaseClient', () => ({ supabase: { from, rpc } }))
 const {
   assignCourseToManagedEmployerMember,
   canManageEmployerMember,
+  closeManagedEmployerSkillDevelopmentTarget,
   confirmManagedEmployerSkillLevel,
   createEmployerManagementRelationship,
   endEmployerManagementRelationship,
@@ -20,9 +21,11 @@ const {
   listEmployerDirectReports,
   listEmployerManagementRelationships,
   listManagerAssignableCourses,
+  listManagedEmployerSkillDevelopmentTargets,
   listManagerSuggestibleSkills,
   listMyEmployerManagementContexts,
   listMyEmployerTeam,
+  setManagedEmployerSkillDevelopmentTarget,
   suggestSkillToManagedEmployerMember,
   updateEmployerManagementRelationship,
 } = await import('./employerManagement')
@@ -213,6 +216,44 @@ describe('employer management service', () => {
     expect(rpc).toHaveBeenNthCalledWith(3, 'confirm_managed_employer_skill_level', {
       p_employer_id: 'employer-1', p_employee_member_id: 'member-1',
       p_skill_library_id: 'skill-1', p_level: 3,
+    })
+  })
+
+  it('lists, sets, and closes employer-owned skill development targets through guarded RPCs', async () => {
+    rpc
+      .mockResolvedValueOnce({
+        data: [{
+          id: 'target-1', skill_library_id: 'skill-1', skill_name: 'Coaching',
+          target_level: 4, target_date: '2026-12-01', notes: 'Lead a session',
+          status: 'active', created_at: '2026-09-21T12:00:00Z', closed_at: null,
+        }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: 'target-2', error: null })
+      .mockResolvedValueOnce({ data: null, error: null })
+
+    await expect(listManagedEmployerSkillDevelopmentTargets('employer-1', 'member-1'))
+      .resolves.toEqual([{
+        id: 'target-1', skillLibraryId: 'skill-1', skillName: 'Coaching',
+        targetLevel: 4, targetDate: '2026-12-01', notes: 'Lead a session',
+        status: 'active', createdAt: '2026-09-21T12:00:00Z', closedAt: null,
+      }])
+    await expect(setManagedEmployerSkillDevelopmentTarget('employer-1', 'member-1', 'skill-1', {
+      targetLevel: 5,
+      targetDate: '2027-01-15',
+      notes: '  Own the programme  ',
+    })).resolves.toBe('target-2')
+    await closeManagedEmployerSkillDevelopmentTarget('target-2', 'completed')
+
+    expect(rpc).toHaveBeenNthCalledWith(1, 'list_managed_employer_skill_development_targets', {
+      p_employer_id: 'employer-1', p_employee_member_id: 'member-1',
+    })
+    expect(rpc).toHaveBeenNthCalledWith(2, 'set_managed_employer_skill_development_target', {
+      p_employer_id: 'employer-1', p_employee_member_id: 'member-1', p_skill_library_id: 'skill-1',
+      p_target_level: 5, p_target_date: '2027-01-15', p_notes: 'Own the programme',
+    })
+    expect(rpc).toHaveBeenNthCalledWith(3, 'close_managed_employer_skill_development_target', {
+      p_target_id: 'target-2', p_status: 'completed',
     })
   })
 })
