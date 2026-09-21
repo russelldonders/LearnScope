@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import AccessibleDialog from './AccessibleDialog'
+import { useLanguage } from '../context/LanguageContext'
 
 // Shown when a skill is marked "part of my current role" but the learner
 // has more than one ongoing job -- rather than silently linking to all of
 // them, this asks which one(s) it actually applies to.
 export default function CurrentRoleSelectModal({ roles, onConfirm, onCancel }) {
+  const { t } = useLanguage()
   const [selected, setSelected] = useState(new Set())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -47,10 +49,9 @@ export default function CurrentRoleSelectModal({ roles, onConfirm, onCancel }) {
       closeOnBackdrop={!saving}
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6"
     >
-        <h2 id="current-role-dialog-title" className="font-display text-xl text-ink mb-2">Which current role is this part of?</h2>
+        <h2 id="current-role-dialog-title" className="font-display text-xl text-ink mb-2">{t('modals.currentRoleSelect.title')}</h2>
         <p className="text-sm text-secondary mb-4">
-          You have more than one ongoing role on your Experience timeline — pick which one(s)
-          this skill applies to.
+          {t('modals.currentRoleSelect.description')}
         </p>
 
         <div className="space-y-2 mb-4">
@@ -82,7 +83,7 @@ export default function CurrentRoleSelectModal({ roles, onConfirm, onCancel }) {
             disabled={saving || selected.size === 0}
             className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90 disabled:opacity-60"
           >
-            {saving ? 'Saving…' : 'Apply'}
+            {saving ? t('modals.currentRoleSelect.saving') : t('modals.currentRoleSelect.apply')}
           </button>
           <button
             type="button"
@@ -90,7 +91,7 @@ export default function CurrentRoleSelectModal({ roles, onConfirm, onCancel }) {
             disabled={saving}
             className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper disabled:opacity-60"
           >
-            Cancel
+            {t('modals.currentRoleSelect.cancel')}
           </button>
         </div>
     </AccessibleDialog>

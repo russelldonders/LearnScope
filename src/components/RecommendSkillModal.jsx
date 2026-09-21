@@ -14,6 +14,7 @@ import {
 import { isMobileDevice } from '../lib/device'
 import WhatsAppIcon from './WhatsAppIcon'
 import { getOrCreateMyDefaultManagerTeam, inviteConnectionToManagerTeam, inviteManagerTeamMemberByEmail } from '../lib/managerTeams'
+import { useLanguage } from '../context/LanguageContext'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -24,6 +25,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 // connections, WhatsApp, email, share link) that only differs in what
 // accepting it does.
 export default function RecommendSkillModal({ skill, onClose }) {
+  const { t } = useLanguage()
   const { user } = useAuth()
   const [inviterName, setInviterName] = useState(null)
   const [connections, setConnections] = useState([])
@@ -109,7 +111,7 @@ export default function RecommendSkillModal({ skill, onClose }) {
       try {
         resolvedTeamId = await resolveTeamId()
       } catch (err) {
-        setTeamInviteNotices((prev) => [...prev, `Couldn't set up your team: ${err.message}`])
+        setTeamInviteNotices((prev) => [...prev, t('modals.recommendSkill.teamSetupFailed', { error: err.message })])
       }
     }
 
@@ -135,7 +137,10 @@ export default function RecommendSkillModal({ skill, onClose }) {
           try {
             await inviteConnectionToManagerTeam(resolvedTeamId, c.id)
           } catch (err) {
-            setTeamInviteNotices((prev) => [...prev, `${c.name}: ${err.message}`])
+            setTeamInviteNotices((prev) => [
+              ...prev,
+              t('modals.recommendSkill.teamInviteMemberError', { name: c.name, error: err.message }),
+            ])
           }
         }
       })
@@ -148,7 +153,7 @@ export default function RecommendSkillModal({ skill, onClose }) {
     if (!value) return
     setEmailInputError(null)
     if (!EMAIL_RE.test(value)) {
-      setEmailInputError('That doesn\'t look like a valid email address.')
+      setEmailInputError(t('modals.recommendSkill.invalidEmail'))
       return
     }
     if (emails.includes(value)) {
@@ -194,7 +199,7 @@ export default function RecommendSkillModal({ skill, onClose }) {
       try {
         resolvedTeamId = await resolveTeamId()
       } catch (err) {
-        setTeamInviteNotices((prev) => [...prev, `Couldn't set up your team: ${err.message}`])
+        setTeamInviteNotices((prev) => [...prev, t('modals.recommendSkill.teamSetupFailed', { error: err.message })])
       }
     }
 
@@ -215,7 +220,10 @@ export default function RecommendSkillModal({ skill, onClose }) {
           try {
             await inviteManagerTeamMemberByEmail(resolvedTeamId, addr)
           } catch (err) {
-            setTeamInviteNotices((prev) => [...prev, `${addr}: ${err.message}`])
+            setTeamInviteNotices((prev) => [
+              ...prev,
+              t('modals.recommendSkill.teamInviteMemberError', { name: addr, error: err.message }),
+            ])
           }
         }
       })
@@ -238,10 +246,10 @@ export default function RecommendSkillModal({ skill, onClose }) {
       panelClassName="w-full max-w-sm bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
         <h2 id="recommend-skill-dialog-title" className="font-display text-2xl text-ink mb-1">
-          Recommend this skill
+          {t('modals.recommendSkill.title')}
         </h2>
         <p className="text-sm text-secondary mb-4">
-          They'll be invited to add "{skill.name}" to their own profile and start tracking it.
+          {t('modals.recommendSkill.subtitle', { skillName: skill.name })}
         </p>
 
         {linkError && <p className="text-sm text-red-700 mb-4">{linkError}</p>}
@@ -254,10 +262,9 @@ export default function RecommendSkillModal({ skill, onClose }) {
             className="mt-0.5 rounded border-hairline accent-moss"
           />
           <span>
-            Also invite to your team
+            {t('modals.recommendSkill.alsoInviteToTeam')}
             <span className="block text-xs text-secondary">
-              Applies to the connections and email methods below. If they accept, you'll become their manager
-              and can share learning with them.
+              {t('modals.recommendSkill.alsoInviteToTeamDescription')}
             </span>
           </span>
         </label>
@@ -271,7 +278,7 @@ export default function RecommendSkillModal({ skill, onClose }) {
           {connections.length > 0 && (
             <div className="rounded-lg border border-hairline p-3">
               <span className="block font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">
-                1 · Recommend to a connection
+                {t('modals.recommendSkill.recommendToConnectionHeading')}
               </span>
               <div className="flex flex-wrap gap-2 mb-2">
                 {connections.map((c) => {
@@ -295,9 +302,9 @@ export default function RecommendSkillModal({ skill, onClose }) {
                       }`}
                     >
                       {status === 'sending'
-                        ? `${c.name}…`
+                        ? t('modals.recommendSkill.connectionSending', { name: c.name })
                         : status === 'sent'
-                          ? `${c.name} ✓`
+                          ? t('modals.recommendSkill.connectionSent', { name: c.name })
                           : c.name}
                     </button>
                   )
@@ -317,17 +324,17 @@ export default function RecommendSkillModal({ skill, onClose }) {
                 className="w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper disabled:opacity-60"
               >
                 {sendingConnections
-                  ? 'Sending…'
+                  ? t('modals.recommendSkill.sending')
                   : selectedCount > 0
-                    ? `Recommend to ${selectedCount} selected`
-                    : 'Recommend to selected'}
+                    ? t('modals.recommendSkill.recommendSelectedCount', { count: selectedCount })
+                    : t('modals.recommendSkill.recommendSelected')}
               </button>
             </div>
           )}
 
           <form onSubmit={handleSendEmails} className="rounded-lg border border-hairline p-3 space-y-2">
             <label className="block font-mono text-[10px] uppercase tracking-wide text-secondary" htmlFor="recommendEmail">
-              2 · Recommend by email
+              {t('modals.recommendSkill.recommendByEmailHeading')}
             </label>
             {emails.length > 0 && (
               <div className="flex flex-wrap gap-2">
@@ -345,12 +352,16 @@ export default function RecommendSkillModal({ skill, onClose }) {
                             : 'border-hairline text-ink'
                       }`}
                     >
-                      {status === 'sending' ? `${addr}…` : status === 'sent' ? `${addr} ✓` : addr}
+                      {status === 'sending'
+                        ? t('modals.recommendSkill.emailSending', { email: addr })
+                        : status === 'sent'
+                          ? t('modals.recommendSkill.emailSent', { email: addr })
+                          : addr}
                       {status !== 'sending' && status !== 'sent' && (
                         <button
                           type="button"
                           onClick={() => removeEmail(addr)}
-                          aria-label={`Remove ${addr}`}
+                          aria-label={t('modals.recommendSkill.removeEmailAriaLabel', { email: addr })}
                           className="hover:opacity-70"
                         >
                           ×
@@ -371,25 +382,29 @@ export default function RecommendSkillModal({ skill, onClose }) {
               onBlur={commitEmailInput}
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
             />
-            <p className="text-xs text-secondary">Press Enter or comma to add more than one.</p>
+            <p className="text-xs text-secondary">{t('modals.recommendSkill.pressEnterOrComma')}</p>
             {emailInputError && <p className="text-sm text-red-700">{emailInputError}</p>}
             <button
               type="submit"
               disabled={sendingEmails || (emails.length === 0 && !emailInput.trim())}
               className="w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper disabled:opacity-60"
             >
-              {sendingEmails ? 'Sending…' : emails.length > 1 ? `Send to ${emails.length}` : 'Send by email'}
+              {sendingEmails
+                ? t('modals.recommendSkill.sending')
+                : emails.length > 1
+                  ? t('modals.recommendSkill.sendToCount', { count: emails.length })
+                  : t('modals.recommendSkill.sendByEmail')}
             </button>
           </form>
 
           <div className="rounded-lg border border-hairline p-3">
             <span className="block font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">
-              3 · Or share a link
+              {t('modals.recommendSkill.orShareLinkHeading')}
             </span>
             <div className="flex items-center gap-2">
               <input
                 readOnly
-                value={link ? link.url : 'Generating link…'}
+                value={link ? link.url : t('modals.recommendSkill.generatingLink')}
                 onFocus={(e) => e.target.select()}
                 className="flex-1 min-w-0 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-xs font-mono focus:outline-none"
               />
@@ -399,14 +414,14 @@ export default function RecommendSkillModal({ skill, onClose }) {
                 disabled={!link}
                 className="shrink-0 rounded-md border border-hairline text-ink py-2 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
               >
-                {copied ? 'Copied!' : 'Copy'}
+                {copied ? t('modals.recommendSkill.copied') : t('modals.recommendSkill.copy')}
               </button>
             </div>
             {isMobileDevice() && (
               <a
                 href={
                   link
-                    ? whatsappShareUrl(`I think you'd be great at "${skill.name}" -- want to start tracking it on LearnScope? ${link.url}`)
+                    ? whatsappShareUrl(t('modals.recommendSkill.whatsappMessage', { skillName: skill.name, url: link.url }))
                     : undefined
                 }
                 target="_blank"
@@ -417,12 +432,12 @@ export default function RecommendSkillModal({ skill, onClose }) {
                 }`}
               >
                 <WhatsAppIcon />
-                Share via WhatsApp
+                {t('modals.recommendSkill.shareViaWhatsApp')}
               </a>
             )}
             {alsoInviteToTeam && (
               <p className="text-xs text-secondary mt-2">
-                Team invites aren't included with a shared link -- use connections or email above for that.
+                {t('modals.recommendSkill.teamInvitesNotIncludedWithLink')}
               </p>
             )}
           </div>
@@ -433,7 +448,7 @@ export default function RecommendSkillModal({ skill, onClose }) {
           onClick={onClose}
           className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 mt-5"
         >
-          Close
+          {t('modals.recommendSkill.close')}
         </button>
     </AccessibleDialog>
   )

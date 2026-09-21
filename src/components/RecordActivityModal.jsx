@@ -4,6 +4,7 @@ import { buildStatement, experienceTrail } from '../lib/xapiStatement'
 import AccessibleDialog from './AccessibleDialog'
 import EvidenceFields from './EvidenceFields'
 import SkillPickerModal from './SkillPickerModal'
+import { useLanguage } from '../context/LanguageContext'
 
 function todayDate() {
   return new Date().toISOString().slice(0, 10)
@@ -28,6 +29,7 @@ function loadPanelPreferences() {
 }
 
 export default function RecordActivityModal({ actor, skills, experiences = [], relatedSkill: fixedSkill, relatedExperience: fixedExperience, onSave, onClose }) {
+  const { t } = useLanguage()
   const [verbValue, setVerbValue] = useState('experienced')
   const [activityTitle, setActivityTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -59,10 +61,10 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
     setError(null)
     let statement
     try {
-      if (!activityTitle.trim()) throw new Error('An activity name is required.')
-      if (!date) throw new Error('A date is required.')
+      if (!activityTitle.trim()) throw new Error(t('modals.recordActivity.activityNameRequired'))
+      if (!date) throw new Error(t('modals.recordActivity.dateRequired'))
       const relatedSkills = fixedSkill ? [fixedSkill] : selectedSkills
-      if (relatedSkills.length === 0) throw new Error('Choose at least one skill this activity contributed to.')
+      if (relatedSkills.length === 0) throw new Error(t('modals.recordActivity.chooseAtLeastOneSkill'))
       const selectedExperience = experiences.find((experience) => experience.id === relatedExperienceId)
       const relatedExperience = fixedExperience ?? selectedExperience ?? null
       statement = buildStatement({
@@ -99,19 +101,19 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
       onClose={onClose}
       panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
-        <h2 id="record-activity-dialog-title" className="font-display text-2xl text-ink mb-1">Log skill activity</h2>
+        <h2 id="record-activity-dialog-title" className="font-display text-2xl text-ink mb-1">{t('modals.recordActivity.title')}</h2>
         <p className="text-sm text-secondary mb-4">
           {fixedExperience
-            ? `Capture one thing you did within “${fixedExperience.title}” and the skill(s) it helped you develop.`
+            ? t('modals.recordActivity.subtitleExperience', { title: fixedExperience.title })
             : fixedSkill
-              ? `Capture one thing you did that contributed to “${fixedSkill.name}”.`
-              : 'Capture one thing you did and the skill(s) it helped you develop.'}
+              ? t('modals.recordActivity.subtitleSkill', { skillName: fixedSkill.name })
+              : t('modals.recordActivity.subtitleDefault')}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm text-secondary mb-1" htmlFor="activityTitle">
-              What did you do?
+              {t('modals.recordActivity.whatDidYouDo')}
             </label>
             <input
               id="activityTitle"
@@ -122,8 +124,8 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
               onChange={(e) => setActivityTitle(e.target.value)}
               placeholder={
                 fixedSkill
-                  ? `something related to "${fixedSkill.name}"…`
-                  : 'a retro for the team, a 10k, a production incident…'
+                  ? t('modals.recordActivity.activityPlaceholderSkill', { skillName: fixedSkill.name })
+                  : t('modals.recordActivity.activityPlaceholderDefault')
               }
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
             />
@@ -131,7 +133,7 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
 
           <div>
             <label className="block text-sm text-secondary mb-1" htmlFor="verb">
-              How would you describe it?
+              {t('modals.recordActivity.howDescribeIt')}
             </label>
             <select
               id="verb"
@@ -149,7 +151,7 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
 
           <div>
             <label className="block text-sm text-secondary mb-1" htmlFor="date">
-              When?
+              {t('modals.recordActivity.when')}
             </label>
             <input
               id="date"
@@ -163,7 +165,7 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
 
           {!fixedSkill && (
             <div>
-              <span className="block text-sm text-secondary mb-1">Skills</span>
+              <span className="block text-sm text-secondary mb-1">{t('modals.recordActivity.skillsLabel')}</span>
               {selectedSkills.length > 0 && (
                 <ul className="flex flex-wrap gap-1.5 mb-2">
                   {selectedSkills.map((s) => (
@@ -175,7 +177,7 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
                       <button
                         type="button"
                         onClick={() => setSelectedSkills((current) => current.filter((sk) => sk.id !== s.id))}
-                        aria-label={`Remove ${s.name}`}
+                        aria-label={t('modals.recordActivity.removeSkillAriaLabel', { name: s.name })}
                         className="rounded-full p-0.5 text-secondary hover:text-ink"
                       >
                         ×
@@ -190,9 +192,9 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
                 className="w-full text-left rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
               >
                 {selectedSkills.length > 0 ? (
-                  '+ Add another skill'
+                  t('modals.recordActivity.addAnotherSkill')
                 ) : (
-                  <span className="text-secondary">Choose a skill…</span>
+                  <span className="text-secondary">{t('modals.recordActivity.chooseSkill')}</span>
                 )}
               </button>
             </div>
@@ -201,7 +203,7 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
           {!fixedExperience && experiences.length > 0 && (
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="relatedExperience">
-                Experience context (optional)
+                {t('modals.recordActivity.experienceContext')}
               </label>
               <select
                 id="relatedExperience"
@@ -209,7 +211,7 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
                 onChange={(e) => setRelatedExperienceId(e.target.value)}
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
               >
-                <option value="">No specific experience</option>
+                <option value="">{t('modals.recordActivity.noSpecificExperience')}</option>
                 {experiences.map((experience) => (
                   <option key={experience.id} value={experience.id}>{experienceTrail(experience)}</option>
                 ))}
@@ -224,7 +226,7 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
                 onClick={() => setShowDuration(true)}
                 className="text-xs text-secondary hover:text-ink underline"
               >
-                + Add how long it took
+                {t('modals.recordActivity.addDuration')}
               </button>
             )}
             {!showNotes && (
@@ -233,7 +235,7 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
                 onClick={() => setShowNotes(true)}
                 className="text-xs text-secondary hover:text-ink underline"
               >
-                + Add more detail
+                {t('modals.recordActivity.addMoreDetail')}
               </button>
             )}
             {!showEvidence && (
@@ -242,7 +244,7 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
                 onClick={() => setShowEvidence(true)}
                 className="text-xs text-secondary hover:text-ink underline"
               >
-                + Add evidence
+                {t('modals.recordActivity.addEvidence')}
               </button>
             )}
           </div>
@@ -250,13 +252,13 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
           {showDuration && (
             <div>
               <div className="flex items-center justify-between mb-1">
-                <span className="block text-sm text-secondary">How long did it take?</span>
+                <span className="block text-sm text-secondary">{t('modals.recordActivity.howLongDidItTake')}</span>
                 <button
                   type="button"
                   onClick={() => setShowDuration(false)}
                   className="text-xs text-secondary hover:text-ink underline"
                 >
-                  Hide
+                  {t('modals.recordActivity.hide')}
                 </button>
               </div>
               <div className="flex items-center gap-2">
@@ -267,10 +269,10 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
                   value={durationHours}
                   onChange={(e) => setDurationHours(e.target.value)}
                   placeholder="0"
-                  aria-label="Hours"
+                  aria-label={t('modals.recordActivity.hoursAriaLabel')}
                   className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
                 />
-                <span className="text-sm text-secondary shrink-0">h</span>
+                <span className="text-sm text-secondary shrink-0">{t('modals.recordActivity.hoursUnit')}</span>
                 <input
                   type="number"
                   min="0"
@@ -279,10 +281,10 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
                   value={durationMinutes}
                   onChange={(e) => setDurationMinutes(e.target.value)}
                   placeholder="0"
-                  aria-label="Minutes"
+                  aria-label={t('modals.recordActivity.minutesAriaLabel')}
                   className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
                 />
-                <span className="text-sm text-secondary shrink-0">m</span>
+                <span className="text-sm text-secondary shrink-0">{t('modals.recordActivity.minutesUnit')}</span>
               </div>
             </div>
           )}
@@ -291,14 +293,14 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-sm text-secondary" htmlFor="description">
-                  Anything else worth remembering?
+                  {t('modals.recordActivity.anythingElse')}
                 </label>
                 <button
                   type="button"
                   onClick={() => setShowNotes(false)}
                   className="text-xs text-secondary hover:text-ink underline"
                 >
-                  Hide
+                  {t('modals.recordActivity.hide')}
                 </button>
               </div>
               <textarea
@@ -307,7 +309,7 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
                 autoFocus
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Any detail worth remembering…"
+                placeholder={t('modals.recordActivity.notesPlaceholder')}
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
               />
             </div>
@@ -331,14 +333,14 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
               disabled={saving}
               className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
             >
-              {saving ? 'Saving…' : 'Log activity'}
+              {saving ? t('modals.recordActivity.saving') : t('modals.recordActivity.logActivity')}
             </button>
             <button
               type="button"
               onClick={onClose}
               className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper"
             >
-              Cancel
+              {t('modals.recordActivity.cancel')}
             </button>
           </div>
         </form>

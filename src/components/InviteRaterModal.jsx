@@ -13,10 +13,12 @@ import {
 } from '../lib/connections'
 import { isMobileDevice } from '../lib/device'
 import WhatsAppIcon from './WhatsAppIcon'
+import { useLanguage } from '../context/LanguageContext'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export default function InviteRaterModal({ skill, afterSelfAssessment = false, onClose }) {
+  const { t } = useLanguage()
   const { user } = useAuth()
   const [inviterName, setInviterName] = useState(null)
   const [connections, setConnections] = useState([])
@@ -93,7 +95,7 @@ export default function InviteRaterModal({ skill, afterSelfAssessment = false, o
     if (!value) return
     setEmailInputError(null)
     if (!EMAIL_RE.test(value)) {
-      setEmailInputError('That doesn\'t look like a valid email address.')
+      setEmailInputError(t('modals.inviteRater.invalidEmail'))
       return
     }
     if (emails.includes(value)) {
@@ -162,12 +164,12 @@ export default function InviteRaterModal({ skill, afterSelfAssessment = false, o
       panelClassName="w-full max-w-sm bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
         <h2 id="invite-rater-dialog-title" className="font-display text-2xl text-ink mb-1">
-          {afterSelfAssessment ? "Now invite someone to confirm it" : 'Invite someone to rate this'}
+          {afterSelfAssessment ? t('modals.inviteRater.titleAfterSelfAssessment') : t('modals.inviteRater.titleDefault')}
         </h2>
         <p className="text-sm text-secondary mb-4">
           {afterSelfAssessment
-            ? `You've rated "${skill.name}" yourself — invite someone else to rate it too, so it's not just your own word for it.`
-            : `They'll be asked to rate "${skill.name}" once they log in or sign up.`}
+            ? t('modals.inviteRater.subtitleAfterSelfAssessment', { skillName: skill.name })
+            : t('modals.inviteRater.subtitleDefault', { skillName: skill.name })}
         </p>
 
         {linkError && <p className="text-sm text-red-700 mb-4">{linkError}</p>}
@@ -176,7 +178,7 @@ export default function InviteRaterModal({ skill, afterSelfAssessment = false, o
           {connections.length > 0 && (
             <div className="rounded-lg border border-hairline p-3">
               <span className="block font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">
-                1 · Invite existing connections
+                {t('modals.inviteRater.inviteConnectionsHeading')}
               </span>
               <div className="flex flex-wrap gap-2 mb-2">
                 {connections.map((c) => {
@@ -200,9 +202,9 @@ export default function InviteRaterModal({ skill, afterSelfAssessment = false, o
                       }`}
                     >
                       {status === 'sending'
-                        ? `${c.name}…`
+                        ? t('modals.inviteRater.connectionSending', { name: c.name })
                         : status === 'sent'
-                          ? `${c.name} ✓`
+                          ? t('modals.inviteRater.connectionSent', { name: c.name })
                           : c.name}
                     </button>
                   )
@@ -222,17 +224,17 @@ export default function InviteRaterModal({ skill, afterSelfAssessment = false, o
                 className="w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper disabled:opacity-60"
               >
                 {sendingConnections
-                  ? 'Sending…'
+                  ? t('modals.inviteRater.sending')
                   : selectedCount > 0
-                    ? `Invite ${selectedCount} selected`
-                    : 'Invite selected'}
+                    ? t('modals.inviteRater.inviteSelectedCount', { count: selectedCount })
+                    : t('modals.inviteRater.inviteSelected')}
               </button>
             </div>
           )}
 
           <form onSubmit={handleSendEmails} className="rounded-lg border border-hairline p-3 space-y-2">
             <label className="block font-mono text-[10px] uppercase tracking-wide text-secondary" htmlFor="inviteEmail">
-              2 · Invite by email
+              {t('modals.inviteRater.inviteByEmailHeading')}
             </label>
             {emails.length > 0 && (
               <div className="flex flex-wrap gap-2">
@@ -250,12 +252,16 @@ export default function InviteRaterModal({ skill, afterSelfAssessment = false, o
                             : 'border-hairline text-ink'
                       }`}
                     >
-                      {status === 'sending' ? `${addr}…` : status === 'sent' ? `${addr} ✓` : addr}
+                      {status === 'sending'
+                        ? t('modals.inviteRater.emailSending', { email: addr })
+                        : status === 'sent'
+                          ? t('modals.inviteRater.emailSent', { email: addr })
+                          : addr}
                       {status !== 'sending' && status !== 'sent' && (
                         <button
                           type="button"
                           onClick={() => removeEmail(addr)}
-                          aria-label={`Remove ${addr}`}
+                          aria-label={t('modals.inviteRater.removeEmailAriaLabel', { email: addr })}
                           className="hover:opacity-70"
                         >
                           ×
@@ -276,25 +282,29 @@ export default function InviteRaterModal({ skill, afterSelfAssessment = false, o
               onBlur={commitEmailInput}
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
             />
-            <p className="text-xs text-secondary">Press Enter or comma to add more than one.</p>
+            <p className="text-xs text-secondary">{t('modals.inviteRater.pressEnterOrComma')}</p>
             {emailInputError && <p className="text-sm text-red-700">{emailInputError}</p>}
             <button
               type="submit"
               disabled={sendingEmails || (emails.length === 0 && !emailInput.trim())}
               className="w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper disabled:opacity-60"
             >
-              {sendingEmails ? 'Sending…' : emails.length > 1 ? `Send to ${emails.length}` : 'Send by email'}
+              {sendingEmails
+                ? t('modals.inviteRater.sending')
+                : emails.length > 1
+                  ? t('modals.inviteRater.sendToCount', { count: emails.length })
+                  : t('modals.inviteRater.sendByEmail')}
             </button>
           </form>
 
           <div className="rounded-lg border border-hairline p-3">
             <span className="block font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">
-              3 · Or share a link
+              {t('modals.inviteRater.orShareLinkHeading')}
             </span>
             <div className="flex items-center gap-2">
               <input
                 readOnly
-                value={link ? link.url : 'Generating link…'}
+                value={link ? link.url : t('modals.inviteRater.generatingLink')}
                 onFocus={(e) => e.target.select()}
                 className="flex-1 min-w-0 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-xs font-mono focus:outline-none"
               />
@@ -304,14 +314,14 @@ export default function InviteRaterModal({ skill, afterSelfAssessment = false, o
                 disabled={!link}
                 className="shrink-0 rounded-md border border-hairline text-ink py-2 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
               >
-                {copied ? 'Copied!' : 'Copy'}
+                {copied ? t('modals.inviteRater.copied') : t('modals.inviteRater.copy')}
               </button>
             </div>
             {isMobileDevice() && (
               <a
                 href={
                   link
-                    ? whatsappShareUrl(`Can you rate my skill "${skill.name}" on LearnScope? ${link.url}`)
+                    ? whatsappShareUrl(t('modals.inviteRater.whatsappMessage', { skillName: skill.name, url: link.url }))
                     : undefined
                 }
                 target="_blank"
@@ -322,7 +332,7 @@ export default function InviteRaterModal({ skill, afterSelfAssessment = false, o
                 }`}
               >
                 <WhatsAppIcon />
-                Share via WhatsApp
+                {t('modals.inviteRater.shareViaWhatsApp')}
               </a>
             )}
           </div>
@@ -333,7 +343,7 @@ export default function InviteRaterModal({ skill, afterSelfAssessment = false, o
           onClick={onClose}
           className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 mt-5"
         >
-          Close
+          {t('modals.inviteRater.close')}
         </button>
     </AccessibleDialog>
   )

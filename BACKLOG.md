@@ -25,16 +25,24 @@ or just delete it.
    Validate, Skill Network, Upcoming), the settings dialog (details,
    schedule, delete/drop, visibility/validation settings), and the History
    tab's full timeline UI (activities, peer ratings, training, relationship
-   links, validation decisions, and their detail modals). Not translated:
-   admin/provider/employer consoles, most modals and secondary dialogs
-   elsewhere in the app, and deeply dynamic/AI-generated content (level
-   guides, diagnostic questions) — still a meaningful amount of ongoing
-   work, not something to treat as finished. `t()` has no
-   string-interpolation support yet (params), so spots with a dynamic value
-   (e.g. "Assigned by {name}", singular/plural counts) are split into a
-   translated prefix/suffix key concatenated with the raw value or a
-   count-driven singular/plural key pair, rather than a single templated
-   string.
+   links, validation decisions, and their detail modals) — plus the 12
+   modal/section components SkillDetail.jsx opens (PeopleWithSkillModal,
+   InviteRaterModal, RecommendSkillModal, RecordActivityModal,
+   AssessBaselineModal, SetTargetModal, ValidateSkillModal,
+   RequestValidationModal, ConfirmingBaselineQuizModal, InterviewModal,
+   CurrentRoleSelectModal, SelfAssessSection), which are also reused from
+   Dashboard/Actions/ExperienceDetail. Not translated: admin/provider/
+   employer consoles, and the roughly 23 other modals/secondary dialogs
+   elsewhere in the app (e.g. those opened from Dashboard, Connections,
+   Experience, the video editor, resume import), and deeply dynamic/
+   AI-generated content (level guides, diagnostic questions, quiz/interview
+   content, and the auto-generated audit strings some diagnostic flows save
+   into skill_assessments.comments) — still a meaningful amount of ongoing
+   work, not something to treat as finished. `t()` now supports
+   string-interpolation (`t(key, { param })` replaces `{param}` placeholders
+   in the translated string), used throughout the SkillDetail modals pass;
+   spots needing genuine singular/plural phrasing still use a count-driven
+   key pair rather than one templated string.
 2. "Proxy as another user" — deliberately NOT built as literal session
    impersonation. The only way to make RLS-scoped queries genuinely return
    another learner's data is to hold a real, fully-privileged session as

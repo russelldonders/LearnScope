@@ -5,10 +5,12 @@ import PersonAvatar from './PersonAvatar'
 import { LEVEL_LABELS } from '../lib/levels'
 import { listSkillMatches, sendConnectionRequest, isDuplicatePendingRequestError } from '../lib/skillDiscovery'
 import AccessibleDialog from './AccessibleDialog'
+import { useLanguage } from '../context/LanguageContext'
 
 const SEARCH_THRESHOLD = 10
 
 export default function PeopleWithSkillModal({ librarySkillId, skillName, skillId, onClose }) {
+  const { t } = useLanguage()
   const [matches, setMatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -41,13 +43,13 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
         <div className="flex items-center justify-between mb-1">
-          <h2 id="people-with-skill-dialog-title" className="font-display text-2xl text-ink">People with {skillName}</h2>
+          <h2 id="people-with-skill-dialog-title" className="font-display text-2xl text-ink">{t('modals.peopleWithSkill.title', { skillName })}</h2>
           <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm shrink-0">
-            Close
+            {t('modals.peopleWithSkill.close')}
           </button>
         </div>
         <p className="text-xs text-secondary mb-4">
-          Only shows people who've chosen to appear in skill searches.
+          {t('modals.peopleWithSkill.subtitle')}
         </p>
 
         {matches.length > SEARCH_THRESHOLD && (
@@ -55,17 +57,17 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name…"
+            placeholder={t('modals.peopleWithSkill.searchPlaceholder')}
             className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-moss"
           />
         )}
 
-        {loading && <p className="text-sm text-secondary">Loading…</p>}
+        {loading && <p className="text-sm text-secondary">{t('modals.peopleWithSkill.loading')}</p>}
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
         {!loading && !error && visible.length === 0 && (
           <p className="text-sm text-secondary">
-            {matches.length === 0 ? 'No one else is currently discoverable for this skill.' : 'No matches.'}
+            {matches.length === 0 ? t('modals.peopleWithSkill.noOneDiscoverable') : t('modals.peopleWithSkill.noMatches')}
           </p>
         )}
 
@@ -80,23 +82,23 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
                   >
                     <PersonAvatar name={m.full_name} avatarUrl={m.avatar_url} />
                     <span className="text-sm text-ink font-medium truncate group-hover:text-moss group-hover:underline">
-                      {m.full_name || 'Someone'}
+                      {m.full_name || t('modals.peopleWithSkill.someone')}
                     </span>
                   </Link>
                 ) : (
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <PersonAvatar name={m.full_name} avatarUrl={m.avatar_url} />
-                    <span className="text-sm text-ink font-medium truncate">{m.full_name || 'Someone'}</span>
+                    <span className="text-sm text-ink font-medium truncate">{m.full_name || t('modals.peopleWithSkill.someone')}</span>
                   </div>
                 )}
                 <GrowthRing level={m.level} size={24} labels={LEVEL_LABELS} />
                 {m.is_connection ? (
                   <span className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 shrink-0">
-                    Connected
+                    {t('modals.peopleWithSkill.connected')}
                   </span>
                 ) : m.has_pending_request ? (
                   <span className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 shrink-0">
-                    Requested
+                    {t('modals.peopleWithSkill.requested')}
                   </span>
                 ) : (
                   <button
@@ -104,14 +106,14 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
                     onClick={() => setOpenRequestFor(openRequestFor === m.user_id ? null : m.user_id)}
                     className="rounded-full border border-hairline px-3 py-1 text-xs font-medium text-ink hover:border-moss hover:text-moss shrink-0"
                   >
-                    Connect
+                    {t('modals.peopleWithSkill.connect')}
                   </button>
                 )}
               </div>
               {openRequestFor === m.user_id && (
                 <ConnectRequestForm
                   recipientId={m.user_id}
-                  recipientName={m.full_name || 'this person'}
+                  recipientName={m.full_name || t('modals.peopleWithSkill.thisPerson')}
                   skillId={skillId}
                   onSent={() => handleRequested(m.user_id)}
                   onCancel={() => setOpenRequestFor(null)}
@@ -125,6 +127,7 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
 }
 
 function ConnectRequestForm({ recipientId, recipientName, skillId, onSent, onCancel }) {
+  const { t } = useLanguage()
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState(null)
@@ -137,7 +140,7 @@ function ConnectRequestForm({ recipientId, recipientName, skillId, onSent, onCan
       onSent()
     } catch (err) {
       if (isDuplicatePendingRequestError(err)) {
-        setError('You already have a pending request with this person.')
+        setError(t('modals.peopleWithSkill.alreadyPendingRequest'))
       } else {
         setError(err.message)
       }
@@ -152,7 +155,7 @@ function ConnectRequestForm({ recipientId, recipientName, skillId, onSent, onCan
         rows={2}
         value={message}
         onChange={(e) => setMessage(e.target.value)}
-        placeholder={`Why do you want to connect with ${recipientName}? (optional)`}
+        placeholder={t('modals.peopleWithSkill.connectPromptPlaceholder', { name: recipientName })}
         className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-xs focus:outline-none focus:ring-2 focus:ring-moss"
       />
       {error && <p role="alert" className="text-xs text-red-700 mt-1">{error}</p>}
@@ -163,14 +166,14 @@ function ConnectRequestForm({ recipientId, recipientName, skillId, onSent, onCan
           disabled={sending}
           className="rounded-md bg-moss text-paper py-1.5 px-3 text-xs font-medium hover:opacity-90 disabled:opacity-60"
         >
-          {sending ? 'Sending…' : 'Send request'}
+          {sending ? t('modals.peopleWithSkill.sending') : t('modals.peopleWithSkill.sendRequest')}
         </button>
         <button
           type="button"
           onClick={onCancel}
           className="rounded-md border border-hairline text-ink py-1.5 px-3 text-xs font-medium hover:bg-paper"
         >
-          Cancel
+          {t('modals.peopleWithSkill.cancel')}
         </button>
       </div>
     </div>

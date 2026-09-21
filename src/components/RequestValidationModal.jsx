@@ -8,8 +8,10 @@ import {
   getValidationRequestContact,
   sendValidationRequestEmail,
 } from '../lib/skillValidationRequests'
+import { useLanguage } from '../context/LanguageContext'
 
 export default function RequestValidationModal({ skill, user, targetLevel, onClose, onRequested }) {
+  const { t } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [candidates, setCandidates] = useState([])
@@ -63,32 +65,31 @@ export default function RequestValidationModal({ skill, user, targetLevel, onClo
       onClose={onClose}
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
-        <h2 id="request-validation-dialog-title" className="font-display text-2xl text-ink mb-1">Request Validation</h2>
+        <h2 id="request-validation-dialog-title" className="font-display text-2xl text-ink mb-1">{t('modals.requestValidation.title')}</h2>
         <p className="text-sm text-secondary mb-4">
-          {skill.name} · Target: {LEVEL_LABELS[targetLevel]}
+          {t('modals.requestValidation.subtitle', { skillName: skill.name, level: LEVEL_LABELS[targetLevel] })}
         </p>
 
         {sent ? (
           <div className="space-y-4">
             <p className="text-sm text-ink">
-              Request sent to {selected?.full_name}. You'll see the outcome here once they respond.
+              {t('modals.requestValidation.sentMessage', { name: selected?.full_name })}
             </p>
             <button
               type="button"
               onClick={onRequested}
               className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90"
             >
-              Done
+              {t('modals.requestValidation.done')}
             </button>
           </div>
         ) : (
           <>
-            {loading && <p className="text-sm text-secondary">Finding people who can validate this skill…</p>}
+            {loading && <p className="text-sm text-secondary">{t('modals.requestValidation.finding')}</p>}
 
             {!loading && candidates.length === 0 && !error && (
               <p className="text-sm text-secondary mb-4">
-                No one is currently available to validate this skill. People become eligible once they've
-                reached this level themselves and opted in to validating others.
+                {t('modals.requestValidation.noOneAvailable')}
               </p>
             )}
 
@@ -97,7 +98,7 @@ export default function RequestValidationModal({ skill, user, targetLevel, onClo
                 {connections.length > 0 && (
                   <div>
                     <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">
-                      Your connections
+                      {t('modals.requestValidation.yourConnections')}
                     </p>
                     <div className="space-y-1">
                       {connections.map((c) => (
@@ -114,7 +115,7 @@ export default function RequestValidationModal({ skill, user, targetLevel, onClo
                 {others.length > 0 && (
                   <div>
                     <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">
-                      Other LearnScope members
+                      {t('modals.requestValidation.otherMembers')}
                     </p>
                     <div className="space-y-1">
                       {others.map((c) => (
@@ -133,9 +134,7 @@ export default function RequestValidationModal({ skill, user, targetLevel, onClo
 
             {selected && (
               <p className="text-xs text-secondary mb-4">
-                If you send this request, {selected.full_name} will get read-only access to this skill's full
-                record — your self, peer and course evidence, activity and uploaded files — for as long as the
-                request exists.
+                {t('modals.requestValidation.accessNotice', { name: selected.full_name })}
               </p>
             )}
 
@@ -148,7 +147,7 @@ export default function RequestValidationModal({ skill, user, targetLevel, onClo
                 disabled={!selected || sending}
                 className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
               >
-                {sending ? 'Sending…' : 'Send request'}
+                {sending ? t('modals.requestValidation.sending') : t('modals.requestValidation.sendRequest')}
               </button>
               <button
                 type="button"
@@ -156,7 +155,7 @@ export default function RequestValidationModal({ skill, user, targetLevel, onClo
                 disabled={sending}
                 className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper disabled:opacity-60"
               >
-                Cancel
+                {t('modals.requestValidation.cancel')}
               </button>
             </div>
           </>

@@ -10,6 +10,7 @@ import {
   saveAssessmentResult,
 } from '../lib/baselineAssessment'
 import AccessibleDialog from './AccessibleDialog'
+import { useLanguage } from '../context/LanguageContext'
 
 // mode: 'baseline' (identified -> baseline_assessed, one-time) or
 // 'evaluate' (always-available re-assessment). Same synthesis either way --
@@ -24,6 +25,7 @@ export default function AssessBaselineModal({
   onClose,
   onAssessed,
 }) {
+  const { t } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
@@ -77,13 +79,13 @@ export default function AssessBaselineModal({
     }
   }
 
-  const heading = mode === 'baseline' ? 'Assess baseline' : 'Evaluate baseline'
-  const proposedLabel = 'Proposed baseline'
-  const confirmLabel = mode === 'baseline' ? 'Confirm baseline' : 'Update baseline'
+  const heading = mode === 'baseline' ? t('modals.assessBaseline.headingBaseline') : t('modals.assessBaseline.headingEvaluate')
+  const proposedLabel = t('modals.assessBaseline.proposedBaseline')
+  const confirmLabel = mode === 'baseline' ? t('modals.assessBaseline.confirmBaseline') : t('modals.assessBaseline.updateBaseline')
   const confirmNote =
     mode === 'baseline'
-      ? `Confirming will set this as the skill's current level, save it to the timeline, and move the skill to the "${SKILL_LIFECYCLE_LABELS.baseline_assessed}" stage.`
-      : "Confirming will update the skill's current baseline level and add this as a new baseline entry on the timeline -- the previous baseline stays in the history."
+      ? t('modals.assessBaseline.confirmNoteBaseline', { stage: SKILL_LIFECYCLE_LABELS.baseline_assessed })
+      : t('modals.assessBaseline.confirmNoteEvaluate')
 
   return (
     <AccessibleDialog
@@ -97,7 +99,7 @@ export default function AssessBaselineModal({
 
         {loading && (
           <p className="text-sm text-secondary">
-            Weighing self-assessment, peer ratings and recorded activity…
+            {t('modals.assessBaseline.weighing')}
           </p>
         )}
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
@@ -122,14 +124,14 @@ export default function AssessBaselineModal({
                 disabled={saving}
                 className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
               >
-                {saving ? 'Saving…' : confirmLabel}
+                {saving ? t('modals.assessBaseline.saving') : confirmLabel}
               </button>
               <button
                 type="button"
                 onClick={onClose}
                 className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper"
               >
-                Cancel
+                {t('modals.assessBaseline.cancel')}
               </button>
             </div>
           </div>

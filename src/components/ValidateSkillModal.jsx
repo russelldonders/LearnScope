@@ -5,6 +5,7 @@ import { activityName, verbLabel } from '../lib/xapiStatement'
 import { fetchPeerRaterProgress, buildWeightedPeerRatings } from '../lib/baselineAssessment'
 import { validateSkillAgainstTarget, saveValidationResult } from '../lib/skillValidation'
 import AccessibleDialog from './AccessibleDialog'
+import { useLanguage } from '../context/LanguageContext'
 
 export default function ValidateSkillModal({
   skill,
@@ -16,6 +17,7 @@ export default function ValidateSkillModal({
   onClose,
   onValidated,
 }) {
+  const { t } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
@@ -76,14 +78,14 @@ export default function ValidateSkillModal({
       onClose={onClose}
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
-        <h2 id="ai-assessment-dialog-title" className="font-display text-2xl text-ink mb-1">AI Assessment</h2>
+        <h2 id="ai-assessment-dialog-title" className="font-display text-2xl text-ink mb-1">{t('modals.validateSkill.title')}</h2>
         <p className="text-sm text-secondary mb-4">
-          {skill.name} · Target: {LEVEL_LABELS[target.target_level]}
+          {t('modals.validateSkill.subtitle', { skillName: skill.name, level: LEVEL_LABELS[target.target_level] })}
         </p>
 
         {loading && (
           <p className="text-sm text-secondary">
-            Weighing self-assessment, peer ratings and recorded activity against your target…
+            {t('modals.validateSkill.weighing')}
           </p>
         )}
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
@@ -93,7 +95,7 @@ export default function ValidateSkillModal({
             <div className="flex items-center gap-3 mb-3">
               <GrowthRing level={result.level} size={48} />
               <div>
-                <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Current level</p>
+                <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">{t('modals.validateSkill.currentLevel')}</p>
                 <p className="text-ink font-medium">{LEVEL_LABELS[result.level]}</p>
               </div>
             </div>
@@ -103,7 +105,7 @@ export default function ValidateSkillModal({
                 result.passed ? 'text-moss border-moss bg-moss/10' : 'text-gold border-gold bg-gold/10'
               }`}
             >
-              {result.passed ? `Target reached` : 'Target not yet reached'}
+              {result.passed ? t('modals.validateSkill.targetReached') : t('modals.validateSkill.targetNotYetReached')}
             </p>
 
             <p className="text-sm text-ink mb-4">{result.feedback}</p>
@@ -111,8 +113,7 @@ export default function ValidateSkillModal({
             {result.passed ? (
               <>
                 <p className="text-xs text-secondary mb-4">
-                  Confirming will save this assessment to the timeline and move the skill to the "Maintaining"
-                  stage.
+                  {t('modals.validateSkill.confirmingWillMoveToMaintaining')}
                 </p>
                 <div className="flex items-center gap-2">
                   <button
@@ -121,22 +122,21 @@ export default function ValidateSkillModal({
                     disabled={saving}
                     className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
                   >
-                    {saving ? 'Saving…' : 'Confirm & move to Maintaining'}
+                    {saving ? t('modals.validateSkill.saving') : t('modals.validateSkill.confirmAndMoveToMaintaining')}
                   </button>
                   <button
                     type="button"
                     onClick={onClose}
                     className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper"
                   >
-                    Cancel
+                    {t('modals.validateSkill.cancel')}
                   </button>
                 </div>
               </>
             ) : (
               <>
                 <p className="text-xs text-secondary mb-4">
-                  Save this assessment to the timeline, and choose whether to keep trying at this stage or send
-                  the skill back to "Developing" to build up more evidence first.
+                  {t('modals.validateSkill.saveKeepTryingDescription')}
                 </p>
                 <div className="space-y-2">
                   <button
@@ -145,7 +145,7 @@ export default function ValidateSkillModal({
                     disabled={saving}
                     className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
                   >
-                    {saving ? 'Saving…' : 'Save feedback & keep trying'}
+                    {saving ? t('modals.validateSkill.saving') : t('modals.validateSkill.saveFeedbackKeepTrying')}
                   </button>
                   <button
                     type="button"
@@ -153,7 +153,7 @@ export default function ValidateSkillModal({
                     disabled={saving}
                     className="w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper disabled:opacity-60"
                   >
-                    Save feedback & go back to Developing
+                    {t('modals.validateSkill.saveFeedbackGoBackToDeveloping')}
                   </button>
                   <button
                     type="button"
@@ -161,7 +161,7 @@ export default function ValidateSkillModal({
                     disabled={saving}
                     className="w-full text-sm text-secondary hover:text-ink py-1"
                   >
-                    Cancel
+                    {t('modals.validateSkill.cancel')}
                   </button>
                 </div>
               </>

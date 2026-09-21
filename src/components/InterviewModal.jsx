@@ -4,6 +4,7 @@ import GrowthRing from './GrowthRing'
 import { KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
 import { fetchOrGenerateInterviewPlan, sendInterviewTurn, saveInterviewAttempt } from '../lib/skillDiagnostics'
 import AccessibleDialog from './AccessibleDialog'
+import { useLanguage } from '../context/LanguageContext'
 
 const SpeechRecognitionAPI =
   typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null
@@ -30,6 +31,7 @@ export default function InterviewModal({
   onClose,
   onConfirmed,
 }) {
+  const { t } = useLanguage()
   const calibratedLevel = calibrating ? null : (latestKnowledgeAssessment?.level ?? skill.knowledge_level ?? 1)
 
   const [diagnosticContentId, setDiagnosticContentId] = useState(null)
@@ -51,7 +53,7 @@ export default function InterviewModal({
   useEffect(() => {
     fetchOrGenerateInterviewPlan({ skill, level: calibratedLevel, calibrate: calibrating })
       .then(({ diagnosticContentId: id, content }) => {
-        if (!content?.openingQuestion) throw new Error("Couldn't prepare an interview for this skill.")
+        if (!content?.openingQuestion) throw new Error(t('modals.interview.couldntPrepareInterview'))
         setDiagnosticContentId(id)
         setPlan(content)
         setTranscript([{ role: 'interviewer', text: content.openingQuestion }])
@@ -125,7 +127,7 @@ export default function InterviewModal({
         plan,
         transcript: apiTranscript,
       })
-      const closingText = result.message || (result.done ? "That's everything I need -- thanks." : '')
+      const closingText = result.message || (result.done ? t('modals.interview.thatsEverythingINeed') : '')
       if (closingText) setTranscript((t) => [...t, { role: 'interviewer', text: closingText }])
       if (result.done) {
         setConfirmedLevel(result.confirmedLevel)
@@ -193,26 +195,29 @@ export default function InterviewModal({
     >
         <div className="flex items-start justify-between mb-1">
           <div>
-            <h2 id="interview-dialog-title" className="font-display text-2xl text-ink">Interview me</h2>
+            <h2 id="interview-dialog-title" className="font-display text-2xl text-ink">{t('modals.interview.title')}</h2>
             <p className="text-sm text-secondary">
-              {skill.name} · {calibrating ? 'finding your level' : `pitched at ${KNOWLEDGE_LEVEL_LABELS[calibratedLevel]}`}
+              {skill.name} ·{' '}
+              {calibrating
+                ? t('modals.interview.findingYourLevel')
+                : t('modals.interview.pitchedAt', { level: KNOWLEDGE_LEVEL_LABELS[calibratedLevel] })}
             </p>
           </div>
           {typeof window !== 'undefined' && window.speechSynthesis && (
             <button
               type="button"
               onClick={() => setReadAloud((v) => !v)}
-              title={readAloud ? 'Stop reading questions aloud' : 'Read questions aloud'}
+              title={readAloud ? t('modals.interview.stopReadingAloud') : t('modals.interview.readAloud')}
               className={`shrink-0 rounded-md border px-2 py-1 text-xs ${
                 readAloud ? 'border-slate bg-slate/10 text-ink' : 'border-hairline text-secondary hover:text-ink'
               }`}
             >
-              {readAloud ? '🔊 On' : '🔈 Off'}
+              {readAloud ? `🔊 ${t('modals.interview.on')}` : `🔈 ${t('modals.interview.off')}`}
             </button>
           )}
         </div>
 
-        {loading && <p className="text-sm text-secondary mt-4">Preparing your interview…</p>}
+        {loading && <p className="text-sm text-secondary mt-4">{t('modals.interview.preparingInterview')}</p>}
         {error && <p className="text-sm text-red-700 mt-2">{error}</p>}
 
         {!loading && plan && (
@@ -229,7 +234,7 @@ export default function InterviewModal({
                   </div>
                 </div>
               ))}
-              {sending && <p className="text-xs text-secondary">Thinking…</p>}
+              {sending && <p className="text-xs text-secondary">{t('modals.interview.thinking')}</p>}
               <div ref={transcriptEndRef} />
             </div>
 
@@ -240,7 +245,7 @@ export default function InterviewModal({
                     type="text"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
-                    placeholder="Type your answer…"
+                    placeholder={t('modals.interview.typeYourAnswer')}
                     disabled={sending}
                     autoFocus
                     className="flex-1 rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss disabled:opacity-60"
@@ -250,12 +255,12 @@ export default function InterviewModal({
                       type="button"
                       onClick={toggleListening}
                       disabled={sending}
-                      title={listening ? 'Stop listening' : 'Speak your answer'}
+                      title={listening ? t('modals.interview.stopListening') : t('modals.interview.speakYourAnswer')}
                       className={`shrink-0 rounded-md border px-3 py-2 text-sm ${
                         listening ? 'border-red-700 bg-red-700/10 text-red-700' : 'border-hairline text-ink hover:bg-paper'
                       } disabled:opacity-60`}
                     >
-                      {listening ? '● Listening…' : '🎤'}
+                      {listening ? t('modals.interview.listening') : '🎤'}
                     </button>
                   )}
                   <button
@@ -263,11 +268,11 @@ export default function InterviewModal({
                     disabled={sending || !inputValue.trim()}
                     className="shrink-0 rounded-md bg-moss text-paper px-4 py-2 font-medium hover:opacity-90 disabled:opacity-60"
                   >
-                    Send
+                    {t('modals.interview.send')}
                   </button>
                 </div>
                 <button type="button" onClick={onClose} className="text-xs text-secondary hover:text-ink underline">
-                  Cancel
+                  {t('modals.interview.cancel')}
                 </button>
               </form>
             ) : (
@@ -276,7 +281,7 @@ export default function InterviewModal({
                   <GrowthRing level={confirmedLevel} size={48} labels={KNOWLEDGE_LEVEL_LABELS} color="var(--color-slate)" />
                   <div>
                     <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">
-                      Confirmed knowledge level
+                      {t('modals.interview.confirmedKnowledgeLevel')}
                     </p>
                     <p className="text-ink font-medium">{KNOWLEDGE_LEVEL_LABELS[confirmedLevel]}</p>
                   </div>
@@ -292,14 +297,14 @@ export default function InterviewModal({
                     disabled={saving}
                     className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
                   >
-                    {saving ? 'Saving…' : 'Save'}
+                    {saving ? t('modals.interview.saving') : t('modals.interview.save')}
                   </button>
                   <button
                     type="button"
                     onClick={onClose}
                     className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper"
                   >
-                    Discard
+                    {t('modals.interview.discard')}
                   </button>
                 </div>
               </div>

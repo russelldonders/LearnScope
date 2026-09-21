@@ -7,6 +7,7 @@ import EvidenceFields from './EvidenceFields'
 import { LEVELS, LEVEL_LABELS, LEVEL_DESCRIPTIONS, KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
 import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
 import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
+import { useLanguage } from '../context/LanguageContext'
 
 // currentLevel is the panel's already-displayed level (falls back through
 // self-assessment history the same way the panel does -- see
@@ -21,9 +22,11 @@ export default function SelfAssessSection({
   currentLevel = null,
   onAssessed,
   onGuideGenerated,
-  submitLabel = 'Save self-assessment',
+  submitLabel = null,
   secondaryAction = null,
 }) {
+  const { t } = useLanguage()
+  const resolvedSubmitLabel = submitLabel ?? t('modals.selfAssess.saveSelfAssessment')
   const isKnowledge = axis === 'knowledge'
   const labels = isKnowledge ? KNOWLEDGE_LEVEL_LABELS : LEVEL_LABELS
   // Once a knowledge level has been confirmed via the quiz, a later
@@ -93,7 +96,7 @@ export default function SelfAssessSection({
     e.preventDefault()
     setError(null)
     if (!isKnowledge && scheduleNextReview && nextCheckinDate && nextCheckinDate < todayDateString()) {
-      setError("Next self-assessment date can't be in the past.")
+      setError(t('modals.selfAssess.dateCantBeInPast'))
       return
     }
     setSaving(true)
@@ -166,7 +169,7 @@ export default function SelfAssessSection({
     <form onSubmit={handleSubmit} className="space-y-3">
       <div>
         <span className="block text-sm text-secondary mb-2">
-          {isKnowledge ? 'What you already know' : 'Level now'}
+          {isKnowledge ? t('modals.selfAssess.whatYouAlreadyKnow') : t('modals.selfAssess.levelNow')}
         </span>
         <div className="space-y-2">
           {LEVELS.map((l) => {
@@ -175,7 +178,10 @@ export default function SelfAssessSection({
             // the locked rows below it, which was easy to misread as "a
             // higher level is confirmed" attached to the wrong level.
             const isConfirmedRow = confirmedFloor != null && l === confirmedFloor
-            const badges = [isConfirmedRow && 'Confirmed', currentLevel === l && 'Current Self-Assess'].filter(Boolean)
+            const badges = [
+              isConfirmedRow && t('modals.selfAssess.confirmed'),
+              currentLevel === l && t('modals.selfAssess.currentSelfAssess'),
+            ].filter(Boolean)
             return (
             <div
               key={l}
@@ -187,7 +193,7 @@ export default function SelfAssessSection({
                 type="button"
                 onClick={() => !locked && setLevel(l)}
                 disabled={locked}
-                title={locked ? `Already confirmed at ${labels[confirmedFloor]} -- can't self-assess lower` : undefined}
+                title={locked ? t('modals.selfAssess.lockedTooltip', { level: labels[confirmedFloor] }) : undefined}
                 className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${
                   locked
                     ? 'cursor-not-allowed'
@@ -218,7 +224,7 @@ export default function SelfAssessSection({
                     // fallback only ever appears once the guide call has
                     // genuinely finished (and failed to produce anything).
                     if (guideLoading) {
-                      return <p className="text-xs text-secondary leading-relaxed">Loading guidance…</p>
+                      return <p className="text-xs text-secondary leading-relaxed">{t('modals.selfAssess.loadingGuidance')}</p>
                     }
                     const levelDescription = guideStatements[l - 1] ?? (!isKnowledge ? LEVEL_DESCRIPTIONS[l] : undefined)
                     return (
@@ -237,7 +243,7 @@ export default function SelfAssessSection({
 
       <div>
         {isKnowledge && (
-          <span className="block text-sm text-secondary mb-2">What's shaped this understanding?</span>
+          <span className="block text-sm text-secondary mb-2">{t('modals.selfAssess.whatsShapedUnderstanding')}</span>
         )}
         <textarea
           rows={3}
@@ -245,8 +251,8 @@ export default function SelfAssessSection({
           onChange={(e) => setComments(e.target.value)}
           placeholder={
             isKnowledge
-              ? 'e.g. courses, reading, work you’ve done…'
-              : 'Why this level? What changed since last time…'
+              ? t('modals.selfAssess.knowledgeCommentsPlaceholder')
+              : t('modals.selfAssess.practicalCommentsPlaceholder')
           }
           className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
         />
@@ -261,7 +267,7 @@ export default function SelfAssessSection({
               onChange={(e) => setShowEvidence(e.target.checked)}
               className="rounded border-hairline"
             />
-            Provide evidence
+            {t('modals.selfAssess.provideEvidence')}
           </label>
           {showEvidence && (
             <EvidenceFields
@@ -283,7 +289,7 @@ export default function SelfAssessSection({
               onChange={(e) => setScheduleNextReview(e.target.checked)}
               className="rounded border-hairline"
             />
-            Schedule next self-review
+            {t('modals.selfAssess.scheduleNextSelfReview')}
           </label>
           {scheduleNextReview && (
             <div className="mt-2 space-y-2">
@@ -303,11 +309,11 @@ export default function SelfAssessSection({
                   onChange={(e) => setRecurring(e.target.checked)}
                   className="rounded border-hairline"
                 />
-                Set up regular self-assessments
+                {t('modals.selfAssess.setUpRegularSelfAssessments')}
               </label>
               {recurring && (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-secondary">Every</span>
+                  <span className="text-sm text-secondary">{t('modals.selfAssess.every')}</span>
                   <input
                     type="number"
                     min={1}
@@ -321,9 +327,9 @@ export default function SelfAssessSection({
                     onChange={(e) => setFrequencyUnit(e.target.value)}
                     className="rounded-md border border-hairline bg-paper px-2 py-1.5 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
                   >
-                    <option value="weeks">weeks</option>
-                    <option value="months">months</option>
-                    <option value="years">years</option>
+                    <option value="weeks">{t('modals.selfAssess.weeks')}</option>
+                    <option value="months">{t('modals.selfAssess.months')}</option>
+                    <option value="years">{t('modals.selfAssess.years')}</option>
                   </select>
                 </div>
               )}
@@ -340,7 +346,7 @@ export default function SelfAssessSection({
           disabled={saving}
           className="flex-1 rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 disabled:opacity-60"
         >
-          {saving ? 'Saving…' : submitLabel}
+          {saving ? t('modals.selfAssess.saving') : resolvedSubmitLabel}
         </button>
         {secondaryAction && (
           <button

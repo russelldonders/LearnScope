@@ -4,12 +4,14 @@ import GrowthRing from './GrowthRing'
 import { LEVELS, LEVEL_LABELS, LEVEL_DESCRIPTIONS } from '../lib/levels'
 import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
 import AccessibleDialog from './AccessibleDialog'
+import { useLanguage } from '../context/LanguageContext'
 
 // currentLevel is the panel's already-displayed practical level (falls back
 // through self-assessment history the same way the Can Do panel does -- see
 // displayedPracticalLevel in SkillDetail) so the default target selection
 // and "current" badge reflect what the learner actually sees on the page.
 export default function SetTargetModal({ skill, user, targets = [], currentLevel = null, onClose, onSet, onGuideGenerated }) {
+  const { t } = useLanguage()
   const current = targets[0] ?? null
   const isEdit = Boolean(current)
   const [targetLevel, setTargetLevel] = useState(current?.target_level ?? currentLevel ?? 3)
@@ -40,7 +42,7 @@ export default function SetTargetModal({ skill, user, targets = [], currentLevel
   async function handleSubmit(e) {
     e.preventDefault()
     if (!targetDate) {
-      setError('Target date is required.')
+      setError(t('modals.setTarget.targetDateRequired'))
       return
     }
     setError(null)
@@ -76,12 +78,12 @@ export default function SetTargetModal({ skill, user, targets = [], currentLevel
       onClose={onClose}
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
-        <h2 id="target-dialog-title" className="font-display text-2xl text-ink mb-1">{isEdit ? 'Edit target' : 'Set a target'}</h2>
+        <h2 id="target-dialog-title" className="font-display text-2xl text-ink mb-1">{isEdit ? t('modals.setTarget.titleEdit') : t('modals.setTarget.titleNew')}</h2>
         <p className="text-sm text-secondary mb-4">{skill.name}</p>
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <span className="block text-sm text-secondary mb-2">Target level</span>
+            <span className="block text-sm text-secondary mb-2">{t('modals.setTarget.targetLevel')}</span>
             <div className="space-y-2">
               {LEVELS.map((l) => (
                 <div
@@ -101,12 +103,12 @@ export default function SetTargetModal({ skill, user, targets = [], currentLevel
                     <span className="text-sm text-ink font-medium">{LEVEL_LABELS[l]}</span>
                     {currentLevel === l && (
                       <span className="font-mono text-[10px] uppercase tracking-wide text-secondary/70">
-                        Current
+                        {t('modals.setTarget.current')}
                       </span>
                     )}
                     {current?.target_level === l && (
                       <span className="font-mono text-[10px] uppercase tracking-wide text-secondary/70">
-                        Current target
+                        {t('modals.setTarget.currentTarget')}
                       </span>
                     )}
                   </button>
@@ -124,7 +126,7 @@ export default function SetTargetModal({ skill, user, targets = [], currentLevel
 
           <div>
             <label className="block text-sm text-secondary mb-1" htmlFor="targetDate">
-              Achieve by
+              {t('modals.setTarget.achieveBy')}
             </label>
             <input
               id="targetDate"
@@ -139,7 +141,7 @@ export default function SetTargetModal({ skill, user, targets = [], currentLevel
             rows={3}
             value={comments}
             onChange={(e) => setComments(e.target.value)}
-            placeholder="Why this target? What will getting there look like…"
+            placeholder={t('modals.setTarget.commentsPlaceholder')}
             className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
           />
 
@@ -151,14 +153,14 @@ export default function SetTargetModal({ skill, user, targets = [], currentLevel
               disabled={saving}
               className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
             >
-              {saving ? 'Saving…' : isEdit ? 'Save new target' : 'Set target'}
+              {saving ? t('modals.setTarget.saving') : isEdit ? t('modals.setTarget.saveNewTarget') : t('modals.setTarget.setTargetButton')}
             </button>
             <button
               type="button"
               onClick={onClose}
               className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper"
             >
-              Cancel
+              {t('modals.setTarget.cancel')}
             </button>
           </div>
         </form>
@@ -166,20 +168,22 @@ export default function SetTargetModal({ skill, user, targets = [], currentLevel
         {targets.length > 0 && (
           <div className="mt-6 pt-4 border-t border-hairline opacity-50">
             <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">
-              Target history
+              {t('modals.setTarget.targetHistory')}
             </h3>
             <ul className="space-y-2">
-              {targets.map((t) => (
-                <li key={t.id} className="flex items-start gap-2 text-sm">
-                  <GrowthRing level={t.target_level} size={28} />
+              {targets.map((target) => (
+                <li key={target.id} className="flex items-start gap-2 text-sm">
+                  <GrowthRing level={target.target_level} size={28} />
                   <div className="min-w-0">
-                    <p className="text-ink">{LEVEL_LABELS[t.target_level]}</p>
+                    <p className="text-ink">{LEVEL_LABELS[target.target_level]}</p>
                     <p className="font-mono text-xs text-secondary">
-                      By {new Date(`${t.target_date}T00:00:00`).toLocaleDateString()} · set{' '}
-                      {new Date(t.created_at).toLocaleDateString()}
+                      {t('modals.setTarget.byDateSetDate', {
+                        date: new Date(`${target.target_date}T00:00:00`).toLocaleDateString(),
+                        setDate: new Date(target.created_at).toLocaleDateString(),
+                      })}
                     </p>
-                    {t.comments && <p className="text-xs text-secondary mt-0.5">{t.comments}</p>}
-                    {t.set_by_manager && <p className="text-xs text-secondary mt-0.5">Set by your manager</p>}
+                    {target.comments && <p className="text-xs text-secondary mt-0.5">{target.comments}</p>}
+                    {target.set_by_manager && <p className="text-xs text-secondary mt-0.5">{t('modals.setTarget.setByYourManager')}</p>}
                   </div>
                 </li>
               ))}

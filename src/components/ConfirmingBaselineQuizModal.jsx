@@ -4,6 +4,7 @@ import GrowthRing from './GrowthRing'
 import { KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
 import { fetchOrGenerateDiagnosticQuiz, saveDiagnosticAttempt } from '../lib/skillDiagnostics'
 import AccessibleDialog from './AccessibleDialog'
+import { useLanguage } from '../context/LanguageContext'
 
 // A learner is judged to genuinely be at the level they self-assessed if
 // they get at least 70% of the calibrated questions right; below that, the
@@ -37,6 +38,7 @@ export default function ConfirmingBaselineQuizModal({
   onClose,
   onConfirmed,
 }) {
+  const { t } = useLanguage()
   // The latest knowledge-axis event wins, same reasoning as
   // displayedKnowledgeLevel in SkillDetail.jsx: a self-assessment made after
   // the last confirmation is a claim of having grown beyond it, so the quiz
@@ -72,7 +74,7 @@ export default function ConfirmingBaselineQuizModal({
     fetchOrGenerateDiagnosticQuiz({ skill, level: roundLevel })
       .then(({ diagnosticContentId: id, content: c }) => {
         if (cancelled) return
-        if (!c?.questions?.length) throw new Error("Couldn't generate a knowledge check for this skill.")
+        if (!c?.questions?.length) throw new Error(t('modals.confirmingBaselineQuiz.couldntGenerateCheck'))
         setDiagnosticContentId(id)
         setContent(c)
       })
@@ -217,18 +219,18 @@ export default function ConfirmingBaselineQuizModal({
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
         <h2 id="knowledge-quiz-dialog-title" className="font-display text-2xl text-ink mb-1">
-          {calibrating ? 'Find your knowledge level' : 'Confirm your knowledge'}
+          {calibrating ? t('modals.confirmingBaselineQuiz.titleCalibrating') : t('modals.confirmingBaselineQuiz.titleConfirming')}
         </h2>
         <p className="text-sm text-secondary mb-4">
           {skill.name} ·{' '}
           {settled
-            ? `diagnosed at ${KNOWLEDGE_LEVEL_LABELS[diagnosedLevel]}`
-            : `checking ${KNOWLEDGE_LEVEL_LABELS[roundLevel]}`}
+            ? t('modals.confirmingBaselineQuiz.subtitleSettled', { level: KNOWLEDGE_LEVEL_LABELS[diagnosedLevel] })
+            : t('modals.confirmingBaselineQuiz.subtitleChecking', { level: KNOWLEDGE_LEVEL_LABELS[roundLevel] })}
         </p>
 
         {loading && (
           <p className="text-sm text-secondary">
-            {roundHistory.length > 0 ? 'Preparing your next check…' : 'Generating your knowledge check…'}
+            {roundHistory.length > 0 ? t('modals.confirmingBaselineQuiz.loadingNext') : t('modals.confirmingBaselineQuiz.loadingFirst')}
           </p>
         )}
         {error && <p className="text-sm text-red-700">{error}</p>}
@@ -236,7 +238,7 @@ export default function ConfirmingBaselineQuizModal({
         {!loading && !error && !settled && content && (
           <div>
             <p className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">
-              Question {index + 1} of {content.questions.length}
+              {t('modals.confirmingBaselineQuiz.questionCounter', { current: index + 1, total: content.questions.length })}
             </p>
             <p className="text-sm text-ink mb-3">{content.questions[index].description['en-US']}</p>
             <div className="space-y-2 mb-4">
@@ -262,14 +264,18 @@ export default function ConfirmingBaselineQuizModal({
                 disabled={selected === null || savingRound}
                 className="flex-1 rounded-md bg-slate py-2 font-medium text-paper hover:opacity-90 disabled:opacity-60"
               >
-                {savingRound ? 'Saving…' : index + 1 < content.questions.length ? 'Next' : 'Finish'}
+                {savingRound
+                  ? t('modals.confirmingBaselineQuiz.saving')
+                  : index + 1 < content.questions.length
+                    ? t('modals.confirmingBaselineQuiz.next')
+                    : t('modals.confirmingBaselineQuiz.finish')}
               </button>
               <button
                 type="button"
                 onClick={onClose}
                 className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper"
               >
-                Cancel
+                {t('modals.confirmingBaselineQuiz.cancel')}
               </button>
             </div>
           </div>
@@ -281,7 +287,7 @@ export default function ConfirmingBaselineQuizModal({
               <GrowthRing level={diagnosedLevel} size={48} labels={KNOWLEDGE_LEVEL_LABELS} color="var(--color-slate)" />
               <div>
                 <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">
-                  {calibrating ? 'Diagnosed knowledge level' : 'Confirmed knowledge level'}
+                  {calibrating ? t('modals.confirmingBaselineQuiz.diagnosedKnowledgeLevel') : t('modals.confirmingBaselineQuiz.confirmedKnowledgeLevel')}
                 </p>
                 <p className="text-ink font-medium">{KNOWLEDGE_LEVEL_LABELS[diagnosedLevel]}</p>
               </div>
@@ -289,17 +295,29 @@ export default function ConfirmingBaselineQuizModal({
 
             {calibrating ? (
               <p className="text-sm text-ink mb-4">
-                No self-assessment to start from, so this checked {roundHistory.length} level
-                {roundHistory.length === 1 ? '' : 's'} ({roundHistory.map((r) => KNOWLEDGE_LEVEL_LABELS[r.level]).join(' → ')})
-                to find where you genuinely land.
+                {roundHistory.length === 1
+                  ? t('modals.confirmingBaselineQuiz.calibratingResultSingular', {
+                      levels: roundHistory.map((r) => KNOWLEDGE_LEVEL_LABELS[r.level]).join(' → '),
+                    })
+                  : t('modals.confirmingBaselineQuiz.calibratingResultPlural', {
+                      count: roundHistory.length,
+                      levels: roundHistory.map((r) => KNOWLEDGE_LEVEL_LABELS[r.level]).join(' → '),
+                    })}
               </p>
             ) : (
               <p className="text-sm text-ink mb-4">
-                You scored <strong>{roundHistory[0].score} / {roundHistory[0].total}</strong> at the{' '}
-                {KNOWLEDGE_LEVEL_LABELS[roundHistory[0].level]} level
                 {roundHistory[0].pass
-                  ? ' -- that meets expectations, so this is now your confirmed knowledge level.'
-                  : ` -- that's below what's expected at that level, so your confirmed level has been adjusted to ${KNOWLEDGE_LEVEL_LABELS[diagnosedLevel]}.`}
+                  ? t('modals.confirmingBaselineQuiz.confirmingResultPass', {
+                      score: roundHistory[0].score,
+                      total: roundHistory[0].total,
+                      level: KNOWLEDGE_LEVEL_LABELS[roundHistory[0].level],
+                    })
+                  : t('modals.confirmingBaselineQuiz.confirmingResultFail', {
+                      score: roundHistory[0].score,
+                      total: roundHistory[0].total,
+                      level: KNOWLEDGE_LEVEL_LABELS[roundHistory[0].level],
+                      adjustedLevel: KNOWLEDGE_LEVEL_LABELS[diagnosedLevel],
+                    })}
               </p>
             )}
 
@@ -311,7 +329,7 @@ export default function ConfirmingBaselineQuizModal({
               disabled={saving}
               className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
             >
-              {saving ? 'Saving…' : 'Continue'}
+              {saving ? t('modals.confirmingBaselineQuiz.saving') : t('modals.confirmingBaselineQuiz.continue')}
             </button>
           </div>
         )}
