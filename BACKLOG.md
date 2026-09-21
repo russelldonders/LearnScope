@@ -52,12 +52,48 @@ or just delete it.
    OrganisationSettingsModal, BulkAssignToCatalogueDialog,
    BulkPublishCourseDialog, SkillTestQuestionsModal,
    EmployerMemberFieldsModal, EmployerMemberDetailModal, and everything
-   under src/pages/employer/). Still open on the learner side: a handful of
-   other modals/secondary dialogs not yet audited, and deeply dynamic/
-   AI-generated content (level guides, diagnostic questions, quiz/interview
-   content, and the auto-generated audit strings some diagnostic flows save
-   into skill_assessments.comments) — still a meaningful amount of ongoing
-   work, not something to treat as finished. `t()` now supports
+   under src/pages/employer/). Audited 2026-09-21 for what's still
+   hardcoded on the learner side (importer-checked, not just filename
+   guesses) — still open:
+   - High blast-radius shared components: ErrorBoundary, ProtectedRoute,
+     GrowthRing (renders on nearly every page), GoogleSignInButton and
+     StravaConnectButton (both already called from translated pages with
+     no label override, so they silently render English).
+   - Large standalone learner pages, untouched: ExperienceDetail.jsx
+     (1499 lines), ProfilePrivacy.jsx (892), the whole ConnectedAccounts.jsx
+     flow (669 lines plus ~15 account-linking/transfer-plan sub-panels
+     under src/pages/account-linking/), CourseLearn.jsx, SkillsProfile.jsx,
+     CourseCatalogue.jsx, ProviderProfile.jsx (public route), Onboarding.jsx
+     + SkillsToLearnStep.jsx, Help.jsx, ProfileExport.jsx/ProfileImport.jsx,
+     Welcome.jsx, Landing.jsx, ResetPassword.jsx, LtiSession.jsx.
+   - Public token-link pages: Rate.jsx, Recommend.jsx, ValidateRequest.jsx,
+     SharedProfile.jsx — no login required, worth polishing.
+   - Shared components reused across the now-translated Skills/Experience
+     pages: SkillCard, TagsField, CompositeSkillProgress, TimelineItem,
+     ChildExperienceEntry, RoleProfileAlignmentDetail, PendingRoleTimelineCard,
+     KnowledgeLevelBar, OrganizationUrlField, OrganizationLogo,
+     EvidenceAttachmentLink, TrackingReasonIcon/Picker, FilterRow,
+     AddExperienceButton, CourseThumbnail, PersonAvatar.
+   - Dashboard/Connections inline sections: ConnectionsTeams.jsx (698
+     lines, largest single component found), RecordActivitySection,
+     ConnectionsActivityFeed, ConnectionTeamInviteControl, ActivityRow,
+     ImportProfileDataButton, ProfilePhoto.
+   - The employer-linked "role alignment" cluster shown to ordinary
+     employer-linked learners via EmployerHome.jsx (LearnerRoleAlignment*,
+     CurrentRoleCard, PendingAssignmentsPanel, RoleAlignmentSummary) —
+     technically under src/pages/employer/ or src/pages/roles/, but
+     confirmed learner-facing (reached via EmployerMemberRoute, not the
+     admin EmployerAdminRoute); needs a scope decision before picking up.
+   - EvidenceFields.jsx and RouteTitle.jsx are shared with one staff
+     surface each (ManagerTeamPanel.jsx; a mixed learner+staff title
+     array) but are safe to translate without touching staff code.
+   - MyTeam.jsx sits directly under src/pages/ but is manager/team-lead
+     tooling (behind ManagerRoute) — treat as out of scope like the rest
+     of the manager console, despite the file location.
+   Separately, deeply dynamic/AI-generated content (level guides,
+   diagnostic questions, quiz/interview content, and the auto-generated
+   audit strings some diagnostic flows save into skill_assessments.comments)
+   stays out of scope by design, not an oversight. `t()` now supports
    string-interpolation (`t(key, { param })` replaces `{param}` placeholders
    in the translated string); spots needing genuine singular/plural
    phrasing still use a count-driven key pair rather than one templated
