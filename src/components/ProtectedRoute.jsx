@@ -1,14 +1,16 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useLanguage } from '../context/LanguageContext'
 
 export default function ProtectedRoute({ children }) {
   const { user, loading, needsOnboarding, needsName } = useAuth()
+  const { t } = useLanguage()
   const location = useLocation()
 
   if (loading || (user && (needsOnboarding === null || needsName === null))) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-paper text-secondary">
-        Loading…
+        {t('common.loading')}
       </div>
     )
   }

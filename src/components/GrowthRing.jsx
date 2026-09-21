@@ -1,4 +1,5 @@
 import { LEVEL_LABELS } from '../lib/levels'
+import { useLanguage } from '../context/LanguageContext'
 
 const RADII = [8, 15, 22, 29, 36]
 
@@ -10,8 +11,9 @@ export default function GrowthRing({
   color = 'var(--color-gold)',
   targetLevel = null,
 }) {
+  const { t } = useLanguage()
   const clampedLevel = Math.min(5, Math.max(0, level ?? 0))
-  const label = level ? labels[level] : 'Not yet self-assessed'
+  const label = level ? labels[level] : t('common.notYetSelfAssessed')
 
   return (
     <div className="flex flex-col items-center gap-1">

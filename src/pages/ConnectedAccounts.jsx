@@ -2,6 +2,7 @@ import LtiAccounts from './account-linking/LtiAccounts'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import AppHeader from '../components/AppHeader'
+import { useLanguage } from '../context/LanguageContext'
 import { handleTabListKeyDown } from '../lib/tabsKeyboard'
 import ConfirmDialog from '../components/ConfirmDialog'
 import StravaConnectButton from '../components/StravaConnectButton'
@@ -59,6 +60,7 @@ const CONNECTED_ACCOUNTS_TABS = [
 ]
 
 export default function ConnectedAccounts() {
+  const { t } = useLanguage()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabRefs = useRef({})
@@ -610,7 +612,7 @@ export default function ConnectedAccounts() {
               </p>
               <div className="flex items-center gap-2">
                 {connection.status === 'error' ? (
-                  <StravaConnectButton onClick={handleConnectClick} label="Reconnect Strava" />
+                  <StravaConnectButton onClick={handleConnectClick} label={t('common.reconnectStrava')} />
                 ) : (
                   <button
                     type="button"

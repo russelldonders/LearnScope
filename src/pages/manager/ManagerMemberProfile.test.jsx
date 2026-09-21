@@ -1,13 +1,22 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ManagerTeamPanel from './ManagerTeamPanel'
+import { LanguageProvider } from '../../context/LanguageContext'
+
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ user: null }),
+}))
 
 afterEach(cleanup)
 const members = [{ id: 'member-1', name: 'Alex', sharedSkills: [{ id: 'skill-1', name: 'Coaching', level: 2 }] }]
 const detail = { level: 2, knowledge_level: 3, targets: [], assessments: [] }
 
 async function openDetail(props = {}) {
-  render(<ManagerTeamPanel members={members} onLoadSkillDetail={vi.fn().mockResolvedValue(detail)} {...props} />)
+  render(
+    <LanguageProvider>
+      <ManagerTeamPanel members={members} onLoadSkillDetail={vi.fn().mockResolvedValue(detail)} {...props} />
+    </LanguageProvider>
+  )
   fireEvent.click(screen.getByRole('button', { name: 'View skills profile for Alex' }))
   expect(screen.getByRole('heading', { name: 'Alex’s skills profile' })).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'View skill detail for Coaching' }))
@@ -51,7 +60,11 @@ describe('manager skills profile', () => {
   })
 
   it('does not show mutation controls when skill access fails', async () => {
-    render(<ManagerTeamPanel members={members} onLoadSkillDetail={vi.fn().mockRejectedValue(new Error('Skill no longer shared'))} onSetTarget={vi.fn()} />)
+    render(
+      <LanguageProvider>
+        <ManagerTeamPanel members={members} onLoadSkillDetail={vi.fn().mockRejectedValue(new Error('Skill no longer shared'))} onSetTarget={vi.fn()} />
+      </LanguageProvider>
+    )
     fireEvent.click(screen.getByRole('button', { name: 'View skills profile for Alex' }))
     fireEvent.click(screen.getByRole('button', { name: 'View skill detail for Coaching' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Skill no longer shared')

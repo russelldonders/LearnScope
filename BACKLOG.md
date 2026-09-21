@@ -54,11 +54,21 @@ or just delete it.
    EmployerMemberFieldsModal, EmployerMemberDetailModal, and everything
    under src/pages/employer/). Audited 2026-09-21 for what's still
    hardcoded on the learner side (importer-checked, not just filename
-   guesses) — still open:
-   - High blast-radius shared components: ErrorBoundary, ProtectedRoute,
-     GrowthRing (renders on nearly every page), GoogleSignInButton and
-     StravaConnectButton (both already called from translated pages with
-     no label override, so they silently render English).
+   guesses); the high blast-radius shared components from that audit
+   (ErrorBoundary, ProtectedRoute, GrowthRing, GoogleSignInButton,
+   StravaConnectButton, plus the one hardcoded "Reconnect Strava" call
+   site in ConnectedAccounts.jsx) are now translated too, under a new
+   `common` namespace for cross-cutting strings not tied to one page.
+   ErrorBoundary sits outside LanguageProvider in App.jsx on purpose (a
+   crash inside the provider tree must still show a fallback), so it
+   can't call useLanguage() — it reads localStorage directly instead,
+   duplicating a small slice of LanguageContext's own resolution logic
+   rather than risking the app's last line of defence on that context
+   being intact. GrowthRing needing useLanguage() rippled into several
+   manager-console test files the same way ConfirmDialog's fix did
+   before — fixed their test scaffolding (LanguageProvider wrapper),
+   no behavior change to those staff-only pages. Still open from the
+   audit:
    - Large standalone learner pages, untouched: ExperienceDetail.jsx
      (1499 lines), ProfilePrivacy.jsx (892), the whole ConnectedAccounts.jsx
      flow (669 lines plus ~15 account-linking/transfer-plan sub-panels

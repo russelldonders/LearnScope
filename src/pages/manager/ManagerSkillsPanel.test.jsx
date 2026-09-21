@@ -2,6 +2,11 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ManagerSkillsPanel from './ManagerSkillsPanel'
 import { listLibrarySkills } from '../../lib/skillLibrary'
+import { LanguageProvider } from '../../context/LanguageContext'
+
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ user: null }),
+}))
 
 vi.mock('../../lib/skillLibrary', () => ({ listLibrarySkills: vi.fn() }))
 
@@ -15,7 +20,7 @@ const members = [
 
 describe('ManagerSkillsPanel', () => {
   it('shows a matrix of who has which skill, at what level, and whether you’ve rated it', () => {
-    render(<ManagerSkillsPanel members={members} />)
+    render(<LanguageProvider><ManagerSkillsPanel members={members} /></LanguageProvider>)
     const table = screen.getByRole('table')
     expect(within(table).getByRole('columnheader', { name: /Alex/ })).toBeInTheDocument()
     expect(within(table).getByRole('columnheader', { name: /Sam/ })).toBeInTheDocument()
@@ -32,20 +37,20 @@ describe('ManagerSkillsPanel', () => {
 
   it('opens a learner skill directly in skill detail', async () => {
     const onLoadSkillDetail = vi.fn().mockResolvedValue({ level: 3, targets: [], assessments: [] })
-    render(<ManagerSkillsPanel members={members} onLoadSkillDetail={onLoadSkillDetail} />)
+    render(<LanguageProvider><ManagerSkillsPanel members={members} onLoadSkillDetail={onLoadSkillDetail} /></LanguageProvider>)
     fireEvent.click(screen.getByRole('button', { name: 'Review Facilitation for Alex' }))
     expect(await screen.findByRole('heading', { name: 'Facilitation' })).toBeInTheDocument()
     expect(onLoadSkillDetail).toHaveBeenCalledWith('alex', 'a1')
   })
 
   it('explains how to populate an empty skills view', () => {
-    render(<ManagerSkillsPanel members={[]} />)
+    render(<LanguageProvider><ManagerSkillsPanel members={[]} /></LanguageProvider>)
     expect(screen.getByText('No shared skills yet')).toBeInTheDocument()
     expect(screen.getByText(/Invite learners from the Members tab/)).toBeInTheDocument()
   })
 
   it('does not offer to add a skill without permission (an archived team)', () => {
-    render(<ManagerSkillsPanel members={members} />)
+    render(<LanguageProvider><ManagerSkillsPanel members={members} /></LanguageProvider>)
     expect(screen.queryByRole('button', { name: '+ Add a skill' })).not.toBeInTheDocument()
   })
 
@@ -53,7 +58,7 @@ describe('ManagerSkillsPanel', () => {
     listLibrarySkills.mockResolvedValue([{ id: 'lib-1', name: 'Coaching' }])
     const onAddSkill = vi.fn().mockResolvedValue()
     const onSuggestSkill = vi.fn()
-    render(<ManagerSkillsPanel members={members} onAddSkill={onAddSkill} onSuggestSkill={onSuggestSkill} />)
+    render(<LanguageProvider><ManagerSkillsPanel members={members} onAddSkill={onAddSkill} onSuggestSkill={onSuggestSkill} /></LanguageProvider>)
 
     fireEvent.click(screen.getByRole('button', { name: '+ Add a skill' }))
     fireEvent.change(screen.getByLabelText('Skill'), { target: { value: 'Coach' } })
@@ -69,7 +74,7 @@ describe('ManagerSkillsPanel', () => {
   it('shows a just-added team skill as its own row, with a Remove action since nobody has it yet', () => {
     const teamSkills = [{ id: 'tracked-1', teamId: 'team-1', skillLibraryId: 'lib-1', skillName: 'Coaching', addedBy: 'me', createdAt: '2026-09-07' }]
     const onRemoveTeamSkill = vi.fn()
-    render(<ManagerSkillsPanel members={members} teamSkills={teamSkills} onAddSkill={vi.fn()} onRemoveTeamSkill={onRemoveTeamSkill} />)
+    render(<LanguageProvider><ManagerSkillsPanel members={members} teamSkills={teamSkills} onAddSkill={vi.fn()} onRemoveTeamSkill={onRemoveTeamSkill} /></LanguageProvider>)
     expect(screen.getByRole('rowheader', { name: /Coaching/ })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: "Remove Coaching from the team's skill list" }))
     expect(onRemoveTeamSkill).toHaveBeenCalledWith('tracked-1')
@@ -77,7 +82,7 @@ describe('ManagerSkillsPanel', () => {
 
   it('does not offer to remove a tracked skill once someone has actually shared it', () => {
     const teamSkills = [{ id: 'tracked-1', teamId: 'team-1', skillLibraryId: 'lib-1', skillName: 'Facilitation', addedBy: 'me', createdAt: '2026-09-07' }]
-    render(<ManagerSkillsPanel members={members} teamSkills={teamSkills} onAddSkill={vi.fn()} onRemoveTeamSkill={vi.fn()} />)
+    render(<LanguageProvider><ManagerSkillsPanel members={members} teamSkills={teamSkills} onAddSkill={vi.fn()} onRemoveTeamSkill={vi.fn()} /></LanguageProvider>)
     expect(screen.queryByRole('button', { name: /Remove Facilitation/ })).not.toBeInTheDocument()
   })
 
@@ -87,7 +92,7 @@ describe('ManagerSkillsPanel', () => {
     const onSuggestSkill = vi.fn()
       .mockResolvedValueOnce()
       .mockRejectedValueOnce(new Error('Already suggested'))
-    render(<ManagerSkillsPanel members={members} onAddSkill={onAddSkill} onSuggestSkill={onSuggestSkill} />)
+    render(<LanguageProvider><ManagerSkillsPanel members={members} onAddSkill={onAddSkill} onSuggestSkill={onSuggestSkill} /></LanguageProvider>)
 
     fireEvent.click(screen.getByRole('button', { name: '+ Add a skill' }))
     fireEvent.change(screen.getByLabelText('Skill'), { target: { value: 'Coach' } })

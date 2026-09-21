@@ -811,6 +811,16 @@ export const translations = {
         delete: 'Delete',
       },
     },
+    common: {
+      loading: 'Loading…',
+      notYetSelfAssessed: 'Not yet self-assessed',
+      somethingWentWrong: 'Something went wrong.',
+      tryReloadingPage: 'Try reloading the page. If this keeps happening, please let us know.',
+      reload: 'Reload',
+      continueWithGoogle: 'Continue with Google',
+      connectStrava: 'Connect Strava',
+      reconnectStrava: 'Reconnect Strava',
+    },
   },
   es: {
     header: {
@@ -1603,6 +1613,16 @@ export const translations = {
         working: 'Procesando…',
         delete: 'Eliminar',
       },
+    },
+    common: {
+      loading: 'Cargando…',
+      notYetSelfAssessed: 'Aún sin autoevaluar',
+      somethingWentWrong: 'Algo salió mal.',
+      tryReloadingPage: 'Intenta recargar la página. Si esto sigue ocurriendo, avísanos.',
+      reload: 'Recargar',
+      continueWithGoogle: 'Continuar con Google',
+      connectStrava: 'Conectar Strava',
+      reconnectStrava: 'Reconectar Strava',
     },
   },
   fr: {
@@ -2398,6 +2418,16 @@ export const translations = {
         delete: 'Supprimer',
       },
     },
+    common: {
+      loading: 'Chargement…',
+      notYetSelfAssessed: 'Pas encore auto-évalué',
+      somethingWentWrong: 'Une erreur est survenue.',
+      tryReloadingPage: 'Essayez de recharger la page. Si cela persiste, merci de nous le signaler.',
+      reload: 'Recharger',
+      continueWithGoogle: 'Continuer avec Google',
+      connectStrava: 'Connecter Strava',
+      reconnectStrava: 'Reconnecter Strava',
+    },
   },
   de: {
     header: {
@@ -3191,6 +3221,16 @@ export const translations = {
         working: 'Wird verarbeitet…',
         delete: 'Löschen',
       },
+    },
+    common: {
+      loading: 'Wird geladen…',
+      notYetSelfAssessed: 'Noch nicht selbst eingeschätzt',
+      somethingWentWrong: 'Etwas ist schiefgelaufen.',
+      tryReloadingPage: 'Versuche, die Seite neu zu laden. Falls das weiterhin passiert, lass es uns bitte wissen.',
+      reload: 'Neu laden',
+      continueWithGoogle: 'Mit Google fortfahren',
+      connectStrava: 'Strava verbinden',
+      reconnectStrava: 'Strava erneut verbinden',
     },
   },
   it: {
@@ -3986,6 +4026,16 @@ export const translations = {
         delete: 'Elimina',
       },
     },
+    common: {
+      loading: 'Caricamento…',
+      notYetSelfAssessed: 'Non ancora autovalutato',
+      somethingWentWrong: 'Qualcosa è andato storto.',
+      tryReloadingPage: 'Prova a ricaricare la pagina. Se il problema persiste, faccelo sapere.',
+      reload: 'Ricarica',
+      continueWithGoogle: 'Continua con Google',
+      connectStrava: 'Collega Strava',
+      reconnectStrava: 'Ricollega Strava',
+    },
   },
   nl: {
     header: {
@@ -4778,6 +4828,16 @@ export const translations = {
         delete: 'Verwijderen',
       },
     },
+    common: {
+      loading: 'Laden…',
+      notYetSelfAssessed: 'Nog niet zelf beoordeeld',
+      somethingWentWrong: 'Er is iets misgegaan.',
+      tryReloadingPage: 'Probeer de pagina opnieuw te laden. Als dit blijft gebeuren, laat het ons weten.',
+      reload: 'Opnieuw laden',
+      continueWithGoogle: 'Doorgaan met Google',
+      connectStrava: 'Strava koppelen',
+      reconnectStrava: 'Strava opnieuw koppelen',
+    },
   },
   zh: {
     header: {
@@ -5550,6 +5610,16 @@ export const translations = {
         working: '处理中…',
         delete: '删除',
       },
+    },
+    common: {
+      loading: '加载中…',
+      notYetSelfAssessed: '尚未自我评估',
+      somethingWentWrong: '出了点问题。',
+      tryReloadingPage: '请尝试重新加载页面。如果问题持续出现，请告诉我们。',
+      reload: '重新加载',
+      continueWithGoogle: '使用 Google 继续',
+      connectStrava: '连接 Strava',
+      reconnectStrava: '重新连接 Strava',
     },
   },
 }
