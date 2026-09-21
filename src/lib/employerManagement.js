@@ -195,6 +195,51 @@ export async function listManagerSuggestibleSkills(employerId, employeeMemberId)
   return data ?? []
 }
 
+export async function listManagedEmployerSkillDevelopmentTargets(employerId, employeeMemberId) {
+  const { data, error } = await supabase.rpc('list_managed_employer_skill_development_targets', {
+    p_employer_id: employerId,
+    p_employee_member_id: employeeMemberId,
+  })
+  throwIfError(error)
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    skillLibraryId: row.skill_library_id,
+    skillName: row.skill_name,
+    targetLevel: Number(row.target_level),
+    targetDate: row.target_date,
+    notes: row.notes,
+    status: row.status,
+    createdAt: row.created_at,
+    closedAt: row.closed_at,
+  }))
+}
+
+export async function setManagedEmployerSkillDevelopmentTarget(
+  employerId,
+  employeeMemberId,
+  skillLibraryId,
+  { targetLevel, targetDate, notes = null }
+) {
+  const { data, error } = await supabase.rpc('set_managed_employer_skill_development_target', {
+    p_employer_id: employerId,
+    p_employee_member_id: employeeMemberId,
+    p_skill_library_id: skillLibraryId,
+    p_target_level: targetLevel,
+    p_target_date: targetDate,
+    p_notes: notes?.trim() || null,
+  })
+  throwIfError(error)
+  return data
+}
+
+export async function closeManagedEmployerSkillDevelopmentTarget(targetId, status) {
+  const { error } = await supabase.rpc('close_managed_employer_skill_development_target', {
+    p_target_id: targetId,
+    p_status: status,
+  })
+  throwIfError(error)
+}
+
 export async function suggestSkillToManagedEmployerMember(
   employerId,
   employeeMemberId,

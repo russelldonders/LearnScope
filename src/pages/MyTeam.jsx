@@ -4,21 +4,27 @@ import AppHeader from '../components/AppHeader'
 import { useAuth } from '../context/AuthContext'
 import {
   assignCourseToManagedEmployerMember,
+  closeManagedEmployerSkillDevelopmentTarget,
   confirmManagedEmployerSkillLevel,
   getMyEmployerTeamMemberSnapshot,
+  listManagedEmployerSkillDevelopmentTargets,
   listManagerAssignableCourses,
   listManagerSuggestibleSkills,
   listMyEmployerTeam,
+  setManagedEmployerSkillDevelopmentTarget,
   suggestSkillToManagedEmployerMember,
 } from '../lib/employerManagement'
 
 const DEFAULT_SERVICES = {
   assignCourseToManagedEmployerMember,
+  closeManagedEmployerSkillDevelopmentTarget,
   confirmManagedEmployerSkillLevel,
   getMyEmployerTeamMemberSnapshot,
+  listManagedEmployerSkillDevelopmentTargets,
   listManagerAssignableCourses,
   listManagerSuggestibleSkills,
   listMyEmployerTeam,
+  setManagedEmployerSkillDevelopmentTarget,
   suggestSkillToManagedEmployerMember,
 }
 
@@ -298,6 +304,7 @@ export function TeamMemberDetail({ context, employeeMemberId, services = DEFAULT
   const [snapshot, setSnapshot] = useState(null)
   const [courses, setCourses] = useState([])
   const [skills, setSkills] = useState([])
+  const [developmentTargets, setDevelopmentTargets] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [actionError, setActionError] = useState(null)
@@ -308,6 +315,11 @@ export function TeamMemberDetail({ context, employeeMemberId, services = DEFAULT
   const [targetLevel, setTargetLevel] = useState('')
   const [targetDate, setTargetDate] = useState('')
   const [comments, setComments] = useState('')
+  const [developmentSkill, setDevelopmentSkill] = useState('')
+  const [developmentLevel, setDevelopmentLevel] = useState('')
+  const [developmentDate, setDevelopmentDate] = useState('')
+  const [developmentNotes, setDevelopmentNotes] = useState('')
+  const [endingTargetId, setEndingTargetId] = useState(null)
   const [confirmationSkill, setConfirmationSkill] = useState('')
   const [confirmationLevel, setConfirmationLevel] = useState('')
 
@@ -318,16 +330,20 @@ export function TeamMemberDetail({ context, employeeMemberId, services = DEFAULT
       const nextSnapshot = await services.getMyEmployerTeamMemberSnapshot(context.employerId, employeeMemberId)
       setSnapshot(nextSnapshot)
       const scope = nextSnapshot?.accessScope ?? []
-      const [availableCourses, availableSkills] = await Promise.all([
+      const [availableCourses, availableSkills, nextDevelopmentTargets] = await Promise.all([
         scope.includes('training_assignments')
           ? services.listManagerAssignableCourses(context.employerId, employeeMemberId)
           : Promise.resolve([]),
         scope.includes('skill_management')
           ? services.listManagerSuggestibleSkills(context.employerId, employeeMemberId)
           : Promise.resolve([]),
+        scope.includes('skill_management')
+          ? services.listManagedEmployerSkillDevelopmentTargets(context.employerId, employeeMemberId)
+          : Promise.resolve([]),
       ])
       setCourses(availableCourses)
       setSkills(availableSkills)
+      setDevelopmentTargets(nextDevelopmentTargets)
     } catch (loadError) {
       setSnapshot(null)
       setError(loadError.message || 'This team member could not be loaded.')
@@ -341,7 +357,7 @@ export function TeamMemberDetail({ context, employeeMemberId, services = DEFAULT
   }, [load])
 
   async function runAction(key, successMessage, action) {
-    if (submitting) return
+    if (submitting) return false
     setSubmitting(key)
     setActionError(null)
     setNotice(null)
@@ -349,8 +365,10 @@ export function TeamMemberDetail({ context, employeeMemberId, services = DEFAULT
       await action()
       setNotice(successMessage)
       await load()
+      return true
     } catch (submitError) {
       setActionError(submitError.message || 'The action could not be completed.')
+      return false
     } finally {
       setSubmitting(null)
     }
@@ -382,6 +400,19 @@ export function TeamMemberDetail({ context, employeeMemberId, services = DEFAULT
   }
 
   const scope = snapshot.accessScope ?? []
+  const selectedActiveDevelopmentTarget = developmentTargets.find(
+    (target) => target.status === 'active' && target.skillLibraryId === developmentSkill
+  )
+
+  function selectDevelopmentSkill(skillLibraryId) {
+    setDevelopmentSkill(skillLibraryId)
+    const activeTarget = developmentTargets.find(
+      (target) => target.status === 'active' && target.skillLibraryId === skillLibraryId
+    )
+    setDevelopmentLevel(activeTarget ? String(activeTarget.targetLevel) : '')
+    setDevelopmentDate(activeTarget?.targetDate ?? '')
+    setDevelopmentNotes(activeTarget?.notes ?? '')
+  }
 
   return (
     <div className="min-h-screen bg-paper">
@@ -477,6 +508,63 @@ export function TeamMemberDetail({ context, employeeMemberId, services = DEFAULT
 
             {scope.includes('skill_management') && (
               <form
+                onSubmit={async (event) => {
+                  event.preventDefault()
+                  if (!developmentSkill || !developmentLevel || !developmentDate) return
+                  const saved = await runAction('development-target', 'Employer skill target saved.', () => services.setManagedEmployerSkillDevelopmentTarget(
+                    context.employerId,
+                    employeeMemberId,
+                    developmentSkill,
+                    {
+                      targetLevel: Number(developmentLevel),
+                      targetDate: developmentDate,
+                      notes: developmentNotes,
+                    }
+                  ))
+                  if (saved) {
+                    setDevelopmentSkill('')
+                    setDevelopmentLevel('')
+                    setDevelopmentDate('')
+                    setDevelopmentNotes('')
+                  }
+                }}
+                className="mt-6 border-t border-hairline pt-4"
+              >
+                <div className="max-w-2xl">
+                  <h3 className="font-medium text-ink">Set an employer skill target</h3>
+                  <p className="mt-1 text-sm text-secondary">This target belongs to {context.employerName}. It does not create or change the learner’s personal skill or personal target.</p>
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_9rem_11rem]">
+                  <label className="text-sm text-secondary">Skill
+                    <select value={developmentSkill} onChange={(event) => selectDevelopmentSkill(event.target.value)} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink">
+                      <option value="">Choose a skill</option>
+                      {skills.map((skill) => <option key={skill.id} value={skill.id}>{skill.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="text-sm text-secondary">Target level
+                    <select value={developmentLevel} onChange={(event) => setDevelopmentLevel(event.target.value)} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink">
+                      <option value="">Choose</option>
+                      {[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>{level}</option>)}
+                    </select>
+                  </label>
+                  <label className="text-sm text-secondary">Target date
+                    <input type="date" value={developmentDate} onChange={(event) => setDevelopmentDate(event.target.value)} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink" />
+                  </label>
+                </div>
+                <label className="mt-3 block max-w-2xl text-sm text-secondary">Development context
+                  <textarea value={developmentNotes} onChange={(event) => setDevelopmentNotes(event.target.value)} rows={2} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink" />
+                </label>
+                {selectedActiveDevelopmentTarget && (
+                  <p className="mt-3 max-w-2xl text-sm text-gold">This skill already has an active employer target. Saving will preserve the current target in history and replace it with these values.</p>
+                )}
+                <button type="submit" disabled={!developmentSkill || !developmentLevel || !developmentDate || Boolean(submitting)} className="mt-3 rounded-md bg-moss px-4 py-2 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-50">
+                  {submitting === 'development-target' ? 'Saving…' : selectedActiveDevelopmentTarget ? 'Update employer target' : 'Save employer target'}
+                </button>
+              </form>
+            )}
+
+            {scope.includes('skill_management') && (
+              <form
                 onSubmit={(event) => {
                   event.preventDefault()
                   if (!confirmationSkill || !confirmationLevel) return
@@ -510,7 +598,45 @@ export function TeamMemberDetail({ context, employeeMemberId, services = DEFAULT
           {scope.includes('training_assignments') && <DetailSection title="Training assigned by employer" items={snapshot.trainingAssignments} empty="No employer training assignments." renderItem={(item) => <div><div className="flex flex-wrap items-center gap-2"><p className="font-medium text-ink">{item.name}</p><StatusPill tone={item.status === 'enrolled' ? 'active' : 'neutral'}>{item.status}</StatusPill></div><p className="mt-1 text-sm text-secondary">{[item.provider, item.courseType, formatDate(item.assignedAt)].filter(Boolean).join(' · ')}</p></div>} />}
           {scope.includes('skill_management') && (
             <section className="py-6">
-              <h2 className="font-display text-xl text-ink">Employer skill activity</h2>
+              <h2 className="font-display text-xl text-ink">Skill development</h2>
+              <div className="mt-4">
+                <CompactList
+                  title="Employer targets"
+                  items={developmentTargets}
+                  empty="No employer skill targets."
+                  renderItem={(item) => (
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium text-ink">{item.skillName}</p>
+                          <StatusPill tone={item.status === 'active' ? 'active' : 'neutral'}>{item.status}</StatusPill>
+                        </div>
+                        <p className="mt-1 text-xs text-secondary">Target level {item.targetLevel} · by {formatDate(item.targetDate)}</p>
+                        {item.notes && <p className="mt-2 text-sm text-secondary">{item.notes}</p>}
+                      </div>
+                      {item.status === 'active' && (
+                        endingTargetId === item.id ? (
+                          <div className="shrink-0 sm:text-right">
+                            <p className="text-sm text-secondary">End this target?</p>
+                            <div className="mt-1 flex gap-1 sm:justify-end">
+                              <button type="button" onClick={() => setEndingTargetId(null)} className="min-h-11 rounded-md px-3 text-sm text-secondary hover:text-ink">Keep target</button>
+                              <button type="button" disabled={Boolean(submitting)} onClick={async () => {
+                                const closed = await runAction(`cancel-${item.id}`, 'Employer skill target ended.', () => services.closeManagedEmployerSkillDevelopmentTarget(item.id, 'cancelled'))
+                                if (closed) setEndingTargetId(null)
+                              }} className="min-h-11 rounded-md px-3 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50">Yes, end target</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex shrink-0 gap-1">
+                            <button type="button" disabled={Boolean(submitting)} onClick={() => runAction(`complete-${item.id}`, 'Employer skill target completed.', () => services.closeManagedEmployerSkillDevelopmentTarget(item.id, 'completed'))} className="min-h-11 rounded-md px-3 text-sm font-medium text-moss hover:bg-card disabled:opacity-50">Complete</button>
+                            <button type="button" disabled={Boolean(submitting)} onClick={() => setEndingTargetId(item.id)} className="min-h-11 rounded-md px-3 text-sm text-secondary hover:bg-card hover:text-ink disabled:opacity-50">End target</button>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  )}
+                />
+              </div>
               <div className="mt-4 grid gap-6 sm:grid-cols-2">
                 <CompactList title="Suggestions" items={snapshot.skillSuggestions} empty="No skill suggestions." renderItem={(item) => <div><p className="font-medium text-ink">{item.skillName}</p><p className="mt-1 text-xs text-secondary">{item.suggestedTargetLevel ? `Target level ${item.suggestedTargetLevel}` : 'No target level'}{item.targetDate ? ` · by ${formatDate(item.targetDate)}` : ''} · {item.status}</p></div>} />
                 <CompactList title="Latest confirmations" items={snapshot.skillConfirmations} empty="No employer confirmations." renderItem={(item) => <div><p className="font-medium text-ink">{item.skillName}</p><p className="mt-1 text-xs text-secondary">Level {item.confirmedLevel} · {formatDate(item.confirmedAt)}</p></div>} />
