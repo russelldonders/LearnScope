@@ -7,18 +7,25 @@ import {
   FIXTURE_LINKED_ASSIGNMENTS,
   FIXTURE_PENDING_ASSIGNMENTS,
 } from './roleAlignmentFixtures'
+import { LanguageProvider } from '../../../context/LanguageContext'
+
+vi.mock('../../../context/AuthContext', () => ({
+  useAuth: () => ({ user: null }),
+}))
 
 afterEach(cleanup)
 
 function renderSection(props = {}) {
   return render(
-    <LearnerRoleAlignmentSection
-      currentRoles={FIXTURE_CURRENT_ROLES}
-      pendingAssignments={FIXTURE_PENDING_ASSIGNMENTS}
-      linkedAssignments={FIXTURE_LINKED_ASSIGNMENTS}
-      alignmentByAssignmentId={FIXTURE_ALIGNMENT_BY_ASSIGNMENT_ID}
-      {...props}
-    />
+    <LanguageProvider>
+      <LearnerRoleAlignmentSection
+        currentRoles={FIXTURE_CURRENT_ROLES}
+        pendingAssignments={FIXTURE_PENDING_ASSIGNMENTS}
+        linkedAssignments={FIXTURE_LINKED_ASSIGNMENTS}
+        alignmentByAssignmentId={FIXTURE_ALIGNMENT_BY_ASSIGNMENT_ID}
+        {...props}
+      />
+    </LanguageProvider>
   )
 }
 

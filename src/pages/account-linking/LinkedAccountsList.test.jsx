@@ -2,12 +2,21 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import LinkedAccountsList from './LinkedAccountsList'
 import { FIXTURE_LINKED_ACCOUNTS } from './accountLinkingFixtures'
+import { LanguageProvider } from '../../context/LanguageContext'
+
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ user: null }),
+}))
 
 afterEach(cleanup)
 
+function withLanguage(ui) {
+  return <LanguageProvider>{ui}</LanguageProvider>
+}
+
 describe('LinkedAccountsList', () => {
   it('lists each linked account with email, type, verification date and status', () => {
-    render(<LinkedAccountsList linkedAccounts={FIXTURE_LINKED_ACCOUNTS} />)
+    render(withLanguage(<LinkedAccountsList linkedAccounts={FIXTURE_LINKED_ACCOUNTS} />))
     expect(screen.getByText('me.personal@example.com')).toBeInTheDocument()
     const row = screen.getByText('me.personal@example.com').closest('li')
     expect(row).toHaveTextContent('Invited by you')
@@ -19,13 +28,13 @@ describe('LinkedAccountsList', () => {
   })
 
   it('shows an empty state when nothing is linked', () => {
-    render(<LinkedAccountsList linkedAccounts={[]} />)
+    render(withLanguage(<LinkedAccountsList linkedAccounts={[]} />))
     expect(screen.getByText("You haven't linked any other accounts yet.")).toBeInTheDocument()
   })
 
   it('confirms before revoking, and calls onRevoke with the right id', () => {
     const onRevoke = vi.fn()
-    render(<LinkedAccountsList linkedAccounts={FIXTURE_LINKED_ACCOUNTS} onRevoke={onRevoke} />)
+    render(withLanguage(<LinkedAccountsList linkedAccounts={FIXTURE_LINKED_ACCOUNTS} onRevoke={onRevoke} />))
 
     const row = screen.getByText('me.personal@example.com').closest('li')
     fireEvent.click(within(row).getByRole('button', { name: 'Revoke' }))
@@ -37,19 +46,19 @@ describe('LinkedAccountsList', () => {
   })
 
   it('surfaces a failed revoke attempt inline in the confirm dialog', () => {
-    render(<LinkedAccountsList linkedAccounts={FIXTURE_LINKED_ACCOUNTS} error="Couldn't revoke -- try again." />)
+    render(withLanguage(<LinkedAccountsList linkedAccounts={FIXTURE_LINKED_ACCOUNTS} error="Couldn't revoke -- try again." />))
     const row = screen.getByText('me.personal@example.com').closest('li')
     fireEvent.click(within(row).getByRole('button', { name: 'Revoke' }))
     expect(screen.getByRole('alert')).toHaveTextContent("Couldn't revoke -- try again.")
   })
 
   it('closes the confirm dialog once revoking finishes with no error', () => {
-    const { rerender } = render(<LinkedAccountsList linkedAccounts={FIXTURE_LINKED_ACCOUNTS} revokingId="link-1" />)
+    const { rerender } = render(withLanguage(<LinkedAccountsList linkedAccounts={FIXTURE_LINKED_ACCOUNTS} revokingId="link-1" />))
     const row = screen.getByText('me.personal@example.com').closest('li')
     fireEvent.click(within(row).getByRole('button', { name: 'Revoke' }))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
 
-    rerender(<LinkedAccountsList linkedAccounts={FIXTURE_LINKED_ACCOUNTS} revokingId={null} error={null} />)
+    rerender(withLanguage(<LinkedAccountsList linkedAccounts={FIXTURE_LINKED_ACCOUNTS} revokingId={null} error={null} />))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })

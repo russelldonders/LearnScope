@@ -8,17 +8,24 @@ import {
   FIXTURE_ROSTER,
   FIXTURE_SHARED_SKILL_IDS,
 } from './managerLearnerFixtures'
+import { LanguageProvider } from '../../../context/LanguageContext'
+
+vi.mock('../../../context/AuthContext', () => ({
+  useAuth: () => ({ user: null }),
+}))
 
 afterEach(cleanup)
 
 function renderPanel(props = {}) {
   return render(
-    <ManagerTeamSharingPanel
-      membership={FIXTURE_MEMBERSHIP}
-      availableSkills={FIXTURE_AVAILABLE_SKILLS}
-      sharedSkillIds={FIXTURE_SHARED_SKILL_IDS}
-      {...props}
-    />
+    <LanguageProvider>
+      <ManagerTeamSharingPanel
+        membership={FIXTURE_MEMBERSHIP}
+        availableSkills={FIXTURE_AVAILABLE_SKILLS}
+        sharedSkillIds={FIXTURE_SHARED_SKILL_IDS}
+        {...props}
+      />
+    </LanguageProvider>
   )
 }
 
@@ -90,13 +97,15 @@ describe('ManagerTeamSharingPanel', () => {
     expect(screen.getByText('Choose skills to share')).toBeInTheDocument()
 
     rerender(
-      <ManagerTeamSharingPanel
-        membership={FIXTURE_MEMBERSHIP}
-        availableSkills={FIXTURE_AVAILABLE_SKILLS}
-        sharedSkillIds={FIXTURE_SHARED_SKILL_IDS}
-        saving={false}
-        error={null}
-      />
+      <LanguageProvider>
+        <ManagerTeamSharingPanel
+          membership={FIXTURE_MEMBERSHIP}
+          availableSkills={FIXTURE_AVAILABLE_SKILLS}
+          sharedSkillIds={FIXTURE_SHARED_SKILL_IDS}
+          saving={false}
+          error={null}
+        />
+      </LanguageProvider>
     )
 
     expect(screen.queryByText('Choose skills to share')).not.toBeInTheDocument()
@@ -138,7 +147,7 @@ describe('ManagerTeamSharingPanel', () => {
   it('gives each instance its own dialog heading id so multiple team memberships never collide', () => {
     const otherMembership = { id: 'fixture-membership-2', teamName: 'Other Team', managerName: 'Someone Else', joinedAt: '2026-01-01' }
     render(
-      <>
+      <LanguageProvider>
         <ManagerTeamSharingPanel
           membership={FIXTURE_MEMBERSHIP}
           availableSkills={FIXTURE_AVAILABLE_SKILLS}
@@ -149,7 +158,7 @@ describe('ManagerTeamSharingPanel', () => {
           availableSkills={FIXTURE_AVAILABLE_SKILLS}
           sharedSkillIds={[]}
         />
-      </>
+      </LanguageProvider>
     )
 
     const editButtons = screen.getAllByRole('button', { name: /Edit shared skills|Choose skills to share/ })

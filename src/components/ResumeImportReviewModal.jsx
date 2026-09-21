@@ -15,6 +15,7 @@ import {
   listCurrentRoleExperiences,
 } from '../lib/currentRole'
 import CurrentRoleSelectModal from './CurrentRoleSelectModal'
+import { useLanguage } from '../context/LanguageContext'
 
 function useSelection(items) {
   const [selected, setSelected] = useState(() => new Set(items.map((_, i) => i)))
@@ -49,6 +50,7 @@ export default function ResumeImportReviewModal({
   onImported,
 }) {
   const { user } = useAuth()
+  const { t } = useLanguage()
   // Best-guess default for "why are you tracking this" -- everything here
   // came off a CV/LinkedIn export, which is inherently a work-history
   // document, so 'work' is the safe default; still just a starting point,
@@ -299,9 +301,9 @@ export default function ResumeImportReviewModal({
       onClose={onClose}
       panelClassName="w-full max-w-2xl bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
-        <h2 id="resume-import-dialog-title" className="font-display text-2xl text-ink mb-1">Review before import</h2>
+        <h2 id="resume-import-dialog-title" className="font-display text-2xl text-ink mb-1">{t('modals.resumeImportReview.title')}</h2>
         <p className="text-sm text-secondary mb-6">
-          Uncheck anything you don't want, tweak the name/title if needed, then import.
+          {t('modals.resumeImportReview.subtitle')}
         </p>
 
         {(hasProfileFields || hasPhoto) && (
@@ -319,13 +321,12 @@ export default function ResumeImportReviewModal({
                   alt="Found in document"
                   className="w-12 h-12 rounded-full object-cover border border-hairline"
                 />
-                <span className="text-sm text-ink">Set as your profile photo</span>
+                <span className="text-sm text-ink">{t('modals.resumeImportReview.setAsProfilePhoto')}</span>
               </label>
             )}
             {extracted.photoBase64 && hasAvatar && (
               <p className="text-xs text-secondary">
-                Found a photo in this document, but you already have a profile photo — leaving it
-                as is.
+                {t('modals.resumeImportReview.foundPhotoButAlreadyHaveOne')}
               </p>
             )}
 
@@ -338,7 +339,7 @@ export default function ResumeImportReviewModal({
                   className="mt-0.5 rounded border-hairline"
                 />
                 <span className="text-sm text-ink">
-                  Fill in blank profile fields:{' '}
+                  {t('modals.resumeImportReview.fillInBlankProfileFields')}{' '}
                   <span className="text-secondary">
                     {[
                       [profileFields.first_name, profileFields.last_name].filter(Boolean).join(' '),
@@ -356,7 +357,7 @@ export default function ResumeImportReviewModal({
         )}
 
         <ReviewSection
-          title="Skills"
+          title={t('modals.resumeImportReview.skillsSectionTitle')}
           selection={skills}
           renderItem={(item, i, sel) => (
             <SkillRow
@@ -375,7 +376,7 @@ export default function ResumeImportReviewModal({
         />
 
         <ReviewSection
-          title="Training & courses"
+          title={t('modals.resumeImportReview.trainingCoursesSectionTitle')}
           selection={courses}
           renderItem={(item, i, sel) => (
             <CourseRow
@@ -390,7 +391,7 @@ export default function ResumeImportReviewModal({
         />
 
         <ReviewSection
-          title="Experience"
+          title={t('modals.resumeImportReview.experienceSectionTitle')}
           selection={experience}
           renderItem={(item, i, sel) => (
             <ExperienceRow
@@ -412,14 +413,21 @@ export default function ResumeImportReviewModal({
             disabled={importing || (totalSelected === 0 && !(applyProfile && hasProfileFields) && !(applyPhoto && hasPhoto))}
             className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90 disabled:opacity-60"
           >
-            {importing ? 'Importing…' : `Import ${totalSelected} item${totalSelected === 1 ? '' : 's'}`}
+            {importing
+              ? t('modals.resumeImportReview.importing')
+              : t(
+                  totalSelected === 1
+                    ? 'modals.resumeImportReview.importItemsSingular'
+                    : 'modals.resumeImportReview.importItemsPlural',
+                  { count: totalSelected }
+                )}
           </button>
           <button
             type="button"
             onClick={onClose}
             className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper"
           >
-            Cancel
+            {t('modals.resumeImportReview.cancel')}
           </button>
         </div>
     </AccessibleDialog>
@@ -466,6 +474,7 @@ function SkillRow({
   onKeepPrivateChange,
   onTrackingReasonChange,
 }) {
+  const { t } = useLanguage()
   return (
     <Row checked={checked && !alreadyExists} onToggle={onToggle} disabled={alreadyExists}>
       <input
@@ -475,14 +484,14 @@ function SkillRow({
         className="w-full bg-transparent font-display text-ink border-b border-transparent focus:border-hairline focus:outline-none disabled:opacity-60"
       />
       <p className="text-xs text-secondary mt-0.5">
-        {item.tags?.length > 0 && item.tags.join(', ')} · Level {item.level}
-        {item.current_role ? ' · Current role' : ''}
-        {alreadyExists ? ' · Already in your profile' : ''}
+        {item.tags?.length > 0 && item.tags.join(', ')} · {t('modals.resumeImportReview.levelLabel', { level: item.level })}
+        {item.current_role ? t('modals.resumeImportReview.currentRoleSuffix') : ''}
+        {alreadyExists ? t('modals.resumeImportReview.alreadyInProfileSuffix') : ''}
       </p>
       {!alreadyExists && (
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
           <label className="flex items-center gap-1.5 text-xs text-secondary">
-            Since
+            {t('modals.resumeImportReview.sinceLabel')}
             <input
               type="date"
               value={item.since ?? ''}
@@ -491,7 +500,7 @@ function SkillRow({
             />
           </label>
           <label className="flex items-center gap-1.5 text-xs text-secondary">
-            Why tracking
+            {t('modals.resumeImportReview.whyTrackingLabel')}
             <select
               value={item.tracking_reason ?? ''}
               onChange={(e) => onTrackingReasonChange(e.target.value || null)}
@@ -506,8 +515,7 @@ function SkillRow({
           </label>
           {libraryMatch ? (
             <span className="text-xs text-secondary">
-              Matches the library skill "{libraryMatch.name}" — name and tags will stay fixed
-              after import.
+              {t('modals.resumeImportReview.matchesLibrarySkill', { name: libraryMatch.name })}
             </span>
           ) : (
             <label className="flex items-center gap-1.5 text-xs text-secondary">
@@ -517,7 +525,7 @@ function SkillRow({
                 onChange={(e) => onKeepPrivateChange(e.target.checked)}
                 className="rounded border-hairline"
               />
-              Keep private (public skills join the shared library and can't be renamed later)
+              {t('modals.resumeImportReview.keepPrivateLabel')}
             </label>
           )}
         </div>
@@ -527,6 +535,7 @@ function SkillRow({
 }
 
 function CourseRow({ item, checked, alreadyExists, onToggle, onChange }) {
+  const { t } = useLanguage()
   return (
     <Row checked={checked && !alreadyExists} onToggle={onToggle} disabled={alreadyExists}>
       <input
@@ -538,13 +547,14 @@ function CourseRow({ item, checked, alreadyExists, onToggle, onChange }) {
       <p className="text-xs text-secondary mt-0.5">
         {item.provider}
         {item.completed_date ? ` · ${formatMonthYear(item.completed_date)}` : ''}
-        {alreadyExists ? ' · Already in your profile' : ''}
+        {alreadyExists ? t('modals.resumeImportReview.alreadyInProfileSuffix') : ''}
       </p>
     </Row>
   )
 }
 
 function ExperienceRow({ item, checked, alreadyExists, onToggle, onChange }) {
+  const { t } = useLanguage()
   return (
     <Row checked={checked && !alreadyExists} onToggle={onToggle} disabled={alreadyExists}>
       <input
@@ -554,10 +564,10 @@ function ExperienceRow({ item, checked, alreadyExists, onToggle, onChange }) {
         className="w-full bg-transparent font-display text-ink border-b border-transparent focus:border-hairline focus:outline-none disabled:opacity-60"
       />
       <p className="text-xs text-secondary mt-0.5">
-        {item.organization} · {item.type === 'education' ? 'Education' : 'Employment'} ·{' '}
+        {item.organization} · {item.type === 'education' ? t('modals.resumeImportReview.educationType') : t('modals.resumeImportReview.employmentType')} ·{' '}
         {formatMonthYear(item.start_date)} –{' '}
-        {item.end_date ? formatMonthYear(item.end_date) : 'Present'}
-        {alreadyExists ? ' · Already in your profile' : ''}
+        {item.end_date ? formatMonthYear(item.end_date) : t('modals.resumeImportReview.present')}
+        {alreadyExists ? t('modals.resumeImportReview.alreadyInProfileSuffix') : ''}
       </p>
     </Row>
   )

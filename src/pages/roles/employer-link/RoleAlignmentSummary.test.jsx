@@ -3,6 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import RoleAlignmentSummary from './RoleAlignmentSummary'
 import { FIXTURE_LINKED_ASSIGNMENTS } from './roleAlignmentFixtures'
 import { computeRoleAlignment } from './roleAlignment'
+import { LanguageProvider } from '../../../context/LanguageContext'
+
+vi.mock('../../../context/AuthContext', () => ({
+  useAuth: () => ({ user: null }),
+}))
 
 afterEach(cleanup)
 
@@ -15,13 +20,15 @@ const { aligned, gaps } = computeRoleAlignment(learnerSkills, assignment.rolePro
 
 function renderSummary(props = {}) {
   return render(
-    <RoleAlignmentSummary
-      assignment={assignment}
-      aligned={aligned}
-      gaps={gaps}
-      training={assignment.roleProfile.training}
-      {...props}
-    />
+    <LanguageProvider>
+      <RoleAlignmentSummary
+        assignment={assignment}
+        aligned={aligned}
+        gaps={gaps}
+        training={assignment.roleProfile.training}
+        {...props}
+      />
+    </LanguageProvider>
   )
 }
 
@@ -80,14 +87,16 @@ describe('RoleAlignmentSummary', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
 
     rerender(
-      <RoleAlignmentSummary
-        assignment={assignment}
-        aligned={aligned}
-        gaps={gaps}
-        training={assignment.roleProfile.training}
-        disconnecting={false}
-        error={null}
-      />
+      <LanguageProvider>
+        <RoleAlignmentSummary
+          assignment={assignment}
+          aligned={aligned}
+          gaps={gaps}
+          training={assignment.roleProfile.training}
+          disconnecting={false}
+          error={null}
+        />
+      </LanguageProvider>
     )
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })

@@ -21,6 +21,11 @@ vi.mock('../../lib/employerManagement', () => ({
 }))
 
 const { default: EmployerManagementSection } = await import('./EmployerManagementSection')
+const { LanguageProvider } = await import('../../context/LanguageContext')
+
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ user: null }),
+}))
 
 const members = [
   { id: 'manager-member', user_id: 'manager-user', email: 'manager@example.com', status: 'active' },
@@ -56,7 +61,7 @@ beforeEach(() => {
 afterEach(cleanup)
 
 it('shows reporting relationships and explains the learner data fence', async () => {
-  render(<EmployerManagementSection employer={{ id: 'employer-1', name: 'Northstar' }} />)
+  render(<LanguageProvider><EmployerManagementSection employer={{ id: 'employer-1', name: 'Northstar' }} /></LanguageProvider>)
 
   expect(await screen.findByRole('heading', { name: 'Reporting & management' })).toBeVisible()
   expect(screen.getByText(/never grants access to a learner's full LearnScope profile/i)).toBeVisible()
@@ -67,7 +72,7 @@ it('shows reporting relationships and explains the learner data fence', async ()
 })
 
 it('creates a functional relationship with conservative default scopes', async () => {
-  render(<EmployerManagementSection employer={{ id: 'employer-1', name: 'Northstar' }} />)
+  render(<LanguageProvider><EmployerManagementSection employer={{ id: 'employer-1', name: 'Northstar' }} /></LanguageProvider>)
   await screen.findByText('manager@example.com')
 
   fireEvent.click(screen.getByRole('button', { name: 'Add relationship' }))
@@ -89,7 +94,7 @@ it('creates a functional relationship with conservative default scopes', async (
 })
 
 it('updates relationship scope without changing its participants', async () => {
-  render(<EmployerManagementSection employer={{ id: 'employer-1', name: 'Northstar' }} />)
+  render(<LanguageProvider><EmployerManagementSection employer={{ id: 'employer-1', name: 'Northstar' }} /></LanguageProvider>)
   await screen.findByText('manager@example.com')
 
   fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
@@ -105,7 +110,7 @@ it('updates relationship scope without changing its participants', async () => {
 })
 
 it('ends a relationship only after confirmation', async () => {
-  render(<EmployerManagementSection employer={{ id: 'employer-1', name: 'Northstar' }} />)
+  render(<LanguageProvider><EmployerManagementSection employer={{ id: 'employer-1', name: 'Northstar' }} /></LanguageProvider>)
   await screen.findByText('manager@example.com')
 
   fireEvent.click(screen.getByRole('button', { name: 'End' }))
@@ -119,7 +124,7 @@ it('marks relationships with inactive participants as non-active and offers no u
   mocks.listMembers.mockResolvedValue(members.map((member) => (
     member.id === 'employee-member' ? { ...member, status: 'inactive' } : member
   )))
-  render(<EmployerManagementSection employer={{ id: 'employer-1', name: 'Northstar' }} />)
+  render(<LanguageProvider><EmployerManagementSection employer={{ id: 'employer-1', name: 'Northstar' }} /></LanguageProvider>)
   await screen.findByRole('heading', { name: 'Reporting & management' })
 
   fireEvent.change(screen.getByLabelText('Filter by relationship status'), { target: { value: 'inactive' } })

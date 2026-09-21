@@ -11,6 +11,7 @@ import {
   listEmployerMemberFieldValues,
 } from '../../lib/admin/employers'
 import { listEmployerManagementRelationships } from '../../lib/employerManagement'
+import { LanguageProvider } from '../../context/LanguageContext'
 
 // EmployerLearnersPanel reads isPlatformAdmin and user (the latter only for
 // the roster-field save's updated_by, not exercised here) -- stub the
@@ -24,7 +25,9 @@ vi.mock('../../context/AuthContext', () => ({
 
 vi.mock('../../lib/skillLibrary', () => ({ listLibrarySkills: vi.fn().mockResolvedValue([]) }))
 
-vi.mock('../../lib/supabaseClient', () => ({ supabase: {} }))
+vi.mock('../../lib/supabaseClient', () => ({
+  supabase: { from: () => ({ select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }) }) },
+}))
 
 vi.mock('../../lib/employerManagement', () => ({
   createEmployerManagementRelationship: vi.fn(),
@@ -52,11 +55,11 @@ const fieldDefinitions = [
 ]
 function Panel() {
   const [searchParams, setSearchParams] = useSearchParams()
-  return <EmployerLearnersPanel employer={{ id: 'employer', name: 'Acme' }} searchParams={searchParams} setSearchParams={setSearchParams} />
+  return <LanguageProvider><EmployerLearnersPanel employer={{ id: 'employer', name: 'Acme' }} searchParams={searchParams} setSearchParams={setSearchParams} /></LanguageProvider>
 }
 function StaffWorkspace() {
   const [searchParams, setSearchParams] = useSearchParams()
-  return <EmployerUsersPanel employer={{ id: 'employer', name: 'Acme' }} searchParams={searchParams} setSearchParams={setSearchParams} />
+  return <LanguageProvider><EmployerUsersPanel employer={{ id: 'employer', name: 'Acme' }} searchParams={searchParams} setSearchParams={setSearchParams} /></LanguageProvider>
 }
 beforeEach(() => {
   vi.clearAllMocks()

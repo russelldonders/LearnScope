@@ -2,22 +2,29 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import PlanApprovalPanel from './PlanApprovalPanel'
 import { FIXTURE_DURABLE_ACCOUNT, FIXTURE_SOURCE_ACCOUNT } from './transferPlanFixtures'
+import { LanguageProvider } from '../../../context/LanguageContext'
+
+vi.mock('../../../context/AuthContext', () => ({
+  useAuth: () => ({ user: null }),
+}))
 
 afterEach(cleanup)
 
 function renderPanel(props = {}) {
   return render(
-    <PlanApprovalPanel
-      status="pending"
-      version={1}
-      expiresAt="2026-09-15T10:00:00Z"
-      approvals={[]}
-      sourceAccount={FIXTURE_SOURCE_ACCOUNT}
-      durableAccount={FIXTURE_DURABLE_ACCOUNT}
-      currentAccountId={FIXTURE_DURABLE_ACCOUNT.id}
-      allConflictsResolved
-      {...props}
-    />
+    <LanguageProvider>
+      <PlanApprovalPanel
+        status="pending"
+        version={1}
+        expiresAt="2026-09-15T10:00:00Z"
+        approvals={[]}
+        sourceAccount={FIXTURE_SOURCE_ACCOUNT}
+        durableAccount={FIXTURE_DURABLE_ACCOUNT}
+        currentAccountId={FIXTURE_DURABLE_ACCOUNT.id}
+        allConflictsResolved
+        {...props}
+      />
+    </LanguageProvider>
   )
 }
 
@@ -86,18 +93,20 @@ describe('PlanApprovalPanel', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
 
     rerender(
-      <PlanApprovalPanel
-        status="pending"
-        version={1}
-        expiresAt="2026-09-15T10:00:00Z"
-        approvals={[]}
-        sourceAccount={FIXTURE_SOURCE_ACCOUNT}
-        durableAccount={FIXTURE_DURABLE_ACCOUNT}
-        currentAccountId={FIXTURE_DURABLE_ACCOUNT.id}
-        allConflictsResolved
-        approving={false}
-        error={null}
-      />
+      <LanguageProvider>
+        <PlanApprovalPanel
+          status="pending"
+          version={1}
+          expiresAt="2026-09-15T10:00:00Z"
+          approvals={[]}
+          sourceAccount={FIXTURE_SOURCE_ACCOUNT}
+          durableAccount={FIXTURE_DURABLE_ACCOUNT}
+          currentAccountId={FIXTURE_DURABLE_ACCOUNT.id}
+          allConflictsResolved
+          approving={false}
+          error={null}
+        />
+      </LanguageProvider>
     )
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
@@ -201,21 +210,23 @@ describe('PlanApprovalPanel', () => {
       expect(screen.getByRole('dialog')).toBeInTheDocument()
 
       rerender(
-        <PlanApprovalPanel
-          status="approved"
-          version={2}
-          expiresAt="2026-09-15T10:00:00Z"
-          approvals={[
-            { accountId: FIXTURE_DURABLE_ACCOUNT.id, approvedAt: '2026-09-02T09:00:00Z', approvedVersion: 2 },
-            { accountId: FIXTURE_SOURCE_ACCOUNT.id, approvedAt: '2026-09-03T09:00:00Z', approvedVersion: 2 },
-          ]}
-          sourceAccount={FIXTURE_SOURCE_ACCOUNT}
-          durableAccount={FIXTURE_DURABLE_ACCOUNT}
-          currentAccountId={FIXTURE_DURABLE_ACCOUNT.id}
-          allConflictsResolved
-          executing={false}
-          executeError={null}
-        />
+        <LanguageProvider>
+          <PlanApprovalPanel
+            status="approved"
+            version={2}
+            expiresAt="2026-09-15T10:00:00Z"
+            approvals={[
+              { accountId: FIXTURE_DURABLE_ACCOUNT.id, approvedAt: '2026-09-02T09:00:00Z', approvedVersion: 2 },
+              { accountId: FIXTURE_SOURCE_ACCOUNT.id, approvedAt: '2026-09-03T09:00:00Z', approvedVersion: 2 },
+            ]}
+            sourceAccount={FIXTURE_SOURCE_ACCOUNT}
+            durableAccount={FIXTURE_DURABLE_ACCOUNT}
+            currentAccountId={FIXTURE_DURABLE_ACCOUNT.id}
+            allConflictsResolved
+            executing={false}
+            executeError={null}
+          />
+        </LanguageProvider>
       )
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })

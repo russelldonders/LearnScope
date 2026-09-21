@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import { findOrCreatePersonalSkill } from '../lib/skillLibrary'
 import { suggestActivitySkills } from '../lib/activitySkillSuggestions'
 import AccessibleDialog from './AccessibleDialog'
+import { useLanguage } from '../context/LanguageContext'
 
 // A lighter-weight picker than FindSkillModal's full add-a-skill wizard --
 // no tracking-reason or self-assessment steps, since this only needs to
@@ -13,6 +14,7 @@ import AccessibleDialog from './AccessibleDialog'
 // and confirmed together, rather than closing after the first pick.
 export default function SkillPickerModal({ activityTitle, activityDescription, skills, onConfirm, onClose }) {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const [query, setQuery] = useState('')
   const [suggestions, setSuggestions] = useState([])
   const [loadingSuggestions, setLoadingSuggestions] = useState(false)
@@ -93,13 +95,13 @@ export default function SkillPickerModal({ activityTitle, activityDescription, s
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
       <h2 id="skill-picker-dialog-title" className="font-display text-2xl text-ink mb-1">
-        Choose skills
+        {t('modals.skillPicker.title')}
       </h2>
       <p className="text-sm text-secondary mb-4">
-        Pick as many of your skills as apply, or create a new one.
+        {t('modals.skillPicker.subtitle')}
       </p>
 
-      {loadingSuggestions && <p className="text-sm text-secondary mb-3">Finding likely skills…</p>}
+      {loadingSuggestions && <p className="text-sm text-secondary mb-3">{t('modals.skillPicker.findingLikelySkills')}</p>}
       {suggestionError && (
         <p role="alert" className="text-sm text-red-700 mb-3">
           {suggestionError}
@@ -107,7 +109,7 @@ export default function SkillPickerModal({ activityTitle, activityDescription, s
       )}
       {!loadingSuggestions && suggestions.length > 0 && (
         <div className="mb-4">
-          <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">Suggested</h3>
+          <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">{t('modals.skillPicker.suggestedHeading')}</h3>
           <div className="divide-y divide-hairline">
             {suggestions.map((s) => {
               const existing = skills.find((sk) => sk.name.toLowerCase() === s.name.toLowerCase())
@@ -135,12 +137,12 @@ export default function SkillPickerModal({ activityTitle, activityDescription, s
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search your skills…"
+        placeholder={t('modals.skillPicker.searchPlaceholder')}
         className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
       />
 
       <div className="max-h-48 overflow-y-auto mt-3 mb-3 divide-y divide-hairline">
-        {filtered.length === 0 && <p className="text-sm text-secondary py-2">No matches.</p>}
+        {filtered.length === 0 && <p className="text-sm text-secondary py-2">{t('modals.skillPicker.noMatches')}</p>}
         {filtered.map((s) => (
           <label key={s.id} className="flex items-center gap-3 py-2 cursor-pointer">
             <input
@@ -168,7 +170,7 @@ export default function SkillPickerModal({ activityTitle, activityDescription, s
           onClick={() => chooseByName(query)}
           className="w-full mb-3 rounded-md border border-hairline text-ink py-2 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
         >
-          {creating ? 'Creating…' : `+ Create "${query.trim()}"`}
+          {creating ? t('modals.skillPicker.creating') : t('modals.skillPicker.createNamed', { name: query.trim() })}
         </button>
       )}
 
@@ -179,7 +181,10 @@ export default function SkillPickerModal({ activityTitle, activityDescription, s
           onClick={handleConfirm}
           className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
         >
-          {`Add ${chosen.size || ''} skill${chosen.size === 1 ? '' : 's'}`}
+          {t(
+            chosen.size === 1 ? 'modals.skillPicker.addSkillsSingular' : 'modals.skillPicker.addSkillsPlural',
+            { count: chosen.size || '' }
+          )}
         </button>
         <button
           type="button"
@@ -187,7 +192,7 @@ export default function SkillPickerModal({ activityTitle, activityDescription, s
           disabled={creating}
           className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper disabled:opacity-60"
         >
-          Cancel
+          {t('modals.skillPicker.cancel')}
         </button>
       </div>
     </AccessibleDialog>

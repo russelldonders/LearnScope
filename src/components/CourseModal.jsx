@@ -12,12 +12,16 @@ import GrowthRing from './GrowthRing'
 import AccessibleDialog from './AccessibleDialog'
 import EvidenceFields from './EvidenceFields'
 import ConfirmDialog from './ConfirmDialog'
+import { useLanguage } from '../context/LanguageContext'
 
-const TABS = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'skills', label: 'Skills' },
-  { id: 'details', label: 'Details' },
-]
+function useTabs() {
+  const { t } = useLanguage()
+  return [
+    { id: 'overview', label: t('modals.courseModal.tabOverview') },
+    { id: 'skills', label: t('modals.courseModal.tabSkills') },
+    { id: 'details', label: t('modals.courseModal.tabDetails') },
+  ]
+}
 
 export default function CourseModal({
   course,
@@ -35,6 +39,8 @@ export default function CourseModal({
   onClose,
 }) {
   const { user } = useAuth()
+  const { t } = useLanguage()
+  const TABS = useTabs()
   const isEditing = Boolean(course?.id)
   const [tab, setTab] = useState(initialTab)
   const [name, setName] = useState(course?.name ?? '')
@@ -83,7 +89,7 @@ export default function CourseModal({
   async function handleSubmit(e) {
     e.preventDefault()
     if (!name.trim()) {
-      setError('Name is required.')
+      setError(t('modals.courseModal.nameRequired'))
       return
     }
     setError(null)
@@ -123,23 +129,23 @@ export default function CourseModal({
       panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
         <h2 id="course-dialog-title" className="font-display text-2xl text-ink mb-4">
-          {isEditing ? course.name : 'Add a course'}
+          {isEditing ? course.name : t('modals.courseModal.addACourse')}
         </h2>
 
         {isEditing && !restricted && (
           <div className="flex items-center gap-1 border-b border-hairline mb-4">
-            {TABS.map((t) => (
+            {TABS.map((tabItem) => (
               <button
-                key={t.id}
+                key={tabItem.id}
                 type="button"
-                onClick={() => setTab(t.id)}
+                onClick={() => setTab(tabItem.id)}
                 className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
-                  tab === t.id
+                  tab === tabItem.id
                     ? 'border-moss text-ink'
                     : 'border-transparent text-secondary hover:text-ink'
                 }`}
               >
-                {t.label}
+                {tabItem.label}
               </button>
             ))}
           </div>
@@ -149,7 +155,7 @@ export default function CourseModal({
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="courseName">
-                Name
+                {t('modals.courseModal.nameLabel')}
               </label>
               <input
                 id="courseName"
@@ -162,11 +168,11 @@ export default function CourseModal({
 
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="provider">
-                Provider
+                {t('modals.courseModal.providerLabel')}
               </label>
               <input
                 id="provider"
-                placeholder="Coursera, Toastmasters, in-house…"
+                placeholder={t('modals.courseModal.providerPlaceholder')}
                 value={provider}
                 onChange={(e) => setProvider(e.target.value)}
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
@@ -176,29 +182,29 @@ export default function CourseModal({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm text-secondary mb-1" htmlFor="courseType">
-                  Type
+                  {t('modals.courseModal.typeLabel')}
                 </label>
                 <input
                   id="courseType"
                   list="course-type-options"
-                  placeholder="Online, Degree, Seminar…"
+                  placeholder={t('modals.courseModal.typePlaceholder')}
                   value={courseType}
                   onChange={(e) => setCourseType(e.target.value)}
                   className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
                 />
                 <datalist id="course-type-options">
-                  {COURSE_TYPES.map((t) => (
-                    <option key={t} value={t} />
+                  {COURSE_TYPES.map((courseTypeOption) => (
+                    <option key={courseTypeOption} value={courseTypeOption} />
                   ))}
                 </datalist>
               </div>
               <div>
                 <label className="block text-sm text-secondary mb-1" htmlFor="duration">
-                  Duration
+                  {t('modals.courseModal.durationLabel')}
                 </label>
                 <input
                   id="duration"
-                  placeholder="6 weeks, 40 hours…"
+                  placeholder={t('modals.courseModal.durationPlaceholder')}
                   value={duration}
                   onChange={(e) => setDuration(e.target.value)}
                   className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
@@ -208,7 +214,7 @@ export default function CourseModal({
 
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="completedDate">
-                Completed on
+                {t('modals.courseModal.completedOnLabel')}
               </label>
               <input
                 id="completedDate"
@@ -221,14 +227,14 @@ export default function CourseModal({
 
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="courseNotes">
-                Notes
+                {t('modals.courseModal.notesLabel')}
               </label>
               <textarea
                 id="courseNotes"
                 rows={3}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="What it covered, certificate link…"
+                placeholder={t('modals.courseModal.notesPlaceholder')}
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
               />
             </div>
@@ -241,14 +247,14 @@ export default function CourseModal({
                 disabled={saving}
                 className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
               >
-                {saving ? 'Saving…' : 'Save'}
+                {saving ? t('modals.courseModal.saving') : t('modals.courseModal.save')}
               </button>
               <button
                 type="button"
                 onClick={onClose}
                 className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper"
               >
-                Cancel
+                {t('modals.courseModal.cancel')}
               </button>
               {isEditing && (
                 <button
@@ -257,7 +263,7 @@ export default function CourseModal({
                   disabled={saving}
                   className="rounded-md border border-hairline text-red-700 py-2 px-4 hover:bg-paper disabled:opacity-60"
                 >
-                  Delete
+                  {t('modals.courseModal.delete')}
                 </button>
               )}
             </div>
@@ -300,7 +306,7 @@ export default function CourseModal({
 
       {confirmingDelete && (
         <ConfirmDialog
-          message={`Delete "${course.name}"? This can't be undone.`}
+          message={t('modals.courseModal.deleteConfirmMessage', { courseName: course.name })}
           onConfirm={handleDelete}
           onCancel={() => setConfirmingDelete(false)}
           confirming={saving}
@@ -310,7 +316,8 @@ export default function CourseModal({
   )
 }
 function OverviewTab({ course, linkedExperiences, skillLinks, achievements, loaded }) {
-  if (!loaded) return <p className="text-sm text-secondary">Loading…</p>
+  const { t } = useLanguage()
+  if (!loaded) return <p className="text-sm text-secondary">{t('modals.courseModal.loading')}</p>
 
   const grouped = []
   const bySkill = new Map()
@@ -333,7 +340,7 @@ function OverviewTab({ course, linkedExperiences, skillLinks, achievements, load
         </p>
         {course.completed_date && (
           <p className="font-mono text-xs text-secondary mt-1">
-            Completed {formatMonthYear(course.completed_date)}
+            {t('modals.courseModal.completedOn', { date: formatMonthYear(course.completed_date) })}
           </p>
         )}
         {course.notes && <p className="text-sm text-ink mt-2 whitespace-pre-line">{course.notes}</p>}
@@ -341,7 +348,7 @@ function OverviewTab({ course, linkedExperiences, skillLinks, achievements, load
 
       {linkedExperiences.length > 0 && (
         <div>
-          <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">Part of</h4>
+          <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">{t('modals.courseModal.partOf')}</h4>
           <ul className="space-y-1">
             {linkedExperiences.map((l) => (
               <li key={l.id} className="text-sm text-ink">
@@ -353,9 +360,9 @@ function OverviewTab({ course, linkedExperiences, skillLinks, achievements, load
       )}
 
       <div>
-        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">Skills developed</h4>
+        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">{t('modals.courseModal.skillsDeveloped')}</h4>
         {grouped.length === 0 ? (
-          <p className="text-sm text-secondary">No skills linked yet.</p>
+          <p className="text-sm text-secondary">{t('modals.courseModal.noSkillsLinkedYet')}</p>
         ) : (
           <ul className="space-y-1">
             {grouped.map((g) => (
@@ -371,9 +378,9 @@ function OverviewTab({ course, linkedExperiences, skillLinks, achievements, load
       </div>
 
       <div>
-        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">Skill achievements</h4>
+        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">{t('modals.courseModal.skillAchievements')}</h4>
         {achievements.length === 0 ? (
-          <p className="text-sm text-secondary">No achievements recorded yet.</p>
+          <p className="text-sm text-secondary">{t('modals.courseModal.noAchievementsYet')}</p>
         ) : (
           <ul className="space-y-2">
             {achievements.map((a) => (
@@ -393,6 +400,7 @@ function OverviewTab({ course, linkedExperiences, skillLinks, achievements, load
 }
 
 function SkillsDevelopedSubsection({ course, skills, skillLinks, librarySkills, onChange, onRefreshPickerData, user }) {
+  const { t } = useLanguage()
   const [skillId, setSkillId] = useState('')
   const [creatingNew, setCreatingNew] = useState(false)
   const [newSkillName, setNewSkillName] = useState('')
@@ -419,7 +427,7 @@ function SkillsDevelopedSubsection({ course, skills, skillLinks, librarySkills, 
       let targetSkillId = skillId
       if (creatingNew) {
         if (!newSkillName.trim()) {
-          throw new Error('A name is required for a new skill.')
+          throw new Error(t('modals.courseModal.nameRequiredForNewSkill'))
         }
         const libraryId = await findOrCreateLibrarySkill(newSkillName, null, user.id)
         const { data, error } = await supabase
@@ -438,7 +446,7 @@ function SkillsDevelopedSubsection({ course, skills, skillLinks, librarySkills, 
         targetSkillId = data.id
         await onRefreshPickerData()
       }
-      if (!targetSkillId) throw new Error('Choose or create a skill.')
+      if (!targetSkillId) throw new Error(t('modals.courseModal.chooseOrCreateSkill'))
 
       const { error } = await supabase.from('skill_course_links').insert({
         user_id: user.id,
@@ -447,7 +455,7 @@ function SkillsDevelopedSubsection({ course, skills, skillLinks, librarySkills, 
         relationship,
       })
       if (error) {
-        if (error.code === '23505') throw new Error('That relationship is already recorded for this skill.')
+        if (error.code === '23505') throw new Error(t('modals.courseModal.relationshipAlreadyRecorded'))
         throw error
       }
       setSkillId('')
@@ -470,10 +478,10 @@ function SkillsDevelopedSubsection({ course, skills, skillLinks, librarySkills, 
 
   return (
     <div>
-      <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Skills developed</h4>
+      <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">{t('modals.courseModal.skillsDeveloped')}</h4>
 
       {grouped.length === 0 ? (
-        <p className="text-sm text-secondary mb-3">No skills linked yet.</p>
+        <p className="text-sm text-secondary mb-3">{t('modals.courseModal.noSkillsLinkedYet')}</p>
       ) : (
         <ul className="space-y-2 mb-3">
           {grouped.map((g) => (
@@ -486,7 +494,7 @@ function SkillsDevelopedSubsection({ course, skills, skillLinks, librarySkills, 
                     className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
                   >
                     {SKILL_RELATIONSHIP_LABELS[l.relationship]}
-                    <button type="button" onClick={() => removeLink(l.id)} className="text-red-700" aria-label="Remove">
+                    <button type="button" onClick={() => removeLink(l.id)} className="text-red-700" aria-label={t('modals.courseModal.removeAriaLabel')}>
                       ×
                     </button>
                   </span>
@@ -504,7 +512,7 @@ function SkillsDevelopedSubsection({ course, skills, skillLinks, librarySkills, 
               list="skill-library-options-course-developed"
               value={newSkillName}
               onChange={(e) => setNewSkillName(e.target.value)}
-              placeholder="Search the skill library or type a new one…"
+              placeholder={t('modals.courseModal.searchOrCreateSkill')}
               className="flex-1 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
             />
             <datalist id="skill-library-options-course-developed">
@@ -517,7 +525,7 @@ function SkillsDevelopedSubsection({ course, skills, skillLinks, librarySkills, 
               onClick={() => setCreatingNew(false)}
               className="shrink-0 text-xs text-secondary hover:text-ink"
             >
-              Cancel
+              {t('modals.courseModal.cancel')}
             </button>
           </div>
         ) : (
@@ -527,7 +535,7 @@ function SkillsDevelopedSubsection({ course, skills, skillLinks, librarySkills, 
               onChange={(e) => setSkillId(e.target.value)}
               className="flex-1 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
             >
-              <option value="">Choose a skill…</option>
+              <option value="">{t('modals.courseModal.chooseASkill')}</option>
               {skills.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -542,7 +550,7 @@ function SkillsDevelopedSubsection({ course, skills, skillLinks, librarySkills, 
               }}
               className="shrink-0 text-xs text-moss font-medium"
             >
-              + New skill
+              {t('modals.courseModal.newSkill')}
             </button>
           </div>
         )}
@@ -564,7 +572,7 @@ function SkillsDevelopedSubsection({ course, skills, skillLinks, librarySkills, 
             disabled={saving}
             className="shrink-0 rounded-md bg-moss text-paper py-2 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
           >
-            Add
+            {t('modals.courseModal.add')}
           </button>
         </div>
       </form>
@@ -574,6 +582,7 @@ function SkillsDevelopedSubsection({ course, skills, skillLinks, librarySkills, 
 }
 
 function AchievementsSubsection({ course, skills, achievements, librarySkills, onChange, onRefreshPickerData, user }) {
+  const { t } = useLanguage()
   const [skillId, setSkillId] = useState('')
   const [creatingNew, setCreatingNew] = useState(false)
   const [newSkillName, setNewSkillName] = useState('')
@@ -590,7 +599,7 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
     e.preventDefault()
     setError(null)
     if (!achievedDate) {
-      setError('An achievement date is required.')
+      setError(t('modals.courseModal.achievementDateRequired'))
       return
     }
     setSaving(true)
@@ -599,7 +608,7 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
       let targetSkillName = skills.find((s) => s.id === skillId)?.name
       if (creatingNew) {
         if (!newSkillName.trim()) {
-          throw new Error('A name is required for a new skill.')
+          throw new Error(t('modals.courseModal.nameRequiredForNewSkill'))
         }
         const libraryId = await findOrCreateLibrarySkill(newSkillName, null, user.id)
         const { data, error } = await supabase
@@ -619,7 +628,7 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
         targetSkillName = data.name
         await onRefreshPickerData()
       }
-      if (!targetSkillId) throw new Error('Choose or create a skill.')
+      if (!targetSkillId) throw new Error(t('modals.courseModal.chooseOrCreateSkill'))
 
       const { data: assessment, error: assessmentError } = await supabase
         .from('skill_assessments')
@@ -724,31 +733,30 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
 
   return (
     <div>
-      <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Skill achievements</h4>
+      <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">{t('modals.courseModal.skillAchievements')}</h4>
 
       {levelSyncPrompt && (
         <div className="flex items-center justify-between gap-2 rounded-md border border-gold bg-gold/10 px-3 py-2 mb-3">
           <p className="text-sm text-ink">
-            This is your highest or most recent recorded level for {levelSyncPrompt.skillName}. Update the
-            current profile level to {LEVEL_LABELS[levelSyncPrompt.newLevel]}?
+            {t('modals.courseModal.levelSyncMessage', { skillName: levelSyncPrompt.skillName, level: LEVEL_LABELS[levelSyncPrompt.newLevel] })}
           </p>
           <div className="flex items-center gap-2 shrink-0">
             <button type="button" onClick={applyLevelSync} className="text-xs text-moss font-medium">
-              Update
+              {t('modals.courseModal.update')}
             </button>
             <button
               type="button"
               onClick={() => setLevelSyncPrompt(null)}
               className="text-xs text-secondary"
             >
-              Not now
+              {t('modals.courseModal.notNow')}
             </button>
           </div>
         </div>
       )}
 
       {achievements.length === 0 ? (
-        <p className="text-sm text-secondary mb-3">No achievements recorded yet.</p>
+        <p className="text-sm text-secondary mb-3">{t('modals.courseModal.noAchievementsYet')}</p>
       ) : (
         <ul className="space-y-2 mb-3">
           {achievements.map((a) => (
@@ -768,7 +776,7 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
                   onClick={() => removeAchievement(a.id)}
                   className="shrink-0 text-xs text-red-700 font-medium"
                 >
-                  Remove
+                  {t('modals.courseModal.remove')}
                 </button>
               </div>
             </li>
@@ -783,7 +791,7 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
               list="skill-library-options-course-achievement"
               value={newSkillName}
               onChange={(e) => setNewSkillName(e.target.value)}
-              placeholder="Search the skill library or type a new one…"
+              placeholder={t('modals.courseModal.searchOrCreateSkill')}
               className="flex-1 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
             />
             <datalist id="skill-library-options-course-achievement">
@@ -796,7 +804,7 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
               onClick={() => setCreatingNew(false)}
               className="shrink-0 text-xs text-secondary hover:text-ink"
             >
-              Cancel
+              {t('modals.courseModal.cancel')}
             </button>
           </div>
         ) : (
@@ -806,7 +814,7 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
               onChange={(e) => setSkillId(e.target.value)}
               className="flex-1 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
             >
-              <option value="">Choose a skill…</option>
+              <option value="">{t('modals.courseModal.chooseASkill')}</option>
               {skills.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -821,13 +829,13 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
               }}
               className="shrink-0 text-xs text-moss font-medium"
             >
-              + New skill
+              {t('modals.courseModal.newSkill')}
             </button>
           </div>
         )}
 
         <div>
-          <span className="block text-sm text-secondary mb-2">Level reached</span>
+          <span className="block text-sm text-secondary mb-2">{t('modals.courseModal.levelReached')}</span>
           <div className="flex items-center justify-between">
             {LEVELS.map((l) => (
               <button
@@ -847,7 +855,7 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
 
         <div>
           <label className="block text-sm text-secondary mb-1" htmlFor="courseAchievedDate">
-            Achieved on
+            {t('modals.courseModal.achievedOn')}
           </label>
           <input
             id="courseAchievedDate"
@@ -862,7 +870,7 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
           rows={3}
           value={comments}
           onChange={(e) => setComments(e.target.value)}
-          placeholder="What happened — assessment passed, accreditation earned, project delivered…"
+          placeholder={t('modals.courseModal.achievementCommentsPlaceholder')}
           className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
         />
 
@@ -880,7 +888,7 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
           disabled={saving}
           className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 disabled:opacity-60"
         >
-          {saving ? 'Saving…' : 'Add achievement'}
+          {saving ? t('modals.courseModal.saving') : t('modals.courseModal.addAchievement')}
         </button>
       </form>
     </div>

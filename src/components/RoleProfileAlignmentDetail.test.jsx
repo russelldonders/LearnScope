@@ -1,6 +1,11 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import RoleProfileAlignmentDetail from './RoleProfileAlignmentDetail'
+import { LanguageProvider } from '../context/LanguageContext'
+
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => ({ user: null }),
+}))
 
 afterEach(cleanup)
 
@@ -13,14 +18,16 @@ const training = [
 
 function renderDetail(props = {}) {
   return render(
-    <RoleProfileAlignmentDetail
-      employerName="Acme Corp"
-      roleProfileName="Senior Support Engineer"
-      aligned={aligned}
-      gaps={gaps}
-      training={training}
-      {...props}
-    />
+    <LanguageProvider>
+      <RoleProfileAlignmentDetail
+        employerName="Acme Corp"
+        roleProfileName="Senior Support Engineer"
+        aligned={aligned}
+        gaps={gaps}
+        training={training}
+        {...props}
+      />
+    </LanguageProvider>
   )
 }
 

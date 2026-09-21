@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { EXPERIENCE_TYPE_CONFIG } from '../lib/experienceTypes'
 import OrganizationUrlField from './OrganizationUrlField'
 import AccessibleDialog from './AccessibleDialog'
+import { useLanguage } from '../context/LanguageContext'
 
 export default function ExperienceModal({
   type = 'employment',
@@ -12,6 +13,7 @@ export default function ExperienceModal({
   onSave,
   onClose,
 }) {
+  const { t } = useLanguage()
   const config = EXPERIENCE_TYPE_CONFIG[type]
   const [title, setTitle] = useState('')
   const [otherType, setOtherType] = useState('')
@@ -30,15 +32,18 @@ export default function ExperienceModal({
     e.preventDefault()
     const datesRequired = config.datesRequired !== false
     if (!title.trim() || (config.orgRequired && !organization.trim()) || (datesRequired && !startDate)) {
-      setError(`Title${config.orgRequired ? ', organization,' : ''}${datesRequired ? ' and start date are' : ' is'} required.`)
+      const key = config.orgRequired
+        ? (datesRequired ? 'modals.experienceModal.requiredTitleOrgDates' : 'modals.experienceModal.requiredTitleOrg')
+        : (datesRequired ? 'modals.experienceModal.requiredTitleDates' : 'modals.experienceModal.requiredTitleOnly')
+      setError(t(key))
       return
     }
     if (!datesRequired && !startDate && !studyDurationValue) {
-      setError('Enter a start date or a duration of study.')
+      setError(t('modals.experienceModal.noStartDateOrDuration'))
       return
     }
     if (endDate && !startDate) {
-      setError('Enter a start date before adding an end date.')
+      setError(t('modals.experienceModal.endDateNeedsStartDate'))
       return
     }
     setError(null)
@@ -89,13 +94,13 @@ export default function ExperienceModal({
           {type === 'other' && (
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="otherType">
-                Type of experience
+                {t('modals.experienceModal.otherTypeLabel')}
               </label>
               <input
                 id="otherType"
                 value={otherType}
                 onChange={(e) => setOtherType(e.target.value)}
-                placeholder="e.g. Hackathon, competition, personal pursuit…"
+                placeholder={t('modals.experienceModal.otherTypePlaceholder')}
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
               />
             </div>
@@ -118,23 +123,23 @@ export default function ExperienceModal({
 
           {config.allowsStudyDuration && (
             <div>
-              <label className="block text-sm text-secondary mb-1" htmlFor="studyDurationValue">Duration of study</label>
+              <label className="block text-sm text-secondary mb-1" htmlFor="studyDurationValue">{t('modals.experienceModal.durationOfStudyLabel')}</label>
               <div className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,0.7fr)] gap-2">
-                <input id="studyDurationValue" type="number" min="1" step="1" inputMode="numeric" value={studyDurationValue} onChange={(e) => setStudyDurationValue(e.target.value)} placeholder="e.g. 6" className="min-w-0 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
-                <select aria-label="Duration unit" value={studyDurationUnit} onChange={(e) => setStudyDurationUnit(e.target.value)} className="min-w-0 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss">
-                  <option value="days">Days</option>
-                  <option value="months">Months</option>
-                  <option value="years">Years</option>
+                <input id="studyDurationValue" type="number" min="1" step="1" inputMode="numeric" value={studyDurationValue} onChange={(e) => setStudyDurationValue(e.target.value)} placeholder={t('modals.experienceModal.durationPlaceholder')} className="min-w-0 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
+                <select aria-label={t('modals.experienceModal.durationUnitAriaLabel')} value={studyDurationUnit} onChange={(e) => setStudyDurationUnit(e.target.value)} className="min-w-0 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss">
+                  <option value="days">{t('modals.experienceModal.days')}</option>
+                  <option value="months">{t('modals.experienceModal.months')}</option>
+                  <option value="years">{t('modals.experienceModal.years')}</option>
                 </select>
               </div>
-              <p className="text-xs text-secondary mt-1">Use this instead of dates, or alongside them.</p>
+              <p className="text-xs text-secondary mt-1">{t('modals.experienceModal.durationOfStudyHint')}</p>
             </div>
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="startDate">
-                Start date{config.datesRequired === false ? ' (optional)' : ''}
+                {config.datesRequired === false ? t('modals.experienceModal.startDateOptionalLabel') : t('modals.experienceModal.startDateLabel')}
               </label>
               <input
                 id="startDate"
@@ -153,7 +158,7 @@ export default function ExperienceModal({
             </div>
             <div>
               <label className="block text-sm text-secondary mb-1" htmlFor="endDate">
-                End date{config.datesRequired === false ? ' (optional)' : ''}
+                {config.datesRequired === false ? t('modals.experienceModal.endDateOptionalLabel') : t('modals.experienceModal.endDateLabel')}
               </label>
               <input
                 id="endDate"
@@ -176,20 +181,20 @@ export default function ExperienceModal({
                 onChange={(e) => setCurrent(e.target.checked)}
                 className="rounded border-hairline"
               />
-              This is ongoing / current
+              {t('modals.experienceModal.ongoingCurrent')}
             </label>
           )}
 
           <div>
             <label className="block text-sm text-secondary mb-1" htmlFor="description">
-              Description
+              {t('modals.experienceModal.descriptionLabel')}
             </label>
             <textarea
               id="description"
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="What did you learn? What knowledge or skills did you develop?"
+              placeholder={t('modals.experienceModal.descriptionPlaceholder')}
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
             />
           </div>
@@ -202,14 +207,14 @@ export default function ExperienceModal({
               disabled={saving}
               className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
             >
-              {saving ? 'Saving…' : 'Save'}
+              {saving ? t('modals.experienceModal.saving') : t('modals.experienceModal.save')}
             </button>
             <button
               type="button"
               onClick={onClose}
               className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper"
             >
-              Cancel
+              {t('modals.experienceModal.cancel')}
             </button>
           </div>
         </form>

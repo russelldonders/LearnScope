@@ -1,13 +1,16 @@
 import AccessibleDialog from './AccessibleDialog'
+import { useLanguage } from '../context/LanguageContext'
 
 // A small in-app stand-in for window.confirm() -- same "are you sure, with
 // no other way through" shape, but styled like the rest of the app instead
 // of an OS-level dialog. z-[60] so it always sits above a parent *Modal.jsx
 // (z-50) when a destructive action is confirmed from inside one.
-export default function ConfirmDialog({ message, confirmLabel = 'Delete', onConfirm, onCancel, confirming = false }) {
+export default function ConfirmDialog({ message, confirmLabel = null, onConfirm, onCancel, confirming = false }) {
+  const { t } = useLanguage()
+  const resolvedConfirmLabel = confirmLabel ?? t('modals.confirmDialog.delete')
   return (
     <AccessibleDialog
-      label="Confirm action"
+      label={t('modals.confirmDialog.dialogLabel')}
       describedBy="confirm-dialog-message"
       onClose={confirming ? undefined : onCancel}
       closeOnBackdrop={!confirming}
@@ -22,7 +25,7 @@ export default function ConfirmDialog({ message, confirmLabel = 'Delete', onConf
             disabled={confirming}
             className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
           >
-            Cancel
+            {t('modals.confirmDialog.cancel')}
           </button>
           <button
             type="button"
@@ -30,7 +33,7 @@ export default function ConfirmDialog({ message, confirmLabel = 'Delete', onConf
             disabled={confirming}
             className="rounded-md border border-hairline text-red-700 py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
           >
-            {confirming ? 'Working…' : confirmLabel}
+            {confirming ? t('modals.confirmDialog.working') : resolvedConfirmLabel}
           </button>
         </div>
     </AccessibleDialog>

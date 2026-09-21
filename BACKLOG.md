@@ -31,18 +31,37 @@ or just delete it.
    AssessBaselineModal, SetTargetModal, ValidateSkillModal,
    RequestValidationModal, ConfirmingBaselineQuizModal, InterviewModal,
    CurrentRoleSelectModal, SelfAssessSection), which are also reused from
-   Dashboard/Actions/ExperienceDetail. Not translated: admin/provider/
-   employer consoles, and the roughly 23 other modals/secondary dialogs
-   elsewhere in the app (e.g. those opened from Dashboard, Connections,
-   Experience, the video editor, resume import), and deeply dynamic/
+   Dashboard/Actions/ExperienceDetail — plus 10 more confirmed
+   learner-facing components: CourseModal (opened from CourseLearn),
+   ResumeImportReviewModal (onboarding/profile import), FindSkillModal
+   (Dashboard/ExperienceDetail/SkillsSection), StravaActivityReviewModal
+   (ConnectedAccounts), ExperienceModal (Experience timeline),
+   SkillPickerModal (inside RecordActivityModal), ShareSkillsModal
+   (ProfilePrivacy), CohortPickerModal (Actions/CourseCatalogue and the
+   public /providers/:slug page), EmployerDataAccessConsentDialog (shown to
+   the learner despite the name — it's their own Actions page asking for
+   their consent), and ConfirmDialog (the small shared confirm/cancel
+   dialog used throughout learner flows — its default confirmLabel now
+   resolves via t() instead of a hardcoded default, so any other page
+   rendering it needed a LanguageProvider in its own tests too; fixed
+   incidentally in employer/manager/role-alignment/account-linking test
+   files that render it without changing what those pages do). Deliberately
+   NOT translated (staff-only tooling, left alone per explicit instruction):
+   admin/provider/employer/manager consoles, and their modals
+   (PageBuilderModal, VideoEditorModal, ScreenRecorderModal,
+   OrganisationSettingsModal, BulkAssignToCatalogueDialog,
+   BulkPublishCourseDialog, SkillTestQuestionsModal,
+   EmployerMemberFieldsModal, EmployerMemberDetailModal, and everything
+   under src/pages/employer/). Still open on the learner side: a handful of
+   other modals/secondary dialogs not yet audited, and deeply dynamic/
    AI-generated content (level guides, diagnostic questions, quiz/interview
    content, and the auto-generated audit strings some diagnostic flows save
    into skill_assessments.comments) — still a meaningful amount of ongoing
    work, not something to treat as finished. `t()` now supports
    string-interpolation (`t(key, { param })` replaces `{param}` placeholders
-   in the translated string), used throughout the SkillDetail modals pass;
-   spots needing genuine singular/plural phrasing still use a count-driven
-   key pair rather than one templated string.
+   in the translated string); spots needing genuine singular/plural
+   phrasing still use a count-driven key pair rather than one templated
+   string.
 2. "Proxy as another user" — deliberately NOT built as literal session
    impersonation. The only way to make RLS-scoped queries genuinely return
    another learner's data is to hold a real, fully-privileged session as

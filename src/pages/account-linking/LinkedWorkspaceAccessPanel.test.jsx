@@ -2,17 +2,26 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import LinkedWorkspaceAccessPanel from './LinkedWorkspaceAccessPanel'
 import { FIXTURE_LINKED_ACCOUNTS } from './accountLinkingFixtures'
+import { LanguageProvider } from '../../context/LanguageContext'
+
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ user: null }),
+}))
 
 afterEach(cleanup)
 
+function withLanguage(ui) {
+  return <LanguageProvider>{ui}</LanguageProvider>
+}
+
 describe('LinkedWorkspaceAccessPanel', () => {
   it('renders nothing when there are no active linked accounts', () => {
-    const { container } = render(<LinkedWorkspaceAccessPanel linkedAccounts={[]} requests={[]} grants={[]} />)
+    const { container } = render(withLanguage(<LinkedWorkspaceAccessPanel linkedAccounts={[]} requests={[]} grants={[]} />))
     expect(container).toBeEmptyDOMElement()
   })
 
   it('offers to share when neither a request nor a grant exists for either direction', () => {
-    render(<LinkedWorkspaceAccessPanel linkedAccounts={FIXTURE_LINKED_ACCOUNTS} requests={[]} grants={[]} />)
+    render(withLanguage(<LinkedWorkspaceAccessPanel linkedAccounts={FIXTURE_LINKED_ACCOUNTS} requests={[]} grants={[]} />))
     const row = screen.getByText('me.personal@example.com').closest('li')
     expect(within(row).getByRole('button', { name: 'Share your profile with them' })).toBeInTheDocument()
     expect(row).toHaveTextContent('Their profile: you cannot view it')
@@ -21,7 +30,7 @@ describe('LinkedWorkspaceAccessPanel', () => {
   it('confirms before removing an outgoing grant, and calls onRevoke with the link id only after confirming', () => {
     const onRevoke = vi.fn()
     const grants = [{ linkId: 'link-1', email: 'me.personal@example.com', direction: 'granted', grantedAt: '2026-08-20T10:00:00Z' }]
-    render(<LinkedWorkspaceAccessPanel linkedAccounts={FIXTURE_LINKED_ACCOUNTS} requests={[]} grants={grants} onRevoke={onRevoke} />)
+    render(withLanguage(<LinkedWorkspaceAccessPanel linkedAccounts={FIXTURE_LINKED_ACCOUNTS} requests={[]} grants={grants} onRevoke={onRevoke} />))
     const row = screen.getByText('me.personal@example.com').closest('li')
     expect(row).toHaveTextContent('Your profile: they can view it, since')
     fireEvent.click(within(row).getByRole('button', { name: 'Remove access' }))
@@ -34,7 +43,7 @@ describe('LinkedWorkspaceAccessPanel', () => {
   it('shows an outgoing pending request with a cancel action, and calls onCancelRequest with the request id', () => {
     const onCancelRequest = vi.fn()
     const requests = [{ id: 'request-9', linkId: 'link-1', email: 'me.personal@example.com', direction: 'sent', status: 'pending', createdAt: '2026-09-01T10:00:00Z' }]
-    render(<LinkedWorkspaceAccessPanel linkedAccounts={FIXTURE_LINKED_ACCOUNTS} requests={requests} grants={[]} onCancelRequest={onCancelRequest} />)
+    render(withLanguage(<LinkedWorkspaceAccessPanel linkedAccounts={FIXTURE_LINKED_ACCOUNTS} requests={requests} grants={[]} onCancelRequest={onCancelRequest} />))
     const row = screen.getByText('me.personal@example.com').closest('li')
     expect(row).toHaveTextContent('waiting for them to accept')
     fireEvent.click(within(row).getByRole('button', { name: 'Cancel request' }))
@@ -45,7 +54,7 @@ describe('LinkedWorkspaceAccessPanel', () => {
     const onAccept = vi.fn()
     const onDecline = vi.fn()
     const requests = [{ id: 'request-9', linkId: 'link-1', email: 'me.personal@example.com', direction: 'received', status: 'pending', createdAt: '2026-09-01T10:00:00Z' }]
-    render(<LinkedWorkspaceAccessPanel linkedAccounts={FIXTURE_LINKED_ACCOUNTS} requests={requests} grants={[]} onAccept={onAccept} onDecline={onDecline} />)
+    render(withLanguage(<LinkedWorkspaceAccessPanel linkedAccounts={FIXTURE_LINKED_ACCOUNTS} requests={requests} grants={[]} onAccept={onAccept} onDecline={onDecline} />))
     const row = screen.getByText('me.personal@example.com').closest('li')
     expect(row).toHaveTextContent('they want to share it with you')
     fireEvent.click(within(row).getByRole('button', { name: 'Accept' }))
@@ -57,7 +66,7 @@ describe('LinkedWorkspaceAccessPanel', () => {
   it('confirms before giving up an incoming grant, and calls onRenounce with the link id only after confirming', () => {
     const onRenounce = vi.fn()
     const grants = [{ linkId: 'link-1', email: 'me.personal@example.com', direction: 'received', grantedAt: '2026-08-20T10:00:00Z' }]
-    render(<LinkedWorkspaceAccessPanel linkedAccounts={FIXTURE_LINKED_ACCOUNTS} requests={[]} grants={grants} onRenounce={onRenounce} />)
+    render(withLanguage(<LinkedWorkspaceAccessPanel linkedAccounts={FIXTURE_LINKED_ACCOUNTS} requests={[]} grants={grants} onRenounce={onRenounce} />))
     const row = screen.getByText('me.personal@example.com').closest('li')
     expect(row).toHaveTextContent('Their profile: you can view it, since')
     fireEvent.click(within(row).getByRole('button', { name: 'Give up access' }))
@@ -71,7 +80,7 @@ describe('LinkedWorkspaceAccessPanel', () => {
       { linkId: 'link-1', email: 'me.personal@example.com', direction: 'granted', grantedAt: '2026-08-20T10:00:00Z' },
       { linkId: 'link-1', email: 'me.personal@example.com', direction: 'received', grantedAt: '2026-08-21T10:00:00Z' },
     ]
-    render(<LinkedWorkspaceAccessPanel linkedAccounts={FIXTURE_LINKED_ACCOUNTS} requests={[]} grants={grants} />)
+    render(withLanguage(<LinkedWorkspaceAccessPanel linkedAccounts={FIXTURE_LINKED_ACCOUNTS} requests={[]} grants={grants} />))
     const row = screen.getByText('me.personal@example.com').closest('li')
     expect(row).toHaveTextContent('Your profile: they can view it, since')
     expect(row).toHaveTextContent('Their profile: you can view it, since')
@@ -81,23 +90,25 @@ describe('LinkedWorkspaceAccessPanel', () => {
 
   it('only renders active linked accounts, not revoked ones', () => {
     const linkedAccounts = [...FIXTURE_LINKED_ACCOUNTS, { id: 'link-3', email: 'revoked@example.com', direction: 'sent', verifiedAt: '2026-01-01', status: 'revoked' }]
-    render(<LinkedWorkspaceAccessPanel linkedAccounts={linkedAccounts} requests={[]} grants={[]} />)
+    render(withLanguage(<LinkedWorkspaceAccessPanel linkedAccounts={linkedAccounts} requests={[]} grants={[]} />))
     expect(screen.queryByText('revoked@example.com')).not.toBeInTheDocument()
   })
 
   it('surfaces a list-load error at the top of the panel', () => {
-    render(<LinkedWorkspaceAccessPanel linkedAccounts={FIXTURE_LINKED_ACCOUNTS} requests={[]} grants={[]} errors={{ load: 'Could not load sharing status.' }} />)
+    render(withLanguage(<LinkedWorkspaceAccessPanel linkedAccounts={FIXTURE_LINKED_ACCOUNTS} requests={[]} grants={[]} errors={{ load: 'Could not load sharing status.' }} />))
     expect(screen.getByRole('alert')).toHaveTextContent('Could not load sharing status.')
   })
 
   it('surfaces a failed request inline on that row only, not as a shared banner', () => {
     render(
-      <LinkedWorkspaceAccessPanel
-        linkedAccounts={FIXTURE_LINKED_ACCOUNTS}
-        requests={[]}
-        grants={[]}
-        errors={{ 'request:link-1': "Couldn't send the request." }}
-      />
+      withLanguage(
+        <LinkedWorkspaceAccessPanel
+          linkedAccounts={FIXTURE_LINKED_ACCOUNTS}
+          requests={[]}
+          grants={[]}
+          errors={{ 'request:link-1': "Couldn't send the request." }}
+        />
+      )
     )
     const row = screen.getByText('me.personal@example.com').closest('li')
     expect(within(row).getByRole('alert')).toHaveTextContent("Couldn't send the request.")
@@ -107,12 +118,12 @@ describe('LinkedWorkspaceAccessPanel', () => {
 
   it('closes the confirm dialog once the revoke finishes with no error', () => {
     const grants = [{ linkId: 'link-1', email: 'me.personal@example.com', direction: 'granted', grantedAt: '2026-08-20T10:00:00Z' }]
-    const { rerender } = render(<LinkedWorkspaceAccessPanel linkedAccounts={FIXTURE_LINKED_ACCOUNTS} requests={[]} grants={grants} busyKey="revoke:link-1" />)
+    const { rerender } = render(withLanguage(<LinkedWorkspaceAccessPanel linkedAccounts={FIXTURE_LINKED_ACCOUNTS} requests={[]} grants={grants} busyKey="revoke:link-1" />))
     const row = screen.getByText('me.personal@example.com').closest('li')
     fireEvent.click(within(row).getByRole('button', { name: 'Remove access' }))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
 
-    rerender(<LinkedWorkspaceAccessPanel linkedAccounts={FIXTURE_LINKED_ACCOUNTS} requests={[]} grants={[]} busyKey={null} errors={{}} />)
+    rerender(withLanguage(<LinkedWorkspaceAccessPanel linkedAccounts={FIXTURE_LINKED_ACCOUNTS} requests={[]} grants={[]} busyKey={null} errors={{}} />))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })

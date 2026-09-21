@@ -11,6 +11,7 @@ import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
 import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
 import SelfAssessSection from './SelfAssessSection'
 import AccessibleDialog from './AccessibleDialog'
+import { useLanguage } from '../context/LanguageContext'
 
 // 'search' / 'settings' create the skill itself; 'knowledge' / 'practical'
 // are the two rating steps that follow, each independently skippable since
@@ -20,6 +21,7 @@ import AccessibleDialog from './AccessibleDialog'
 // in the app (see SelfAssessSection).
 export default function FindSkillModal({ onClose, onCreated, experienceId }) {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const [mode, setMode] = useState('search')
   const [query, setQuery] = useState('')
   const [libraryResults, setLibraryResults] = useState([])
@@ -85,11 +87,11 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
   async function handleSubmit(e) {
     e.preventDefault()
     if (!selected.name.trim()) {
-      setError('Name is required.')
+      setError(t('modals.findSkill.nameRequired'))
       return
     }
     if (!trackingReason) {
-      setError('Please choose why you are tracking this skill.')
+      setError(t('modals.findSkill.chooseTrackingReason'))
       return
     }
     setError(null)
@@ -220,7 +222,7 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
 
   return (
     <AccessibleDialog
-      label="Add a skill"
+      label={t('modals.findSkill.dialogLabel')}
       onClose={handleDismiss}
       panelRef={scrollRef}
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
@@ -228,23 +230,23 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
         {mode === 'search' && (
           <>
             <h2 data-dialog-initial-focus tabIndex={-1} className="font-display text-2xl text-ink mb-1">
-              Find a skill
+              {t('modals.findSkill.findASkillTitle')}
             </h2>
             <p className="text-sm text-secondary mb-4">
-              Search the skill library, or create a new one if you can't find it.
+              {t('modals.findSkill.findASkillSubtitle')}
             </p>
 
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search skills…"
+              placeholder={t('modals.findSkill.searchPlaceholder')}
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
             />
 
             <div className="max-h-64 overflow-y-auto mt-3 mb-3 divide-y divide-hairline">
-              {loadingLibrary && <p className="text-sm text-secondary py-2">Loading…</p>}
+              {loadingLibrary && <p className="text-sm text-secondary py-2">{t('modals.findSkill.loading')}</p>}
               {!loadingLibrary && filtered.length === 0 && (
-                <p className="text-sm text-secondary py-2">No matches.</p>
+                <p className="text-sm text-secondary py-2">{t('modals.findSkill.noMatches')}</p>
               )}
               {filtered.map((s) => (
                 <div key={s.id} className="flex items-center justify-between gap-2 py-2">
@@ -252,7 +254,7 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
                     {s.name}
                     {s.is_private && (
                       <span className="ml-1.5 font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-1.5 py-0.5">
-                        Private
+                        {t('modals.findSkill.privateBadge')}
                       </span>
                     )}
                   </span>
@@ -261,7 +263,7 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
                     onClick={() => selectExisting(s)}
                     className="shrink-0 rounded-md border border-hairline text-ink py-1 px-3 text-sm font-medium hover:bg-paper"
                   >
-                    Add
+                    {t('modals.findSkill.add')}
                   </button>
                 </div>
               ))}
@@ -273,14 +275,14 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
                 onClick={openCreate}
                 className="flex-1 rounded-md border border-hairline text-ink py-2 px-3 text-sm font-medium hover:bg-paper"
               >
-                {query.trim() ? `+ Create "${query.trim()}"` : '+ Create a new skill'}
+                {query.trim() ? t('modals.findSkill.createNamed', { name: query.trim() }) : t('modals.findSkill.createNewSkill')}
               </button>
               <button
                 type="button"
                 onClick={onClose}
                 className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper"
               >
-                Cancel
+                {t('modals.findSkill.cancel')}
               </button>
             </div>
           </>
@@ -293,18 +295,18 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
               onClick={() => setMode('search')}
               className="text-xs text-secondary hover:text-ink mb-2"
             >
-              ← Back to search
+              {t('modals.findSkill.backToSearch')}
             </button>
-            <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1">Step 1 of 3</p>
+            <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1">{t('modals.findSkill.stepCounter', { current: 1, total: 3 })}</p>
             <h2 className="font-display text-2xl text-ink mb-4">
-              {selected.isNew ? 'Create a skill' : `Add "${selected.name}"`}
+              {selected.isNew ? t('modals.findSkill.createASkillTitle') : t('modals.findSkill.addNamedTitle', { name: selected.name })}
             </h2>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {selected.isNew && (
                 <div>
                   <label className="block text-sm text-secondary mb-1" htmlFor="name">
-                    Name
+                    {t('modals.findSkill.nameLabel')}
                   </label>
                   <input
                     id="name"
@@ -325,10 +327,9 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
                     className="mt-0.5 rounded border-hairline"
                   />
                   <span>
-                    Keep this skill private
+                    {t('modals.findSkill.keepPrivateLabel')}
                     <span className="block text-xs text-secondary/80 mt-0.5">
-                      Only you will be able to find it when searching. Public skills help other
-                      learners avoid re-creating the same one.
+                      {t('modals.findSkill.keepPrivateDescription')}
                     </span>
                   </span>
                 </label>
@@ -343,11 +344,9 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
                     className="mt-0.5 rounded border-hairline"
                   />
                   <span>
-                    Part of my current role
+                    {t('modals.findSkill.partOfCurrentRoleLabel')}
                     <span className="block text-xs text-secondary/80 mt-0.5">
-                      Links this skill to your current job on the Experience timeline — creates one
-                      called "Current role" if you don't have one yet, or asks which one if you
-                      have more than one.
+                      {t('modals.findSkill.partOfCurrentRoleDescription')}
                     </span>
                   </span>
                 </label>
@@ -363,14 +362,14 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
                   disabled={saving}
                   className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
                 >
-                  {saving ? 'Saving…' : 'Continue'}
+                  {saving ? t('modals.findSkill.saving') : t('modals.findSkill.continue')}
                 </button>
                 <button
                   type="button"
                   onClick={onClose}
                   className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper"
                 >
-                  Cancel
+                  {t('modals.findSkill.cancel')}
                 </button>
               </div>
             </form>
@@ -379,11 +378,10 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
 
         {mode === 'knowledge' && createdSkill && (
           <>
-            <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1">Step 2 of 3</p>
-            <h2 className="font-display text-2xl text-ink mb-1">Rate your knowledge</h2>
+            <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1">{t('modals.findSkill.stepCounter', { current: 2, total: 3 })}</p>
+            <h2 className="font-display text-2xl text-ink mb-1">{t('modals.findSkill.rateKnowledgeTitle')}</h2>
             <p className="text-sm text-secondary mb-4">
-              How well do you understand "{createdSkill.name}" in theory? You can skip this and rate it later
-              from the skill's page.
+              {t('modals.findSkill.rateKnowledgeSubtitle', { skillName: createdSkill.name })}
             </p>
             <SelfAssessSection
               skill={createdSkill}
@@ -393,19 +391,18 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
               onGuideGenerated={(statements) =>
                 setCreatedSkill((s) => (s ? { ...s, knowledge_level_guide: statements } : s))
               }
-              submitLabel="Save & Next"
-              secondaryAction={{ label: 'Skip for now', onClick: () => setMode('practical') }}
+              submitLabel={t('modals.findSkill.saveAndNext')}
+              secondaryAction={{ label: t('modals.findSkill.skipForNow'), onClick: () => setMode('practical') }}
             />
           </>
         )}
 
         {mode === 'practical' && createdSkill && (
           <>
-            <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1">Step 3 of 3</p>
-            <h2 className="font-display text-2xl text-ink mb-1">Rate your practical ability</h2>
+            <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1">{t('modals.findSkill.stepCounter', { current: 3, total: 3 })}</p>
+            <h2 className="font-display text-2xl text-ink mb-1">{t('modals.findSkill.ratePracticalTitle')}</h2>
             <p className="text-sm text-secondary mb-4">
-              How would you rate applying "{createdSkill.name}" in practice? You can skip this and rate it
-              later from the skill's page.
+              {t('modals.findSkill.ratePracticalSubtitle', { skillName: createdSkill.name })}
             </p>
             <SelfAssessSection
               skill={createdSkill}
@@ -415,8 +412,8 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
               onGuideGenerated={(statements) =>
                 setCreatedSkill((s) => (s ? { ...s, practical_level_guide: statements } : s))
               }
-              submitLabel="Save & Close"
-              secondaryAction={{ label: 'Skip for now', onClick: onCreated }}
+              submitLabel={t('modals.findSkill.saveAndClose')}
+              secondaryAction={{ label: t('modals.findSkill.skipForNow'), onClick: onCreated }}
             />
           </>
         )}

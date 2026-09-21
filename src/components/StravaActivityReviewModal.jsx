@@ -7,6 +7,7 @@ import { insertStatementSkillLinks } from '../lib/activitySkillLinks'
 import { suggestedSkillNameForActivity } from '../lib/strava'
 import { formatMonthYear } from '../lib/dates'
 import AccessibleDialog from './AccessibleDialog'
+import { useLanguage } from '../context/LanguageContext'
 
 // Same per-row select/edit shape as ResumeImportReviewModal's useSelection --
 // re-implemented locally rather than extracted/shared, matching how that
@@ -45,6 +46,7 @@ function formatStravaDistance(meters) {
 
 export default function StravaActivityReviewModal({ activities, onClose, onImported }) {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const items = useSelection(activities.map((a) => ({ ...a, skillName: suggestedSkillNameForActivity(a) ?? '' })))
   const [existingSkills, setExistingSkills] = useState(null)
   const [alreadyImportedIds, setAlreadyImportedIds] = useState(null)
@@ -182,15 +184,15 @@ export default function StravaActivityReviewModal({ activities, onClose, onImpor
       closeOnBackdrop={!importing}
       panelClassName="w-full max-w-2xl bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
-      <h2 id="strava-review-dialog-title" className="font-display text-2xl text-ink mb-1">Review Strava activities</h2>
+      <h2 id="strava-review-dialog-title" className="font-display text-2xl text-ink mb-1">{t('modals.stravaActivityReview.title')}</h2>
       <p className="text-sm text-secondary mb-6">
-        Pick the skill each activity contributed to, uncheck anything you don't want, then import.
+        {t('modals.stravaActivityReview.subtitle')}
       </p>
 
-      {!loaded && <p className="text-sm text-secondary">Loading…</p>}
+      {!loaded && <p className="text-sm text-secondary">{t('modals.stravaActivityReview.loading')}</p>}
 
       {loaded && items.values.length === 0 && (
-        <p className="text-sm text-secondary">No new activities to review.</p>
+        <p className="text-sm text-secondary">{t('modals.stravaActivityReview.noNewActivities')}</p>
       )}
 
       {loaded && (
@@ -216,15 +218,15 @@ export default function StravaActivityReviewModal({ activities, onClose, onImpor
                     {activity.startDate ? ` · ${formatMonthYear(activity.startDate)}` : ''}
                     {formatStravaDuration(activity.movingTimeSeconds) ? ` · ${formatStravaDuration(activity.movingTimeSeconds)}` : ''}
                     {formatStravaDistance(activity.distanceMeters) ? ` · ${formatStravaDistance(activity.distanceMeters)}` : ''}
-                    {alreadyImported ? ' · Already logged' : ''}
+                    {alreadyImported ? t('modals.stravaActivityReview.alreadyLoggedSuffix') : ''}
                   </p>
                   {!alreadyImported && (
                     <label className="flex items-center gap-1.5 text-xs text-secondary mt-2">
-                      Skill
+                      {t('modals.stravaActivityReview.skillLabel')}
                       <input
                         value={activity.skillName}
                         onChange={(e) => items.updateField(i, 'skillName', e.target.value)}
-                        placeholder="e.g. Running"
+                        placeholder={t('modals.stravaActivityReview.skillPlaceholder')}
                         className="rounded border border-hairline bg-card px-1.5 py-0.5 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-moss"
                       />
                     </label>
@@ -244,7 +246,14 @@ export default function StravaActivityReviewModal({ activities, onClose, onImpor
           disabled={!loaded || importing || totalSelected === 0 || hasEmptySkillName}
           className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90 disabled:opacity-60"
         >
-          {importing ? 'Importing…' : `Import ${totalSelected} activit${totalSelected === 1 ? 'y' : 'ies'}`}
+          {importing
+            ? t('modals.stravaActivityReview.importing')
+            : t(
+                totalSelected === 1
+                  ? 'modals.stravaActivityReview.importActivitySingular'
+                  : 'modals.stravaActivityReview.importActivityPlural',
+                { count: totalSelected }
+              )}
         </button>
         <button
           type="button"
@@ -252,7 +261,7 @@ export default function StravaActivityReviewModal({ activities, onClose, onImpor
           disabled={importing}
           className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper disabled:opacity-60"
         >
-          Cancel
+          {t('modals.stravaActivityReview.cancel')}
         </button>
       </div>
     </AccessibleDialog>

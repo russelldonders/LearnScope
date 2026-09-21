@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ConnectionsTeams from './ConnectionsTeams'
 import * as teams from '../lib/managerTeams'
+import { LanguageProvider } from '../context/LanguageContext'
 
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'me' }, workspaces: [], refreshWorkspaces: async () => {} }) }))
 vi.mock('../lib/skillEvidence', () => ({ uploadEvidenceFiles: vi.fn() }))
@@ -25,7 +26,7 @@ vi.mock('../lib/managerTeams', () => ({
 }))
 const connections = [{ id: 'alex', name: 'Alex' }, { id: 'sam', name: 'Sam' }]
 function renderTeams(props = {}) {
-  return render(<MemoryRouter><ConnectionsTeams connections={connections} currentUserName="Russell" {...props} /></MemoryRouter>)
+  return render(<MemoryRouter><LanguageProvider><ConnectionsTeams connections={connections} currentUserName="Russell" {...props} /></LanguageProvider></MemoryRouter>)
 }
 beforeEach(() => {
   vi.resetAllMocks()

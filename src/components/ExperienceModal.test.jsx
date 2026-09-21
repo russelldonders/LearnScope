@@ -1,13 +1,29 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ExperienceModal from './ExperienceModal'
+import { LanguageProvider } from '../context/LanguageContext'
+
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 'user-1' } }),
+}))
+vi.mock('../lib/supabaseClient', () => ({
+  supabase: { from: () => ({ select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }) }) },
+}))
+
+function renderModal(props) {
+  return render(
+    <LanguageProvider>
+      <ExperienceModal {...props} />
+    </LanguageProvider>
+  )
+}
 
 describe('ExperienceModal subject timing', () => {
   afterEach(cleanup)
 
   it('saves a subject with a study duration and no dates', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined)
-    render(<ExperienceModal type="subject" onSave={onSave} onClose={vi.fn()} />)
+    renderModal({ type: 'subject', onSave, onClose: vi.fn() })
 
     expect(screen.queryByLabelText(/Institution/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Organization website/)).not.toBeInTheDocument()
@@ -31,7 +47,7 @@ describe('ExperienceModal subject timing', () => {
 
   it('requires either a start date or a study duration for a subject', async () => {
     const onSave = vi.fn()
-    render(<ExperienceModal type="subject" onSave={onSave} onClose={vi.fn()} />)
+    renderModal({ type: 'subject', onSave, onClose: vi.fn() })
 
     fireEvent.change(screen.getByLabelText('Subject name'), { target: { value: 'Physics' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))

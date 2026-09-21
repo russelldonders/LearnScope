@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import AccessibleDialog from './AccessibleDialog'
+import { useLanguage } from '../context/LanguageContext'
 
 // Purpose-built skill picker for the employer data-access sharing flow
 // (Actions.jsx's Accept, ProfilePrivacy.jsx's Share/Edit shared skills) --
@@ -10,12 +11,16 @@ import AccessibleDialog from './AccessibleDialog'
 export default function ShareSkillsModal({
   skills,
   initiallySelectedIds = [],
-  title = 'Choose skills to share',
-  description = 'Pick which of your skills this employer can see. You can change this any time.',
-  confirmLabel = 'Share',
+  title = null,
+  description = null,
+  confirmLabel = null,
   onConfirm,
   onClose,
 }) {
+  const { t } = useLanguage()
+  const resolvedTitle = title ?? t('modals.shareSkills.defaultTitle')
+  const resolvedDescription = description ?? t('modals.shareSkills.defaultDescription')
+  const resolvedConfirmLabel = confirmLabel ?? t('modals.shareSkills.defaultConfirmLabel')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(() => new Set(initiallySelectedIds))
   const [saving, setSaving] = useState(false)
@@ -64,18 +69,18 @@ export default function ShareSkillsModal({
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
       <h2 id="share-skills-dialog-title" className="font-display text-2xl text-ink mb-1">
-        {title}
+        {resolvedTitle}
       </h2>
-      <p className="text-sm text-secondary mb-4">{description}</p>
+      <p className="text-sm text-secondary mb-4">{resolvedDescription}</p>
 
       {skills.length === 0 ? (
-        <p className="text-sm text-secondary py-2">You haven't added any skills yet.</p>
+        <p className="text-sm text-secondary py-2">{t('modals.shareSkills.noSkillsYet')}</p>
       ) : (
         <>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search your skills…"
+            placeholder={t('modals.shareSkills.searchPlaceholder')}
             className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
           />
 
@@ -86,7 +91,7 @@ export default function ShareSkillsModal({
               disabled={saving}
               className="text-xs font-medium text-moss hover:underline disabled:opacity-60"
             >
-              Select all
+              {t('modals.shareSkills.selectAll')}
             </button>
             <button
               type="button"
@@ -94,13 +99,13 @@ export default function ShareSkillsModal({
               disabled={saving}
               className="text-xs font-medium text-moss hover:underline disabled:opacity-60"
             >
-              Select none
+              {t('modals.shareSkills.selectNone')}
             </button>
-            <span className="text-xs text-secondary ml-auto">{selected.size} selected</span>
+            <span className="text-xs text-secondary ml-auto">{t('modals.shareSkills.selectedCount', { count: selected.size })}</span>
           </div>
 
           <div className="max-h-64 overflow-y-auto mt-2 mb-3 divide-y divide-hairline">
-            {filtered.length === 0 && <p className="text-sm text-secondary py-2">No matches.</p>}
+            {filtered.length === 0 && <p className="text-sm text-secondary py-2">{t('modals.shareSkills.noMatches')}</p>}
             {filtered.map((s) => (
               <label key={s.id} className="flex items-center gap-3 py-2 cursor-pointer">
                 <input
@@ -130,7 +135,12 @@ export default function ShareSkillsModal({
           disabled={saving}
           className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
         >
-          {saving ? 'Saving…' : `${confirmLabel} ${selected.size} skill${selected.size === 1 ? '' : 's'}`}
+          {saving
+            ? t('modals.shareSkills.saving')
+            : t(
+                selected.size === 1 ? 'modals.shareSkills.confirmCountSingular' : 'modals.shareSkills.confirmCountPlural',
+                { confirmLabel: resolvedConfirmLabel, count: selected.size }
+              )}
         </button>
         <button
           type="button"
@@ -138,7 +148,7 @@ export default function ShareSkillsModal({
           disabled={saving}
           className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper disabled:opacity-60"
         >
-          Cancel
+          {t('modals.shareSkills.cancel')}
         </button>
       </div>
     </AccessibleDialog>
