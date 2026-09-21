@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { getEvidenceSignedUrl } from '../lib/skillEvidence'
+import { useLanguage } from '../context/LanguageContext'
 
 // A single uploaded evidence file, shown as a button that lazily fetches a
 // short-lived signed URL (files live in a private bucket) and opens it in a
 // new tab. Shared by skill assessments and skill activity logs -- both
 // store evidence the same way (skillEvidence.js), just on different tables.
 export default function EvidenceAttachmentLink({ path, index }) {
+  const { t } = useLanguage()
   const [signedUrl, setSignedUrl] = useState(null)
   const [loadingUrl, setLoadingUrl] = useState(false)
   const [error, setError] = useState(null)
@@ -22,7 +24,7 @@ export default function EvidenceAttachmentLink({ path, index }) {
       setSignedUrl(url)
       window.open(url, '_blank', 'noopener')
     } catch {
-      setError("Couldn't load — try again")
+      setError(t('modals.evidenceAttachmentLink.loadError'))
     } finally {
       setLoadingUrl(false)
     }
@@ -36,7 +38,7 @@ export default function EvidenceAttachmentLink({ path, index }) {
         disabled={loadingUrl}
         className="text-xs text-moss font-medium"
       >
-        {loadingUrl ? 'Loading…' : `Attachment ${index + 1}`}
+        {loadingUrl ? t('common.loading') : t('modals.evidenceAttachmentLink.attachmentLabel', { number: index + 1 })}
       </button>
       {error && <span className="text-xs text-red-700">{error}</span>}
     </span>

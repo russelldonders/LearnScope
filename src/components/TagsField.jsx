@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { suggestTags } from '../lib/skillTags'
+import { useLanguage } from '../context/LanguageContext'
 
 // tags: [{ id, name }] — id may be null for a tag not yet persisted (e.g.
 // while adding a brand-new skill). onAddTag/onRemoveTag are async
@@ -7,6 +8,7 @@ import { suggestTags } from '../lib/skillTags'
 // (editing an existing skill) or just update local state (adding a new
 // one, applied once the skill itself is saved).
 export default function TagsField({ tags, onAddTag, onRemoveTag, skillName, allTags, datalistId, readOnly = false }) {
+  const { t } = useLanguage()
   const [input, setInput] = useState('')
   const [suggestions, setSuggestions] = useState([])
   const [suggesting, setSuggesting] = useState(false)
@@ -16,7 +18,7 @@ export default function TagsField({ tags, onAddTag, onRemoveTag, skillName, allT
     e?.preventDefault()
     const name = input.trim()
     if (!name) return
-    if (tags.some((t) => t.name.toLowerCase() === name.toLowerCase())) {
+    if (tags.some((tag) => tag.name.toLowerCase() === name.toLowerCase())) {
       setInput('')
       return
     }
@@ -32,7 +34,7 @@ export default function TagsField({ tags, onAddTag, onRemoveTag, skillName, allT
 
   async function handleSuggest() {
     if (!skillName?.trim()) {
-      setError('Enter a skill name first.')
+      setError(t('modals.tagsField.enterSkillNameFirst'))
       return
     }
     setError(null)
@@ -40,9 +42,9 @@ export default function TagsField({ tags, onAddTag, onRemoveTag, skillName, allT
     try {
       const result = await suggestTags(
         skillName,
-        allTags.map((t) => t.name)
+        allTags.map((tag) => tag.name)
       )
-      setSuggestions(result.filter((s) => !tags.some((t) => t.name.toLowerCase() === s.toLowerCase())))
+      setSuggestions(result.filter((s) => !tags.some((tag) => tag.name.toLowerCase() === s.toLowerCase())))
     } catch (err) {
       setError(err.message)
     } finally {
@@ -63,20 +65,20 @@ export default function TagsField({ tags, onAddTag, onRemoveTag, skillName, allT
   if (readOnly) {
     return (
       <div>
-        <span className="block text-sm text-secondary mb-1">Tags</span>
+        <span className="block text-sm text-secondary mb-1">{t('modals.tagsField.tagsReadOnlyLabel')}</span>
         {tags.length > 0 ? (
           <div className="flex flex-wrap gap-1.5">
-            {tags.map((t, i) => (
+            {tags.map((tag, i) => (
               <span
-                key={t.id ?? t.name ?? i}
+                key={tag.id ?? tag.name ?? i}
                 className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
               >
-                {t.name}
+                {tag.name}
               </span>
             ))}
           </div>
         ) : (
-          <p className="text-sm text-secondary">No tags.</p>
+          <p className="text-sm text-secondary">{t('modals.tagsField.noTags')}</p>
         )}
       </div>
     )
@@ -84,21 +86,21 @@ export default function TagsField({ tags, onAddTag, onRemoveTag, skillName, allT
 
   return (
     <div>
-      <span className="block text-sm text-secondary mb-1">Tags (optional)</span>
+      <span className="block text-sm text-secondary mb-1">{t('modals.tagsField.tagsLabel')}</span>
 
       {tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-2">
-          {tags.map((t, i) => (
+          {tags.map((tag, i) => (
             <span
-              key={t.id ?? t.name}
+              key={tag.id ?? tag.name}
               className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
             >
-              {t.name}
+              {tag.name}
               <button
                 type="button"
-                onClick={() => onRemoveTag(t.id ?? i)}
+                onClick={() => onRemoveTag(tag.id ?? i)}
                 className="text-red-700"
-                aria-label={`Remove ${t.name}`}
+                aria-label={t('modals.tagsField.removeTagAriaLabel', { name: tag.name })}
               >
                 ×
               </button>
@@ -115,12 +117,12 @@ export default function TagsField({ tags, onAddTag, onRemoveTag, skillName, allT
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleAdd(e)
           }}
-          placeholder="Type a tag and press Enter…"
+          placeholder={t('modals.tagsField.inputPlaceholder')}
           className="flex-1 rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
         />
         <datalist id={datalistId}>
-          {allTags.map((t) => (
-            <option key={t.id} value={t.name} />
+          {allTags.map((tag) => (
+            <option key={tag.id} value={tag.name} />
           ))}
         </datalist>
         <button
@@ -128,7 +130,7 @@ export default function TagsField({ tags, onAddTag, onRemoveTag, skillName, allT
           onClick={handleAdd}
           className="shrink-0 rounded-md border border-hairline text-ink py-2 px-3 text-sm font-medium hover:bg-paper"
         >
-          Add
+          {t('modals.tagsField.add')}
         </button>
       </div>
 
@@ -138,7 +140,7 @@ export default function TagsField({ tags, onAddTag, onRemoveTag, skillName, allT
         disabled={suggesting}
         className="text-xs text-moss font-medium mt-2 disabled:opacity-60"
       >
-        {suggesting ? 'Suggesting…' : '✨ Suggest tags'}
+        {suggesting ? t('modals.tagsField.suggesting') : t('modals.tagsField.suggestTags')}
       </button>
 
       {suggestions.length > 0 && (

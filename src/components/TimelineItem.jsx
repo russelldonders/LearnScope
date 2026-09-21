@@ -3,6 +3,7 @@ import { experienceTypeLabel } from '../lib/experienceTypes'
 import OrganizationLogo from './OrganizationLogo'
 import ChildExperienceEntry from './ChildExperienceEntry'
 import RoleProfileAlignmentDetail from './RoleProfileAlignmentDetail'
+import { useLanguage } from '../context/LanguageContext'
 
 // roleAssignments is only set for an experience entry linked to at least
 // one accepted role profile (decide_employer_role_assignment,
@@ -14,6 +15,7 @@ import RoleProfileAlignmentDetail from './RoleProfileAlignmentDetail'
 // information, just attached to the timeline entry it actually belongs to
 // instead of split off on its own.
 export default function TimelineItem({ item, summary, childExperiences, onEdit, isLast, roleAssignments }) {
+  const { t } = useLanguage()
   return (
     <div className="flex gap-4 print:break-inside-avoid">
       <div className="flex flex-col items-center">
@@ -49,7 +51,7 @@ export default function TimelineItem({ item, summary, childExperiences, onEdit, 
           </div>
         )}
         <p className="font-mono text-xs text-secondary mt-2">
-          {formatMonthYear(item.start_date)} – {item.end_date ? formatMonthYear(item.end_date) : 'Present'}
+          {formatMonthYear(item.start_date)} – {item.end_date ? formatMonthYear(item.end_date) : t('modals.timelineItem.present')}
         </p>
         {item.description && (
           <p className="text-sm text-ink mt-2 whitespace-pre-line">{item.description}</p>
@@ -65,13 +67,13 @@ export default function TimelineItem({ item, summary, childExperiences, onEdit, 
           <div className="mt-3 pt-3 border-t border-hairline space-y-1">
             {summary.courseNames.length > 0 && (
               <p className="text-xs text-secondary">
-                <span className="font-mono uppercase tracking-wide">Courses:</span>{' '}
+                <span className="font-mono uppercase tracking-wide">{t('modals.timelineItem.coursesLabel')}</span>{' '}
                 {summary.courseNames.join(', ')}
               </p>
             )}
             {summary.skillNames.length > 0 && (
               <p className="text-xs text-secondary">
-                <span className="font-mono uppercase tracking-wide">Linked skills:</span>{' '}
+                <span className="font-mono uppercase tracking-wide">{t('modals.timelineItem.linkedSkillsLabel')}</span>{' '}
                 {summary.skillNames.join(', ')}
               </p>
             )}

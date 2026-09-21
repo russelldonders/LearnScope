@@ -1,11 +1,13 @@
 import TrackingReasonIcon from './TrackingReasonIcon'
 import { TRACKING_REASONS } from '../lib/trackingReasons'
+import { useLanguage } from '../context/LanguageContext'
 
 export default function TrackingReasonPicker({ value, onChange, required = false }) {
+  const { t } = useLanguage()
   return (
     <div>
       <span className="block text-sm text-secondary mb-2">
-        Why are you tracking this?{!required && ' (optional)'}
+        {t('modals.trackingReasonPicker.whyTracking')}{!required && ` ${t('modals.trackingReasonPicker.optionalSuffix')}`}
       </span>
       <div className="grid grid-cols-2 gap-2">
         {TRACKING_REASONS.map((r) => (

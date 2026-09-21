@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import ConfirmDialog from './ConfirmDialog'
 import { LEVEL_LABELS } from '../lib/levels'
+import { useLanguage } from '../context/LanguageContext'
 
 // Badge + expandable alignment detail for a timeline entry that a role
 // profile assignment auto-created (decide_employer_role_assignment,
@@ -11,6 +12,7 @@ import { LEVEL_LABELS } from '../lib/levels'
 // so without that, expanding this or disconnecting would also open the
 // edit-experience modal underneath it.
 export default function RoleProfileAlignmentDetail({ employerName, roleProfileName, aligned, gaps, training, disconnecting = false, onDisconnect }) {
+  const { t } = useLanguage()
   const [expanded, setExpanded] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
 
@@ -28,47 +30,56 @@ export default function RoleProfileAlignmentDetail({ employerName, roleProfileNa
     <div className="mt-3 pt-3 border-t border-hairline" onClick={stop} onKeyDown={stop}>
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wide text-moss border border-moss/40 rounded-full px-2 py-0.5">
-          Linked to {employerName}'s {roleProfileName} role profile
+          {t('modals.roleProfileAlignmentDetail.linkedToRoleProfile', { employer: employerName, roleProfile: roleProfileName })}
         </span>
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
           className="text-xs font-medium text-secondary hover:text-ink"
         >
-          {expanded ? 'Hide alignment' : `${aligned.length}/${aligned.length + gaps.length} skills met`}
-          {training.length > 0 && !expanded && ` · ${training.filter((t) => t.completed).length}/${training.length} training complete`}
+          {expanded
+            ? t('modals.roleProfileAlignmentDetail.hideAlignment')
+            : t('modals.roleProfileAlignmentDetail.skillsMet', { aligned: aligned.length, total: aligned.length + gaps.length })}
+          {training.length > 0 && !expanded &&
+            ` · ${t('modals.roleProfileAlignmentDetail.trainingComplete', { completed: training.filter((item) => item.completed).length, total: training.length })}`}
         </button>
       </div>
 
       {expanded && (
         <div className="mt-3 space-y-3">
           <div>
-            <p className="text-xs font-medium text-ink mb-1">Aligned ({aligned.length})</p>
+            <p className="text-xs font-medium text-ink mb-1">{t('modals.roleProfileAlignmentDetail.alignedHeading', { count: aligned.length })}</p>
             {aligned.length === 0 ? (
-              <p className="text-xs text-secondary">No requirements met yet.</p>
+              <p className="text-xs text-secondary">{t('modals.roleProfileAlignmentDetail.noRequirementsMet')}</p>
             ) : (
               <ul className="text-xs text-ink space-y-0.5">
                 {aligned.map((skill) => (
                   <li key={skill.skillId}>
-                    {skill.name} -- at {LEVEL_LABELS[skill.learnerLevel] ?? skill.learnerLevel}, requires{' '}
-                    {LEVEL_LABELS[skill.targetLevel] ?? skill.targetLevel}
+                    {t('modals.roleProfileAlignmentDetail.atLevelRequires', {
+                      name: skill.name,
+                      learnerLevel: LEVEL_LABELS[skill.learnerLevel] ?? skill.learnerLevel,
+                      targetLevel: LEVEL_LABELS[skill.targetLevel] ?? skill.targetLevel,
+                    })}
                   </li>
                 ))}
               </ul>
             )}
           </div>
           <div>
-            <p className="text-xs font-medium text-ink mb-1">Gaps ({gaps.length})</p>
+            <p className="text-xs font-medium text-ink mb-1">{t('modals.roleProfileAlignmentDetail.gapsHeading', { count: gaps.length })}</p>
             {gaps.length === 0 ? (
-              <p className="text-xs text-secondary">No gaps -- every required skill is met.</p>
+              <p className="text-xs text-secondary">{t('modals.roleProfileAlignmentDetail.noGaps')}</p>
             ) : (
               <ul className="text-xs text-ink space-y-0.5">
                 {gaps.map((skill) => (
                   <li key={skill.skillId}>
-                    {skill.name} -- requires {LEVEL_LABELS[skill.targetLevel] ?? skill.targetLevel}
+                    {t('modals.roleProfileAlignmentDetail.requiresLevel', {
+                      name: skill.name,
+                      targetLevel: LEVEL_LABELS[skill.targetLevel] ?? skill.targetLevel,
+                    })}
                     {skill.learnerLevel !== null
-                      ? `, you're at ${LEVEL_LABELS[skill.learnerLevel] ?? skill.learnerLevel}`
-                      : ", you haven't tracked this skill yet"}
+                      ? t('modals.roleProfileAlignmentDetail.youreAtLevel', { learnerLevel: LEVEL_LABELS[skill.learnerLevel] ?? skill.learnerLevel })
+                      : t('modals.roleProfileAlignmentDetail.notTrackedYet')}
                   </li>
                 ))}
               </ul>
@@ -76,11 +87,14 @@ export default function RoleProfileAlignmentDetail({ employerName, roleProfileNa
           </div>
           {training.length > 0 && (
             <div>
-              <p className="text-xs font-medium text-ink mb-1">Employer training</p>
+              <p className="text-xs font-medium text-ink mb-1">{t('modals.roleProfileAlignmentDetail.employerTrainingHeading')}</p>
               <ul className="text-xs text-ink space-y-0.5">
                 {training.map((item) => (
                   <li key={item.courseId}>
-                    {item.title} <span className="text-secondary">({item.completed ? 'Completed' : 'Not completed'})</span>
+                    {item.title}{' '}
+                    <span className="text-secondary">
+                      ({item.completed ? t('modals.roleProfileAlignmentDetail.completed') : t('modals.roleProfileAlignmentDetail.notCompleted')})
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -91,15 +105,15 @@ export default function RoleProfileAlignmentDetail({ employerName, roleProfileNa
             onClick={() => setConfirmOpen(true)}
             className="text-xs font-medium text-red-700 hover:underline"
           >
-            Disconnect role profile
+            {t('modals.roleProfileAlignmentDetail.disconnectRoleProfile')}
           </button>
         </div>
       )}
 
       {confirmOpen && (
         <ConfirmDialog
-          message={`Disconnect from ${roleProfileName}? You'll stop seeing this alignment view. This experience entry stays exactly as it is -- nothing is deleted.`}
-          confirmLabel="Disconnect"
+          message={t('modals.roleProfileAlignmentDetail.disconnectConfirm', { roleProfile: roleProfileName })}
+          confirmLabel={t('modals.roleProfileAlignmentDetail.disconnectLabel')}
           confirming={disconnecting}
           onConfirm={() => onDisconnect?.()}
           onCancel={() => setConfirmOpen(false)}

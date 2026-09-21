@@ -51,15 +51,17 @@ describe('RoleProfileAlignmentDetail', () => {
   it('never lets a click reach an ancestor click handler (TimelineItem\'s own card is one big button)', () => {
     const onCardClick = vi.fn()
     render(
-      <div onClick={onCardClick}>
-        <RoleProfileAlignmentDetail
-          employerName="Acme Corp"
-          roleProfileName="Senior Support Engineer"
-          aligned={aligned}
-          gaps={gaps}
-          training={training}
-        />
-      </div>
+      <LanguageProvider>
+        <div onClick={onCardClick}>
+          <RoleProfileAlignmentDetail
+            employerName="Acme Corp"
+            roleProfileName="Senior Support Engineer"
+            aligned={aligned}
+            gaps={gaps}
+            training={training}
+          />
+        </div>
+      </LanguageProvider>
     )
     fireEvent.click(screen.getByText('1/2 skills met · 1/2 training complete'))
     expect(onCardClick).not.toHaveBeenCalled()

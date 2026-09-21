@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
+import { useLanguage } from '../context/LanguageContext'
 import { formatMonthYear, formatFullDate } from '../lib/dates'
 import { LEVEL_LABELS } from '../lib/levels'
+import { translations } from '../lib/i18n/translations'
 import { EXPERIENCE_TYPE_CONFIG, experienceTypeLabel, formatStudyDuration, nestedExperienceTypesFor } from '../lib/experienceTypes'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
@@ -25,30 +27,40 @@ import { addRecommendedSkills, recommendExperienceSkills } from '../lib/experien
 import { useMyRoleAssignments } from './roles/useMyRoleAssignments'
 import RoleProfileAlignmentDetail from '../components/RoleProfileAlignmentDetail'
 
+// A plain (non-component) translator used as this function's default `t` --
+// falls back to English so every existing caller/test that doesn't pass one
+// (this is exported and used outside the React tree) keeps working exactly
+// as before. The real page passes its live useLanguage() `t` through instead.
+function defaultT(key, params) {
+  const value = key.split('.').reduce((v, part) => v?.[part], translations.en)
+  if (typeof value !== 'string' || !params) return value ?? key
+  return value.replace(/\{(\w+)\}/g, (match, name) => (name in params ? params[name] : match))
+}
+
 // Keeps a nested experience's dates from silently
 // drifting outside the parent role's dates -- an open-ended parent
 // (end_date null) places no upper bound on its children.
-export function validateWithinParent(values, parent) {
+export function validateWithinParent(values, parent, t = defaultT) {
   if (!parent) return null
   if (values.start_date && values.start_date < parent.start_date) {
-    return `Start date can't be before ${formatMonthYear(parent.start_date)}, when "${parent.title}" started.`
+    return t('experience.startDateBeforeParentStart', { date: formatMonthYear(parent.start_date), title: parent.title })
   }
   if (parent.end_date) {
     if (values.start_date && values.start_date > parent.end_date) {
-      return `Start date can't be after ${formatMonthYear(parent.end_date)}, when "${parent.title}" ended.`
+      return t('experience.startDateAfterParentEnd', { date: formatMonthYear(parent.end_date), title: parent.title })
     }
     if (values.end_date && values.end_date > parent.end_date) {
-      return `End date can't be after ${formatMonthYear(parent.end_date)}, when "${parent.title}" ended.`
+      return t('experience.endDateAfterParentEnd', { date: formatMonthYear(parent.end_date), title: parent.title })
     }
     if (values.type !== 'subject' && !values.end_date) {
-      return `End date can't be after ${formatMonthYear(parent.end_date)}, when "${parent.title}" ended.`
+      return t('experience.endDateAfterParentEnd', { date: formatMonthYear(parent.end_date), title: parent.title })
     }
   }
   if (values.end_date && values.end_date < parent.start_date) {
-    return `End date can't be before ${formatMonthYear(parent.start_date)}, when "${parent.title}" started.`
+    return t('experience.endDateBeforeParentStart', { date: formatMonthYear(parent.start_date), title: parent.title })
   }
   if (values.start_date && values.end_date && values.end_date < values.start_date) {
-    return 'End date can\'t be before the start date.'
+    return t('experience.endDateBeforeStartDate')
   }
   return null
 }
@@ -103,6 +115,7 @@ export default function ExperienceDetail() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user } = useAuth()
+  const { t } = useLanguage()
   const [item, setItem] = useState(null)
   const [loadingItem, setLoadingItem] = useState(true)
   const [notFound, setNotFound] = useState(false)
@@ -277,7 +290,7 @@ export default function ExperienceDetail() {
     const childValues = values.type === 'subject'
       ? { ...values, organization: item.organization, organization_url: item.organization_url }
       : values
-    const validationError = validateWithinParent(childValues, item)
+    const validationError = validateWithinParent(childValues, item, t)
     if (validationError) throw new Error(validationError)
     const { error } = await supabase.from('experience').insert({
       ...childValues,
@@ -294,7 +307,7 @@ export default function ExperienceDetail() {
       ? { ...values, organization: parentExperience.organization, organization_url: parentExperience.organization_url }
       : values
     if (item.parent_experience_id && parentExperience) {
-      const validationError = validateWithinParent(savedValues, parentExperience)
+      const validationError = validateWithinParent(savedValues, parentExperience, t)
       if (validationError) throw new Error(validationError)
     }
     const { error } = await supabase.from('experience').update(savedValues).eq('id', item.id)
@@ -357,7 +370,7 @@ export default function ExperienceDetail() {
       )
       setRecommendations(result)
       setSelectedRecommendations(new Set(result.map((recommendation) => recommendation.name)))
-      if (result.length === 0) setRecommendationNotice('No additional skills were identified from these details.')
+      if (result.length === 0) setRecommendationNotice(t('experience.noAdditionalSkillsIdentified'))
     } catch (err) {
       setRecommendationError(err.message)
     } finally {
@@ -388,11 +401,13 @@ export default function ExperienceDetail() {
       setRecommendations([])
       setSelectedRecommendations(new Set())
       setRecommendationNotice(
-        `${added.length} skill${added.length === 1 ? '' : 's'} added to this experience and your profile.`
+        added.length === 1
+          ? t('experience.skillsAddedSingular', { count: added.length })
+          : t('experience.skillsAddedPlural', { count: added.length })
       )
       await loadLearning()
     } catch (err) {
-      setRecommendationError(`${err.message} Any skills added before the error are still saved.`)
+      setRecommendationError(`${err.message} ${t('experience.skillsAddedBeforeErrorSaved')}`)
       await loadLearning()
     } finally {
       setAddingRecommendations(false)
@@ -400,18 +415,18 @@ export default function ExperienceDetail() {
   }
 
   const backTo = location.state?.backTo ?? (parentExperience ? `/experience/${parentExperience.id}` : '/experience')
-  const backLabel = location.state?.backLabel ?? (parentExperience ? parentExperience.title : 'experience')
+  const backLabel = location.state?.backLabel ?? (parentExperience ? parentExperience.title : t('experience.defaultBackLabel'))
 
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
         <Link to={backTo} className="text-sm text-secondary hover:text-ink mb-6 inline-block">
-          ← Back to {backLabel}
+          {t('experience.backTo', { label: backLabel })}
         </Link>
 
-        {loadingItem && <p className="text-secondary">Loading…</p>}
-        {notFound && <p className="text-secondary">Experience not found.</p>}
+        {loadingItem && <p className="text-secondary">{t('common.loading')}</p>}
+        {notFound && <p className="text-secondary">{t('experience.notFound')}</p>}
 
         {item && (
           <div className="bg-card border border-hairline rounded-lg p-6">
@@ -431,7 +446,7 @@ export default function ExperienceDetail() {
                 )}
                 {parentExperience && (
                   <p className="text-xs text-secondary mt-1">
-                    Part of{' '}
+                    {t('skillDetail.partOfPrefix')}{' '}
                     <Link to={`/experience/${parentExperience.id}`} className="text-moss hover:underline">
                       {parentExperience.title}
                     </Link>
@@ -441,8 +456,8 @@ export default function ExperienceDetail() {
               <button
                 type="button"
                 onClick={() => setSettingsOpen(true)}
-                aria-label="Experience settings"
-                title="Experience settings"
+                aria-label={t('experience.settings')}
+                title={t('experience.settings')}
                 className="p-2 -m-2 rounded-md text-moss hover:opacity-75 transition-opacity shrink-0"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -509,18 +524,18 @@ export default function ExperienceDetail() {
             ))}
 
             <div className="flex items-center gap-1 border-b border-hairline mt-4 mb-4">
-              {getExperienceTabs(item, linkedCourses).map((t) => (
+              {getExperienceTabs(item, linkedCourses).map((tabOption) => (
                 <button
-                  key={t.id}
+                  key={tabOption.id}
                   type="button"
-                  onClick={() => setTab(t.id)}
+                  onClick={() => setTab(tabOption.id)}
                   className={`shrink-0 px-3 py-2 text-sm font-medium border-b-2 -mb-px ${
-                    tab === t.id
+                    tab === tabOption.id
                       ? 'border-moss text-ink'
                       : 'border-transparent text-secondary hover:text-ink'
                   }`}
                 >
-                  {t.label}
+                  {t(`experience.tabs.${tabOption.id}`)}
                 </button>
               ))}
             </div>
@@ -576,13 +591,13 @@ export default function ExperienceDetail() {
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="font-display text-2xl text-ink">Experience settings</h2>
+                    <h2 className="font-display text-2xl text-ink">{t('experience.settings')}</h2>
                     <button
                       type="button"
                       onClick={() => setSettingsOpen(false)}
                       className="text-secondary hover:text-ink text-sm"
                     >
-                      Close
+                      {t('skillDetail.close')}
                     </button>
                   </div>
                   <DetailsTab item={item} parentExperience={parentExperience} onSave={handleSaveDetails} onDelete={handleDelete} />
@@ -597,6 +612,7 @@ export default function ExperienceDetail() {
 }
 
 function DetailsTab({ item, parentExperience, onSave, onDelete }) {
+  const { t } = useLanguage()
   const type = item.type
   // A child experience can't stay "ongoing" once its parent has ended --
   // force it closed here too, so the end date field is usable instead of
@@ -622,15 +638,18 @@ function DetailsTab({ item, parentExperience, onSave, onDelete }) {
     e.preventDefault()
     const datesRequired = config.datesRequired !== false
     if (!title.trim() || (config.orgRequired && !organization.trim()) || (datesRequired && !startDate)) {
-      setError(`Title${config.orgRequired ? ', organization,' : ''}${datesRequired ? ' and start date are' : ' is'} required.`)
+      const key = config.orgRequired
+        ? (datesRequired ? 'modals.experienceModal.requiredTitleOrgDates' : 'modals.experienceModal.requiredTitleOrg')
+        : (datesRequired ? 'modals.experienceModal.requiredTitleDates' : 'modals.experienceModal.requiredTitleOnly')
+      setError(t(key))
       return
     }
     if (!datesRequired && !startDate && !studyDurationValue && !item.study_duration) {
-      setError('Enter a start date or a duration of study.')
+      setError(t('modals.experienceModal.noStartDateOrDuration'))
       return
     }
     if (endDate && !startDate) {
-      setError('Enter a start date before adding an end date.')
+      setError(t('modals.experienceModal.endDateNeedsStartDate'))
       return
     }
     setError(null)
@@ -686,13 +705,13 @@ function DetailsTab({ item, parentExperience, onSave, onDelete }) {
       {type === 'other' && (
         <div>
           <label className="block text-sm text-secondary mb-1" htmlFor="otherType">
-            Type of experience
+            {t('modals.experienceModal.otherTypeLabel')}
           </label>
           <input
             id="otherType"
             value={otherType}
             onChange={(e) => setOtherType(e.target.value)}
-            placeholder="e.g. Hackathon, competition, personal pursuit…"
+            placeholder={t('modals.experienceModal.otherTypePlaceholder')}
             className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
           />
         </div>
@@ -715,24 +734,24 @@ function DetailsTab({ item, parentExperience, onSave, onDelete }) {
 
       {config.allowsStudyDuration && (
         <div>
-          <label className="block text-sm text-secondary mb-1" htmlFor="studyDurationValue">Duration of study</label>
+          <label className="block text-sm text-secondary mb-1" htmlFor="studyDurationValue">{t('modals.experienceModal.durationOfStudyLabel')}</label>
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,0.7fr)] gap-2">
-            <input id="studyDurationValue" type="number" min="1" step="1" inputMode="numeric" value={studyDurationValue} onChange={(e) => setStudyDurationValue(e.target.value)} placeholder="e.g. 6" className="min-w-0 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
-            <select aria-label="Duration unit" value={studyDurationUnit} onChange={(e) => setStudyDurationUnit(e.target.value)} className="min-w-0 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss">
-              <option value="days">Days</option>
-              <option value="months">Months</option>
-              <option value="years">Years</option>
+            <input id="studyDurationValue" type="number" min="1" step="1" inputMode="numeric" value={studyDurationValue} onChange={(e) => setStudyDurationValue(e.target.value)} placeholder={t('modals.experienceModal.durationPlaceholder')} className="min-w-0 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
+            <select aria-label={t('modals.experienceModal.durationUnitAriaLabel')} value={studyDurationUnit} onChange={(e) => setStudyDurationUnit(e.target.value)} className="min-w-0 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss">
+              <option value="days">{t('modals.experienceModal.days')}</option>
+              <option value="months">{t('modals.experienceModal.months')}</option>
+              <option value="years">{t('modals.experienceModal.years')}</option>
             </select>
           </div>
-          {item.study_duration && !studyDurationValue && <p className="text-xs text-secondary mt-1">Previously entered: {item.study_duration}</p>}
-          <p className="text-xs text-secondary mt-1">Use this instead of dates, or alongside them.</p>
+          {item.study_duration && !studyDurationValue && <p className="text-xs text-secondary mt-1">{t('experience.previouslyEntered', { duration: item.study_duration })}</p>}
+          <p className="text-xs text-secondary mt-1">{t('modals.experienceModal.durationOfStudyHint')}</p>
         </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm text-secondary mb-1" htmlFor="startDate">
-            Start date{config.datesRequired === false ? ' (optional)' : ''}
+            {config.datesRequired === false ? t('modals.experienceModal.startDateOptionalLabel') : t('modals.experienceModal.startDateLabel')}
           </label>
           <input
             id="startDate"
@@ -747,7 +766,7 @@ function DetailsTab({ item, parentExperience, onSave, onDelete }) {
         </div>
         <div>
           <label className="block text-sm text-secondary mb-1" htmlFor="endDate">
-            End date{config.datesRequired === false ? ' (optional)' : ''}
+            {config.datesRequired === false ? t('modals.experienceModal.endDateOptionalLabel') : t('modals.experienceModal.endDateLabel')}
           </label>
           <input
             id="endDate"
@@ -770,20 +789,20 @@ function DetailsTab({ item, parentExperience, onSave, onDelete }) {
             onChange={(e) => setCurrent(e.target.checked)}
             className="rounded border-hairline"
           />
-          This is ongoing / current
+          {t('modals.experienceModal.ongoingCurrent')}
         </label>
       )}
 
       <div>
         <label className="block text-sm text-secondary mb-1" htmlFor="description">
-          Description
+          {t('modals.experienceModal.descriptionLabel')}
         </label>
         <textarea
           id="description"
           rows={3}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="What did you learn? What knowledge or skills did you develop?"
+          placeholder={t('modals.experienceModal.descriptionPlaceholder')}
           className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
         />
       </div>
@@ -796,7 +815,7 @@ function DetailsTab({ item, parentExperience, onSave, onDelete }) {
           disabled={saving}
           className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
         >
-          {saving ? 'Saving…' : 'Save details'}
+          {saving ? t('skillDetail.saving') : t('skillDetail.saveDetails')}
         </button>
         <button
           type="button"
@@ -804,13 +823,13 @@ function DetailsTab({ item, parentExperience, onSave, onDelete }) {
           disabled={saving}
           className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm hover:bg-paper disabled:opacity-60"
         >
-          Delete experience
+          {t('experience.deleteExperience')}
         </button>
       </div>
 
       {confirmingDelete && (
         <ConfirmDialog
-          message={`Delete "${item.title}"? This can't be undone.`}
+          message={t('experience.deleteConfirm', { title: item.title })}
           onConfirm={handleDelete}
           onCancel={() => setConfirmingDelete(false)}
           confirming={saving}
@@ -822,7 +841,8 @@ function DetailsTab({ item, parentExperience, onSave, onDelete }) {
 
 function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievements, childExperiences, activities, allActivities, loaded, highlightActivityId }) {
   const navigate = useNavigate()
-  if (!loaded) return <p className="text-sm text-secondary">Loading…</p>
+  const { t } = useLanguage()
+  if (!loaded) return <p className="text-sm text-secondary">{t('common.loading')}</p>
 
   function goToCourse(courseId) {
     navigate(`/courses/${courseId}/learn`, { state: { backTo: `/experience/${item.id}`, backLabel: item.title } })
@@ -836,11 +856,11 @@ function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievemen
     <div className="space-y-6">
       {item.description && <p className="text-sm text-ink whitespace-pre-line">{item.description}</p>}
       {formatStudyDuration(item) && (
-        <p className="text-sm text-secondary"><span className="font-medium text-ink">Duration of study:</span> {formatStudyDuration(item)}</p>
+        <p className="text-sm text-secondary"><span className="font-medium text-ink">{t('experience.durationOfStudyPrefix')}</span> {formatStudyDuration(item)}</p>
       )}
 
       <div>
-        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Timeline</h4>
+        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">{t('experience.timelineHeading')}</h4>
         {pendingCourseLinks.map((link, i) => (
           <PendingCourseEntry
             key={link.id}
@@ -862,9 +882,9 @@ function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievemen
       </div>
 
       <div>
-        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">Skills developed</h4>
+        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">{t('experience.skillsDevelopedHeading')}</h4>
         {skillLinks.length === 0 ? (
-          <p className="text-sm text-secondary">No skills linked yet.</p>
+          <p className="text-sm text-secondary">{t('experience.noSkillsLinkedYet')}</p>
         ) : (
           <SkillDevelopmentList item={item} skillLinks={skillLinks} assessments={skillHistory} activities={allActivities} />
         )}
@@ -895,7 +915,11 @@ export function buildExperienceSkillProgress(skillLink, assessments, item, today
   return {
     entryLevel: entryAssessment?.level ?? null,
     endLevel: item.end_date ? (exitAssessment?.level ?? null) : (skillLink.skills?.level ?? null),
-    endLabel: item.end_date ? 'When role ended' : 'Current level',
+    // A translation key, not display text -- this is a plain (non-component)
+    // function with no useLanguage() access, so the actual t() lookup
+    // happens where this is rendered (SkillLevelPoint), same reasoning as
+    // validateWithinParent's defaultT fallback above.
+    endLabel: item.end_date ? 'experience.whenRoleEnded' : 'skillDetail.currentLevel',
     duringRole,
   }
 }
@@ -914,6 +938,7 @@ function activityIncludesSkill(activity, skillId) {
 }
 
 function SkillDevelopmentList({ item, skillLinks, assessments, activities = [] }) {
+  const { t } = useLanguage()
   const [expandedSkillId, setExpandedSkillId] = useState(null)
   // "Skills developed" is scoped to skills with real logged activity against
   // this experience -- a skill that's merely been added/linked here, with
@@ -952,14 +977,14 @@ function SkillDevelopmentList({ item, skillLinks, assessments, activities = [] }
                       </Link>
                       {activityCount > 0 && (
                         <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
-                          {activityCount} {activityCount === 1 ? 'activity' : 'activities'} logged
+                          {activityCount} {activityCount === 1 ? t('skillDetail.activityLoggedSingular') : t('skillDetail.activityLoggedPlural')}
                         </span>
                       )}
                     </span>
                     <button
                       type="button"
                       aria-expanded={expanded}
-                      aria-label={expanded ? 'Hide skill progress' : 'Show skill progress'}
+                      aria-label={expanded ? t('experience.hideSkillProgress') : t('experience.showSkillProgress')}
                       onClick={() => setExpandedSkillId(expanded ? null : link.skill_id)}
                       className="shrink-0 p-1 -m-1 rounded-md hover:bg-paper transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moss"
                     >
@@ -980,11 +1005,11 @@ function SkillDevelopmentList({ item, skillLinks, assessments, activities = [] }
                     onClick={() => setExpandedSkillId(expanded ? null : link.skill_id)}
                     className="mt-2 grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 text-left rounded-md hover:bg-paper transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moss focus-visible:ring-inset"
                   >
-                    <SkillLevelPoint label="At role start" level={progress.entryLevel} />
+                    <SkillLevelPoint label={t('experience.atRoleStart')} level={progress.entryLevel} />
                     <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="h-4 w-4 text-secondary">
                       <path d="M3.5 10h13m-4-4 4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
-                    <SkillLevelPoint label={progress.endLabel} level={progress.endLevel} align="right" />
+                    <SkillLevelPoint label={t(progress.endLabel)} level={progress.endLevel} align="right" />
                   </button>
                 </div>
                 {expanded && <SkillProgressHistory progress={progress} />}
@@ -1011,7 +1036,7 @@ function SkillDevelopmentList({ item, skillLinks, assessments, activities = [] }
                   {link.skills?.name}
                 </Link>
                 <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">
-                  {activityCount} {activityCount === 1 ? 'activity' : 'activities'} logged
+                  {activityCount} {activityCount === 1 ? t('skillDetail.activityLoggedSingular') : t('skillDetail.activityLoggedPlural')}
                 </span>
               </li>
             )
@@ -1023,30 +1048,32 @@ function SkillDevelopmentList({ item, skillLinks, assessments, activities = [] }
 }
 
 function SkillLevelPoint({ label, level, align = 'left' }) {
+  const { t } = useLanguage()
   return (
     <span className={`flex min-w-0 items-center gap-2 ${align === 'right' ? 'flex-row-reverse text-right' : ''}`}>
       <GrowthRing level={level} size={36} />
       <span className="min-w-0">
         <span className="block font-mono text-[10px] uppercase tracking-wide text-secondary">{label}</span>
-        <span className="mt-0.5 block text-sm text-ink">Level {level} · {LEVEL_LABELS[level]}</span>
+        <span className="mt-0.5 block text-sm text-ink">{t('experience.levelAndLabel', { level, label: LEVEL_LABELS[level] })}</span>
       </span>
     </span>
   )
 }
 
 function SkillProgressHistory({ progress }) {
+  const { t } = useLanguage()
   return (
     <div className="border-t border-hairline bg-card px-3 py-3">
-      <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">History during this role</p>
+      <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">{t('experience.historyDuringRole')}</p>
       {progress.duringRole.length === 0 ? (
-        <p className="text-sm text-secondary">No assessments were recorded during this role.</p>
+        <p className="text-sm text-secondary">{t('experience.noAssessmentsDuringRole')}</p>
       ) : (
         <ol className="space-y-2">
           {progress.duringRole.map((entry) => (
             <li key={entry.id} className="grid grid-cols-[auto_1fr] gap-x-3 text-sm">
               <GrowthRing level={entry.level} size={28} />
               <div className="min-w-0">
-                <p className="text-ink">Level {entry.level} · {LEVEL_LABELS[entry.level]}</p>
+                <p className="text-ink">{t('experience.levelAndLabel', { level: entry.level, label: LEVEL_LABELS[entry.level] })}</p>
                 <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">
                   {formatFullDate(entry.assessed_at)}
                 </p>
@@ -1061,6 +1088,7 @@ function SkillProgressHistory({ progress }) {
 }
 
 function PendingCourseEntry({ link, hasMore, onClick }) {
+  const { t } = useLanguage()
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center w-12 shrink-0">
@@ -1082,7 +1110,7 @@ function PendingCourseEntry({ link, hasMore, onClick }) {
         className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper/60 p-3 cursor-pointer hover:border-moss/60 transition-colors"
       >
         <p className="text-sm text-secondary">
-          Enrolled in <span className="text-ink font-medium">{link.courses.name}</span> — in progress
+          {t('skillDetail.enrolledInPrefix')} <span className="text-ink font-medium">{link.courses.name}</span> — {t('skillDetail.inProgressSuffix')}
         </p>
       </div>
     </div>
@@ -1099,6 +1127,7 @@ function FlagIcon({ className }) {
 }
 
 function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse, highlighted }) {
+  const { t } = useLanguage()
   if (event.type === 'start' || event.type === 'end') {
     const config = EXPERIENCE_TYPE_CONFIG[item.type] ?? EXPERIENCE_TYPE_CONFIG.employment
     const isSubExperience = Boolean(item.parent_experience_id)
@@ -1112,7 +1141,9 @@ function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse, highligh
         </div>
         <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3">
           <p className="text-sm font-medium text-ink capitalize">
-            {event.type === 'start' ? `${config.periodNoun} started` : `${config.periodNoun} ended`}
+            {event.type === 'start'
+              ? t('experience.periodStarted', { period: config.periodNoun })
+              : t('experience.periodEnded', { period: config.periodNoun })}
           </p>
           <p className="font-mono text-xs text-secondary mt-0.5">
             {isSubExperience ? formatFullDate(event.date) : formatMonthYear(event.date)}
@@ -1131,7 +1162,7 @@ function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse, highligh
         </div>
         <div className="min-w-0 flex-1 mb-6 flex items-center gap-2">
           <span className="font-mono text-[10px] uppercase tracking-wide text-ink font-semibold">
-            Today · {new Date(event.date).toLocaleDateString()}
+            {t('skillDetail.today')} · {new Date(event.date).toLocaleDateString()}
           </span>
           <span className="flex-1 h-px bg-hairline" />
         </div>
@@ -1163,7 +1194,7 @@ function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse, highligh
           }}
           className="min-w-0 flex-1 mb-3 flex items-center gap-2 text-xs text-secondary cursor-pointer hover:text-ink transition-colors"
         >
-          <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">Training</span>
+          <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">{t('skillDetail.trainingLabel')}</span>
           <span className="truncate min-w-0">{course.name}</span>
           <span className="font-mono text-[10px] text-secondary/70 shrink-0">
             {new Date(course.completed_date).toLocaleDateString()}
@@ -1205,7 +1236,7 @@ function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse, highligh
                   rel="noopener noreferrer"
                   className="text-xs text-moss font-medium"
                 >
-                  Evidence link
+                  {t('skillDetail.evidenceLink')}
                 </a>
               )}
               {evidencePaths.map((path, i) => (
@@ -1237,6 +1268,7 @@ function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse, highligh
 }
 
 function CoursesSubsection({ item, linkedCourses, onChange }) {
+  const { t } = useLanguage()
   const [error, setError] = useState(null)
 
   async function unlinkCourse(linkId) {
@@ -1248,10 +1280,10 @@ function CoursesSubsection({ item, linkedCourses, onChange }) {
 
   return (
     <div>
-      <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Courses</h4>
+      <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">{t('experience.coursesHeading')}</h4>
 
       {linkedCourses.length === 0 ? (
-        <p className="text-sm text-secondary mb-3">No courses linked yet.</p>
+        <p className="text-sm text-secondary mb-3">{t('experience.noCoursesLinkedYet')}</p>
       ) : (
         <ul className="space-y-2 mb-3">
           {linkedCourses
@@ -1269,7 +1301,7 @@ function CoursesSubsection({ item, linkedCourses, onChange }) {
                   <p className="text-sm text-ink truncate hover:underline">{l.courses.name}</p>
                   {l.courses.completed_date && (
                     <p className="font-mono text-xs text-secondary">
-                      Completed {formatMonthYear(l.courses.completed_date)}
+                      {t('experience.completedPrefix')} {formatMonthYear(l.courses.completed_date)}
                     </p>
                   )}
                 </Link>
@@ -1278,7 +1310,7 @@ function CoursesSubsection({ item, linkedCourses, onChange }) {
                   onClick={() => unlinkCourse(l.id)}
                   className="shrink-0 text-xs text-red-700 font-medium"
                 >
-                  Unlink
+                  {t('experience.unlink')}
                 </button>
               </li>
             ))}
@@ -1307,6 +1339,7 @@ export function SkillsSubsection({
   recommendationNotice = null,
 }) {
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const [skills, setSkills] = useState([])
   const [tagsBySkill, setTagsBySkill] = useState(new Map())
   const [loading, setLoading] = useState(true)
@@ -1342,7 +1375,7 @@ export function SkillsSubsection({
 
   return (
     <div>
-      <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Skills linked</h4>
+      <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">{t('experience.skillsLinkedHeading')}</h4>
 
       {recommendationError && (
         <p role="alert" className="text-sm text-red-700 mb-3">
@@ -1360,12 +1393,12 @@ export function SkillsSubsection({
           <div className="flex items-start justify-between gap-4 mb-3">
             <div>
               <h5 id="skill-recommendations-heading" className="font-display text-lg text-ink">
-                Recommended for this experience
+                {t('experience.recommendedForExperience')}
               </h5>
-              <p className="text-sm text-secondary mt-1">Choose up to three skills to add.</p>
+              <p className="text-sm text-secondary mt-1">{t('experience.chooseUpToThree')}</p>
             </div>
             <span className="text-xs text-secondary tabular-nums shrink-0">
-              {selectedRecommendations.size} selected
+              {t('experience.selectedCount', { count: selectedRecommendations.size })}
             </span>
           </div>
           <div className="divide-y divide-hairline">
@@ -1380,7 +1413,7 @@ export function SkillsSubsection({
                 <span className="min-w-0 flex-1">
                   <span className="flex flex-wrap items-baseline gap-x-2">
                     <span className="text-sm font-semibold text-ink">{recommendation.name}</span>
-                    <span className="text-xs text-secondary">Priority {index + 1}</span>
+                    <span className="text-xs text-secondary">{t('experience.priorityLabel', { number: index + 1 })}</span>
                   </span>
                   <span className="block text-sm text-secondary mt-0.5">{recommendation.reason}</span>
                 </span>
@@ -1395,8 +1428,10 @@ export function SkillsSubsection({
               className="rounded-md bg-moss text-paper px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-60"
             >
               {addingRecommendations
-                ? 'Adding skills…'
-                : `Add ${selectedRecommendations.size || ''} selected skill${selectedRecommendations.size === 1 ? '' : 's'}`}
+                ? t('experience.addingSkills')
+                : selectedRecommendations.size === 1
+                  ? t('experience.addSelectedSkillSingular', { count: selectedRecommendations.size || '' })
+                  : t('experience.addSelectedSkillPlural', { count: selectedRecommendations.size || '' })}
             </button>
             <button
               type="button"
@@ -1404,16 +1439,16 @@ export function SkillsSubsection({
               disabled={addingRecommendations}
               className="rounded-md px-3 py-2 text-sm text-secondary hover:text-ink disabled:opacity-60"
             >
-              Dismiss
+              {t('experience.dismiss')}
             </button>
           </div>
         </section>
       )}
 
       {loading ? (
-        <p className="text-sm text-secondary">Loading…</p>
+        <p className="text-sm text-secondary">{t('common.loading')}</p>
       ) : skills.length === 0 ? (
-        <p className="text-sm text-secondary">No skills linked yet.</p>
+        <p className="text-sm text-secondary">{t('experience.noSkillsLinkedYet')}</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {skills.map((skill) => (
@@ -1464,6 +1499,7 @@ export function ExperienceActionButtons({
   addingRecommendations = false,
   hasRecommendations = false,
 }) {
+  const { t } = useLanguage()
   const nestedTypes = nestedExperienceTypesFor(itemType)
   const showAddButton = nestedTypes.length > 0 || canManageSkills
   return (
@@ -1472,8 +1508,8 @@ export function ExperienceActionButtons({
         <AddExperienceButton
           types={nestedTypes}
           onSelect={onAddExperience}
-          label="+ Add"
-          leadingOptions={canManageSkills ? [{ value: 'skill', label: 'Skill', onSelect: onAddSkill }] : []}
+          label={t('experience.addShort')}
+          leadingOptions={canManageSkills ? [{ value: 'skill', label: t('experience.skillOptionLabel'), onSelect: onAddSkill }] : []}
         />
       )}
       <button
@@ -1481,7 +1517,7 @@ export function ExperienceActionButtons({
         onClick={onLogActivity}
         className="inline-flex items-center gap-2 rounded-md border border-moss text-moss px-3 py-2 text-sm font-medium hover:bg-moss/10 disabled:opacity-60"
       >
-        Log skill activity
+        {t('skillDetail.logSkillActivity')}
       </button>
       {canManageSkills && (
         <button
@@ -1491,7 +1527,7 @@ export function ExperienceActionButtons({
           className="inline-flex items-center gap-2 rounded-md border border-moss text-moss px-3 py-2 text-sm font-medium hover:bg-moss/10 disabled:opacity-60"
         >
           <SparkIcon />
-          {recommending ? 'Finding skills…' : hasRecommendations ? 'Suggest again' : 'Suggest additional skills'}
+          {recommending ? t('experience.findingSkills') : hasRecommendations ? t('experience.suggestAgain') : t('experience.suggestAdditionalSkills')}
         </button>
       )}
     </div>

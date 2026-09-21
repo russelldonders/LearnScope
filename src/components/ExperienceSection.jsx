@@ -217,7 +217,7 @@ export default function ExperienceSection() {
           print so this is the only heading that reaches the page. */}
       <div className="hidden print:block mb-8">
         <h1 className="font-display text-3xl text-ink">
-          {fullName ? `${fullName} — Experience` : 'Experience'}
+          {fullName ? t('experience.printTitleWithName', { name: fullName }) : t('experience.printTitleDefault')}
         </h1>
       </div>
 
@@ -240,7 +240,7 @@ export default function ExperienceSection() {
         </div>
       </div>
 
-      {loading && <p className="text-secondary">Loading…</p>}
+      {loading && <p className="text-secondary">{t('common.loading')}</p>}
       {error && <p className="text-red-700 text-sm">{error}</p>}
       {assignmentsError && <p className="text-red-700 text-sm">{assignmentsError}</p>}
 
@@ -295,6 +295,7 @@ export default function ExperienceSection() {
 }
 
 function CurrentJobPrompt({ existingJob, onEndAndContinue, onKeepBoth, onCancel }) {
+  const { t } = useLanguage()
   const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -327,16 +328,16 @@ function CurrentJobPrompt({ existingJob, onEndAndContinue, onKeepBoth, onCancel 
       onClose={onCancel}
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6"
     >
-        <h2 id="current-job-dialog-title" className="font-display text-xl text-ink mb-2">You already have a current job</h2>
+        <h2 id="current-job-dialog-title" className="font-display text-xl text-ink mb-2">{t('experience.currentJobPromptTitle')}</h2>
         <p className="text-sm text-secondary mb-4">
-          {existingJob.title}
-          {existingJob.organization ? ` at ${existingJob.organization}` : ''} is marked as your current job. Would
-          you like to mark it as ended?
+          {existingJob.organization
+            ? t('experience.currentJobPromptBodyWithOrg', { title: existingJob.title, organization: existingJob.organization })
+            : t('experience.currentJobPromptBodyNoOrg', { title: existingJob.title })}
         </p>
 
         <div className="mb-4">
           <label className="block text-sm text-secondary mb-1" htmlFor="oldJobEndDate">
-            End date for {existingJob.title}
+            {t('experience.endDateForPrefix', { title: existingJob.title })}
           </label>
           <input
             id="oldJobEndDate"
@@ -356,7 +357,7 @@ function CurrentJobPrompt({ existingJob, onEndAndContinue, onKeepBoth, onCancel 
             onClick={handleEnd}
             className="rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
           >
-            Yes, mark it ended and continue
+            {t('experience.markEndedAndContinue')}
           </button>
           <button
             type="button"
@@ -364,7 +365,7 @@ function CurrentJobPrompt({ existingJob, onEndAndContinue, onKeepBoth, onCancel 
             onClick={handleKeepBoth}
             className="rounded-md border border-hairline text-ink py-2 hover:bg-paper disabled:opacity-60"
           >
-            Keep both as current
+            {t('experience.keepBothAsCurrent')}
           </button>
           <button
             type="button"
@@ -372,7 +373,7 @@ function CurrentJobPrompt({ existingJob, onEndAndContinue, onKeepBoth, onCancel 
             onClick={onCancel}
             className="text-sm text-secondary hover:text-ink py-1"
           >
-            Cancel
+            {t('modals.confirmDialog.cancel')}
           </button>
         </div>
     </AccessibleDialog>

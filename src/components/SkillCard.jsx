@@ -7,8 +7,10 @@ import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
 import { LEVEL_LABELS, KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
 import { TRUST_STATUS, TRUST_STATUS_COLORS, computeTrustStatus } from '../lib/skillProficiencyModel'
 import LifecycleStageIcon from './LifecycleStageIcon'
+import { useLanguage } from '../context/LanguageContext'
 
 export default function SkillCard({ skill, onEdit, compact = false }) {
+  const { t } = useLanguage()
   const due = isSelfAssessmentDue(skill.next_checkin_date)
   // Falls back to the latest self-assessment when skill.level itself hasn't
   // moved yet (see displayedLevel in SkillsSection.jsx) -- matches the same
@@ -56,28 +58,28 @@ export default function SkillCard({ skill, onEdit, compact = false }) {
           <h3 className="font-display text-lg text-ink truncate min-w-0">{skill.name}</h3>
           {skill.source === 'role_profile' && (
             <span
-              title="Required by a role profile you accepted"
+              title={t('skillDetail.roleProfileBadgeTitle')}
               className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-moss border border-moss/40 rounded-full px-2 py-0.5"
             >
-              Role profile
+              {t('skillDetail.roleProfileBadgeLabel')}
             </span>
           )}
           {due && (
             <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-gold border border-gold rounded-full px-2 py-0.5">
-              Self-assessment due
+              {t('modals.skillCard.selfAssessmentDue')}
             </span>
           )}
         </div>
         {compact && (
           <p className="text-sm text-secondary mt-1">
-            {displayedLevel ? LEVEL_LABELS[displayedLevel] : 'Not yet assessed'}
+            {displayedLevel ? LEVEL_LABELS[displayedLevel] : t('modals.skillCard.notYetAssessed')}
             {skill.targetLevel
-              ? ` → target ${LEVEL_LABELS[skill.targetLevel]}${skill.targetSource === 'employer' ? ' (set by employer)' : ''}`
+              ? ` ${t('modals.skillCard.targetArrowPrefix')} ${LEVEL_LABELS[skill.targetLevel]}${skill.targetSource === 'employer' ? ` ${t('modals.skillCard.setByEmployerSuffix')}` : ''}`
               : ''}
             {skill.employerTargetMet &&
               (skill.targetSource === 'personal'
-                ? ' · employer target met, now working toward your own'
-                : ' · employer target met')}
+                ? ` · ${t('modals.skillCard.employerTargetMetWorkingTowardOwnSuffix')}`
+                : ` · ${t('modals.skillCard.employerTargetMetSuffix')}`)}
           </p>
         )}
         {!compact && skill.lifecycle_stage && SKILL_LIFECYCLE_LABELS[skill.lifecycle_stage] && (

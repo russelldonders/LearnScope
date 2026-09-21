@@ -67,23 +67,33 @@ or just delete it.
    being intact. GrowthRing needing useLanguage() rippled into several
    manager-console test files the same way ConfirmDialog's fix did
    before — fixed their test scaffolding (LanguageProvider wrapper),
-   no behavior change to those staff-only pages. Still open from the
-   audit:
-   - Large standalone learner pages, untouched: ExperienceDetail.jsx
-     (1499 lines), ProfilePrivacy.jsx (892), the whole ConnectedAccounts.jsx
-     flow (669 lines plus ~15 account-linking/transfer-plan sub-panels
-     under src/pages/account-linking/), CourseLearn.jsx, SkillsProfile.jsx,
+   no behavior change to those staff-only pages. ExperienceDetail.jsx
+   (1499 lines) and its shared-component cluster are now translated too
+   (SkillCard, TagsField, CompositeSkillProgress, TimelineItem,
+   RoleProfileAlignmentDetail, PendingRoleTimelineCard, KnowledgeLevelBar,
+   OrganizationUrlField, EvidenceAttachmentLink, TrackingReasonPicker,
+   FilterRow, AddExperienceButton, plus ExperienceSection.jsx's own
+   remaining strings) — ChildExperienceEntry/OrganizationLogo/
+   CourseThumbnail/PersonAvatar/TrackingReasonIcon turned out to have no
+   literal user-facing text (icons/data-driven only), so were left as-is.
+   Caught and avoided a near-duplication: ExperienceDetail.jsx's edit form
+   reused modals.experienceModal.* keys (from the earlier ExperienceModal
+   translation) instead of adding ~19 parallel keys for the same field
+   copy. Two exported pure functions (validateWithinParent,
+   buildExperienceSkillProgress) live outside the React tree — they take
+   an optional t or return a translation-key string resolved at the
+   render site, rather than needing useLanguage() directly, so existing
+   non-component callers/tests keep working unchanged. Still open from
+   the audit:
+   - Large standalone learner pages, untouched: ProfilePrivacy.jsx (892),
+     the whole ConnectedAccounts.jsx flow (669 lines plus ~15
+     account-linking/transfer-plan sub-panels under
+     src/pages/account-linking/), CourseLearn.jsx, SkillsProfile.jsx,
      CourseCatalogue.jsx, ProviderProfile.jsx (public route), Onboarding.jsx
      + SkillsToLearnStep.jsx, Help.jsx, ProfileExport.jsx/ProfileImport.jsx,
      Welcome.jsx, Landing.jsx, ResetPassword.jsx, LtiSession.jsx.
    - Public token-link pages: Rate.jsx, Recommend.jsx, ValidateRequest.jsx,
      SharedProfile.jsx — no login required, worth polishing.
-   - Shared components reused across the now-translated Skills/Experience
-     pages: SkillCard, TagsField, CompositeSkillProgress, TimelineItem,
-     ChildExperienceEntry, RoleProfileAlignmentDetail, PendingRoleTimelineCard,
-     KnowledgeLevelBar, OrganizationUrlField, OrganizationLogo,
-     EvidenceAttachmentLink, TrackingReasonIcon/Picker, FilterRow,
-     AddExperienceButton, CourseThumbnail, PersonAvatar.
    - Dashboard/Connections inline sections: ConnectionsTeams.jsx (698
      lines, largest single component found), RecordActivitySection,
      ConnectionsActivityFeed, ConnectionTeamInviteControl, ActivityRow,

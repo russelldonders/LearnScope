@@ -2,6 +2,11 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import CompositeSkillProgress from './CompositeSkillProgress'
+import { LanguageProvider } from '../context/LanguageContext'
+
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => ({ user: null }),
+}))
 
 const composite = {
   version: 2,
@@ -36,7 +41,7 @@ afterEach(cleanup)
 
 describe('CompositeSkillProgress', () => {
   it('shows coverage, required targets, and links tracked component skills', () => {
-    render(<MemoryRouter><CompositeSkillProgress composite={composite} /></MemoryRouter>)
+    render(<LanguageProvider><MemoryRouter><CompositeSkillProgress composite={composite} /></MemoryRouter></LanguageProvider>)
 
     expect(screen.getByText('67%')).toBeInTheDocument()
     expect(screen.getByText('1 of 2 required targets met')).toBeInTheDocument()
@@ -48,25 +53,25 @@ describe('CompositeSkillProgress', () => {
   })
 
   it('stays hidden when the skill has no published component set', () => {
-    const { container } = render(<MemoryRouter><CompositeSkillProgress composite={null} /></MemoryRouter>)
+    const { container } = render(<LanguageProvider><MemoryRouter><CompositeSkillProgress composite={null} /></MemoryRouter></LanguageProvider>)
     expect(container).toBeEmptyDOMElement()
   })
 
   it('offers to start a not-yet-tracked component, and calls onStartComponent with it', () => {
     const onStartComponent = vi.fn()
-    render(<MemoryRouter><CompositeSkillProgress composite={composite} onStartComponent={onStartComponent} /></MemoryRouter>)
+    render(<LanguageProvider><MemoryRouter><CompositeSkillProgress composite={composite} onStartComponent={onStartComponent} /></MemoryRouter></LanguageProvider>)
     expect(screen.queryByText('Add it from your Skills page to begin.')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Start working on this skill now' }))
     expect(onStartComponent).toHaveBeenCalledWith(composite.components[1])
   })
 
   it('disables and relabels the button for whichever component is currently starting', () => {
-    render(<MemoryRouter><CompositeSkillProgress composite={composite} startingComponentId="slicing-link" /></MemoryRouter>)
+    render(<LanguageProvider><MemoryRouter><CompositeSkillProgress composite={composite} startingComponentId="slicing-link" /></MemoryRouter></LanguageProvider>)
     expect(screen.getByRole('button', { name: 'Starting…' })).toBeDisabled()
   })
 
   it('shows an inline error if starting a component fails', () => {
-    render(<MemoryRouter><CompositeSkillProgress composite={composite} startError="Couldn't add that skill." /></MemoryRouter>)
+    render(<LanguageProvider><MemoryRouter><CompositeSkillProgress composite={composite} startError="Couldn't add that skill." /></MemoryRouter></LanguageProvider>)
     expect(screen.getByRole('alert')).toHaveTextContent("Couldn't add that skill.")
   })
 })

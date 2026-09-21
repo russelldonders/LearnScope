@@ -1,4 +1,7 @@
+import { useLanguage } from '../context/LanguageContext'
+
 export default function FilterRow({ label, value, onChange, options }) {
+  const { t } = useLanguage()
   if (options.length === 0) return null
   return (
     <div className="flex items-start gap-2">
@@ -15,7 +18,7 @@ export default function FilterRow({ label, value, onChange, options }) {
             value === null ? 'bg-moss text-paper border-moss' : 'border-hairline text-secondary hover:text-ink'
           }`}
         >
-          Any
+          {t('modals.filterRow.any')}
         </button>
         {options.map((o) => (
           <button

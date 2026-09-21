@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { LanguageProvider } from '../context/LanguageContext'
 
 const { recommendExperienceSkills, addRecommendedSkills } = vi.hoisted(() => ({
   recommendExperienceSkills: vi.fn(),
@@ -18,6 +19,9 @@ vi.mock('../lib/supabaseClient', () => ({
       })),
     })),
   },
+}))
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => ({ user: null }),
 }))
 vi.mock('../lib/experienceSkillRecommendations', () => ({
   recommendExperienceSkills,
@@ -92,9 +96,11 @@ describe('experience skill recommendations', () => {
     }
 
     render(
-      <MemoryRouter>
-        <RecommendationHarness />
-      </MemoryRouter>,
+      <LanguageProvider>
+        <MemoryRouter>
+          <RecommendationHarness />
+        </MemoryRouter>
+      </LanguageProvider>,
     )
 
     expect(screen.getByText('Product Strategy')).toBeInTheDocument()
@@ -112,11 +118,13 @@ describe('experience skill recommendations', () => {
     const onAddExperience = vi.fn()
     const onLogActivity = vi.fn()
     render(
-      <ExperienceActionButtons
-        itemType="employment"
-        onAddExperience={onAddExperience}
-        onLogActivity={onLogActivity}
-      />,
+      <LanguageProvider>
+        <ExperienceActionButtons
+          itemType="employment"
+          onAddExperience={onAddExperience}
+          onLogActivity={onLogActivity}
+        />
+      </LanguageProvider>,
     )
 
     fireEvent.click(screen.getByRole('button', { name: '+ Add' }))
@@ -134,11 +142,13 @@ describe('experience skill recommendations', () => {
 
     const onAddExperience = vi.fn()
     render(
-      <ExperienceActionButtons
-        itemType="education"
-        onAddExperience={onAddExperience}
-        onLogActivity={vi.fn()}
-      />,
+      <LanguageProvider>
+        <ExperienceActionButtons
+          itemType="education"
+          onAddExperience={onAddExperience}
+          onLogActivity={vi.fn()}
+        />
+      </LanguageProvider>,
     )
 
     fireEvent.click(screen.getByRole('button', { name: '+ Add' }))
@@ -232,7 +242,7 @@ describe('experience skill progress', () => {
 
     expect(progress.entryLevel).toBe(2)
     expect(progress.endLevel).toBe(5)
-    expect(progress.endLabel).toBe('Current level')
+    expect(progress.endLabel).toBe('skillDetail.currentLevel')
     expect(progress.duringRole.map((entry) => entry.id)).toEqual(['start', 'growth'])
   })
 
@@ -244,7 +254,7 @@ describe('experience skill progress', () => {
 
     expect(progress.entryLevel).toBe(2)
     expect(progress.endLevel).toBe(4)
-    expect(progress.endLabel).toBe('When role ended')
+    expect(progress.endLabel).toBe('experience.whenRoleEnded')
     expect(progress.duringRole.map((entry) => entry.id)).toEqual(['start', 'growth', 'exit'])
   })
 

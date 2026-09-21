@@ -1,4 +1,5 @@
 import { KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
+import { useLanguage } from '../context/LanguageContext'
 
 const SEGMENTS = [1, 2, 3, 4, 5]
 
@@ -19,12 +20,13 @@ export default function KnowledgeLevelBar({
   milestoneLevel = null,
   milestoneColor = 'var(--color-moss)',
 }) {
+  const { t } = useLanguage()
   const clampedLevel = Math.min(5, Math.max(0, level ?? 0))
   const clampedMilestone = milestoneLevel ? Math.min(5, Math.max(0, milestoneLevel)) : 0
-  const label = level ? labels[level] : 'Not yet self-assessed'
+  const label = level ? labels[level] : t('common.notYetSelfAssessed')
   const fullLabel =
     clampedMilestone > 0 && clampedMilestone < clampedLevel
-      ? `${label} -- confirmed to ${labels[milestoneLevel]}`
+      ? t('modals.knowledgeLevelBar.confirmedToSuffix', { label, milestoneLabel: labels[milestoneLevel] })
       : label
 
   return (
