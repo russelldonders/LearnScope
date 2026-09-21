@@ -50,8 +50,8 @@ import { computeVisibleTarget } from '../lib/skillTargetPrecedence'
 import CompositeSkillProgress from '../components/CompositeSkillProgress'
 
 const SKILL_DETAIL_TABS = [
-  { key: 'overview', label: 'Overview' },
-  { key: 'history', label: 'History' },
+  { key: 'overview' },
+  { key: 'history' },
 ]
 
 export default function SkillDetail({ skillId, embedded = false }) {
@@ -68,8 +68,8 @@ export default function SkillDetail({ skillId, embedded = false }) {
   // caller that only ever passed `from` (never `fromLabel`) keeps reading
   // exactly as it did before.
   const backLabel = location.state?.fromLabel
-    ? `← Back to ${location.state.fromLabel}`
-    : location.state?.from ? '← Back to experience' : '← Back to skills'
+    ? `${t('skillDetail.backToPrefix')} ${location.state.fromLabel}`
+    : location.state?.from ? t('skillDetail.backToExperience') : t('skillDetail.backToSkills')
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedTab = searchParams.get('tab')
   // A deep link that highlights a specific timeline entry (from Activity.jsx
@@ -171,13 +171,13 @@ export default function SkillDetail({ skillId, embedded = false }) {
         if (active) setComposite(result)
       })
       .catch((err) => {
-        if (active) setCompositeError(`Couldn't load component progress: ${err.message}`)
+        if (active) setCompositeError(`${t('skillDetail.couldntLoadComponentProgressPrefix')} ${err.message}`)
       })
       .finally(() => {
         if (active) setLoadingComposite(false)
       })
     return () => { active = false }
-  }, [skill?.library_skill_id, user.id])
+  }, [skill?.library_skill_id, user.id, t])
 
   useEffect(() => {
     let active = true
@@ -566,8 +566,8 @@ export default function SkillDetail({ skillId, embedded = false }) {
           {backLabel}
         </Link>
 
-        {loadingSkill && <p className="text-secondary">Loading…</p>}
-        {notFound && <p className="text-secondary">Skill not found.</p>}
+        {loadingSkill && <p className="text-secondary">{t('skillDetail.loading')}</p>}
+        {notFound && <p className="text-secondary">{t('skillDetail.skillNotFound')}</p>}
 
         {skill && (
           <div className="bg-card border border-hairline rounded-lg p-6">
@@ -584,10 +584,10 @@ export default function SkillDetail({ skillId, embedded = false }) {
                     <h2 className="font-display text-2xl text-ink">{skill.name}</h2>
                     {skill.source === 'role_profile' && (
                       <span
-                        title="Required by a role profile you accepted"
+                        title={t('skillDetail.roleProfileBadgeTitle')}
                         className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-moss border border-moss/40 rounded-full px-2 py-0.5"
                       >
-                        Role profile
+                        {t('skillDetail.roleProfileBadgeLabel')}
                       </span>
                     )}
                   </div>
@@ -603,7 +603,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
                   </p>
                   {parentComposites.length > 0 && (
                     <p className="text-xs text-secondary mt-0.5">
-                      Part of{' '}
+                      {t('skillDetail.partOfPrefix')}{' '}
                       {parentComposites.map((parent, index) => (
                         <span key={parent.librarySkillId}>
                           {index > 0 && ', '}
@@ -629,22 +629,22 @@ export default function SkillDetail({ skillId, embedded = false }) {
                       : setAssessMode(skill.lifecycle_stage === 'identified' ? 'baseline' : 'evaluate')
                   }
                   disabled={!hasAnyEvaluationInput}
-                  aria-label="Request AI assessment"
+                  aria-label={t('skillDetail.requestAiAssessment')}
                   title={
                     !hasAnyEvaluationInput
-                      ? 'Self-assess, invite a rating, or record activity first'
-                      : 'Request AI assessment'
+                      ? t('skillDetail.requestAiAssessmentDisabledHint')
+                      : t('skillDetail.requestAiAssessment')
                   }
                   className="rounded-full bg-moss text-paper text-xs font-medium px-2.5 sm:px-3 py-1.5 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <span aria-hidden="true">✨</span>
-                  <span className="hidden sm:inline"> Request AI assessment</span>
+                  <span className="hidden sm:inline"> {t('skillDetail.requestAiAssessment')}</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setSettingsOpen(true)}
-                  aria-label="Skill settings"
-                  title="Skill settings"
+                  aria-label={t('skillDetail.skillSettings')}
+                  title={t('skillDetail.skillSettings')}
                   className="p-2 -m-2 rounded-md text-moss hover:opacity-75 transition-opacity"
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -674,7 +674,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
 
             <div
               role="tablist"
-              aria-label="Skill sections"
+              aria-label={t('skillDetail.tabsAriaLabel')}
               className="flex items-center flex-wrap gap-1 mt-4 border-b border-hairline"
             >
               {SKILL_DETAIL_TABS.map((tabDef) => (
@@ -702,7 +702,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
                       : 'border-transparent text-secondary hover:text-ink'
                   }`}
                 >
-                  {tabDef.label}
+                  {t(`skillDetail.tabs.${tabDef.key}`)}
                 </button>
               ))}
             </div>
@@ -733,7 +733,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
                           : t('skillDetail.notYetSelfAssessed')}
                       </p>
                       <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
-                        {knowledgeVerification ?? 'Knowledge foundation'}
+                        {knowledgeVerification ?? t('skillDetail.knowledgeFoundation')}
                       </p>
                     </div>
                   </button>
@@ -763,20 +763,20 @@ export default function SkillDetail({ skillId, embedded = false }) {
                                   >
                                     {link.courses.name}
                                   </button>
-                                  <span className="text-xs text-secondary"> · enrolled</span>
+                                  <span className="text-xs text-secondary"> · {t('skillDetail.enrolledSuffix')}</span>
                                 </li>
                               ))}
                             </ul>
                           ) : (
                             completedCourseLinksCount === 0 && (
-                              <p className="text-sm text-secondary">No training linked yet</p>
+                              <p className="text-sm text-secondary">{t('skillDetail.noTrainingLinkedYet')}</p>
                             )
                           )}
                         </div>
                       }
                       actions={[
                         {
-                          label: 'Find a course',
+                          label: t('skillDetail.findACourse'),
                           onClick: () => navigate('/training', { state: trainingScopeState }),
                         },
                       ]}
@@ -785,12 +785,12 @@ export default function SkillDetail({ skillId, embedded = false }) {
                       title={t('skillDetail.stages.verify')}
                       status={
                         <p className="text-sm text-secondary">
-                          {knowledgeConfirmed ? 'Confirmed' : 'Not yet confirmed'}
+                          {knowledgeConfirmed ? t('skillDetail.confirmed') : t('skillDetail.notYetConfirmed')}
                         </p>
                       }
                       actions={[
-                        { label: 'Take a quiz', onClick: () => setConfirmingBaselineOpen(true) },
-                        { label: '✨ Interview me', onClick: () => setInterviewOpen(true) },
+                        { label: t('skillDetail.takeAQuiz'), onClick: () => setConfirmingBaselineOpen(true) },
+                        { label: t('skillDetail.interviewMe'), onClick: () => setInterviewOpen(true) },
                       ]}
                     />
                   </div>
@@ -816,7 +816,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
                         {displayedPracticalLevel ? LEVEL_LABELS[displayedPracticalLevel] : t('skillDetail.notYetSelfAssessed')}
                       </p>
                       <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
-                        {practicalVerification ?? 'Practical foundation'}
+                        {practicalVerification ?? t('skillDetail.practicalFoundation')}
                       </p>
                     </div>
                   </button>
@@ -833,27 +833,27 @@ export default function SkillDetail({ skillId, embedded = false }) {
                             onClick={() => setActivitiesListOpen(true)}
                             className="text-sm text-secondary underline decoration-dotted underline-offset-2 hover:text-moss text-left"
                           >
-                            {practicalStatements.length} activit{practicalStatements.length === 1 ? 'y' : 'ies'} logged
+                            {practicalStatements.length} {practicalStatements.length === 1 ? t('skillDetail.activityLoggedSingular') : t('skillDetail.activityLoggedPlural')}
                             {relationshipLinks.length > 0
-                              ? ` · linked to ${relationshipLinks.length} experience entr${relationshipLinks.length === 1 ? 'y' : 'ies'}`
+                              ? ` · ${t('skillDetail.linkedToPrefix')} ${relationshipLinks.length} ${relationshipLinks.length === 1 ? t('skillDetail.experienceEntrySingular') : t('skillDetail.experienceEntryPlural')}`
                               : ''}
                           </button>
                         ) : (
                           <p className="text-sm text-secondary">
-                            {practicalStatements.length} activit{practicalStatements.length === 1 ? 'y' : 'ies'} logged
+                            {practicalStatements.length} {practicalStatements.length === 1 ? t('skillDetail.activityLoggedSingular') : t('skillDetail.activityLoggedPlural')}
                             {relationshipLinks.length > 0
-                              ? ` · linked to ${relationshipLinks.length} experience entr${relationshipLinks.length === 1 ? 'y' : 'ies'}`
+                              ? ` · ${t('skillDetail.linkedToPrefix')} ${relationshipLinks.length} ${relationshipLinks.length === 1 ? t('skillDetail.experienceEntrySingular') : t('skillDetail.experienceEntryPlural')}`
                               : ''}
                           </p>
                         )
                       }
                       actions={[
-                        { label: 'Log skill activity', onClick: () => setRecordActivityOpen(true) },
+                        { label: t('skillDetail.logSkillActivity'), onClick: () => setRecordActivityOpen(true) },
                         ...(canShowDemonstrateAction
-                          ? [{ label: 'Demonstrate skill', onClick: handleDemonstrateSkill }]
+                          ? [{ label: t('skillDetail.demonstrateSkillAction'), onClick: handleDemonstrateSkill }]
                           : []),
                         ...(canShowValidateAction
-                          ? [{ label: 'Move to validating', onClick: handleValidateSkillStage }]
+                          ? [{ label: t('skillDetail.moveToValidating'), onClick: handleValidateSkillStage }]
                           : []),
                       ]}
                     />
@@ -862,21 +862,21 @@ export default function SkillDetail({ skillId, embedded = false }) {
                       status={
                         <p className="text-sm text-secondary">
                           {peerRatings.length > 0
-                            ? `${peerRatings.length} peer rating${peerRatings.length === 1 ? '' : 's'}`
-                            : 'No peer ratings yet'}
+                            ? `${peerRatings.length} ${peerRatings.length === 1 ? t('skillDetail.peerRatingSingular') : t('skillDetail.peerRatingPlural')}`
+                            : t('skillDetail.noPeerRatingsYet')}
                           {pendingValidationRequestsCount > 0
-                            ? ` · ${pendingValidationRequestsCount} request${pendingValidationRequestsCount === 1 ? '' : 's'} pending`
+                            ? ` · ${pendingValidationRequestsCount} ${pendingValidationRequestsCount === 1 ? t('skillDetail.requestPendingSingular') : t('skillDetail.requestPendingPlural')}`
                             : ''}
-                          {decidedValidationRequestsCount > 0 ? ` · ${decidedValidationRequestsCount} decided` : ''}
+                          {decidedValidationRequestsCount > 0 ? ` · ${decidedValidationRequestsCount} ${t('skillDetail.decidedSuffix')}` : ''}
                         </p>
                       }
                       actions={[
-                        { label: 'Invite others to assess', onClick: () => setInviteOpen(true) },
+                        { label: t('skillDetail.inviteOthersToAssess'), onClick: () => setInviteOpen(true) },
                         // "✨ Request AI assessment" now lives in the header next
                         // to the skill name -- see the button beside setSettingsOpen
                         // above, which shares this exact same onClick/disabled logic.
                         ...(targets.length > 0
-                          ? [{ label: 'Request validation', onClick: () => setExpertValidationOpen(true) }]
+                          ? [{ label: t('skillDetail.requestValidationAction'), onClick: () => setExpertValidationOpen(true) }]
                           : []),
                       ]}
                     />
@@ -896,7 +896,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
 
             {skill.library_skill_id && (
               <div className="mt-4 pt-4 border-t border-hairline">
-                <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">Skill Network</h3>
+                <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">{t('skillDetail.skillNetwork')}</h3>
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
                   <button
                     type="button"
@@ -905,7 +905,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
                     className="flex items-center gap-1.5 text-ink underline decoration-dotted underline-offset-2 hover:text-moss disabled:no-underline disabled:cursor-default disabled:hover:text-ink"
                   >
                     <PeopleIcon />
-                    {connectionsWithSkill.length} of your connections have this skill
+                    {connectionsWithSkill.length} {t('skillDetail.connectionsHaveSkillSuffix')}
                   </button>
                   <button
                     type="button"
@@ -913,14 +913,14 @@ export default function SkillDetail({ skillId, embedded = false }) {
                     className="flex items-center gap-1.5 text-ink underline decoration-dotted underline-offset-2 hover:text-moss"
                   >
                     <PeopleIcon />
-                    {totalTrackersCount} {totalTrackersCount === 1 ? 'person' : 'people'} in total have this skill
+                    {totalTrackersCount} {totalTrackersCount === 1 ? t('skillDetail.personSingular') : t('skillDetail.peoplePlural')} {t('skillDetail.inTotalHaveThisSkillSuffix')}
                   </button>
                   <button
                     type="button"
                     onClick={() => setRecommendOpen(true)}
                     className="rounded-full border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:border-moss hover:text-moss transition-colors"
                   >
-                    Recommend this skill
+                    {t('skillDetail.recommendThisSkill')}
                   </button>
                 </div>
               </div>
@@ -1165,13 +1165,13 @@ export default function SkillDetail({ skillId, embedded = false }) {
                 panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
               >
                   <div className="flex items-center justify-between mb-4">
-                    <h2 id="skill-settings-dialog-title" className="font-display text-2xl text-ink">Skill settings</h2>
+                    <h2 id="skill-settings-dialog-title" className="font-display text-2xl text-ink">{t('skillDetail.skillSettings')}</h2>
                     <button
                       type="button"
                       onClick={() => setSettingsOpen(false)}
                       className="text-secondary hover:text-ink text-sm"
                     >
-                      Close
+                      {t('skillDetail.close')}
                     </button>
                   </div>
                   <div className="space-y-6">
@@ -1197,23 +1197,23 @@ export default function SkillDetail({ skillId, embedded = false }) {
 
             {(skill.next_checkin_date || currentTarget || employerTargetLevel) && (
               <div className="mt-4 pt-4 border-t border-hairline">
-                <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-3">Upcoming</h3>
+                <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-3">{t('skillDetail.upcoming')}</h3>
                 <div className="space-y-2">
                   {employerTargetLevel && (
                     <div className="flex items-center justify-between rounded-md border border-hairline bg-paper px-3 py-2">
                       <span className="font-mono text-xs uppercase tracking-wide text-secondary">
-                        Employer target {LEVEL_LABELS[employerTargetLevel]}
+                        {t('skillDetail.employerTargetPrefix')} {LEVEL_LABELS[employerTargetLevel]}
                       </span>
                       <span className={`text-sm font-medium ${visibleTarget?.employerTargetMet ? 'text-moss' : 'text-ink'}`}>
                         {visibleTarget?.employerTargetMet
-                          ? 'Met'
-                          : 'Working towards — needs employer confirmation'}
+                          ? t('skillDetail.met')
+                          : t('skillDetail.workingTowardsNeedsConfirmation')}
                       </span>
                     </div>
                   )}
                   {employerTargetLevel && visibleTarget?.employerTargetMet && visibleTarget.source === 'personal' && (
                     <p className="text-xs text-secondary px-1">
-                      Employer target met — now working toward your own higher target below.
+                      {t('skillDetail.employerTargetMetWorkingTowardOwn')}
                     </p>
                   )}
                   {skill.next_checkin_date && (
@@ -1225,7 +1225,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
                       }`}
                     >
                       <span className="font-mono text-xs uppercase tracking-wide text-secondary">
-                        Next self-assessment
+                        {t('skillDetail.nextSelfAssessment')}
                       </span>
                       <span
                         className={`text-sm font-medium ${
@@ -1233,7 +1233,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
                         }`}
                       >
                         {new Date(`${skill.next_checkin_date}T00:00:00`).toLocaleDateString()}
-                        {isSelfAssessmentDue(skill.next_checkin_date) ? ' · Due' : ''}
+                        {isSelfAssessmentDue(skill.next_checkin_date) ? ` · ${t('skillDetail.dueSuffix')}` : ''}
                       </span>
                     </div>
                   )}
@@ -1244,7 +1244,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
                       className="w-full flex items-center justify-between rounded-md border border-hairline bg-paper px-3 py-2 text-left hover:border-moss/60 transition-colors"
                     >
                       <span className="font-mono text-xs uppercase tracking-wide text-secondary">
-                        Target {LEVEL_LABELS[currentTarget.target_level]}
+                        {t('skillDetail.target')} {LEVEL_LABELS[currentTarget.target_level]}
                       </span>
                       <span className="text-sm font-medium text-ink">
                         {new Date(`${currentTarget.target_date}T00:00:00`).toLocaleDateString()}
@@ -1304,6 +1304,7 @@ function PeopleIcon() {
 // to TimelineDetailModal instead of stacking a second dialog on top of this
 // one, so only one AccessibleDialog is ever mounted at a time.
 function ActivitiesModal({ statements, onSelect, onClose }) {
+  const { t } = useLanguage()
   const sorted = [...statements].sort((a, b) => new Date(b.recorded_at) - new Date(a.recorded_at))
   return (
     <AccessibleDialog
@@ -1313,10 +1314,10 @@ function ActivitiesModal({ statements, onSelect, onClose }) {
     >
         <div className="flex items-center justify-between mb-4">
           <h2 id="activities-dialog-title" className="font-display text-2xl text-ink">
-            {sorted.length} activit{sorted.length === 1 ? 'y' : 'ies'} logged
+            {sorted.length} {sorted.length === 1 ? t('skillDetail.activityLoggedSingular') : t('skillDetail.activityLoggedPlural')}
           </h2>
           <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm shrink-0">
-            Close
+            {t('skillDetail.close')}
           </button>
         </div>
         <div>
@@ -1334,6 +1335,7 @@ function ActivitiesModal({ statements, onSelect, onClose }) {
 }
 
 function ConnectionsWithSkillModal({ connections, skillName, onClose }) {
+  const { t } = useLanguage()
   return (
     <AccessibleDialog
       labelledBy="connections-with-skill-dialog-title"
@@ -1341,13 +1343,13 @@ function ConnectionsWithSkillModal({ connections, skillName, onClose }) {
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
         <div className="flex items-center justify-between mb-4">
-          <h2 id="connections-with-skill-dialog-title" className="font-display text-2xl text-ink">Connections with {skillName}</h2>
+          <h2 id="connections-with-skill-dialog-title" className="font-display text-2xl text-ink">{t('skillDetail.connectionsWithPrefix')} {skillName}</h2>
           <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm shrink-0">
-            Close
+            {t('skillDetail.close')}
           </button>
         </div>
         {connections.length === 0 ? (
-          <p className="text-sm text-secondary">None of your connections track this skill yet.</p>
+          <p className="text-sm text-secondary">{t('skillDetail.noConnectionsTrackSkill')}</p>
         ) : (
           <ul className="space-y-2">
             {connections.map((c) => (
@@ -1361,7 +1363,7 @@ function ConnectionsWithSkillModal({ connections, skillName, onClose }) {
                   </Link>
                   <GrowthRing level={c.level} size={24} labels={LEVEL_LABELS} />
                   <span className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 shrink-0">
-                    Connected
+                    {t('skillDetail.connected')}
                   </span>
                 </div>
               </li>
@@ -1502,7 +1504,7 @@ function LevelDetailModal({
         <div className="flex items-center justify-between mb-4">
           <h2 id="axis-summary-dialog-title" className="font-display text-2xl text-ink">{isKnowledge ? t('skillDetail.knowledge') : t('skillDetail.application')}</h2>
           <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
-            Close
+            {t('skillDetail.close')}
           </button>
         </div>
         <div className="flex items-center gap-3 mb-3">
@@ -1512,21 +1514,21 @@ function LevelDetailModal({
             <GrowthRing level={level} size={40} color={TRUST_STATUS_COLORS[trustStatus]} />
           )}
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Current level</p>
+            <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">{t('skillDetail.currentLevel')}</p>
             <p className="text-base font-medium text-ink">{level ? labels[level] : t('skillDetail.notYetSelfAssessed')}</p>
           </div>
         </div>
         {level ? (
           guideLoading && description == null ? (
-            <p className="text-sm text-secondary mb-4">Loading guidance…</p>
+            <p className="text-sm text-secondary mb-4">{t('skillDetail.loadingGuidance')}</p>
           ) : (
             description && <p className="text-sm text-secondary mb-4">{description}</p>
           )
         ) : (
           <p className="text-sm text-secondary mb-4">
             {isKnowledge
-              ? "You haven't rated your knowledge of this skill yet."
-              : "You haven't self-assessed your practical level for this skill yet."}
+              ? t('skillDetail.knowledgeNotRatedYet')
+              : t('skillDetail.practicalNotAssessedYet')}
           </p>
         )}
         {/* Mirrors the practical Current/Target pair below -- a newer
@@ -1544,7 +1546,7 @@ function LevelDetailModal({
                   color={TRUST_STATUS_COLORS[TRUST_STATUS.CONFIRMED]}
                 />
                 <div>
-                  <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Confirmed</p>
+                  <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">{t('skillDetail.confirmed')}</p>
                   <p className="text-base font-medium text-ink">{KNOWLEDGE_LEVEL_LABELS[knowledgeMilestone]}</p>
                 </div>
               </div>
@@ -1560,15 +1562,15 @@ function LevelDetailModal({
               <div className="flex items-center gap-3">
                 <GrowthRing level={0} size={40} targetLevel={currentTarget.target_level} />
                 <div>
-                  <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">Target</p>
+                  <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">{t('skillDetail.target')}</p>
                   <p className="text-base font-medium text-ink">{LEVEL_LABELS[currentTarget.target_level]}</p>
                   <p className="font-mono text-xs text-secondary/80 mt-0.5">
-                    By {new Date(`${currentTarget.target_date}T00:00:00`).toLocaleDateString()}
+                    {t('skillDetail.byPrefix')} {new Date(`${currentTarget.target_date}T00:00:00`).toLocaleDateString()}
                   </p>
                 </div>
               </div>
               {targetDescription && <p className="text-sm text-secondary mt-2">{targetDescription}</p>}
-              {currentTarget.set_by_manager && <p className="text-sm text-secondary mt-2">Set by your manager</p>}
+              {currentTarget.set_by_manager && <p className="text-sm text-secondary mt-2">{t('skillDetail.setByYourManager')}</p>}
               {currentTarget.comments && <p className="text-sm text-secondary mt-2 whitespace-pre-wrap">{currentTarget.comments}</p>}
             </div>
           )
@@ -1579,7 +1581,7 @@ function LevelDetailModal({
             onClick={onSelfAssess}
             className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
           >
-            {isKnowledge ? 'Rate your current level' : 'Self-assess your current level'}
+            {isKnowledge ? t('skillDetail.rateCurrentLevel') : t('skillDetail.selfAssessCurrentLevel')}
           </button>
           {!isKnowledge && (
             <button
@@ -1587,7 +1589,7 @@ function LevelDetailModal({
               onClick={onSetTarget}
               className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper"
             >
-              Set target
+              {t('skillDetail.setTargetAction')}
             </button>
           )}
         </div>
@@ -1605,6 +1607,7 @@ function SelfAssessModal({
   onAssessed,
   onGuideGenerated,
 }) {
+  const { t } = useLanguage()
   return (
     <AccessibleDialog
       labelledBy="self-assess-dialog-title"
@@ -1613,10 +1616,10 @@ function SelfAssessModal({
     >
         <div className="flex items-center justify-between mb-4">
           <h2 id="self-assess-dialog-title" className="font-display text-2xl text-ink">
-            {axis === 'knowledge' ? 'Self-assess your knowledge' : 'Self-assess'}
+            {axis === 'knowledge' ? t('skillDetail.selfAssessKnowledgeTitle') : t('skillDetail.selfAssessTitle')}
           </h2>
           <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
-            Close
+            {t('skillDetail.close')}
           </button>
         </div>
         <SelfAssessSection
@@ -1634,7 +1637,7 @@ function SelfAssessModal({
             axisHistory.length > 0 && (
               <div className="mt-6 pt-4 border-t border-hairline opacity-50">
                 <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">
-                  {axis === 'knowledge' ? 'Knowledge' : 'Self-assessment'} history
+                  {axis === 'knowledge' ? t('skillDetail.knowledge') : t('skillDetail.selfAssessmentWord')} {t('skillDetail.historySuffix')}
                 </h3>
                 <ul className="space-y-2">
                   {axisHistory.map((a) => (
@@ -1722,6 +1725,7 @@ function HistorySection({
   highlightActivityId,
 }) {
   const navigate = useNavigate()
+  const { t } = useLanguage()
   // The Confirming Baseline knowledge quiz logs its own xAPI attempt --
   // exclude it here too, same reasoning as the top-level SkillDetail
   // component (see there for the full comment).
@@ -1746,9 +1750,9 @@ function HistorySection({
 
   return (
     <div className="mt-4 pt-4 border-t border-hairline">
-      <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-3">Timeline</h3>
+      <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-3">{t('skillDetail.timeline')}</h3>
 
-      {loading && <p className="text-sm text-secondary">Loading…</p>}
+      {loading && <p className="text-sm text-secondary">{t('skillDetail.loading')}</p>}
       {!loading && (() => {
         // Enrolled-but-not-completed courses have no real date yet -- they
         // haven't happened. Rather than fake a date (which risked sorting
@@ -1878,6 +1882,7 @@ function HistorySection({
 }
 
 function PendingTrainingEntry({ link, hasMore, onClick }) {
+  const { t } = useLanguage()
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center w-12 shrink-0">
@@ -1899,7 +1904,7 @@ function PendingTrainingEntry({ link, hasMore, onClick }) {
         className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper/60 p-3 cursor-pointer hover:border-moss/60 transition-colors"
       >
         <p className="text-sm text-secondary">
-          Enrolled in <span className="text-ink font-medium">{link.courses.name}</span> — in progress
+          {t('skillDetail.enrolledInPrefix')} <span className="text-ink font-medium">{link.courses.name}</span> — {t('skillDetail.inProgressSuffix')}
         </p>
       </div>
     </div>
@@ -1907,6 +1912,7 @@ function PendingTrainingEntry({ link, hasMore, onClick }) {
 }
 
 function PendingValidationEntry({ request, validatorName, hasMore }) {
+  const { t } = useLanguage()
   return (
     <div className="flex gap-3">
       <div className="flex flex-col items-center w-12 shrink-0">
@@ -1917,7 +1923,7 @@ function PendingValidationEntry({ request, validatorName, hasMore }) {
       </div>
       <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper/60 p-3">
         <p className="text-sm text-secondary">
-          Waiting on <span className="text-ink font-medium">{validatorName || 'a validator'}</span> to confirm{' '}
+          {t('skillDetail.waitingOnPrefix')} <span className="text-ink font-medium">{validatorName || t('skillDetail.aValidator')}</span> {t('skillDetail.toConfirmSuffix')}{' '}
           {LEVEL_LABELS[request.target_level]}
         </p>
       </div>
@@ -1934,6 +1940,7 @@ function TimelineEntry({
   assessorName,
   onSelect,
 }) {
+  const { t } = useLanguage()
   const boxClass = 'rounded-md border border-hairline bg-paper p-3'
   const clickableProps = onSelect
     ? {
@@ -1958,7 +1965,7 @@ function TimelineEntry({
         </div>
         <div className="min-w-0 flex-1 mb-6 flex items-center gap-2">
           <span className="font-mono text-[10px] uppercase tracking-wide text-ink font-semibold">
-            Today · {new Date(event.date).toLocaleDateString()}
+            {t('skillDetail.today')} · {new Date(event.date).toLocaleDateString()}
           </span>
           <span className="flex-1 h-px bg-hairline" />
         </div>
@@ -1997,7 +2004,7 @@ function TimelineEntry({
 
   if (event.type === 'activity-group') {
     const totalLabel = formatMinutes(event.totalMinutes)
-    const yearLabel = event.year === new Date().getFullYear() ? 'this year' : `in ${event.year}`
+    const yearLabel = event.year === new Date().getFullYear() ? t('skillDetail.thisYear') : `${t('skillDetail.inYearPrefix')} ${event.year}`
     return (
       <div className="flex gap-3">
         <div className="flex flex-col items-center w-12 shrink-0">
@@ -2010,12 +2017,12 @@ function TimelineEntry({
         >
           <div className="flex items-center gap-2">
             <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">{event.verbLabel}</span>
-            <p className="text-sm font-medium text-ink truncate min-w-0">{event.count} times {yearLabel}</p>
+            <p className="text-sm font-medium text-ink truncate min-w-0">{event.count} {t('skillDetail.timesSuffix')} {yearLabel}</p>
           </div>
           <p className="font-mono text-xs text-secondary mt-0.5">
-            {totalLabel ? `Total ${totalLabel}` : `${event.count} activities`}
+            {totalLabel ? `${t('skillDetail.totalPrefix')} ${totalLabel}` : `${event.count} ${t('skillDetail.activitiesWord')}`}
           </p>
-          {onSelect && <p className="font-mono text-[10px] text-moss mt-1">View all →</p>}
+          {onSelect && <p className="font-mono text-[10px] text-moss mt-1">{t('skillDetail.viewAllArrow')}</p>}
         </div>
       </div>
     )
@@ -2034,13 +2041,13 @@ function TimelineEntry({
           {...clickableProps}
         >
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">Training</span>
+            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">{t('skillDetail.trainingLabel')}</span>
             <p className="text-sm font-medium text-ink truncate min-w-0">{course.name}</p>
           </div>
           <p className="font-mono text-xs text-secondary mt-0.5">
             {new Date(course.completed_date).toLocaleDateString()}
           </p>
-          {onSelect && <p className="font-mono text-[10px] text-moss mt-1">View course →</p>}
+          {onSelect && <p className="font-mono text-[10px] text-moss mt-1">{t('skillDetail.viewCourseArrow')}</p>}
         </div>
       </div>
     )
@@ -2054,11 +2061,11 @@ function TimelineEntry({
           {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
         </div>
         <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3">
-          <p className="text-sm font-medium text-ink">Skill added</p>
+          <p className="text-sm font-medium text-ink">{t('skillDetail.skillAdded')}</p>
           {event.source && (
             <p className="font-mono text-[10px] text-secondary mt-0.5">
               {event.provenanceSource
-                ? `Synced from ${PROVENANCE_SOURCE_LABELS[event.provenanceSource] ?? event.provenanceSource}`
+                ? `${t('skillDetail.syncedFromPrefix')} ${PROVENANCE_SOURCE_LABELS[event.provenanceSource] ?? event.provenanceSource}`
                 : SKILL_SOURCE_LABELS[event.source] ?? event.source}
             </p>
           )}
@@ -2090,7 +2097,7 @@ function TimelineEntry({
           </p>
           <p className="font-mono text-[10px] text-secondary mt-0.5 flex items-center gap-1.5">
             <RaterAvatar url={raterAvatars?.[rating.rater_id]} />
-            Rated by {rating.rater_name || rating.rater_email || 'a connection'}
+            {t('skillDetail.ratedByPrefix')} {rating.rater_name || rating.rater_email || t('skillDetail.aConnection')}
           </p>
           {rating.comments && <p className="text-sm text-ink mt-1">{rating.comments}</p>}
         </div>
@@ -2119,10 +2126,10 @@ function TimelineEntry({
         >
           <p className="text-sm font-medium text-ink">{exp.title}</p>
           <p className="font-mono text-xs text-secondary mt-0.5">
-            {formatMonthYear(exp.start_date)} – {exp.end_date ? formatMonthYear(exp.end_date) : 'present'}
+            {formatMonthYear(exp.start_date)} – {exp.end_date ? formatMonthYear(exp.end_date) : t('skillDetail.present')}
           </p>
           <p className="font-mono text-[10px] text-secondary mt-0.5">
-            {exp.type === 'education' ? 'Developed during education' : 'Used during employment'} · {exp.organization}
+            {exp.type === 'education' ? t('skillDetail.developedDuringEducation') : t('skillDetail.usedDuringEmployment')} · {exp.organization}
           </p>
         </div>
       </div>
@@ -2148,7 +2155,7 @@ function TimelineEntry({
         </div>
         <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3">
           <p className="text-sm font-medium text-ink">
-            {confirmed ? `Validated at ${LEVEL_LABELS[request.target_level]}` : 'Validation declined'}
+            {confirmed ? `${t('skillDetail.validatedAtPrefix')} ${LEVEL_LABELS[request.target_level]}` : t('skillDetail.validationDeclined')}
           </p>
           <p className="font-mono text-xs text-secondary mt-0.5">
             {new Date(request.decided_at).toLocaleDateString()}
@@ -2188,12 +2195,12 @@ function TimelineEntry({
           </p>
           {entry.axis === 'knowledge' && (
             <span className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5">
-              Knowledge
+              {t('skillDetail.knowledge')}
             </span>
           )}
           {isBaseline && (
             <span className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5">
-              Baseline
+              {t('skillDetail.baseline')}
             </span>
           )}
         </div>
@@ -2202,33 +2209,33 @@ function TimelineEntry({
         </p>
         {entry.source === 'course' && entry.courses?.name ? (
           <p className="font-mono text-[10px] text-secondary mt-0.5">
-            Earned by completing {entry.courses.name}
+            {t('skillDetail.earnedByCompletingPrefix')} {entry.courses.name}
           </p>
         ) : entry.source === 'ai_baseline' ? (
           <p className="font-mono text-[10px] text-secondary mt-0.5">
-            AI-assessed baseline, from self-assessment, peer ratings and activity
+            {t('skillDetail.aiAssessedBaselineDescription')}
           </p>
         ) : entry.source === 'ai_evaluation' ? (
           <p className="font-mono text-[10px] text-secondary mt-0.5">
-            AI assessment, evaluated against your target level
+            {t('skillDetail.aiEvaluationDescription')}
           </p>
         ) : entry.source === 'diagnostic_confirmed' ? (
-          <p className="font-mono text-[10px] text-secondary mt-0.5">Confirmed via knowledge check</p>
+          <p className="font-mono text-[10px] text-secondary mt-0.5">{t('skillDetail.confirmedViaKnowledgeCheck')}</p>
         ) : (
           <p className="font-mono text-[10px] text-secondary mt-0.5">
-            Self-assessed by {assessorName || 'you'}
+            {t('skillDetail.selfAssessedByPrefix')} {assessorName || t('skillDetail.you')}
           </p>
         )}
         {entry.experience?.title && (
           <p className="font-mono text-[10px] text-secondary mt-0.5">
-            During {entry.experience.title} · {entry.experience.organization}
+            {t('skillDetail.duringPrefix')} {entry.experience.title} · {entry.experience.organization}
           </p>
         )}
         {entry.comments && <p className="text-sm text-ink mt-1">{entry.comments}</p>}
         {(entry.evidence_url || paths.length > 0) && (
           <div className="mt-2">
             <h5 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1">
-              Evidence
+              {t('skillDetail.evidence')}
             </h5>
             <div className="flex flex-wrap items-center gap-3" onClick={(e) => e.stopPropagation()}>
             {entry.evidence_url && (
@@ -2238,7 +2245,7 @@ function TimelineEntry({
                 rel="noopener noreferrer"
                 className="text-xs text-moss font-medium"
               >
-                Evidence link
+                {t('skillDetail.evidenceLink')}
               </a>
             )}
             {paths.map((path, i) => (
@@ -2253,7 +2260,8 @@ function TimelineEntry({
 }
 
 function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assessorName, onClose }) {
-  let title = 'Details'
+  const { t } = useLanguage()
+  let title = t('skillDetail.details')
   let body = null
 
   if (event.type === 'assessment') {
@@ -2279,7 +2287,7 @@ function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assesso
           </p>
           {entry.axis === 'knowledge' && (
             <span className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5">
-              Knowledge
+              {t('skillDetail.knowledge')}
             </span>
           )}
         </div>
@@ -2289,27 +2297,27 @@ function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assesso
           </p>
         )}
         {entry.source === 'course' && entry.courses?.name ? (
-          <p className="text-sm text-secondary">Earned by completing {entry.courses.name}</p>
+          <p className="text-sm text-secondary">{t('skillDetail.earnedByCompletingPrefix')} {entry.courses.name}</p>
         ) : entry.source === 'ai_baseline' ? (
           <p className="text-sm text-secondary">
-            AI-assessed baseline, from self-assessment, peer ratings and activity
+            {t('skillDetail.aiAssessedBaselineDescription')}
           </p>
         ) : entry.source === 'ai_evaluation' ? (
-          <p className="text-sm text-secondary">AI assessment, evaluated against your target level</p>
+          <p className="text-sm text-secondary">{t('skillDetail.aiEvaluationDescription')}</p>
         ) : entry.source === 'diagnostic_confirmed' ? (
-          <p className="text-sm text-secondary">Confirmed via knowledge check</p>
+          <p className="text-sm text-secondary">{t('skillDetail.confirmedViaKnowledgeCheck')}</p>
         ) : (
-          <p className="text-sm text-secondary">Self-assessed by {assessorName || 'you'}</p>
+          <p className="text-sm text-secondary">{t('skillDetail.selfAssessedByPrefix')} {assessorName || t('skillDetail.you')}</p>
         )}
         {entry.experience?.title && (
           <p className="text-sm text-secondary">
-            During {entry.experience.title} · {entry.experience.organization}
+            {t('skillDetail.duringPrefix')} {entry.experience.title} · {entry.experience.organization}
           </p>
         )}
         {entry.comments && <p className="text-sm text-ink">{entry.comments}</p>}
         {(entry.evidence_url || paths.length > 0) && (
           <div>
-            <h5 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1">Evidence</h5>
+            <h5 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1">{t('skillDetail.evidence')}</h5>
             <div className="flex flex-wrap items-center gap-3">
               {entry.evidence_url && (
                 <a
@@ -2318,7 +2326,7 @@ function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assesso
                   rel="noopener noreferrer"
                   className="text-xs text-moss font-medium"
                 >
-                  Evidence link
+                  {t('skillDetail.evidenceLink')}
                 </a>
               )}
               {paths.map((path, i) => (
@@ -2342,7 +2350,7 @@ function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assesso
         </div>
         <p className="text-sm text-secondary flex items-center gap-1.5">
           <RaterAvatar url={raterAvatars?.[rating.rater_id]} size={20} />
-          Rated by {rating.rater_name || rating.rater_email || 'a connection'}
+          {t('skillDetail.ratedByPrefix')} {rating.rater_name || rating.rater_email || t('skillDetail.aConnection')}
         </p>
         {rating.comments && <p className="text-sm text-ink">{rating.comments}</p>}
       </div>
@@ -2353,10 +2361,10 @@ function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assesso
     body = (
       <div className="space-y-2">
         <p className="font-mono text-xs text-secondary">
-          {formatMonthYear(exp.start_date)} – {exp.end_date ? formatMonthYear(exp.end_date) : 'present'}
+          {formatMonthYear(exp.start_date)} – {exp.end_date ? formatMonthYear(exp.end_date) : t('skillDetail.present')}
         </p>
         <p className="text-sm text-secondary">
-          {exp.type === 'education' ? 'Developed during education' : 'Used during employment'} · {exp.organization}
+          {exp.type === 'education' ? t('skillDetail.developedDuringEducation') : t('skillDetail.usedDuringEmployment')} · {exp.organization}
         </p>
       </div>
     )
@@ -2380,7 +2388,7 @@ function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assesso
         )}
         {(s.evidence_url || evidencePaths.length > 0) && (
           <div>
-            <h5 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1">Evidence</h5>
+            <h5 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1">{t('skillDetail.evidence')}</h5>
             <div className="flex flex-wrap items-center gap-3">
               {s.evidence_url && (
                 <a
@@ -2389,7 +2397,7 @@ function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assesso
                   rel="noopener noreferrer"
                   className="text-xs text-moss font-medium"
                 >
-                  Evidence link
+                  {t('skillDetail.evidenceLink')}
                 </a>
               )}
               {evidencePaths.map((path, i) => (
@@ -2401,7 +2409,7 @@ function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assesso
       </div>
     )
   } else if (event.type === 'activity-group') {
-    title = `${event.verbLabel} · ${event.count} times`
+    title = `${event.verbLabel} · ${event.count} ${t('skillDetail.timesSuffix')}`
     body = (
       <div className="space-y-2">
         {event.statements.map((s) => {
@@ -2432,7 +2440,7 @@ function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, assesso
         <div className="flex items-center justify-between mb-4 gap-4">
           <h2 className="font-display text-xl text-ink">{title}</h2>
           <button type="button" onClick={onClose} className="shrink-0 text-secondary hover:text-ink text-sm">
-            Close
+            {t('skillDetail.close')}
           </button>
         </div>
         {body}
@@ -2467,6 +2475,7 @@ function RaterAvatar({ url, size = 16 }) {
 }
 
 function ScheduleSection({ skill, onUpdated }) {
+  const { t } = useLanguage()
   const [nextCheckinDate, setNextCheckinDate] = useState(skill.next_checkin_date ?? '')
   const [recurring, setRecurring] = useState(Boolean(skill.checkin_frequency_unit))
   const [frequencyValue, setFrequencyValue] = useState(skill.checkin_frequency_value ?? 1)
@@ -2493,7 +2502,7 @@ function ScheduleSection({ skill, onUpdated }) {
     // let a typed/pasted value through, so this is the actual guarantee a
     // check-in can never be scheduled in the past.
     if (nextCheckinDate && nextCheckinDate < todayDateString()) {
-      setError("Next self-assessment date can't be in the past.")
+      setError(t('skillDetail.dateCantBeInPast'))
       return
     }
     setSaving(true)
@@ -2520,12 +2529,12 @@ function ScheduleSection({ skill, onUpdated }) {
   return (
     <form onSubmit={handleSave} className="border-t border-hairline pt-4 space-y-3">
       <h3 className="font-mono text-xs uppercase tracking-wide text-secondary">
-        Self-assessment schedule
+        {t('skillDetail.selfAssessmentScheduleHeading')}
       </h3>
 
       <div>
         <label className="block text-sm text-secondary mb-1" htmlFor="nextCheckinDate">
-          Next self-assessment date
+          {t('skillDetail.nextSelfAssessmentDateLabel')}
         </label>
         <input
           id="nextCheckinDate"
@@ -2544,12 +2553,12 @@ function ScheduleSection({ skill, onUpdated }) {
           onChange={(e) => setRecurring(e.target.checked)}
           className="rounded border-hairline"
         />
-        Set up regular self-assessments
+        {t('skillDetail.setUpRegularSelfAssessments')}
       </label>
 
       {recurring && (
         <div className="flex items-center gap-2">
-          <span className="text-sm text-secondary">Every</span>
+          <span className="text-sm text-secondary">{t('skillDetail.every')}</span>
           <input
             type="number"
             min={1}
@@ -2563,28 +2572,29 @@ function ScheduleSection({ skill, onUpdated }) {
             onChange={(e) => setFrequencyUnit(e.target.value)}
             className="rounded-md border border-hairline bg-paper px-2 py-1.5 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
           >
-            <option value="weeks">weeks</option>
-            <option value="months">months</option>
-            <option value="years">years</option>
+            <option value="weeks">{t('skillDetail.weeks')}</option>
+            <option value="months">{t('skillDetail.months')}</option>
+            <option value="years">{t('skillDetail.years')}</option>
           </select>
         </div>
       )}
 
       {error && <p className="text-sm text-red-700">{error}</p>}
-      {saved && <p className="text-sm text-moss">Schedule saved.</p>}
+      {saved && <p className="text-sm text-moss">{t('skillDetail.scheduleSaved')}</p>}
 
       <button
         type="submit"
         disabled={saving}
         className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
       >
-        {saving ? 'Saving…' : 'Save schedule'}
+        {saving ? t('skillDetail.saving') : t('skillDetail.saveSchedule')}
       </button>
     </form>
   )
 }
 
 function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user, onUpdated }) {
+  const { t } = useLanguage()
   const isCustom = !skill.library_skill_id || skill.skill_library?.is_private
   const [name, setName] = useState(skill.name)
   const [trackingReason, setTrackingReason] = useState(skill.tracking_reason ?? null)
@@ -2594,7 +2604,7 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
   async function handleSave(e) {
     e.preventDefault()
     if (!name.trim()) {
-      setError('Name is required.')
+      setError(t('skillDetail.nameRequired'))
       return
     }
     setError(null)
@@ -2623,13 +2633,13 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
   return (
     <form onSubmit={handleSave} className="space-y-3">
       <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">
-        {isCustom ? 'Custom skill — private to you' : 'From the shared skill library'}
+        {isCustom ? t('skillDetail.customSkillPrivate') : t('skillDetail.fromSharedLibrary')}
       </p>
       {isCustom && (
         <>
           <div>
             <label className="block text-sm text-secondary mb-1" htmlFor="detailName">
-              Name
+              {t('skillDetail.nameLabel')}
             </label>
             <input
               id="detailName"
@@ -2640,7 +2650,7 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
           </div>
 
           <TagsField
-            tags={skillTags.map((t) => ({ id: t.id, name: t.tags?.name }))}
+            tags={skillTags.map((tag) => ({ id: tag.id, name: tag.tags?.name }))}
             onAddTag={onAddTag}
             onRemoveTag={onRemoveTag}
             skillName={name}
@@ -2662,7 +2672,7 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
           disabled={saving}
           className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
         >
-          {saving ? 'Saving…' : 'Save details'}
+          {saving ? t('skillDetail.saving') : t('skillDetail.saveDetails')}
         </button>
       </div>
     </form>
@@ -2677,6 +2687,7 @@ function DetailsSection({ skill, skillTags, allTags, onAddTag, onRemoveTag, user
 // current role it links straight to it; with more than one it opens
 // CurrentRoleSelectModal scoped to just the untracked ones.
 function TrackUnderCurrentRoleButton({ skill, user, onUpdated }) {
+  const { t } = useLanguage()
   const [status, setStatus] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -2738,11 +2749,10 @@ function TrackUnderCurrentRoleButton({ skill, user, onUpdated }) {
         disabled={!status || saving}
         className="rounded-full border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:border-moss hover:text-moss transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       >
-        {saving ? 'Adding…' : 'Track under current role'}
+        {saving ? t('skillDetail.adding') : t('skillDetail.trackUnderCurrentRole')}
       </button>
       <p className="text-xs text-secondary/80 mt-1">
-        Links this skill to your current job on the Experience timeline — creates one called
-        "Current role" if you don't have one yet, or asks which one if you have more than one.
+        {t('skillDetail.trackUnderCurrentRoleDescription')}
       </p>
       {error && <p className="text-sm text-red-700 mt-1">{error}</p>}
     </div>
@@ -2753,6 +2763,7 @@ function TrackUnderCurrentRoleButton({ skill, user, onUpdated }) {
 // editable details, so a destructive/semi-destructive action never sits
 // next to routine fields a learner is casually editing.
 function DeleteSection({ skill, onUpdated, onDeleted }) {
+  const { t } = useLanguage()
   const isCustom = !skill.library_skill_id || skill.skill_library?.is_private
   const isArchived = skill.lifecycle_stage === 'archived'
   const [saving, setSaving] = useState(false)
@@ -2815,14 +2826,14 @@ function DeleteSection({ skill, onUpdated, onDeleted }) {
   return (
     <div className="pt-6 border-t border-hairline">
       <h3 className="font-display text-base text-ink mb-2">
-        {isCustom ? 'Delete this skill' : 'Drop this skill'}
+        {isCustom ? t('skillDetail.deleteThisSkill') : t('skillDetail.dropThisSkill')}
       </h3>
       <p className="text-sm text-secondary mb-3">
         {isCustom
-          ? "Permanently deletes this skill and everything tied to it — self-assessments, evidence, tags, targets, and peer ratings. This can't be undone."
+          ? t('skillDetail.deleteDescriptionCustom')
           : isArchived
-            ? 'This skill is archived and hidden from your active skills list, but its history is untouched. Restore it to track it again.'
-            : "Archives this skill and removes it from your active skills list. Nothing is deleted — your history stays intact and you can restore it anytime."}
+            ? t('skillDetail.dropDescriptionArchived')
+            : t('skillDetail.dropDescriptionActive')}
       </p>
       {error && <p className="text-sm text-red-700 mb-3">{error}</p>}
       {isCustom ? (
@@ -2832,7 +2843,7 @@ function DeleteSection({ skill, onUpdated, onDeleted }) {
           disabled={saving}
           className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
         >
-          Delete skill
+          {t('skillDetail.deleteSkillButton')}
         </button>
       ) : isArchived ? (
         <button
@@ -2841,7 +2852,7 @@ function DeleteSection({ skill, onUpdated, onDeleted }) {
           disabled={saving}
           className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
         >
-          Restore skill
+          {t('skillDetail.restoreSkillButton')}
         </button>
       ) : (
         <button
@@ -2850,13 +2861,13 @@ function DeleteSection({ skill, onUpdated, onDeleted }) {
           disabled={saving}
           className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
         >
-          Drop skill
+          {t('skillDetail.dropSkillButton')}
         </button>
       )}
 
       {confirmingDelete && (
         <ConfirmDialog
-          message={`Delete "${skill.name}" and all of its self-assessment history? This can't be undone.`}
+          message={`${t('skillDetail.deleteConfirmPrefix')} "${skill.name}" ${t('skillDetail.deleteConfirmSuffix')}`}
           onConfirm={handleDelete}
           onCancel={() => setConfirmingDelete(false)}
           confirming={saving}
@@ -2865,8 +2876,8 @@ function DeleteSection({ skill, onUpdated, onDeleted }) {
 
       {confirmingDrop && (
         <ConfirmDialog
-          message={`Drop "${skill.name}"? It'll be archived and removed from your active skills list. Your history stays intact and you can restore it anytime.`}
-          confirmLabel="Drop"
+          message={`${t('skillDetail.dropConfirmPrefix')} "${skill.name}"${t('skillDetail.dropConfirmSuffix')}`}
+          confirmLabel={t('skillDetail.drop')}
           onConfirm={handleDrop}
           onCancel={() => setConfirmingDrop(false)}
           confirming={saving}
@@ -2877,6 +2888,7 @@ function DeleteSection({ skill, onUpdated, onDeleted }) {
 }
 
 function SettingsSection({ skill, user, onUpdated }) {
+  const { t } = useLanguage()
   const [visible, setVisible] = useState(skill.visible_on_profile ?? false)
   const [validateConnections, setValidateConnections] = useState(skill.offer_validate_connections ?? false)
   const [validateOthers, setValidateOthers] = useState(skill.offer_validate_others ?? false)
@@ -2950,7 +2962,7 @@ function SettingsSection({ skill, user, onUpdated }) {
   return (
     <div className="space-y-6">
       <div>
-        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Profile visibility</h4>
+        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">{t('skillDetail.profileVisibility')}</h4>
         <label className="flex items-start gap-3">
           <input
             type="checkbox"
@@ -2960,10 +2972,9 @@ function SettingsSection({ skill, user, onUpdated }) {
             className="mt-0.5 rounded border-hairline"
           />
           <span className="text-sm text-ink">
-            Show this skill on your skills profile
+            {t('skillDetail.showSkillOnProfile')}
             <span className="block text-xs text-secondary mt-0.5">
-              Only skills marked visible here can appear to your connections — and only if you've also
-              turned on "Let connections view your skills profile" in your Profile's Privacy settings.
+              {t('skillDetail.showSkillOnProfileDescription')}
             </span>
           </span>
         </label>
@@ -2971,7 +2982,7 @@ function SettingsSection({ skill, user, onUpdated }) {
 
       {!searchableLoading && searchVisibilityMode === 'selective' && skill.library_skill_id && (
         <div>
-          <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Skill search</h4>
+          <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">{t('skillDetail.skillSearchHeading')}</h4>
           <label className="flex items-start gap-3">
             <input
               type="checkbox"
@@ -2981,10 +2992,9 @@ function SettingsSection({ skill, user, onUpdated }) {
               className="mt-0.5 rounded border-hairline"
             />
             <span className="text-sm text-ink">
-              Show this skill when others search
+              {t('skillDetail.showSkillWhenSearch')}
               <span className="block text-xs text-secondary mt-0.5">
-                Your Privacy settings are set to "Choose which skills to show" — this is the same
-                list, editable from either place.
+                {t('skillDetail.showSkillWhenSearchDescription')}
               </span>
             </span>
           </label>
@@ -2993,11 +3003,9 @@ function SettingsSection({ skill, user, onUpdated }) {
 
       {canOfferValidation && (
         <div>
-          <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">Validating others</h4>
+          <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">{t('skillDetail.validatingOthersHeading')}</h4>
           <p className="text-xs text-secondary mb-3">
-            Since you've reached this level yourself, other people working toward it can ask you to review
-            their evidence and confirm they've got there too. If you accept a request, you get read-only
-            access to that one skill's record for as long as the request exists.
+            {t('skillDetail.validatingOthersDescription')}
           </p>
           <div className="space-y-3">
             <label className="flex items-start gap-3">
@@ -3010,7 +3018,7 @@ function SettingsSection({ skill, user, onUpdated }) {
                 }
                 className="mt-0.5 rounded border-hairline"
               />
-              <span className="text-sm text-ink">Let your connections ask you to validate this skill</span>
+              <span className="text-sm text-ink">{t('skillDetail.letConnectionsValidate')}</span>
             </label>
             <label className="flex items-start gap-3">
               <input
@@ -3022,7 +3030,7 @@ function SettingsSection({ skill, user, onUpdated }) {
                 }
                 className="mt-0.5 rounded border-hairline"
               />
-              <span className="text-sm text-ink">Let anyone on LearnScope ask you to validate this skill</span>
+              <span className="text-sm text-ink">{t('skillDetail.letAnyoneValidate')}</span>
             </label>
           </div>
         </div>

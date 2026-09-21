@@ -17,18 +17,24 @@ or just delete it.
 
 - general
 1. Multi-language: now 7 languages (en, es, fr, de, it, nl, zh) across
-   AppHeader nav/menu, Login/Signup/ForgotPassword, and the learner area's
+   AppHeader nav/menu, Login/Signup/ForgotPassword, the learner area's
    page-level shell text (headings, subheadings, primary buttons, empty
    states, tab/section labels) on Dashboard, Skills, Connections, Learning,
-   Actions, Activity, Experience, and SkillDetail's core Knowledge/
-   Application/Learn/Verify/Demonstrate/Validate structure. Not translated:
-   admin/provider/employer consoles, most modals and secondary dialogs,
-   deeply dynamic/AI-generated content (level guides, diagnostic questions),
-   and most of SkillDetail's ~2800 lines beyond that core structure —
-   still a meaningful amount of ongoing work, not something to treat as
-   finished. `t()` has no string-interpolation support yet (params), so a
-   few spots (e.g. "Assigned by {name}") were split into a prefix key
-   concatenated with the raw value rather than a single templated string.
+   Actions, Activity, Experience, and now all of SkillDetail.jsx — its
+   overview panels (Knowledge/Application, Learn/Verify/Demonstrate/
+   Validate, Skill Network, Upcoming), the settings dialog (details,
+   schedule, delete/drop, visibility/validation settings), and the History
+   tab's full timeline UI (activities, peer ratings, training, relationship
+   links, validation decisions, and their detail modals). Not translated:
+   admin/provider/employer consoles, most modals and secondary dialogs
+   elsewhere in the app, and deeply dynamic/AI-generated content (level
+   guides, diagnostic questions) — still a meaningful amount of ongoing
+   work, not something to treat as finished. `t()` has no
+   string-interpolation support yet (params), so spots with a dynamic value
+   (e.g. "Assigned by {name}", singular/plural counts) are split into a
+   translated prefix/suffix key concatenated with the raw value or a
+   count-driven singular/plural key pair, rather than a single templated
+   string.
 2. "Proxy as another user" — deliberately NOT built as literal session
    impersonation. The only way to make RLS-scoped queries genuinely return
    another learner's data is to hold a real, fully-privileged session as
