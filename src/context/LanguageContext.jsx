@@ -15,6 +15,16 @@ function resolve(dictionary, key) {
   return key.split('.').reduce((value, part) => value?.[part], dictionary)
 }
 
+// {paramName} placeholders inside a translated string get swapped for the
+// matching value in `params` -- an unmatched placeholder (missing param, or
+// a plain string with no `params` passed) is left as-is rather than blanked
+// out, so a caller forgetting a param is obvious in the UI instead of
+// silently vanishing.
+function interpolate(value, params) {
+  if (typeof value !== 'string' || !params) return value
+  return value.replace(/\{(\w+)\}/g, (match, name) => (name in params ? params[name] : match))
+}
+
 const LanguageContext = createContext(undefined)
 
 export function LanguageProvider({ children }) {
@@ -53,7 +63,8 @@ export function LanguageProvider({ children }) {
   )
 
   const t = useCallback(
-    (key) => resolve(translations[language], key) ?? resolve(translations[DEFAULT_LANGUAGE], key) ?? key,
+    (key, params) =>
+      interpolate(resolve(translations[language], key) ?? resolve(translations[DEFAULT_LANGUAGE], key) ?? key, params),
     [language]
   )
 
