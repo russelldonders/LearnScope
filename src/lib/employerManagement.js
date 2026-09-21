@@ -127,3 +127,104 @@ export async function listEmployerMemberManagers(employeeMemberId) {
   throwIfError(error)
   return data ?? []
 }
+
+export async function listMyEmployerManagementContexts() {
+  const { data, error } = await supabase.rpc('list_my_employer_management_contexts')
+  throwIfError(error)
+  return (data ?? []).map((row) => ({
+    employerId: row.employer_id,
+    employerName: row.employer_name,
+    employerSlug: row.employer_slug,
+    managerMemberId: row.manager_member_id,
+    directReportCount: Number(row.direct_report_count ?? 0),
+    indirectReportCount: Number(row.indirect_report_count ?? 0),
+  }))
+}
+
+export async function listMyEmployerTeam(employerId) {
+  const { data, error } = await supabase.rpc('list_my_employer_team', {
+    p_employer_id: employerId,
+  })
+  throwIfError(error)
+  return (data ?? []).map((row) => ({
+    employeeMemberId: row.employee_member_id,
+    employeeUserId: row.employee_user_id,
+    fullName: row.full_name,
+    avatarUrl: row.avatar_url,
+    reportDepth: Number(row.report_depth ?? 1),
+    accessScope: row.access_scope ?? [],
+    relationshipTypes: row.relationship_types ?? [],
+    isPrimary: Boolean(row.is_primary),
+  }))
+}
+
+export async function getMyEmployerTeamMemberSnapshot(employerId, employeeMemberId) {
+  const { data, error } = await supabase.rpc('get_my_employer_team_member_snapshot', {
+    p_employer_id: employerId,
+    p_employee_member_id: employeeMemberId,
+  })
+  throwIfError(error)
+  return data
+}
+
+export async function listManagerAssignableCourses(employerId, employeeMemberId) {
+  const { data, error } = await supabase.rpc('list_manager_assignable_courses', {
+    p_employer_id: employerId,
+    p_employee_member_id: employeeMemberId,
+  })
+  throwIfError(error)
+  return data ?? []
+}
+
+export async function assignCourseToManagedEmployerMember(employerId, employeeMemberId, catalogueCourseId) {
+  const { data, error } = await supabase.rpc('assign_course_to_managed_employer_member', {
+    p_employer_id: employerId,
+    p_employee_member_id: employeeMemberId,
+    p_catalogue_course_id: catalogueCourseId,
+  })
+  throwIfError(error)
+  return data
+}
+
+export async function listManagerSuggestibleSkills(employerId, employeeMemberId) {
+  const { data, error } = await supabase.rpc('list_manager_suggestible_skills', {
+    p_employer_id: employerId,
+    p_employee_member_id: employeeMemberId,
+  })
+  throwIfError(error)
+  return data ?? []
+}
+
+export async function suggestSkillToManagedEmployerMember(
+  employerId,
+  employeeMemberId,
+  skillLibraryId,
+  { targetLevel = null, targetDate = null, comments = null } = {}
+) {
+  const { data, error } = await supabase.rpc('suggest_skill_to_managed_employer_member', {
+    p_employer_id: employerId,
+    p_employee_member_id: employeeMemberId,
+    p_skill_library_id: skillLibraryId,
+    p_target_level: targetLevel,
+    p_target_date: targetDate || null,
+    p_comments: comments?.trim() || null,
+  })
+  throwIfError(error)
+  return data
+}
+
+export async function confirmManagedEmployerSkillLevel(
+  employerId,
+  employeeMemberId,
+  skillLibraryId,
+  level
+) {
+  const { data, error } = await supabase.rpc('confirm_managed_employer_skill_level', {
+    p_employer_id: employerId,
+    p_employee_member_id: employeeMemberId,
+    p_skill_library_id: skillLibraryId,
+    p_level: level,
+  })
+  throwIfError(error)
+  return data
+}

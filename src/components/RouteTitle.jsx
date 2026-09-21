@@ -21,6 +21,8 @@ const TITLES = [
   [/^\/connections$/, 'Connections'],
   [/^\/training$/, 'Find training'],
   [/^\/learning$/, 'Learning'],
+  [/^\/team$/, 'My team'],
+  [/^\/team\/[^/]+$/, 'Team member'],
   [/^\/courses\/[^/]+\/learn$/, 'Course player'],
   [/^\/courses\/[^/]+$/, 'Course details'],
   [/^\/skills-profile\/[^/]+$/, 'Skills profile'],

@@ -11,11 +11,19 @@ const relationshipQuery = {
 vi.mock('./supabaseClient', () => ({ supabase: { from, rpc } }))
 
 const {
+  assignCourseToManagedEmployerMember,
   canManageEmployerMember,
+  confirmManagedEmployerSkillLevel,
   createEmployerManagementRelationship,
   endEmployerManagementRelationship,
+  getMyEmployerTeamMemberSnapshot,
   listEmployerDirectReports,
   listEmployerManagementRelationships,
+  listManagerAssignableCourses,
+  listManagerSuggestibleSkills,
+  listMyEmployerManagementContexts,
+  listMyEmployerTeam,
+  suggestSkillToManagedEmployerMember,
   updateEmployerManagementRelationship,
 } = await import('./employerManagement')
 
@@ -122,5 +130,89 @@ describe('employer management service', () => {
     rpc.mockResolvedValueOnce({ data: null, error })
 
     await expect(endEmployerManagementRelationship('relationship-1')).rejects.toBe(error)
+  })
+
+  it('maps caller-scoped manager contexts and team rows', async () => {
+    rpc
+      .mockResolvedValueOnce({
+        data: [{
+          employer_id: 'employer-1', employer_name: 'Acme', employer_slug: 'acme',
+          manager_member_id: 'manager-1', direct_report_count: 2, indirect_report_count: 3,
+        }],
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: [{
+          employee_member_id: 'member-1', employee_user_id: 'user-1', full_name: 'Alex Example',
+          avatar_url: null, report_depth: 2, access_scope: ['employment'],
+          relationship_types: ['indirect'], is_primary: false,
+        }],
+        error: null,
+      })
+
+    await expect(listMyEmployerManagementContexts()).resolves.toEqual([{
+      employerId: 'employer-1', employerName: 'Acme', employerSlug: 'acme',
+      managerMemberId: 'manager-1', directReportCount: 2, indirectReportCount: 3,
+    }])
+    await expect(listMyEmployerTeam('employer-1')).resolves.toEqual([{
+      employeeMemberId: 'member-1', employeeUserId: 'user-1', fullName: 'Alex Example',
+      avatarUrl: null, reportDepth: 2, accessScope: ['employment'],
+      relationshipTypes: ['indirect'], isPrimary: false,
+    }])
+
+    expect(rpc).toHaveBeenNthCalledWith(1, 'list_my_employer_management_contexts')
+    expect(rpc).toHaveBeenNthCalledWith(2, 'list_my_employer_team', { p_employer_id: 'employer-1' })
+  })
+
+  it('loads a team-member snapshot through the strict employer-context RPC', async () => {
+    const snapshot = { employeeMemberId: 'member-1', sharedSkills: [] }
+    rpc.mockResolvedValueOnce({ data: snapshot, error: null })
+
+    await expect(getMyEmployerTeamMemberSnapshot('employer-1', 'member-1')).resolves.toBe(snapshot)
+    expect(rpc).toHaveBeenCalledWith('get_my_employer_team_member_snapshot', {
+      p_employer_id: 'employer-1',
+      p_employee_member_id: 'member-1',
+    })
+  })
+
+  it('uses separately scope-checked RPCs for manager training actions', async () => {
+    rpc
+      .mockResolvedValueOnce({ data: [{ id: 'course-1', name: 'Safety' }], error: null })
+      .mockResolvedValueOnce({ data: 'assignment-1', error: null })
+
+    await expect(listManagerAssignableCourses('employer-1', 'member-1')).resolves.toEqual([
+      { id: 'course-1', name: 'Safety' },
+    ])
+    await expect(assignCourseToManagedEmployerMember('employer-1', 'member-1', 'course-1'))
+      .resolves.toBe('assignment-1')
+
+    expect(rpc).toHaveBeenNthCalledWith(1, 'list_manager_assignable_courses', {
+      p_employer_id: 'employer-1', p_employee_member_id: 'member-1',
+    })
+    expect(rpc).toHaveBeenNthCalledWith(2, 'assign_course_to_managed_employer_member', {
+      p_employer_id: 'employer-1', p_employee_member_id: 'member-1', p_catalogue_course_id: 'course-1',
+    })
+  })
+
+  it('normalizes scoped skill suggestion input and confirms a level', async () => {
+    rpc
+      .mockResolvedValueOnce({ data: [{ id: 'skill-1', name: 'Coaching' }], error: null })
+      .mockResolvedValueOnce({ data: 'suggestion-1', error: null })
+      .mockResolvedValueOnce({ data: 'confirmation-1', error: null })
+
+    await expect(listManagerSuggestibleSkills('employer-1', 'member-1')).resolves.toHaveLength(1)
+    await suggestSkillToManagedEmployerMember('employer-1', 'member-1', 'skill-1', {
+      targetLevel: 4, targetDate: '', comments: '  Focus on facilitation  ',
+    })
+    await confirmManagedEmployerSkillLevel('employer-1', 'member-1', 'skill-1', 3)
+
+    expect(rpc).toHaveBeenNthCalledWith(2, 'suggest_skill_to_managed_employer_member', {
+      p_employer_id: 'employer-1', p_employee_member_id: 'member-1', p_skill_library_id: 'skill-1',
+      p_target_level: 4, p_target_date: null, p_comments: 'Focus on facilitation',
+    })
+    expect(rpc).toHaveBeenNthCalledWith(3, 'confirm_managed_employer_skill_level', {
+      p_employer_id: 'employer-1', p_employee_member_id: 'member-1',
+      p_skill_library_id: 'skill-1', p_level: 3,
+    })
   })
 })

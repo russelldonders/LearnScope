@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { getPendingInviteCode } from '../lib/connections'
 import { getPendingEnrolCourseId } from '../lib/courseCatalogue'
 import { chooseActiveWorkspace, listAvailableWorkspaces } from '../lib/workspaces'
+import { listMyEmployerManagementContexts } from '../lib/employerManagement'
 
 const AuthContext = createContext(undefined)
 
@@ -32,6 +33,11 @@ export function AuthProvider({ children }) {
   // provider staff, so it's tracked independently rather than folded into
   // organisationMemberships above.
   const [employerMemberships, setEmployerMemberships] = useState(null)
+  // Active employer-scoped management contexts. This is derived from live
+  // management relationships in Postgres, never from an employer role or a
+  // global is_manager flag. An empty array is a resolved non-manager state.
+  const [managerContexts, setManagerContexts] = useState(null)
+  const [managerContextsError, setManagerContextsError] = useState(null)
   // Workspaces are an additive context layer. Existing learner pages continue
   // to use user.id until their domains are migrated deliberately; exposing the
   // resolved personal workspace here lets new UI integrate without changing
@@ -108,6 +114,20 @@ export function AuthProvider({ children }) {
       .then(({ data, error }) => setEmployerMemberships(!error && data ? data : []))
   }, [userId])
 
+  const refreshManagerContexts = useCallback(async () => {
+    if (!userId) return []
+    try {
+      const contexts = await listMyEmployerManagementContexts()
+      setManagerContexts(contexts)
+      setManagerContextsError(null)
+      return contexts
+    } catch (error) {
+      setManagerContexts([])
+      setManagerContextsError(error)
+      return []
+    }
+  }, [userId])
+
   const refreshWorkspaces = useCallback(async () => {
     if (!userId) return []
     try {
@@ -136,6 +156,8 @@ export function AuthProvider({ children }) {
       setIsPlatformAdmin(null)
       setOrganisationMemberships(null)
       setEmployerMemberships(null)
+      setManagerContexts(null)
+      setManagerContextsError(null)
       setWorkspaces(null)
       setActiveWorkspace(null)
       setWorkspaceError(null)
@@ -149,8 +171,9 @@ export function AuthProvider({ children }) {
       .then(({ data, error }) => setIsPlatformAdmin(!error && Boolean(data)))
     refreshOrganisationMemberships()
     refreshEmployerMemberships()
+    refreshManagerContexts()
     refreshWorkspaces()
-  }, [userId, refreshOrganisationMemberships, refreshEmployerMemberships, refreshWorkspaces])
+  }, [userId, refreshOrganisationMemberships, refreshEmployerMemberships, refreshManagerContexts, refreshWorkspaces])
 
   async function markOnboardingComplete() {
     if (!userId) return { error: null }
@@ -173,6 +196,9 @@ export function AuthProvider({ children }) {
     refreshOrganisationMemberships,
     employerMemberships,
     refreshEmployerMemberships,
+    managerContexts,
+    managerContextsError,
+    refreshManagerContexts,
     workspaces,
     activeWorkspace,
     workspaceError,
