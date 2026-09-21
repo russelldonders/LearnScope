@@ -11,6 +11,7 @@ import PlatformAdminRoute from './components/PlatformAdminRoute'
 import ProviderAdminRoute from './components/ProviderAdminRoute'
 import EmployerAdminRoute from './components/EmployerAdminRoute'
 import EmployerMemberRoute from './components/EmployerMemberRoute'
+import ManagerRoute from './components/ManagerRoute'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
@@ -41,6 +42,7 @@ import CourseCatalogue from './pages/CourseCatalogue'
 import CourseDetail from './pages/CourseDetail'
 import CourseLearn from './pages/CourseLearn'
 import Learning from './pages/Learning'
+import MyTeam from './pages/MyTeam'
 import ValidateRequest from './pages/ValidateRequest'
 import AdminOverview from './pages/admin/AdminOverview'
 import AdminUsers from './pages/admin/AdminUsers'
@@ -224,6 +226,22 @@ function App() {
               <ProtectedRoute>
                 <Learning />
               </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/team"
+            element={
+              <ManagerRoute>
+                <MyTeam />
+              </ManagerRoute>
+            }
+          />
+          <Route
+            path="/team/:employeeMemberId"
+            element={
+              <ManagerRoute>
+                <MyTeam />
+              </ManagerRoute>
             }
           />
           <Route

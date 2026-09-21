@@ -26,7 +26,7 @@ test('forgot password form exposes accessible field names', async ({ page }) => 
 // whenever there's no signed-in user -- this is the one behavior of these
 // pages that's actually reachable without seeded backend data/a real
 // session, and it's exactly the guard every one of these routes depends on.
-for (const path of ['/dashboard', '/profile', '/connections', '/actions']) {
+for (const path of ['/dashboard', '/profile', '/connections', '/actions', '/team', '/team/member-id']) {
   test(`${path} redirects an unauthenticated visitor to /login`, async ({ page }) => {
     await page.goto(path);
     await page.waitForURL('**/login');

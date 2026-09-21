@@ -14,6 +14,7 @@ const NAV_LINKS = [
   { to: '/skills', label: 'nav.skills', requires: 'hasSkills' },
   { to: '/experience', label: 'nav.experience' },
   { to: '/learning', label: 'nav.learning', requires: 'hasCourses' },
+  { to: '/team', label: 'nav.team', requires: 'managerContexts' },
 ]
 
 const MENU_ITEMS = [
@@ -34,7 +35,7 @@ const MENU_ITEMS = [
 // logo stays on/returns to that page instead of jumping to the visitor's
 // personal dashboard.
 export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandName, brandHomeHref = '/dashboard' }) {
-  const { signOut, user, isPlatformAdmin, organisationMemberships, employerMemberships } = useAuth()
+  const { signOut, user, isPlatformAdmin, organisationMemberships, employerMemberships, managerContexts } = useAuth()
   const { pendingActionCount } = usePendingActions()
   const { navVisibility } = useNavVisibility()
   const { t } = useLanguage()
@@ -57,7 +58,10 @@ export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandNam
       })
   }, [user])
 
-  const visibleNavLinks = NAV_LINKS.filter((link) => !link.requires || navVisibility[link.requires])
+  const visibleNavLinks = NAV_LINKS.filter((link) => {
+    if (link.requires === 'managerContexts') return managerContexts?.length > 0
+    return !link.requires || navVisibility[link.requires]
+  })
   const visibleMenuItems = MENU_ITEMS.filter((item) => !item.requires || navVisibility[item.requires])
 
   useEffect(() => {
@@ -210,7 +214,7 @@ export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandNam
                 key={link.to}
                 to={link.to}
                 className={`flex items-center gap-1.5 text-sm rounded-md px-2.5 py-1.5 whitespace-nowrap ${
-                  location.pathname === link.to
+                  location.pathname === link.to || (link.to === '/team' && location.pathname.startsWith('/team/'))
                     ? 'text-ink font-medium bg-paper'
                     : 'text-secondary hover:text-ink'
                 }`}

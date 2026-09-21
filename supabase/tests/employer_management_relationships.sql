@@ -110,6 +110,28 @@ insert into public.employers (id, name, provider_organisation_id) values
   ('a0000000-0000-0000-0000-000000000002', 'Employer A', 'a0000000-0000-0000-0000-000000000001'),
   ('b0000000-0000-0000-0000-000000000002', 'Employer B', 'b0000000-0000-0000-0000-000000000001');
 
+update public.profiles set
+  first_name = case id
+    when '20000000-0000-0000-0000-000000000002' then 'Line'
+    when '30000000-0000-0000-0000-000000000003' then 'Team'
+    when '40000000-0000-0000-0000-000000000004' then 'Worker'
+    when '50000000-0000-0000-0000-000000000005' then 'Functional'
+    else first_name
+  end,
+  last_name = case id
+    when '20000000-0000-0000-0000-000000000002' then 'Manager'
+    when '30000000-0000-0000-0000-000000000003' then 'Lead'
+    when '40000000-0000-0000-0000-000000000004' then 'Person'
+    when '50000000-0000-0000-0000-000000000005' then 'Manager'
+    else last_name
+  end
+where id in (
+  '20000000-0000-0000-0000-000000000002',
+  '30000000-0000-0000-0000-000000000003',
+  '40000000-0000-0000-0000-000000000004',
+  '50000000-0000-0000-0000-000000000005'
+);
+
 insert into public.employer_members (id, employer_id, user_id, role, status) values
   ('a1000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'admin', 'active'),
   ('a2000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002', 'member', 'active'),
@@ -233,6 +255,12 @@ insert into public.skill_library (id, name) values
   ('c0000000-0000-0000-0000-000000000001', 'Shared SQL'),
   ('c0000000-0000-0000-0000-000000000002', 'Private Writing');
 
+insert into public.organisation_offered_skills (
+  organisation_id, skill_library_id, created_by
+) values
+  ('a0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001'),
+  ('a0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001');
+
 insert into public.skills (id, user_id, name, library_skill_id) values
   ('c1000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000004', 'Shared SQL', 'c0000000-0000-0000-0000-000000000001'),
   ('c1000000-0000-0000-0000-000000000002', '40000000-0000-0000-0000-000000000004', 'Private Writing', 'c0000000-0000-0000-0000-000000000002');
@@ -270,6 +298,25 @@ insert into public.employer_data_access_shared_skills (request_id, skill_id) val
 
 insert into public.course_catalogue (id, name, version_group_id) values
   ('e0000000-0000-0000-0000-000000000001', 'Employer course', 'e0000000-0000-0000-0000-000000000001');
+insert into public.course_catalogue (
+  id, name, organisation_id, status, version_group_id, is_current_published
+) values (
+  'e0000000-0000-0000-0000-000000000002', 'Manager-assigned course',
+  'a0000000-0000-0000-0000-000000000001', 'approved',
+  'e0000000-0000-0000-0000-000000000002', true
+);
+insert into public.catalogues (id, organisation_id, name) values (
+  'e0000000-0000-0000-0000-000000000003',
+  'a0000000-0000-0000-0000-000000000001',
+  'Employer A catalogue'
+);
+insert into public.course_catalogue_publications (
+  course_id, catalogue_id, selected_by, published_at
+) values (
+  'e0000000-0000-0000-0000-000000000002',
+  'e0000000-0000-0000-0000-000000000003',
+  '10000000-0000-0000-0000-000000000001', now()
+);
 insert into public.course_assignments (id, employer_id, catalogue_course_id, assigned_to, assigned_by) values
   ('e1000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000001'),
   ('e1000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000004', '80000000-0000-0000-0000-000000000008');
@@ -363,6 +410,146 @@ select pg_temp.assert_boolean_as(
   'same people remain isolated in a second employer'
 );
 
+-- Caller-scoped My Team projections expose only active relationship
+-- contexts and manageable members, never employer-admin status by itself.
+select pg_temp.assert_count_as(
+  '20000000-0000-0000-0000-000000000002',
+  $$select * from public.list_my_employer_management_contexts()
+    where employer_id = 'a0000000-0000-0000-0000-000000000002'
+      and direct_report_count = 1 and indirect_report_count = 1$$,
+  1,
+  'line manager receives one active employer context'
+);
+select pg_temp.assert_count_as(
+  '10000000-0000-0000-0000-000000000001',
+  $$select * from public.list_my_employer_management_contexts()$$,
+  0,
+  'employer admin status alone does not create a manager context'
+);
+select pg_temp.assert_count_as(
+  '20000000-0000-0000-0000-000000000002',
+  $$select * from public.list_my_employer_team('a0000000-0000-0000-0000-000000000002')$$,
+  2,
+  'line manager team projection contains direct and intended indirect reports'
+);
+select pg_temp.assert_count_as(
+  '50000000-0000-0000-0000-000000000005',
+  $$select * from public.list_my_employer_team('a0000000-0000-0000-0000-000000000002')$$,
+  1,
+  'functional manager projection excludes the direct report subtree'
+);
+select pg_temp.assert_count_as(
+  '20000000-0000-0000-0000-000000000002',
+  $$select * from public.list_my_employer_team('b0000000-0000-0000-0000-000000000002')$$,
+  0,
+  'changing the employer id returns no cross-employer team members'
+);
+select pg_temp.assert_raises_as(
+  '50000000-0000-0000-0000-000000000005',
+  $$select public.get_my_employer_team_member_snapshot(
+    'a0000000-0000-0000-0000-000000000002',
+    'a4000000-0000-0000-0000-000000000004'
+  )$$,
+  'Team member not found',
+  'matrix manager cannot open an unrelated subtree member snapshot'
+);
+select pg_temp.assert_raises_as(
+  '20000000-0000-0000-0000-000000000002',
+  $$select public.get_my_employer_team_member_snapshot(
+    'b0000000-0000-0000-0000-000000000002',
+    'b4000000-0000-0000-0000-000000000004'
+  )$$,
+  'Team member not found',
+  'manager cannot open the same person through another employer'
+);
+
+select pg_temp.assert_boolean_as(
+  '20000000-0000-0000-0000-000000000002',
+  $$select
+      jsonb_array_length(snapshot->'employmentFields') > 0
+      and jsonb_array_length(snapshot->'trainingAssignments') = 1
+      and jsonb_array_length(snapshot->'skillSuggestions') = 1
+      and jsonb_array_length(snapshot->'skillConfirmations') = 1
+      and jsonb_array_length(snapshot->'sharedSkills') = 1
+      and snapshot::text not like '%Private Writing%'
+    from (select public.get_my_employer_team_member_snapshot(
+      'a0000000-0000-0000-0000-000000000002',
+      'a4000000-0000-0000-0000-000000000004'
+    ) snapshot) checked$$,
+  true,
+  'member snapshot returns scoped employer data and only explicitly shared learner skills'
+);
+
+-- Manager actions are independently scope-checked in PostgreSQL.
+select pg_temp.assert_count_as(
+  '20000000-0000-0000-0000-000000000002',
+  $$select * from public.list_manager_assignable_courses(
+    'a0000000-0000-0000-0000-000000000002',
+    'a4000000-0000-0000-0000-000000000004'
+  ) where id = 'e0000000-0000-0000-0000-000000000002'$$,
+  1,
+  'scoped manager can list employer-enabled training'
+);
+select pg_temp.assert_raises_as(
+  '50000000-0000-0000-0000-000000000005',
+  $$select public.assign_course_to_managed_employer_member(
+    'a0000000-0000-0000-0000-000000000002',
+    'a3000000-0000-0000-0000-000000000003',
+    'e0000000-0000-0000-0000-000000000002'
+  )$$,
+  'Not authorised',
+  'functional manager cannot assign training without training scope'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '20000000-0000-0000-0000-000000000002', true);
+select public.assign_course_to_managed_employer_member(
+  'a0000000-0000-0000-0000-000000000002',
+  'a4000000-0000-0000-0000-000000000004',
+  'e0000000-0000-0000-0000-000000000002'
+);
+select public.suggest_skill_to_managed_employer_member(
+  'a0000000-0000-0000-0000-000000000002',
+  'a4000000-0000-0000-0000-000000000004',
+  'c0000000-0000-0000-0000-000000000002',
+  3, current_date + 30, 'Employer development target'
+);
+select public.confirm_managed_employer_skill_level(
+  'a0000000-0000-0000-0000-000000000002',
+  'a4000000-0000-0000-0000-000000000004',
+  'c0000000-0000-0000-0000-000000000002',
+  2::smallint
+);
+reset role;
+
+select pg_temp.assert_count_as(
+  '20000000-0000-0000-0000-000000000002',
+  $$select * from public.course_assignments
+    where employer_id = 'a0000000-0000-0000-0000-000000000002'
+      and assigned_to = '40000000-0000-0000-0000-000000000004'
+      and catalogue_course_id = 'e0000000-0000-0000-0000-000000000002'$$,
+  1,
+  'scoped manager can create an employer-owned training assignment'
+);
+select pg_temp.assert_count_as(
+  '20000000-0000-0000-0000-000000000002',
+  $$select * from public.employer_skill_suggestions
+    where employer_id = 'a0000000-0000-0000-0000-000000000002'
+      and learner_id = '40000000-0000-0000-0000-000000000004'
+      and skill_library_id = 'c0000000-0000-0000-0000-000000000002'$$,
+  1,
+  'scoped manager can create an employer-owned skill suggestion'
+);
+select pg_temp.assert_count_as(
+  '20000000-0000-0000-0000-000000000002',
+  $$select * from public.employer_skill_confirmations
+    where employer_id = 'a0000000-0000-0000-0000-000000000002'
+      and user_id = '40000000-0000-0000-0000-000000000004'
+      and library_skill_id = 'c0000000-0000-0000-0000-000000000002'$$,
+  1,
+  'scoped manager can add an attributed employer skill confirmation'
+);
+
 -- Employer-owned rows are visible only within scope and employer.
 select pg_temp.assert_count_as('20000000-0000-0000-0000-000000000002', $$select * from public.employer_member_field_values where id = 'e6000000-0000-0000-0000-000000000001'$$, 1, 'indirect manager sees employer roster data');
 select pg_temp.assert_count_as('20000000-0000-0000-0000-000000000002', $$select * from public.employer_role_assignments where id = 'e3000000-0000-0000-0000-000000000001'$$, 1, 'indirect manager sees employer role assignment');
@@ -398,6 +585,15 @@ where request_id = 'd0000000-0000-0000-0000-000000000001';
 select pg_temp.assert_count_as('20000000-0000-0000-0000-000000000002', $$select * from public.skills where id = 'c1000000-0000-0000-0000-000000000001'$$, 0, 'revoking sharing removes manager skill access');
 select pg_temp.assert_count_as('20000000-0000-0000-0000-000000000002', $$select * from public.courses where id = 'c3000000-0000-0000-0000-000000000001'$$, 0, 'revoking sharing removes manager training access');
 select pg_temp.assert_count_as('20000000-0000-0000-0000-000000000002', $$select * from public.course_assignments where id = 'e1000000-0000-0000-0000-000000000001'$$, 1, 'revoking sharing does not erase employer-owned access');
+select pg_temp.assert_boolean_as(
+  '20000000-0000-0000-0000-000000000002',
+  $$select jsonb_array_length(public.get_my_employer_team_member_snapshot(
+    'a0000000-0000-0000-0000-000000000002',
+    'a4000000-0000-0000-0000-000000000004'
+  )->'sharedSkills') = 0$$,
+  true,
+  'revoking sharing removes skills from the manager snapshot'
+);
 
 -- Membership deactivation immediately removes management access.
 update public.employer_members set status = 'inactive'

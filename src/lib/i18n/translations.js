@@ -29,7 +29,8 @@ export const translations = {
       home: 'Home',
       skills: 'Skills',
       experience: 'Experience',
-      learning: 'Learning',
+      learning: 'My learning',
+      team: 'My team',
       actions: 'Actions',
     },
     menu: {
@@ -819,7 +820,8 @@ export const translations = {
       home: 'Inicio',
       skills: 'Habilidades',
       experience: 'Experiencia',
-      learning: 'Aprendizaje',
+      learning: 'Mi aprendizaje',
+      team: 'Mi equipo',
       actions: 'Acciones',
     },
     menu: {
@@ -1611,7 +1613,8 @@ export const translations = {
       home: 'Accueil',
       skills: 'Compétences',
       experience: 'Expérience',
-      learning: 'Formation',
+      learning: 'Ma formation',
+      team: 'Mon équipe',
       actions: 'Actions',
     },
     menu: {
@@ -2404,7 +2407,8 @@ export const translations = {
       home: 'Start',
       skills: 'Fähigkeiten',
       experience: 'Erfahrung',
-      learning: 'Lernen',
+      learning: 'Mein Lernen',
+      team: 'Mein Team',
       actions: 'Aktionen',
     },
     menu: {
@@ -3197,7 +3201,8 @@ export const translations = {
       home: 'Home',
       skills: 'Competenze',
       experience: 'Esperienza',
-      learning: 'Formazione',
+      learning: 'La mia formazione',
+      team: 'Il mio team',
       actions: 'Azioni',
     },
     menu: {
@@ -3990,7 +3995,8 @@ export const translations = {
       home: 'Home',
       skills: 'Vaardigheden',
       experience: 'Ervaring',
-      learning: 'Leren',
+      learning: 'Mijn leren',
+      team: 'Mijn team',
       actions: 'Acties',
     },
     menu: {
@@ -4781,7 +4787,8 @@ export const translations = {
       home: '首页',
       skills: '技能',
       experience: '经历',
-      learning: '学习',
+      learning: '我的学习',
+      team: '我的团队',
       actions: '待办',
     },
     menu: {

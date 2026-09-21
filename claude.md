@@ -170,6 +170,14 @@ Two Supabase projects: **Staging** (local dev + Vercel Preview) and **Production
 
 Two Git branches: `staging` (active dev; every push deploys a Vercel Preview build against Staging) and `master` (Vercel's Production branch; updated periodically by merging `staging` in once a batch is ready — not on every commit).
 
+### Staging changelog discipline
+
+At the end of every session that deploys a user- or admin-visible feature, fix or behaviour change to `staging`, add a concise plain-language entry to Staging's `platform_changelog_entries` before declaring the work complete. Add it as **unreleased** (`release_id is null`) so Staging maintains the running list for the next release. Do this proactively without waiting to be asked, and verify the inserted entry by querying Staging afterwards.
+
+Changelog summaries describe the outcome for users or administrators, not implementation details or commit messages. Combine tightly related changes where that reads more clearly, but do not omit a visible change. Do not add entries for internal-only refactors, tests, documentation or migrations that do not change application behaviour.
+
+Adding an unreleased Staging entry does **not** authorise a Production change or a numbered release. Only bundle pending entries into a new `platform_releases` version and mirror that version and its entries to Production during the explicit `staging` → `master` release workflow below.
+
 Release checklist when merging `staging` into `master`:
 
 1. Diff `master..staging` for new files under `supabase/migrations/` — these ran against Staging but not yet Production.
