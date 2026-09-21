@@ -45,6 +45,7 @@ import MutationFeedback from '../../components/MutationFeedback'
 import StatusBadge from '../../components/StatusBadge'
 import EmployerRoleProfilesSection from './EmployerRoleProfilesSection'
 import EmployerOverviewPanel from './EmployerOverviewPanel'
+import EmployerManagementSection from './EmployerManagementSection'
 
 // Training, Skills, Catalogues and Resources belong to the attached provider
 // organisation (the same components ProviderConsole.jsx mounts, reused
@@ -72,7 +73,7 @@ const SECTIONS = [
   { key: 'provider-catalogues', label: 'Catalogues', providerTab: true },
   { key: 'provider-resources', label: 'Resources', providerTab: true },
   { key: 'provider-lti-tools', label: 'LTI tools', adminOnly: true, providerTab: true },
-  { key: 'users', label: 'Users' },
+  { key: 'users', label: 'Staff' },
   { key: 'roles', label: 'Role profiles' },
   { key: 'providers', label: 'Linked providers' },
 ]
@@ -731,16 +732,62 @@ const DATA_ACCESS_STATUS_LABELS = {
   revoked: 'Access revoked',
 }
 
-function EmployerUsersPanel({ employer, attachedProviderOrg, canManageTrainingTeam, searchParams, setSearchParams }) {
-  return (
-    <div>
+export function EmployerUsersPanel({ employer, attachedProviderOrg, canManageTrainingTeam, searchParams, setSearchParams }) {
+  const usersView = searchParams.get('usersView')
+  const showManagement = usersView === 'reporting'
+
+  function viewParams(view) {
+    const next = new URLSearchParams(searchParams)
+    if (view) next.set('usersView', view)
+    else next.delete('usersView')
+    ;['q', 'status', 'sort', 'dir', 'page', 'pageSize'].forEach((key) => next.delete(key))
+    return next
+  }
+
+  if (usersView === 'add') {
+    return (
       <EmployerLearnersPanel
         employer={employer}
         searchParams={searchParams}
         setSearchParams={setSearchParams}
         attachedProviderOrg={canManageTrainingTeam ? attachedProviderOrg : null}
       />
+    )
+  }
 
+  return (
+    <div>
+      <nav aria-label="Staff workspace" className="mb-6 flex flex-wrap gap-1 border-b border-hairline">
+        <Link
+          to={`?${viewParams(null)}`}
+          aria-current={!showManagement ? 'page' : undefined}
+          className={`px-3 py-2 -mb-px border-b-2 text-sm whitespace-nowrap ${
+            !showManagement ? 'border-moss text-ink font-medium' : 'border-transparent text-secondary hover:text-ink'
+          }`}
+        >
+          People
+        </Link>
+        <Link
+          to={`?${viewParams('reporting')}`}
+          aria-current={showManagement ? 'page' : undefined}
+          className={`px-3 py-2 -mb-px border-b-2 text-sm whitespace-nowrap ${
+            showManagement ? 'border-moss text-ink font-medium' : 'border-transparent text-secondary hover:text-ink'
+          }`}
+        >
+          Reporting &amp; management
+        </Link>
+      </nav>
+
+      {showManagement ? (
+        <EmployerManagementSection employer={employer} />
+      ) : (
+        <EmployerLearnersPanel
+          employer={employer}
+          searchParams={searchParams}
+          setSearchParams={setSearchParams}
+          attachedProviderOrg={canManageTrainingTeam ? attachedProviderOrg : null}
+        />
+      )}
     </div>
   )
 }
@@ -1003,9 +1050,9 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
         to={`?${listParams}`}
         className="inline-block mb-4 rounded-md border border-hairline px-3 py-1.5 text-sm font-medium text-ink hover:bg-card"
       >
-        ← Back to users
+        ← Back to people
       </Link>
-      <h2 id="employer-add-users-heading" className="font-display text-lg text-ink mb-5">Add users</h2>
+      <h2 id="employer-add-users-heading" className="font-display text-lg text-ink mb-5">Add staff</h2>
       <MutationFeedback status="success" message={message} size="xs" className="mb-3" />
       <MutationFeedback status="error" message={error} size="xs" className="mb-3" />
       <form onSubmit={handleAdd} className="bg-card border border-hairline rounded-lg p-4 mb-4">
@@ -1051,7 +1098,7 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
   return (
     <section aria-labelledby="employer-learners-heading">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-        <h2 id="employer-learners-heading" className="font-display text-lg text-ink">Users</h2>
+        <h2 id="employer-learners-heading" className="font-display text-lg text-ink">People</h2>
         <div className="flex items-center gap-2">
           {isPlatformAdmin && (
             <ColumnCustomizer
@@ -1062,7 +1109,7 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
               onReset={resetToDefault}
             />
           )}
-          {selection.selected.size === 0 && <Link to={`?${addParams}`} className="rounded-md bg-moss text-paper px-3 py-2 text-sm font-medium hover:opacity-90">Add users</Link>}
+          {selection.selected.size === 0 && <Link to={`?${addParams}`} className="rounded-md bg-moss text-paper px-3 py-2 text-sm font-medium hover:opacity-90">Add staff</Link>}
         </div>
       </div>
 
@@ -1072,7 +1119,7 @@ export function EmployerLearnersPanel({ employer, searchParams, setSearchParams,
 
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <input
-          aria-label="Search learners"
+          aria-label="Search staff"
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}

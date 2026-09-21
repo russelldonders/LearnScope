@@ -1,0 +1,129 @@
+import { supabase } from './supabaseClient'
+
+export const EMPLOYER_MANAGEMENT_RELATIONSHIP_TYPES = Object.freeze([
+  'primary',
+  'functional',
+  'project',
+  'delegate',
+])
+
+export const EMPLOYER_MANAGEMENT_ACCESS_SCOPES = Object.freeze([
+  'employment',
+  'role_assignments',
+  'training_assignments',
+  'skill_management',
+  'shared_skills',
+  'shared_skill_evidence',
+  'shared_training',
+  'shared_experience',
+])
+
+function throwIfError(error) {
+  if (error) throw error
+}
+
+export async function listEmployerManagementRelationships(employerId) {
+  const { data, error } = await supabase
+    .from('employer_management_relationships')
+    .select('*')
+    .eq('employer_id', employerId)
+    .order('valid_from', { ascending: false })
+    .order('created_at', { ascending: false })
+  throwIfError(error)
+  return data ?? []
+}
+
+// Mutations are deliberately RPC-only. The database verifies employer-admin
+// authority, active same-employer memberships, effective dates, and cycles.
+export async function createEmployerManagementRelationship({
+  employerId,
+  managerMemberId,
+  employeeMemberId,
+  relationshipType,
+  isPrimary = false,
+  includeIndirectReports = false,
+  accessScope,
+  validFrom,
+  validUntil,
+}) {
+  const params = {
+    p_employer_id: employerId,
+    p_manager_member_id: managerMemberId,
+    p_employee_member_id: employeeMemberId,
+    p_relationship_type: relationshipType,
+    p_is_primary: isPrimary,
+    p_include_indirect_reports: includeIndirectReports,
+    p_access_scope: accessScope,
+    p_valid_until: validUntil || null,
+  }
+  if (validFrom) params.p_valid_from = validFrom
+
+  const { data, error } = await supabase.rpc('create_employer_management_relationship', params)
+  throwIfError(error)
+  return data
+}
+
+export async function updateEmployerManagementRelationship(relationshipId, changes) {
+  const { error } = await supabase.rpc('update_employer_management_relationship', {
+    p_relationship_id: relationshipId,
+    p_relationship_type: changes.relationshipType,
+    p_is_primary: changes.isPrimary,
+    p_include_indirect_reports: changes.includeIndirectReports,
+    p_access_scope: changes.accessScope,
+    p_valid_from: changes.validFrom,
+    p_valid_until: changes.validUntil || null,
+  })
+  throwIfError(error)
+}
+
+export async function endEmployerManagementRelationship(relationshipId, validUntil) {
+  const params = {
+    p_relationship_id: relationshipId,
+  }
+  if (validUntil) params.p_valid_until = validUntil
+
+  const { error } = await supabase.rpc('end_employer_management_relationship', params)
+  throwIfError(error)
+}
+
+export async function canManageEmployerMember(employeeMemberId, scope = null, allowIndirect = true) {
+  const { data, error } = await supabase.rpc('can_manage_employer_member', {
+    p_employee_member_id: employeeMemberId,
+    p_scope: scope,
+    p_allow_indirect: allowIndirect,
+  })
+  throwIfError(error)
+  return Boolean(data)
+}
+
+export async function listEmployerDirectReports(employerId) {
+  const { data, error } = await supabase.rpc('list_employer_direct_reports', {
+    p_employer_id: employerId,
+  })
+  throwIfError(error)
+  return data ?? []
+}
+
+export async function listEmployerIndirectReports(employerId) {
+  const { data, error } = await supabase.rpc('list_employer_indirect_reports', {
+    p_employer_id: employerId,
+  })
+  throwIfError(error)
+  return data ?? []
+}
+
+export async function listManageableEmployerMembers(employerId) {
+  const { data, error } = await supabase.rpc('list_manageable_employer_members', {
+    p_employer_id: employerId,
+  })
+  throwIfError(error)
+  return data ?? []
+}
+
+export async function listEmployerMemberManagers(employeeMemberId) {
+  const { data, error } = await supabase.rpc('list_employer_member_managers', {
+    p_employee_member_id: employeeMemberId,
+  })
+  throwIfError(error)
+  return data ?? []
+}

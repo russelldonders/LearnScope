@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { MemoryRouter, useSearchParams } from 'react-router-dom'
-import { EmployerLearnersPanel } from './EmployerConsole'
+import { EmployerLearnersPanel, EmployerUsersPanel } from './EmployerConsole'
 import {
   listEmployerMembers,
   listEmployerDataAccessRequests,
@@ -10,6 +10,7 @@ import {
   listFieldDefinitionsForEmployer,
   listEmployerMemberFieldValues,
 } from '../../lib/admin/employers'
+import { listEmployerManagementRelationships } from '../../lib/employerManagement'
 
 // EmployerLearnersPanel reads isPlatformAdmin and user (the latter only for
 // the roster-field save's updated_by, not exercised here) -- stub the
@@ -24,6 +25,13 @@ vi.mock('../../context/AuthContext', () => ({
 vi.mock('../../lib/skillLibrary', () => ({ listLibrarySkills: vi.fn().mockResolvedValue([]) }))
 
 vi.mock('../../lib/supabaseClient', () => ({ supabase: {} }))
+
+vi.mock('../../lib/employerManagement', () => ({
+  createEmployerManagementRelationship: vi.fn(),
+  endEmployerManagementRelationship: vi.fn(),
+  listEmployerManagementRelationships: vi.fn(),
+  updateEmployerManagementRelationship: vi.fn(),
+}))
 
 vi.mock('../../lib/admin/employers', async (original) => ({
   ...await original(),
@@ -46,6 +54,10 @@ function Panel() {
   const [searchParams, setSearchParams] = useSearchParams()
   return <EmployerLearnersPanel employer={{ id: 'employer', name: 'Acme' }} searchParams={searchParams} setSearchParams={setSearchParams} />
 }
+function StaffWorkspace() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  return <EmployerUsersPanel employer={{ id: 'employer', name: 'Acme' }} searchParams={searchParams} setSearchParams={setSearchParams} />
+}
 beforeEach(() => {
   vi.clearAllMocks()
   listEmployerMembers.mockResolvedValue(members)
@@ -54,20 +66,21 @@ beforeEach(() => {
   removeEmployerMember.mockResolvedValue(undefined)
   listFieldDefinitionsForEmployer.mockResolvedValue(fieldDefinitions)
   listEmployerMemberFieldValues.mockResolvedValue([])
+  listEmployerManagementRelationships.mockResolvedValue([])
 })
 afterEach(cleanup)
-it('reveals invitations through Add users and uses the account code', async () => {
+it('reveals invitations through Add staff and uses the account code', async () => {
   render(<MemoryRouter><Panel /></MemoryRouter>)
   expect(await screen.findByText('USR-000001')).toBeVisible()
   expect(screen.queryByRole('textbox', { name: 'Email' })).toBeNull()
-  fireEvent.click(screen.getByRole('link', { name: 'Add users' }))
+  fireEvent.click(screen.getByRole('link', { name: 'Add staff' }))
   expect(await screen.findByRole('textbox', { name: 'Email' })).toBeVisible()
   expect(screen.queryByRole('table')).toBeNull()
-  expect(screen.getByRole('heading', { name: 'Add users' })).toBeVisible()
-  fireEvent.click(screen.getByRole('link', { name: '← Back to users' }))
+  expect(screen.getByRole('heading', { name: 'Add staff' })).toBeVisible()
+  fireEvent.click(screen.getByRole('link', { name: '← Back to people' }))
   expect(screen.getByRole('table')).toBeVisible()
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select a@example.com' }))
-  expect(screen.queryByRole('link', { name: 'Add users' })).toBeNull()
+  expect(screen.queryByRole('link', { name: 'Add staff' })).toBeNull()
   expect(screen.queryByRole('textbox', { name: 'Email' })).toBeNull()
 })
 it('requests access for eligible selections and removes active and pending users after confirmation', async () => {
@@ -85,4 +98,15 @@ it('requests access for eligible selections and removes active and pending users
   await waitFor(() => expect(removeEmployerMember).toHaveBeenCalledTimes(2))
   expect(removeEmployerMember).toHaveBeenCalledWith('membership-a')
   expect(removeEmployerMember).toHaveBeenCalledWith('membership-b')
+})
+
+it('opens Reporting & management from the Staff workspace without carrying roster filters', async () => {
+  render(<MemoryRouter initialEntries={['/?q=member&page=2']}><StaffWorkspace /></MemoryRouter>)
+  expect(await screen.findByRole('heading', { name: 'People' })).toBeVisible()
+
+  fireEvent.click(screen.getByRole('link', { name: 'Reporting & management' }))
+
+  expect(await screen.findByRole('heading', { name: 'Reporting & management' })).toBeVisible()
+  expect(screen.getByRole('searchbox', { name: 'Search reporting relationships' })).toHaveValue('')
+  expect(listEmployerManagementRelationships).toHaveBeenCalledWith('employer')
 })
