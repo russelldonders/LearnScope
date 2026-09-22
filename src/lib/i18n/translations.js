@@ -107,10 +107,6 @@ export const translations = {
       searchPlaceholder: 'Search your skills',
       filters: 'Filters',
       views: { all: 'All', current: 'Current role', developing: 'Developing', review: 'Needs review' },
-      toDevelop: {
-        title: 'Skills to develop',
-        description: 'The clearest opportunities to move toward your targets.',
-      },
       noMatch: {
         title: 'No skills match this view',
         description: 'Try another search or remove the active filters.',
@@ -123,7 +119,6 @@ export const translations = {
       skillTargetsLoadError: 'Your skill targets could not be loaded. Please try again.',
       skillTargetsEmpty: 'No active skill targets yet. Set a target to assess where you are and where you want to go next.',
       personalTarget: 'Personal target',
-      targetLevelPrefix: 'Level',
       targetDatePrefix: 'by',
     },
     connections: {
@@ -1070,10 +1065,6 @@ export const translations = {
       searchPlaceholder: 'Busca tus habilidades',
       filters: 'Filtros',
       views: { all: 'Todas', current: 'Puesto actual', developing: 'En desarrollo', review: 'Necesita revisión' },
-      toDevelop: {
-        title: 'Habilidades por desarrollar',
-        description: 'Las oportunidades más claras para avanzar hacia tus objetivos.',
-      },
       noMatch: {
         title: 'Ninguna habilidad coincide con esta vista',
         description: 'Prueba otra búsqueda o elimina los filtros activos.',
@@ -1086,7 +1077,6 @@ export const translations = {
       skillTargetsLoadError: 'No se pudieron cargar tus objetivos de habilidades. Inténtalo de nuevo.',
       skillTargetsEmpty: 'Aún no hay objetivos de habilidades activos. Establece un objetivo para evaluar dónde estás y definir tu siguiente paso.',
       personalTarget: 'Objetivo personal',
-      targetLevelPrefix: 'Nivel',
       targetDatePrefix: 'para el',
     },
     connections: {
@@ -2035,10 +2025,6 @@ export const translations = {
       searchPlaceholder: 'Rechercher vos compétences',
       filters: 'Filtres',
       views: { all: 'Toutes', current: 'Poste actuel', developing: 'En développement', review: 'À revoir' },
-      toDevelop: {
-        title: 'Compétences à développer',
-        description: 'Les opportunités les plus claires pour progresser vers vos objectifs.',
-      },
       noMatch: {
         title: 'Aucune compétence ne correspond à cette vue',
         description: 'Essayez une autre recherche ou supprimez les filtres actifs.',
@@ -2051,7 +2037,6 @@ export const translations = {
       skillTargetsLoadError: 'Impossible de charger vos objectifs de compétences. Réessayez.',
       skillTargetsEmpty: 'Aucun objectif de compétence actif. Définissez un objectif pour évaluer votre niveau et la prochaine étape.',
       personalTarget: 'Objectif personnel',
-      targetLevelPrefix: 'Niveau',
       targetDatePrefix: 'avant le',
     },
     connections: {
@@ -3001,10 +2986,6 @@ export const translations = {
       searchPlaceholder: 'Fähigkeiten durchsuchen',
       filters: 'Filter',
       views: { all: 'Alle', current: 'Aktuelle Rolle', developing: 'In Entwicklung', review: 'Braucht Überprüfung' },
-      toDevelop: {
-        title: 'Zu entwickelnde Fähigkeiten',
-        description: 'Die klarsten Gelegenheiten, um deinen Zielen näherzukommen.',
-      },
       noMatch: {
         title: 'Keine Fähigkeiten passen zu dieser Ansicht',
         description: 'Versuche eine andere Suche oder entferne die aktiven Filter.',
@@ -3017,7 +2998,6 @@ export const translations = {
       skillTargetsLoadError: 'Deine Kompetenzziele konnten nicht geladen werden. Bitte versuche es erneut.',
       skillTargetsEmpty: 'Noch keine aktiven Kompetenzziele. Lege ein Ziel fest, um deinen Stand einzuschätzen und den nächsten Schritt zu bestimmen.',
       personalTarget: 'Persönliches Ziel',
-      targetLevelPrefix: 'Stufe',
       targetDatePrefix: 'bis',
     },
     connections: {
@@ -3967,10 +3947,6 @@ export const translations = {
       searchPlaceholder: 'Cerca le tue competenze',
       filters: 'Filtri',
       views: { all: 'Tutte', current: 'Ruolo attuale', developing: 'In sviluppo', review: 'Da rivedere' },
-      toDevelop: {
-        title: 'Competenze da sviluppare',
-        description: 'Le opportunità più chiare per avvicinarti ai tuoi obiettivi.',
-      },
       noMatch: {
         title: 'Nessuna competenza corrisponde a questa vista',
         description: "Prova un'altra ricerca o rimuovi i filtri attivi.",
@@ -3983,7 +3959,6 @@ export const translations = {
       skillTargetsLoadError: 'Impossibile caricare i tuoi obiettivi di competenza. Riprova.',
       skillTargetsEmpty: 'Non ci sono ancora obiettivi di competenza attivi. Imposta un obiettivo per valutare il tuo livello e definire il prossimo passo.',
       personalTarget: 'Obiettivo personale',
-      targetLevelPrefix: 'Livello',
       targetDatePrefix: 'entro il',
     },
     connections: {
@@ -4933,10 +4908,6 @@ export const translations = {
       searchPlaceholder: 'Zoek je vaardigheden',
       filters: 'Filters',
       views: { all: 'Alle', current: 'Huidige functie', developing: 'In ontwikkeling', review: 'Beoordeling nodig' },
-      toDevelop: {
-        title: 'Te ontwikkelen vaardigheden',
-        description: 'De duidelijkste kansen om richting je doelen te werken.',
-      },
       noMatch: {
         title: 'Geen vaardigheden komen overeen met deze weergave',
         description: 'Probeer een andere zoekopdracht of verwijder de actieve filters.',
@@ -4949,7 +4920,6 @@ export const translations = {
       skillTargetsLoadError: 'Je vaardigheidsdoelen konden niet worden geladen. Probeer het opnieuw.',
       skillTargetsEmpty: 'Nog geen actieve vaardigheidsdoelen. Stel een doel in om te bepalen waar je staat en wat je volgende stap wordt.',
       personalTarget: 'Persoonlijk doel',
-      targetLevelPrefix: 'Niveau',
       targetDatePrefix: 'voor',
     },
     connections: {
@@ -5897,10 +5867,6 @@ export const translations = {
       searchPlaceholder: '搜索你的技能',
       filters: '筛选',
       views: { all: '全部', current: '当前职位', developing: '发展中', review: '需要复核' },
-      toDevelop: {
-        title: '待发展的技能',
-        description: '最明显的、能帮你迈向目标的机会。',
-      },
       noMatch: {
         title: '没有符合此视图的技能',
         description: '请尝试其他搜索或移除已启用的筛选条件。',
@@ -5913,7 +5879,6 @@ export const translations = {
       skillTargetsLoadError: '无法加载你的技能目标，请重试。',
       skillTargetsEmpty: '目前没有进行中的技能目标。请设定一个目标，评估当前水平并确定下一步。',
       personalTarget: '个人目标',
-      targetLevelPrefix: '等级',
       targetDatePrefix: '截止',
     },
     connections: {

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SkillsSection from './SkillsSection'
@@ -22,7 +22,20 @@ function makeSupabaseMock(resultsByTable = {}) {
   }
 }
 
-let supabaseMock = makeSupabaseMock()
+// A personal target only shows up in the merged targets section once the
+// skill it's for is in the loaded skills list (see targetRows in
+// SkillsSection.jsx) -- so the 'skills'/'skill_targets' tables need a
+// matching row for skill-1 here, unlike the employer-side 'Coaching' target
+// below, which is deliberately left unmatched to exercise the "employer
+// target on a skill not yet tracked" branch.
+function defaultSupabaseMock() {
+  return makeSupabaseMock({
+    skills: { data: [{ id: 'skill-1', name: 'SQL', lifecycle_stage: 'developing', library_skill_id: null, level: null }], error: null },
+    skill_targets: { data: [{ skill_id: 'skill-1', target_level: 4, created_at: '2027-01-01' }], error: null },
+  })
+}
+
+let supabaseMock = defaultSupabaseMock()
 
 vi.mock('../lib/supabaseClient', () => ({ supabase: { from: (...args) => supabaseMock.from(...args) } }))
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user-1' } }) }))
@@ -48,7 +61,7 @@ vi.mock('./SetSkillTargetFlow', () => ({
 }))
 
 beforeEach(() => {
-  supabaseMock = makeSupabaseMock()
+  supabaseMock = defaultSupabaseMock()
 })
 
 afterEach(cleanup)
@@ -58,15 +71,23 @@ function renderSection() {
 }
 
 describe('SkillsSection development targets', () => {
-  it('shows the skill development targets section, separating personal and employer targets', async () => {
+  it('shows one merged targets section covering both a tracked and an untracked skill, with no separate "skills to develop" section', async () => {
     renderSection()
 
-    expect(await screen.findByRole('heading', { name: 'skills.skillTargets' })).toBeInTheDocument()
-    expect(screen.getByText('SQL')).toBeInTheDocument()
-    expect(screen.getByText('skills.personalTarget')).toBeInTheDocument()
-    expect(screen.getByText('Coaching')).toBeInTheDocument()
-    expect(screen.getByText('Acme')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /SQL/ })).toHaveAttribute('href', '/skills/skill-1')
+    const heading = await screen.findByRole('heading', { name: 'skills.skillTargets' })
+    const targetsSection = heading.closest('section')
+    expect(within(targetsSection).getByText('SQL')).toBeInTheDocument()
+    expect(within(targetsSection).getByText('skills.personalTarget')).toBeInTheDocument()
+    expect(within(targetsSection).getByText('Coaching')).toBeInTheDocument()
+    expect(within(targetsSection).getByText('Acme')).toBeInTheDocument()
+    expect(within(targetsSection).getByRole('link', { name: /SQL/ })).toHaveAttribute('href', '/skills/skill-1')
+    // Coaching has no matching tracked skill (no library_skill_id match), so
+    // it renders as a plain row with no link to a skill page.
+    expect(within(targetsSection).queryByRole('link', { name: /Coaching/ })).not.toBeInTheDocument()
+
+    // The old separate "Skills to develop" section is gone -- its content is
+    // now part of this one section instead (sorted not-yet-met first).
+    expect(screen.queryByText('skills.toDevelop.title')).not.toBeInTheDocument()
   })
 
   it('does not present a failed target load as an empty target list', async () => {
