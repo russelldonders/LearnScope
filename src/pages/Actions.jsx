@@ -475,8 +475,9 @@ export default function Actions() {
         )}
 
         {actionableCount > 0 && (
+        <div>
+        <p className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-4">Needs your response</p>
         <div className="space-y-10">
-        <p className="font-mono text-[10px] uppercase tracking-wide text-secondary -mb-4">Needs your response</p>
 
         {incomingRateInvites.length > 0 && (
           <div>
@@ -940,6 +941,7 @@ export default function Actions() {
             </div>
           </div>
         )}
+        </div>
         </div>
         )}
 
