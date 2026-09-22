@@ -78,7 +78,32 @@ describe('Connections sections', () => {
     const teamsTab = screen.getByRole('tab', { name: 'Teams' })
     expect(teamsTab).toHaveAttribute('aria-selected', 'true')
     fireEvent.keyDown(teamsTab, { key: 'ArrowLeft' })
+    expect(screen.getByRole('tab', { name: 'Pending invites' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Pending invites' })).toHaveFocus()
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Pending invites' }), { key: 'ArrowLeft' })
     expect(screen.getByRole('tab', { name: 'People' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: 'People' })).toHaveFocus()
+  })
+
+  it('shows pending invites in their own tab, separate from People', async () => {
+    connectionApi.listSentInvites.mockResolvedValue([
+      {
+        id: 'invite-1', status: 'pending', invite_type: 'rate', invitee_email: 'friend@example.com',
+        created_at: '2026-09-01T00:00:00Z', skills: { name: 'SQL' },
+      },
+    ])
+    renderPage()
+
+    const invitesTab = await screen.findByRole('tab', { name: 'Pending invites (1)' })
+    expect(screen.queryByText('friend@example.com', { exact: false })).not.toBeInTheDocument()
+
+    fireEvent.click(invitesTab)
+    expect(await screen.findByText(/sent to friend@example.com/)).toBeInTheDocument()
+  })
+
+  it('shows an empty state on the invites tab when there are none', async () => {
+    renderPage('/connections?section=invites')
+    expect(screen.getByRole('tab', { name: 'Pending invites' })).toHaveAttribute('aria-selected', 'true')
+    expect(await screen.findByText('No pending invites.')).toBeInTheDocument()
   })
 })

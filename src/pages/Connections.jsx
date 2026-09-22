@@ -30,7 +30,8 @@ export default function Connections() {
   const { user, refreshWorkspaces } = useAuth()
   const { t } = useLanguage()
   const [searchParams, setSearchParams] = useSearchParams()
-  const activeSection = searchParams.get('section') === 'teams' ? 'teams' : 'people'
+  const sectionParam = searchParams.get('section')
+  const activeSection = sectionParam === 'teams' || sectionParam === 'invites' ? sectionParam : 'people'
   const tabRefs = useRef({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -205,6 +206,7 @@ export default function Connections() {
         <div role="tablist" aria-label="Connections sections" className="flex items-center gap-1 mb-8 border-b border-hairline">
           {[
             { key: 'people', label: t('connections.tabs.people') },
+            { key: 'invites', label: t('connections.pendingInvites') + (pendingInvites.length > 0 ? ` (${pendingInvites.length})` : '') },
             { key: 'teams', label: t('connections.tabs.teams') },
           ].map((section) => (
             <button key={section.key} type="button" role="tab"
@@ -215,7 +217,7 @@ export default function Connections() {
               tabIndex={activeSection === section.key ? 0 : -1}
               onClick={() => selectSection(section.key)}
               onKeyDown={(event) => handleTabListKeyDown(event, {
-                keys: ['people', 'teams'], activeKey: activeSection, refs: tabRefs, onChange: selectSection,
+                keys: ['people', 'invites', 'teams'], activeKey: activeSection, refs: tabRefs, onChange: selectSection,
               })}
               className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${activeSection === section.key
                 ? 'border-moss text-ink font-medium'
@@ -234,8 +236,7 @@ export default function Connections() {
             initialTeamId={searchParams.get('team')}
           />
         )}
-        {activeSection === 'people' && <div className="space-y-10">
-        <div>
+        {activeSection === 'people' && <div>
           <h2 className="font-display text-xl text-ink mb-6">{t('connections.yourConnections')}</h2>
 
           {loading && <p className="text-secondary">Loading…</p>}
@@ -278,11 +279,17 @@ export default function Connections() {
               />
             ))}
           </div>
-        </div>
+        </div>}
 
-        {pendingInvites.length > 0 && (
-          <div>
-            <h2 className="font-display text-xl text-ink mb-6">{t('connections.pendingInvites')}</h2>
+        {activeSection === 'invites' && <div>
+          {loading && <p className="text-secondary">Loading…</p>}
+          {error && <p role="alert" className="text-red-700 text-sm">{error}</p>}
+
+          {!loading && pendingInvites.length === 0 ? (
+            <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
+              <p className="text-secondary">No pending invites.</p>
+            </div>
+          ) : (
             <div className="space-y-3">
               {pendingInvites.map((invite) => (
                 <div
@@ -336,8 +343,7 @@ export default function Connections() {
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          )}
         </div>}
         </div>
       </main>

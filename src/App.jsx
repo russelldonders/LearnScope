@@ -1,5 +1,6 @@
 import LtiSession from './pages/LtiSession'
 import LmsConnectionsPage from './pages/provider/LtiConfiguration'
+import LtiToolsPage from './pages/provider/LtiTools'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
@@ -303,6 +304,10 @@ function App() {
           <Route
             path="/provider/organisations/:organisationId/lms-connections"
             element={<ProviderAdminRoute><LmsConnectionsPage /></ProviderAdminRoute>}
+          />
+          <Route
+            path="/provider/organisations/:organisationId/lti-tools"
+            element={<ProviderAdminRoute><LtiToolsPage /></ProviderAdminRoute>}
           />
           <Route
             path="/provider/organisations/:organisationId/skills/:skillId"

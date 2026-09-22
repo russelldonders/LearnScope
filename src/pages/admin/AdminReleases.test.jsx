@@ -4,9 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AdminReleases from './AdminReleases'
 import {
   addChangelogEntry,
-  confirmPlatformRelease,
   deleteChangelogEntry,
-  getNextSuggestedVersion,
   listPendingChangelogEntries,
   listPlatformReleases,
   updateChangelogEntry,
@@ -22,9 +20,7 @@ vi.mock('./AdminLayout', () => ({
 
 vi.mock('../../lib/admin/platformReleases', () => ({
   addChangelogEntry: vi.fn(),
-  confirmPlatformRelease: vi.fn(),
   deleteChangelogEntry: vi.fn(),
-  getNextSuggestedVersion: vi.fn(),
   listPendingChangelogEntries: vi.fn(),
   listPlatformReleases: vi.fn(),
   updateChangelogEntry: vi.fn(),
@@ -35,7 +31,6 @@ beforeEach(() => {
   vi.clearAllMocks()
   listPendingChangelogEntries.mockResolvedValue([])
   listPlatformReleases.mockResolvedValue([])
-  getNextSuggestedVersion.mockResolvedValue(1)
 })
 
 function renderPage() {
@@ -47,16 +42,14 @@ describe('AdminReleases', () => {
     renderPage()
     expect(await screen.findByText('Nothing pending yet.')).toBeInTheDocument()
     expect(screen.getByText('No releases confirmed yet.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Confirm release…' })).toBeDisabled()
   })
 
-  it('lists pending entries and enables confirming a release', async () => {
+  it('lists pending entries', async () => {
     listPendingChangelogEntries.mockResolvedValue([
       { id: 'e1', summary: 'Added the cohort date-only option', created_at: '2026-09-13T00:00:00Z' },
     ])
     renderPage()
     expect(await screen.findByText('Added the cohort date-only option')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Confirm release…' })).not.toBeDisabled()
   })
 
   it('adds a new pending entry', async () => {
@@ -86,20 +79,6 @@ describe('AdminReleases', () => {
     fireEvent.change(input, { target: { value: 'Better wording' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(updateChangelogEntry).toHaveBeenCalledWith('e1', 'Better wording'))
-  })
-
-  it('opens the confirm dialog prefilled with the suggested next version and submits it', async () => {
-    listPendingChangelogEntries.mockResolvedValue([
-      { id: 'e1', summary: 'Something shipped', created_at: '2026-09-13T00:00:00Z' },
-    ])
-    getNextSuggestedVersion.mockResolvedValue(6)
-    renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Confirm release…' }))
-    const versionInput = await screen.findByLabelText('Version')
-    await waitFor(() => expect(versionInput).toHaveValue(6))
-    fireEvent.change(screen.getByLabelText('Notes (optional)'), { target: { value: 'Ships the changelog feature' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm release' }))
-    await waitFor(() => expect(confirmPlatformRelease).toHaveBeenCalledWith(6, 'Ships the changelog feature'))
   })
 
   it('shows release history with its bundled entries', async () => {

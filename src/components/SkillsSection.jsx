@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
@@ -9,11 +9,13 @@ import FilterRow from './FilterRow'
 import TrackingReasonIcon from './TrackingReasonIcon'
 import OrganizationLogo from './OrganizationLogo'
 import GrowthRing from './GrowthRing'
+import SetSkillTargetFlow from './SetSkillTargetFlow'
 import { TRACKING_REASONS } from '../lib/trackingReasons'
 import { LEVEL_LABELS } from '../lib/levels'
 import { isSelfAssessmentDue } from '../lib/checkin'
 import { getEmployerTargetsForUser, getLatestEmployerSkillConfirmations } from '../lib/employerSkillTargets'
 import { computeVisibleTarget } from '../lib/skillTargetPrecedence'
+import { listMySkillDevelopmentTargets } from '../lib/skillDevelopmentTargets'
 
 const SKILL_VIEWS = [
   { value: 'all', labelKey: 'skills.views.all' },
@@ -41,10 +43,28 @@ export default function SkillsSection() {
 
   const [currentRoleSkillIdsByExperienceId, setCurrentRoleSkillIdsByExperienceId] = useState({})
 
+  const [developmentTargets, setDevelopmentTargets] = useState({ personal: [], employer: [] })
+  const [targetsError, setTargetsError] = useState(null)
+  const [targetsLoading, setTargetsLoading] = useState(true)
+  const [showSetTargetFlow, setShowSetTargetFlow] = useState(false)
+
   useEffect(() => {
     loadSkills()
     loadCurrentRoles()
+    loadDevelopmentTargets()
   }, [])
+
+  async function loadDevelopmentTargets() {
+    setTargetsLoading(true)
+    setTargetsError(null)
+    try {
+      setDevelopmentTargets(await listMySkillDevelopmentTargets(user.id))
+    } catch (err) {
+      setTargetsError(err.message || 'Your skill targets could not be loaded.')
+    } finally {
+      setTargetsLoading(false)
+    }
+  }
 
   // Which specific current role(s) each current-role skill actually belongs
   // to -- used both to split the "Current role(s)" grid per role and to
@@ -275,6 +295,15 @@ export default function SkillsSection() {
         </button>
       </div>
 
+      {!targetsLoading && (
+        <SkillDevelopmentTargets
+          targets={developmentTargets}
+          error={targetsError}
+          t={t}
+          onSetNewTarget={() => setShowSetTargetFlow(true)}
+        />
+      )}
+
       {loading && <SkillsSkeleton />}
       {error && (
         <div role="alert" className="rounded-lg border border-red-700 p-4 text-sm text-red-700">
@@ -495,8 +524,86 @@ export default function SkillsSection() {
           }}
         />
       )}
+
+      {showSetTargetFlow && (
+        <SetSkillTargetFlow
+          skills={activeSkills}
+          user={user}
+          onClose={() => setShowSetTargetFlow(false)}
+          onSet={() => {
+            setShowSetTargetFlow(false)
+            loadSkills()
+            loadDevelopmentTargets()
+          }}
+        />
+      )}
     </section>
   )
+}
+
+function SkillDevelopmentTargets({ targets, error, t, onSetNewTarget }) {
+  const activeEmployerTargets = targets.employer.filter((target) => target.status === 'active')
+  const hasTargets = targets.personal.length > 0 || activeEmployerTargets.length > 0
+
+  return (
+    <section aria-labelledby="skill-targets-heading" className="mb-10 border-y border-hairline py-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="max-w-2xl">
+          <h2 id="skill-targets-heading" className="font-display text-xl text-ink">{t('skills.skillTargets')}</h2>
+          <p className="mt-1 text-sm text-secondary">{t('skills.skillTargetsIntro')}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onSetNewTarget}
+          className="shrink-0 rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+        >
+          {t('skills.setNewTarget')}
+        </button>
+      </div>
+
+      {error ? (
+        <p role="alert" className="mt-5 text-sm text-red-700">{t('skills.skillTargetsLoadError')}</p>
+      ) : !hasTargets ? (
+        <p className="mt-5 text-sm text-secondary">{t('skills.skillTargetsEmpty')}</p>
+      ) : (
+        <div className="mt-5 divide-y divide-hairline border-t border-hairline">
+          {targets.personal.map((target) => (
+            <TargetRow key={`personal-${target.id}`} target={target} t={t} />
+          ))}
+          {activeEmployerTargets.map((target) => (
+            <TargetRow key={`employer-${target.id}`} target={target} t={t} />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function TargetRow({ target, t }) {
+  const content = (
+    <>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="font-medium text-ink">{target.skillName}</h3>
+          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${target.ownership === 'personal' ? 'border-moss text-moss' : 'border-slate text-slate'}`}>
+            {target.ownership === 'personal' ? t('skills.personalTarget') : target.employerName}
+          </span>
+        </div>
+        {target.notes && <p className="mt-1 line-clamp-2 text-sm text-secondary">{target.notes}</p>}
+      </div>
+      <p className="shrink-0 text-sm text-secondary">{t('skills.targetLevelPrefix')} {target.targetLevel} · {t('skills.targetDatePrefix')} {new Date(`${target.targetDate}T00:00:00`).toLocaleDateString()}</p>
+    </>
+  )
+
+  if (target.ownership === 'personal') {
+    return (
+      <Link to={`/skills/${target.skillId}`} className="flex flex-col gap-2 py-4 hover:text-moss sm:flex-row sm:items-start sm:justify-between">
+        {content}
+      </Link>
+    )
+  }
+
+  return <div className="flex flex-col gap-2 py-4 sm:flex-row sm:items-start sm:justify-between">{content}</div>
 }
 
 function SkillGrid({ skills, onEdit }) {

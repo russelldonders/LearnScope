@@ -136,7 +136,10 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
     >
         <h2 id="organisation-settings-dialog-title" className="font-display text-lg text-ink mb-4">Organisation settings</h2>
 
-        <Link to={`/provider/organisations/${organisation.id}/lms-connections`} onClick={onClose} className="inline-block text-sm text-moss hover:underline mb-5">LMS connections</Link>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 mb-5">
+          <Link to={`/provider/organisations/${organisation.id}/lms-connections`} onClick={onClose} className="inline-block text-sm text-moss hover:underline">LMS connections</Link>
+          <Link to={`/provider/organisations/${organisation.id}/lti-tools`} onClick={onClose} className="inline-block text-sm text-moss hover:underline">LTI tools</Link>
+        </div>
 
         <form onSubmit={handleSave} className="space-y-4">
           <div>

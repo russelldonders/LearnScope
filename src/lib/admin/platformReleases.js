@@ -48,22 +48,3 @@ export async function listPlatformReleases() {
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at)),
   }))
 }
-
-export async function getNextSuggestedVersion() {
-  const { data, error } = await supabase
-    .from('platform_releases')
-    .select('version')
-    .order('version', { ascending: false })
-    .limit(1)
-  if (error) throw error
-  return (data?.[0]?.version ?? 0) + 1
-}
-
-export async function confirmPlatformRelease(version, notes) {
-  const { data, error } = await supabase.rpc('confirm_platform_release', {
-    p_version: version,
-    p_notes: notes?.trim() || null,
-  })
-  if (error) throw error
-  return data
-}
