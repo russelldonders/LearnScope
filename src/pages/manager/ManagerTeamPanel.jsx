@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import PersonAvatar from '../../components/PersonAvatar'
 import MutationFeedback from '../../components/MutationFeedback'
 import AccessibleDialog from '../../components/AccessibleDialog'
@@ -15,70 +15,72 @@ const SORT_ACCESSORS = {
   sharedSkillCount: (m) => m.sharedSkills?.length ?? 0,
 }
 
+const inviteButtonClass = 'shrink-0 rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper'
+
 // Team roster is a projection over the manager's own connections (manager
 // mode extends connections, it isn't a lightweight employer with its own
 // member profiles). Deliberately narrow: each row shows only what a member
-// has explicitly shared with this manager -- `sharedSkills` (with a level
-// and evidence count, never the member's full skill list) and a count of
-// team-scoped collaborative learning they're part of (see
-// ManagerLearningPanel) -- never their complete learner profile.
+// has explicitly shared with this manager -- a count of `sharedSkills` (and
+// how many of those this manager has rated), never the member's full skill
+// list -- and a count of team-scoped collaborative learning they're part of
+// (see ManagerLearningPanel), never their complete learner profile.
 //
-// Sharing a skill is also what lets the manager rate it -- each shared-skill
-// chip has a "Rate" action opening RateSkillDialog, which shows this
-// manager's own rating history for that skill (via `onLoadSkillAssessments`)
-// and records a new one (via `onRateSkill`); a rating is its own record,
-// never rewriting the member's own self-assessed level shown on the chip.
-// `members`, `loading`, `error`, `onInvite`, `onRateSkill` and
-// `onLoadSkillAssessments` are the only contract with the data layer; this
-// component never fetches or writes anything itself outside of those.
+// This tab is about *people* -- who's on the team, who's still to accept,
+// inviting more. Rating a shared skill happens from the Skills matrix or a
+// member's own profile (ManagerMemberProfile, opened from the name here),
+// not from per-skill chips in this table, which grew unreadably wide once a
+// few members had shared a handful of skills each. RateSkillDialog below is
+// still exported for that profile view.
+// `members`, `loading`, `error`, `onInvite`, `onInviteConnections`,
+// `onRateSkill` and `onLoadSkillAssessments` are the only contract with the
+// data layer; this component never fetches or writes anything itself
+// outside of those.
 export default function ManagerTeamPanel({
-  members = [], pendingMembers = [], loading = false, error = null, onInvite, onInviteConnection,
-  onRevokeInvite, connections = [], teamMemberships = [],
+  members = [], pendingMembers = [], loading = false, error = null, onInvite, onInviteConnections,
+  onRevokeInvite, connections = [], teamMemberships = [], onOpenCollaboration,
   onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget, readOnly = false,
 }) {
   const [inviteOpen, setInviteOpen] = useState(false)
-  const [rateTarget, setRateTarget] = useState(null)
   const [profileId, setProfileId] = useState(null)
   const profileMember = members.find((member) => member.id === profileId)
-  // Invited-but-not-yet-accepted people are folded into the same roster
-  // (rather than a separate section) so they're genuinely "in the list" --
-  // just visually muted, with no shared skills or collaborative learning
-  // possible yet, and a Revoke action instead of a skills-profile link.
-  const rows = [...members, ...pendingMembers.map((p) => ({ ...p, pending: true }))]
+  // Invited-but-not-yet-accepted people stay in the same table (they're
+  // genuinely "in the list"), but pinned above the sorted/paged members
+  // with an explicit "Invited" badge rather than blending in wherever the
+  // current sort happens to put them.
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
-    useSortedPage(rows, SORT_ACCESSORS, { defaultSortKey: 'name' })
+    useSortedPage(members, SORT_ACCESSORS, { defaultSortKey: 'name' })
+  const hasRows = members.length > 0 || pendingMembers.length > 0
 
   if (profileMember) return <ManagerMemberProfile member={profileMember} onBack={() => setProfileId(null)}
     onRateSkill={onRateSkill} onLoadSkillAssessments={onLoadSkillAssessments}
     onLoadSkillDetail={onLoadSkillDetail} onSetTarget={onSetTarget} />
 
+  const inviteButton = !readOnly && (
+    <button type="button" onClick={() => setInviteOpen(true)} className={inviteButtonClass}>
+      Invite to team
+    </button>
+  )
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-secondary">
-          Open a team member’s skills profile, then choose a skill to review their progress, rate it or set a target.
-          Profiles show the skills they’ve shared with you.
+          Open a team member’s skills profile to review their progress, rate a skill or set a target.
+          Profiles show only the skills they’ve shared with you.
         </p>
-        {!readOnly && (
-          <button
-            type="button"
-            onClick={() => setInviteOpen(true)}
-            className="shrink-0 rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
-          >
-            Invite to team
-          </button>
-        )}
+        {hasRows && inviteButton}
       </div>
 
       <MutationFeedback status="error" message={error} />
 
       {loading ? (
         <p className="text-secondary text-sm">Loading…</p>
-      ) : rows.length === 0 ? (
-        <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
+      ) : !hasRows ? (
+        <div className="text-center py-16 border border-dashed border-hairline rounded-lg space-y-3">
           <p className="text-secondary text-sm">
-            No team members yet. Invite one of your connections to build out your team.
+            No team members yet. Invite your connections, or anyone by email, to build out your team.
           </p>
+          {inviteButton}
         </div>
       ) : (
         <div className="border border-hairline rounded-lg overflow-hidden">
@@ -105,12 +107,15 @@ export default function ManagerTeamPanel({
                 </tr>
               </thead>
               <tbody>
-                {pageItems.map((member) => member.pending ? (
-                  <tr key={member.id} className="border-b border-hairline last:border-b-0 align-top opacity-50">
+                {page === 1 && pendingMembers.map((member) => (
+                  <tr key={member.id} className="border-b border-hairline last:border-b-0 align-top bg-paper/60">
                     <td className="px-4 py-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <PersonAvatar name={member.name} avatarUrl={member.avatarUrl} size={7} />
                         <span className="text-ink">{member.name}</span>
+                        <span className="rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 text-[11px] font-medium text-ink">
+                          Invited
+                        </span>
                       </div>
                       {onRevokeInvite && (
                         <button type="button" onClick={() => onRevokeInvite(member)}
@@ -122,76 +127,55 @@ export default function ManagerTeamPanel({
                     <td className="px-4 py-2 text-secondary" title={formatAbsoluteDate(member.invitedAt)}>
                       Invited {formatRelativeDate(member.invitedAt)}
                     </td>
+                    <td className="px-4 py-2 text-secondary">Waiting to accept</td>
                     <td className="px-4 py-2 text-secondary">—</td>
-                    <td className="px-4 py-2 text-secondary">—</td>
-                  </tr>
-                ) : (
-                  <tr key={member.id} className="border-b border-hairline last:border-b-0 align-top">
-                    <td className="px-4 py-2">
-                      <button type="button" onClick={() => setProfileId(member.id)}
-                        aria-label={`View skills profile for ${member.name}`}
-                        className="flex items-center gap-2 group">
-                        <PersonAvatar name={member.name} avatarUrl={member.avatarUrl} size={7} />
-                        <span className="text-ink group-hover:text-moss group-hover:underline">{member.name}</span>
-                      </button>
-                    </td>
-                    <td className="px-4 py-2 text-secondary">
-                      {member.teamSince ? (
-                        <span title={formatAbsoluteDate(member.teamSince)}>
-                          {formatRelativeDate(member.teamSince)}
-                        </span>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      {member.sharedSkills?.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                          {member.sharedSkills.map((skill) => (
-                            <div key={skill.id} className="flex flex-col items-start gap-0.5">
-                              <span
-                                title={`Shared ${formatAbsoluteDate(skill.sharedAt)}`}
-                                className="inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
-                              >
-                                {skill.name} · {LEVEL_LABELS[skill.level]}
-                                {skill.evidenceCount > 0 && (
-                                  <span className="inline-flex items-center gap-0.5" aria-label={`${skill.evidenceCount} evidence item${skill.evidenceCount === 1 ? '' : 's'}`}>
-                                    <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m21.4 11.6-8.9 8.9a6 6 0 0 1-8.5-8.5l9.6-9.6a4 4 0 0 1 5.7 5.7l-9.6 9.6a2 2 0 0 1-2.8-2.8l8.9-8.9" /></svg>
-                                    {skill.evidenceCount}
-                                  </span>
-                                )}
-                              </span>
-                              <div className="flex items-center gap-1.5 pl-1">
-                                {skill.managerRating && (
-                                  <span
-                                    title={`You rated this ${formatAbsoluteDate(skill.managerRating.assessedAt)}`}
-                                    className="text-[11px] text-secondary"
-                                  >
-                                    Your rating: {LEVEL_LABELS[skill.managerRating.level]}
-                                  </span>
-                                )}
-                                {onRateSkill && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setRateTarget({ member, skill })}
-                                    className="text-[11px] font-medium text-moss hover:underline"
-                                  >
-                                    {skill.managerRating ? 'Rate again' : 'Rate'}
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-secondary">Nothing shared yet</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-secondary">
-                      {member.collaborativeLearningCount ?? 0}
-                    </td>
                   </tr>
                 ))}
+                {pageItems.map((member) => {
+                  const sharedCount = member.sharedSkills?.length ?? 0
+                  const ratedCount = member.sharedSkills?.filter((skill) => skill.managerRating).length ?? 0
+                  const collaborationCount = member.collaborativeLearningCount ?? 0
+                  return (
+                    <tr key={member.id} className="border-b border-hairline last:border-b-0 align-top">
+                      <td className="px-4 py-2">
+                        <button type="button" onClick={() => setProfileId(member.id)}
+                          aria-label={`View skills profile for ${member.name}`}
+                          className="flex items-center gap-2 group">
+                          <PersonAvatar name={member.name} avatarUrl={member.avatarUrl} size={7} />
+                          <span className="text-ink group-hover:text-moss group-hover:underline">{member.name}</span>
+                        </button>
+                      </td>
+                      <td className="px-4 py-2 text-secondary">
+                        {member.teamSince ? (
+                          <span title={formatAbsoluteDate(member.teamSince)}>
+                            {formatRelativeDate(member.teamSince)}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className="px-4 py-2">
+                        {sharedCount > 0 ? (
+                          <button type="button" onClick={() => setProfileId(member.id)}
+                            className="text-left text-ink hover:text-moss hover:underline">
+                            {sharedCount} shared · {ratedCount} rated by you
+                          </button>
+                        ) : (
+                          <span className="text-secondary">Nothing shared yet</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-secondary">
+                        {collaborationCount > 0 && onOpenCollaboration ? (
+                          <button type="button" onClick={onOpenCollaboration}
+                            aria-label={`View ${collaborationCount} collaborative learning record${collaborationCount === 1 ? '' : 's'}`}
+                            className="text-moss hover:underline">
+                            {collaborationCount}
+                          </button>
+                        ) : collaborationCount}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -210,19 +194,9 @@ export default function ManagerTeamPanel({
         <InviteToTeamDialog
           onClose={() => setInviteOpen(false)}
           onInvite={onInvite}
-          onInviteConnection={onInviteConnection}
+          onInviteConnections={onInviteConnections}
           connections={connections}
           teamMemberships={teamMemberships}
-        />
-      )}
-
-      {rateTarget && (
-        <RateSkillDialog
-          member={rateTarget.member}
-          skill={rateTarget.skill}
-          onClose={() => setRateTarget(null)}
-          onRate={(payload) => onRateSkill(rateTarget.member.id, rateTarget.skill.id, payload)}
-          onLoadHistory={() => onLoadSkillAssessments?.(rateTarget.member.id, rateTarget.skill.id)}
         />
       )}
     </div>
@@ -230,23 +204,38 @@ export default function ManagerTeamPanel({
 }
 
 const MAX_EMAIL_ROWS = 10
+const CONNECTION_SEARCH_THRESHOLD = 6
 
-function InviteToTeamDialog({ onClose, onInvite, onInviteConnection, connections, teamMemberships }) {
+// One form, one submit: pick any number of connections (same searchable
+// checkbox picker as the create-team form in ConnectionsTeams.jsx) and/or
+// type any number of email addresses, then send the lot together. Each
+// invite is sent independently by the caller -- `onInviteConnections(ids)`
+// and `onInvite(emails)` both resolve to per-item { ok, error } results
+// rather than throwing -- so one bad address doesn't sink the rest, and only
+// the failures stay in the form to fix and resend.
+function InviteToTeamDialog({ onClose, onInvite, onInviteConnections, connections, teamMemberships }) {
   const [emails, setEmails] = useState([''])
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [query, setQuery] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
-  const initialFocusRef = useRef(null)
-  const [connectionId, setConnectionId] = useState('')
-  const unavailableIds = new Set(teamMemberships.filter((membership) => ['active', 'pending'].includes(membership.status)).map((membership) => membership.member_user_id))
+  const statusById = new Map(teamMemberships
+    .filter((membership) => ['active', 'pending'].includes(membership.status))
+    .map((membership) => [membership.member_user_id, membership.status]))
+  const canInviteConnections = connections.length > 0 && Boolean(onInviteConnections)
   const emailsToSend = emails.map((value) => value.trim()).filter(Boolean)
+  const totalToSend = emailsToSend.length + selectedIds.size
+  const visibleConnections = connections.filter((connection) =>
+    connection.name?.toLowerCase().includes(query.trim().toLowerCase()))
+  const firstSelectableId = visibleConnections.find((connection) => !statusById.has(connection.id))?.id
 
-  async function handleConnectionSubmit(event) {
-    event.preventDefault()
-    if (!connectionId || !onInviteConnection) return
-    setSubmitting(true); setSubmitError(null)
-    try { await onInviteConnection(connectionId); onClose() }
-    catch (error) { setSubmitError(error.message || 'Could not send the invitation. Try again.') }
-    finally { setSubmitting(false) }
+  function toggleConnection(id) {
+    setSelectedIds((previous) => {
+      const next = new Set(previous)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   function updateEmail(index, value) {
@@ -263,22 +252,33 @@ function InviteToTeamDialog({ onClose, onInvite, onInviteConnection, connections
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!onInvite || emailsToSend.length === 0) return
+    if (totalToSend === 0) return
     setSubmitting(true)
     setSubmitError(null)
     try {
-      const results = await onInvite(emailsToSend)
-      const failures = results.filter((r) => !r.ok)
-      if (failures.length === 0) {
+      const connectionIds = [...selectedIds]
+      const [connectionResults, emailResults] = await Promise.all([
+        connectionIds.length > 0 && onInviteConnections ? onInviteConnections(connectionIds) : [],
+        emailsToSend.length > 0 && onInvite ? onInvite(emailsToSend) : [],
+      ])
+      const failedConnections = connectionResults.filter((r) => !r.ok)
+      const failedEmails = emailResults.filter((r) => !r.ok)
+      const failureCount = failedConnections.length + failedEmails.length
+      if (failureCount === 0) {
         onClose()
         return
       }
       // Drop the ones that succeeded so a retry doesn't re-invite them --
-      // only the failed addresses stay in the form to fix and resend.
-      setEmails(failures.map((f) => f.email))
+      // only the failed connections/addresses stay in the form.
+      setSelectedIds(new Set(failedConnections.map((f) => f.id)))
+      setEmails(failedEmails.length > 0 ? failedEmails.map((f) => f.email) : [''])
+      const nameById = new Map(connections.map((c) => [c.id, c.name]))
       setSubmitError(
-        (failures.length < emailsToSend.length ? `${emailsToSend.length - failures.length} sent. ` : '') +
-        failures.map((f) => `${f.email}: ${f.error}`).join('; ')
+        (failureCount < totalToSend ? `${totalToSend - failureCount} sent. ` : '') +
+        [
+          ...failedConnections.map((f) => `${nameById.get(f.id) ?? 'Connection'}: ${f.error}`),
+          ...failedEmails.map((f) => `${f.email}: ${f.error}`),
+        ].join('; ')
       )
     } catch (error) {
       setSubmitError(error.message || 'Could not send the invitations. Try again.')
@@ -292,58 +292,79 @@ function InviteToTeamDialog({ onClose, onInvite, onInviteConnection, connections
       label="Invite to team"
       onClose={submitting ? undefined : onClose}
       closeOnBackdrop={!submitting}
-      panelClassName="w-full max-w-sm bg-card border border-hairline rounded-lg p-6"
+      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
-      <div>
+      <form onSubmit={handleSubmit}>
         <h2 className="font-display text-lg text-ink mb-1">Invite to team</h2>
-        <p className="text-sm text-secondary mb-5">Invite one of your connections, or send an email invite. They’ll appear after accepting and choose which skills to share.</p>
-        {connections.length > 0 && onInviteConnection && <form onSubmit={handleConnectionSubmit} className="space-y-3 border-b border-hairline pb-5 mb-5">
-          <label className="block text-sm font-medium text-ink">Add a connection
-            <select ref={initialFocusRef} data-dialog-initial-focus value={connectionId} onChange={(event) => setConnectionId(event.target.value)} disabled={submitting}
-              className="mt-1 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink">
-              <option value="">Choose a connection</option>
-              {connections.map((connection) => <option key={connection.id} value={connection.id} disabled={unavailableIds.has(connection.id)}>
-                {connection.name}{unavailableIds.has(connection.id) ? ' — Already added or invited' : ''}
-              </option>)}
-            </select>
-          </label>
-          <button type="submit" disabled={submitting || !connectionId || unavailableIds.has(connectionId)} className="rounded-md bg-moss px-4 py-2 text-sm font-medium text-paper disabled:opacity-60">{submitting ? 'Sending…' : 'Invite connection'}</button>
-        </form>}
-        <form onSubmit={handleSubmit}>
-        <h3 className="font-display text-base text-ink mb-3">Invite by email</h3>
-        <p className="text-sm text-secondary mb-3">
-          No LearnScope account yet? They’ll get a real sign-up invite. Already have one? They’ll see this on their Actions page.
+        <p className="text-sm text-secondary mb-5">
+          Choose connections, add email addresses, or both. They’ll appear here as invited until they accept
+          and choose which skills to share.
         </p>
-        <div className="space-y-2 mb-2">
-          {emails.map((value, index) => (
-            <div key={index} className="flex items-center gap-2">
-              <label htmlFor={`manager-team-invite-email-${index}`} className="sr-only">Email {index + 1}</label>
-              <input
-                ref={index === 0 && connections.length === 0 ? initialFocusRef : undefined}
-                id={`manager-team-invite-email-${index}`}
-                type="email"
-                maxLength={320}
-                value={value}
-                onChange={(e) => updateEmail(index, e.target.value)}
-                disabled={submitting}
-                placeholder="name@example.com"
-                data-dialog-initial-focus={index === 0 && connections.length === 0 ? true : undefined}
-                className="flex-1 rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-              />
-              {emails.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => removeEmailRow(index)}
-                  disabled={submitting}
-                  aria-label={`Remove email ${index + 1}`}
-                  className="shrink-0 rounded-md border border-hairline text-secondary hover:text-red-700 px-2 py-2 text-sm disabled:opacity-60"
-                >
-                  ✕
-                </button>
+
+        {canInviteConnections && (
+          <fieldset className="mb-5">
+            <legend className="text-sm font-medium text-ink">Your connections</legend>
+            {connections.length > CONNECTION_SEARCH_THRESHOLD && (
+              <input type="text" value={query} disabled={submitting} placeholder="Search connections…"
+                aria-label="Search connections" onChange={(event) => setQuery(event.target.value)}
+                className="mt-1 mb-1 block w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink" />
+            )}
+            <div className="mt-1 max-h-48 overflow-y-auto rounded-md border border-hairline bg-paper divide-y divide-hairline">
+              {visibleConnections.length === 0 && (
+                <p className="px-3 py-2 text-sm text-secondary">No connections match “{query.trim()}”.</p>
               )}
+              {visibleConnections.map((connection) => {
+                const status = statusById.get(connection.id)
+                return (
+                  <label key={connection.id} className={`flex items-center gap-2 px-3 py-1.5 text-sm ${status ? 'text-secondary' : 'text-ink'}`}>
+                    <input type="checkbox" checked={Boolean(status) || selectedIds.has(connection.id)}
+                      disabled={submitting || Boolean(status)} onChange={() => toggleConnection(connection.id)}
+                      data-dialog-initial-focus={connection.id === firstSelectableId ? true : undefined}
+                      className="rounded border-hairline accent-moss" />
+                    <span className="flex-1">{connection.name}</span>
+                    {status && <span className="text-xs">{status === 'pending' ? 'Invited' : 'On this team'}</span>}
+                  </label>
+                )
+              })}
             </div>
-          ))}
-        </div>
+          </fieldset>
+        )}
+
+        <fieldset className="mb-2">
+          <legend className="text-sm font-medium text-ink mb-1">Invite by email</legend>
+          <p className="text-sm text-secondary mb-3">
+            No LearnScope account yet? They’ll get a sign-up invite. Already have one? They’ll see it on their Actions page.
+          </p>
+          <div className="space-y-2">
+            {emails.map((value, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <label htmlFor={`manager-team-invite-email-${index}`} className="sr-only">Email {index + 1}</label>
+                <input
+                  id={`manager-team-invite-email-${index}`}
+                  type="email"
+                  maxLength={320}
+                  value={value}
+                  onChange={(e) => updateEmail(index, e.target.value)}
+                  disabled={submitting}
+                  placeholder="name@example.com"
+                  data-dialog-initial-focus={index === 0 && !firstSelectableId ? true : undefined}
+                  className="flex-1 rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+                />
+                {emails.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeEmailRow(index)}
+                    disabled={submitting}
+                    aria-label={`Remove email ${index + 1}`}
+                    className="shrink-0 rounded-md border border-hairline text-secondary hover:text-red-700 px-2 py-2 text-sm disabled:opacity-60"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </fieldset>
         {emails.length < MAX_EMAIL_ROWS && (
           <button
             type="button"
@@ -366,14 +387,13 @@ function InviteToTeamDialog({ onClose, onInvite, onInviteConnection, connections
           </button>
           <button
             type="submit"
-            disabled={submitting || emailsToSend.length === 0}
-            className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
+            disabled={submitting || totalToSend === 0}
+            className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 disabled:opacity-60"
           >
-            {submitting ? 'Sending…' : emailsToSend.length > 1 ? `Send ${emailsToSend.length} invites` : 'Send invite'}
+            {submitting ? 'Sending…' : totalToSend > 1 ? `Send ${totalToSend} invites` : 'Send invite'}
           </button>
         </div>
-        </form>
-      </div>
+      </form>
     </AccessibleDialog>
   )
 }

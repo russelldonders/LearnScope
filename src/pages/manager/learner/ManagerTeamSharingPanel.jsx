@@ -50,8 +50,11 @@ export default function ManagerTeamSharingPanel({
   onSave,
   onLeaveTeam,
   readOnly = false,
+  initialEditOpen = false,
 }) {
-  const [editOpen, setEditOpen] = useState(false)
+  // `initialEditOpen` -- set by the caller right after the learner accepts
+  // an invite, since picking what to share is the obvious next step.
+  const [editOpen, setEditOpen] = useState(initialEditOpen && !readOnly)
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false)
   const wasSaving = useRef(saving)
 
@@ -84,7 +87,7 @@ export default function ManagerTeamSharingPanel({
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
       <p className="text-sm text-secondary mb-4">
-        Managed by {membership.managerName} · member since {formatAbsoluteDate(membership.joinedAt)}
+        Led by {membership.managerName} · member since {formatAbsoluteDate(membership.joinedAt)}
       </p>
 
       <p className="text-sm text-secondary mb-4">
@@ -224,7 +227,7 @@ function EditSharedSkillsDialog({ availableSkills, initiallySelectedIds, saving,
         Choose skills to share
       </h2>
       <p className="text-sm text-secondary mb-4">
-        Only the skills you check here -- and their evidence, if any -- become visible to your manager. You
+        Only the skills you check here -- and their evidence, if any -- become visible to your team leader. You
         can change this any time.
       </p>
 
