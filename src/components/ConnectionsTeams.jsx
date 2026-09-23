@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { usePendingActions } from '../context/PendingActionsContext'
 import { uploadEvidenceFiles } from '../lib/skillEvidence'
 import { handleTabListKeyDown } from '../lib/tabsKeyboard'
+import { writeUrlParams } from '../lib/useSortedPage'
 import {
   createManagerWorkspace, createManagerTeam, listMyLedManagerTeams, listMyArchivedManagerTeams,
   listMyManagerTeamRelationships, listManagerTeamMembers, listManagerTeamRoster, inviteConnectionToManagerTeam,
@@ -12,7 +14,8 @@ import {
   getManagerTeamSkillDetail, setManagerTeamSkillTarget, archiveManagerTeam, restoreManagerTeam,
   listMyManagerShareableSkills, setManagerTeamSharedSkills, leaveManagerTeam,
   listManagerTeamPendingMembers, revokeManagerTeamInvite, suggestManagerTeamSkill,
-  listManagerTeamSkills, addManagerTeamSkill, removeManagerTeamSkill,
+  listManagerTeamSkills, addManagerTeamSkill, removeManagerTeamSkill, decideManagerTeamInvite,
+  resendManagerTeamInvite, updateManagerTeamDetails, listManagerTeamSkillsForMember,
 } from '../lib/managerTeams'
 import MutationFeedback from './MutationFeedback'
 import ConfirmDialog from './ConfirmDialog'
@@ -39,6 +42,7 @@ const PANELS = [
   { key: 'collaboration', label: 'Collaboration' },
   { key: 'settings', label: 'Settings' },
 ]
+const PANEL_KEYS = PANELS.map((panel) => panel.key)
 
 // Builds "Alex", "Alex and Sam", or "Alex, Sam and Jo" from the leader's own
 // name plus whoever is currently checked in the create-team member picker --
@@ -59,7 +63,7 @@ function buildDefaultTeamName(selfName, memberNames) {
 // sort last within each group so the active, actionable ones stay on top.
 function buildTeamOptions(ledTeams, archivedLedTeams, relationships) {
   const led = [...ledTeams, ...archivedLedTeams].map((t) => ({
-    key: `lead:${t.id}`, id: t.id, name: t.name, role: 'leader', teamStatus: t.status,
+    key: `lead:${t.id}`, id: t.id, name: t.name, description: t.description ?? null, role: 'leader', teamStatus: t.status,
   }))
   const joined = relationships
     .filter((r) => r.status === 'active')
@@ -100,8 +104,23 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
   const [revoking, setRevoking] = useState(false)
   const [learningRecords, setLearningRecords] = useState([])
   const [collaborationRecords, setCollaborationRecords] = useState([])
-  const [activePanel, setActivePanel] = useState('skills')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { refreshPendingActionCount } = usePendingActions()
+  // ?tab= is only honoured on first load (for whichever team that lands
+  // on); after that each team remembers its own last-used tab, below.
+  const initialPanel = useRef(PANEL_KEYS.includes(searchParams.get('tab')) ? searchParams.get('tab') : null)
+  const [activePanel, setActivePanel] = useState(initialPanel.current ?? 'skills')
   const panelTabRefs = useRef({})
+  // Last tab a leader deliberately picked per team id -- switching away and
+  // back returns there instead of always bouncing to Skills. A team with no
+  // entry here yet is still "undecided", which lets loadTeamDetail steer an
+  // empty team towards Members (see below) without ever overriding a tab
+  // the leader actually chose.
+  const lastPanelByTeam = useRef({})
+  const currentTeamId = useRef('')
+  const [decidingInviteId, setDecidingInviteId] = useState(null)
+  const [inviteDecisionError, setInviteDecisionError] = useState(null)
+  const [shareOnOpenKey, setShareOnOpenKey] = useState(null)
   const [successorId, setSuccessorId] = useState('')
   const [transferOpen, setTransferOpen] = useState(false)
   const [membersError, setMembersError] = useState(false)
@@ -111,6 +130,10 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
   const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false)
   const [memberRoster, setMemberRoster] = useState([])
   const [memberAssessments, setMemberAssessments] = useState([])
+  const [memberTeamSkills, setMemberTeamSkills] = useState([])
+  const [detailsName, setDetailsName] = useState('')
+  const [detailsDescription, setDetailsDescription] = useState('')
+  const [detailsSaving, setDetailsSaving] = useState(false)
   const [memberDetailLoading, setMemberDetailLoading] = useState(false)
   const [memberDetailError, setMemberDetailError] = useState(false)
   const [memberSaving, setMemberSaving] = useState(false)
@@ -173,15 +196,21 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
   // records. Reloaded wholesale after any mutation below (invite, rating,
   // new record) the same way the old ManagerConsolePage did, rather than
   // each panel managing its own slice independently.
+  //
+  // Every result is dropped if the leader has since switched to another
+  // team (currentTeamId) -- otherwise a slow load for team A resolving after
+  // a click on team B would paint A's members and skills under B's name.
   const loadTeamDetail = useCallback(async (id) => {
     setMembersLoading(true)
     setMembersError(false)
+    const isStale = () => currentTeamId.current !== id
     try {
       const [membershipRows, people, summaries, learning, collaboration, pending, tracked] = await Promise.all([
         listManagerTeamMembers(id), listManagerTeamRoster(id), listManagerTeamMemberSummaries(id),
         listManagerTeamLearningRecords(id), listManagerCollaborationRecords(id), listManagerTeamPendingMembers(id),
         listManagerTeamSkills(id),
       ])
+      if (isStale()) return
       setMembers(membershipRows)
       setRoster(people)
       setTeamMemberSummaries(summaries)
@@ -189,36 +218,69 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       setCollaborationRecords(collaboration)
       setPendingMembers(pending)
       setTeamSkills(tracked)
+      // Nobody has joined yet, so every other tab would just be an empty
+      // state -- land on Members (where inviting happens) instead, unless
+      // the leader has already picked a tab for this team themselves.
+      if (summaries.length === 0 && !lastPanelByTeam.current[id]) {
+        lastPanelByTeam.current[id] = 'members'
+        setActivePanel('members')
+      }
     } catch (err) {
+      if (isStale()) return
       setMembersError(true)
       setError(err.message || 'Could not load team members. Try again.')
     } finally {
-      setMembersLoading(false)
+      if (!isStale()) setMembersLoading(false)
     }
   }, [])
 
-  // Switching to a different team should land back on the Skills tab, but
-  // archiving/restoring/retrying the *same* team (both of which live under
-  // Settings) must not -- otherwise clicking "Archive team" or "Restore
-  // team" would immediately bounce the leader away from the Settings tab
-  // they were just on. Kept as its own effect, keyed only on teamId, so it
-  // doesn't fire on the `retry` bumps below.
-  //
-  // Guarded on an actual previous team id (not just "teamId changed") so
-  // the very first resolution of the initial team-list load -- teamId
-  // going from '' to the first real id, which happens asynchronously after
-  // mount, activePanel already defaults to 'skills' -- doesn't re-fire this
-  // reset. Without the guard, a click on another tab that lands in the
-  // narrow window before that initial load resolves gets silently
-  // reverted back to Skills once it does (this was flaky in
-  // ConnectionsTeams.test.jsx for exactly this reason).
+  // Switching to a team restores the tab last used on it (Skills for one
+  // not visited yet). Archiving/restoring/retrying the *same* team (both
+  // under Settings) doesn't change teamId, so it never bounces the leader
+  // off the tab they're on. Keyed on selectedKey too so that a first
+  // selection landing on a *joined* team still consumes ?tab=, rather than
+  // it leaking onto whichever led team gets opened later.
   const previousTeamId = useRef(teamId)
   useEffect(() => {
-    if (previousTeamId.current && previousTeamId.current !== teamId) {
-      setActivePanel('skills')
+    if (!selectedKey) return
+    currentTeamId.current = teamId
+    if (teamId && previousTeamId.current !== teamId) {
+      if (initialPanel.current) lastPanelByTeam.current[teamId] ??= initialPanel.current
+      setActivePanel(lastPanelByTeam.current[teamId] ?? 'skills')
     }
+    initialPanel.current = null
     previousTeamId.current = teamId
-  }, [teamId])
+  }, [teamId, selectedKey])
+
+  // Keeps ?team=&tab= in step with what's on screen, so a refresh or a
+  // shared link lands on the same team and tab. replace:true -- switching
+  // teams/tabs is in-page navigation, not something Back should step
+  // through one click at a time.
+  const selectedTeamId = selected?.id ?? ''
+  const urlTab = selected?.role === 'leader' ? activePanel : ''
+  useEffect(() => {
+    if (!selectedTeamId) return
+    if (searchParams.get('team') === selectedTeamId && (searchParams.get('tab') ?? '') === urlTab) return
+    writeUrlParams(searchParams, setSearchParams, { team: selectedTeamId, tab: urlTab })
+  }, [selectedTeamId, urlTab, searchParams, setSearchParams])
+
+  // Seeds Settings' "Team details" form from whichever led team is open --
+  // and re-seeds after a save, so the form always shows what's stored.
+  const selectedName = selected?.name ?? ''
+  const selectedDescription = selected?.description ?? ''
+  useEffect(() => {
+    setDetailsName(selectedName)
+    setDetailsDescription(selectedDescription)
+  }, [teamId, selectedName, selectedDescription])
+
+  function selectPanel(key) {
+    lastPanelByTeam.current[teamId] = key
+    setActivePanel(key)
+  }
+
+  function selectTeam(key) {
+    setSelectedKey(key); setShareOnOpenKey(null); setNotice(''); setError(null)
+  }
 
   useEffect(() => {
     setMembers([])
@@ -246,10 +308,15 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     Promise.allSettled([
       listManagerTeamRoster(selected.id),
       listManagerTeamSkillAssessments(selected.membership.id),
-    ]).then(([rosterResult, assessmentResult]) => {
+      listManagerTeamSkillsForMember(selected.id),
+    ]).then(([rosterResult, assessmentResult, teamSkillsResult]) => {
       if (!active) return
       setMemberRoster(rosterResult.status === 'fulfilled' ? rosterResult.value : [])
       setMemberAssessments(assessmentResult.status === 'fulfilled' ? assessmentResult.value : [])
+      // Optional extra, not core to the panel -- a failure here just hides
+      // the "skills this team is working on" list rather than flagging the
+      // whole member view as broken.
+      setMemberTeamSkills(teamSkillsResult.status === 'fulfilled' ? teamSkillsResult.value : [])
       if (rosterResult.status === 'rejected' || assessmentResult.status === 'rejected') setMemberDetailError(true)
     }).finally(() => { if (active) setMemberDetailLoading(false) })
     return () => { active = false }
@@ -301,11 +368,11 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
         await loadTeamDetail(id)
         setNotice(
           failureCount > 0
-            ? `Team created, but ${failureCount} of ${memberIds.length} member invitations couldn't be sent. Try inviting them from the Members tab below.`
+            ? `Team created, but ${failureCount} of ${memberIds.length} member invitations couldn't be sent. Try inviting them again below.`
             : 'Team created and members invited.'
         )
       } else {
-        setNotice('Team created. Invite a connection from the Members tab below.')
+        setNotice('Team created. Invite people to get started.')
       }
     } catch (err) { setError(err.message || 'Could not create your team. Try again.') }
     finally { setBusy(false) }
@@ -360,9 +427,42 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     })
   }
 
-  async function handleInviteConnection(connectionId) {
-    await inviteConnectionToManagerTeam(teamId, connectionId)
+  // Same per-item shape as handleInviteByEmail above, for the invite
+  // dialog's multi-select connection picker.
+  async function handleInviteConnections(connectionIds) {
+    const results = await Promise.allSettled(connectionIds.map((id) => inviteConnectionToManagerTeam(teamId, id)))
     await loadTeamDetail(teamId)
+    return connectionIds.map((id, i) => {
+      const result = results[i]
+      return result.status === 'fulfilled'
+        ? { id, ok: true }
+        : { id, ok: false, error: result.reason?.message || 'Could not send this invitation' }
+    })
+  }
+
+  // Answering here rather than sending the learner off to /actions -- same
+  // decide_manager_team_invite call Actions.jsx makes. Accepting drops them
+  // straight into that team with the share-skills picker already open,
+  // since choosing what to share is the very next thing a new member does.
+  async function handleInviteDecision(membership, accept) {
+    setDecidingInviteId(membership.id); setInviteDecisionError(null); setNotice('')
+    try {
+      await decideManagerTeamInvite(membership.id, accept)
+      setRelationships((current) => accept
+        ? current.map((r) => (r.id === membership.id ? { ...r, status: 'active', joinedAt: new Date().toISOString() } : r))
+        : current.filter((r) => r.id !== membership.id))
+      if (accept) {
+        const key = `member:${membership.teamId}`
+        setSelectedKey(key)
+        setShareOnOpenKey(key)
+        setNotice(`You joined ${membership.teamName}. Choose which skills to share with ${membership.managerName}.`)
+      }
+      refreshPendingActionCount?.()
+    } catch (err) {
+      setInviteDecisionError({ id: membership.id, message: err.message || 'Could not respond to this invitation. Try again.' })
+    } finally {
+      setDecidingInviteId(null)
+    }
   }
 
   async function handleRevokeInvite() {
@@ -373,6 +473,25 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       await loadTeamDetail(teamId)
     } catch (err) { setError(err.message || 'Could not revoke this invitation. Try again.') }
     finally { setRevoking(false) }
+  }
+
+  async function handleResendInvite(person) {
+    await resendManagerTeamInvite(person.id)
+    await loadTeamDetail(teamId)
+  }
+
+  async function handleSaveDetails(event) {
+    event.preventDefault()
+    const nextName = detailsName.trim()
+    if (!nextName) return
+    const nextDescription = detailsDescription.trim() || null
+    setDetailsSaving(true); setError(null); setNotice('')
+    try {
+      await updateManagerTeamDetails(teamId, { name: nextName, description: nextDescription })
+      setLedTeams((previous) => previous.map((team) => (team.id === teamId ? { ...team, name: nextName, description: nextDescription } : team)))
+      setNotice('Team details saved.')
+    } catch (err) { setError(err.message || 'Could not save the team details. Try again.') }
+    finally { setDetailsSaving(false) }
   }
 
   async function handleCreateCollaborationRecord(record) {
@@ -460,7 +579,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
   return <section aria-labelledby="connections-teams-title" className="space-y-4 border-b border-hairline pb-8">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h2 id="connections-teams-title" className="font-display text-xl text-ink">Teams you are part of</h2>
-      {!creating && <button type="button" disabled={busy || loading} onClick={startCreating} className={buttonClass}>{ledTeams.length === 0 ? 'Form team' : 'Create a team'}</button>}
+      {!creating && <button type="button" disabled={busy || loading} onClick={startCreating} className={buttonClass}>Create a team</button>}
     </div>
     <p className="text-sm text-secondary">Create and lead multiple teams, or join teams led by others. Invite your connections to learn together. Members choose which skills to share with their team leader.</p>
 
@@ -474,7 +593,21 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
         <ul className="divide-y divide-hairline">{pendingInvites.map((membership) => (
           <li key={membership.id} className="flex flex-wrap items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
             <div><p className="text-sm font-medium text-ink">{membership.teamName}</p><p className="text-sm text-secondary">Led by {membership.managerName}</p></div>
-            <Link className="text-sm text-moss underline underline-offset-4" to="/actions">Respond to invitation</Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" disabled={decidingInviteId !== null} onClick={() => handleInviteDecision(membership, true)}
+                aria-label={`Accept invitation to ${membership.teamName}`}
+                className="rounded-md bg-moss px-3 py-1.5 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-60">
+                {decidingInviteId === membership.id ? 'Saving…' : 'Accept'}
+              </button>
+              <button type="button" disabled={decidingInviteId !== null} onClick={() => handleInviteDecision(membership, false)}
+                aria-label={`Decline invitation to ${membership.teamName}`}
+                className="rounded-md border border-hairline px-3 py-1.5 text-sm font-medium text-ink hover:bg-card disabled:opacity-60">
+                Decline
+              </button>
+            </div>
+            {inviteDecisionError?.id === membership.id && (
+              <MutationFeedback status="error" message={inviteDecisionError.message} className="w-full" />
+            )}
           </li>
         ))}</ul>
       </div>
@@ -516,38 +649,14 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     )}
 
     {teamOptions.length > 0 && <div className="space-y-4">
-      {teamOptions.length > 1 ? (
-        <label className="block max-w-sm text-sm text-ink">Team
-          {/* Grouped by role rather than left as one flat list -- leading a
-              team and merely belonging to one lead to genuinely different
-              screens below (a 5-tab admin console vs. one sharing panel), so
-              that distinction needs to be visible at a glance, not just
-              readable in each option's own trailing text. */}
-          <select disabled={busy} value={selectedKey} onChange={(e) => { setSelectedKey(e.target.value); setNotice(''); setError(null) }} className={fieldClass}>
-            {teamOptions.some((t) => t.role === 'leader') && (
-              <optgroup label="Teams you lead">
-                {teamOptions.filter((t) => t.role === 'leader').map((t) => (
-                  <option key={t.key} value={t.key}>
-                    {t.name}{t.teamStatus === 'archived' ? ' (Archived)' : ''}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {teamOptions.some((t) => t.role === 'member') && (
-              <optgroup label="Teams you've joined">
-                {teamOptions.filter((t) => t.role === 'member').map((t) => (
-                  <option key={t.key} value={t.key}>
-                    {t.name} · led by {t.membership.managerName}{t.teamStatus === 'archived' ? ' (Archived)' : ''}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
-        </label>
-      ) : (
-        <h3 className="font-display text-lg text-ink">
-          {teamOptions[0].name}{teamOptions[0].teamStatus === 'archived' ? ' (Archived)' : ''}
-        </h3>
+      <TeamList options={teamOptions} selectedKey={selectedKey} disabled={busy} onSelect={selectTeam} />
+      {selected && (
+        <div>
+          <h3 className="font-display text-lg text-ink">
+            {selected.name}{isArchived ? ' (Archived)' : ''}
+          </h3>
+          {selected.description && <p className="text-sm text-secondary">{selected.description}</p>}
+        </div>
       )}
 
       {isArchived && (
@@ -558,6 +667,10 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       )}
 
       {selected?.role === 'leader' && <div className={`space-y-4 ${isArchived ? 'opacity-75 border-l-2 border-gold/40 pl-4' : ''}`}>
+        {!isArchived && !membersLoading && !membersError && (
+          <TeamSetupChecklist members={teamMemberSummaries} pendingMembers={pendingMembers}
+            onOpenPanel={selectPanel} />
+        )}
         <div role="tablist" aria-label="Team section" className="flex items-center flex-wrap gap-1 border-b border-hairline">
           {PANELS.map((panel) => (
             <button key={panel.key} type="button" role="tab"
@@ -567,9 +680,9 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
               aria-controls={`team-panel-${panel.key}`}
               aria-label={panel.label}
               tabIndex={activePanel === panel.key ? 0 : -1}
-              onClick={() => setActivePanel(panel.key)}
+              onClick={() => selectPanel(panel.key)}
               onKeyDown={(event) => handleTabListKeyDown(event, {
-                keys: PANELS.map((p) => p.key), activeKey: activePanel, refs: panelTabRefs, onChange: setActivePanel,
+                keys: PANEL_KEYS, activeKey: activePanel, refs: panelTabRefs, onChange: selectPanel,
               })}
               className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${activePanel === panel.key
                 ? 'border-moss text-ink font-medium'
@@ -592,8 +705,10 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
           {activePanel === 'members' && (
             <ManagerTeamPanel members={teamMemberSummaries} pendingMembers={pendingMembers}
               loading={membersLoading} error={membersError ? error : null}
-              onInvite={handleInviteByEmail} onInviteConnection={handleInviteConnection}
+              onInvite={handleInviteByEmail} onInviteConnections={handleInviteConnections}
+              onOpenCollaboration={() => selectPanel('collaboration')}
               onRevokeInvite={isArchived ? undefined : (person) => setRevokeTarget(person)}
+              onResendInvite={isArchived ? undefined : handleResendInvite}
               connections={connections} teamMemberships={members} readOnly={isArchived}
               onRateSkill={isArchived ? undefined : handleRateSkill} onLoadSkillAssessments={listManagerTeamSkillAssessments}
               onLoadSkillDetail={getManagerTeamSkillDetail} onSetTarget={isArchived ? undefined : setManagerTeamSkillTarget} />
@@ -608,6 +723,30 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
           )}
           {activePanel === 'settings' && (
             <div className="space-y-6 max-w-lg">
+              <div className="bg-card border border-hairline rounded-lg p-6">
+                <h3 className="font-display text-lg text-ink mb-1">Team details</h3>
+                {isArchived ? (
+                  <p className="text-sm text-secondary">Restore this team to rename it or change its description.</p>
+                ) : (
+                  <form onSubmit={handleSaveDetails} className="space-y-3">
+                    <label className="block text-sm text-ink">Team name
+                      <input required maxLength={120} value={detailsName} disabled={detailsSaving}
+                        onChange={(e) => setDetailsName(e.target.value)} className={fieldClass} />
+                    </label>
+                    <label className="block text-sm text-ink">Description (optional)
+                      <textarea rows={2} maxLength={500} value={detailsDescription} disabled={detailsSaving}
+                        onChange={(e) => setDetailsDescription(e.target.value)}
+                        placeholder="What is this team working on together?" className={fieldClass} />
+                    </label>
+                    <button type="submit" className={buttonClass}
+                      disabled={detailsSaving || !detailsName.trim()
+                        || (detailsName.trim() === selectedName && (detailsDescription.trim() || '') === (selectedDescription || ''))}>
+                      {detailsSaving ? 'Saving…' : 'Save details'}
+                    </button>
+                  </form>
+                )}
+              </div>
+
               <div className="bg-card border border-hairline rounded-lg p-6">
                 <h3 className="font-display text-lg text-ink mb-1">Team leadership</h3>
                 <p className="text-sm text-secondary mb-4">
@@ -660,11 +799,14 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       )}
       {selected?.role === 'member' && !memberDetailLoading && (
         <ManagerTeamSharingPanel
+          key={selected.key}
+          initialEditOpen={shareOnOpenKey === selected.key}
           membership={selected.membership}
           availableSkills={mySkills}
           sharedSkillIds={selected.membership.sharedSkillIds}
           roster={memberRoster}
           assessments={memberAssessments}
+          teamSkills={memberTeamSkills}
           saving={memberSaving}
           error={memberDetailError ? 'Could not load this team’s details.' : memberActionError}
           onSave={handleManagerTeamShare}
@@ -695,4 +837,67 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     )}
 
   </section>
+}
+
+// Every team as a visible card rather than a <select> -- leading a team and
+// merely belonging to one open genuinely different screens below (a 5-tab
+// console vs. one sharing panel), so the role needs to be readable before
+// choosing, not buried in an option's trailing text. Shown even for a
+// single team so the layout doesn't change shape once a second one appears.
+function TeamList({ options, selectedKey, disabled, onSelect }) {
+  return <ul aria-label="Your teams" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+    {options.map((team) => {
+      const isSelected = team.key === selectedKey
+      const isArchived = team.teamStatus === 'archived'
+      return <li key={team.key}>
+        <button type="button" disabled={disabled} aria-pressed={isSelected} onClick={() => onSelect(team.key)}
+          className={`w-full h-full rounded-lg border px-4 py-3 text-left disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-moss ${isSelected
+            ? 'border-moss bg-moss/10'
+            : 'border-hairline bg-card hover:bg-paper'}`}>
+          <span className="block text-sm font-medium text-ink">{team.name}</span>
+          <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-secondary">
+            <span className={`rounded-full border px-2 py-0.5 ${team.role === 'leader' ? 'border-moss/40 text-ink' : 'border-hairline'}`}>
+              {team.role === 'leader' ? 'You lead' : `Led by ${team.membership.managerName}`}
+            </span>
+            {isArchived && <span className="rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 text-ink">Archived</span>}
+          </span>
+        </button>
+      </li>
+    })}
+  </ul>
+}
+
+// Getting a team going takes three steps, and until the third happens every
+// tab but Members is an empty state -- so spell them out, with a shortcut to
+// the tab that moves each one forward. Hides itself for good once someone
+// has actually shared a skill; nothing here is persisted, it's derived
+// entirely from the team's own loaded data.
+function TeamSetupChecklist({ members, pendingMembers, onOpenPanel }) {
+  const steps = [
+    { label: 'Invite people to the team', done: members.length > 0 || pendingMembers.length > 0, panel: 'members', action: 'Invite people' },
+    { label: 'They accept the invitation', done: members.length > 0, panel: 'members', action: 'See who’s invited' },
+    { label: 'Members choose skills to share with you', done: members.some((m) => m.sharedSkills?.length > 0), panel: 'skills', action: 'Add team skills meanwhile' },
+  ]
+  if (steps.every((step) => step.done)) return null
+  const nextIndex = steps.findIndex((step) => !step.done)
+  return <div className="rounded-lg border border-hairline bg-card p-4">
+    <h4 className="text-sm font-medium text-ink">Getting your team started</h4>
+    <ol className="mt-2 space-y-1.5">
+      {steps.map((step, index) => (
+        <li key={step.label} className="flex flex-wrap items-center gap-2 text-sm">
+          <span aria-hidden="true" className={`inline-flex size-5 items-center justify-center rounded-full text-xs ${step.done ? 'bg-moss text-paper' : 'border border-hairline text-secondary'}`}>
+            {step.done ? '✓' : index + 1}
+          </span>
+          <span className={step.done ? 'text-secondary line-through' : 'text-ink'}>
+            {step.label}<span className="sr-only">{step.done ? ' (done)' : ' (to do)'}</span>
+          </span>
+          {index === nextIndex && (
+            <button type="button" onClick={() => onOpenPanel(step.panel)} className="text-sm font-medium text-moss hover:underline">
+              {step.action}
+            </button>
+          )}
+        </li>
+      ))}
+    </ol>
+  </div>
 }

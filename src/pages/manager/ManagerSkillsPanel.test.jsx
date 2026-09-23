@@ -108,4 +108,43 @@ describe('ManagerSkillsPanel', () => {
     expect(screen.getByRole('checkbox', { name: 'Sam' })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Alex' })).not.toBeChecked()
   })
+
+  it('filters the matrix by name, unrated skills, and skills few members have shared', () => {
+    const team = [
+      { id: 'alex', name: 'Alex', sharedSkills: [
+        { id: 'a1', name: 'Facilitation', level: 3, managerRating: { level: 2 } },
+        { id: 'a2', name: 'Budgeting', level: 1 },
+      ] },
+      { id: 'sam', name: 'Sam', sharedSkills: [{ id: 's1', name: 'Facilitation', level: 4, managerRating: { level: 4 } }] },
+      { id: 'jo', name: 'Jo', sharedSkills: [] },
+    ]
+    render(<LanguageProvider><ManagerSkillsPanel members={team} /></LanguageProvider>)
+    expect(screen.getByRole('rowheader', { name: 'Budgeting' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Not yet rated by you' }))
+    expect(screen.queryByRole('rowheader', { name: 'Facilitation' })).not.toBeInTheDocument()
+    expect(screen.getByRole('rowheader', { name: 'Budgeting' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Shared by fewer than half' }))
+    expect(screen.getByRole('rowheader', { name: 'Budgeting' })).toBeInTheDocument()
+    expect(screen.queryByRole('rowheader', { name: 'Facilitation' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'All skills' }))
+    fireEvent.change(screen.getByPlaceholderText('Search skills…'), { target: { value: 'facil' } })
+    expect(screen.getByRole('rowheader', { name: 'Facilitation' })).toBeInTheDocument()
+    expect(screen.queryByRole('rowheader', { name: 'Budgeting' })).not.toBeInTheDocument()
+  })
+
+  it('rates a skill straight from its matrix cell', async () => {
+    const onRateSkill = vi.fn().mockResolvedValue()
+    const onLoadSkillAssessments = vi.fn().mockResolvedValue([])
+    render(<LanguageProvider><ManagerSkillsPanel members={members} onRateSkill={onRateSkill} onLoadSkillAssessments={onLoadSkillAssessments} /></LanguageProvider>)
+    expect(screen.getByRole('button', { name: 'Rate again: Facilitation for Alex' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Rate: Facilitation for Sam' }))
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Rate Facilitation')
+    expect(onLoadSkillAssessments).toHaveBeenCalledWith('sam', 's1')
+    fireEvent.click(screen.getByRole('button', { name: 'Expert' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save rating' }))
+    await waitFor(() => expect(onRateSkill).toHaveBeenCalledWith('sam', 's1', { level: 5, comments: null, evidenceUrl: null, files: [] }))
+  })
 })
