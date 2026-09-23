@@ -15,6 +15,11 @@ const SORT_ACCESSORS = {
   sharedSkillCount: (m) => m.sharedSkills?.length ?? 0,
 }
 
+// An invite older than this gets flagged as possibly missed, with a nudge
+// to resend it.
+const STALE_INVITE_DAYS = 14
+const DAY_MS = 24 * 60 * 60 * 1000
+
 const inviteButtonClass = 'shrink-0 rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper'
 
 // Team roster is a projection over the manager's own connections (manager
@@ -30,18 +35,20 @@ const inviteButtonClass = 'shrink-0 rounded-md border border-hairline text-ink p
 // member's own profile (ManagerMemberProfile, opened from the name here),
 // not from per-skill chips in this table, which grew unreadably wide once a
 // few members had shared a handful of skills each. RateSkillDialog below is
-// still exported for that profile view.
+// exported for those two views.
 // `members`, `loading`, `error`, `onInvite`, `onInviteConnections`,
 // `onRateSkill` and `onLoadSkillAssessments` are the only contract with the
 // data layer; this component never fetches or writes anything itself
 // outside of those.
 export default function ManagerTeamPanel({
   members = [], pendingMembers = [], loading = false, error = null, onInvite, onInviteConnections,
-  onRevokeInvite, connections = [], teamMemberships = [], onOpenCollaboration,
+  onRevokeInvite, onResendInvite, connections = [], teamMemberships = [], onOpenCollaboration,
   onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget, readOnly = false,
 }) {
   const [inviteOpen, setInviteOpen] = useState(false)
   const [profileId, setProfileId] = useState(null)
+  const [resendingId, setResendingId] = useState(null)
+  const [resendResult, setResendResult] = useState(null)
   const profileMember = members.find((member) => member.id === profileId)
   // Invited-but-not-yet-accepted people stay in the same table (they're
   // genuinely "in the list"), but pinned above the sorted/paged members
@@ -54,6 +61,18 @@ export default function ManagerTeamPanel({
   if (profileMember) return <ManagerMemberProfile member={profileMember} onBack={() => setProfileId(null)}
     onRateSkill={onRateSkill} onLoadSkillAssessments={onLoadSkillAssessments}
     onLoadSkillDetail={onLoadSkillDetail} onSetTarget={onSetTarget} />
+
+  async function handleResend(member) {
+    setResendingId(member.id); setResendResult(null)
+    try {
+      await onResendInvite(member)
+      setResendResult({ id: member.id, ok: true, message: 'Invitation sent again.' })
+    } catch (err) {
+      setResendResult({ id: member.id, ok: false, message: err.message || 'Could not resend this invitation. Try again.' })
+    } finally {
+      setResendingId(null)
+    }
+  }
 
   const inviteButton = !readOnly && (
     <button type="button" onClick={() => setInviteOpen(true)} className={inviteButtonClass}>
@@ -107,30 +126,46 @@ export default function ManagerTeamPanel({
                 </tr>
               </thead>
               <tbody>
-                {page === 1 && pendingMembers.map((member) => (
-                  <tr key={member.id} className="border-b border-hairline last:border-b-0 align-top bg-paper/60">
-                    <td className="px-4 py-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <PersonAvatar name={member.name} avatarUrl={member.avatarUrl} size={7} />
-                        <span className="text-ink">{member.name}</span>
-                        <span className="rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 text-[11px] font-medium text-ink">
-                          Invited
-                        </span>
-                      </div>
-                      {onRevokeInvite && (
-                        <button type="button" onClick={() => onRevokeInvite(member)}
-                          className="mt-2 text-sm font-medium text-red-700 underline underline-offset-4 hover:opacity-80">
-                          Revoke
-                        </button>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-secondary" title={formatAbsoluteDate(member.invitedAt)}>
-                      Invited {formatRelativeDate(member.invitedAt)}
-                    </td>
-                    <td className="px-4 py-2 text-secondary">Waiting to accept</td>
-                    <td className="px-4 py-2 text-secondary">—</td>
-                  </tr>
-                ))}
+                {page === 1 && pendingMembers.map((member) => {
+                  const isStale = member.invitedAt && Date.now() - new Date(member.invitedAt).getTime() > STALE_INVITE_DAYS * DAY_MS
+                  return (
+                    <tr key={member.id} className="border-b border-hairline last:border-b-0 align-top bg-paper/60">
+                      <td className="px-4 py-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <PersonAvatar name={member.name} avatarUrl={member.avatarUrl} size={7} />
+                          <span className="text-ink">{member.name}</span>
+                          <span className="rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 text-[11px] font-medium text-ink">
+                            Invited
+                          </span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-3">
+                          {onResendInvite && (
+                            <button type="button" disabled={resendingId !== null} onClick={() => handleResend(member)}
+                              aria-label={`Resend invitation to ${member.name}`}
+                              className="text-sm font-medium text-moss underline underline-offset-4 hover:opacity-80 disabled:opacity-60">
+                              {resendingId === member.id ? 'Sending…' : 'Resend'}
+                            </button>
+                          )}
+                          {onRevokeInvite && (
+                            <button type="button" onClick={() => onRevokeInvite(member)}
+                              className="text-sm font-medium text-red-700 underline underline-offset-4 hover:opacity-80">
+                              Revoke
+                            </button>
+                          )}
+                        </div>
+                        {resendResult?.id === member.id && (
+                          <MutationFeedback status={resendResult.ok ? 'success' : 'error'} message={resendResult.message} className="mt-2" />
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-secondary" title={formatAbsoluteDate(member.invitedAt)}>
+                        Invited {formatRelativeDate(member.invitedAt)}
+                        {isStale && <span className="block text-xs text-ink">No reply yet -- they may have missed it</span>}
+                      </td>
+                      <td className="px-4 py-2 text-secondary">Waiting to accept</td>
+                      <td className="px-4 py-2 text-secondary">—</td>
+                    </tr>
+                  )
+                })}
                 {pageItems.map((member) => {
                   const sharedCount = member.sharedSkills?.length ?? 0
                   const ratedCount = member.sharedSkills?.filter((skill) => skill.managerRating).length ?? 0

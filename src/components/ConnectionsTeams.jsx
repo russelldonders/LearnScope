@@ -15,6 +15,7 @@ import {
   listMyManagerShareableSkills, setManagerTeamSharedSkills, leaveManagerTeam,
   listManagerTeamPendingMembers, revokeManagerTeamInvite, suggestManagerTeamSkill,
   listManagerTeamSkills, addManagerTeamSkill, removeManagerTeamSkill, decideManagerTeamInvite,
+  resendManagerTeamInvite, updateManagerTeamDetails, listManagerTeamSkillsForMember,
 } from '../lib/managerTeams'
 import MutationFeedback from './MutationFeedback'
 import ConfirmDialog from './ConfirmDialog'
@@ -62,7 +63,7 @@ function buildDefaultTeamName(selfName, memberNames) {
 // sort last within each group so the active, actionable ones stay on top.
 function buildTeamOptions(ledTeams, archivedLedTeams, relationships) {
   const led = [...ledTeams, ...archivedLedTeams].map((t) => ({
-    key: `lead:${t.id}`, id: t.id, name: t.name, role: 'leader', teamStatus: t.status,
+    key: `lead:${t.id}`, id: t.id, name: t.name, description: t.description ?? null, role: 'leader', teamStatus: t.status,
   }))
   const joined = relationships
     .filter((r) => r.status === 'active')
@@ -129,6 +130,10 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
   const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false)
   const [memberRoster, setMemberRoster] = useState([])
   const [memberAssessments, setMemberAssessments] = useState([])
+  const [memberTeamSkills, setMemberTeamSkills] = useState([])
+  const [detailsName, setDetailsName] = useState('')
+  const [detailsDescription, setDetailsDescription] = useState('')
+  const [detailsSaving, setDetailsSaving] = useState(false)
   const [memberDetailLoading, setMemberDetailLoading] = useState(false)
   const [memberDetailError, setMemberDetailError] = useState(false)
   const [memberSaving, setMemberSaving] = useState(false)
@@ -191,15 +196,21 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
   // records. Reloaded wholesale after any mutation below (invite, rating,
   // new record) the same way the old ManagerConsolePage did, rather than
   // each panel managing its own slice independently.
+  //
+  // Every result is dropped if the leader has since switched to another
+  // team (currentTeamId) -- otherwise a slow load for team A resolving after
+  // a click on team B would paint A's members and skills under B's name.
   const loadTeamDetail = useCallback(async (id) => {
     setMembersLoading(true)
     setMembersError(false)
+    const isStale = () => currentTeamId.current !== id
     try {
       const [membershipRows, people, summaries, learning, collaboration, pending, tracked] = await Promise.all([
         listManagerTeamMembers(id), listManagerTeamRoster(id), listManagerTeamMemberSummaries(id),
         listManagerTeamLearningRecords(id), listManagerCollaborationRecords(id), listManagerTeamPendingMembers(id),
         listManagerTeamSkills(id),
       ])
+      if (isStale()) return
       setMembers(membershipRows)
       setRoster(people)
       setTeamMemberSummaries(summaries)
@@ -212,13 +223,14 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       // the leader has already picked a tab for this team themselves.
       if (summaries.length === 0 && !lastPanelByTeam.current[id]) {
         lastPanelByTeam.current[id] = 'members'
-        if (currentTeamId.current === id) setActivePanel('members')
+        setActivePanel('members')
       }
     } catch (err) {
+      if (isStale()) return
       setMembersError(true)
       setError(err.message || 'Could not load team members. Try again.')
     } finally {
-      setMembersLoading(false)
+      if (!isStale()) setMembersLoading(false)
     }
   }, [])
 
@@ -251,6 +263,15 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     if (searchParams.get('team') === selectedTeamId && (searchParams.get('tab') ?? '') === urlTab) return
     writeUrlParams(searchParams, setSearchParams, { team: selectedTeamId, tab: urlTab })
   }, [selectedTeamId, urlTab, searchParams, setSearchParams])
+
+  // Seeds Settings' "Team details" form from whichever led team is open --
+  // and re-seeds after a save, so the form always shows what's stored.
+  const selectedName = selected?.name ?? ''
+  const selectedDescription = selected?.description ?? ''
+  useEffect(() => {
+    setDetailsName(selectedName)
+    setDetailsDescription(selectedDescription)
+  }, [teamId, selectedName, selectedDescription])
 
   function selectPanel(key) {
     lastPanelByTeam.current[teamId] = key
@@ -287,10 +308,15 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     Promise.allSettled([
       listManagerTeamRoster(selected.id),
       listManagerTeamSkillAssessments(selected.membership.id),
-    ]).then(([rosterResult, assessmentResult]) => {
+      listManagerTeamSkillsForMember(selected.id),
+    ]).then(([rosterResult, assessmentResult, teamSkillsResult]) => {
       if (!active) return
       setMemberRoster(rosterResult.status === 'fulfilled' ? rosterResult.value : [])
       setMemberAssessments(assessmentResult.status === 'fulfilled' ? assessmentResult.value : [])
+      // Optional extra, not core to the panel -- a failure here just hides
+      // the "skills this team is working on" list rather than flagging the
+      // whole member view as broken.
+      setMemberTeamSkills(teamSkillsResult.status === 'fulfilled' ? teamSkillsResult.value : [])
       if (rosterResult.status === 'rejected' || assessmentResult.status === 'rejected') setMemberDetailError(true)
     }).finally(() => { if (active) setMemberDetailLoading(false) })
     return () => { active = false }
@@ -447,6 +473,25 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       await loadTeamDetail(teamId)
     } catch (err) { setError(err.message || 'Could not revoke this invitation. Try again.') }
     finally { setRevoking(false) }
+  }
+
+  async function handleResendInvite(person) {
+    await resendManagerTeamInvite(person.id)
+    await loadTeamDetail(teamId)
+  }
+
+  async function handleSaveDetails(event) {
+    event.preventDefault()
+    const nextName = detailsName.trim()
+    if (!nextName) return
+    const nextDescription = detailsDescription.trim() || null
+    setDetailsSaving(true); setError(null); setNotice('')
+    try {
+      await updateManagerTeamDetails(teamId, { name: nextName, description: nextDescription })
+      setLedTeams((previous) => previous.map((team) => (team.id === teamId ? { ...team, name: nextName, description: nextDescription } : team)))
+      setNotice('Team details saved.')
+    } catch (err) { setError(err.message || 'Could not save the team details. Try again.') }
+    finally { setDetailsSaving(false) }
   }
 
   async function handleCreateCollaborationRecord(record) {
@@ -606,9 +651,12 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     {teamOptions.length > 0 && <div className="space-y-4">
       <TeamList options={teamOptions} selectedKey={selectedKey} disabled={busy} onSelect={selectTeam} />
       {selected && (
-        <h3 className="font-display text-lg text-ink">
-          {selected.name}{isArchived ? ' (Archived)' : ''}
-        </h3>
+        <div>
+          <h3 className="font-display text-lg text-ink">
+            {selected.name}{isArchived ? ' (Archived)' : ''}
+          </h3>
+          {selected.description && <p className="text-sm text-secondary">{selected.description}</p>}
+        </div>
       )}
 
       {isArchived && (
@@ -660,6 +708,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
               onInvite={handleInviteByEmail} onInviteConnections={handleInviteConnections}
               onOpenCollaboration={() => selectPanel('collaboration')}
               onRevokeInvite={isArchived ? undefined : (person) => setRevokeTarget(person)}
+              onResendInvite={isArchived ? undefined : handleResendInvite}
               connections={connections} teamMemberships={members} readOnly={isArchived}
               onRateSkill={isArchived ? undefined : handleRateSkill} onLoadSkillAssessments={listManagerTeamSkillAssessments}
               onLoadSkillDetail={getManagerTeamSkillDetail} onSetTarget={isArchived ? undefined : setManagerTeamSkillTarget} />
@@ -674,6 +723,30 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
           )}
           {activePanel === 'settings' && (
             <div className="space-y-6 max-w-lg">
+              <div className="bg-card border border-hairline rounded-lg p-6">
+                <h3 className="font-display text-lg text-ink mb-1">Team details</h3>
+                {isArchived ? (
+                  <p className="text-sm text-secondary">Restore this team to rename it or change its description.</p>
+                ) : (
+                  <form onSubmit={handleSaveDetails} className="space-y-3">
+                    <label className="block text-sm text-ink">Team name
+                      <input required maxLength={120} value={detailsName} disabled={detailsSaving}
+                        onChange={(e) => setDetailsName(e.target.value)} className={fieldClass} />
+                    </label>
+                    <label className="block text-sm text-ink">Description (optional)
+                      <textarea rows={2} maxLength={500} value={detailsDescription} disabled={detailsSaving}
+                        onChange={(e) => setDetailsDescription(e.target.value)}
+                        placeholder="What is this team working on together?" className={fieldClass} />
+                    </label>
+                    <button type="submit" className={buttonClass}
+                      disabled={detailsSaving || !detailsName.trim()
+                        || (detailsName.trim() === selectedName && (detailsDescription.trim() || '') === (selectedDescription || ''))}>
+                      {detailsSaving ? 'Saving…' : 'Save details'}
+                    </button>
+                  </form>
+                )}
+              </div>
+
               <div className="bg-card border border-hairline rounded-lg p-6">
                 <h3 className="font-display text-lg text-ink mb-1">Team leadership</h3>
                 <p className="text-sm text-secondary mb-4">
@@ -733,6 +806,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
           sharedSkillIds={selected.membership.sharedSkillIds}
           roster={memberRoster}
           assessments={memberAssessments}
+          teamSkills={memberTeamSkills}
           saving={memberSaving}
           error={memberDetailError ? 'Could not load this team’s details.' : memberActionError}
           onSave={handleManagerTeamShare}

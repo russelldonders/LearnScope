@@ -87,6 +87,9 @@ export default async function handler(req, res) {
       case 'inviteManagerTeamMemberByEmail':
         await inviteManagerTeamMemberByEmail(admin, caller, payload, res)
         return
+      case 'resendManagerTeamInvite':
+        await resendManagerTeamInvite(admin, caller, payload, res)
+        return
       default:
         res.status(400).json({ error: 'Unknown action' })
     }
@@ -1183,6 +1186,84 @@ async function inviteManagerTeamMemberByEmail(admin, caller, { teamId, email }, 
   }
 
   res.status(200).json({ ok: true, userId, alreadyExisted: Boolean(existingUserId) })
+}
+
+// Nudges someone who hasn't answered a pending team invite yet. Re-checks
+// the same authority as inviteManagerTeamMemberByEmail (caller leads this
+// membership's team, team still active) since this route bypasses RLS. An
+// invitee who has never signed in gets a fresh Supabase sign-up invite
+// (their original one may have expired); anyone else gets the same
+// "check your Actions page" email a first invite sends. invited_at moves to
+// now -- the invite is live again from this point -- and doubles as a
+// throttle so a leader can't spam someone with repeat emails.
+const RESEND_COOLDOWN_MS = 60 * 60 * 1000
+
+async function resendManagerTeamInvite(admin, caller, { membershipId }, res) {
+  if (!membershipId) {
+    res.status(400).json({ error: 'Missing membershipId' })
+    return
+  }
+
+  const { data: membership, error: membershipError } = await admin
+    .from('manager_team_memberships')
+    .select('id, team_id, member_user_id, invited_email, invited_at, status, role')
+    .eq('id', membershipId).maybeSingle()
+  if (membershipError) throw membershipError
+  if (!membership || membership.role !== 'member') {
+    res.status(404).json({ error: 'Invitation not found' })
+    return
+  }
+
+  const { data: canManage, error: canManageError } = await admin
+    .rpc('is_manager_team_leader', { p_team_id: membership.team_id, p_user_id: caller.id })
+  if (canManageError) throw canManageError
+  if (!canManage) {
+    res.status(403).json({ error: 'Only this team’s leader can resend invitations' })
+    return
+  }
+  if (membership.status !== 'pending') {
+    res.status(400).json({ error: 'This invitation has already been answered' })
+    return
+  }
+
+  const { data: team, error: teamError } = await admin
+    .from('manager_teams').select('name, status').eq('id', membership.team_id).maybeSingle()
+  if (teamError) throw teamError
+  if (!team || team.status !== 'active') {
+    res.status(400).json({ error: 'This team has been archived and can no longer be changed' })
+    return
+  }
+
+  if (membership.invited_at && Date.now() - new Date(membership.invited_at).getTime() < RESEND_COOLDOWN_MS) {
+    res.status(429).json({ error: 'This invitation was sent less than an hour ago -- try again later' })
+    return
+  }
+
+  const { data: userData, error: userError } = await admin.auth.admin.getUserById(membership.member_user_id)
+  if (userError) throw userError
+  const invitee = userData?.user
+  const email = membership.invited_email || invitee?.email
+  if (!email) {
+    res.status(400).json({ error: 'No email address is on file for this person' })
+    return
+  }
+
+  let sentSignUpInvite = false
+  if (invitee && !invitee.last_sign_in_at) {
+    const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, inviteRedirectTo())
+    if (!inviteError) sentSignUpInvite = true
+    else console.error('resendManagerTeamInvite: sign-up invite failed, falling back to notification', inviteError)
+  }
+  if (!sentSignUpInvite) {
+    await notifyManagerTeamInvitePending(admin, email, caller.id, team.name)
+  }
+
+  const { error: updateError } = await admin.from('manager_team_memberships')
+    .update({ invited_at: new Date().toISOString(), invited_by: caller.id })
+    .eq('id', membership.id).eq('status', 'pending')
+  if (updateError) throw updateError
+
+  res.status(200).json({ ok: true })
 }
 
 // Mirrors notifyOrgInvitePending above, scoped to a manager team invite.

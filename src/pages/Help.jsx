@@ -217,9 +217,11 @@ function ManagerGuide() {
 
       <GuideSection title="Building a team">
         <p>
-          You can only invite people you're already connected with as a learner -- there's no way to add someone
-          you haven't connected with first. An invited person sees the invite as one of their own pending
-          Actions and has to accept it before they appear on your team.
+          Create a team from Connections › Teams, then invite people from its Members tab -- pick any of your
+          connections, or invite anyone by email (someone without a LearnScope account gets a sign-up invite).
+          An invited person can accept or decline from the Teams tab or their Actions page, and only appears on
+          your team once they accept. If someone hasn't replied, you can resend the invitation or revoke it.
+          You can rename a team, change its leader or archive it from its Settings tab.
         </p>
       </GuideSection>
 

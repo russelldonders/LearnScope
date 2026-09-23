@@ -154,4 +154,14 @@ describe('ManagerTeamPanel', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled())
     expect(onRate).toHaveBeenCalledWith({ level: 1, comments: null, evidenceUrl: null, files: [] })
   })
+
+  it('flags an invitation with no reply for a fortnight and offers to resend it', async () => {
+    const onResendInvite = vi.fn().mockRejectedValue(new Error('This invitation was sent less than an hour ago -- try again later'))
+    const pendingMembers = [{ id: 'p1', name: 'Sam Rivera', avatarUrl: null, invitedAt: '2020-01-01' }]
+    render(<ManagerTeamPanel members={[]} pendingMembers={pendingMembers} onResendInvite={onResendInvite} />)
+    expect(screen.getByText(/No reply yet/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Resend invitation to Sam Rivera' }))
+    expect(onResendInvite).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/less than an hour ago/)
+  })
 })

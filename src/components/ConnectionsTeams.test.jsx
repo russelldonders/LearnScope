@@ -24,7 +24,8 @@ vi.mock('../lib/managerTeams', () => ({
   listManagerTeamPendingMembers: vi.fn(), revokeManagerTeamInvite: vi.fn(),
   suggestManagerTeamSkill: vi.fn(),
   listManagerTeamSkills: vi.fn(), addManagerTeamSkill: vi.fn(), removeManagerTeamSkill: vi.fn(),
-  decideManagerTeamInvite: vi.fn(),
+  decideManagerTeamInvite: vi.fn(), resendManagerTeamInvite: vi.fn(), updateManagerTeamDetails: vi.fn(),
+  listManagerTeamSkillsForMember: vi.fn(),
 }))
 const connections = [{ id: 'alex', name: 'Alex' }, { id: 'sam', name: 'Sam' }]
 function renderTeams(props = {}, { initialEntries = ['/connections?section=teams'] } = {}) {
@@ -44,6 +45,7 @@ beforeEach(() => {
   teams.listManagerTeamSkillAssessments.mockResolvedValue([])
   teams.listManagerTeamPendingMembers.mockResolvedValue([])
   teams.listManagerTeamSkills.mockResolvedValue([])
+  teams.listManagerTeamSkillsForMember.mockResolvedValue([])
   teams.createManagerWorkspace.mockResolvedValue('workspace')
   teams.createManagerTeam.mockResolvedValue('new-team')
   teams.inviteConnectionToManagerTeam.mockResolvedValue('invite')
@@ -331,5 +333,67 @@ describe('Connections teams', () => {
     await inviteConnection('Alex')
     expect(await screen.findByRole('alert')).toHaveTextContent('Alex: Could not send invitation')
     expect(screen.getByRole('checkbox', { name: 'Alex' })).toBeChecked()
+  })
+
+  it("never shows a slow-loading team's members under another team the leader has since switched to", async () => {
+    teams.listMyLedManagerTeams.mockResolvedValue([{ id: 'one', name: 'First team', status: 'active' }, { id: 'two', name: 'Second team', status: 'active' }])
+    let resolveOne
+    teams.listManagerTeamMemberSummaries.mockImplementation((id) => id === 'one'
+      ? new Promise((resolve) => { resolveOne = resolve })
+      : Promise.resolve([{ id: 'm2', name: 'Bea', sharedSkills: [] }]))
+    renderTeams()
+    await waitFor(() => expect(teams.listManagerTeamMemberSummaries).toHaveBeenCalledWith('one'))
+    fireEvent.click(screen.getByRole('button', { name: /Second team/ }))
+    await waitFor(() => expect(teams.listManagerTeamMemberSummaries).toHaveBeenCalledWith('two'))
+    fireEvent.click(screen.getByRole('tab', { name: 'Members' }))
+    expect(await screen.findByText('Bea')).toBeInTheDocument()
+    await act(async () => { resolveOne([{ id: 'm1', name: 'Ada', sharedSkills: [] }]) })
+    expect(screen.queryByText('Ada')).not.toBeInTheDocument()
+    expect(screen.getByText('Bea')).toBeInTheDocument()
+  })
+
+  it('lets a leader rename a team and add a description from Settings', async () => {
+    teams.listMyLedManagerTeams.mockResolvedValue([{ id: 'one', name: 'My team', description: null, status: 'active' }])
+    teams.updateManagerTeamDetails.mockResolvedValue()
+    renderTeams()
+    fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }))
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Settings' })).toHaveAttribute('aria-selected', 'true'), { timeout: 3000 })
+    const nameField = await screen.findByLabelText('Team name')
+    expect(nameField).toHaveValue('My team')
+    expect(screen.getByRole('button', { name: 'Save details' })).toBeDisabled()
+    fireEvent.change(nameField, { target: { value: 'Design crew' } })
+    fireEvent.change(screen.getByLabelText('Description (optional)'), { target: { value: 'Getting better at research' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }))
+    await waitFor(() => expect(teams.updateManagerTeamDetails).toHaveBeenCalledWith('one', { name: 'Design crew', description: 'Getting better at research' }))
+    expect(await screen.findByRole('heading', { name: 'Design crew' })).toBeInTheDocument()
+    expect(screen.getByText('Getting better at research', { selector: 'p' })).toBeInTheDocument()
+  })
+
+  it('resends a pending invitation from the Members tab', async () => {
+    teams.listMyLedManagerTeams.mockResolvedValue([{ id: 'one', name: 'First team', status: 'active' }])
+    teams.listManagerTeamPendingMembers.mockResolvedValue([{ id: 'p1', name: 'Sam Rivera', avatarUrl: null, invitedAt: '2026-08-01' }])
+    teams.resendManagerTeamInvite.mockResolvedValue({ ok: true })
+    renderTeams()
+    fireEvent.click(await screen.findByRole('tab', { name: 'Members' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Resend invitation to Sam Rivera' }))
+    await waitFor(() => expect(teams.resendManagerTeamInvite).toHaveBeenCalledWith('p1'))
+    expect(await screen.findByText('Invitation sent again.')).toBeInTheDocument()
+  })
+
+  it("shows a member the team's tracked skills and shares a matching one in one click", async () => {
+    teams.listMyManagerTeamRelationships.mockResolvedValue([
+      { id: 'membership-1', teamId: 'book-team', teamName: 'Book group', managerName: 'Pat', status: 'active', teamStatus: 'active', sharedSkillIds: [] },
+    ])
+    teams.listMyManagerShareableSkills.mockResolvedValue([{ id: 'skill-1', name: 'Welding', level: 3, evidenceCount: 0 }])
+    teams.listManagerTeamSkillsForMember.mockResolvedValue([
+      { id: 't1', skillLibraryId: 'lib-1', skillName: 'welding' },
+      { id: 't2', skillLibraryId: 'lib-2', skillName: 'Soldering' },
+    ])
+    renderTeams()
+    expect(await screen.findByText('Skills this team is working on')).toBeInTheDocument()
+    expect(screen.getByText('Not on your profile yet')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Share Welding with Pat' }))
+    await waitFor(() => expect(teams.setManagerTeamSharedSkills).toHaveBeenCalledWith('membership-1', ['skill-1']))
+    expect(await screen.findByText('Shared')).toBeInTheDocument()
   })
 })
