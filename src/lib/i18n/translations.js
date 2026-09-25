@@ -29,7 +29,7 @@ export const translations = {
       home: 'Home',
       skills: 'Skills',
       experience: 'Experience',
-      learning: 'My learning',
+      learning: 'Learning',
       team: 'My team',
       actions: 'Actions',
     },
