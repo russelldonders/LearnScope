@@ -63,7 +63,7 @@ describe('recommendBrandPaletteFromPixels', () => {
     }
   })
 
-  it('uses a website action colour instead of darkening a bright logo accent', () => {
+  it('uses the website for the action colour while preserving a bright logo accent', () => {
     const palette = recommendBrandPaletteFromPixels(
       pixels([{ rgb: [255, 205, 0], count: 100 }]),
       {
@@ -77,7 +77,25 @@ describe('recommendBrandPaletteFromPixels', () => {
     const [red, green, blue] = [1, 3, 5].map((index) => Number.parseInt(palette.primary.slice(index, index + 2), 16))
     expect(blue).toBeGreaterThan(red)
     expect(blue).toBeGreaterThan(green)
+    const secondaryChannels = [1, 3, 5].map((index) => Number.parseInt(palette.secondary.slice(index, index + 2), 16))
+    expect(secondaryChannels[0]).toBeGreaterThan(secondaryChannels[2])
+    expect(secondaryChannels[1]).toBeGreaterThan(secondaryChannels[2])
     expect(palette.background).toMatch(/^#f[8-9a-f][f8-9a-f][f8-9a-f][f8-9a-f][f8-9a-f]$/i)
+    expectWcagAaPalette(palette)
+  })
+
+  it('keeps a usable logo colour primary and uses the website as supporting evidence', () => {
+    const palette = recommendBrandPaletteFromPixels(
+      pixels([
+        { rgb: [31, 93, 171], count: 80 },
+        { rgb: [245, 166, 35], count: 20 },
+      ]),
+      { websiteColours: [{ hex: '#7a1732', weight: 30 }] },
+    )
+
+    const [red, green, blue] = [1, 3, 5].map((index) => Number.parseInt(palette.primary.slice(index, index + 2), 16))
+    expect(blue).toBeGreaterThan(red)
+    expect(blue).toBeGreaterThan(green)
     expectWcagAaPalette(palette)
   })
 })

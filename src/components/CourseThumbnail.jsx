@@ -22,7 +22,7 @@ function hashString(str) {
 
 // gradientColors: [from, to] hex pair overriding the deterministic pair
 // below -- used only by ProviderProfile.jsx to theme this fallback with an
-// org's own Primary/Secondary brand colours on its public page, so every
+// org's own Primary/Hover brand colours on its public page, so every
 // other caller (Dashboard.jsx, Learning.jsx, CourseCatalogue.jsx, etc.)
 // keeps today's varied-by-course-name look untouched.
 export default function CourseThumbnail({ name, provider, logoUrl, imageUrl, gradientColors, className = '' }) {

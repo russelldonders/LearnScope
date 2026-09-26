@@ -132,11 +132,6 @@ export function getBrandPaletteContrastChecks(palette) {
       minimum: WCAG_AA_TEXT_CONTRAST,
     },
     {
-      role: 'Thumbnail text on secondary',
-      ratio: translucentWhiteContrastRatio(palette.secondary),
-      minimum: WCAG_AA_TEXT_CONTRAST,
-    },
-    {
       role: 'Page text',
       ratio: contrastRatio(palette.text, palette.background),
       minimum: WCAG_AA_TEXT_CONTRAST,
@@ -242,7 +237,14 @@ export function recommendBrandPaletteFromPixels(pixelData, { websiteColours = []
   const logoPrimary = colours.find((colour) => (
     colour.saturation >= 0.22 && colour.score >= colours[0].score * 0.08
   ))
-  const primarySource = (websitePrimary ?? logoPrimary ?? colours[0]).rgb
+  const logoActionColour = logoPrimary && contrastRatio(rgbToHex(logoPrimary.rgb), WHITE) >= 3
+    ? logoPrimary
+    : null
+  // The logo remains the primary authority when its colour is already close
+  // to a usable action shade. The website fills the action role only when a
+  // bright logo accent (for example yellow) would have to be distorted into
+  // a different-looking colour to carry white text.
+  const primarySource = (logoActionColour ?? websitePrimary ?? logoPrimary ?? colours[0]).rgb
   // Brand colour belongs in actions and accents. The page canvas stays very
   // near neutral so supporting text and card boundaries remain visually
   // distinct even when the source brand colour is bright or yellow-heavy.
@@ -259,12 +261,13 @@ export function recommendBrandPaletteFromPixels(pixelData, { websiteColours = []
   ])
   const thumbnailSafePrimary = darkenForTranslucentWhite(primary)
 
-  const distinctSecondary = [...websiteCandidates, ...colours]
-    .find(({ rgb }) => distance(rgb, primarySource) >= 72)?.rgb
+  // Preserve a visibly distinct logo colour as the accent before looking to
+  // secondary website colours. This keeps both sources represented when the
+  // website supplies the action colour.
+  const distinctSecondary = colours.find(({ rgb }) => distance(rgb, primarySource) >= 72)?.rgb
+    ?? websiteCandidates.find(({ rgb }) => distance(rgb, primarySource) >= 72)?.rgb
   const secondarySource = distinctSecondary ?? mix(primarySource, relativeLuminance(primarySource) < 0.2 ? WHITE_RGB : BLACK_RGB, 0.34)
-  const secondary = darkenForTranslucentWhite(
-    darkenUntil(secondarySource, [{ against: background, minimum: WCAG_AA_NON_TEXT_CONTRAST }]),
-  )
+  const secondary = darkenUntil(secondarySource, [{ against: background, minimum: WCAG_AA_NON_TEXT_CONTRAST }])
   const hover = darkenHoverUntil(mix(thumbnailSafePrimary, BLACK_RGB, 0.18), background)
   const text = darkenUntil(mix(primarySource, BLACK_RGB, 0.76), [{ against: background, minimum: 7 }])
 

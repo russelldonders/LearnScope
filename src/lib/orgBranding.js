@@ -36,5 +36,6 @@ export function orgBrandStyle(branding) {
     '--org-hover': branding?.hoverColor || undefined,
     '--org-background': branding?.backgroundColor || undefined,
     '--org-text': branding?.textColor || undefined,
+    '--org-primary-contrast': branding?.primaryColor ? '#ffffff' : undefined,
   }
 }

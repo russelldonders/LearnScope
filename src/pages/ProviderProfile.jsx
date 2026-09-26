@@ -130,7 +130,7 @@ export default function ProviderProfile() {
   // org's own colours, for a course with no uploaded image of its own --
   // undefined (component's default) when the org hasn't set a Primary.
   const thumbnailGradient = hasCustomPrimary
-    ? [profile.organisation.brandPrimaryColor, profile.organisation.brandSecondaryColor || profile.organisation.brandPrimaryColor]
+    ? [profile.organisation.brandPrimaryColor, profile.organisation.brandHoverColor || profile.organisation.brandPrimaryColor]
     : undefined
 
   return (
@@ -166,7 +166,7 @@ export default function ProviderProfile() {
             {(profile.organisation.url || profile.organisation.about) && (
               <div
                 className={`mb-8 ${
-                  profile.organisation.brandSecondaryColor ? 'border-l-4 border-[var(--org-secondary)] pl-4' : ''
+                  profile.organisation.brandSecondaryColor ? 'border-l border-[var(--org-secondary)] pl-4' : ''
                 }`}
               >
                 {profile.organisation.url && (
