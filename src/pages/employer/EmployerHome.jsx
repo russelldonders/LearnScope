@@ -70,7 +70,6 @@ export default function EmployerHome() {
         brandName={branding?.name}
         brandHomeHref={orgSlug ? `/employer/home?org=${orgSlug}` : '/dashboard'}
         contextExitHref="/dashboard"
-        contextExitLabel="Back to LearnScope"
       />
       <div className="border-b border-hairline bg-[var(--org-background,var(--color-card))]">
         <nav aria-label="Employer learning" className="max-w-4xl mx-auto px-4 flex gap-6 overflow-x-auto">

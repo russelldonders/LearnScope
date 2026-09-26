@@ -40,7 +40,6 @@ export default function AppHeader({
   brandName,
   brandHomeHref = '/dashboard',
   contextExitHref,
-  contextExitLabel,
 }) {
   const { signOut, user, isPlatformAdmin, organisationMemberships, employerMemberships, managerContexts } = useAuth()
   const { pendingActionCount } = usePendingActions()
@@ -49,8 +48,13 @@ export default function AppHeader({
   const location = useLocation()
   const [avatarUrl, setAvatarUrl] = useState(null)
   const [fullName, setFullName] = useState(null)
+  const [employerPortals, setEmployerPortals] = useState([])
+  const [employerPortalsLoading, setEmployerPortalsLoading] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef(null)
+  const employerIdsKey = [...new Set((employerMemberships ?? []).map((membership) => membership.employer_id))]
+    .sort()
+    .join(',')
 
   useEffect(() => {
     if (!user) return
@@ -65,11 +69,43 @@ export default function AppHeader({
       })
   }, [user])
 
+  useEffect(() => {
+    const employerIds = employerIdsKey ? employerIdsKey.split(',') : []
+    if (employerIds.length === 0) {
+      setEmployerPortals([])
+      setEmployerPortalsLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setEmployerPortalsLoading(true)
+    supabase
+      .from('employers')
+      .select('id, name, organisation:organisations!employers_provider_organisation_id_fkey(slug, logo_url)')
+      .in('id', employerIds)
+      .order('name')
+      .then(({ data, error }) => {
+        if (cancelled) return
+        setEmployerPortals(error ? [] : (data ?? []).filter((employer) => employer.organisation?.slug))
+        setEmployerPortalsLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [employerIdsKey])
+
   const visibleNavLinks = NAV_LINKS.filter((link) => {
     if (link.requires === 'managerContexts') return managerContexts?.length > 0
     return !link.requires || navVisibility[link.requires]
   })
   const visibleMenuItems = MENU_ITEMS.filter((item) => !item.requires || navVisibility[item.requires])
+  const activeEmployerSlug = location.pathname === '/employer/home'
+    ? new URLSearchParams(location.search).get('org')
+    : null
+  const inEmployerAdminConsole = location.pathname === '/employer' || location.pathname.startsWith('/employer/roles/')
+  const isPersonalWorkspace = !activeEmployerSlug
+    && !location.pathname.startsWith('/admin')
+    && !location.pathname.startsWith('/provider')
+    && !inEmployerAdminConsole
+  const showWorkspaceSwitcher = Boolean(contextExitHref || employerMemberships?.length > 0)
 
   useEffect(() => {
     if (!menuOpen) return
@@ -155,20 +191,57 @@ export default function AppHeader({
               </button>
 
               {menuOpen && (
-                <div className="absolute right-0 top-full mt-2 w-56 rounded-md border border-hairline bg-[var(--org-background,var(--color-card))] shadow-lg py-1 z-10">
+                <div className="absolute right-0 top-full mt-2 w-[min(18rem,calc(100vw-2rem))] rounded-md border border-hairline bg-[var(--org-background,var(--color-card))] shadow-lg py-1 z-10">
                   {fullName && (
                     <div className="px-4 py-2 text-sm font-medium text-[var(--org-text,var(--color-ink))] border-b border-hairline">
                       {fullName}
                     </div>
                   )}
-                  {contextExitHref && (
-                    <Link
-                      to={contextExitHref}
-                      onClick={() => setMenuOpen(false)}
-                      className="block px-4 py-2 text-sm font-medium text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
-                    >
-                      {contextExitLabel || 'Back to LearnScope'}
-                    </Link>
+                  {showWorkspaceSwitcher && (
+                    <div className="border-b border-hairline py-2">
+                      <p className="px-4 pb-1.5 text-xs font-medium text-secondary">Switch workspace</p>
+                      <Link
+                        to={contextExitHref || '/dashboard'}
+                        onClick={() => setMenuOpen(false)}
+                        aria-current={isPersonalWorkspace ? 'page' : undefined}
+                        className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-hairline bg-paper">
+                          <img src="/favicon.svg" alt="" className="h-5 w-5 object-contain" />
+                        </span>
+                        <span className="min-w-0 flex-1 font-medium">Personal LearnScope</span>
+                        {isPersonalWorkspace && (
+                          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="m5 12 4 4L19 6" />
+                          </svg>
+                        )}
+                      </Link>
+                      {employerPortals.map((employer) => {
+                        const isActive = activeEmployerSlug === employer.organisation.slug
+                        return (
+                          <Link
+                            key={employer.id}
+                            to={`/providers/${encodeURIComponent(employer.organisation.slug)}`}
+                            onClick={() => setMenuOpen(false)}
+                            aria-current={isActive ? 'page' : undefined}
+                            className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
+                          >
+                            <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-hairline bg-paper text-xs font-medium text-ink">
+                              {employer.organisation.logo_url
+                                ? <img src={employer.organisation.logo_url} alt="" className="h-full w-full object-contain" />
+                                : employer.name.trim().charAt(0).toUpperCase()}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate font-medium">{employer.name}</span>
+                            {isActive && (
+                              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="m5 12 4 4L19 6" />
+                              </svg>
+                            )}
+                          </Link>
+                        )
+                      })}
+                      {employerPortalsLoading && <p role="status" className="px-4 py-2 text-xs text-secondary">Loading employer workspaces…</p>}
+                    </div>
                   )}
                   {visibleMenuItems.map((item) => (
                     <Link
@@ -200,11 +273,11 @@ export default function AppHeader({
                   )}
                   {employerMemberships?.some((m) => m.role === 'admin') && (
                     <Link
-                      to={location.pathname.startsWith('/employer') ? '/dashboard' : '/employer'}
+                      to={inEmployerAdminConsole ? '/dashboard' : '/employer'}
                       onClick={() => setMenuOpen(false)}
                       className="block px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
                     >
-                      {location.pathname.startsWith('/employer') ? t('menu.switchToLearner') : t('menu.employerConsole')}
+                      {inEmployerAdminConsole ? t('menu.switchToLearner') : t('menu.employerConsole')}
                     </Link>
                   )}
                   <div className="my-1 border-t border-hairline" />
