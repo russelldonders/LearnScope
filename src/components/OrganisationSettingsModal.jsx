@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useRef, useState } from 'react'
 import { updateOrganisation, uploadOrganisationLogo, removeOrganisationLogo } from '../lib/admin/organisations'
+import { recommendBrandPalette } from '../lib/brandPalette'
 import AccessibleDialog from './AccessibleDialog'
 
 const MAX_LOGO_BYTES = 5 * 1024 * 1024
@@ -30,12 +31,17 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
   const [url, setUrl] = useState(organisation.url ?? '')
   const [about, setAbout] = useState(organisation.about ?? '')
   const [logoUrl, setLogoUrl] = useState(organisation.logo_url ?? null)
+  const [logoSourceFile, setLogoSourceFile] = useState(null)
   const [brandPrimaryColor, setBrandPrimaryColor] = useState(organisation.brand_primary_color ?? '')
   const [brandSecondaryColor, setBrandSecondaryColor] = useState(organisation.brand_secondary_color ?? '')
   const [brandHoverColor, setBrandHoverColor] = useState(organisation.brand_hover_color ?? '')
   const [brandBackgroundColor, setBrandBackgroundColor] = useState(organisation.brand_background_color ?? '')
   const [brandTextColor, setBrandTextColor] = useState(organisation.brand_text_color ?? '')
   const [colorError, setColorError] = useState(null)
+  const [recommendedPalette, setRecommendedPalette] = useState(null)
+  const [recommendingColors, setRecommendingColors] = useState(false)
+  const [recommendationError, setRecommendationError] = useState(null)
+  const [recommendationApplied, setRecommendationApplied] = useState(false)
   const [publicProfileEnabled, setPublicProfileEnabled] = useState(organisation.public_profile_enabled ?? false)
   // Tracks what's actually persisted, separately from the checkbox above --
   // the link/copy/pop-out block reads this, not the live checkbox, so
@@ -72,6 +78,10 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
     setUploadingLogo(true)
     try {
       setLogoUrl(await uploadOrganisationLogo(organisation.id, file))
+      setLogoSourceFile(file)
+      setRecommendedPalette(null)
+      setRecommendationError(null)
+      setRecommendationApplied(false)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -85,11 +95,41 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
     try {
       await removeOrganisationLogo(organisation.id)
       setLogoUrl(null)
+      setLogoSourceFile(null)
+      setRecommendedPalette(null)
+      setRecommendationError(null)
+      setRecommendationApplied(false)
     } catch (err) {
       setError(err.message)
     } finally {
       setUploadingLogo(false)
     }
+  }
+
+  async function handleRecommendColors() {
+    setRecommendingColors(true)
+    setRecommendationError(null)
+    setRecommendationApplied(false)
+    try {
+      setRecommendedPalette(await recommendBrandPalette(logoSourceFile || logoUrl))
+    } catch (err) {
+      setRecommendationError(err.message)
+      setRecommendedPalette(null)
+    } finally {
+      setRecommendingColors(false)
+    }
+  }
+
+  function applyRecommendedPalette() {
+    if (!recommendedPalette) return
+    setBrandPrimaryColor(recommendedPalette.primary)
+    setBrandSecondaryColor(recommendedPalette.secondary)
+    setBrandHoverColor(recommendedPalette.hover)
+    setBrandBackgroundColor(recommendedPalette.background)
+    setBrandTextColor(recommendedPalette.text)
+    setColorError(null)
+    setRecommendedPalette(null)
+    setRecommendationApplied(true)
   }
 
   async function handleSave(e) {
@@ -226,6 +266,65 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
               colours, so pick shades dark enough to stay readable. If you pick a dark Background, set a light
               Text colour too so headings and labels stay readable against it.
             </p>
+            <div className="flex items-center gap-2 flex-wrap mb-3">
+              <button
+                type="button"
+                onClick={handleRecommendColors}
+                disabled={!logoUrl || uploadingLogo || recommendingColors}
+                className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-50"
+              >
+                {recommendingColors ? 'Analysing logo…' : 'Recommend based on logo'}
+              </button>
+              {!logoUrl && <span className="text-xs text-secondary">Upload a logo to get recommendations.</span>}
+            </div>
+
+            {recommendationError && <p role="alert" className="text-sm text-red-700 mb-3">{recommendationError}</p>}
+
+            {recommendedPalette && (
+              <div className="rounded-lg border border-hairline bg-paper p-3 mb-3" aria-live="polite">
+                <p className="text-sm font-medium text-ink">Recommended palette</p>
+                <p className="text-xs text-secondary mt-0.5 mb-3">
+                  Generated from the strongest colours in your logo and adjusted for readable text and controls.
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
+                  {[
+                    ['Primary', recommendedPalette.primary],
+                    ['Secondary', recommendedPalette.secondary],
+                    ['Hover', recommendedPalette.hover],
+                    ['Background', recommendedPalette.background],
+                    ['Text', recommendedPalette.text],
+                  ].map(([label, colour]) => (
+                    <div key={label} className="min-w-0">
+                      <span className="block h-8 rounded border border-hairline" style={{ backgroundColor: colour }} aria-hidden="true" />
+                      <span className="block text-[11px] text-secondary mt-1 truncate">{label}</span>
+                      <code className="block text-[10px] text-ink">{colour}</code>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={applyRecommendedPalette}
+                    className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
+                  >
+                    Use these colours
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRecommendedPalette(null)}
+                    className="text-sm text-secondary hover:text-ink"
+                  >
+                    Not now
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {recommendationApplied && (
+              <p role="status" className="text-xs text-moss mb-3">
+                Recommended colours applied. Save to publish them.
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-3">
               {BRAND_COLOR_FIELDS.map((field) => {
                 const value = {
