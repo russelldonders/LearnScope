@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { contrastRatio, recommendBrandPaletteFromPixels } from './brandPalette'
+import {
+  getBrandPaletteContrastChecks,
+  recommendBrandPaletteFromPixels,
+} from './brandPalette'
 
 function pixels(colours) {
   return new Uint8ClampedArray(colours.flatMap(({ rgb, count }) => (
@@ -8,6 +11,11 @@ function pixels(colours) {
 }
 
 describe('recommendBrandPaletteFromPixels', () => {
+  function expectWcagAaPalette(palette) {
+    const failedChecks = getBrandPaletteContrastChecks(palette).filter((check) => !check.passes)
+    expect(failedChecks, failedChecks.map((check) => `${check.role}: ${check.ratio}:1`).join(', ')).toEqual([])
+  }
+
   it('turns dominant logo colours into a complete accessible brand palette', () => {
     const palette = recommendBrandPaletteFromPixels(pixels([
       { rgb: [35, 96, 190], count: 60 },
@@ -16,10 +24,7 @@ describe('recommendBrandPaletteFromPixels', () => {
     ]))
 
     Object.values(palette).forEach((colour) => expect(colour).toMatch(/^#[0-9a-f]{6}$/))
-    expect(contrastRatio(palette.primary, '#ffffff')).toBeGreaterThanOrEqual(4.5)
-    expect(contrastRatio(palette.primary, palette.background)).toBeGreaterThanOrEqual(4.5)
-    expect(contrastRatio(palette.secondary, palette.background)).toBeGreaterThanOrEqual(3)
-    expect(contrastRatio(palette.text, palette.background)).toBeGreaterThanOrEqual(7)
+    expectWcagAaPalette(palette)
     expect(palette.hover).not.toBe(palette.primary)
   })
 
@@ -30,7 +35,7 @@ describe('recommendBrandPaletteFromPixels', () => {
     ]))
 
     expect(palette.secondary).not.toBe(palette.primary)
-    expect(contrastRatio(palette.text, palette.background)).toBeGreaterThanOrEqual(7)
+    expectWcagAaPalette(palette)
   })
 
   it('prefers a smaller chromatic brand mark over a large neutral wordmark', () => {
@@ -41,5 +46,20 @@ describe('recommendBrandPaletteFromPixels', () => {
 
     const channels = [1, 3, 5].map((index) => Number.parseInt(palette.primary.slice(index, index + 2), 16))
     expect(Math.max(...channels) - Math.min(...channels)).toBeGreaterThan(20)
+    expectWcagAaPalette(palette)
+  })
+
+  it('passes every WCAG AA pairing across the RGB colour space', () => {
+    for (let red = 0; red <= 255; red += 51) {
+      for (let green = 0; green <= 255; green += 51) {
+        for (let blue = 0; blue <= 255; blue += 51) {
+          if (red === 255 && green === 255 && blue === 255) continue
+          const palette = recommendBrandPaletteFromPixels(pixels([
+            { rgb: [red, green, blue], count: 40 },
+          ]))
+          expectWcagAaPalette(palette)
+        }
+      }
+    }
   })
 })

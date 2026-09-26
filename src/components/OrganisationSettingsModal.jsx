@@ -284,7 +284,8 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
               <div className="rounded-lg border border-hairline bg-paper p-3 mb-3" aria-live="polite">
                 <p className="text-sm font-medium text-ink">Recommended palette</p>
                 <p className="text-xs text-secondary mt-0.5 mb-3">
-                  Generated from the strongest colours in your logo and adjusted for readable text and controls.
+                  Generated from the strongest colours in your logo and checked against WCAG AA contrast for
+                  text, links, controls, focus indicators, accents, and hover states.
                 </p>
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
                   {[

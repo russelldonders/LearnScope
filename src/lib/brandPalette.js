@@ -1,5 +1,17 @@
 const SAMPLE_EDGE = 96
 const MIN_PIXEL_ALPHA = 160
+const WHITE = '#ffffff'
+const WHITE_RGB = [255, 255, 255]
+const BLACK_RGB = [0, 0, 0]
+const DEFAULT_INK = '#20301f'
+const DEFAULT_SECONDARY = '#5a6752'
+const DEFAULT_HAIRLINE = '#858d7b'
+const DEFAULT_FOCUS = '#80651d'
+const DEFAULT_ERROR = '#b91c1c'
+const HOVER_OPACITY = 0.9
+
+export const WCAG_AA_TEXT_CONTRAST = 4.5
+export const WCAG_AA_NON_TEXT_CONTRAST = 3
 
 function clampByte(value) {
   return Math.max(0, Math.min(255, Math.round(value)))
@@ -15,6 +27,10 @@ function hexToRgb(hex) {
 
 function mix(rgb, target, amount) {
   return rgb.map((value, index) => value + (target[index] - value) * amount)
+}
+
+function composite(foreground, background, opacity) {
+  return foreground.map((value, index) => value * opacity + background[index] * (1 - opacity))
 }
 
 function relativeLuminance(rgb) {
@@ -48,9 +64,114 @@ function darkenUntil(rgb, checks) {
   for (let attempt = 0; attempt < 18; attempt += 1) {
     const hex = rgbToHex(result)
     if (checks.every(({ against, minimum }) => contrastRatio(hex, against) >= minimum)) return result
-    result = mix(result, [0, 0, 0], 0.1)
+    result = mix(result, BLACK_RGB, 0.1)
   }
-  return result
+  return BLACK_RGB
+}
+
+function lightenUntil(rgb, checks) {
+  let result = [...rgb]
+  for (let attempt = 0; attempt < 18; attempt += 1) {
+    const hex = rgbToHex(result)
+    if (checks.every(({ against, minimum }) => contrastRatio(hex, against) >= minimum)) return result
+    result = mix(result, WHITE_RGB, 0.1)
+  }
+  return WHITE_RGB
+}
+
+function hoverContrastRatio(hoverHex, backgroundHex) {
+  const background = hexToRgb(backgroundHex)
+  const renderedHover = rgbToHex(composite(hexToRgb(hoverHex), background, HOVER_OPACITY))
+  const renderedText = rgbToHex(composite(WHITE_RGB, background, HOVER_OPACITY))
+  return contrastRatio(renderedText, renderedHover)
+}
+
+function translucentWhiteContrastRatio(surfaceHex) {
+  const surface = hexToRgb(surfaceHex)
+  return contrastRatio(rgbToHex(composite(WHITE_RGB, surface, HOVER_OPACITY)), surfaceHex)
+}
+
+function darkenForTranslucentWhite(rgb) {
+  let result = [...rgb]
+  for (let attempt = 0; attempt < 18; attempt += 1) {
+    if (translucentWhiteContrastRatio(rgbToHex(result)) >= WCAG_AA_TEXT_CONTRAST) return result
+    result = mix(result, BLACK_RGB, 0.1)
+  }
+  return BLACK_RGB
+}
+
+function darkenHoverUntil(rgb, backgroundHex) {
+  let result = [...rgb]
+  for (let attempt = 0; attempt < 18; attempt += 1) {
+    if (hoverContrastRatio(rgbToHex(result), backgroundHex) >= WCAG_AA_TEXT_CONTRAST) return result
+    result = mix(result, BLACK_RGB, 0.1)
+  }
+  return BLACK_RGB
+}
+
+export function getBrandPaletteContrastChecks(palette) {
+  return [
+    {
+      role: 'Primary button text',
+      ratio: contrastRatio(WHITE, palette.primary),
+      minimum: WCAG_AA_TEXT_CONTRAST,
+    },
+    {
+      role: 'Hover button text',
+      ratio: hoverContrastRatio(palette.hover, palette.background),
+      minimum: WCAG_AA_TEXT_CONTRAST,
+    },
+    {
+      role: 'Primary links',
+      ratio: contrastRatio(palette.primary, palette.background),
+      minimum: WCAG_AA_TEXT_CONTRAST,
+    },
+    {
+      role: 'Thumbnail text on primary',
+      ratio: translucentWhiteContrastRatio(palette.primary),
+      minimum: WCAG_AA_TEXT_CONTRAST,
+    },
+    {
+      role: 'Thumbnail text on secondary',
+      ratio: translucentWhiteContrastRatio(palette.secondary),
+      minimum: WCAG_AA_TEXT_CONTRAST,
+    },
+    {
+      role: 'Page text',
+      ratio: contrastRatio(palette.text, palette.background),
+      minimum: WCAG_AA_TEXT_CONTRAST,
+    },
+    {
+      role: 'Secondary accents',
+      ratio: contrastRatio(palette.secondary, palette.background),
+      minimum: WCAG_AA_NON_TEXT_CONTRAST,
+    },
+    {
+      role: 'Default body text',
+      ratio: contrastRatio(DEFAULT_INK, palette.background),
+      minimum: WCAG_AA_TEXT_CONTRAST,
+    },
+    {
+      role: 'Default supporting text',
+      ratio: contrastRatio(DEFAULT_SECONDARY, palette.background),
+      minimum: WCAG_AA_TEXT_CONTRAST,
+    },
+    {
+      role: 'Default boundaries',
+      ratio: contrastRatio(DEFAULT_HAIRLINE, palette.background),
+      minimum: WCAG_AA_NON_TEXT_CONTRAST,
+    },
+    {
+      role: 'Focus indicator',
+      ratio: contrastRatio(DEFAULT_FOCUS, palette.background),
+      minimum: WCAG_AA_NON_TEXT_CONTRAST,
+    },
+    {
+      role: 'Error text',
+      ratio: contrastRatio(DEFAULT_ERROR, palette.background),
+      minimum: WCAG_AA_TEXT_CONTRAST,
+    },
+  ].map((check) => ({ ...check, passes: check.ratio >= check.minimum }))
 }
 
 function rankedColours(pixelData) {
@@ -96,25 +217,40 @@ export function recommendBrandPaletteFromPixels(pixelData) {
     colour.saturation >= 0.22 && colour.score >= colours[0].score * 0.08
   ))
   const primarySource = (chromaticPrimary ?? colours[0]).rgb
-  const background = rgbToHex(mix(primarySource, [255, 255, 255], 0.94))
+  const background = rgbToHex(lightenUntil(mix(primarySource, WHITE_RGB, 0.92), [
+    { against: DEFAULT_INK, minimum: WCAG_AA_TEXT_CONTRAST },
+    { against: DEFAULT_SECONDARY, minimum: WCAG_AA_TEXT_CONTRAST },
+    { against: DEFAULT_HAIRLINE, minimum: WCAG_AA_NON_TEXT_CONTRAST },
+    { against: DEFAULT_FOCUS, minimum: WCAG_AA_NON_TEXT_CONTRAST },
+    { against: DEFAULT_ERROR, minimum: WCAG_AA_TEXT_CONTRAST },
+  ]))
   const primary = darkenUntil(primarySource, [
-    { against: '#ffffff', minimum: 4.5 },
-    { against: background, minimum: 4.5 },
+    { against: WHITE, minimum: WCAG_AA_TEXT_CONTRAST },
+    { against: background, minimum: WCAG_AA_TEXT_CONTRAST },
   ])
+  const thumbnailSafePrimary = darkenForTranslucentWhite(primary)
 
   const distinctSecondary = colours.find(({ rgb }) => distance(rgb, primarySource) >= 72)?.rgb
-  const secondarySource = distinctSecondary ?? mix(primarySource, relativeLuminance(primarySource) < 0.2 ? [255, 255, 255] : [0, 0, 0], 0.34)
-  const secondary = darkenUntil(secondarySource, [{ against: background, minimum: 3 }])
-  const hover = darkenUntil(mix(primary, [0, 0, 0], 0.18), [{ against: '#ffffff', minimum: 4.5 }])
-  const text = darkenUntil(mix(primarySource, [0, 0, 0], 0.76), [{ against: background, minimum: 7 }])
+  const secondarySource = distinctSecondary ?? mix(primarySource, relativeLuminance(primarySource) < 0.2 ? WHITE_RGB : BLACK_RGB, 0.34)
+  const secondary = darkenForTranslucentWhite(
+    darkenUntil(secondarySource, [{ against: background, minimum: WCAG_AA_NON_TEXT_CONTRAST }]),
+  )
+  const hover = darkenHoverUntil(mix(thumbnailSafePrimary, BLACK_RGB, 0.18), background)
+  const text = darkenUntil(mix(primarySource, BLACK_RGB, 0.76), [{ against: background, minimum: 7 }])
 
-  return {
-    primary: rgbToHex(primary),
+  const palette = {
+    primary: rgbToHex(thumbnailSafePrimary),
     secondary: rgbToHex(secondary),
     hover: rgbToHex(hover),
     background,
     text: rgbToHex(text),
   }
+
+  if (!getBrandPaletteContrastChecks(palette).every((check) => check.passes)) {
+    throw new Error('A WCAG-compliant palette could not be generated from this logo.')
+  }
+
+  return palette
 }
 
 async function sourceToBlob(source) {
