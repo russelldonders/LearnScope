@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
 import CourseThumbnail from '../components/CourseThumbnail'
 import { LEVEL_LABELS } from '../lib/levels'
 import { getProviderProfile } from '../lib/providerProfile'
+import { getEmployerLoginContext } from '../lib/employerRoleProfiles'
 import { orgBrandStyle } from '../lib/orgBranding'
 import {
   listEnrolledCatalogueIds,
@@ -23,8 +24,9 @@ import CohortPickerModal from '../components/CohortPickerModal'
 // same links as Landing.jsx's own header.
 export default function ProviderProfile() {
   const { slug } = useParams()
-  const { user, loading: authLoading } = useAuth()
+  const { user, loading: authLoading, employerMemberships } = useAuth()
   const [profile, setProfile] = useState(undefined)
+  const [employerContext, setEmployerContext] = useState(undefined)
   const [error, setError] = useState(null)
   const [enrolledIds, setEnrolledIds] = useState(new Map())
   const [enrollingId, setEnrollingId] = useState(null)
@@ -41,6 +43,13 @@ export default function ProviderProfile() {
     getProviderProfile(slug)
       .then(setProfile)
       .catch((err) => setError(err.message))
+  }, [slug])
+
+  useEffect(() => {
+    setEmployerContext(undefined)
+    getEmployerLoginContext(slug)
+      .then(setEmployerContext)
+      .catch(() => setEmployerContext(null))
   }, [slug])
 
   // Independent of the profile fetch (works for any logged-in visitor,
@@ -132,6 +141,27 @@ export default function ProviderProfile() {
   const thumbnailGradient = hasCustomPrimary
     ? [profile.organisation.brandPrimaryColor, profile.organisation.brandHoverColor || profile.organisation.brandPrimaryColor]
     : undefined
+
+  const employerMembershipsLoading = Boolean(user && employerMemberships === null)
+  const isEmployerMember = Boolean(
+    user && employerContext && employerMemberships?.some((membership) => membership.employer_id === employerContext.id)
+  )
+
+  if (authLoading || employerContext === undefined || employerMembershipsLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-paper text-secondary">
+        Loading…
+      </div>
+    )
+  }
+
+  if (isEmployerMember) {
+    return <Navigate to={`/employer/home?org=${encodeURIComponent(slug)}`} replace />
+  }
+
+  if (!user && employerContext && !loading && !profile) {
+    return <Navigate to={`/login?org=${encodeURIComponent(slug)}`} replace />
+  }
 
   return (
     <div className="min-h-screen bg-[var(--org-background,var(--color-paper))]" style={brandStyle}>

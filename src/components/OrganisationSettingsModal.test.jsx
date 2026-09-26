@@ -121,7 +121,7 @@ describe('OrganisationSettingsModal logo colour recommendations', () => {
       .toHaveAttribute('href', '/provider/organisations/org-1/lti-tools')
   })
 
-  it('shows the private learner LMS separately from the public provider page', () => {
+  it('shows one organisation URL for both the learner LMS and public catalogue', () => {
     render(
       <MemoryRouter>
         <OrganisationSettingsModal
@@ -132,12 +132,13 @@ describe('OrganisationSettingsModal logo colour recommendations', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByRole('heading', { name: 'Learner LMS' })).toBeVisible()
-    expect(screen.getByText(/Private learning home for Acme Stores/)).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Open learner LMS in a new window' }))
-      .toHaveAttribute('href', expect.stringContaining('/employer/home?org=acme'))
-    expect(screen.getByRole('button', { name: 'Copy learner link' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Copy public link' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Organisation link' })).toBeVisible()
+    expect(screen.getByText(/Employer members see their private learner LMS/)).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Open organisation link in a new window' }))
+      .toHaveAttribute('href', expect.stringContaining('/providers/acme'))
+    expect(screen.getByRole('button', { name: 'Copy organisation link' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Copy public link' })).not.toBeInTheDocument()
+    expect(screen.getByText('Show a public catalogue to other visitors')).toBeVisible()
   })
 
   it('closes after saving when the public provider page is enabled', async () => {

@@ -60,9 +60,6 @@ export default function OrganisationSettingsModal({ organisation, learnerPortal,
   const fileInputRef = useRef(null)
 
   const publicProfileUrl = `${window.location.origin}/providers/${organisation.slug}`
-  const learnerPortalUrl = learnerPortal
-    ? `${window.location.origin}/employer/home?org=${encodeURIComponent(organisation.slug)}`
-    : null
 
   function handleCopyLink(url, linkType) {
     navigator.clipboard.writeText(url)
@@ -296,30 +293,30 @@ export default function OrganisationSettingsModal({ organisation, learnerPortal,
             />
           </div>
 
-          {learnerPortalUrl && (
-            <section aria-labelledby="learner-lms-link-heading" className="border-t border-hairline pt-4">
-              <h3 id="learner-lms-link-heading" className="text-sm font-medium text-ink">Learner LMS</h3>
+          {learnerPortal && (
+            <section aria-labelledby="organisation-link-heading" className="border-t border-hairline pt-4">
+              <h3 id="organisation-link-heading" className="text-sm font-medium text-ink">Organisation link</h3>
               <p className="text-xs text-secondary mt-1">
-                Private learning home for {learnerPortal.name}. Members sign in to see assigned learning,
-                role skills, and completed training.
+                One address for {learnerPortal.name}. Employer members see their private learner LMS; other
+                visitors see the public catalogue when it is enabled below.
               </p>
               <div className="mt-2 flex items-center gap-2 flex-wrap">
                 <code className="text-xs bg-paper border border-hairline rounded-md px-2 py-1 text-ink break-all">
-                  {learnerPortalUrl}
+                  {publicProfileUrl}
                 </code>
                 <button
                   type="button"
-                  onClick={() => handleCopyLink(learnerPortalUrl, 'learner')}
+                  onClick={() => handleCopyLink(publicProfileUrl, 'organisation')}
                   className="rounded-md border border-hairline text-ink py-1 px-2 text-xs font-medium hover:bg-paper shrink-0"
                 >
-                  {copiedLink === 'learner' ? 'Copied!' : 'Copy learner link'}
+                  {copiedLink === 'organisation' ? 'Copied!' : 'Copy organisation link'}
                 </button>
                 <a
-                  href={learnerPortalUrl}
+                  href={publicProfileUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  title="Open learner LMS in a new window"
-                  aria-label="Open learner LMS in a new window"
+                  title="Open organisation link in a new window"
+                  aria-label="Open organisation link in a new window"
                   className="flex items-center justify-center w-6 h-6 rounded-md border border-hairline text-ink hover:bg-paper shrink-0"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -457,7 +454,7 @@ export default function OrganisationSettingsModal({ organisation, learnerPortal,
                 className="mt-0.5 rounded border-hairline"
               />
               <span>
-                Show a public provider page
+                {learnerPortal ? 'Show a public catalogue to other visitors' : 'Show a public provider page'}
                 <span className="block text-xs text-secondary mt-0.5 font-normal">
                   Lists the skills you offer and your approved training courses -- visible to anyone with the
                   link, including people who aren't logged in.
@@ -467,7 +464,7 @@ export default function OrganisationSettingsModal({ organisation, learnerPortal,
             {publicProfileEnabled && !savedPublicProfileEnabled && (
               <p className="text-xs text-secondary mt-2">Save to get your public link.</p>
             )}
-            {savedPublicProfileEnabled && (
+            {savedPublicProfileEnabled && !learnerPortal && (
               <div className="mt-2 flex items-center gap-2 flex-wrap">
                 <code className="text-xs bg-paper border border-hairline rounded-md px-2 py-1 text-ink break-all">
                   {publicProfileUrl}
