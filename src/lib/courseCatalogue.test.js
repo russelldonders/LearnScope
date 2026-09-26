@@ -1,8 +1,13 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('./supabaseClient', () => ({ supabase: {} }))
+const supabaseMock = vi.hoisted(() => ({ from: vi.fn() }))
+vi.mock('./supabaseClient', () => ({ supabase: supabaseMock }))
 
-const { formatCohortDateRange } = await import('./courseCatalogue')
+const { formatCohortDateRange, respondToCourseAssignment } = await import('./courseCatalogue')
+
+beforeEach(() => {
+  supabaseMock.from.mockReset()
+})
 
 describe('formatCohortDateRange', () => {
   it('reports no dates set when neither is given', () => {
@@ -36,5 +41,37 @@ describe('formatCohortDateRange', () => {
 
   it('shows only an end when there is no start date', () => {
     expect(formatCohortDateRange(null, '2026-10-05T00:00:00')).toBe('Ends 5 Oct 2026')
+  })
+})
+
+describe('respondToCourseAssignment', () => {
+  it('returns the learner course created when an assignment is started', async () => {
+    const learnerCourse = { id: 'learner-course-1', catalogue_course_id: 'catalogue-1' }
+    supabaseMock.from.mockImplementation((table) => {
+      if (table === 'courses') {
+        return {
+          insert: () => ({
+            select() { return this },
+            single: () => Promise.resolve({ data: learnerCourse, error: null }),
+          }),
+        }
+      }
+      return {
+        update: () => ({ eq: () => Promise.resolve({ error: null }) }),
+      }
+    })
+
+    const result = await respondToCourseAssignment('user-1', 'assignment-1', {
+      enrol: true,
+      courseForEnrolment: {
+        id: 'catalogue-1',
+        name: 'Leading well',
+        provider: 'Acme',
+        course_type: 'Online',
+        duration: '30 minutes',
+      },
+    })
+
+    expect(result).toEqual(learnerCourse)
   })
 })

@@ -34,7 +34,14 @@ const MENU_ITEMS = [
 // ProviderProfile.jsx overrides it to the org's own page so clicking its
 // logo stays on/returns to that page instead of jumping to the visitor's
 // personal dashboard.
-export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandName, brandHomeHref = '/dashboard' }) {
+export default function AppHeader({
+  hideNavLinks = false,
+  brandLogoUrl,
+  brandName,
+  brandHomeHref = '/dashboard',
+  contextExitHref,
+  contextExitLabel,
+}) {
   const { signOut, user, isPlatformAdmin, organisationMemberships, employerMemberships, managerContexts } = useAuth()
   const { pendingActionCount } = usePendingActions()
   const { navVisibility } = useNavVisibility()
@@ -153,6 +160,15 @@ export default function AppHeader({ hideNavLinks = false, brandLogoUrl, brandNam
                     <div className="px-4 py-2 text-sm font-medium text-[var(--org-text,var(--color-ink))] border-b border-hairline">
                       {fullName}
                     </div>
+                  )}
+                  {contextExitHref && (
+                    <Link
+                      to={contextExitHref}
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-4 py-2 text-sm font-medium text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
+                    >
+                      {contextExitLabel || 'Back to LearnScope'}
+                    </Link>
                   )}
                   {visibleMenuItems.map((item) => (
                     <Link

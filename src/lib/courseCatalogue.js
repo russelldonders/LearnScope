@@ -213,7 +213,7 @@ export async function listMyCourseAssignments(userId) {
 export async function listMyCourseAssignmentsForEmployer(userId, employerId) {
   const { data, error } = await supabase
     .from('course_assignments')
-    .select('id, catalogue_course_id, status, created_at, course_catalogue(id, name, provider, course_type, duration)')
+    .select('id, catalogue_course_id, status, created_at, course_catalogue(id, name, provider, course_type, duration, image_url)')
     .eq('assigned_to', userId)
     .eq('employer_id', employerId)
     .neq('status', 'dismissed')
@@ -233,14 +233,16 @@ export async function listMyCourseAssignmentsForEmployer(userId, employerId) {
 // userId is explicit (not read from the session internally) to match every
 // other function in this file, e.g. enrolInCatalogueCourse(userId, ...).
 export async function respondToCourseAssignment(userId, assignmentId, { enrol, courseForEnrolment, skillId = null } = {}) {
+  let enrolledCourse = null
   if (enrol) {
-    await enrolInCatalogueCourse(userId, courseForEnrolment, skillId)
+    enrolledCourse = await enrolInCatalogueCourse(userId, courseForEnrolment, skillId)
   }
   const { error } = await supabase
     .from('course_assignments')
     .update({ status: enrol ? 'enrolled' : 'dismissed' })
     .eq('id', assignmentId)
   if (error) throw error
+  return enrolledCourse
 }
 
 // Phase 6: powers the "Assigned by X" badge on Learning.jsx/Dashboard.jsx,

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import AppHeader from './AppHeader'
@@ -58,5 +58,16 @@ describe('AppHeader organisation branding', () => {
       .toContain(organisationTextClass)
     expect(screen.getByText('1').className)
       .toContain('text-[var(--org-primary-contrast,var(--color-paper))]')
+  })
+
+  it('offers a quiet exit from a branded context in the account menu', () => {
+    render(
+      <MemoryRouter initialEntries={['/employer/home?org=acme']}>
+        <AppHeader hideNavLinks contextExitHref="/dashboard" contextExitLabel="Back to LearnScope" />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
+    expect(screen.getByRole('link', { name: 'Back to LearnScope' })).toHaveAttribute('href', '/dashboard')
   })
 })

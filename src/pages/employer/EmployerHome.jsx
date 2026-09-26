@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import AppHeader from '../../components/AppHeader'
 import { getOrganisationBranding, orgBrandStyle } from '../../lib/orgBranding'
 import { getEmployerLoginContext } from '../../lib/employerRoleProfiles'
@@ -19,6 +19,7 @@ import EmployerAssignedTrainingPanel from './EmployerAssignedTrainingPanel'
 export default function EmployerHome() {
   const [searchParams] = useSearchParams()
   const orgSlug = searchParams.get('org')
+  const section = ['learning', 'role'].includes(searchParams.get('section')) ? searchParams.get('section') : 'home'
   const [branding, setBranding] = useState(null)
   const [employer, setEmployer] = useState(undefined)
   const [error, setError] = useState(null)
@@ -48,26 +49,89 @@ export default function EmployerHome() {
     )
   }
 
+  function sectionHref(nextSection) {
+    const params = new URLSearchParams(searchParams)
+    if (nextSection === 'home') params.delete('section')
+    else params.set('section', nextSection)
+    return `/employer/home?${params.toString()}`
+  }
+
+  const navItems = [
+    { id: 'home', label: 'Home' },
+    { id: 'learning', label: 'My learning' },
+    { id: 'role', label: 'Role & skills' },
+  ]
+
   return (
     <div className="min-h-screen bg-[var(--org-background,var(--color-paper))]" style={orgBrandStyle(branding)}>
       <AppHeader
+        hideNavLinks
         brandLogoUrl={branding?.logoUrl}
         brandName={branding?.name}
         brandHomeHref={orgSlug ? `/employer/home?org=${orgSlug}` : '/dashboard'}
+        contextExitHref="/dashboard"
+        contextExitLabel="Back to LearnScope"
       />
-      <main className="max-w-3xl mx-auto px-4 py-10">
-        <div className="mb-8">
-          <p className="text-xs font-medium text-secondary uppercase tracking-wide">
-            {employer ? employer.name : 'Employer'}
+      <div className="border-b border-hairline bg-[var(--org-background,var(--color-card))]">
+        <nav aria-label="Employer learning" className="max-w-4xl mx-auto px-4 flex gap-6 overflow-x-auto">
+          {navItems.map((item) => (
+            <Link
+              key={item.id}
+              to={sectionHref(item.id)}
+              aria-current={section === item.id ? 'page' : undefined}
+              className={`border-b-2 py-3 text-sm font-medium whitespace-nowrap transition-colors ${
+                section === item.id
+                  ? 'border-[var(--org-primary,var(--color-moss))] text-[var(--org-text,var(--color-ink))]'
+                  : 'border-transparent text-secondary hover:text-[var(--org-text,var(--color-ink))]'
+              }`}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+      </div>
+      <main id="main-content" className="max-w-4xl mx-auto px-4 py-8 sm:py-10">
+        <div className="mb-8 sm:mb-10">
+          <p className="text-xs font-medium text-secondary uppercase tracking-[0.12em]">
+            {employer ? `Learning with ${employer.name}` : 'Employer learning'}
           </p>
-          <h1 className="font-display text-2xl text-[var(--org-text,var(--color-ink))] mt-1">
-            Your training and skills
+          <h1 className="font-display text-3xl sm:text-4xl text-[var(--org-text,var(--color-ink))] mt-2">
+            {section === 'home' && 'Welcome back'}
+            {section === 'learning' && 'My learning'}
+            {section === 'role' && 'Role & skills'}
           </h1>
+          {section === 'home' && (
+            <p className="text-sm text-secondary mt-2 max-w-2xl">
+              Pick up where you left off, see what is next, and track the learning connected to your role.
+            </p>
+          )}
         </div>
         {employer ? (
           <>
-            <EmployerAssignedTrainingPanel employerId={employer.id} />
-            <LearnerRoleAlignmentContainer employerId={employer.id} />
+            {section === 'home' && (
+              <>
+                <EmployerAssignedTrainingPanel
+                  employerId={employer.id}
+                  employerName={employer.name}
+                  employerLogoUrl={branding?.logoUrl}
+                  variant="home"
+                  viewAllHref={sectionHref('learning')}
+                />
+                <LearnerRoleAlignmentContainer
+                  employerId={employer.id}
+                  variant="summary"
+                  roleHref={sectionHref('role')}
+                />
+              </>
+            )}
+            {section === 'learning' && (
+              <EmployerAssignedTrainingPanel
+                employerId={employer.id}
+                employerName={employer.name}
+                employerLogoUrl={branding?.logoUrl}
+              />
+            )}
+            {section === 'role' && <LearnerRoleAlignmentContainer employerId={employer.id} />}
           </>
         ) : (
           <p className="text-secondary">Loading…</p>
