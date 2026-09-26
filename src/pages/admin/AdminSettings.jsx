@@ -5,9 +5,11 @@ import { OnboardingSettingsSection } from './AdminOnboarding'
 import { NotificationSettingsSection } from './AdminNotifications'
 import { WhatsNewSettingsSection } from './AdminReleases'
 import { AuditLogSettingsSection } from './AdminActivityLog'
+import AdminMemberFieldSettings from './AdminMemberFieldSettings'
 
 const SETTINGS_SECTIONS = [
   { id: 'first-login-journey', label: 'First login journey' },
+  { id: 'member-fields', label: 'Member fields' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'whats-new', label: "What's new" },
   { id: 'audit-log', label: 'Audit log' },
@@ -27,8 +29,8 @@ export default function AdminSettings() {
       <div className="mb-10">
         <h2 className="font-display text-xl text-ink mb-1">Settings</h2>
         <p className="text-sm text-secondary max-w-2xl">
-          Configure the first-login experience and platform communications, then review releases
-          and administrative changes.
+          Configure shared learner and employer experiences, manage platform communications, and
+          review releases and administrative changes.
         </p>
         <nav aria-label="Settings sections" className="mt-4">
           <p className="text-xs font-medium text-secondary mb-2">On this page</p>
@@ -47,6 +49,9 @@ export default function AdminSettings() {
       <div className="divide-y divide-hairline">
         <section id="first-login-journey" className="scroll-mt-6 pb-10">
           <OnboardingSettingsSection />
+        </section>
+        <section id="member-fields" className="scroll-mt-6 py-10">
+          <AdminMemberFieldSettings />
         </section>
         <section id="notifications" className="scroll-mt-6 py-10">
           <NotificationSettingsSection />

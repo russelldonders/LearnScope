@@ -33,7 +33,7 @@ function formToPayload(form) {
 }
 
 // Shared schema-builder UI for both tiers of employer roster fields
-// (20260911130000): platform admin's global "base" fields (AdminEmployers.jsx)
+// (20260911130000): platform admin's global "base" fields (AdminMemberFieldSettings.jsx)
 // and one employer's own additional fields (EmployerMemberFieldsSection.jsx).
 // Deliberately one component -- the create/edit/delete/reorder shape is
 // identical for both; only which rows/callbacks the caller passes in differ.
