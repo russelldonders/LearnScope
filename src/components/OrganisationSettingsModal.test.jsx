@@ -2,13 +2,14 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import OrganisationSettingsModal from './OrganisationSettingsModal'
-import { updateOrganisation } from '../lib/admin/organisations'
+import { getOrganisationWebsiteBrandColours, updateOrganisation } from '../lib/admin/organisations'
 import { recommendBrandPalette } from '../lib/brandPalette'
 
 vi.mock('../lib/admin/organisations', () => ({
   updateOrganisation: vi.fn(),
   uploadOrganisationLogo: vi.fn(),
   removeOrganisationLogo: vi.fn(),
+  getOrganisationWebsiteBrandColours: vi.fn(),
 }))
 
 vi.mock('../lib/brandPalette', () => ({
@@ -39,14 +40,16 @@ afterEach(cleanup)
 beforeEach(() => {
   vi.clearAllMocks()
   recommendBrandPalette.mockResolvedValue(palette)
+  getOrganisationWebsiteBrandColours.mockResolvedValue([])
   updateOrganisation.mockResolvedValue({})
 })
 
 describe('OrganisationSettingsModal logo colour recommendations', () => {
   it('previews recommendations and applies all five colours only after acceptance', async () => {
+    const onClose = vi.fn()
     render(
       <MemoryRouter>
-        <OrganisationSettingsModal organisation={organisation} onClose={vi.fn()} />
+        <OrganisationSettingsModal organisation={organisation} onClose={onClose} />
       </MemoryRouter>,
     )
 
@@ -72,5 +75,66 @@ describe('OrganisationSettingsModal logo colour recommendations', () => {
       brandBackgroundColor: palette.background,
       brandTextColor: palette.text,
     })))
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('uses the entered organisation website as an additional recommendation source', async () => {
+    const websiteColours = [
+      { hex: '#1d428a', weight: 24 },
+      { hex: '#ffcd00', weight: 18 },
+    ]
+    getOrganisationWebsiteBrandColours.mockResolvedValue(websiteColours)
+
+    render(
+      <MemoryRouter>
+        <OrganisationSettingsModal
+          organisation={{ ...organisation, url: 'https://www.example.com' }}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Recommend from logo + website' }))
+
+    await waitFor(() => expect(getOrganisationWebsiteBrandColours).toHaveBeenCalledWith(
+      'org-1',
+      'https://www.example.com',
+    ))
+    expect(recommendBrandPalette).toHaveBeenCalledWith(
+      organisation.logo_url,
+      { websiteColours },
+    )
+    expect(await screen.findByText(/strongest colours in your logo and website/i)).toBeInTheDocument()
+  })
+
+  it('shows integration destinations as settings tabs', () => {
+    render(
+      <MemoryRouter>
+        <OrganisationSettingsModal organisation={organisation} onClose={vi.fn()} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('General')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'LMS connections' }))
+      .toHaveAttribute('href', '/provider/organisations/org-1/lms-connections')
+    expect(screen.getByRole('link', { name: 'LTI tools' }))
+      .toHaveAttribute('href', '/provider/organisations/org-1/lti-tools')
+  })
+
+  it('closes after saving when the public provider page is enabled', async () => {
+    const onClose = vi.fn()
+    render(
+      <MemoryRouter>
+        <OrganisationSettingsModal
+          organisation={{ ...organisation, public_profile_enabled: true }}
+          onClose={onClose}
+        />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(updateOrganisation).toHaveBeenCalled())
+    expect(onClose).toHaveBeenCalledOnce()
   })
 })

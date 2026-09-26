@@ -1,6 +1,11 @@
 import { Link } from 'react-router-dom'
 import { useRef, useState } from 'react'
-import { updateOrganisation, uploadOrganisationLogo, removeOrganisationLogo } from '../lib/admin/organisations'
+import {
+  getOrganisationWebsiteBrandColours,
+  removeOrganisationLogo,
+  updateOrganisation,
+  uploadOrganisationLogo,
+} from '../lib/admin/organisations'
 import { recommendBrandPalette } from '../lib/brandPalette'
 import AccessibleDialog from './AccessibleDialog'
 
@@ -62,6 +67,13 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  function handleWebsiteChange(e) {
+    setUrl(e.target.value)
+    setRecommendedPalette(null)
+    setRecommendationError(null)
+    setRecommendationApplied(false)
+  }
+
   async function handleLogoChange(e) {
     const file = e.target.files?.[0]
     e.target.value = ''
@@ -111,7 +123,13 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
     setRecommendationError(null)
     setRecommendationApplied(false)
     try {
-      setRecommendedPalette(await recommendBrandPalette(logoSourceFile || logoUrl))
+      const websiteColours = url.trim()
+        ? await getOrganisationWebsiteBrandColours(organisation.id, url.trim())
+        : []
+      setRecommendedPalette(await recommendBrandPalette(
+        logoSourceFile || logoUrl,
+        { websiteColours },
+      ))
     } catch (err) {
       setRecommendationError(err.message)
       setRecommendedPalette(null)
@@ -156,16 +174,18 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
         brandTextColor: brandTextColor || null,
       })
       setSavedPublicProfileEnabled(publicProfileEnabled)
-      // Stay open when the public page is (now) enabled, so there's a
-      // moment to actually copy/open the link this save just made live --
-      // otherwise close as before.
-      if (!publicProfileEnabled) onClose()
+      onClose()
     } catch (err) {
       setError(err.message)
     } finally {
       setSaving(false)
     }
   }
+
+  const hasWebsite = Boolean(url.trim())
+  const recommendationButtonLabel = recommendingColors
+    ? hasWebsite ? 'Analysing logo and website…' : 'Analysing logo…'
+    : hasWebsite ? 'Recommend from logo + website' : 'Recommend based on logo'
 
   return (
     <AccessibleDialog
@@ -176,10 +196,25 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
     >
         <h2 id="organisation-settings-dialog-title" className="font-display text-lg text-ink mb-4">Organisation settings</h2>
 
-        <div className="flex flex-wrap gap-x-4 gap-y-1 mb-5">
-          <Link to={`/provider/organisations/${organisation.id}/lms-connections`} onClick={onClose} className="inline-block text-sm text-moss hover:underline">LMS connections</Link>
-          <Link to={`/provider/organisations/${organisation.id}/lti-tools`} onClick={onClose} className="inline-block text-sm text-moss hover:underline">LTI tools</Link>
-        </div>
+        <nav aria-label="Organisation settings sections" className="flex items-center gap-1 mb-5 border-b border-hairline overflow-x-auto">
+          <span aria-current="page" className="text-sm px-3 py-2 -mb-px border-b-2 border-moss text-ink font-medium whitespace-nowrap">
+            General
+          </span>
+          <Link
+            to={`/provider/organisations/${organisation.id}/lms-connections`}
+            onClick={onClose}
+            className="text-sm px-3 py-2 -mb-px border-b-2 border-transparent text-secondary hover:text-ink hover:border-hairline whitespace-nowrap"
+          >
+            LMS connections
+          </Link>
+          <Link
+            to={`/provider/organisations/${organisation.id}/lti-tools`}
+            onClick={onClose}
+            className="text-sm px-3 py-2 -mb-px border-b-2 border-transparent text-secondary hover:text-ink hover:border-hairline whitespace-nowrap"
+          >
+            LTI tools
+          </Link>
+        </nav>
 
         <form onSubmit={handleSave} className="space-y-4">
           <div>
@@ -239,7 +274,7 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
               type="url"
               placeholder="https://…"
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
+              onChange={handleWebsiteChange}
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
             />
           </div>
@@ -273,7 +308,7 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
                 disabled={!logoUrl || uploadingLogo || recommendingColors}
                 className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-50"
               >
-                {recommendingColors ? 'Analysing logo…' : 'Recommend based on logo'}
+                {recommendationButtonLabel}
               </button>
               {!logoUrl && <span className="text-xs text-secondary">Upload a logo to get recommendations.</span>}
             </div>
@@ -284,8 +319,9 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
               <div className="rounded-lg border border-hairline bg-paper p-3 mb-3" aria-live="polite">
                 <p className="text-sm font-medium text-ink">Recommended palette</p>
                 <p className="text-xs text-secondary mt-0.5 mb-3">
-                  Generated from the strongest colours in your logo and checked against WCAG AA contrast for
-                  text, links, controls, focus indicators, accents, and hover states.
+                  Generated from the strongest colours in your logo{hasWebsite ? ' and website' : ''}, then
+                  checked against WCAG AA contrast for text, links, controls, focus indicators, accents, and
+                  hover states.
                 </p>
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
                   {[

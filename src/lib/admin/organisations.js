@@ -94,6 +94,11 @@ export async function removeOrganisationLogo(organisationId) {
   if (error) throw error
 }
 
+export async function getOrganisationWebsiteBrandColours(organisationId, websiteUrl) {
+  const { colours } = await callAdminApi('getWebsiteBrandColours', { organisationId, websiteUrl })
+  return colours ?? []
+}
+
 // Routed through the service-role dispatcher (listOrgMembers) rather than a
 // direct RLS-scoped query, since organisation_members alone only has
 // user_id -- email lives on auth.users, which the client can't read.

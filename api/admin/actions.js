@@ -2,6 +2,7 @@ import ltiHandler from '../_lib/lti/handler.js'
 import { verifySupabaseUser } from '../_lib/auth.js'
 import { supabaseAdmin } from '../_lib/supabaseAdmin.js'
 import { deleteUserEvidenceFiles } from '../_lib/evidenceStorage.js'
+import { getWebsiteBrandColours } from '../_lib/websiteBrandColours.js'
 
 // Single dispatcher for every service-role action needing the Supabase Auth
 // admin API or otherwise needing to bypass RLS, rather than one serverless
@@ -77,6 +78,9 @@ export default async function handler(req, res) {
         return
       case 'listOrgMembers':
         await listOrgMembers(admin, caller, payload, res)
+        return
+      case 'getWebsiteBrandColours':
+        await websiteBrandColours(admin, caller, payload, res)
         return
       case 'listEmployerMembers':
         await listEmployerMembers(admin, caller, payload, res)
@@ -706,6 +710,25 @@ async function requireOrgAdmin(admin, caller, organisationId, res) {
     return false
   }
   return true
+}
+
+async function websiteBrandColours(admin, caller, { organisationId, websiteUrl }, res) {
+  if (!organisationId || typeof websiteUrl !== 'string' || !websiteUrl.trim()) {
+    res.status(400).json({ error: 'An organisation and website URL are required.' })
+    return
+  }
+  if (!(await requireOrgAdmin(admin, caller, organisationId, res))) return
+
+  try {
+    const colours = await getWebsiteBrandColours(websiteUrl.trim())
+    if (colours.length === 0) {
+      res.status(422).json({ error: 'No usable brand colours were found on that website.' })
+      return
+    }
+    res.status(200).json({ colours })
+  } catch (error) {
+    res.status(422).json({ error: error.message || 'The website could not be analysed.' })
+  }
 }
 
 async function inviteOrgStaff(admin, caller, { organisationId, email, role }, res) {

@@ -207,17 +207,46 @@ function rankedColours(pixelData) {
     .sort((first, second) => second.score - first.score)
 }
 
-export function recommendBrandPaletteFromPixels(pixelData) {
+function rankedWebsiteColours(websiteColours) {
+  return websiteColours
+    .filter((colour) => /^#[0-9a-f]{6}$/i.test(colour?.hex))
+    .map((colour) => {
+      const rgb = hexToRgb(colour.hex)
+      return {
+        rgb,
+        saturation: saturation(rgb),
+        score: Math.max(1, Number(colour.weight) || 1),
+        source: 'website',
+      }
+    })
+    .sort((first, second) => second.score - first.score)
+}
+
+export function recommendBrandPaletteFromPixels(pixelData, { websiteColours = [] } = {}) {
   const colours = rankedColours(pixelData)
   if (colours.length === 0) {
     throw new Error('This logo does not contain enough visible colour to recommend a palette.')
   }
 
-  const chromaticPrimary = colours.find((colour) => (
+  const websiteCandidates = rankedWebsiteColours(websiteColours)
+  // A website often declares both a bright accent and the darker colour it
+  // pairs with for navigation/buttons. Prefer the declared colour that is
+  // already closest to a usable action colour, rather than heavily darkening
+  // a dominant yellow logo into an unrelated-looking olive.
+  const websitePrimary = websiteCandidates.find((colour) => (
+    colour.saturation >= 0.2
+    && relativeLuminance(colour.rgb) >= 0.025
+    && relativeLuminance(colour.rgb) <= 0.42
+    && contrastRatio(rgbToHex(colour.rgb), WHITE) >= 3
+  ))
+  const logoPrimary = colours.find((colour) => (
     colour.saturation >= 0.22 && colour.score >= colours[0].score * 0.08
   ))
-  const primarySource = (chromaticPrimary ?? colours[0]).rgb
-  const background = rgbToHex(lightenUntil(mix(primarySource, WHITE_RGB, 0.92), [
+  const primarySource = (websitePrimary ?? logoPrimary ?? colours[0]).rgb
+  // Brand colour belongs in actions and accents. The page canvas stays very
+  // near neutral so supporting text and card boundaries remain visually
+  // distinct even when the source brand colour is bright or yellow-heavy.
+  const background = rgbToHex(lightenUntil(mix(primarySource, WHITE_RGB, 0.985), [
     { against: DEFAULT_INK, minimum: WCAG_AA_TEXT_CONTRAST },
     { against: DEFAULT_SECONDARY, minimum: WCAG_AA_TEXT_CONTRAST },
     { against: DEFAULT_HAIRLINE, minimum: WCAG_AA_NON_TEXT_CONTRAST },
@@ -230,7 +259,8 @@ export function recommendBrandPaletteFromPixels(pixelData) {
   ])
   const thumbnailSafePrimary = darkenForTranslucentWhite(primary)
 
-  const distinctSecondary = colours.find(({ rgb }) => distance(rgb, primarySource) >= 72)?.rgb
+  const distinctSecondary = [...websiteCandidates, ...colours]
+    .find(({ rgb }) => distance(rgb, primarySource) >= 72)?.rgb
   const secondarySource = distinctSecondary ?? mix(primarySource, relativeLuminance(primarySource) < 0.2 ? WHITE_RGB : BLACK_RGB, 0.34)
   const secondary = darkenForTranslucentWhite(
     darkenUntil(secondarySource, [{ against: background, minimum: WCAG_AA_NON_TEXT_CONTRAST }]),
@@ -260,7 +290,7 @@ async function sourceToBlob(source) {
   return response.blob()
 }
 
-export async function recommendBrandPalette(source) {
+export async function recommendBrandPalette(source, { websiteColours = [] } = {}) {
   if (!source) throw new Error('Upload a logo before requesting colour recommendations.')
 
   const blob = await sourceToBlob(source)
@@ -280,7 +310,10 @@ export async function recommendBrandPalette(source) {
     const context = canvas.getContext('2d', { willReadFrequently: true })
     if (!context) throw new Error('This browser could not analyse the logo.')
     context.drawImage(image, 0, 0, width, height)
-    return recommendBrandPaletteFromPixels(context.getImageData(0, 0, width, height).data)
+    return recommendBrandPaletteFromPixels(
+      context.getImageData(0, 0, width, height).data,
+      { websiteColours },
+    )
   } catch (error) {
     if (error instanceof Error && error.message.includes('recommend')) throw error
     throw new Error('The logo could not be analysed. Try uploading it again.')

@@ -62,4 +62,22 @@ describe('recommendBrandPaletteFromPixels', () => {
       }
     }
   })
+
+  it('uses a website action colour instead of darkening a bright logo accent', () => {
+    const palette = recommendBrandPaletteFromPixels(
+      pixels([{ rgb: [255, 205, 0], count: 100 }]),
+      {
+        websiteColours: [
+          { hex: '#ffcd00', weight: 30 },
+          { hex: '#1d428a', weight: 18 },
+        ],
+      },
+    )
+
+    const [red, green, blue] = [1, 3, 5].map((index) => Number.parseInt(palette.primary.slice(index, index + 2), 16))
+    expect(blue).toBeGreaterThan(red)
+    expect(blue).toBeGreaterThan(green)
+    expect(palette.background).toMatch(/^#f[8-9a-f][f8-9a-f][f8-9a-f][f8-9a-f][f8-9a-f]$/i)
+    expectWcagAaPalette(palette)
+  })
 })
