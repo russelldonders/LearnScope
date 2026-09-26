@@ -40,7 +40,7 @@ function SettingsMenu({ canManageOrganisation, onChoose, onClose }) {
           >
             <span className="min-w-0">
               <span className="block text-sm font-medium">Organisation settings</span>
-              <span className="mt-0.5 block text-xs text-secondary">Branding, public profile and LMS connections</span>
+              <span className="mt-0.5 block text-xs text-secondary">Branding, learner LMS, public profile and connections</span>
             </span>
             <ChevronIcon />
           </button>
@@ -176,6 +176,7 @@ export default function EmployerSettingsDialog({ employer, userId, providerOrgan
     return (
       <OrganisationSettingsModal
         organisation={providerOrganisation}
+        learnerPortal={{ name: employer.name }}
         onClose={() => {
           onOrganisationUpdated?.()
           setView('menu')

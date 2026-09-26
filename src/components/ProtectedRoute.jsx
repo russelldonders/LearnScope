@@ -2,7 +2,7 @@ import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 
-export default function ProtectedRoute({ children }) {
+export default function ProtectedRoute({ children, loginHref = '/login' }) {
   const { user, loading, needsOnboarding, needsName } = useAuth()
   const { t } = useLanguage()
   const location = useLocation()
@@ -16,7 +16,7 @@ export default function ProtectedRoute({ children }) {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />
+    return <Navigate to={loginHref} replace />
   }
 
   // Checked before onboarding: name is the more fundamental gap, and it's

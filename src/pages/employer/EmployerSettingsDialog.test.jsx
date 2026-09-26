@@ -19,8 +19,8 @@ vi.mock('../../components/FieldDefinitionsManager', () => ({
 }))
 
 vi.mock('../../components/OrganisationSettingsModal', () => ({
-  default: ({ onClose }) => (
-    <div role="dialog" aria-label="Organisation settings">
+  default: ({ learnerPortal, onClose }) => (
+    <div role="dialog" aria-label="Organisation settings" data-learner-name={learnerPortal?.name}>
       <button type="button" onClick={onClose}>Back from organisation settings</button>
     </div>
   ),
@@ -90,6 +90,7 @@ it('returns from organisation settings to the shared settings menu', () => {
   )
 
   fireEvent.click(screen.getByRole('button', { name: /Organisation settings/ }))
+  expect(screen.getByRole('dialog', { name: 'Organisation settings' })).toHaveAttribute('data-learner-name', 'Acme')
   fireEvent.click(screen.getByRole('button', { name: 'Back from organisation settings' }))
   expect(onOrganisationUpdated).toHaveBeenCalledTimes(1)
   expect(screen.getByRole('heading', { name: 'Settings' })).toBeVisible()

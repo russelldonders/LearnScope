@@ -121,6 +121,25 @@ describe('OrganisationSettingsModal logo colour recommendations', () => {
       .toHaveAttribute('href', '/provider/organisations/org-1/lti-tools')
   })
 
+  it('shows the private learner LMS separately from the public provider page', () => {
+    render(
+      <MemoryRouter>
+        <OrganisationSettingsModal
+          organisation={{ ...organisation, public_profile_enabled: true }}
+          learnerPortal={{ name: 'Acme Stores' }}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('heading', { name: 'Learner LMS' })).toBeVisible()
+    expect(screen.getByText(/Private learning home for Acme Stores/)).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Open learner LMS in a new window' }))
+      .toHaveAttribute('href', expect.stringContaining('/employer/home?org=acme'))
+    expect(screen.getByRole('button', { name: 'Copy learner link' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Copy public link' })).toBeVisible()
+  })
+
   it('closes after saving when the public provider page is enabled', async () => {
     const onClose = vi.fn()
     render(

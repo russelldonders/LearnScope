@@ -13,8 +13,12 @@ import ProtectedRoute from './ProtectedRoute'
 // this route is also reachable directly by URL, independent of how the
 // learner signed in.
 export default function EmployerMemberRoute({ children }) {
+  const [searchParams] = useSearchParams()
+  const orgSlug = searchParams.get('org')
+  const loginHref = orgSlug ? `/login?org=${encodeURIComponent(orgSlug)}` : '/login'
+
   return (
-    <ProtectedRoute>
+    <ProtectedRoute loginHref={loginHref}>
       <RequireEmployerMember>{children}</RequireEmployerMember>
     </ProtectedRoute>
   )

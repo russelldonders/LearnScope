@@ -32,7 +32,7 @@ const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/
 // separate storage operation rather than a organisations-row field edit.
 // Only ever rendered for an org admin (0081's RLS enforces this
 // independently of who the UI lets open it).
-export default function OrganisationSettingsModal({ organisation, onClose }) {
+export default function OrganisationSettingsModal({ organisation, learnerPortal, onClose }) {
   const [url, setUrl] = useState(organisation.url ?? '')
   const [about, setAbout] = useState(organisation.about ?? '')
   const [logoUrl, setLogoUrl] = useState(organisation.logo_url ?? null)
@@ -56,15 +56,18 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
   const [saving, setSaving] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [error, setError] = useState(null)
-  const [copied, setCopied] = useState(false)
+  const [copiedLink, setCopiedLink] = useState(null)
   const fileInputRef = useRef(null)
 
   const publicProfileUrl = `${window.location.origin}/providers/${organisation.slug}`
+  const learnerPortalUrl = learnerPortal
+    ? `${window.location.origin}/employer/home?org=${encodeURIComponent(organisation.slug)}`
+    : null
 
-  function handleCopyLink() {
-    navigator.clipboard.writeText(publicProfileUrl)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  function handleCopyLink(url, linkType) {
+    navigator.clipboard.writeText(url)
+    setCopiedLink(linkType)
+    setTimeout(() => setCopiedLink(null), 2000)
   }
 
   function handleWebsiteChange(e) {
@@ -293,6 +296,42 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
             />
           </div>
 
+          {learnerPortalUrl && (
+            <section aria-labelledby="learner-lms-link-heading" className="border-t border-hairline pt-4">
+              <h3 id="learner-lms-link-heading" className="text-sm font-medium text-ink">Learner LMS</h3>
+              <p className="text-xs text-secondary mt-1">
+                Private learning home for {learnerPortal.name}. Members sign in to see assigned learning,
+                role skills, and completed training.
+              </p>
+              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                <code className="text-xs bg-paper border border-hairline rounded-md px-2 py-1 text-ink break-all">
+                  {learnerPortalUrl}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => handleCopyLink(learnerPortalUrl, 'learner')}
+                  className="rounded-md border border-hairline text-ink py-1 px-2 text-xs font-medium hover:bg-paper shrink-0"
+                >
+                  {copiedLink === 'learner' ? 'Copied!' : 'Copy learner link'}
+                </button>
+                <a
+                  href={learnerPortalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Open learner LMS in a new window"
+                  aria-label="Open learner LMS in a new window"
+                  className="flex items-center justify-center w-6 h-6 rounded-md border border-hairline text-ink hover:bg-paper shrink-0"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    <path d="M15 3h6v6" />
+                    <path d="M10 14 21 3" />
+                  </svg>
+                </a>
+              </div>
+            </section>
+          )}
+
           <div className="border-t border-hairline pt-4">
             <label className="block text-sm text-secondary mb-1">Brand colours</label>
             <p className="text-xs text-secondary mb-2">
@@ -435,10 +474,10 @@ export default function OrganisationSettingsModal({ organisation, onClose }) {
                 </code>
                 <button
                   type="button"
-                  onClick={handleCopyLink}
+                  onClick={() => handleCopyLink(publicProfileUrl, 'public')}
                   className="rounded-md border border-hairline text-ink py-1 px-2 text-xs font-medium hover:bg-paper shrink-0"
                 >
-                  {copied ? 'Copied!' : 'Copy link'}
+                  {copiedLink === 'public' ? 'Copied!' : 'Copy public link'}
                 </button>
                 <a
                   href={publicProfileUrl}
