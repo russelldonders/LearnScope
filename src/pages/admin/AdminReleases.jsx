@@ -19,7 +19,7 @@ import {
 // read-only for versioning: it tracks pending entries (still added/edited/
 // removed by hand here) and shows release history, but no longer triggers
 // a release itself.
-export default function AdminReleases() {
+export function WhatsNewSettingsSection() {
   const [pending, setPending] = useState([])
   const [releases, setReleases] = useState([])
   const [loading, setLoading] = useState(true)
@@ -106,10 +106,9 @@ export default function AdminReleases() {
   }
 
   return (
-    <AdminLayout>
       <div className="space-y-6">
         <div>
-          <h2 className="font-display text-xl text-ink mb-1">What's new</h2>
+          <h2 className="font-display text-lg text-ink mb-1">What's new</h2>
           <p className="text-sm text-secondary">
             Track what's changed on Staging since the last release. A new version is bundled and
             published to Production automatically the next time this batch goes live.
@@ -233,6 +232,13 @@ export default function AdminReleases() {
           )}
         </div>
       </div>
+  )
+}
+
+export default function AdminReleases() {
+  return (
+    <AdminLayout>
+      <WhatsNewSettingsSection />
     </AdminLayout>
   )
 }

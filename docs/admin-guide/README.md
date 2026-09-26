@@ -46,7 +46,7 @@ mind before you touch anything:
 6. [Moderating the course catalogue](#6-moderating-the-course-catalogue)
 7. [Managing the skill library](#7-managing-the-skill-library)
 8. [Managing tags](#8-managing-tags)
-9. [Activity log — the audit trail](#9-activity-log--the-audit-trail)
+9. [Audit log — the audit trail](#9-audit-log--the-audit-trail)
 10. [Configuring the first-login journey](#10-configuring-the-first-login-journey)
 11. [Appendix: roles, permissions, and the domain model](#11-appendix-roles-permissions-and-the-domain-model)
 
@@ -72,12 +72,13 @@ flowchart LR
     A["Learner signs in"] --> B{"Row in\nplatform_admins?"}
     B -- "No" --> C["Sees only the\nlearner-facing app"]
     B -- "Yes" --> D["'Platform console'\nappears in account menu"]
-    D --> E["/admin — nine-tab\nconsole shell"]
+    D --> E["/admin — eight-tab\nconsole shell"]
 ```
 
 Every admin page shares the same shell: a **Platform console** header and a
 row of tabs — *Overview, Users, Providers, Employers, Courses, Skill
-library, Tags, Activity log, Settings*. You'll see this same tab strip on
+library, Tags, Settings*. Notifications, What's new, and the Audit log are
+grouped with the first-login journey as sections on the Settings page. You'll see this tab strip on
 every screenshot in this guide.
 
 ---
@@ -273,7 +274,7 @@ dropdown, and every filter combination is reflected in the URL.
 
 **Rejecting** a course requires a reason — the *Confirm reject* button
 stays disabled until you type one, and that reason is what the provider
-sees on their end, plus what gets recorded to the [activity log](#9-activity-log--the-audit-trail).
+sees on their end, plus what gets recorded to the [audit log](#9-audit-log--the-audit-trail).
 
 ![The reject dialog open on 'Advanced Stakeholder Negotiation', showing a required rejection-reason field with Confirm reject and Cancel buttons](images/admin-catalogue-reject-dialog.png)
 
@@ -393,9 +394,9 @@ this console.
 
 ---
 
-## 9. Activity log — the audit trail
+## 9. Audit log — the audit trail
 
-`/admin/activity` is a flat, most-recent-first record of every
+The **Audit log** section of `/admin/settings` is a flat, most-recent-first record of every
 significant moderation action taken across the platform: course
 approvals/rejections, user blocks, tag blacklisting, organisation
 activation/suspension, and staff/membership changes.
@@ -414,7 +415,7 @@ rejection).
 
 ## 10. Configuring the first-login journey
 
-`/admin/onboarding` — the **Settings** tab — controls the step-by-step
+The **First login journey** section of `/admin/settings` controls the step-by-step
 wizard every new learner sees immediately after signing up: importing a
 CV, choosing skills to learn, and so on.
 
@@ -504,5 +505,5 @@ detail page in [§3](#3-managing-users).
 | Build a skill out of other skills | [Skill detail → composite skills](#skill-detail-composite-skills-and-promotion) |
 | Make a provider's private skill available platform-wide | [Skill detail → promote to global](#skill-detail-composite-skills-and-promotion) |
 | Stop a bad tag from being suggested again | [Tags](#8-managing-tags) |
-| Find out who did something and why | [Activity log](#9-activity-log--the-audit-trail) |
+| Find out who did something and why | [Audit log](#9-audit-log--the-audit-trail) |
 | Change what new learners see when they sign up | [Settings / First Login Journey](#10-configuring-the-first-login-journey) |

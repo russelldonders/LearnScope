@@ -18,7 +18,7 @@ export default function Onboarding() {
   // /dashboard for the normal case where nothing set it.
   const redirectFrom = useLocation().state?.from
   // null = not yet loaded from onboarding_steps. Platform-admin-configurable
-  // (see /admin/onboarding) -- only the steps an admin has enabled, in
+  // (see /admin/settings#first-login-journey) -- only the steps an admin has enabled, in
   // order, ever get shown; an empty list finishes onboarding immediately.
   const [stepKeys, setStepKeys] = useState(null)
   const [stepIndex, setStepIndex] = useState(0)

@@ -142,7 +142,7 @@ export default function AdminOverview() {
         <div>
           <h3 className="font-display text-base text-ink mb-2">Settings</h3>
           <Link
-            to="/admin/onboarding"
+            to="/admin/settings#first-login-journey"
             className="block rounded-lg border border-hairline bg-card p-4 hover:border-moss transition-colors max-w-md"
           >
             {onboarding.status === 'loading' ? (
