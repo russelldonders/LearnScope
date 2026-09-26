@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import ManagerTeamSharingPanel from './ManagerTeamSharingPanel'
 import {
@@ -50,9 +50,15 @@ describe('ManagerTeamSharingPanel', () => {
 
   it("shows the manager's own rating of a shared skill, read-only", () => {
     renderPanel({ assessments: FIXTURE_ASSESSMENTS })
-    expect(screen.getByText("Dana Whitfield's ratings")).toBeInTheDocument()
-    expect(screen.getByText('Facilitation')).toBeInTheDocument()
+    const ratings = screen.getByText("Dana Whitfield's ratings").parentElement
+    expect(within(ratings).getByText('Facilitation')).toBeInTheDocument()
     expect(screen.getByText('Led the workshop well.')).toBeInTheDocument()
+  })
+
+  it('previews exactly what the team leader sees: shared skills only', () => {
+    renderPanel({ sharedSkillIds: [] })
+    expect(screen.getByText('Preview what Dana Whitfield sees')).toBeInTheDocument()
+    expect(screen.getByText(/you haven’t shared any skills with this team/)).toBeInTheDocument()
   })
 
   it('never shows a rating for a skill that is no longer shared', () => {

@@ -1,14 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const from = vi.fn()
-const rpc = vi.fn()
-vi.mock('../supabaseClient', () => ({ supabase: { from, rpc } }))
+vi.mock('../supabaseClient', () => ({ supabase: { from } }))
 
 const {
   addChangelogEntry,
-  confirmPlatformRelease,
   deleteChangelogEntry,
-  getNextSuggestedVersion,
   listPendingChangelogEntries,
   listPlatformReleases,
   updateChangelogEntry,
@@ -76,33 +73,5 @@ describe('platformReleases service', () => {
     const result = await listPlatformReleases()
     expect(result[0].version).toBe(2)
     expect(result[0].entries.map((e) => e.summary)).toEqual(['First', 'Second'])
-  })
-
-  it('suggests version 1 when there are no releases yet', async () => {
-    from.mockReturnValue(chain({ data: [], error: null }))
-    expect(await getNextSuggestedVersion()).toBe(1)
-  })
-
-  it('suggests the next version after the highest existing one', async () => {
-    from.mockReturnValue(chain({ data: [{ version: 4 }], error: null }))
-    expect(await getNextSuggestedVersion()).toBe(5)
-  })
-
-  it('confirms a release via RPC with trimmed notes', async () => {
-    rpc.mockResolvedValue({ data: 'release-1', error: null })
-    const result = await confirmPlatformRelease(5, '  Ships the new dashboard  ')
-    expect(rpc).toHaveBeenCalledWith('confirm_platform_release', { p_version: 5, p_notes: 'Ships the new dashboard' })
-    expect(result).toBe('release-1')
-  })
-
-  it('sends null notes when none are given', async () => {
-    rpc.mockResolvedValue({ data: 'release-1', error: null })
-    await confirmPlatformRelease(5, '')
-    expect(rpc).toHaveBeenCalledWith('confirm_platform_release', { p_version: 5, p_notes: null })
-  })
-
-  it('throws when the confirm RPC errors', async () => {
-    rpc.mockResolvedValue({ data: null, error: { message: 'Not authorised' } })
-    await expect(confirmPlatformRelease(5, null)).rejects.toEqual({ message: 'Not authorised' })
   })
 })

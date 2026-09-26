@@ -4,9 +4,7 @@ import MutationFeedback from '../../components/MutationFeedback'
 import { formatAbsoluteDate } from '../../lib/dates'
 import {
   addChangelogEntry,
-  confirmPlatformRelease,
   deleteChangelogEntry,
-  getNextSuggestedVersion,
   listPendingChangelogEntries,
   listPlatformReleases,
   updateChangelogEntry,
@@ -14,12 +12,14 @@ import {
 
 // "What's new" for the platform admin console: a running list of unreleased
 // changes (pending entries, added here as they ship to Staging) that gets
-// bundled into a numbered version once confirmed for Production. This page
-// only tracks version/changelog metadata -- it doesn't perform the actual
-// staging->master merge or deploy, which stays the existing manual git
-// workflow; confirm a release here around the same time as doing that
-// merge.
-export default function AdminReleases() {
+// bundled into a numbered version automatically -- see
+// .github/workflows/release-platform-version.yml and
+// scripts/release-platform-version.mjs, which run on every push to master
+// and mirror the same version and entries onto Production. This page is
+// read-only for versioning: it tracks pending entries (still added/edited/
+// removed by hand here) and shows release history, but no longer triggers
+// a release itself.
+export function WhatsNewSettingsSection() {
   const [pending, setPending] = useState([])
   const [releases, setReleases] = useState([])
   const [loading, setLoading] = useState(true)
@@ -33,12 +33,6 @@ export default function AdminReleases() {
   const [editingValue, setEditingValue] = useState('')
   const [entryBusyId, setEntryBusyId] = useState(null)
   const [entryError, setEntryError] = useState(null)
-
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const [confirmVersion, setConfirmVersion] = useState('')
-  const [confirmNotes, setConfirmNotes] = useState('')
-  const [confirming, setConfirming] = useState(false)
-  const [confirmError, setConfirmError] = useState(null)
 
   useEffect(() => {
     load()
@@ -111,41 +105,13 @@ export default function AdminReleases() {
     }
   }
 
-  async function openConfirm() {
-    setConfirmError(null)
-    setConfirmNotes('')
-    setConfirmVersion(String(await getNextSuggestedVersion().catch(() => '')))
-    setConfirmOpen(true)
-  }
-
-  async function handleConfirmRelease(e) {
-    e.preventDefault()
-    const versionNumber = Number(confirmVersion)
-    if (!Number.isInteger(versionNumber) || versionNumber <= 0) {
-      setConfirmError('Enter a whole number greater than 0.')
-      return
-    }
-    setConfirming(true)
-    setConfirmError(null)
-    try {
-      await confirmPlatformRelease(versionNumber, confirmNotes)
-      setConfirmOpen(false)
-      await load()
-    } catch (err) {
-      setConfirmError(err.message)
-    } finally {
-      setConfirming(false)
-    }
-  }
-
   return (
-    <AdminLayout>
       <div className="space-y-6">
         <div>
-          <h2 className="font-display text-xl text-ink mb-1">What's new</h2>
+          <h2 className="font-display text-lg text-ink mb-1">What's new</h2>
           <p className="text-sm text-secondary">
-            Track what's changed on Staging since the last release, then confirm a version when
-            it's ready to go to Production.
+            Track what's changed on Staging since the last release. A new version is bundled and
+            published to Production automatically the next time this batch goes live.
           </p>
         </div>
 
@@ -153,17 +119,7 @@ export default function AdminReleases() {
 
         {!loading && (
           <div className="bg-card border border-hairline rounded-lg p-6">
-            <div className="flex items-start justify-between gap-4 mb-1">
-              <h3 className="font-display text-lg text-ink">Pending (unreleased)</h3>
-              <button
-                type="button"
-                onClick={openConfirm}
-                disabled={pending.length === 0}
-                className="shrink-0 rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Confirm release…
-              </button>
-            </div>
+            <h3 className="font-display text-lg text-ink mb-1">Pending (unreleased)</h3>
             <p className="text-sm text-secondary mb-4">
               What's shipped to Staging since version {releases[0]?.version ?? 0}.
             </p>
@@ -246,65 +202,6 @@ export default function AdminReleases() {
           </div>
         )}
 
-        {confirmOpen && (
-          <div className="bg-card border border-gold rounded-lg p-6">
-            <h3 className="font-display text-lg text-ink mb-1">Confirm release</h3>
-            <p className="text-sm text-secondary mb-4">
-              Bundles all {pending.length} pending {pending.length === 1 ? 'entry' : 'entries'} into this version.
-              The pending list starts fresh for whatever ships next.
-            </p>
-            <form onSubmit={handleConfirmRelease} className="space-y-3">
-              <div>
-                <label className="block text-xs text-secondary mb-1" htmlFor="releaseVersion">
-                  Version
-                </label>
-                <input
-                  id="releaseVersion"
-                  type="number"
-                  min="1"
-                  step="1"
-                  required
-                  value={confirmVersion}
-                  disabled={confirming}
-                  onChange={(e) => setConfirmVersion(e.target.value)}
-                  className="w-32 rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-secondary mb-1" htmlFor="releaseNotes">
-                  Notes (optional)
-                </label>
-                <textarea
-                  id="releaseNotes"
-                  rows={2}
-                  value={confirmNotes}
-                  disabled={confirming}
-                  onChange={(e) => setConfirmNotes(e.target.value)}
-                  className="w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink"
-                />
-              </div>
-              {confirmError && <p role="alert" className="text-sm text-red-700">{confirmError}</p>}
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setConfirmOpen(false)}
-                  disabled={confirming}
-                  className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={confirming}
-                  className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 disabled:opacity-60"
-                >
-                  {confirming ? 'Confirming…' : 'Confirm release'}
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
         <div>
           <h3 className="font-display text-lg text-ink mb-3">Release history</h3>
           {loading ? (
@@ -335,6 +232,13 @@ export default function AdminReleases() {
           )}
         </div>
       </div>
+  )
+}
+
+export default function AdminReleases() {
+  return (
+    <AdminLayout>
+      <WhatsNewSettingsSection />
     </AdminLayout>
   )
 }

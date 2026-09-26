@@ -1,5 +1,6 @@
 import LtiSession from './pages/LtiSession'
 import LmsConnectionsPage from './pages/provider/LtiConfiguration'
+import LtiToolsPage from './pages/provider/LtiTools'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
@@ -54,10 +55,7 @@ import AdminCourseDetail from './pages/admin/AdminCourseDetail'
 import AdminSkills from './pages/admin/AdminSkills'
 import AdminSkillDetail from './pages/admin/AdminSkillDetail'
 import AdminTags from './pages/admin/AdminTags'
-import AdminActivityLog from './pages/admin/AdminActivityLog'
-import AdminOnboarding from './pages/admin/AdminOnboarding'
-import AdminNotifications from './pages/admin/AdminNotifications'
-import AdminReleases from './pages/admin/AdminReleases'
+import AdminSettings from './pages/admin/AdminSettings'
 import ProviderConsole from './pages/provider/ProviderConsole'
 import EmployerConsole from './pages/employer/EmployerConsole'
 import EmployerHome from './pages/employer/EmployerHome'
@@ -305,6 +303,10 @@ function App() {
             element={<ProviderAdminRoute><LmsConnectionsPage /></ProviderAdminRoute>}
           />
           <Route
+            path="/provider/organisations/:organisationId/lti-tools"
+            element={<ProviderAdminRoute><LtiToolsPage /></ProviderAdminRoute>}
+          />
+          <Route
             path="/provider/organisations/:organisationId/skills/:skillId"
             element={
               <ProviderAdminRoute>
@@ -417,37 +419,17 @@ function App() {
             }
           />
           <Route
-            path="/admin/activity"
+            path="/admin/settings"
             element={
               <PlatformAdminRoute>
-                <AdminActivityLog />
+                <AdminSettings />
               </PlatformAdminRoute>
             }
           />
-          <Route
-            path="/admin/onboarding"
-            element={
-              <PlatformAdminRoute>
-                <AdminOnboarding />
-              </PlatformAdminRoute>
-            }
-          />
-          <Route
-            path="/admin/notifications"
-            element={
-              <PlatformAdminRoute>
-                <AdminNotifications />
-              </PlatformAdminRoute>
-            }
-          />
-          <Route
-            path="/admin/releases"
-            element={
-              <PlatformAdminRoute>
-                <AdminReleases />
-              </PlatformAdminRoute>
-            }
-          />
+          <Route path="/admin/onboarding" element={<Navigate to="/admin/settings#first-login-journey" replace />} />
+          <Route path="/admin/notifications" element={<Navigate to="/admin/settings#notifications" replace />} />
+          <Route path="/admin/releases" element={<Navigate to="/admin/settings#whats-new" replace />} />
+          <Route path="/admin/activity" element={<Navigate to="/admin/settings#audit-log" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </NavVisibilityProvider>

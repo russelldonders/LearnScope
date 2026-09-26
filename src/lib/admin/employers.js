@@ -334,8 +334,8 @@ export async function listEmployerSkillSuggestions(employerId) {
 // stays untouched. Plain table calls throughout: RLS (20260911130000) already
 // fully expresses who can read/write which rows, no RPC needed.
 
-// Platform admin's own view -- base fields only, for AdminEmployers.jsx's
-// "Member field settings" panel.
+// Platform admin's own view -- base fields only, for the Member field
+// settings section in the platform Settings page.
 export async function listGlobalFieldDefinitions() {
   const { data, error } = await supabase
     .from('employer_field_definitions')

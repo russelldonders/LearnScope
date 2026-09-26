@@ -18,7 +18,7 @@ import { useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
 // finding one actor/action/entity in a flat 200-row list was becoming the
 // actual problem the original comment here predicted, so search + action/
 // entity filters (client-side, over that same 200-row window) were added.
-export default function AdminActivityLog() {
+export function AuditLogSettingsSection() {
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -57,18 +57,23 @@ export default function AdminActivityLog() {
     try {
       setEntries(await listAdminActivityLog())
     } catch (err) {
-      setError(`Couldn't load the activity log: ${err.message}`)
+      setError(`Couldn't load the audit log: ${err.message}`)
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <AdminLayout>
       <div className="space-y-4">
+        <div>
+          <h2 className="font-display text-lg text-ink mb-1">Audit log</h2>
+          <p className="text-sm text-secondary">
+            Review recent administrative changes, including who made them and why.
+          </p>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <input
-            aria-label="Search activity log"
+            aria-label="Search audit log"
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -115,7 +120,7 @@ export default function AdminActivityLog() {
         ) : filtered.length === 0 ? (
           <div className="text-center py-12 border border-dashed border-hairline rounded-lg">
             <p className="text-secondary">
-              {entries.length === 0 ? 'No activity logged yet.' : 'No activity matches your search.'}
+              {entries.length === 0 ? 'No audit events logged yet.' : 'No audit events match your search.'}
             </p>
           </div>
         ) : (
@@ -152,6 +157,13 @@ export default function AdminActivityLog() {
           </div>
         )}
       </div>
+  )
+}
+
+export default function AdminActivityLog() {
+  return (
+    <AdminLayout>
+      <AuditLogSettingsSection />
     </AdminLayout>
   )
 }

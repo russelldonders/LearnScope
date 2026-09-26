@@ -25309,3 +25309,124 @@ grant execute on function public.list_managed_employer_skill_development_targets
 grant execute on function public.list_my_employer_skill_development_targets() to authenticated;
 grant execute on function public.set_managed_employer_skill_development_target(uuid, uuid, uuid, integer, date, text) to authenticated;
 grant execute on function public.close_managed_employer_skill_development_target(uuid, text) to authenticated;
+
+
+
+-- =============================================================================
+-- 20260922090000_system_confirm_platform_release.sql
+-- =============================================================================
+
+-- Machine-driven counterpart to confirm_platform_release (0913150000),
+-- for the GitHub Action that bundles a platform release automatically on
+-- every push to master (see .github/workflows/release-platform-version.yml).
+-- confirm_platform_release itself stays human-only (it checks
+-- is_platform_admin(auth.uid()), which is meaningless for an unattended
+-- service-role caller -- auth.uid() is null outside a user JWT), so this is
+-- a distinct function rather than a relaxed version of that one, scoped
+-- entirely by GRANT: revoked from anon/authenticated, granted only to
+-- service_role, which the Action authenticates as via each Supabase
+-- project's service-role key (never exposed to the browser bundle).
+--
+-- Two shapes, matching how each environment's entries come to exist:
+--   * p_entry_summaries omitted/null -- bundles this database's own
+--     currently-pending entries into the new release (Staging's case: the
+--     entries were already added there one at a time during development,
+--     per CLAUDE.md's "Staging changelog discipline").
+--   * p_entry_summaries given -- creates each summary as a new entry
+--     already attached to the release (Production's case: Production never
+--     accumulates a local pending backlog under this workflow, so its
+--     entries for this version are born already-released, copied verbatim
+--     from whatever Staging just bundled).
+create or replace function public.system_confirm_platform_release(
+  p_version integer,
+  p_notes text default null,
+  p_entry_summaries text[] default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_release_id uuid;
+begin
+  insert into public.platform_releases (version, notes)
+  values (p_version, p_notes)
+  returning id into v_release_id;
+
+  if p_entry_summaries is null or array_length(p_entry_summaries, 1) is null then
+    update public.platform_changelog_entries
+    set release_id = v_release_id
+    where release_id is null;
+  else
+    insert into public.platform_changelog_entries (summary, release_id)
+    select trim(summary), v_release_id
+    from unnest(p_entry_summaries) as summary;
+  end if;
+
+  return v_release_id;
+end
+$$;
+
+revoke all on function public.system_confirm_platform_release(integer, text, text[]) from public, anon, authenticated;
+grant execute on function public.system_confirm_platform_release(integer, text, text[]) to service_role;
+
+
+
+-- =============================================================================
+-- 20260923100000_manager_team_details_and_member_team_skills.sql
+-- =============================================================================
+
+-- Two small additions for the Teams UI, no schema changes:
+--
+-- 1. update_manager_team_details -- lets a team's leader rename a team (and
+--    set its description) after creating it. Until now name/description
+--    were only ever written by create_manager_team, so a team created with a
+--    placeholder name (e.g. "My team" from getOrCreateMyDefaultManagerTeam)
+--    was stuck with it. Same leader + active-team guards as every other
+--    manager-team write RPC; the name check mirrors manager_teams' own
+--    constraint so the error is readable rather than a raw check violation.
+--
+-- 2. list_manager_team_skills_for_member -- lets an active member see the
+--    team's tracked-skills list (manager_team_skills), which the leader
+--    curates as "skills the team is working on together". Only skill names
+--    and library ids leave here: no per-member data, nothing about who has
+--    shared what, and not added_by. Scoped the same way as
+--    list_manager_team_roster: the caller must hold an active membership of
+--    that team. The leader's own view (list_manager_team_skills) and the
+--    table's RLS policy are unchanged.
+
+create or replace function public.update_manager_team_details(p_team_id uuid, p_name text, p_description text default null)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  if not private.can_manage_manager_team(p_team_id, auth.uid()) then raise exception 'Not authorised'; end if;
+  if not exists (select 1 from public.manager_teams where id = p_team_id and status = 'active') then
+    raise exception 'This team has been archived and can no longer be changed';
+  end if;
+  if p_name is null or char_length(trim(p_name)) not between 1 and 120 then
+    raise exception 'Team name must be between 1 and 120 characters';
+  end if;
+  if p_description is not null and char_length(p_description) > 500 then
+    raise exception 'Team description must be 500 characters or fewer';
+  end if;
+  update public.manager_teams
+  set name = trim(p_name), description = nullif(trim(p_description), ''), updated_at = now()
+  where id = p_team_id;
+end;
+$$;
+
+create or replace function public.list_manager_team_skills_for_member(p_team_id uuid)
+returns table (id uuid, skill_library_id uuid, skill_name text)
+language sql stable security definer set search_path = '' as $$
+  select s.id, s.skill_library_id, s.skill_name
+  from public.manager_team_skills s
+  where s.team_id = p_team_id
+    and exists (
+      select 1 from public.manager_team_memberships me
+      where me.team_id = p_team_id and me.member_user_id = auth.uid() and me.status = 'active'
+    )
+  order by s.skill_name
+$$;
+
+revoke all on function public.update_manager_team_details(uuid, text, text), public.list_manager_team_skills_for_member(uuid) from public, anon;
+grant execute on function public.update_manager_team_details(uuid, text, text), public.list_manager_team_skills_for_member(uuid) to authenticated;

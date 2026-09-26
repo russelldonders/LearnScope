@@ -3,7 +3,7 @@ import AdminLayout from './AdminLayout'
 import MutationFeedback from '../../components/MutationFeedback'
 import { listAllOnboardingSteps, setOnboardingStepEnabled, reorderOnboardingStep } from '../../lib/admin/onboardingSteps'
 
-export default function AdminOnboarding() {
+export function OnboardingSettingsSection() {
   const [steps, setSteps] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -55,9 +55,8 @@ export default function AdminOnboarding() {
   const allDisabled = steps.length > 0 && enabledSteps.length === 0
 
   return (
-    <AdminLayout>
       <div className="space-y-4">
-        <h2 className="font-display text-base text-ink">First Login Journey</h2>
+        <h2 className="font-display text-lg text-ink">First login journey</h2>
         <p className="text-sm text-secondary">
           Choose which steps appear in the first-login wizard new learners see right after signing
           up, and the order they appear in. Disabling every step skips the wizard entirely — new
@@ -149,6 +148,13 @@ export default function AdminOnboarding() {
           </div>
         )}
       </div>
+  )
+}
+
+export default function AdminOnboarding() {
+  return (
+    <AdminLayout>
+      <OnboardingSettingsSection />
     </AdminLayout>
   )
 }

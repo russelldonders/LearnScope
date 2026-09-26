@@ -34,6 +34,14 @@ import { formatAbsoluteDate } from '../../../lib/dates'
 // of, the learner's own. Entries are { id, skillId, level, comments,
 // evidenceUrl, evidencePaths, assessedByName, assessedAt }.
 //
+// `teamSkills` is the leader's tracked "skills this team is working on"
+// list (list_manager_team_skills_for_member -- names only). Each one is
+// matched by name against the learner's own skills, the same
+// case-insensitive name match ManagerSkillsPanel's matrix uses, so a
+// matching skill can be shared in one click; a tracked skill the learner
+// doesn't have yet is just listed, never added for them. Entries are
+// { id, skillLibraryId, skillName }.
+//
 // `saving`/`error` are owned by the caller, not this component -- there's
 // no internal saving/try-catch here. `onSave(skillIds)` and `onLeaveTeam()`
 // are just called; this panel reacts to `saving` transitioning back to
@@ -45,13 +53,17 @@ export default function ManagerTeamSharingPanel({
   sharedSkillIds = [],
   roster = [],
   assessments = [],
+  teamSkills = [],
   saving = false,
   error = null,
   onSave,
   onLeaveTeam,
   readOnly = false,
+  initialEditOpen = false,
 }) {
-  const [editOpen, setEditOpen] = useState(false)
+  // `initialEditOpen` -- set by the caller right after the learner accepts
+  // an invite, since picking what to share is the obvious next step.
+  const [editOpen, setEditOpen] = useState(initialEditOpen && !readOnly)
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false)
   const wasSaving = useRef(saving)
 
@@ -66,6 +78,11 @@ export default function ManagerTeamSharingPanel({
   const sharedSkills = useMemo(
     () => availableSkills.filter((s) => sharedSkillIds.includes(s.id)),
     [availableSkills, sharedSkillIds]
+  )
+
+  const skillByName = useMemo(
+    () => new Map(availableSkills.map((skill) => [skill.name?.trim().toLocaleLowerCase(), skill])),
+    [availableSkills]
   )
 
   // Latest rating per skill only -- history for a given skill can pile up
@@ -84,7 +101,7 @@ export default function ManagerTeamSharingPanel({
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
       <p className="text-sm text-secondary mb-4">
-        Managed by {membership.managerName} · member since {formatAbsoluteDate(membership.joinedAt)}
+        Led by {membership.managerName} · member since {formatAbsoluteDate(membership.joinedAt)}
       </p>
 
       <p className="text-sm text-secondary mb-4">
@@ -112,6 +129,65 @@ export default function ManagerTeamSharingPanel({
           </ul>
         </div>
       )}
+
+      {teamSkills.length > 0 && (
+        <div className="mb-4 pt-3 border-t border-hairline">
+          <p className="text-xs font-medium uppercase tracking-wide text-secondary mb-2">
+            Skills this team is working on
+          </p>
+          <ul className="divide-y divide-hairline">
+            {teamSkills.map((teamSkill) => {
+              const mine = skillByName.get(teamSkill.skillName?.trim().toLocaleLowerCase())
+              const isShared = mine && sharedSkillIds.includes(mine.id)
+              return (
+                <li key={teamSkill.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-sm">
+                  <span className="text-ink">{teamSkill.skillName}</span>
+                  {!mine ? (
+                    <span className="text-xs text-secondary">Not on your profile yet</span>
+                  ) : isShared ? (
+                    <span className="text-xs text-moss">Shared</span>
+                  ) : !readOnly ? (
+                    <button type="button" disabled={saving} onClick={() => onSave?.([...sharedSkillIds, mine.id])}
+                      aria-label={`Share ${mine.name} with ${membership.managerName}`}
+                      className="text-xs font-medium text-moss hover:underline disabled:opacity-60">
+                      Share yours ({LEVEL_LABELS[mine.level] ?? 'not assessed'})
+                    </button>
+                  ) : (
+                    <span className="text-xs text-secondary">Not shared</span>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+
+      <details className="mb-4 pt-3 border-t border-hairline group">
+        <summary className="cursor-pointer text-sm font-medium text-moss">
+          Preview what {membership.managerName} sees
+        </summary>
+        <div className="mt-2 rounded-md border border-hairline bg-paper p-3 text-sm">
+          {sharedSkills.length === 0 ? (
+            <p className="text-secondary">Nothing yet -- you haven’t shared any skills with this team.</p>
+          ) : (
+            <ul className="space-y-1">
+              {sharedSkills.map((skill) => (
+                <li key={skill.id} className="flex flex-wrap justify-between gap-2">
+                  <span className="text-ink">{skill.name}</span>
+                  <span className="text-secondary">
+                    {LEVEL_LABELS[skill.level] ?? 'Not assessed'}
+                    {' · '}{skill.evidenceCount ?? 0} evidence item{skill.evidenceCount === 1 ? '' : 's'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-2 text-xs text-secondary">
+            Plus any collaborative learning your team does together. Your experience, personal courses and
+            other skills are not shown.
+          </p>
+        </div>
+      </details>
 
       {sharedSkills.some((skill) => latestRatingBySkillId.has(skill.id)) && (
         <div className="mb-4 pt-3 border-t border-hairline space-y-2">
@@ -224,7 +300,7 @@ function EditSharedSkillsDialog({ availableSkills, initiallySelectedIds, saving,
         Choose skills to share
       </h2>
       <p className="text-sm text-secondary mb-4">
-        Only the skills you check here -- and their evidence, if any -- become visible to your manager. You
+        Only the skills you check here -- and their evidence, if any -- become visible to your team leader. You
         can change this any time.
       </p>
 

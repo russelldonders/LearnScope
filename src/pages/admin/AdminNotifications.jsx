@@ -171,7 +171,7 @@ function TemplateCard({ template, onSaved }) {
   )
 }
 
-export default function AdminNotifications() {
+export function NotificationSettingsSection() {
   const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -197,7 +197,6 @@ export default function AdminNotifications() {
   }
 
   return (
-    <AdminLayout>
       <div className="space-y-8">
         <div>
           <h2 className="font-display text-lg text-ink mb-1">Notification emails</h2>
@@ -239,6 +238,13 @@ export default function AdminNotifications() {
           </div>
         </div>
       </div>
+  )
+}
+
+export default function AdminNotifications() {
+  return (
+    <AdminLayout>
+      <NotificationSettingsSection />
     </AdminLayout>
   )
 }

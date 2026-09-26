@@ -7,7 +7,6 @@ import { OrganisationStaffPanel } from '../admin/AdminProviders'
 import ProviderOverviewPanel from './ProviderOverviewPanel'
 import ResourceLibrarySection from '../../components/ResourceLibrarySection'
 import ProviderSkillsSection from '../../components/ProviderSkillsSection'
-import ProviderLtiToolsSection from '../../components/ProviderLtiToolsSection'
 import OrganisationSettingsModal from '../../components/OrganisationSettingsModal'
 import AccessibleDialog from '../../components/AccessibleDialog'
 import ConfirmDialog from '../../components/ConfirmDialog'
@@ -92,7 +91,6 @@ const SECTIONS = [
   { key: 'staff', label: 'Users', adminOnly: true },
   { key: 'employers', label: 'Employers', adminOnly: true },
   { key: 'resources', label: 'Resources' },
-  { key: 'lti-tools', label: 'LTI tools', adminOnly: true },
 ]
 
 const EMPTY_FORM = { name: '', provider: '', courseType: '', durationValue: '', durationUnit: 'hours', synopsis: '' }
@@ -141,8 +139,7 @@ export default function ProviderConsole() {
   const myRole = (organisationMemberships ?? []).find((m) => m.organisation_id === selectedOrgId)?.role
   const selectedOrg = myOrgs.find((o) => o.id === selectedOrgId)
   // Guards against a stale admin-only tab surviving an organisation switch.
-  const currentSection =
-    (activeSection === 'staff' || activeSection === 'lti-tools') && myRole !== 'admin' ? 'training' : activeSection
+  const currentSection = activeSection === 'staff' && myRole !== 'admin' ? 'training' : activeSection
 
   useEffect(() => {
     reloadOrganisations().finally(() => setLoading(false))
@@ -366,9 +363,6 @@ export default function ProviderConsole() {
                   )}
                   {currentSection === 'resources' && (
                     <ResourceLibrarySection key={selectedOrg.id} organisationId={selectedOrg.id} userId={user.id} />
-                  )}
-                  {currentSection === 'lti-tools' && myRole === 'admin' && (
-                    <ProviderLtiToolsSection key={selectedOrg.id} organisationId={selectedOrg.id} userId={user.id} />
                   )}
                 </div>
               </div>

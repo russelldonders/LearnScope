@@ -147,6 +147,28 @@ export async function inviteManagerTeamMemberByEmail(teamId, email) {
   return callAdminApi('inviteManagerTeamMemberByEmail', { teamId, email })
 }
 
+// Service-role for the same reason as inviteManagerTeamMemberByEmail above:
+// re-sending can mean a fresh Supabase sign-up invite for someone who has
+// never signed in. Leader/active-team checks happen server-side.
+export async function resendManagerTeamInvite(membershipId) {
+  return callAdminApi('resendManagerTeamInvite', { membershipId })
+}
+
+export async function updateManagerTeamDetails(teamId, { name, description = null }) {
+  const { error } = await supabase.rpc('update_manager_team_details', {
+    p_team_id: teamId, p_name: name, p_description: description,
+  })
+  if (error) throw error
+}
+
+// The team's tracked-skills list as an active member sees it -- names only,
+// see the migration (list_manager_team_skills_for_member).
+export async function listManagerTeamSkillsForMember(teamId) {
+  const { data, error } = await supabase.rpc('list_manager_team_skills_for_member', { p_team_id: teamId })
+  if (error) throw error
+  return (data ?? []).map((row) => ({ id: row.id, skillLibraryId: row.skill_library_id, skillName: row.skill_name }))
+}
+
 export async function decideManagerTeamInvite(membershipId, accept) {
   const { error } = await supabase.rpc('decide_manager_team_invite', {
     p_membership_id: membershipId, p_accept: accept,

@@ -5,8 +5,26 @@ import AccessibleDialog from '../../components/AccessibleDialog'
 import { LEVELS, LEVEL_LABELS } from '../../lib/levels'
 import { listLibrarySkills } from '../../lib/skillLibrary'
 import ManagerMemberProfile from './ManagerMemberProfile'
+import { RateSkillDialog } from './ManagerTeamPanel'
 
 const actionClass = 'rounded-md border border-hairline px-3 py-2 text-sm font-medium text-ink hover:bg-paper focus-visible:outline-2 focus-visible:outline-moss'
+
+// Cell tint deepens with the member's own self-assessed level, so gaps and
+// strengths across the team read at a glance -- always alongside the level
+// label itself, never colour alone.
+const LEVEL_CELL_CLASSES = {
+  1: 'bg-moss/10',
+  2: 'bg-moss/20',
+  3: 'bg-moss/30',
+  4: 'bg-moss/45',
+  5: 'bg-moss/60',
+}
+
+const FILTERS = [
+  { key: 'all', label: 'All skills' },
+  { key: 'unrated', label: 'Not yet rated by you' },
+  { key: 'gaps', label: 'Shared by fewer than half' },
+]
 
 function skillKey(skill) {
   return skill.name?.trim().toLocaleLowerCase() ?? skill.id
@@ -18,6 +36,9 @@ export default function ManagerSkillsPanel({
 }) {
   const [selection, setSelection] = useState(null)
   const [addSkillOpen, setAddSkillOpen] = useState(false)
+  const [rateTarget, setRateTarget] = useState(null)
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState('all')
   const selectedMember = members.find((member) => member.id === selection?.memberId)
   // Row-per-skill, column-per-member matrix -- byMemberId gives each row an
   // O(1) lookup for whether a given member has it, and at what level. Rows
@@ -43,6 +64,13 @@ export default function ManagerSkillsPanel({
     (total, group) => total + [...group.byMemberId.values()].filter((skill) => skill.managerRating).length,
     0
   )
+
+  const visibleSkills = skills.filter((group) => {
+    if (query.trim() && !group.name.toLowerCase().includes(query.trim().toLowerCase())) return false
+    if (filter === 'unrated') return [...group.byMemberId.values()].some((skill) => !skill.managerRating)
+    if (filter === 'gaps') return group.byMemberId.size < members.length / 2
+    return true
+  })
 
   if (selectedMember) return <ManagerMemberProfile member={selectedMember} initialSkillId={selection.skillId}
     onBack={() => setSelection(null)} onRateSkill={onRateSkill} onLoadSkillAssessments={onLoadSkillAssessments}
@@ -75,6 +103,31 @@ export default function ManagerSkillsPanel({
           {' · '}{members.length} team {members.length === 1 ? 'member' : 'members'}
           {' · '}{ratedCount} rated by you
         </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="text-sm text-ink">
+            <span className="sr-only">Search team skills</span>
+            <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search skills…"
+              className="rounded-md border border-hairline bg-card px-3 py-1.5 text-sm text-ink" />
+          </label>
+          <div role="group" aria-label="Filter skills" className="flex flex-wrap gap-1">
+            {FILTERS.map((option) => (
+              <button key={option.key} type="button" aria-pressed={filter === option.key} onClick={() => setFilter(option.key)}
+                className={`rounded-full border px-3 py-1 text-xs font-medium ${filter === option.key
+                  ? 'border-moss bg-moss/10 text-ink'
+                  : 'border-hairline text-secondary hover:text-ink'}`}>
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <p aria-hidden="true" className="flex items-center gap-1 text-xs text-secondary sm:ml-auto">
+            {LEVEL_LABELS[1]}
+            {[1, 2, 3, 4, 5].map((level) => <span key={level} className={`inline-block size-3 rounded-sm ${LEVEL_CELL_CLASSES[level]}`} />)}
+            {LEVEL_LABELS[5]}
+          </p>
+        </div>
+        {visibleSkills.length === 0 ? (
+          <p className="py-6 text-center text-sm text-secondary">No skills match this view.</p>
+        ) : (
         <div className="overflow-x-auto border border-hairline rounded-lg">
           <table className="w-full text-sm border-collapse">
             <thead>
@@ -91,7 +144,7 @@ export default function ManagerSkillsPanel({
               </tr>
             </thead>
             <tbody>
-              {skills.map((group) => (
+              {visibleSkills.map((group) => (
                 <tr key={group.key}>
                   <th scope="row" className="sticky left-0 bg-card px-3 py-2 text-left font-medium text-ink border-r border-b border-hairline whitespace-nowrap">
                     {group.name}
@@ -109,14 +162,23 @@ export default function ManagerSkillsPanel({
                   {members.map((member) => {
                     const skill = group.byMemberId.get(member.id)
                     return (
-                      <td key={member.id} className="px-3 py-2 text-center border-b border-hairline">
+                      <td key={member.id} className={`px-3 py-2 text-center border-b border-hairline ${skill ? LEVEL_CELL_CLASSES[skill.level] ?? '' : ''}`}>
                         {skill ? (
-                          <button type="button" onClick={() => setSelection({ memberId: member.id, skillId: skill.id })}
-                            aria-label={`Review ${group.name} for ${member.name}`}
-                            className="inline-flex flex-col items-center gap-0.5 rounded-md px-2 py-1 hover:bg-paper focus-visible:outline-2 focus-visible:outline-moss">
-                            <span className="text-xs font-medium text-ink whitespace-nowrap">{LEVEL_LABELS[skill.level] ?? 'Not assessed'}</span>
-                            {skill.managerRating && <span className="text-[10px] text-moss">Rated by you</span>}
-                          </button>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <button type="button" onClick={() => setSelection({ memberId: member.id, skillId: skill.id })}
+                              aria-label={`Review ${group.name} for ${member.name}`}
+                              className="inline-flex flex-col items-center gap-0.5 rounded-md px-2 py-1 hover:bg-card/60 focus-visible:outline-2 focus-visible:outline-moss">
+                              <span className="text-xs font-medium text-ink whitespace-nowrap">{LEVEL_LABELS[skill.level] ?? 'Not assessed'}</span>
+                              {skill.managerRating && <span className="text-[10px] text-ink">Rated by you</span>}
+                            </button>
+                            {onRateSkill && (
+                              <button type="button" onClick={() => setRateTarget({ member, skill })}
+                                aria-label={`${skill.managerRating ? 'Rate again' : 'Rate'}: ${group.name} for ${member.name}`}
+                                className="text-[11px] font-medium text-ink underline underline-offset-2 hover:opacity-80">
+                                {skill.managerRating ? 'Rate again' : 'Rate'}
+                              </button>
+                            )}
+                          </div>
                         ) : <span className="text-secondary" aria-hidden="true">—</span>}
                       </td>
                     )
@@ -126,7 +188,17 @@ export default function ManagerSkillsPanel({
             </tbody>
           </table>
         </div>
+        )}
       </>}
+    {rateTarget && (
+      <RateSkillDialog
+        member={rateTarget.member}
+        skill={rateTarget.skill}
+        onClose={() => setRateTarget(null)}
+        onRate={(payload) => onRateSkill(rateTarget.member.id, rateTarget.skill.id, payload)}
+        onLoadHistory={() => onLoadSkillAssessments?.(rateTarget.member.id, rateTarget.skill.id)}
+      />
+    )}
     {addSkillOpen && (
       <AddTeamSkillModal members={members} onClose={() => setAddSkillOpen(false)} onAdd={onAddSkill} onSuggest={onSuggestSkill} />
     )}

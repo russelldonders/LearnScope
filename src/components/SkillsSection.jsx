@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
@@ -9,11 +9,13 @@ import FilterRow from './FilterRow'
 import TrackingReasonIcon from './TrackingReasonIcon'
 import OrganizationLogo from './OrganizationLogo'
 import GrowthRing from './GrowthRing'
+import SetSkillTargetFlow from './SetSkillTargetFlow'
 import { TRACKING_REASONS } from '../lib/trackingReasons'
 import { LEVEL_LABELS } from '../lib/levels'
 import { isSelfAssessmentDue } from '../lib/checkin'
 import { getEmployerTargetsForUser, getLatestEmployerSkillConfirmations } from '../lib/employerSkillTargets'
 import { computeVisibleTarget } from '../lib/skillTargetPrecedence'
+import { listMySkillDevelopmentTargets } from '../lib/skillDevelopmentTargets'
 
 const SKILL_VIEWS = [
   { value: 'all', labelKey: 'skills.views.all' },
@@ -41,10 +43,28 @@ export default function SkillsSection() {
 
   const [currentRoleSkillIdsByExperienceId, setCurrentRoleSkillIdsByExperienceId] = useState({})
 
+  const [developmentTargets, setDevelopmentTargets] = useState({ personal: [], employer: [] })
+  const [targetsError, setTargetsError] = useState(null)
+  const [targetsLoading, setTargetsLoading] = useState(true)
+  const [showSetTargetFlow, setShowSetTargetFlow] = useState(false)
+
   useEffect(() => {
     loadSkills()
     loadCurrentRoles()
+    loadDevelopmentTargets()
   }, [])
+
+  async function loadDevelopmentTargets() {
+    setTargetsLoading(true)
+    setTargetsError(null)
+    try {
+      setDevelopmentTargets(await listMySkillDevelopmentTargets(user.id))
+    } catch (err) {
+      setTargetsError(err.message || 'Your skill targets could not be loaded.')
+    } finally {
+      setTargetsLoading(false)
+    }
+  }
 
   // Which specific current role(s) each current-role skill actually belongs
   // to -- used both to split the "Current role(s)" grid per role and to
@@ -181,16 +201,80 @@ export default function SkillsSection() {
   const activeSkills = useMemo(() => skills.filter((s) => s.lifecycle_stage !== 'archived'), [skills])
   const archivedSkills = useMemo(() => skills.filter((s) => s.lifecycle_stage === 'archived'), [skills])
 
-  // A skill only counts as a gap once the learner has actually set a target
-  // for it -- comparing everyone against an unset target would just flag
-  // every newly added skill as "behind", which isn't a gap, it's normal.
-  const skillGaps = useMemo(
-    () =>
-      activeSkills.filter(
-        (s) => s.targetLevel != null && (s.displayedLevel == null || s.displayedLevel < s.targetLevel)
-      ),
-    [activeSkills]
-  )
+  // The one list of "your skill development targets" -- built from
+  // activeSkills' already-reconciled targetLevel/targetSource (see
+  // computeVisibleTarget in loadSkills above) rather than developmentTargets'
+  // raw personal+employer rows directly, so a skill with both a personal and
+  // an employer target shows once, with whichever one actually applies --
+  // the same precedence the rest of this page (GrowthRing, skill cards)
+  // already uses. developmentTargets is still consulted per row for notes/
+  // date/employer name (data loadSkills doesn't fetch), and for employer
+  // targets on a skill the learner hasn't added to their own list yet, which
+  // activeSkills has no row for at all.
+  const targetRows = useMemo(() => {
+    const personalBySkillId = new Map(developmentTargets.personal.map((t) => [t.skillId, t]))
+    const activeEmployerTargets = developmentTargets.employer.filter((t) => t.status === 'active')
+    const employerByLibraryId = new Map(activeEmployerTargets.map((t) => [t.skillLibraryId, t]))
+    const matchedLibraryIds = new Set()
+
+    const rows = []
+    for (const skill of activeSkills) {
+      if (skill.targetLevel == null) continue
+      if (skill.targetSource === 'personal') {
+        const raw = personalBySkillId.get(skill.id)
+        rows.push({
+          id: `skill-${skill.id}`,
+          skillId: skill.id,
+          skillName: skill.name,
+          ownership: 'personal',
+          targetLevel: skill.targetLevel,
+          currentLevel: skill.displayedLevel,
+          notes: raw?.notes ?? null,
+          targetDate: raw?.targetDate ?? null,
+        })
+      } else {
+        const raw = skill.library_skill_id ? employerByLibraryId.get(skill.library_skill_id) : null
+        if (raw) matchedLibraryIds.add(skill.library_skill_id)
+        rows.push({
+          id: `skill-${skill.id}`,
+          skillId: skill.id,
+          skillName: skill.name,
+          ownership: 'employer',
+          employerName: raw?.employerName ?? '',
+          targetLevel: skill.targetLevel,
+          currentLevel: skill.displayedLevel,
+          notes: raw?.notes ?? null,
+          targetDate: raw?.targetDate ?? null,
+        })
+      }
+    }
+    // Employer targets for a skill not yet tracked personally -- still worth
+    // showing (the learner hasn't started it yet), just with no current
+    // level to compare against.
+    for (const raw of activeEmployerTargets) {
+      if (matchedLibraryIds.has(raw.skillLibraryId)) continue
+      rows.push({
+        id: `employer-${raw.id}`,
+        skillId: null,
+        skillName: raw.skillName,
+        ownership: 'employer',
+        employerName: raw.employerName,
+        targetLevel: raw.targetLevel,
+        currentLevel: null,
+        notes: raw.notes,
+        targetDate: raw.targetDate,
+      })
+    }
+
+    // Not-yet-met targets first -- this is what "Skills to develop" used to
+    // surface as a separate section; folding it into one sorted list here
+    // instead of two sections showing overlapping target data.
+    return rows.sort((a, b) => {
+      const aMet = a.currentLevel != null && a.currentLevel >= a.targetLevel
+      const bMet = b.currentLevel != null && b.currentLevel >= b.targetLevel
+      return aMet === bMet ? 0 : aMet ? 1 : -1
+    })
+  }, [activeSkills, developmentTargets])
 
   const filteredSkills = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase()
@@ -274,6 +358,15 @@ export default function SkillsSection() {
           {t('skills.addSkill')}
         </button>
       </div>
+
+      {!targetsLoading && (
+        <SkillDevelopmentTargets
+          rows={targetRows}
+          error={targetsError}
+          t={t}
+          onSetNewTarget={() => setShowSetTargetFlow(true)}
+        />
+      )}
 
       {loading && <SkillsSkeleton />}
       {error && (
@@ -375,38 +468,6 @@ export default function SkillsSection() {
         </div>
       )}
 
-      {!loading && !error && view === 'all' && !query && !tagFilter && !trackingReasonFilter && skillGaps.length > 0 && (
-        <div className="mb-10">
-          <h2 className="font-display text-xl text-ink">{t('skills.toDevelop.title')}</h2>
-          <p className="text-sm text-secondary mt-1 mb-4">{t('skills.toDevelop.description')}</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {skillGaps.slice(0, 3).map((skill) => (
-              <button
-                key={skill.id}
-                type="button"
-                onClick={() => navigate(`/skills/${skill.id}`)}
-                className="text-left bg-card border border-hairline rounded-lg p-4 flex items-center gap-4 hover:border-moss transition-colors w-full"
-              >
-                <GrowthRing level={skill.displayedLevel} size={48} targetLevel={skill.targetLevel} />
-                <div className="min-w-0 flex-1">
-                  <h3 className="font-display text-base text-ink truncate">{skill.name}</h3>
-                  <p className="text-sm text-secondary">
-                    {skill.displayedLevel ? LEVEL_LABELS[skill.displayedLevel] : 'Not yet assessed'}
-                    {' → target '}
-                    {LEVEL_LABELS[skill.targetLevel]}
-                  </p>
-                  <p className="text-sm font-medium text-moss mt-2">
-                    {skill.displayedLevel == null
-                      ? 'Assess your current level'
-                      : `Work toward ${LEVEL_LABELS[skill.targetLevel]}`}
-                  </p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {!loading && !error && activeSkills.length > 0 && filteredSkills.length === 0 && (
         <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
           <h2 className="font-display text-xl text-ink">{t('skills.noMatch.title')}</h2>
@@ -495,8 +556,90 @@ export default function SkillsSection() {
           }}
         />
       )}
+
+      {showSetTargetFlow && (
+        <SetSkillTargetFlow
+          skills={activeSkills}
+          user={user}
+          onClose={() => setShowSetTargetFlow(false)}
+          onSet={() => {
+            setShowSetTargetFlow(false)
+            loadSkills()
+            loadDevelopmentTargets()
+          }}
+        />
+      )}
     </section>
   )
+}
+
+function SkillDevelopmentTargets({ rows, error, t, onSetNewTarget }) {
+  return (
+    <section aria-labelledby="skill-targets-heading" className="mb-10 border-y border-hairline py-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="max-w-2xl">
+          <h2 id="skill-targets-heading" className="font-display text-xl text-ink">{t('skills.skillTargets')}</h2>
+          <p className="mt-1 text-sm text-secondary">{t('skills.skillTargetsIntro')}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onSetNewTarget}
+          className="shrink-0 rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
+        >
+          {t('skills.setNewTarget')}
+        </button>
+      </div>
+
+      {error ? (
+        <p role="alert" className="mt-5 text-sm text-red-700">{t('skills.skillTargetsLoadError')}</p>
+      ) : rows.length === 0 ? (
+        <p className="mt-5 text-sm text-secondary">{t('skills.skillTargetsEmpty')}</p>
+      ) : (
+        <div className="mt-5 divide-y divide-hairline border-t border-hairline">
+          {rows.map((target) => (
+            <TargetRow key={target.id} target={target} t={t} />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function TargetRow({ target, t }) {
+  const content = (
+    <>
+      <div className="flex items-center gap-3 min-w-0">
+        <GrowthRing level={target.currentLevel} size={40} targetLevel={target.targetLevel} />
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-medium text-ink">{target.skillName}</h3>
+            <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${target.ownership === 'personal' ? 'border-moss text-moss' : 'border-slate text-slate'}`}>
+              {target.ownership === 'personal' ? t('skills.personalTarget') : target.employerName}
+            </span>
+          </div>
+          <p className="text-sm text-secondary">
+            {target.currentLevel ? LEVEL_LABELS[target.currentLevel] : 'Not yet assessed'}
+            {' → '}
+            {LEVEL_LABELS[target.targetLevel]}
+          </p>
+          {target.notes && <p className="mt-1 line-clamp-2 text-sm text-secondary">{target.notes}</p>}
+        </div>
+      </div>
+      {target.targetDate && (
+        <p className="shrink-0 text-sm text-secondary">{t('skills.targetDatePrefix')} {new Date(`${target.targetDate}T00:00:00`).toLocaleDateString()}</p>
+      )}
+    </>
+  )
+
+  if (target.skillId) {
+    return (
+      <Link to={`/skills/${target.skillId}`} className="flex flex-col gap-2 py-4 hover:text-moss sm:flex-row sm:items-start sm:justify-between">
+        {content}
+      </Link>
+    )
+  }
+
+  return <div className="flex flex-col gap-2 py-4 sm:flex-row sm:items-start sm:justify-between">{content}</div>
 }
 
 function SkillGrid({ skills, onEdit }) {
