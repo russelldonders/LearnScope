@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import AppHeader from './AppHeader'
@@ -32,6 +32,8 @@ vi.mock('../context/LanguageContext', () => ({
     t: (key) => ({
       'nav.actions': 'Actions',
       'menu.switchWorkspace': 'Switch workspace',
+      'menu.learningWorkspaces': 'Learning workspaces',
+      'menu.administration': 'Administration',
       'menu.personalAccount': 'Personal account',
     })[key] ?? key,
   }),
@@ -96,7 +98,9 @@ describe('AppHeader organisation branding', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
-    expect(screen.getByText('Switch workspace')).toBeVisible()
+    expect(screen.getByRole('navigation', { name: 'Switch workspace' })).toBeVisible()
+    expect(screen.getByRole('group', { name: 'Learning workspaces' })).toBeVisible()
+    expect(screen.queryByRole('group', { name: 'Administration' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Personal LearnScope' })).toHaveAttribute('href', '/dashboard')
     expect(screen.queryByText('Personal account')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'menu.profile' })).not.toBeInTheDocument()
@@ -165,12 +169,16 @@ describe('AppHeader organisation branding', () => {
     expect(screen.getByRole('link', { name: 'menu.employerConsole' })).toHaveAttribute('href', '/employer')
   })
 
-  it('keeps role workspaces in the switcher and marks the active console', () => {
+  it('separates learner-facing workspaces from the three administration workspaces', async () => {
     authMock.value = {
       ...authMock.value,
       isPlatformAdmin: true,
       organisationMemberships: [{ organisation_id: 'org-1', role: 'admin' }],
+      employerMemberships: [{ employer_id: 'employer-1', role: 'admin' }],
     }
+    databaseMock.employerRows = [
+      { id: 'employer-1', name: 'Acme Stores', organisation: { slug: 'acme', logo_url: null } },
+    ]
 
     render(
       <MemoryRouter initialEntries={['/provider']}>
@@ -179,8 +187,15 @@ describe('AppHeader organisation branding', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
-    expect(screen.getByRole('link', { name: 'menu.providerConsole' })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('link', { name: 'menu.platformConsole' })).toHaveAttribute('href', '/admin')
+    const learningWorkspaces = screen.getByRole('group', { name: 'Learning workspaces' })
+    const administration = screen.getByRole('group', { name: 'Administration' })
+
+    expect(within(learningWorkspaces).getByRole('link', { name: 'Personal LearnScope' })).toBeVisible()
+    expect(await within(learningWorkspaces).findByRole('link', { name: 'Acme Stores' })).toBeVisible()
+    expect(within(administration).getByRole('link', { name: 'menu.providerConsole' })).toHaveAttribute('aria-current', 'page')
+    expect(within(administration).getByRole('link', { name: 'menu.employerConsole' })).toHaveAttribute('href', '/employer')
+    expect(within(administration).getByRole('link', { name: 'menu.platformConsole' })).toHaveAttribute('href', '/admin')
+    expect(learningWorkspaces.compareDocumentPosition(administration) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.queryByText('Personal account')).not.toBeInTheDocument()
   })
 })

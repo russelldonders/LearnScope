@@ -106,6 +106,8 @@ export default function AppHeader({
     && !inEmployerAdminConsole
   const inPlatformConsole = location.pathname.startsWith('/admin')
   const inProviderConsole = location.pathname === '/provider' || location.pathname.startsWith('/provider/')
+  const hasEmployerAdminWorkspace = employerMemberships?.some((membership) => membership.role === 'admin') ?? false
+  const hasAdminWorkspaces = Boolean(organisationMemberships?.length || hasEmployerAdminWorkspace || isPlatformAdmin)
 
   useEffect(() => {
     if (!menuOpen) return
@@ -198,100 +200,107 @@ export default function AppHeader({
                       {user?.email && <p className="truncate text-xs text-secondary">{user.email}</p>}
                     </div>
                   )}
-                  <div className="border-b border-hairline py-2">
-                    <p className="px-4 pb-1.5 text-xs font-medium text-secondary">{t('menu.switchWorkspace')}</p>
-                    <Link
-                      to={contextExitHref || '/dashboard'}
-                      onClick={() => setMenuOpen(false)}
-                      aria-current={isPersonalWorkspace ? 'page' : undefined}
-                      className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
-                    >
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-hairline bg-paper">
-                        <img src="/favicon.svg" alt="" className="h-5 w-5 object-contain" />
-                      </span>
-                      <span className="min-w-0 flex-1 font-medium">Personal LearnScope</span>
-                      {isPersonalWorkspace && (
-                        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="m5 12 4 4L19 6" />
-                        </svg>
-                      )}
-                    </Link>
-                    {employerPortals.map((employer) => {
-                      const isActive = activeEmployerSlug === employer.organisation.slug
-                      return (
-                        <Link
-                          key={employer.id}
-                          to={`/providers/${encodeURIComponent(employer.organisation.slug)}`}
-                          onClick={() => setMenuOpen(false)}
-                          aria-current={isActive ? 'page' : undefined}
-                          className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
-                        >
-                          <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-hairline bg-paper text-xs font-medium text-ink">
-                            {employer.organisation.logo_url
-                              ? <img src={employer.organisation.logo_url} alt="" className="h-full w-full object-contain" />
-                              : employer.name.trim().charAt(0).toUpperCase()}
-                          </span>
-                          <span className="min-w-0 flex-1 truncate font-medium">{employer.name}</span>
-                          {isActive && (
-                            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="m5 12 4 4L19 6" />
-                            </svg>
-                          )}
-                        </Link>
-                      )
-                    })}
-                    {employerPortalsLoading && <p role="status" className="px-4 py-2 text-xs text-secondary">Loading employer workspaces…</p>}
-                    {organisationMemberships?.length > 0 && (
+                  <nav aria-label={t('menu.switchWorkspace')}>
+                    <div role="group" aria-labelledby="learning-workspaces-label" className="border-b border-hairline py-2">
+                      <p id="learning-workspaces-label" className="px-4 pb-1.5 text-xs font-medium text-secondary">{t('menu.learningWorkspaces')}</p>
                       <Link
-                        to="/provider"
+                        to={contextExitHref || '/dashboard'}
                         onClick={() => setMenuOpen(false)}
-                        aria-current={inProviderConsole ? 'page' : undefined}
+                        aria-current={isPersonalWorkspace ? 'page' : undefined}
                         className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
                       >
-                        <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-hairline bg-paper text-xs font-medium text-ink">P</span>
-                        <span className="min-w-0 flex-1 font-medium">{t('menu.providerConsole')}</span>
-                        {inProviderConsole && (
-                          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="m5 12 4 4L19 6" />
-                          </svg>
-                        )}
-                      </Link>
-                    )}
-                    {employerMemberships?.some((m) => m.role === 'admin') && (
-                      <Link
-                        to="/employer"
-                        onClick={() => setMenuOpen(false)}
-                        aria-current={inEmployerAdminConsole ? 'page' : undefined}
-                        className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
-                      >
-                        <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-hairline bg-paper text-xs font-medium text-ink">E</span>
-                        <span className="min-w-0 flex-1 font-medium">{t('menu.employerConsole')}</span>
-                        {inEmployerAdminConsole && (
-                          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="m5 12 4 4L19 6" />
-                          </svg>
-                        )}
-                      </Link>
-                    )}
-                    {isPlatformAdmin && (
-                      <Link
-                        to="/admin"
-                        onClick={() => setMenuOpen(false)}
-                        aria-current={inPlatformConsole ? 'page' : undefined}
-                        className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
-                      >
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-hairline bg-paper">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-hairline bg-paper">
                           <img src="/favicon.svg" alt="" className="h-5 w-5 object-contain" />
                         </span>
-                        <span className="min-w-0 flex-1 font-medium">{t('menu.platformConsole')}</span>
-                        {inPlatformConsole && (
+                        <span className="min-w-0 flex-1 font-medium">Personal LearnScope</span>
+                        {isPersonalWorkspace && (
                           <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="m5 12 4 4L19 6" />
                           </svg>
                         )}
                       </Link>
+                      {employerPortals.map((employer) => {
+                        const isActive = activeEmployerSlug === employer.organisation.slug
+                        return (
+                          <Link
+                            key={employer.id}
+                            to={`/providers/${encodeURIComponent(employer.organisation.slug)}`}
+                            onClick={() => setMenuOpen(false)}
+                            aria-current={isActive ? 'page' : undefined}
+                            className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
+                          >
+                            <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-hairline bg-paper text-xs font-medium text-ink">
+                              {employer.organisation.logo_url
+                                ? <img src={employer.organisation.logo_url} alt="" className="h-full w-full object-contain" />
+                                : employer.name.trim().charAt(0).toUpperCase()}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate font-medium">{employer.name}</span>
+                            {isActive && (
+                              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="m5 12 4 4L19 6" />
+                              </svg>
+                            )}
+                          </Link>
+                        )
+                      })}
+                      {employerPortalsLoading && <p role="status" className="px-4 py-2 text-xs text-secondary">Loading employer workspaces…</p>}
+                    </div>
+                    {hasAdminWorkspaces && (
+                      <div role="group" aria-labelledby="admin-workspaces-label" className="border-b border-hairline py-2">
+                        <p id="admin-workspaces-label" className="px-4 pb-1.5 text-xs font-medium text-secondary">{t('menu.administration')}</p>
+                        {organisationMemberships?.length > 0 && (
+                          <Link
+                            to="/provider"
+                            onClick={() => setMenuOpen(false)}
+                            aria-current={inProviderConsole ? 'page' : undefined}
+                            className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
+                          >
+                            <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-hairline bg-paper text-xs font-medium text-ink">P</span>
+                            <span className="min-w-0 flex-1 font-medium">{t('menu.providerConsole')}</span>
+                            {inProviderConsole && (
+                              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="m5 12 4 4L19 6" />
+                              </svg>
+                            )}
+                          </Link>
+                        )}
+                        {hasEmployerAdminWorkspace && (
+                          <Link
+                            to="/employer"
+                            onClick={() => setMenuOpen(false)}
+                            aria-current={inEmployerAdminConsole ? 'page' : undefined}
+                            className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
+                          >
+                            <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-hairline bg-paper text-xs font-medium text-ink">E</span>
+                            <span className="min-w-0 flex-1 font-medium">{t('menu.employerConsole')}</span>
+                            {inEmployerAdminConsole && (
+                              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="m5 12 4 4L19 6" />
+                              </svg>
+                            )}
+                          </Link>
+                        )}
+                        {isPlatformAdmin && (
+                          <Link
+                            to="/admin"
+                            onClick={() => setMenuOpen(false)}
+                            aria-current={inPlatformConsole ? 'page' : undefined}
+                            className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
+                          >
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-hairline bg-paper">
+                              <img src="/favicon.svg" alt="" className="h-5 w-5 object-contain" />
+                            </span>
+                            <span className="min-w-0 flex-1 font-medium">{t('menu.platformConsole')}</span>
+                            {inPlatformConsole && (
+                              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="m5 12 4 4L19 6" />
+                              </svg>
+                            )}
+                          </Link>
+                        )}
+                      </div>
                     )}
-                  </div>
+                  </nav>
                   {isPersonalWorkspace && (
                     <div className="border-b border-hairline py-2">
                       <p className="px-4 pb-1.5 text-xs font-medium text-secondary">{t('menu.personalAccount')}</p>
