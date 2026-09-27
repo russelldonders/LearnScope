@@ -327,7 +327,7 @@ export default function CourseCatalogue() {
                     {course.provider &&
                       (course.providerSlug ? (
                         <Link
-                          to={`/providers/${course.providerSlug}`}
+                          to={`/organisations/${course.providerSlug}`}
                           onClick={(e) => e.stopPropagation()}
                           className="hover:text-moss hover:underline"
                         >
@@ -425,7 +425,7 @@ function CourseDetailModal({ course, enrolled, completed, enrolling, onEnrol, on
         <p className="font-mono text-xs text-secondary mb-3">
           {course.provider &&
             (course.providerSlug ? (
-              <Link to={`/providers/${course.providerSlug}`} className="hover:text-moss hover:underline">
+              <Link to={`/organisations/${course.providerSlug}`} className="hover:text-moss hover:underline">
                 {course.provider}
               </Link>
             ) : (

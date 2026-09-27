@@ -195,7 +195,7 @@ export default function ProviderProfile() {
           hideNavLinks
           brandLogoUrl={profile?.organisation.logoUrl}
           brandName={profile?.organisation.name}
-          brandHomeHref={`/providers/${slug}`}
+          brandHomeHref={`/organisations/${slug}`}
         />
       ) : (
         <PublicHeader organisation={profile?.organisation} slug={slug} />
@@ -378,7 +378,7 @@ function PublicHeader({ organisation, slug }) {
   const ctaTextClass = organisation?.brandPrimaryColor ? 'text-white' : 'text-paper'
   return (
     <header className="max-w-4xl mx-auto px-4 py-6 flex items-center justify-between">
-      <Link to={organisation?.logoUrl ? `/providers/${slug}` : '/'} className="flex items-center gap-2 font-display text-2xl text-[var(--org-text,var(--color-ink))]">
+      <Link to={organisation?.logoUrl ? `/organisations/${slug}` : '/'} className="flex items-center gap-2 font-display text-2xl text-[var(--org-text,var(--color-ink))]">
         <img
           src={organisation?.logoUrl || '/favicon.svg'}
           alt=""

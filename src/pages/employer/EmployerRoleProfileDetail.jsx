@@ -208,7 +208,7 @@ export default function EmployerRoleProfileDetail() {
             straight to this profile. Falls back to a bare /employer before
             it's loaded. */}
         <Link
-          to={employer ? `/organisation?employer=${employer.id}&section=roles` : '/organisation'}
+          to={employer ? `/organisation?org=${employer.id}&section=roles` : '/organisation'}
           className="text-sm text-secondary hover:text-ink mb-4 inline-block"
         >
           ← Back to role profiles

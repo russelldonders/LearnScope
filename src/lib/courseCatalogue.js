@@ -196,7 +196,7 @@ export async function resumePendingEnrolment(userId, explicitCourseId = null) {
 export async function listMyCourseAssignments(userId) {
   const { data, error } = await supabase
     .from('course_assignments')
-    .select('id, catalogue_course_id, status, created_at, course_catalogue(id, name, provider, course_type, duration), employers(id, name)')
+    .select('id, catalogue_course_id, status, created_at, course_catalogue(id, name, provider, course_type, duration), employers:organisations!course_assignments_organisation_fkey(id, name)')
     .eq('assigned_to', userId)
     .eq('status', 'assigned')
     .order('created_at', { ascending: false })

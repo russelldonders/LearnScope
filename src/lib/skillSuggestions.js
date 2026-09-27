@@ -14,7 +14,7 @@ import { findOrCreatePersonalSkill } from './skillLibrary'
 export async function listMySkillSuggestions(userId) {
   const { data, error } = await supabase
     .from('employer_skill_suggestions')
-    .select('id, skill_library_id, skill_name, suggested_target_level, target_date, comments, status, created_at, employers(id, name)')
+    .select('id, skill_library_id, skill_name, suggested_target_level, target_date, comments, status, created_at, employers:organisations!employer_skill_suggestions_organisation_fkey(id, name)')
     .eq('learner_id', userId)
     .eq('status', 'suggested')
     .order('created_at', { ascending: false })

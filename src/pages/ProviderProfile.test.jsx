@@ -56,9 +56,9 @@ afterEach(cleanup)
 
 function renderProfile() {
   return render(
-    <MemoryRouter initialEntries={['/providers/acme']}>
+    <MemoryRouter initialEntries={['/organisations/acme']}>
       <Routes>
-        <Route path="/providers/:slug" element={<ProviderProfile />} />
+        <Route path="/organisations/:slug" element={<ProviderProfile />} />
         <Route path="/organisation/learning" element={<Destination label="Learner LMS" />} />
         <Route path="/login" element={<Destination label="Login" />} />
       </Routes>

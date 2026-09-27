@@ -144,10 +144,10 @@ export default function ProviderCatalogueDetail() {
   // Reconstructed from the loaded catalogue itself, not passed-through
   // navigation state -- so "All catalogues" always returns to the right
   // organisation/section even after a refresh or a bookmarked link here.
-  const employerContext = searchParams.get('employer')
-  const detailSuffix = employerContext ? `?employer=${encodeURIComponent(employerContext)}` : ''
+  const employerContext = searchParams.get('org')
+  const detailSuffix = employerContext ? `?org=${encodeURIComponent(employerContext)}` : ''
   const backToProviderConsole = employerContext
-    ? `/organisation?employer=${encodeURIComponent(employerContext)}&section=provider-catalogues`
+    ? `/organisation?org=${encodeURIComponent(employerContext)}&section=provider-catalogues`
     : `/organisation?org=${catalogue.organisation_id}&section=catalogues`
   function catalogueSearch(tabKey = null) {
     const next = new URLSearchParams()

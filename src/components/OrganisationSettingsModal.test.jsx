@@ -135,7 +135,7 @@ describe('OrganisationSettingsModal logo colour recommendations', () => {
     expect(screen.getByRole('heading', { name: 'Organisation link' })).toBeVisible()
     expect(screen.getByText(/Employer members see their private learner LMS/)).toBeVisible()
     expect(screen.getByRole('link', { name: 'Open organisation link in a new window' }))
-      .toHaveAttribute('href', expect.stringContaining('/providers/acme'))
+      .toHaveAttribute('href', expect.stringContaining('/organisations/acme'))
     expect(screen.getByRole('button', { name: 'Copy organisation link' })).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Copy public link' })).not.toBeInTheDocument()
     expect(screen.getByText('Show a public catalogue to other visitors')).toBeVisible()

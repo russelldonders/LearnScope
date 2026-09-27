@@ -2,17 +2,19 @@ import { supabase } from '../supabaseClient'
 import { callAdminApi } from './adminApi'
 
 export async function listOrganisations() {
-  const { data, error } = await supabase.from('organisations').select('*').order('name')
+  const { data, error } = await supabase
+    .from('organisations')
+    .select('*, organisation_capabilities(capability, status)')
+    .order('name')
   if (error) throw error
   return data ?? []
 }
 
-export async function createOrganisation(userId, name) {
-  const { data, error } = await supabase
-    .from('organisations')
-    .insert({ name: name.trim(), created_by: userId })
-    .select()
-    .single()
+export async function createOrganisation(name, capabilities = []) {
+  const { data, error } = await supabase.rpc('create_organisation', {
+    p_name: name.trim(),
+    p_capabilities: capabilities,
+  })
   if (error) throw error
   return data
 }
@@ -22,6 +24,14 @@ export async function setOrganisationStatus(id, status) {
     .from('organisations')
     .update({ status, updated_at: new Date().toISOString() })
     .eq('id', id)
+  if (error) throw error
+}
+
+export async function setOrganisationCapabilities(id, capabilities) {
+  const { error } = await supabase.rpc('set_organisation_capabilities', {
+    p_organisation_id: id,
+    p_capabilities: capabilities,
+  })
   if (error) throw error
 }
 

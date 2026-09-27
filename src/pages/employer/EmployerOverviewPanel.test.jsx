@@ -35,7 +35,7 @@ describe('EmployerOverviewPanel', () => {
     expect(await screen.findByText('1 learner currently connected to this employer')).toBeInTheDocument()
     expect(screen.getByText('1 invitation waiting for a response')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Active learners/ })).toHaveAttribute(
-      'href', '/?employer=employer-1&section=users'
+      'href', '/?org=employer-1&section=users'
     )
   })
 

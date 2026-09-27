@@ -35,17 +35,17 @@ const QUEUE_TILES = [
   },
   {
     key: 'inactiveProviders',
-    heading: 'Inactive provider organisations',
-    to: '/admin/providers?status=inactive',
+    heading: 'Inactive organisations',
+    to: '/admin/organisations?status=inactive',
     load: countInactiveProviders,
-    describe: (n) => `${n} provider organisation${n === 1 ? '' : 's'} marked inactive`,
+    describe: (n) => `${n} organisation${n === 1 ? '' : 's'} marked inactive`,
   },
   {
     key: 'pendingInvitations',
     heading: 'Pending staff invitations',
-    to: '/admin/providers',
+    to: '/admin/organisations',
     load: countPendingStaffInvitations,
-    describe: (n) => `${n} provider-staff invitation${n === 1 ? '' : 's'} not yet accepted`,
+    describe: (n) => `${n} organisation access invitation${n === 1 ? '' : 's'} not yet accepted`,
   },
 ]
 

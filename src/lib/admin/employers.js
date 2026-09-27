@@ -9,15 +9,24 @@ import { callAdminApi } from './adminApi'
 // employer's own admin sees only their own employer(s) -- no service-role
 // round trip needed for either.
 export async function listEmployers() {
-  const { data, error } = await supabase.from('employers').select('*').order('name')
+  const { data, error } = await supabase
+    .from('organisations')
+    .select('*, organisation_capabilities!inner(capability, status)')
+    .eq('organisation_capabilities.capability', 'employs_people')
+    .eq('organisation_capabilities.status', 'active')
+    .order('name')
   if (error) throw error
-  return data ?? []
+  return (data ?? []).map((organisation) => ({
+    ...organisation,
+    employer_code: organisation.org_code,
+    provider_organisation_id: organisation.id,
+  }))
 }
 
 export async function getEmployer(id) {
-  const { data, error } = await supabase.from('employers').select('*').eq('id', id).single()
+  const { data, error } = await supabase.from('organisations').select('*').eq('id', id).single()
   if (error) throw error
-  return data
+  return { ...data, employer_code: data.org_code, provider_organisation_id: data.id }
 }
 
 // create_employer (20260902090000) is security definer and platform-admin-
@@ -63,7 +72,7 @@ export async function removeEmployerMember(memberRowId) {
 export async function listMyPendingEmployerInvites(userId) {
   const { data, error } = await supabase
     .from('employer_members')
-    .select('id, role, created_at, employers(id, name)')
+    .select('id, role, created_at, employers:organisations!employer_members_organisation_fkey(id, name)')
     .eq('user_id', userId)
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
@@ -254,7 +263,7 @@ export async function listEmployerDataAccessRequests(employerId) {
 export async function listMyPendingDataAccessRequests(userId) {
   const { data, error } = await supabase
     .from('employer_data_access_requests')
-    .select('id, employer_id, created_at, requested_data, requested_skill_library_ids, requested_skill_names, request_comment, employers(id, name)')
+    .select('id, employer_id, created_at, requested_data, requested_skill_library_ids, requested_skill_names, request_comment, employers:organisations!employer_data_access_requests_organisation_fkey(id, name)')
     .eq('learner_id', userId)
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
@@ -270,7 +279,7 @@ export async function listMyPendingDataAccessRequests(userId) {
 export async function listMyEmployerDataAccessStatus(userId) {
   const { data, error } = await supabase
     .from('employer_data_access_requests')
-    .select('id, employer_id, status, requested_by, created_at, decided_at, approved_data, employers(id, name)')
+    .select('id, employer_id, status, requested_by, created_at, decided_at, approved_data, employers:organisations!employer_data_access_requests_organisation_fkey(id, name)')
     .eq('learner_id', userId)
     .order('created_at', { ascending: false })
   if (error) throw error

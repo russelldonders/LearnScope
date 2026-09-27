@@ -4,8 +4,7 @@ import AppHeader from '../../components/AppHeader'
 const SECTIONS = [
   { to: '/admin', label: 'Overview' },
   { to: '/admin/users', label: 'Users' },
-  { to: '/admin/providers', label: 'Providers' },
-  { to: '/admin/employers', label: 'Employers' },
+  { to: '/admin/organisations', label: 'Organisations' },
   { to: '/admin/catalogue', label: 'Courses' },
   { to: '/admin/skills', label: 'Skill library' },
   { to: '/admin/tags', label: 'Tags' },
@@ -37,7 +36,7 @@ export default function AdminLayout({ children }) {
           </a>
         </div>
         <p className="text-sm text-secondary mb-6">
-          Manage users, provider organisations, and the shared courses, skill library and
+          Manage users, organisations, and the shared courses, skill library and
           tags.
         </p>
 

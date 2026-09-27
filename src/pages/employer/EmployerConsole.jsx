@@ -14,7 +14,6 @@ import { ProviderTrainingSection, ProviderCataloguesSection } from '../provider/
 import TrainingTeamAccessDialog from './TrainingTeamAccessDialog'
 import EmployerSettingsDialog from './EmployerSettingsDialog'
 import {
-  listEmployers,
   listEmployerMembers,
   addEmployerMember,
   removeEmployerMember,
@@ -47,6 +46,9 @@ import EmployerRoleProfilesSection from './EmployerRoleProfilesSection'
 import EmployerOverviewPanel from './EmployerOverviewPanel'
 import EmployerManagementSection from './EmployerManagementSection'
 import EmployerCatalogueAccessPanel from './EmployerCatalogueAccessPanel'
+import ProviderOverviewPanel from '../provider/ProviderOverviewPanel'
+import OrganisationSettingsModal from '../../components/OrganisationSettingsModal'
+import { OrganisationStaffPanel } from '../admin/AdminProviders'
 
 // Training, Skills, Catalogues and Resources belong to the attached provider
 // organisation (the same components ProviderConsole.jsx mounts, reused
@@ -74,9 +76,9 @@ const SECTIONS = [
   { key: 'provider-catalogues', label: 'Catalogues', providerTab: true },
   { key: 'provider-resources', label: 'Resources', providerTab: true },
   { key: 'provider-lti-tools', label: 'LTI tools', adminOnly: true, providerTab: true },
-  { key: 'users', label: 'Staff' },
-  { key: 'roles', label: 'Role profiles' },
-  { key: 'providers', label: 'Linked providers' },
+  { key: 'users', label: 'People' },
+  { key: 'roles', label: 'Role profiles', workforceOnly: true },
+  { key: 'providers', label: 'Distribution' },
 ]
 
 const LEARNER_SORT_ACCESSORS = {
@@ -240,7 +242,6 @@ export default function EmployerConsole() {
   const { user, employerMemberships, organisationMemberships } = useAuth()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [employers, setEmployers] = useState([])
   const [organisations, setOrganisations] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -249,7 +250,7 @@ export default function EmployerConsole() {
   // same convention as ProviderConsole.jsx -- re-derived from searchParams
   // on every render so refresh, Back/Forward, and a shared link all restore
   // the same view.
-  const selectedEmployerId = searchParams.get('employer')
+  const selectedEmployerId = searchParams.get('org')
   const requestedSection = searchParams.get('section') ?? 'overview'
   // Preserve old bookmarked links after merging the former Users and
   // Learners tabs (both legacy destinations now open the combined view),
@@ -284,14 +285,29 @@ export default function EmployerConsole() {
   }
 
   const myEmployerIds = useMemo(
-    () => (employerMemberships ?? []).filter((m) => m.role === 'admin').map((m) => m.employer_id),
-    [employerMemberships]
+    () => [...new Set([
+      ...(employerMemberships ?? []).filter((m) => m.role === 'admin').map((m) => m.employer_id),
+      ...(organisationMemberships ?? []).filter((m) => m.role === 'admin').map((m) => m.organisation_id),
+    ])],
+    [employerMemberships, organisationMemberships]
   )
   const myEmployers = useMemo(
-    () => employers.filter((e) => myEmployerIds.includes(e.id)),
-    [employers, myEmployerIds]
+    () => organisations
+      .filter((organisation) => myEmployerIds.includes(organisation.id) && organisation.status === 'active')
+      .map((organisation) => ({
+        ...organisation,
+        employer_code: organisation.org_code,
+        provider_organisation_id: organisation.id,
+      })),
+    [organisations, myEmployerIds]
   )
   const selectedEmployer = myEmployers.find((e) => e.id === selectedEmployerId)
+  const activeCapabilities = new Set(
+    (selectedEmployer?.organisation_capabilities ?? [])
+      .filter((item) => item.status === 'active')
+      .map((item) => item.capability)
+  )
+  const hasWorkforceCapability = activeCapabilities.has('employs_people')
   // The attached provider org, required to actually be active -- mirrors
   // ProviderConsole.jsx's own myOrgs filter ("Deactivating an organisation
   // revokes its staff's actual access (RLS, 0069) -- filter to active orgs
@@ -316,6 +332,7 @@ export default function EmployerConsole() {
     ? (organisationMemberships ?? []).find((m) => m.organisation_id === attachedProviderOrg.id)?.role
     : undefined
   const visibleSections = SECTIONS.filter((s) => {
+    if (s.workforceOnly && !hasWorkforceCapability) return false
     if (s.adminOnly) return myProviderRole === 'admin'
     if (s.providerOnly) return !!myProviderRole
     return true
@@ -353,11 +370,8 @@ export default function EmployerConsole() {
   }
 
   useEffect(() => {
-    Promise.all([listEmployers(), listOrganisations()])
-      .then(([employersData, organisationsData]) => {
-        setEmployers(employersData)
-        setOrganisations(organisationsData)
-      })
+    listOrganisations()
+      .then(setOrganisations)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }, [])
@@ -375,7 +389,7 @@ export default function EmployerConsole() {
   // this correction doesn't itself become a Back-button stop.
   useEffect(() => {
     if (myEmployers.length > 0 && !myEmployers.some((e) => e.id === selectedEmployerId)) {
-      setSearchParams(buildParams({ employer: myEmployers[0].id }), { replace: true })
+      setSearchParams(buildParams({ org: myEmployers[0].id, employer: null }), { replace: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myEmployers, selectedEmployerId])
@@ -400,13 +414,13 @@ export default function EmployerConsole() {
         ) : (
           <>
             {myEmployers.length > 1 && (
-              <div role="tablist" aria-label="Employer" className="flex items-center flex-wrap gap-1 mb-4 border-b border-hairline">
+              <div role="tablist" aria-label="Organisation" className="flex items-center flex-wrap gap-1 mb-4 border-b border-hairline">
                 {myEmployers.map((employer) => (
                   <Link
                     key={employer.id}
                     ref={(el) => { employerTabRefs.current[employer.id] = el }}
                     id={`employer-tab-${employer.id}`}
-                    to={`?${buildParams({ employer: employer.id, ...EMPLOYER_FILTER_RESET }).toString()}`}
+                    to={`?${buildParams({ org: employer.id, employer: null, ...EMPLOYER_FILTER_RESET }).toString()}`}
                     role="tab"
                     aria-selected={selectedEmployerId === employer.id}
                     aria-controls={`employer-panel-${employer.id}`}
@@ -420,7 +434,7 @@ export default function EmployerConsole() {
                         // employer switch, same reasoning as ProviderConsole's org
                         // switcher -- a stale q/status filter would otherwise carry
                         // over and make the new employer's list look empty/wrong.
-                        onChange: (employerId) => setSearchParams(buildParams({ employer: employerId, ...EMPLOYER_FILTER_RESET })),
+                        onChange: (employerId) => setSearchParams(buildParams({ org: employerId, employer: null, ...EMPLOYER_FILTER_RESET })),
                       })
                     }
                     className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
@@ -536,14 +550,15 @@ export default function EmployerConsole() {
                   tabIndex={0}
                 >
                   {currentSection === 'overview' && (
-                    <EmployerOverviewPanel key={`${selectedEmployer.id}-overview`} employer={selectedEmployer} />
+                    hasWorkforceCapability
+                      ? <EmployerOverviewPanel key={`${selectedEmployer.id}-overview`} employer={selectedEmployer} />
+                      : <ProviderOverviewPanel key={`${selectedEmployer.id}-overview`} organisation={selectedEmployer} role={myProviderRole} />
                   )}
                   {currentSection === 'provider-training' && (
                     <div className="space-y-4">
                       {!myProviderRole && (
                         <p className="text-sm text-secondary">
-                          This view is read-only. Ask an admin of this employer's provider organisation to manage
-                          courses there.
+                          This view is read-only. Ask an organisation administrator to manage courses.
                         </p>
                       )}
                       <ProviderTrainingSection
@@ -554,17 +569,16 @@ export default function EmployerConsole() {
                         searchParams={searchParams}
                         setSearchParams={setSearchParams}
                         readOnly={!myProviderRole}
-                        detailContext={`&employer=${encodeURIComponent(selectedEmployer.id)}`}
+                        detailContext={`&org=${encodeURIComponent(selectedEmployer.id)}`}
                       />
                     </div>
                   )}
                   {currentSection === 'provider-catalogues' && (
                     <div className="space-y-4">
-                      <EmployerCatalogueAccessPanel employerId={selectedEmployer.id} />
+                      {hasWorkforceCapability && <EmployerCatalogueAccessPanel employerId={selectedEmployer.id} />}
                       {!myProviderRole && (
                         <p className="text-sm text-secondary">
-                          This view is read-only. Ask an admin of this employer's provider organisation to manage
-                          catalogues there.
+                          This view is read-only. Ask an organisation administrator to manage catalogues.
                         </p>
                       )}
                       <ProviderCataloguesSection
@@ -573,7 +587,7 @@ export default function EmployerConsole() {
                         userId={user.id}
                         canCreate={myProviderRole === 'admin'}
                         readOnly={!myProviderRole}
-                        detailContext={`&employer=${encodeURIComponent(selectedEmployer.id)}`}
+                        detailContext={`&org=${encodeURIComponent(selectedEmployer.id)}`}
                       />
                     </div>
                   )}
@@ -581,8 +595,7 @@ export default function EmployerConsole() {
                     <div className="space-y-4">
                       {!myProviderRole && (
                         <p className="text-sm text-secondary">
-                          This view is read-only. Ask an admin of this employer's provider organisation to manage
-                          resources there.
+                          This view is read-only. Ask an organisation administrator to manage resources.
                         </p>
                       )}
                       <ResourceLibrarySection
@@ -608,14 +621,18 @@ export default function EmployerConsole() {
                     />
                   )}
                   {currentSection === 'users' && (
-                    <EmployerUsersPanel
-                      key={`${selectedEmployer.id}-users`}
-                      employer={selectedEmployer}
-                      attachedProviderOrg={attachedProviderOrg}
-                      canManageTrainingTeam={myProviderRole === 'admin'}
-                      searchParams={searchParams}
-                      setSearchParams={setSearchParams}
-                    />
+                    hasWorkforceCapability ? (
+                      <EmployerUsersPanel
+                        key={`${selectedEmployer.id}-users`}
+                        employer={selectedEmployer}
+                        attachedProviderOrg={attachedProviderOrg}
+                        canManageTrainingTeam={myProviderRole === 'admin'}
+                        searchParams={searchParams}
+                        setSearchParams={setSearchParams}
+                      />
+                    ) : (
+                      <OrganisationStaffPanel key={`${selectedEmployer.id}-users`} organisation={selectedEmployer} heading="People" />
+                    )
                   )}
                   {currentSection === 'roles' && (
                     <EmployerRoleProfilesSection
@@ -628,13 +645,17 @@ export default function EmployerConsole() {
                     />
                   )}
                   {currentSection === 'providers' && (
-                    <EmployerProvidersPanel
-                      key={selectedEmployer.id}
-                      employer={selectedEmployer}
-                      user={user}
-                      searchParams={searchParams}
-                      setSearchParams={setSearchParams}
-                    />
+                    hasWorkforceCapability ? (
+                      <EmployerProvidersPanel
+                        key={selectedEmployer.id}
+                        employer={selectedEmployer}
+                        user={user}
+                        searchParams={searchParams}
+                        setSearchParams={setSearchParams}
+                      />
+                    ) : (
+                      <ProviderSharingPanel key={selectedEmployer.id} side="provider" organisation={selectedEmployer} userId={user.id} />
+                    )
                   )}
                 </div>
               </div>
@@ -643,7 +664,7 @@ export default function EmployerConsole() {
         )}
       </main>
 
-      {showSettings && selectedEmployer && (
+      {showSettings && selectedEmployer && (hasWorkforceCapability ? (
         <EmployerSettingsDialog
           employer={selectedEmployer}
           userId={user.id}
@@ -652,7 +673,15 @@ export default function EmployerConsole() {
           onOrganisationUpdated={reloadOrganisations}
           onClose={() => setShowSettings(false)}
         />
-      )}
+      ) : (
+        <OrganisationSettingsModal
+          organisation={selectedEmployer}
+          onClose={() => {
+            setShowSettings(false)
+            reloadOrganisations()
+          }}
+        />
+      ))}
     </div>
   )
 }
@@ -761,7 +790,7 @@ export function EmployerUsersPanel({ employer, attachedProviderOrg, canManageTra
 
   return (
     <div>
-      <nav aria-label="Staff workspace" className="mb-6 flex flex-wrap gap-1 border-b border-hairline">
+      <nav aria-label="People workspace" className="mb-6 flex flex-wrap gap-1 border-b border-hairline">
         <Link
           to={`?${viewParams(null)}`}
           aria-current={!showManagement ? 'page' : undefined}

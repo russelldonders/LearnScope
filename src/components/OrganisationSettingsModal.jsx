@@ -59,7 +59,7 @@ export default function OrganisationSettingsModal({ organisation, learnerPortal,
   const [copiedLink, setCopiedLink] = useState(null)
   const fileInputRef = useRef(null)
 
-  const publicProfileUrl = `${window.location.origin}/providers/${organisation.slug}`
+  const publicProfileUrl = `${window.location.origin}/organisations/${organisation.slug}`
 
   function handleCopyLink(url, linkType) {
     navigator.clipboard.writeText(url)

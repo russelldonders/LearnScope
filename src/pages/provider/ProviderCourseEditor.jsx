@@ -370,7 +370,7 @@ export default function ProviderCourseEditor() {
   const { courseId } = useParams()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const employerContext = searchParams.get('employer')
+  const employerContext = searchParams.get('org')
   const { user, organisationMemberships } = useAuth()
   const [course, setCourse] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -501,7 +501,7 @@ export default function ProviderCourseEditor() {
     setSaving(true)
     try {
       const draftId = await createDraftCourseVersion(course.id)
-      navigate(`/organisation/training/${draftId}${employerContext ? `?employer=${encodeURIComponent(employerContext)}` : ''}`)
+      navigate(`/organisation/training/${draftId}${employerContext ? `?org=${encodeURIComponent(employerContext)}` : ''}`)
     } catch (err) {
       setSaveError(err.message)
     } finally {
@@ -521,7 +521,7 @@ export default function ProviderCourseEditor() {
             the course has loaded. */}
         <Link
           to={employerContext
-            ? `/organisation?employer=${encodeURIComponent(employerContext)}&section=provider-training`
+            ? `/organisation?org=${encodeURIComponent(employerContext)}&section=provider-training`
             : course ? `/organisation?org=${course.organisation_id}&section=training` : '/organisation'}
           className="text-sm text-secondary hover:text-ink mb-4 inline-block"
         >

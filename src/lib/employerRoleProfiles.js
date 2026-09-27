@@ -229,7 +229,7 @@ export async function listMyEmployerRoleAssignments(userId) {
     .select(`
       id, status, proposed_at, decided_at, disconnected_at, learner_experience_id,
       employer_members!inner(user_id),
-      employer_role_profiles!inner(${PROFILE_SELECT}, employers(id, name)),
+      employer_role_profiles!inner(${PROFILE_SELECT}, employers:organisations!employer_role_profiles_organisation_fkey(id, name)),
       experience(id, title, organization, start_date)
     `)
     .eq('employer_members.user_id', userId)

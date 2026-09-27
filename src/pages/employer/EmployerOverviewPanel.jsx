@@ -107,7 +107,7 @@ export default function EmployerOverviewPanel({ employer, loaders = DEFAULT_LOAD
           {tiles.map((tile) => (
             <li key={tile.key}>
               <Link
-                to={`?employer=${employer.id}&section=${tile.section}`}
+                to={`?org=${employer.id}&section=${tile.section}`}
                 className="block h-full rounded-lg border border-hairline bg-card p-4 hover:border-moss transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-moss"
               >
                 {tile.result?.status === 'error' ? (

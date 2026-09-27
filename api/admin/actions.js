@@ -1031,7 +1031,7 @@ async function addEmployerMember(admin, caller, { employerId, email, role, field
   // That grant moves to decide_employer_invite's own accept path instead.
   if (role === 'admin' && !existingUserId) {
     const { data: employerRow, error: employerFetchError } = await admin
-      .from('employers')
+      .from('organisations')
       .select('provider_organisation_id')
       .eq('id', employerId)
       .single()
@@ -1106,7 +1106,7 @@ async function notifyEmployerInvitePending(admin, email, employerId, role) {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) return
 
-  const { data: employer } = await admin.from('employers').select('name').eq('id', employerId).maybeSingle()
+  const { data: employer } = await admin.from('organisations').select('name').eq('id', employerId).maybeSingle()
   const employerName = employer?.name || 'an employer'
   const roleLabel = role === 'admin' ? 'an admin' : 'a member'
 

@@ -47,7 +47,6 @@ export default function AppHeader({
   const location = useLocation()
   const [avatarUrl, setAvatarUrl] = useState(null)
   const [fullName, setFullName] = useState(null)
-  const [employerPortals, setEmployerPortals] = useState([])
   const [organisationPortals, setOrganisationPortals] = useState([])
   const [employerPortalsLoading, setEmployerPortalsLoading] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -73,9 +72,12 @@ export default function AppHeader({
   }, [user])
 
   useEffect(() => {
-    const employerIds = employerIdsKey ? employerIdsKey.split(',') : []
-    if (employerIds.length === 0) {
-      setEmployerPortals([])
+    const organisationIds = [...new Set([
+      ...(organisationIdsKey ? organisationIdsKey.split(',') : []),
+      ...(employerIdsKey ? employerIdsKey.split(',') : []),
+    ])]
+    if (organisationIds.length === 0) {
+      setOrganisationPortals([])
       setEmployerPortalsLoading(false)
       return
     }
@@ -83,36 +85,18 @@ export default function AppHeader({
     let cancelled = false
     setEmployerPortalsLoading(true)
     supabase
-      .from('employers')
-      .select('id, name, organisation:organisations!employers_provider_organisation_id_fkey(id, name, slug, logo_url)')
-      .in('id', employerIds)
-      .order('name')
-      .then(({ data, error }) => {
-        if (cancelled) return
-        setEmployerPortals(error ? [] : (data ?? []).filter((employer) => employer.organisation?.slug))
-        setEmployerPortalsLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [employerIdsKey])
-
-  useEffect(() => {
-    const organisationIds = organisationIdsKey ? organisationIdsKey.split(',') : []
-    if (organisationIds.length === 0) {
-      setOrganisationPortals([])
-      return
-    }
-
-    let cancelled = false
-    supabase
       .from('organisations')
-      .select('id, name, logo_url')
+      .select('id, name, slug, logo_url')
       .in('id', organisationIds)
       .order('name')
       .then(({ data, error }) => {
-        if (!cancelled) setOrganisationPortals(error ? [] : (data ?? []))
+        if (!cancelled) {
+          setOrganisationPortals(error ? [] : (data ?? []))
+          setEmployerPortalsLoading(false)
+        }
       })
     return () => { cancelled = true }
-  }, [organisationIdsKey])
+  }, [organisationIdsKey, employerIdsKey])
 
   const visibleNavLinks = NAV_LINKS.filter((link) => {
     if (link.requires === 'managerContexts') return managerContexts?.length > 0
@@ -123,7 +107,6 @@ export default function AppHeader({
     ? new URLSearchParams(location.search).get('org')
     : null
   const organisationParams = new URLSearchParams(location.search)
-  const activeEmployerId = location.pathname.startsWith('/organisation') ? organisationParams.get('employer') : null
   const activeOrganisationId = location.pathname.startsWith('/organisation') ? organisationParams.get('org') : null
   const isPersonalWorkspace = !activeEmployerSlug
     && !location.pathname.startsWith('/admin')
@@ -136,9 +119,15 @@ export default function AppHeader({
       .filter((membership) => membership.role === 'admin')
       .map((membership) => membership.employer_id)
   )
+  const employerIds = new Set((employerMemberships ?? []).map((membership) => membership.employer_id))
+  const employerPortals = organisationPortals
+    .filter((organisation) => employerIds.has(organisation.id) && organisation.slug)
+    .map((organisation) => ({ ...organisation, organisation }))
   const employerAdminPortals = employerPortals.filter((employer) => employerAdminIds.has(employer.id))
-  const attachedOrganisationIds = new Set(employerAdminPortals.map((employer) => employer.organisation.id))
-  const independentOrganisationPortals = organisationPortals.filter((organisation) => !attachedOrganisationIds.has(organisation.id))
+  const independentOrganisationPortals = organisationPortals.filter((organisation) =>
+    (organisationMemberships ?? []).some((membership) => membership.organisation_id === organisation.id && membership.role === 'admin')
+    && !employerAdminIds.has(organisation.id)
+  )
 
   useEffect(() => {
     if (!menuOpen) return
@@ -255,7 +244,7 @@ export default function AppHeader({
                         return (
                           <Link
                             key={employer.id}
-                            to={`/providers/${encodeURIComponent(employer.organisation.slug)}`}
+                            to={`/organisations/${encodeURIComponent(employer.organisation.slug)}`}
                             onClick={() => setMenuOpen(false)}
                             aria-current={isActive ? 'page' : undefined}
                             className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
@@ -282,9 +271,9 @@ export default function AppHeader({
                         {employerAdminPortals.map((employer) => (
                           <Link
                             key={employer.id}
-                            to={`/organisation?employer=${encodeURIComponent(employer.id)}`}
+                            to={`/organisation?org=${encodeURIComponent(employer.id)}`}
                             onClick={() => setMenuOpen(false)}
-                            aria-current={activeEmployerId === employer.id ? 'page' : undefined}
+                            aria-current={activeOrganisationId === employer.id ? 'page' : undefined}
                             className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
                           >
                             <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-hairline bg-paper text-xs font-medium text-ink">
@@ -293,7 +282,7 @@ export default function AppHeader({
                                 : employer.name.trim().charAt(0).toUpperCase()}
                             </span>
                             <span className="min-w-0 flex-1 truncate font-medium">{employer.name}</span>
-                            {activeEmployerId === employer.id && (
+                            {activeOrganisationId === employer.id && (
                               <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="m5 12 4 4L19 6" />
                               </svg>

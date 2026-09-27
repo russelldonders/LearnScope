@@ -178,7 +178,7 @@ export default function ProfilePrivacy() {
     }
     try {
       const [{ data: employersData, error: employersError }, statusRows] = await Promise.all([
-        supabase.from('employers').select('id, name').in('id', activeEmployerIds),
+        supabase.from('organisations').select('id, name').in('id', activeEmployerIds),
         listMyEmployerDataAccessStatus(user.id),
       ])
       if (employersError) throw employersError

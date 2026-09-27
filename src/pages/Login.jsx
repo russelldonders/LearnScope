@@ -89,7 +89,7 @@ export default function Login() {
         return
       }
       setSubmitting(false)
-      navigate(membership.role === 'admin' ? `/organisation?employer=${employer.id}` : `/organisation/learning?org=${orgSlug}`)
+      navigate(membership.role === 'admin' ? `/organisation?org=${employer.id}` : `/organisation/learning?org=${orgSlug}`)
       return
     }
 
@@ -141,7 +141,7 @@ export default function Login() {
     >
       <div className="w-full max-w-sm bg-[var(--org-background,var(--color-card))] border border-hairline rounded-lg p-8">
         <Link
-          to={branding?.logoUrl ? `/providers/${orgSlug}` : '/'}
+          to={branding?.logoUrl ? `/organisations/${orgSlug}` : '/'}
           className="flex items-center gap-2 font-display text-3xl text-ink mb-1"
         >
           <img src={branding?.logoUrl || '/favicon.svg'} alt="" className="w-8 h-8 object-contain rounded" />

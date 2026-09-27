@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { useAuth } from '../../context/AuthContext'
 import AdminLayout from './AdminLayout'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import StatusBadge from '../../components/StatusBadge'
@@ -9,6 +8,7 @@ import {
   createOrganisation,
   updateOrganisation,
   setOrganisationStatus,
+  setOrganisationCapabilities,
   listOrganisationMembers,
   removeOrganisationMember,
   inviteOrganisationStaff,
@@ -26,11 +26,18 @@ const STATUS_FILTERS = [
   { value: 'inactive', label: 'Inactive' },
 ]
 
+const CAPABILITY_OPTIONS = [
+  ['employs_people', 'Employs people'],
+  ['manages_workforce_development', 'Develops its workforce'],
+  ['authors_learning', 'Authors learning'],
+  ['supplies_learning_externally', 'Supplies learning externally'],
+]
+
 const ORG_SORT_ACCESSORS = {
   name: (o) => o.name?.toLowerCase() ?? '',
   org_code: (o) => o.org_code?.toLowerCase() ?? '',
   url: (o) => o.url?.toLowerCase() ?? '',
-  type: (o) => o.type ?? '',
+  capabilities: (o) => (o.organisation_capabilities ?? []).map((item) => item.capability).sort().join(','),
   status: (o) => o.status ?? '',
 }
 
@@ -70,12 +77,21 @@ const ORG_COLUMNS = [
       ),
   },
   {
-    key: 'type',
-    label: 'Type',
+    key: 'capabilities',
+    label: 'Capabilities',
     sortable: true,
     thClassName: 'whitespace-nowrap',
     cellClassName: 'px-4 py-3 text-secondary whitespace-nowrap',
-    renderCell: (o) => o.type,
+    renderCell: (o) => {
+      const labels = {
+        employs_people: 'People',
+        manages_workforce_development: 'Workforce',
+        authors_learning: 'Authoring',
+        supplies_learning_externally: 'External supply',
+      }
+      const active = (o.organisation_capabilities ?? []).filter((item) => item.status === 'active')
+      return active.length ? active.map((item) => labels[item.capability] ?? item.capability).join(', ') : 'None'
+    },
   },
   {
     key: 'status',
@@ -97,18 +113,18 @@ const STAFF_SORT_ACCESSORS = {
 }
 
 export default function AdminProviders() {
-  const { user } = useAuth()
   const [organisations, setOrganisations] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newName, setNewName] = useState('')
+  const [newCapabilities, setNewCapabilities] = useState(['authors_learning'])
   const [creating, setCreating] = useState(false)
 
   const [expandedId, setExpandedId] = useState(null)
   const [editingId, setEditingId] = useState(null)
-  const [editForm, setEditForm] = useState({ name: '', url: '' })
+  const [editForm, setEditForm] = useState({ name: '', url: '', capabilities: [] })
   const [saving, setSaving] = useState(false)
 
   // Search text, status filter, sort, page and pageSize all live in the URL
@@ -174,8 +190,9 @@ export default function AdminProviders() {
     setCreating(true)
     setError(null)
     try {
-      await createOrganisation(user.id, newName)
+      await createOrganisation(newName, newCapabilities)
       setNewName('')
+      setNewCapabilities(['authors_learning'])
       setShowCreateForm(false)
       await load()
     } catch (err) {
@@ -228,7 +245,13 @@ export default function AdminProviders() {
 
   function startEdit(org) {
     setEditingId(org.id)
-    setEditForm({ name: org.name, url: org.url ?? '' })
+    setEditForm({
+      name: org.name,
+      url: org.url ?? '',
+      capabilities: (org.organisation_capabilities ?? [])
+        .filter((item) => item.status === 'active')
+        .map((item) => item.capability),
+    })
     setError(null)
   }
 
@@ -238,7 +261,10 @@ export default function AdminProviders() {
     setSaving(true)
     setError(null)
     try {
-      await updateOrganisation(orgId, editForm)
+      await Promise.all([
+        updateOrganisation(orgId, editForm),
+        setOrganisationCapabilities(orgId, editForm.capabilities),
+      ])
       setEditingId(null)
       await load()
     } catch (err) {
@@ -252,7 +278,7 @@ export default function AdminProviders() {
     <AdminLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="font-display text-lg text-ink">Providers</h2>
+          <h2 className="font-display text-lg text-ink">Organisations</h2>
           <div className="flex items-center gap-2">
             <ColumnCustomizer
               idPrefix="admin-providers"
@@ -289,6 +315,23 @@ export default function AdminProviders() {
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
               />
             </div>
+            <fieldset className="min-w-[260px]">
+              <legend className="mb-1 text-sm text-secondary">Capabilities</legend>
+              <div className="grid gap-1 text-sm text-ink sm:grid-cols-2">
+                {CAPABILITY_OPTIONS.map(([value, label]) => (
+                  <label key={value} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={newCapabilities.includes(value)}
+                      onChange={(event) => setNewCapabilities((current) =>
+                        event.target.checked ? [...current, value] : current.filter((item) => item !== value)
+                      )}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
             <button
               type="submit"
               disabled={creating}
@@ -341,7 +384,7 @@ export default function AdminProviders() {
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
             <p className="text-secondary">
-              {organisations.length === 0 ? 'No provider organisations yet.' : 'No provider organisations match your search or filter.'}
+              {organisations.length === 0 ? 'No organisations yet.' : 'No organisations match your search or filter.'}
             </p>
           </div>
         ) : (
@@ -482,7 +525,7 @@ function OrganisationRow({
               {expanded ? 'Hide users' : 'Manage users'}
             </button>
             {org.is_system ? (
-              <span className="rounded-full bg-moss/10 px-2.5 py-1 text-xs font-medium text-moss">System provider</span>
+              <span className="rounded-full bg-moss/10 px-2.5 py-1 text-xs font-medium text-moss">System organisation</span>
             ) : (
               <button type="button" onClick={onToggleStatus} className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper whitespace-nowrap">
                 {org.status === 'active' ? 'Deactivate' : 'Reactivate'}
@@ -507,6 +550,26 @@ function OrganisationRow({
                   className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
                 />
               </div>
+              <fieldset>
+                <legend className="mb-1 text-sm text-secondary">Capabilities</legend>
+                <div className="grid gap-2 text-sm text-ink sm:grid-cols-2">
+                  {CAPABILITY_OPTIONS.map(([value, label]) => (
+                    <label key={value} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={editForm.capabilities.includes(value)}
+                        onChange={(event) => onEditFormChange((form) => ({
+                          ...form,
+                          capabilities: event.target.checked
+                            ? [...form.capabilities, value]
+                            : form.capabilities.filter((item) => item !== value),
+                        }))}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
               <div>
                 <label className="block text-sm text-secondary mb-1" htmlFor={`orgEditUrl-${org.id}`}>
                   Website URL

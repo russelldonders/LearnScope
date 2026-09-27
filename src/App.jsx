@@ -48,7 +48,6 @@ import AdminOverview from './pages/admin/AdminOverview'
 import AdminUsers from './pages/admin/AdminUsers'
 import AdminUserDetail from './pages/admin/AdminUserDetail'
 import AdminProviders from './pages/admin/AdminProviders'
-import AdminEmployers from './pages/admin/AdminEmployers'
 import AdminCatalogue from './pages/admin/AdminCatalogue'
 import AdminCourseDetail from './pages/admin/AdminCourseDetail'
 import AdminSkills from './pages/admin/AdminSkills'
@@ -87,7 +86,7 @@ function App() {
           <Route path="/rate/:code" element={<Rate />} />
           <Route path="/recommend/:code" element={<Recommend />} />
           <Route path="/shared/:token" element={<SharedProfile />} />
-          <Route path="/providers/:slug" element={<ProviderProfile />} />
+          <Route path="/organisations/:slug" element={<ProviderProfile />} />
           <Route
             path="/onboarding"
             element={
@@ -337,18 +336,10 @@ function App() {
             }
           />
           <Route
-            path="/admin/providers"
+            path="/admin/organisations"
             element={
               <PlatformAdminRoute>
                 <AdminProviders />
-              </PlatformAdminRoute>
-            }
-          />
-          <Route
-            path="/admin/employers"
-            element={
-              <PlatformAdminRoute>
-                <AdminEmployers />
               </PlatformAdminRoute>
             }
           />

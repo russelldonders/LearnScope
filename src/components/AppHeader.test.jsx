@@ -72,12 +72,12 @@ afterEach(() => {
 describe('AppHeader organisation branding', () => {
   it('uses the organisation foreground for the title and header controls', () => {
     render(
-      <MemoryRouter initialEntries={['/providers/leeds']}>
+      <MemoryRouter initialEntries={['/organisations/leeds']}>
         <AppHeader
           hideNavLinks
           brandLogoUrl="https://example.com/logo.png"
           brandName="Leeds United"
-          brandHomeHref="/providers/leeds"
+          brandHomeHref="/organisations/leeds"
         />
       </MemoryRouter>,
     )
@@ -132,9 +132,9 @@ describe('AppHeader organisation branding', () => {
         { employer_id: 'employer-2', role: 'member' },
       ],
     }
-    databaseMock.employerRows = [
-      { id: 'employer-1', name: 'Acme Stores', organisation: { id: 'org-1', slug: 'acme', logo_url: null } },
-      { id: 'employer-2', name: 'Northwind', organisation: { id: 'org-2', slug: 'northwind', logo_url: 'https://example.com/northwind.png' } },
+    databaseMock.organisationRows = [
+      { id: 'employer-1', name: 'Acme Stores', slug: 'acme', logo_url: null },
+      { id: 'employer-2', name: 'Northwind', slug: 'northwind', logo_url: 'https://example.com/northwind.png' },
     ]
 
     render(
@@ -144,9 +144,9 @@ describe('AppHeader organisation branding', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
-    expect(await screen.findByRole('link', { name: 'Acme Stores' })).toHaveAttribute('href', '/providers/acme')
+    expect(await screen.findByRole('link', { name: 'Acme Stores' })).toHaveAttribute('href', '/organisations/acme')
     expect(screen.getByRole('link', { name: 'Acme Stores' })).toHaveAttribute('aria-current', 'page')
-    expect(screen.getByRole('link', { name: 'Northwind' })).toHaveAttribute('href', '/providers/northwind')
+    expect(screen.getByRole('link', { name: 'Northwind' })).toHaveAttribute('href', '/organisations/northwind')
     expect(screen.getByRole('link', { name: 'Personal LearnScope' })).not.toHaveAttribute('aria-current')
   })
 
@@ -155,8 +155,8 @@ describe('AppHeader organisation branding', () => {
       ...authMock.value,
       employerMemberships: [{ employer_id: 'employer-1', role: 'admin' }],
     }
-    databaseMock.employerRows = [
-      { id: 'employer-1', name: 'Acme Stores', organisation: { id: 'org-1', slug: 'acme', logo_url: null } },
+    databaseMock.organisationRows = [
+      { id: 'employer-1', name: 'Acme Stores', slug: 'acme', logo_url: null },
     ]
 
     render(
@@ -169,23 +169,20 @@ describe('AppHeader organisation branding', () => {
     const links = await screen.findAllByRole('link', { name: 'Acme Stores' })
     expect(links).toHaveLength(2)
     expect(links[0]).toHaveAttribute('aria-current', 'page')
-    expect(links[1]).toHaveAttribute('href', '/organisation?employer=employer-1')
+    expect(links[1]).toHaveAttribute('href', '/organisation?org=employer-1')
   })
 
   it('separates learner-facing workspaces from organisation and platform administration', async () => {
     authMock.value = {
       ...authMock.value,
       isPlatformAdmin: true,
-      organisationMemberships: [{ organisation_id: 'org-1', role: 'admin' }],
+      organisationMemberships: [{ organisation_id: 'employer-1', role: 'admin' }],
       employerMemberships: [{ employer_id: 'employer-1', role: 'admin' }],
     }
-    databaseMock.employerRows = [
-      { id: 'employer-1', name: 'Acme Stores', organisation: { id: 'org-1', slug: 'acme', logo_url: null } },
-    ]
-    databaseMock.organisationRows = [{ id: 'org-1', name: 'Acme Stores', logo_url: null }]
+    databaseMock.organisationRows = [{ id: 'employer-1', name: 'Acme Stores', slug: 'acme', logo_url: null }]
 
     render(
-      <MemoryRouter initialEntries={['/organisation?employer=employer-1']}>
+      <MemoryRouter initialEntries={['/organisation?org=employer-1']}>
         <AppHeader hideNavLinks />
       </MemoryRouter>,
     )
@@ -198,7 +195,7 @@ describe('AppHeader organisation branding', () => {
     expect(await within(learningWorkspaces).findByRole('link', { name: 'Acme Stores' })).toBeVisible()
     const organisationLinks = within(administration).getAllByRole('link', { name: 'Acme Stores' })
     expect(organisationLinks).toHaveLength(1)
-    expect(organisationLinks[0]).toHaveAttribute('href', '/organisation?employer=employer-1')
+    expect(organisationLinks[0]).toHaveAttribute('href', '/organisation?org=employer-1')
     expect(organisationLinks[0]).toHaveAttribute('aria-current', 'page')
     expect(within(administration).getByRole('link', { name: 'menu.platformConsole' })).toHaveAttribute('href', '/admin')
     expect(learningWorkspaces.compareDocumentPosition(administration) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()

@@ -72,7 +72,7 @@ const CATALOGUE_COLUMNS = [
     cellClassName: 'px-4 py-3 text-secondary whitespace-nowrap',
     renderCell: (c) =>
       c.organisations?.name ? (
-        <Link to={`/admin/providers?q=${encodeURIComponent(c.organisations.name)}`} className="text-moss font-medium hover:underline">
+        <Link to={`/admin/organisations?q=${encodeURIComponent(c.organisations.name)}`} className="text-moss font-medium hover:underline">
           {c.organisations.name}
         </Link>
       ) : (
