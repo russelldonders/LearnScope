@@ -174,7 +174,23 @@ async function handleStatements(req, res) {
       }
     })
 
-    const { error } = await admin.from('xapi_statements').upsert(rows, { onConflict: 'id' })
+    // Statement ids are client-supplied and xapi_statements.id is a global
+    // key, so an id that already belongs to another learner/launch must be
+    // rejected (xAPI's own 409 for a conflicting id) rather than upserted --
+    // overwriting would move someone else's record into this account.
+    // ignoreDuplicates keeps that true even if two writes race: statements
+    // are immutable in xAPI, so a same-owner retry is simply a no-op.
+    const { data: existing, error: existingError } = await admin
+      .from('xapi_statements')
+      .select('id, user_id, resource_id')
+      .in('id', ids)
+    if (existingError) throw existingError
+    if ((existing ?? []).some((row) => row.user_id !== session.user_id || row.resource_id !== session.resource_id)) {
+      res.status(409).json({ error: 'A statement with this id already exists.' })
+      return
+    }
+
+    const { error } = await admin.from('xapi_statements').upsert(rows, { onConflict: 'id', ignoreDuplicates: true })
     if (error) throw error
 
     res.status(req.method === 'PUT' ? 204 : 200)

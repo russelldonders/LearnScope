@@ -91,14 +91,62 @@ async function sendResendEmail(res, { to, subject, html }) {
   return true
 }
 
-async function sendInvite(res, { toEmail, inviterName, skillName, shareUrl }) {
-  if (!toEmail || !skillName || !shareUrl) {
-    res.status(400).json({ error: 'Missing toEmail, skillName, or shareUrl' })
-    return
+const MAX_SKILL_NAME_LENGTH = 200
+
+// Each email type's link must be this app's own page for it -- otherwise
+// any signed-in user could send LearnScope-branded mail carrying an
+// arbitrary (phishing) link.
+const LINK_PATHS = {
+  invite: /^\/rate\/[A-Za-z0-9_-]+$/,
+  recommend: /^\/recommend\/[A-Za-z0-9_-]+$/,
+  validation_request: /^\/validate-request\/[0-9a-f-]{36}$/i,
+}
+
+// The client builds links from window.location.origin, and the API is only
+// ever called same-origin, so the request's own Host (the deployment or
+// custom domain the learner is on) is the origin to accept, plus APP_URL.
+function allowedOrigins(host) {
+  const origins = new Set()
+  if (process.env.APP_URL) {
+    try {
+      origins.add(new URL(process.env.APP_URL).origin)
+    } catch {
+      // A malformed APP_URL just isn't an accepted origin.
+    }
   }
-  const fromName = inviterName?.trim() || 'A LearnScope user'
-  const vars = { fromName, skillName, url: shareUrl }
-  const template = await getTemplate('peer_rating_invite')
+  if (host) {
+    const isLocal = /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host)
+    origins.add(`${isLocal ? 'http' : 'https'}://${host}`)
+  }
+  return origins
+}
+
+export function isAppLink(value, type, host) {
+  let url
+  try {
+    url = new URL(value)
+  } catch {
+    return false
+  }
+  if (url.username || url.password || url.search || url.hash) return false
+  if (!Object.hasOwn(LINK_PATHS, type) || !LINK_PATHS[type].test(url.pathname)) return false
+  return allowedOrigins(host).has(url.origin)
+}
+
+// The sender's name comes from their own profile, never the request body,
+// so an email can't claim to be from someone (or something) else.
+async function senderName(user) {
+  try {
+    const { data } = await supabaseAdmin().from('profiles').select('full_name').eq('id', user.id).maybeSingle()
+    return data?.full_name?.trim() || user.email || 'A LearnScope user'
+  } catch {
+    return user.email || 'A LearnScope user'
+  }
+}
+
+async function sendTemplatedEmail(res, { templateKey, toEmail, fromName, skillName, url }) {
+  const vars = { fromName, skillName, url }
+  const template = await getTemplate(templateKey)
   const subject = renderTemplate(template.subject_template, vars)
   const html = renderTemplate(template.body_template, vars)
   if (await sendResendEmail(res, { to: toEmail, subject, html })) {
@@ -106,34 +154,10 @@ async function sendInvite(res, { toEmail, inviterName, skillName, shareUrl }) {
   }
 }
 
-async function sendRecommend(res, { toEmail, inviterName, skillName, shareUrl }) {
-  if (!toEmail || !skillName || !shareUrl) {
-    res.status(400).json({ error: 'Missing toEmail, skillName, or shareUrl' })
-    return
-  }
-  const fromName = inviterName?.trim() || 'A LearnScope user'
-  const vars = { fromName, skillName, url: shareUrl }
-  const template = await getTemplate('skill_recommend')
-  const subject = renderTemplate(template.subject_template, vars)
-  const html = renderTemplate(template.body_template, vars)
-  if (await sendResendEmail(res, { to: toEmail, subject, html })) {
-    res.status(200).json({ ok: true })
-  }
-}
-
-async function sendValidationRequest(res, { toEmail, requesterName, skillName, reviewUrl }) {
-  if (!toEmail || !skillName || !reviewUrl) {
-    res.status(400).json({ error: 'Missing toEmail, skillName, or reviewUrl' })
-    return
-  }
-  const fromName = requesterName?.trim() || 'A LearnScope user'
-  const vars = { fromName, skillName, url: reviewUrl }
-  const template = await getTemplate('skill_validation_request')
-  const subject = renderTemplate(template.subject_template, vars)
-  const html = renderTemplate(template.body_template, vars)
-  if (await sendResendEmail(res, { to: toEmail, subject, html })) {
-    res.status(200).json({ ok: true })
-  }
+const EMAIL_TYPES = {
+  invite: { templateKey: 'peer_rating_invite', urlField: 'shareUrl' },
+  recommend: { templateKey: 'skill_recommend', urlField: 'shareUrl' },
+  validation_request: { templateKey: 'skill_validation_request', urlField: 'reviewUrl' },
 }
 
 export default async function handler(req, res) {
@@ -155,21 +179,35 @@ export default async function handler(req, res) {
   }
 
   const { type, ...payload } = req.body ?? {}
+  const emailType = Object.hasOwn(EMAIL_TYPES, type) ? EMAIL_TYPES[type] : null
+  if (!emailType) {
+    res.status(400).json({ error: 'Unknown email type' })
+    return
+  }
+
+  const { toEmail, skillName } = payload
+  const url = payload[emailType.urlField]
+  if (!toEmail || !skillName || !url) {
+    res.status(400).json({ error: `Missing toEmail, skillName, or ${emailType.urlField}` })
+    return
+  }
+  if (typeof skillName !== 'string' || skillName.length > MAX_SKILL_NAME_LENGTH) {
+    res.status(400).json({ error: 'Invalid skillName' })
+    return
+  }
+  if (!isAppLink(url, type, req.headers.host)) {
+    res.status(400).json({ error: `Invalid ${emailType.urlField}` })
+    return
+  }
 
   try {
-    switch (type) {
-      case 'invite':
-        await sendInvite(res, payload)
-        return
-      case 'recommend':
-        await sendRecommend(res, payload)
-        return
-      case 'validation_request':
-        await sendValidationRequest(res, payload)
-        return
-      default:
-        res.status(400).json({ error: 'Unknown email type' })
-    }
+    await sendTemplatedEmail(res, {
+      templateKey: emailType.templateKey,
+      toEmail,
+      fromName: await senderName(user),
+      skillName,
+      url,
+    })
   } catch (err) {
     console.error(`send-email (${type}) error:`, err)
     res.status(500).json({ error: 'Failed to send email.' })
