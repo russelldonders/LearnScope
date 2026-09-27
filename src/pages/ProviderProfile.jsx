@@ -6,6 +6,7 @@ import CourseThumbnail from '../components/CourseThumbnail'
 import { LEVEL_LABELS } from '../lib/levels'
 import { getProviderProfile } from '../lib/providerProfile'
 import { getEmployerLoginContext } from '../lib/employerRoleProfiles'
+import { getPublicEmployerCatalogueCourses } from '../lib/employerCatalogues'
 import { orgBrandStyle } from '../lib/orgBranding'
 import {
   listEnrolledCatalogueIds,
@@ -27,6 +28,7 @@ export default function ProviderProfile() {
   const { user, loading: authLoading, employerMemberships } = useAuth()
   const [profile, setProfile] = useState(undefined)
   const [employerContext, setEmployerContext] = useState(undefined)
+  const [publicEmployerCourses, setPublicEmployerCourses] = useState(undefined)
   const [error, setError] = useState(null)
   const [enrolledIds, setEnrolledIds] = useState(new Map())
   const [enrollingId, setEnrollingId] = useState(null)
@@ -47,9 +49,26 @@ export default function ProviderProfile() {
 
   useEffect(() => {
     setEmployerContext(undefined)
+    setPublicEmployerCourses(undefined)
     getEmployerLoginContext(slug)
-      .then(setEmployerContext)
-      .catch(() => setEmployerContext(null))
+      .then(async (context) => {
+        setEmployerContext(context)
+        if (!context) {
+          setPublicEmployerCourses(null)
+          return
+        }
+        try {
+          setPublicEmployerCourses(await getPublicEmployerCatalogueCourses(slug))
+        } catch {
+          // Fail closed: a transient access-RPC failure must never fall back
+          // to the provider's broader learner-visible catalogue selection.
+          setPublicEmployerCourses([])
+        }
+      })
+      .catch(() => {
+        setEmployerContext(null)
+        setPublicEmployerCourses(null)
+      })
   }, [slug])
 
   // Independent of the profile fetch (works for any logged-in visitor,
@@ -79,7 +98,7 @@ export default function ProviderProfile() {
       const enrolled = await enrolInCatalogueCourse(user.id, {
         id: course.id,
         name: course.name,
-        provider: profile.organisation.name,
+        provider: course.provider || profile.organisation.name,
         course_type: course.courseType,
         duration: course.duration,
       })
@@ -143,11 +162,12 @@ export default function ProviderProfile() {
     : undefined
 
   const employerMembershipsLoading = Boolean(user && employerMemberships === null)
+  const publicEmployerCoursesLoading = Boolean(employerContext && publicEmployerCourses === undefined)
   const isEmployerMember = Boolean(
     user && employerContext && employerMemberships?.some((membership) => membership.employer_id === employerContext.id)
   )
 
-  if (authLoading || employerContext === undefined || employerMembershipsLoading) {
+  if (authLoading || employerContext === undefined || employerMembershipsLoading || publicEmployerCoursesLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-paper text-secondary">
         Loading…
@@ -162,6 +182,11 @@ export default function ProviderProfile() {
   if (!user && employerContext && !loading && !profile) {
     return <Navigate to={`/login?org=${encodeURIComponent(slug)}`} replace />
   }
+
+  // Employer pages use the employer's explicit access settings. A public
+  // catalogue remains available to signed-in members through the member RPC;
+  // this merely controls the pre-login projection of that same catalogue.
+  const visibleCourses = employerContext ? (publicEmployerCourses ?? []) : (profile?.courses ?? [])
 
   return (
     <div className="min-h-screen bg-[var(--org-background,var(--color-paper))]" style={brandStyle}>
@@ -241,11 +266,11 @@ export default function ProviderProfile() {
               <h2 className="font-display text-xl text-[var(--org-text,var(--color-ink))] mb-4 pb-1 border-b-2 border-[var(--org-primary,transparent)]">
                 Training offered
               </h2>
-              {profile.courses.length === 0 ? (
+              {visibleCourses.length === 0 ? (
                 <p className="text-sm text-secondary">No training listed yet.</p>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {profile.courses.map((course) => {
+                  {visibleCourses.map((course) => {
                     const enrollment = enrolledIds.get(course.id)
                     const enrolled = Boolean(enrollment)
                     const completed = Boolean(enrollment?.completedDate)

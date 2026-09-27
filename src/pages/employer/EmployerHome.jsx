@@ -5,6 +5,7 @@ import { getOrganisationBranding, orgBrandStyle } from '../../lib/orgBranding'
 import { getEmployerLoginContext } from '../../lib/employerRoleProfiles'
 import LearnerRoleAlignmentContainer from '../roles/LearnerRoleAlignmentContainer'
 import EmployerAssignedTrainingPanel from './EmployerAssignedTrainingPanel'
+import EmployerCataloguePanel from './EmployerCataloguePanel'
 
 // The learner-facing counterpart to EmployerConsole.jsx (which is admin-only,
 // see EmployerAdminRoute's own comment) -- reached via the same employer URL
@@ -19,7 +20,7 @@ import EmployerAssignedTrainingPanel from './EmployerAssignedTrainingPanel'
 export default function EmployerHome() {
   const [searchParams] = useSearchParams()
   const orgSlug = searchParams.get('org')
-  const section = ['learning', 'role'].includes(searchParams.get('section')) ? searchParams.get('section') : 'home'
+  const section = ['learning', 'catalogue', 'role'].includes(searchParams.get('section')) ? searchParams.get('section') : 'home'
   const [branding, setBranding] = useState(null)
   const [employer, setEmployer] = useState(undefined)
   const [error, setError] = useState(null)
@@ -59,6 +60,7 @@ export default function EmployerHome() {
   const navItems = [
     { id: 'home', label: 'Home' },
     { id: 'learning', label: 'My learning' },
+    { id: 'catalogue', label: 'Catalogue' },
     { id: 'role', label: 'Role & skills' },
   ]
 
@@ -97,6 +99,7 @@ export default function EmployerHome() {
           <h1 className="font-display text-3xl sm:text-4xl text-[var(--org-text,var(--color-ink))] mt-2">
             {section === 'home' && 'Welcome back'}
             {section === 'learning' && 'My learning'}
+            {section === 'catalogue' && 'Catalogue'}
             {section === 'role' && 'Role & skills'}
           </h1>
           {section === 'home' && (
@@ -125,6 +128,13 @@ export default function EmployerHome() {
             )}
             {section === 'learning' && (
               <EmployerAssignedTrainingPanel
+                employerId={employer.id}
+                employerName={employer.name}
+                employerLogoUrl={branding?.logoUrl}
+              />
+            )}
+            {section === 'catalogue' && (
+              <EmployerCataloguePanel
                 employerId={employer.id}
                 employerName={employer.name}
                 employerLogoUrl={branding?.logoUrl}

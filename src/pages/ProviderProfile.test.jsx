@@ -6,12 +6,14 @@ import ProviderProfile from './ProviderProfile'
 const authMock = vi.hoisted(() => ({ value: {} }))
 const profileMock = vi.hoisted(() => vi.fn())
 const employerContextMock = vi.hoisted(() => vi.fn())
+const publicEmployerCoursesMock = vi.hoisted(() => vi.fn())
 
 vi.mock('../context/AuthContext', () => ({ useAuth: () => authMock.value }))
 vi.mock('../components/AppHeader', () => ({ default: () => <header>App header</header> }))
 vi.mock('../components/CohortPickerModal', () => ({ default: () => null }))
 vi.mock('../lib/providerProfile', () => ({ getProviderProfile: profileMock }))
 vi.mock('../lib/employerRoleProfiles', () => ({ getEmployerLoginContext: employerContextMock }))
+vi.mock('../lib/employerCatalogues', () => ({ getPublicEmployerCatalogueCourses: publicEmployerCoursesMock }))
 vi.mock('../lib/orgBranding', () => ({ orgBrandStyle: () => ({}) }))
 vi.mock('../lib/courseCatalogue', () => ({
   listEnrolledCatalogueIds: () => Promise.resolve(new Map()),
@@ -47,6 +49,7 @@ beforeEach(() => {
   authMock.value = { user: null, loading: false, employerMemberships: [] }
   profileMock.mockResolvedValue(publicProfile)
   employerContextMock.mockResolvedValue({ id: 'employer-1', name: 'Acme' })
+  publicEmployerCoursesMock.mockResolvedValue([])
 })
 
 afterEach(cleanup)
@@ -77,10 +80,41 @@ describe('ProviderProfile canonical organisation URL', () => {
   })
 
   it('continues to show the public catalogue to a visitor', async () => {
+    publicEmployerCoursesMock.mockResolvedValue([{
+      id: 'course-public',
+      name: 'Public employer course',
+      provider: 'Acme',
+      courseType: 'Online',
+      duration: '1 hour',
+      synopsis: null,
+      imageUrl: null,
+      catalogues: [{ id: 'catalogue-1', name: 'Acme essentials' }],
+      skillEntries: [],
+      tags: [],
+    }])
     renderProfile()
 
     expect(await screen.findByRole('heading', { name: 'Skills offered' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Training offered' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Public employer course' })).toBeInTheDocument()
+    expect(publicEmployerCoursesMock).toHaveBeenCalledWith('acme')
+  })
+
+  it('fails closed instead of exposing the provider catalogue when employer access cannot be loaded', async () => {
+    profileMock.mockResolvedValue({
+      ...publicProfile,
+      courses: [{
+        id: 'provider-only', name: 'Provider-only course', courseType: 'Online', duration: null,
+        synopsis: null, imageUrl: null, catalogues: [], skillEntries: [], tags: [],
+      }],
+    })
+    publicEmployerCoursesMock.mockRejectedValue(new Error('Access unavailable'))
+
+    renderProfile()
+
+    expect(await screen.findByRole('heading', { name: 'Training offered' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Provider-only course' })).not.toBeInTheDocument()
+    expect(screen.getByText('No training listed yet.')).toBeInTheDocument()
   })
 
   it('sends a signed-out member to branded login when no public catalogue is enabled', async () => {

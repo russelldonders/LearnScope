@@ -46,6 +46,7 @@ import StatusBadge from '../../components/StatusBadge'
 import EmployerRoleProfilesSection from './EmployerRoleProfilesSection'
 import EmployerOverviewPanel from './EmployerOverviewPanel'
 import EmployerManagementSection from './EmployerManagementSection'
+import EmployerCatalogueAccessPanel from './EmployerCatalogueAccessPanel'
 
 // Training, Skills, Catalogues and Resources belong to the attached provider
 // organisation (the same components ProviderConsole.jsx mounts, reused
@@ -558,6 +559,7 @@ export default function EmployerConsole() {
                   )}
                   {currentSection === 'provider-catalogues' && (
                     <div className="space-y-4">
+                      <EmployerCatalogueAccessPanel employerId={selectedEmployer.id} />
                       {!myProviderRole && (
                         <p className="text-sm text-secondary">
                           This view is read-only. Ask an admin of this employer's provider organisation to manage

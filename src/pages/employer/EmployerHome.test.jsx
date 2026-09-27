@@ -7,6 +7,7 @@ vi.mock('../../components/AppHeader', () => ({ default: (props) => <div data-tes
 vi.mock('../../lib/orgBranding', () => ({ getOrganisationBranding: () => Promise.resolve({ name: 'Acme', logoUrl: '/acme.png' }), orgBrandStyle: () => ({}) }))
 vi.mock('../../lib/employerRoleProfiles', () => ({ getEmployerLoginContext: () => Promise.resolve({ id: 'employer-1', name: 'Acme Ltd' }) }))
 vi.mock('./EmployerAssignedTrainingPanel', () => ({ default: (props) => <div data-testid="learning-panel" data-variant={props.variant || 'full'}>{props.employerName}</div> }))
+vi.mock('./EmployerCataloguePanel', () => ({ default: (props) => <div data-testid="catalogue-panel">{props.employerName}</div> }))
 vi.mock('../roles/LearnerRoleAlignmentContainer', () => ({ default: (props) => <div data-testid="role-panel" data-variant={props.variant || 'full'} /> }))
 
 afterEach(cleanup)
@@ -35,5 +36,13 @@ describe('EmployerHome learner LMS navigation', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Role & skills' }))
     expect(await screen.findByRole('heading', { name: 'Role & skills' })).toBeInTheDocument()
     expect(screen.getByTestId('role-panel')).toHaveAttribute('data-variant', 'full')
+  })
+
+  it('opens the employer catalogue as a separate learner section', async () => {
+    render(<MemoryRouter initialEntries={['/employer/home?org=acme&section=catalogue']}><EmployerHome /></MemoryRouter>)
+
+    expect(await screen.findByRole('heading', { name: 'Catalogue' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Catalogue' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('catalogue-panel')).toHaveTextContent('Acme Ltd')
   })
 })
