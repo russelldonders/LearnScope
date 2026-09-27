@@ -17,13 +17,12 @@ const NAV_LINKS = [
   { to: '/team', label: 'nav.team', requires: 'managerContexts' },
 ]
 
-const MENU_ITEMS = [
+const PERSONAL_MENU_ITEMS = [
   { to: '/profile', label: 'menu.profile' },
   { to: '/connections', label: 'menu.connections', requires: 'hasConnectionsActivity' },
   { to: '/profile/connected-accounts', label: 'menu.connectedApps' },
   { to: '/profile/privacy', label: 'menu.privacySettings' },
   { to: '/profile/import', label: 'menu.importSkills' },
-  { to: '/help', label: 'menu.help' },
 ]
 
 // brandLogoUrl/brandName/brandHomeHref let a page whitelabel this header for
@@ -96,7 +95,7 @@ export default function AppHeader({
     if (link.requires === 'managerContexts') return managerContexts?.length > 0
     return !link.requires || navVisibility[link.requires]
   })
-  const visibleMenuItems = MENU_ITEMS.filter((item) => !item.requires || navVisibility[item.requires])
+  const visiblePersonalMenuItems = PERSONAL_MENU_ITEMS.filter((item) => !item.requires || navVisibility[item.requires])
   const activeEmployerSlug = location.pathname === '/employer/home'
     ? new URLSearchParams(location.search).get('org')
     : null
@@ -105,7 +104,8 @@ export default function AppHeader({
     && !location.pathname.startsWith('/admin')
     && !location.pathname.startsWith('/provider')
     && !inEmployerAdminConsole
-  const showWorkspaceSwitcher = Boolean(contextExitHref || employerMemberships?.length > 0)
+  const inPlatformConsole = location.pathname.startsWith('/admin')
+  const inProviderConsole = location.pathname === '/provider' || location.pathname.startsWith('/provider/')
 
   useEffect(() => {
     if (!menuOpen) return
@@ -191,95 +191,129 @@ export default function AppHeader({
               </button>
 
               {menuOpen && (
-                <div className="absolute right-0 top-full mt-2 w-[min(18rem,calc(100vw-2rem))] rounded-md border border-hairline bg-[var(--org-background,var(--color-card))] shadow-lg py-1 z-10">
-                  {fullName && (
-                    <div className="px-4 py-2 text-sm font-medium text-[var(--org-text,var(--color-ink))] border-b border-hairline">
-                      {fullName}
+                <div className="absolute right-0 top-full z-10 mt-2 max-h-[min(42rem,calc(100vh-5rem))] w-[min(18rem,calc(100vw-2rem))] overflow-y-auto rounded-md border border-hairline bg-[var(--org-background,var(--color-card))] py-1 shadow-lg">
+                  {(fullName || user?.email) && (
+                    <div className="border-b border-hairline px-4 py-2.5">
+                      {fullName && <p className="truncate text-sm font-medium text-[var(--org-text,var(--color-ink))]">{fullName}</p>}
+                      {user?.email && <p className="truncate text-xs text-secondary">{user.email}</p>}
                     </div>
                   )}
-                  {showWorkspaceSwitcher && (
-                    <div className="border-b border-hairline py-2">
-                      <p className="px-4 pb-1.5 text-xs font-medium text-secondary">Switch workspace</p>
+                  <div className="border-b border-hairline py-2">
+                    <p className="px-4 pb-1.5 text-xs font-medium text-secondary">{t('menu.switchWorkspace')}</p>
+                    <Link
+                      to={contextExitHref || '/dashboard'}
+                      onClick={() => setMenuOpen(false)}
+                      aria-current={isPersonalWorkspace ? 'page' : undefined}
+                      className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
+                    >
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-hairline bg-paper">
+                        <img src="/favicon.svg" alt="" className="h-5 w-5 object-contain" />
+                      </span>
+                      <span className="min-w-0 flex-1 font-medium">Personal LearnScope</span>
+                      {isPersonalWorkspace && (
+                        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="m5 12 4 4L19 6" />
+                        </svg>
+                      )}
+                    </Link>
+                    {employerPortals.map((employer) => {
+                      const isActive = activeEmployerSlug === employer.organisation.slug
+                      return (
+                        <Link
+                          key={employer.id}
+                          to={`/providers/${encodeURIComponent(employer.organisation.slug)}`}
+                          onClick={() => setMenuOpen(false)}
+                          aria-current={isActive ? 'page' : undefined}
+                          className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
+                        >
+                          <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-hairline bg-paper text-xs font-medium text-ink">
+                            {employer.organisation.logo_url
+                              ? <img src={employer.organisation.logo_url} alt="" className="h-full w-full object-contain" />
+                              : employer.name.trim().charAt(0).toUpperCase()}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate font-medium">{employer.name}</span>
+                          {isActive && (
+                            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="m5 12 4 4L19 6" />
+                            </svg>
+                          )}
+                        </Link>
+                      )
+                    })}
+                    {employerPortalsLoading && <p role="status" className="px-4 py-2 text-xs text-secondary">Loading employer workspaces…</p>}
+                    {organisationMemberships?.length > 0 && (
                       <Link
-                        to={contextExitHref || '/dashboard'}
+                        to="/provider"
                         onClick={() => setMenuOpen(false)}
-                        aria-current={isPersonalWorkspace ? 'page' : undefined}
+                        aria-current={inProviderConsole ? 'page' : undefined}
                         className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
                       >
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-hairline bg-paper">
-                          <img src="/favicon.svg" alt="" className="h-5 w-5 object-contain" />
-                        </span>
-                        <span className="min-w-0 flex-1 font-medium">Personal LearnScope</span>
-                        {isPersonalWorkspace && (
+                        <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-hairline bg-paper text-xs font-medium text-ink">P</span>
+                        <span className="min-w-0 flex-1 font-medium">{t('menu.providerConsole')}</span>
+                        {inProviderConsole && (
                           <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="m5 12 4 4L19 6" />
                           </svg>
                         )}
                       </Link>
-                      {employerPortals.map((employer) => {
-                        const isActive = activeEmployerSlug === employer.organisation.slug
-                        return (
-                          <Link
-                            key={employer.id}
-                            to={`/providers/${encodeURIComponent(employer.organisation.slug)}`}
-                            onClick={() => setMenuOpen(false)}
-                            aria-current={isActive ? 'page' : undefined}
-                            className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
-                          >
-                            <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-hairline bg-paper text-xs font-medium text-ink">
-                              {employer.organisation.logo_url
-                                ? <img src={employer.organisation.logo_url} alt="" className="h-full w-full object-contain" />
-                                : employer.name.trim().charAt(0).toUpperCase()}
-                            </span>
-                            <span className="min-w-0 flex-1 truncate font-medium">{employer.name}</span>
-                            {isActive && (
-                              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="m5 12 4 4L19 6" />
-                              </svg>
-                            )}
-                          </Link>
-                        )
-                      })}
-                      {employerPortalsLoading && <p role="status" className="px-4 py-2 text-xs text-secondary">Loading employer workspaces…</p>}
+                    )}
+                    {employerMemberships?.some((m) => m.role === 'admin') && (
+                      <Link
+                        to="/employer"
+                        onClick={() => setMenuOpen(false)}
+                        aria-current={inEmployerAdminConsole ? 'page' : undefined}
+                        className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
+                      >
+                        <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-hairline bg-paper text-xs font-medium text-ink">E</span>
+                        <span className="min-w-0 flex-1 font-medium">{t('menu.employerConsole')}</span>
+                        {inEmployerAdminConsole && (
+                          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="m5 12 4 4L19 6" />
+                          </svg>
+                        )}
+                      </Link>
+                    )}
+                    {isPlatformAdmin && (
+                      <Link
+                        to="/admin"
+                        onClick={() => setMenuOpen(false)}
+                        aria-current={inPlatformConsole ? 'page' : undefined}
+                        className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-hairline bg-paper">
+                          <img src="/favicon.svg" alt="" className="h-5 w-5 object-contain" />
+                        </span>
+                        <span className="min-w-0 flex-1 font-medium">{t('menu.platformConsole')}</span>
+                        {inPlatformConsole && (
+                          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="m5 12 4 4L19 6" />
+                          </svg>
+                        )}
+                      </Link>
+                    )}
+                  </div>
+                  {isPersonalWorkspace && (
+                    <div className="border-b border-hairline py-2">
+                      <p className="px-4 pb-1.5 text-xs font-medium text-secondary">{t('menu.personalAccount')}</p>
+                      {visiblePersonalMenuItems.map((item) => (
+                        <Link
+                          key={item.to}
+                          to={item.to}
+                          onClick={() => setMenuOpen(false)}
+                          className="block px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
+                        >
+                          {t(item.label)}
+                        </Link>
+                      ))}
                     </div>
                   )}
-                  {visibleMenuItems.map((item) => (
-                    <Link
-                      key={item.to}
-                      to={item.to}
-                      onClick={() => setMenuOpen(false)}
-                      className="block px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
-                    >
-                      {t(item.label)}
-                    </Link>
-                  ))}
-                  {isPlatformAdmin && (
-                    <Link
-                      to={location.pathname.startsWith('/admin') ? '/dashboard' : '/admin'}
-                      onClick={() => setMenuOpen(false)}
-                      className="block px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
-                    >
-                      {location.pathname.startsWith('/admin') ? t('menu.switchToLearner') : t('menu.platformConsole')}
-                    </Link>
-                  )}
-                  {organisationMemberships?.length > 0 && (
-                    <Link
-                      to={location.pathname.startsWith('/provider') ? '/dashboard' : '/provider'}
-                      onClick={() => setMenuOpen(false)}
-                      className="block px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
-                    >
-                      {location.pathname.startsWith('/provider') ? t('menu.switchToLearner') : t('menu.providerConsole')}
-                    </Link>
-                  )}
-                  {employerMemberships?.some((m) => m.role === 'admin') && (
-                    <Link
-                      to={inEmployerAdminConsole ? '/dashboard' : '/employer'}
-                      onClick={() => setMenuOpen(false)}
-                      className="block px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
-                    >
-                      {inEmployerAdminConsole ? t('menu.switchToLearner') : t('menu.employerConsole')}
-                    </Link>
-                  )}
+                  <Link
+                    to="/help"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
+                  >
+                    {t('menu.help')}
+                  </Link>
                   <div className="my-1 border-t border-hairline" />
                   <button
                     type="button"

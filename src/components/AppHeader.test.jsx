@@ -28,7 +28,13 @@ vi.mock('../context/NavVisibilityContext', () => ({
 }))
 
 vi.mock('../context/LanguageContext', () => ({
-  useLanguage: () => ({ t: (key) => key === 'nav.actions' ? 'Actions' : key }),
+  useLanguage: () => ({
+    t: (key) => ({
+      'nav.actions': 'Actions',
+      'menu.switchWorkspace': 'Switch workspace',
+      'menu.personalAccount': 'Personal account',
+    })[key] ?? key,
+  }),
 }))
 
 vi.mock('../lib/supabaseClient', () => ({
@@ -92,6 +98,25 @@ describe('AppHeader organisation branding', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
     expect(screen.getByText('Switch workspace')).toBeVisible()
     expect(screen.getByRole('link', { name: 'Personal LearnScope' })).toHaveAttribute('href', '/dashboard')
+    expect(screen.queryByText('Personal account')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'menu.profile' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'menu.help' })).toBeVisible()
+  })
+
+  it('groups learner-owned destinations under Personal account only in the personal workspace', () => {
+    render(
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <AppHeader />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
+    expect(screen.getByText('Personal account')).toBeVisible()
+    expect(screen.getByRole('link', { name: 'menu.profile' })).toHaveAttribute('href', '/profile')
+    expect(screen.getByRole('link', { name: 'menu.connectedApps' })).toHaveAttribute('href', '/profile/connected-accounts')
+    expect(screen.getByRole('link', { name: 'menu.privacySettings' })).toHaveAttribute('href', '/profile/privacy')
+    expect(screen.getByRole('link', { name: 'menu.importSkills' })).toHaveAttribute('href', '/profile/import')
+    expect(screen.getByRole('link', { name: 'menu.help' })).toHaveAttribute('href', '/help')
   })
 
   it('lists every employer LMS and identifies the active workspace', async () => {
@@ -138,5 +163,24 @@ describe('AppHeader organisation branding', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
     expect(await screen.findByRole('link', { name: 'Acme Stores' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: 'menu.employerConsole' })).toHaveAttribute('href', '/employer')
+  })
+
+  it('keeps role workspaces in the switcher and marks the active console', () => {
+    authMock.value = {
+      ...authMock.value,
+      isPlatformAdmin: true,
+      organisationMemberships: [{ organisation_id: 'org-1', role: 'admin' }],
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/provider']}>
+        <AppHeader hideNavLinks />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
+    expect(screen.getByRole('link', { name: 'menu.providerConsole' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'menu.platformConsole' })).toHaveAttribute('href', '/admin')
+    expect(screen.queryByText('Personal account')).not.toBeInTheDocument()
   })
 })
