@@ -68,9 +68,8 @@ export function AuthProvider({ children }) {
       return
     }
     supabase
-      .from('profiles')
+      .rpc('get_my_profile')
       .select('onboarding_completed_at, first_name, last_name')
-      .eq('id', userId)
       .single()
       .then(({ data, error }) => {
         setNeedsOnboarding(!error && data ? !data.onboarding_completed_at : false)
@@ -85,9 +84,8 @@ export function AuthProvider({ children }) {
   const refreshNeedsName = useCallback(() => {
     if (!userId) return
     supabase
-      .from('profiles')
+      .rpc('get_my_profile')
       .select('first_name, last_name')
-      .eq('id', userId)
       .single()
       .then(({ data, error }) => {
         setNeedsName(!error && data ? !data.first_name?.trim() || !data.last_name?.trim() : false)

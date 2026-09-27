@@ -44,9 +44,8 @@ export function ThemeProvider({ children }) {
   useEffect(() => {
     if (!user) return
     supabase
-      .from('profiles')
+      .rpc('get_my_profile')
       .select('theme_preference')
-      .eq('id', user.id)
       .single()
       .then(({ data, error }) => {
         if (!error && THEME_VALUES.includes(data?.theme_preference)) {

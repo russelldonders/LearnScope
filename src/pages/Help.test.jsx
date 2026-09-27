@@ -14,7 +14,10 @@ vi.mock('../context/NavVisibilityContext', () => ({
   useNavVisibility: () => ({ navVisibility: {} }),
 }))
 vi.mock('../lib/supabaseClient', () => ({
-  supabase: { from: () => ({ select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }) }) },
+  supabase: {
+    from: () => ({ select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }) }),
+    rpc: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }),
+  },
 }))
 
 afterEach(cleanup)

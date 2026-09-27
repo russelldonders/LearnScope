@@ -29,9 +29,8 @@ export default function Onboarding() {
 
   useEffect(() => {
     supabase
-      .from('profiles')
+      .rpc('get_my_profile')
       .select('avatar_url, first_name, last_name, country, location, language')
-      .eq('id', user.id)
       .single()
       .then(({ data }) => {
         setAvatarUrl(data?.avatar_url ?? null)

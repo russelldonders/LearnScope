@@ -7,7 +7,10 @@ vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'user-1' } }),
 }))
 vi.mock('../lib/supabaseClient', () => ({
-  supabase: { from: () => ({ select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }) }) },
+  supabase: {
+    from: () => ({ select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }) }),
+    rpc: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }),
+  },
 }))
 
 function renderModal(props) {

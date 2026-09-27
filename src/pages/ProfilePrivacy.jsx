@@ -145,7 +145,7 @@ export default function ProfilePrivacy() {
   async function load() {
     try {
       const [{ data }, searchSettings, skillsData] = await Promise.all([
-        supabase.from('profiles').select('skills_profile_visible, allow_connection_skill_ratings').eq('id', user.id).single(),
+        supabase.rpc('get_my_profile').select('skills_profile_visible, allow_connection_skill_ratings').single(),
         getSearchPrivacySettings(user.id),
         listMyManagerShareableSkills(user.id),
       ])

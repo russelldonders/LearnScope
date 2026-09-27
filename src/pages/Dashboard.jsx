@@ -40,9 +40,8 @@ import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 // and the "add your current role" banner, dismissible independently.
 async function loadImportBannerState(userId) {
   const { data } = await supabase
-    .from('profiles')
+    .rpc('get_my_profile')
     .select('cv_imported_at, cv_import_banner_dismissed_at, current_role_banner_dismissed_at')
-    .eq('id', userId)
     .single()
   return (
     data ?? {
@@ -926,7 +925,7 @@ function UpNextActionTrigger({ skill, item, className, children, onDone }) {
       case 'activity':
       case 'record-activity': {
         if (!actorName) {
-          const { data } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
+          const { data } = await supabase.rpc('get_my_profile').select('full_name').single()
           setActorName(data?.full_name || user.email)
         }
         setRecordActivityOpen(true)

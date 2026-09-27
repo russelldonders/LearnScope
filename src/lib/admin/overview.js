@@ -26,8 +26,12 @@ export function countRejectedCourses() {
   return countRows('course_catalogue', 'status', 'rejected')
 }
 
-export function countBlockedUsers() {
-  return countRows('profiles', 'account_status', 'blocked')
+// account_status isn't readable on other people's profile rows, so this
+// goes through a platform-admin-only function instead of countRows.
+export async function countBlockedUsers() {
+  const { data, error } = await supabase.rpc('count_blocked_accounts')
+  if (error) throw error
+  return Number(data ?? 0)
 }
 
 // organisations.status is 'active' | 'inactive' (0065) -- there is no

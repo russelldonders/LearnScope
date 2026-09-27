@@ -50,15 +50,17 @@ export default function SkillsProfile() {
   async function load() {
     setLoading(true)
     setError(null)
-    const [{ data: profile, error: profileError }, since] = await Promise.all([
+    // Location isn't readable on other people's profile rows directly; this
+    // returns it only to the person themselves, their connections, or an
+    // opted-in skill-search match (no row otherwise).
+    const [{ data: profile, error: profileError }, since, { data: place }] = await Promise.all([
       supabase
         .from('profiles')
-        .select(
-          'full_name, avatar_url, country, location, skills_profile_visible, profile_visible_to_skill_matches, allow_connection_skill_ratings'
-        )
+        .select('full_name, avatar_url, skills_profile_visible, profile_visible_to_skill_matches, allow_connection_skill_ratings')
         .eq('id', userId)
         .single(),
       getMemberSince(userId).catch(() => null),
+      supabase.rpc('get_profile_location', { p_user_id: userId }).maybeSingle(),
     ])
     if (profileError) {
       setError("This person's profile couldn't be found.")
@@ -67,8 +69,8 @@ export default function SkillsProfile() {
     }
     setName(profile.full_name || 'This person')
     setAvatarUrl(profile.avatar_url ?? null)
-    setLocation(profile.location ?? '')
-    setCountry(profile.country ?? '')
+    setLocation(place?.location ?? '')
+    setCountry(place?.country ?? '')
     setMemberSince(since)
     setAllowRatings(Boolean(profile.allow_connection_skill_ratings))
     // Either opt-in can grant visibility -- skills_profile_visible for an

@@ -53,9 +53,8 @@ export default function Profile() {
     setLoading(true)
     setEmail(user.email)
     const { data, error } = await supabase
-      .from('profiles')
+      .rpc('get_my_profile')
       .select('first_name, last_name, country, location, language, avatar_url')
-      .eq('id', user.id)
       .single()
     if (!error && data) {
       setFirstName(data.first_name ?? '')

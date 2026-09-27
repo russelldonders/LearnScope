@@ -39,9 +39,8 @@ export function LanguageProvider({ children }) {
   useEffect(() => {
     if (!user) return
     supabase
-      .from('profiles')
+      .rpc('get_my_profile')
       .select('language_preference')
-      .eq('id', user.id)
       .single()
       .then(({ data, error }) => {
         if (!error && LANGUAGE_VALUES.includes(data?.language_preference)) {

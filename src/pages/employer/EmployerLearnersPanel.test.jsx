@@ -26,7 +26,10 @@ vi.mock('../../context/AuthContext', () => ({
 vi.mock('../../lib/skillLibrary', () => ({ listLibrarySkills: vi.fn().mockResolvedValue([]) }))
 
 vi.mock('../../lib/supabaseClient', () => ({
-  supabase: { from: () => ({ select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }) }) },
+  supabase: {
+    from: () => ({ select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }) }),
+    rpc: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }),
+  },
 }))
 
 vi.mock('../../lib/employerManagement', () => ({

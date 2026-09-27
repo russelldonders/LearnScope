@@ -36,7 +36,7 @@ export default function ProfileExport() {
         validationsGivenRes,
         connectionsRes,
       ] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', user.id).single(),
+        supabase.rpc('get_my_profile').select('*').single(),
         supabase.from('experience').select('*').eq('user_id', user.id).order('start_date', { ascending: false }),
         supabase.from('courses').select('*').eq('user_id', user.id).order('completed_date', { ascending: false }),
         supabase.from('skills').select('*').eq('user_id', user.id).order('name', { ascending: true }),
