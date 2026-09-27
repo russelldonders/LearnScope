@@ -4,6 +4,8 @@
     "api/admin/actions.js": { "includeFiles": "dist/index.html", "maxDuration": 60 }
   },
   "routes": [
+    { "src": "/(.*)", "headers": { "X-Content-Type-Options": "nosniff", "Referrer-Policy": "strict-origin-when-cross-origin" }, "continue": true },
+    { "src": "/(?!api/|lti/|course-content/)(.*)", "headers": { "Content-Security-Policy": "frame-ancestors 'self'; object-src 'none'; base-uri 'self'", "X-Frame-Options": "SAMEORIGIN" }, "continue": true },
     { "src": "/lti/(session|deep-link|resources/[0-9a-f-]+)", "dest": "/api/admin/actions?lti=surface" },
     { "src": "/api/lti/([a-z-]+)", "dest": "/api/admin/actions?lti=$1" },
     {
@@ -13,7 +15,7 @@
       "transforms": [
         { "type": "response.headers", "op": "set", "target": { "key": "content-type" }, "args": "text/html; charset=utf-8" },
         { "type": "response.headers", "op": "delete", "target": { "key": "content-disposition" } },
-        { "type": "response.headers", "op": "delete", "target": { "key": "content-security-policy" } }
+        { "type": "response.headers", "op": "set", "target": { "key": "content-security-policy" }, "args": "sandbox allow-scripts allow-forms" }
       ]
     },
     {
@@ -53,7 +55,7 @@
       "transforms": [
         { "type": "response.headers", "op": "set", "target": { "key": "content-type" }, "args": "application/xml; charset=utf-8" },
         { "type": "response.headers", "op": "delete", "target": { "key": "content-disposition" } },
-        { "type": "response.headers", "op": "delete", "target": { "key": "content-security-policy" } }
+        { "type": "response.headers", "op": "set", "target": { "key": "content-security-policy" }, "args": "sandbox allow-scripts allow-forms" }
       ]
     },
     {
@@ -63,7 +65,7 @@
       "transforms": [
         { "type": "response.headers", "op": "set", "target": { "key": "content-type" }, "args": "image/svg+xml" },
         { "type": "response.headers", "op": "delete", "target": { "key": "content-disposition" } },
-        { "type": "response.headers", "op": "delete", "target": { "key": "content-security-policy" } }
+        { "type": "response.headers", "op": "set", "target": { "key": "content-security-policy" }, "args": "sandbox allow-scripts allow-forms" }
       ]
     },
     {

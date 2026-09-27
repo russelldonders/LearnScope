@@ -226,12 +226,13 @@ export async function unlinkResourceFromCourse(linkId) {
 // of the same anti-abuse hardening, which otherwise blocks all script
 // execution for the document regardless of the embedding iframe's own
 // sandbox tokens (CSP `sandbox` is additive/more-restrictive, never less).
-// Deliberately widens the known, tracked course-content-bucket XSS exposure
-// (a malicious upload navigated to directly, top-level, outside the
-// sandboxed player, can now execute script where before it silently
-// couldn't) -- an explicit, accepted tradeoff to make SCORM/xAPI content
-// work at all before the real fix (an isolated content origin) exists; see
-// that memory/issue before changing this again.
+// For the document types (html/htm, svg, xml) it's replaced rather than
+// just stripped: `sandbox allow-scripts allow-forms`, the same tokens the
+// players' own iframe sandbox grants. Inside a player that changes nothing,
+// but a malicious upload navigated to directly, top-level, now also gets an
+// opaque origin -- so it can run, but can't read this app's localStorage
+// (the Supabase session) or cookies. An isolated content origin would still
+// be the stronger long-term fix.
 function publicUrlFor(path) {
   return `/course-content/${path}`
 }
