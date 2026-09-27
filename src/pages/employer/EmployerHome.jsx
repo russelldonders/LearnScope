@@ -8,7 +8,7 @@ import EmployerAssignedTrainingPanel from './EmployerAssignedTrainingPanel'
 import EmployerCataloguePanel from './EmployerCataloguePanel'
 
 // The learner-facing counterpart to EmployerConsole.jsx (which is admin-only,
-// see EmployerAdminRoute's own comment) -- reached via the same employer URL
+// see OrganisationAdminRoute's own comment) -- reached via the organisation URL
 // (?org=:slug) an admin copies from the settings cog there, but for a plain
 // employer_members 'member' this is where they land instead of the console.
 // Deliberately just an employer-branded shell around
@@ -54,7 +54,7 @@ export default function EmployerHome() {
     const params = new URLSearchParams(searchParams)
     if (nextSection === 'home') params.delete('section')
     else params.set('section', nextSection)
-    return `/employer/home?${params.toString()}`
+    return `/organisation/learning?${params.toString()}`
   }
 
   const navItems = [
@@ -70,7 +70,7 @@ export default function EmployerHome() {
         hideNavLinks
         brandLogoUrl={branding?.logoUrl}
         brandName={branding?.name}
-        brandHomeHref={orgSlug ? `/employer/home?org=${orgSlug}` : '/dashboard'}
+        brandHomeHref={orgSlug ? `/organisation/learning?org=${orgSlug}` : '/dashboard'}
         contextExitHref="/dashboard"
       />
       <div className="border-b border-hairline bg-[var(--org-background,var(--color-card))]">

@@ -11,33 +11,31 @@ const personal = {
   allowedActions: ['workspace:enter'],
 }
 
-const employer = {
-  id: 'employer',
-  kind: 'employer',
+const organisation = {
+  id: 'organisation',
+  kind: 'organisation',
   status: 'active',
   allowedActions: ['workspace:enter'],
 }
 
 describe('toWorkspaceViewModel', () => {
-  it('maps database ownership fields without treating employer_id as a personal organisation', () => {
+  it('maps the canonical organisation owner', () => {
     expect(toWorkspaceViewModel({
-      access_role: 'employee',
+      access_role: 'member',
       status: 'active',
       workspaces: {
         id: 'workspace-id',
-        workspace_type: 'employer',
-        employer_id: 'employer-id',
-        provider_organisation_id: null,
+        workspace_type: 'organisation',
+        organisation_id: 'organisation-id',
         name: 'Acme',
         status: 'active',
       },
     })).toEqual({
       id: 'workspace-id',
-      kind: 'employer',
-      employerId: 'employer-id',
-      providerOrganisationId: null,
+      kind: 'organisation',
+      organisationId: 'organisation-id',
       name: 'Acme',
-      role: 'employee',
+      role: 'member',
       status: 'active',
       requiresReauthentication: false,
       allowedActions: ['workspace:enter'],
@@ -47,16 +45,16 @@ describe('toWorkspaceViewModel', () => {
 
 describe('chooseActiveWorkspace', () => {
   it('uses an accessible preferred workspace', () => {
-    expect(chooseActiveWorkspace([personal, employer], 'employer')).toBe(employer)
+    expect(chooseActiveWorkspace([personal, organisation], 'organisation')).toBe(organisation)
   })
 
   it('falls back to the personal workspace', () => {
-    expect(chooseActiveWorkspace([employer, personal], 'missing')).toBe(personal)
+    expect(chooseActiveWorkspace([organisation, personal], 'missing')).toBe(personal)
   })
 
   it('does not select a suspended or inaccessible workspace', () => {
     const suspended = { ...personal, status: 'suspended' }
-    const blocked = { ...employer, allowedActions: [] }
+    const blocked = { ...organisation, allowedActions: [] }
     expect(chooseActiveWorkspace([suspended, blocked])).toBeNull()
   })
 })

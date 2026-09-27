@@ -20,7 +20,7 @@ export default function LmsConnectionsPage() {
   const { organisationMemberships } = useAuth()
   const allowed = organisationMemberships?.some((m) => m.organisation_id === organisationId && m.role === 'admin')
   return <div className="min-h-screen bg-paper"><AppHeader hideNavLinks /><main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 py-8">
-    <Link to={`/provider?org=${organisationId}`} className="inline-block text-sm text-moss hover:underline mb-5">Back to provider</Link>
+    <Link to={`/organisation?org=${organisationId}`} className="inline-block text-sm text-moss hover:underline mb-5">Back to organisation workspace</Link>
     {allowed ? <LmsConnectionsPanel key={organisationId} organisationId={organisationId} /> : <p role="alert" className="text-sm text-secondary">Only an administrator of this provider can configure LMS connections.</p>}
   </main></div>
 }
@@ -120,6 +120,6 @@ export function SkillLtiObjectsPanel({ organisationId, skillId, skillName, canMa
       </fieldset>
       <div className="flex justify-end gap-2"><button type="button" disabled={busy} className={buttonClass} onClick={() => { setEditor(null); setError(null) }}>Cancel</button><button disabled={busy} className={primaryClass}>{busy ? 'Saving…' : 'Save object'}</button></div>
     </form> : loading ? <p role="status" className="text-sm text-secondary">Loading LTI objects…</p> : !rows.length ? <p className="border border-dashed border-hairline rounded-lg py-10 text-center text-secondary">No LTI objects for this skill yet.</p> : <ul className="divide-y divide-hairline border border-hairline rounded-lg">{rows.map((row) => <li key={row.id} className="p-4 flex flex-wrap items-center gap-3"><div className="flex-1 min-w-0"><p className="text-sm font-medium break-words">{row.title}</p><p className="text-xs text-secondary mt-1"><span className="font-mono">{row.code}</span> · {row.status === 'archived' ? 'Archived' : 'Draft'} · {row.target_level ? `Target ${row.target_level}` : 'No target'} · {row.grade_passback ? 'Proficiency grades on' : 'Grades off'}</p><p className="text-xs text-secondary mt-1">{row.lti_object_connections.length ? row.lti_object_connections.map((l) => connections.find((c) => c.id === l.connection_id)?.name || 'Unavailable connection').join(', ') : 'No LMS connected'}</p></div>{canManage && <button className={buttonClass} onClick={() => edit(row)} aria-label={`Edit ${row.title}`}>Edit</button>}</li>)}</ul>}
-    {canManage && !busy && <Link to={`/provider/organisations/${organisationId}/lms-connections`} className="inline-block mt-5 text-sm text-moss hover:underline">Manage LMS connections</Link>}
+    {canManage && !busy && <Link to={`/organisation/organisations/${organisationId}/lms-connections`} className="inline-block mt-5 text-sm text-moss hover:underline">Manage LMS connections</Link>}
   </section>
 }

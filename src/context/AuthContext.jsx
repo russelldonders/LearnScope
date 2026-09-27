@@ -23,11 +23,11 @@ export function AuthProvider({ children }) {
   // needs to distinguish "not yet checked" from "checked, not an admin" so
   // it doesn't redirect an actual admin away before the check resolves.
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(null)
-  // Same null-until-known pattern as isPlatformAdmin -- ProviderAdminRoute
-  // needs to tell "not yet checked" apart from "checked, no memberships",
+  // Same null-until-known pattern as isPlatformAdmin -- the organisation
+  // workspace guard must tell "not yet checked" from "no memberships",
   // since an empty array would otherwise look identical to both.
   const [organisationMemberships, setOrganisationMemberships] = useState(null)
-  // Same null-until-known pattern, for EmployerAdminRoute -- employer_members
+  // Employer membership remains a separate workforce-data grant -- employer_members
   // (20260902090000) is a separate membership concept from
   // organisation_members: it's an employer's own managed-learner roster, not
   // provider staff, so it's tracked independently rather than folded into

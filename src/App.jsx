@@ -9,8 +9,7 @@ import { PendingActionsProvider } from './context/PendingActionsContext'
 import { NavVisibilityProvider } from './context/NavVisibilityContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import PlatformAdminRoute from './components/PlatformAdminRoute'
-import ProviderAdminRoute from './components/ProviderAdminRoute'
-import EmployerAdminRoute from './components/EmployerAdminRoute'
+import OrganisationAdminRoute from './components/OrganisationAdminRoute'
 import EmployerMemberRoute from './components/EmployerMemberRoute'
 import ManagerRoute from './components/ManagerRoute'
 import Landing from './pages/Landing'
@@ -56,13 +55,12 @@ import AdminSkills from './pages/admin/AdminSkills'
 import AdminSkillDetail from './pages/admin/AdminSkillDetail'
 import AdminTags from './pages/admin/AdminTags'
 import AdminSettings from './pages/admin/AdminSettings'
-import ProviderConsole from './pages/provider/ProviderConsole'
-import EmployerConsole from './pages/employer/EmployerConsole'
 import EmployerHome from './pages/employer/EmployerHome'
 import EmployerRoleProfileDetail from './pages/employer/EmployerRoleProfileDetail'
 import ProviderCourseEditor from './pages/provider/ProviderCourseEditor'
 import ProviderCatalogueDetail from './pages/provider/ProviderCatalogueDetail'
 import ProviderSkillDetail from './pages/provider/ProviderSkillDetail'
+import OrganisationWorkspace from './pages/organisation/OrganisationWorkspace'
 import RouteTitle from './components/RouteTitle'
 import ErrorBoundary from './components/ErrorBoundary'
 
@@ -275,43 +273,43 @@ function App() {
             }
           />
           <Route
-            path="/provider"
+            path="/organisation"
             element={
-              <ProviderAdminRoute>
-                <ProviderConsole />
-              </ProviderAdminRoute>
+              <OrganisationAdminRoute>
+                <OrganisationWorkspace />
+              </OrganisationAdminRoute>
             }
           />
           <Route
-            path="/provider/catalogues/:catalogueId"
+            path="/organisation/catalogues/:catalogueId"
             element={
-              <ProviderAdminRoute>
+              <OrganisationAdminRoute>
                 <ProviderCatalogueDetail />
-              </ProviderAdminRoute>
+              </OrganisationAdminRoute>
             }
           />
           <Route
-            path="/provider/training/:courseId"
+            path="/organisation/training/:courseId"
             element={
-              <ProviderAdminRoute>
+              <OrganisationAdminRoute>
                 <ProviderCourseEditor />
-              </ProviderAdminRoute>
+              </OrganisationAdminRoute>
             }
           />
           <Route
-            path="/provider/organisations/:organisationId/lms-connections"
-            element={<ProviderAdminRoute><LmsConnectionsPage /></ProviderAdminRoute>}
+            path="/organisation/organisations/:organisationId/lms-connections"
+            element={<OrganisationAdminRoute><LmsConnectionsPage /></OrganisationAdminRoute>}
           />
           <Route
-            path="/provider/organisations/:organisationId/lti-tools"
-            element={<ProviderAdminRoute><LtiToolsPage /></ProviderAdminRoute>}
+            path="/organisation/organisations/:organisationId/lti-tools"
+            element={<OrganisationAdminRoute><LtiToolsPage /></OrganisationAdminRoute>}
           />
           <Route
-            path="/provider/organisations/:organisationId/skills/:skillId"
+            path="/organisation/organisations/:organisationId/skills/:skillId"
             element={
-              <ProviderAdminRoute>
+              <OrganisationAdminRoute>
                 <ProviderSkillDetail />
-              </ProviderAdminRoute>
+              </OrganisationAdminRoute>
             }
           />
           <Route
@@ -355,15 +353,7 @@ function App() {
             }
           />
           <Route
-            path="/employer"
-            element={
-              <EmployerAdminRoute>
-                <EmployerConsole />
-              </EmployerAdminRoute>
-            }
-          />
-          <Route
-            path="/employer/home"
+            path="/organisation/learning"
             element={
               <EmployerMemberRoute>
                 <EmployerHome />
@@ -371,11 +361,11 @@ function App() {
             }
           />
           <Route
-            path="/employer/roles/:roleProfileId"
+            path="/organisation/roles/:roleProfileId"
             element={
-              <EmployerAdminRoute>
+              <OrganisationAdminRoute>
                 <EmployerRoleProfileDetail />
-              </EmployerAdminRoute>
+              </OrganisationAdminRoute>
             }
           />
           <Route

@@ -4,11 +4,11 @@ import { useAuth } from '../context/AuthContext'
 import { getEmployerLoginContext } from '../lib/employerRoleProfiles'
 import ProtectedRoute from './ProtectedRoute'
 
-// Learner-facing counterpart to EmployerAdminRoute: gates a route on the
+// Learner-facing counterpart to OrganisationAdminRoute: gates a route on the
 // signed-in account holding *any* active employer_members row (admin or
 // member) for the employer named by ?org=:slug, rather than requiring the
-// 'admin' role EmployerAdminRoute needs for the separate console at
-// /employer. Resolves the slug itself (get_employer_login_context,
+// admin grant required by the organisation workspace. Resolves the slug
+// itself (get_employer_login_context,
 // 20260912090000) rather than trusting anything Login.jsx already checked --
 // this route is also reachable directly by URL, independent of how the
 // learner signed in.

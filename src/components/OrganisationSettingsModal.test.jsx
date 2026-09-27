@@ -116,9 +116,9 @@ describe('OrganisationSettingsModal logo colour recommendations', () => {
 
     expect(screen.getByText('General')).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: 'LMS connections' }))
-      .toHaveAttribute('href', '/provider/organisations/org-1/lms-connections')
+      .toHaveAttribute('href', '/organisation/organisations/org-1/lms-connections')
     expect(screen.getByRole('link', { name: 'LTI tools' }))
-      .toHaveAttribute('href', '/provider/organisations/org-1/lti-tools')
+      .toHaveAttribute('href', '/organisation/organisations/org-1/lti-tools')
   })
 
   it('shows one organisation URL for both the learner LMS and public catalogue', () => {

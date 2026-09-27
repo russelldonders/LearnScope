@@ -15,7 +15,7 @@ export default function LtiToolsPage() {
     <div className="min-h-screen bg-paper">
       <AppHeader hideNavLinks />
       <main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 py-8">
-        <Link to={`/provider?org=${organisationId}`} className="inline-block text-sm text-moss hover:underline mb-5">
+        <Link to={`/organisation?org=${organisationId}`} className="inline-block text-sm text-moss hover:underline mb-5">
           Back to provider
         </Link>
         {allowed ? (

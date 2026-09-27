@@ -89,7 +89,7 @@ const SECTIONS = [
   { key: 'skills', label: 'Skills' },
   { key: 'catalogues', label: 'Catalogues' },
   { key: 'staff', label: 'Users', adminOnly: true },
-  { key: 'employers', label: 'Employers', adminOnly: true },
+  { key: 'employers', label: 'Distribution', adminOnly: true },
   { key: 'resources', label: 'Resources' },
 ]
 
@@ -201,10 +201,9 @@ export default function ProviderConsole() {
           isn't relevant here and just adds noise/wrong-context links. */}
       <AppHeader hideNavLinks />
       <main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 py-8">
-        <h1 className="font-display text-xl text-ink mb-1">Provider console</h1>
+        <h1 className="font-display text-xl text-ink mb-1">Organisation workspace</h1>
         <p className="text-sm text-secondary mb-6">
-          Create and build out training, then submit it for approval, manage your organisation's users, and
-          maintain a shared library of resources.
+          Create and distribute learning content, manage your training team, and maintain shared resources.
         </p>
 
         {error && <p className="text-sm text-red-700 mb-4">{error}</p>}
@@ -215,7 +214,7 @@ export default function ProviderConsole() {
           <p className="text-secondary">
             {myOrgIds.length > 0
               ? "The organisation(s) you're a user of are currently deactivated."
-              : "You're not part of any provider organisation."}
+              : "You don't have access to an organisation workspace."}
           </p>
         ) : (
           <>
@@ -306,10 +305,10 @@ export default function ProviderConsole() {
                       <span className="inline-flex items-center">
                         <span className="mx-1 h-5 w-px bg-hairline shrink-0" aria-hidden="true" />
                         <Link
-                          to={`/employer?employer=${linkedEmployer.id}`}
+                          to={`/organisation?employer=${linkedEmployer.id}`}
                           className="text-sm px-3 py-2 -mb-px border-b-2 border-transparent whitespace-nowrap text-gold hover:border-gold"
                         >
-                          ← {linkedEmployer.name} employer console
+                          Manage people at {linkedEmployer.name}
                         </Link>
                       </span>
                     )}
@@ -389,7 +388,7 @@ export default function ProviderConsole() {
 // employer's own auto-provisioned attached provider organisation -- this
 // component only ever reads/writes off organisation.id, so no fork is
 // needed.
-export function ProviderCataloguesSection({ organisation, userId, canCreate, readOnly = false }) {
+export function ProviderCataloguesSection({ organisation, userId, canCreate, readOnly = false, detailContext = '' }) {
   // readOnly (employer console reuse) always wins over canCreate -- an
   // employer admin genuinely has the provider org role canCreate is
   // derived from, but authoring here is disabled regardless; see
@@ -722,13 +721,13 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate, rea
                       {/* Straight to the "Manage users & approvers" settings panel (under
                           the catalogue's cog menu) -- this is a catalogue's own admins/
                           approvers (who can approve courses into it), not learners. */}
-                      <Link to={`/provider/catalogues/${catalogue.id}?tab=users`} className="text-xs font-medium text-moss hover:underline">
+                      <Link to={`/organisation/catalogues/${catalogue.id}?tab=users${detailContext}`} className="text-xs font-medium text-moss hover:underline">
                         {catalogue.userCount} user{catalogue.userCount === 1 ? '' : 's'}
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-x-3 whitespace-nowrap">
-                        <Link to={`/provider/catalogues/${catalogue.id}`} className="text-xs font-medium text-moss hover:underline">
+                        <Link to={`/organisation/catalogues/${catalogue.id}${detailContext ? `?${detailContext.slice(1)}` : ''}`} className="text-xs font-medium text-moss hover:underline">
                           Open catalogue →
                         </Link>
                         {!catalogue.isOwn && !readOnly && (
@@ -786,7 +785,7 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate, rea
 // q/status/sort/dir/page/pageSize params land in that same URL alongside
 // whatever the caller already tracks; none of those keys collide with org/
 // section/employer.
-export function ProviderTrainingSection({ organisation, userId, canViewParticipants, readOnly = false, searchParams, setSearchParams }) {
+export function ProviderTrainingSection({ organisation, userId, canViewParticipants, readOnly = false, searchParams, setSearchParams, detailContext = '' }) {
   const navigate = useNavigate()
   const { isPlatformAdmin } = useAuth()
   const { columns, visibleColumns, toggleColumn, moveColumn, resetToDefault } =
@@ -887,7 +886,7 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
       setShowForm(false)
       // Land straight in the course's own editor -- creating is just the
       // first step, the provider keeps building it out from there.
-      navigate(`/provider/training/${created.id}`)
+      navigate(`/organisation/training/${created.id}${detailContext ? `?${detailContext.slice(1)}` : ''}`)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -897,7 +896,7 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
 
   function handleEditCourse(course) {
     if (course.status !== 'approved') {
-      navigate(`/provider/training/${course.id}`)
+      navigate(`/organisation/training/${course.id}${detailContext ? `?${detailContext.slice(1)}` : ''}`)
       return
     }
     // Editing an approved course forks a new draft version rather than
@@ -914,7 +913,7 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
     try {
       const draftId = await createDraftCourseVersion(course.id)
       setConfirmingNewVersionCourse(null)
-      navigate(`/provider/training/${draftId}`)
+      navigate(`/organisation/training/${draftId}${detailContext ? `?${detailContext.slice(1)}` : ''}`)
     } catch (err) {
       setError(`Couldn’t create a new course version. ${err.message}`)
       setConfirmingNewVersionCourse(null)
@@ -1190,6 +1189,7 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
                     onViewHistory={() => setHistoryCourse(course)}
                     onEdit={() => handleEditCourse(course)}
                     creatingDraft={creatingDraftCourseId === course.id}
+                    detailContext={detailContext}
                   />
                 ))}
               </tbody>
@@ -1297,8 +1297,8 @@ const COURSE_COLUMNS = [
     label: 'Training',
     sortable: true,
     cellClassName: 'px-4 py-3 whitespace-nowrap',
-    renderCell: (course) => (
-      <Link to={`/provider/training/${course.id}`} className="text-ink font-medium hover:text-moss hover:underline">
+    renderCell: (course, detailContext = '') => (
+      <Link to={`/organisation/training/${course.id}${detailContext ? `?${detailContext.slice(1)}` : ''}`} className="text-ink font-medium hover:text-moss hover:underline">
         {course.name}
       </Link>
     ),
@@ -1360,6 +1360,7 @@ function CourseRow({
   onReject,
   onDeactivate,
   readOnly,
+  detailContext,
 }) {
   const editable = course.status === 'draft' || course.status === 'rejected'
   const canStartEditing = !readOnly && (editable || course.status === 'approved')
@@ -1381,7 +1382,7 @@ function CourseRow({
         )}
         {columns.map((col) => (
           <td key={col.key} className={col.cellClassName}>
-            {col.renderCell(course)}
+            {col.renderCell(course, detailContext)}
           </td>
         ))}
         <td className="px-4 py-3">
@@ -1396,7 +1397,7 @@ function CourseRow({
                 {creatingDraft ? 'Creating new version…' : course.status === 'rejected' ? 'Revise and resubmit' : 'Edit course'}
               </button>
             ) : (
-              <Link to={`/provider/training/${course.id}`} className="text-xs font-medium text-moss hover:underline whitespace-nowrap">
+              <Link to={`/organisation/training/${course.id}${detailContext ? `?${detailContext.slice(1)}` : ''}`} className="text-xs font-medium text-moss hover:underline whitespace-nowrap">
                 View course
               </Link>
             )}

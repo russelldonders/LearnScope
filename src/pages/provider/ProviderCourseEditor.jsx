@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
 import ScormPlayer from '../../components/ScormPlayer'
@@ -369,6 +369,8 @@ const TABS = [
 export default function ProviderCourseEditor() {
   const { courseId } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const employerContext = searchParams.get('employer')
   const { user, organisationMemberships } = useAuth()
   const [course, setCourse] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -499,7 +501,7 @@ export default function ProviderCourseEditor() {
     setSaving(true)
     try {
       const draftId = await createDraftCourseVersion(course.id)
-      navigate(`/provider/training/${draftId}`)
+      navigate(`/organisation/training/${draftId}${employerContext ? `?employer=${encodeURIComponent(employerContext)}` : ''}`)
     } catch (err) {
       setSaveError(err.message)
     } finally {
@@ -518,7 +520,9 @@ export default function ProviderCourseEditor() {
             straight to this course. Falls back to a bare /provider before
             the course has loaded. */}
         <Link
-          to={course ? `/provider?org=${course.organisation_id}&section=training` : '/provider'}
+          to={employerContext
+            ? `/organisation?employer=${encodeURIComponent(employerContext)}&section=provider-training`
+            : course ? `/organisation?org=${course.organisation_id}&section=training` : '/organisation'}
           className="text-sm text-secondary hover:text-ink mb-4 inline-block"
         >
           ← Back to provider console

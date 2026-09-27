@@ -21,28 +21,28 @@ function buildTiles(organisationId, role) {
     {
       key: 'draftCourses',
       heading: 'Draft training',
-      to: `/provider?org=${organisationId}&section=training&status=draft`,
+      to: `/organisation?org=${organisationId}&section=training&status=draft`,
       load: () => countDraftCourses(organisationId),
       describe: (n) => `${n} draft course${n === 1 ? '' : 's'} not yet submitted for approval`,
     },
     {
       key: 'rejectedCourses',
       heading: 'Rejected training awaiting revision',
-      to: `/provider?org=${organisationId}&section=training&status=rejected`,
+      to: `/organisation?org=${organisationId}&section=training&status=rejected`,
       load: () => countRejectedCourses(organisationId),
       describe: (n) => `${n} rejected course${n === 1 ? '' : 's'} not yet revised and resubmitted`,
     },
     {
       key: 'pendingApprovalCourses',
       heading: 'Training pending approval',
-      to: `/provider?org=${organisationId}&section=training&status=pending_approval`,
+      to: `/organisation?org=${organisationId}&section=training&status=pending_approval`,
       load: () => countPendingApprovalCourses(organisationId),
       describe: (n) => `${n} course${n === 1 ? '' : 's'} waiting for a catalogue approver's decision`,
     },
     {
       key: 'draftResources',
       heading: 'Draft resources',
-      to: `/provider?org=${organisationId}&section=resources`,
+      to: `/organisation?org=${organisationId}&section=resources`,
       load: () => countDraftResources(organisationId),
       describe: (n) => `${n} resource${n === 1 ? '' : 's'} in draft, not yet published into the library`,
     },
@@ -57,7 +57,7 @@ function buildTiles(organisationId, role) {
     tiles.push({
       key: 'pendingInvitations',
       heading: 'Pending staff invitations',
-      to: `/provider?org=${organisationId}&section=staff`,
+      to: `/organisation?org=${organisationId}&section=staff`,
       load: () => countPendingStaffInvitations(organisationId),
       describe: (n) => `${n} invitation${n === 1 ? '' : 's'} not yet accepted`,
     })
@@ -176,7 +176,7 @@ export default function ProviderOverviewPanel({ organisation, role }) {
                 <li key={resource.linkId} className="flex items-center justify-between gap-4 py-3">
                   <div className="min-w-0">
                     <Link
-                      to={`/provider/catalogues/${resource.catalogueId}?tab=resources`}
+                      to={`/organisation/catalogues/${resource.catalogueId}?tab=resources`}
                       className="truncate font-medium text-ink hover:text-moss block"
                     >
                       {resource.title}

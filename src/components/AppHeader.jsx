@@ -48,10 +48,14 @@ export default function AppHeader({
   const [avatarUrl, setAvatarUrl] = useState(null)
   const [fullName, setFullName] = useState(null)
   const [employerPortals, setEmployerPortals] = useState([])
+  const [organisationPortals, setOrganisationPortals] = useState([])
   const [employerPortalsLoading, setEmployerPortalsLoading] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef(null)
   const employerIdsKey = [...new Set((employerMemberships ?? []).map((membership) => membership.employer_id))]
+    .sort()
+    .join(',')
+  const organisationIdsKey = [...new Set((organisationMemberships ?? []).map((membership) => membership.organisation_id))]
     .sort()
     .join(',')
 
@@ -80,7 +84,7 @@ export default function AppHeader({
     setEmployerPortalsLoading(true)
     supabase
       .from('employers')
-      .select('id, name, organisation:organisations!employers_provider_organisation_id_fkey(slug, logo_url)')
+      .select('id, name, organisation:organisations!employers_provider_organisation_id_fkey(id, name, slug, logo_url)')
       .in('id', employerIds)
       .order('name')
       .then(({ data, error }) => {
@@ -91,23 +95,50 @@ export default function AppHeader({
     return () => { cancelled = true }
   }, [employerIdsKey])
 
+  useEffect(() => {
+    const organisationIds = organisationIdsKey ? organisationIdsKey.split(',') : []
+    if (organisationIds.length === 0) {
+      setOrganisationPortals([])
+      return
+    }
+
+    let cancelled = false
+    supabase
+      .from('organisations')
+      .select('id, name, logo_url')
+      .in('id', organisationIds)
+      .order('name')
+      .then(({ data, error }) => {
+        if (!cancelled) setOrganisationPortals(error ? [] : (data ?? []))
+      })
+    return () => { cancelled = true }
+  }, [organisationIdsKey])
+
   const visibleNavLinks = NAV_LINKS.filter((link) => {
     if (link.requires === 'managerContexts') return managerContexts?.length > 0
     return !link.requires || navVisibility[link.requires]
   })
   const visiblePersonalMenuItems = PERSONAL_MENU_ITEMS.filter((item) => !item.requires || navVisibility[item.requires])
-  const activeEmployerSlug = location.pathname === '/employer/home'
+  const activeEmployerSlug = location.pathname === '/organisation/learning'
     ? new URLSearchParams(location.search).get('org')
     : null
-  const inEmployerAdminConsole = location.pathname === '/employer' || location.pathname.startsWith('/employer/roles/')
+  const organisationParams = new URLSearchParams(location.search)
+  const activeEmployerId = location.pathname.startsWith('/organisation') ? organisationParams.get('employer') : null
+  const activeOrganisationId = location.pathname.startsWith('/organisation') ? organisationParams.get('org') : null
   const isPersonalWorkspace = !activeEmployerSlug
     && !location.pathname.startsWith('/admin')
-    && !location.pathname.startsWith('/provider')
-    && !inEmployerAdminConsole
+    && !location.pathname.startsWith('/organisation')
   const inPlatformConsole = location.pathname.startsWith('/admin')
-  const inProviderConsole = location.pathname === '/provider' || location.pathname.startsWith('/provider/')
   const hasEmployerAdminWorkspace = employerMemberships?.some((membership) => membership.role === 'admin') ?? false
   const hasAdminWorkspaces = Boolean(organisationMemberships?.length || hasEmployerAdminWorkspace || isPlatformAdmin)
+  const employerAdminIds = new Set(
+    (employerMemberships ?? [])
+      .filter((membership) => membership.role === 'admin')
+      .map((membership) => membership.employer_id)
+  )
+  const employerAdminPortals = employerPortals.filter((employer) => employerAdminIds.has(employer.id))
+  const attachedOrganisationIds = new Set(employerAdminPortals.map((employer) => employer.organisation.id))
+  const independentOrganisationPortals = organisationPortals.filter((organisation) => !attachedOrganisationIds.has(organisation.id))
 
   useEffect(() => {
     if (!menuOpen) return
@@ -248,38 +279,48 @@ export default function AppHeader({
                     {hasAdminWorkspaces && (
                       <div role="group" aria-labelledby="admin-workspaces-label" className="border-b border-hairline py-2">
                         <p id="admin-workspaces-label" className="px-4 pb-1.5 text-xs font-medium text-secondary">{t('menu.administration')}</p>
-                        {organisationMemberships?.length > 0 && (
+                        {employerAdminPortals.map((employer) => (
                           <Link
-                            to="/provider"
+                            key={employer.id}
+                            to={`/organisation?employer=${encodeURIComponent(employer.id)}`}
                             onClick={() => setMenuOpen(false)}
-                            aria-current={inProviderConsole ? 'page' : undefined}
+                            aria-current={activeEmployerId === employer.id ? 'page' : undefined}
                             className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
                           >
-                            <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-hairline bg-paper text-xs font-medium text-ink">P</span>
-                            <span className="min-w-0 flex-1 font-medium">{t('menu.providerConsole')}</span>
-                            {inProviderConsole && (
+                            <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-hairline bg-paper text-xs font-medium text-ink">
+                              {employer.organisation.logo_url
+                                ? <img src={employer.organisation.logo_url} alt="" className="h-full w-full object-contain" />
+                                : employer.name.trim().charAt(0).toUpperCase()}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate font-medium">{employer.name}</span>
+                            {activeEmployerId === employer.id && (
                               <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="m5 12 4 4L19 6" />
                               </svg>
                             )}
                           </Link>
-                        )}
-                        {hasEmployerAdminWorkspace && (
+                        ))}
+                        {independentOrganisationPortals.map((organisation) => (
                           <Link
-                            to="/employer"
+                            key={organisation.id}
+                            to={`/organisation?org=${encodeURIComponent(organisation.id)}`}
                             onClick={() => setMenuOpen(false)}
-                            aria-current={inEmployerAdminConsole ? 'page' : undefined}
+                            aria-current={activeOrganisationId === organisation.id ? 'page' : undefined}
                             className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
                           >
-                            <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-hairline bg-paper text-xs font-medium text-ink">E</span>
-                            <span className="min-w-0 flex-1 font-medium">{t('menu.employerConsole')}</span>
-                            {inEmployerAdminConsole && (
+                            <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-hairline bg-paper text-xs font-medium text-ink">
+                              {organisation.logo_url
+                                ? <img src={organisation.logo_url} alt="" className="h-full w-full object-contain" />
+                                : organisation.name.trim().charAt(0).toUpperCase()}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate font-medium">{organisation.name}</span>
+                            {activeOrganisationId === organisation.id && (
                               <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="m5 12 4 4L19 6" />
                               </svg>
                             )}
                           </Link>
-                        )}
+                        ))}
                         {isPlatformAdmin && (
                           <Link
                             to="/admin"

@@ -176,7 +176,7 @@ export default function ProviderProfile() {
   }
 
   if (isEmployerMember) {
-    return <Navigate to={`/employer/home?org=${encodeURIComponent(slug)}`} replace />
+    return <Navigate to={`/organisation/learning?org=${encodeURIComponent(slug)}`} replace />
   }
 
   if (!user && employerContext && !loading && !profile) {

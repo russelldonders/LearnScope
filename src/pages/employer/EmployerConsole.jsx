@@ -221,7 +221,7 @@ function employerLearnerColumns(attachedProviderOrg, dataAccessByLearner) {
 const EMPLOYER_FILTER_RESET = { usersView: null, q: null, status: null, page: null, aq: null, aPage: null, sq: null, sPage: null }
 
 // Foundation console for an employer's own admin (employer_members
-// role = 'admin', gated by EmployerAdminRoute). Training/Skills and the
+// role = 'admin', gated by OrganisationAdminRoute). Training/Skills and the
 // training-team controls inside Users reuse
 // the existing provider console components verbatim, scoped to the
 // employer's own auto-provisioned attached provider organisation
@@ -386,9 +386,9 @@ export default function EmployerConsole() {
           distinct workspace from the learner-facing app. */}
       <AppHeader hideNavLinks />
       <main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 py-8">
-        <h1 className="font-display text-xl text-ink mb-1">Employer console</h1>
+        <h1 className="font-display text-xl text-ink mb-1">Organisation workspace</h1>
         <p className="text-sm text-secondary mb-6">
-          Build out your organisation's own training and manage the people it covers.
+          Manage your people, roles, learning content and distribution from one place.
         </p>
 
         <MutationFeedback status="error" message={error} className="mb-4" />
@@ -396,7 +396,7 @@ export default function EmployerConsole() {
         {loading ? (
           <p className="text-secondary">Loading…</p>
         ) : myEmployers.length === 0 ? (
-          <p className="text-secondary">You're not an admin of any employer.</p>
+          <p className="text-secondary">You don't have administration access to an organisation.</p>
         ) : (
           <>
             {myEmployers.length > 1 && (
@@ -554,6 +554,7 @@ export default function EmployerConsole() {
                         searchParams={searchParams}
                         setSearchParams={setSearchParams}
                         readOnly={!myProviderRole}
+                        detailContext={`&employer=${encodeURIComponent(selectedEmployer.id)}`}
                       />
                     </div>
                   )}
@@ -572,6 +573,7 @@ export default function EmployerConsole() {
                         userId={user.id}
                         canCreate={myProviderRole === 'admin'}
                         readOnly={!myProviderRole}
+                        detailContext={`&employer=${encodeURIComponent(selectedEmployer.id)}`}
                       />
                     </div>
                   )}
@@ -622,7 +624,7 @@ export default function EmployerConsole() {
                       user={user}
                       searchParams={searchParams}
                       setSearchParams={setSearchParams}
-                      onOpenProfile={(id) => navigate(`/employer/roles/${id}`)}
+                      onOpenProfile={(id) => navigate(`/organisation/roles/${id}`)}
                     />
                   )}
                   {currentSection === 'providers' && (
@@ -701,13 +703,13 @@ function ProviderSectionMenu({ items, currentSection, isActive, buttonRef, hrefF
           isActive ? 'border-moss text-ink font-medium' : 'border-transparent text-secondary hover:text-ink'
         }`}
       >
-        {activeItem ? `Provider: ${activeItem.label}` : 'Provider'}
+        {activeItem ? `Learning content: ${activeItem.label}` : 'Learning content'}
         <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5" aria-hidden="true">
           <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
         </svg>
       </button>
       {open && (
-        <div role="menu" aria-label="Provider" className="absolute z-10 mt-1 min-w-[10rem] bg-card border border-hairline rounded-md shadow-lg py-1">
+        <div role="menu" aria-label="Learning content" className="absolute z-10 mt-1 min-w-[10rem] bg-card border border-hairline rounded-md shadow-lg py-1">
           {items.map((item) => (
             <Link
               key={item.key}

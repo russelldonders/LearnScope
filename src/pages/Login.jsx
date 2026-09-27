@@ -89,7 +89,7 @@ export default function Login() {
         return
       }
       setSubmitting(false)
-      navigate(membership.role === 'admin' ? '/employer' : `/employer/home?org=${orgSlug}`)
+      navigate(membership.role === 'admin' ? `/organisation?employer=${employer.id}` : `/organisation/learning?org=${orgSlug}`)
       return
     }
 

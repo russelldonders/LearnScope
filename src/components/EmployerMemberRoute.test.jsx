@@ -26,10 +26,10 @@ afterEach(cleanup)
 describe('EmployerMemberRoute', () => {
   it('preserves the organisation when a logged-out learner follows the LMS link', async () => {
     render(
-      <MemoryRouter initialEntries={['/employer/home?org=acme']}>
+      <MemoryRouter initialEntries={['/organisation/learning?org=acme']}>
         <Routes>
           <Route
-            path="/employer/home"
+            path="/organisation/learning"
             element={<EmployerMemberRoute><p>Learner LMS</p></EmployerMemberRoute>}
           />
           <Route path="/login" element={<LoginDestination />} />

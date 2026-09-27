@@ -348,7 +348,7 @@ export default function ProviderSkillsSection({ organisationId, userId }) {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3 justify-end">
                         <Link
-                          to={`/provider/organisations/${organisationId}/skills/${item.skillLibraryId}`}
+                          to={`/organisation/organisations/${organisationId}/skills/${item.skillLibraryId}`}
                           className="text-xs font-medium text-moss hover:underline whitespace-nowrap"
                         >
                           Manage alignment

@@ -136,7 +136,7 @@ export default function ProviderCatalogueDetail() {
       <ProviderPage>
         <h1 className="font-display text-xl text-ink">Catalogue not found</h1>
         <p className="mt-2 text-sm text-secondary">It may have been removed or you may not have access.</p>
-        <Link to="/provider" className="mt-4 inline-block text-sm font-medium text-moss hover:underline">Back to provider console</Link>
+        <Link to="/organisation" className="mt-4 inline-block text-sm font-medium text-moss hover:underline">Back to organisation workspace</Link>
       </ProviderPage>
     )
   }
@@ -144,7 +144,17 @@ export default function ProviderCatalogueDetail() {
   // Reconstructed from the loaded catalogue itself, not passed-through
   // navigation state -- so "All catalogues" always returns to the right
   // organisation/section even after a refresh or a bookmarked link here.
-  const backToProviderConsole = `/provider?org=${catalogue.organisation_id}&section=catalogues`
+  const employerContext = searchParams.get('employer')
+  const detailSuffix = employerContext ? `?employer=${encodeURIComponent(employerContext)}` : ''
+  const backToProviderConsole = employerContext
+    ? `/organisation?employer=${encodeURIComponent(employerContext)}&section=provider-catalogues`
+    : `/organisation?org=${catalogue.organisation_id}&section=catalogues`
+  function catalogueSearch(tabKey = null) {
+    const next = new URLSearchParams()
+    if (tabKey && tabKey !== 'courses') next.set('tab', tabKey)
+    if (employerContext) next.set('employer', employerContext)
+    return next
+  }
 
   return (
     <ProviderPage>
@@ -161,14 +171,14 @@ export default function ProviderCatalogueDetail() {
             label="Catalogue settings"
             onEdit={() => {
               setEditing((value) => !value)
-              if (showUsersPanel) setSearchParams({})
+              if (showUsersPanel) setSearchParams(catalogueSearch())
             }}
             options={[
               {
                 label: 'Manage users & approvers',
                 action: () => {
                   setEditing(false)
-                  setSearchParams(showUsersPanel ? {} : { tab: 'users' })
+                  setSearchParams(showUsersPanel ? catalogueSearch() : catalogueSearch('users'))
                 },
               },
             ]}
@@ -180,7 +190,7 @@ export default function ProviderCatalogueDetail() {
         <div className="mt-5 border-y border-hairline py-5">
           <div className="mb-4 flex items-center justify-between">
             <p className="text-xs font-medium uppercase tracking-wide text-secondary">Catalogue setting</p>
-            <button type="button" onClick={() => setSearchParams({})} className="text-xs font-medium text-secondary hover:text-ink">Close</button>
+            <button type="button" onClick={() => setSearchParams(catalogueSearch())} className="text-xs font-medium text-secondary hover:text-ink">Close</button>
           </div>
           <UsersTab catalogueId={catalogue.id} members={members} orgMembers={orgMembers} canManage={canManage} userId={user.id} onReload={load} onError={setError} />
         </div>
@@ -223,7 +233,7 @@ export default function ProviderCatalogueDetail() {
             key={tab.key}
             ref={(el) => { tabRefs.current[tab.key] = el }}
             id={`catalogue-tab-${tab.key}`}
-            to={{ search: tab.key === 'courses' ? '' : `?tab=${tab.key}` }}
+            to={{ search: `?${catalogueSearch(tab.key).toString()}` }}
             role="tab"
             aria-selected={activeTab === tab.key}
             aria-controls={`catalogue-panel-${tab.key}`}
@@ -233,7 +243,7 @@ export default function ProviderCatalogueDetail() {
                 keys: TABS.map((t) => t.key),
                 activeKey: activeTab,
                 refs: tabRefs,
-                onChange: (tabKey) => setSearchParams(tabKey === 'courses' ? {} : { tab: tabKey }),
+                onChange: (tabKey) => setSearchParams(catalogueSearch(tabKey)),
               })
             }
             className={`-mb-px border-b-2 px-3 py-2 text-sm ${activeTab === tab.key ? 'border-moss font-medium text-ink' : 'border-transparent text-secondary hover:text-ink'}`}
@@ -251,7 +261,7 @@ export default function ProviderCatalogueDetail() {
         tabIndex={0}
         className="pt-6"
       >
-        {activeTab === 'courses' && <CoursesTab catalogue={catalogue} courses={courses} organisationCourses={organisationCourses} canManage={canManage} canApprove={canApprove} onReload={load} onError={setError} />}
+        {activeTab === 'courses' && <CoursesTab catalogue={catalogue} courses={courses} organisationCourses={organisationCourses} canManage={canManage} canApprove={canApprove} onReload={load} onError={setError} detailSuffix={detailSuffix} />}
         {activeTab === 'skills' && <SkillsTab catalogueId={catalogue.id} skills={skills} offeredSkills={offeredSkills} canManage={canManage} userId={user.id} onReload={load} onError={setError} />}
         {activeTab === 'resources' && <ResourcesTab catalogueId={catalogue.id} resources={resources} organisationResources={organisationResources} canManage={canManage} userId={user.id} onReload={load} onError={setError} />}
       </div>
@@ -263,7 +273,7 @@ function ProviderPage({ children }) {
   return <div className="min-h-screen bg-paper"><AppHeader hideNavLinks /><main id="main-content" tabIndex={-1} className="mx-auto max-w-5xl px-4 py-8">{children}</main></div>
 }
 
-function CoursesTab({ catalogue, courses, organisationCourses, canManage, canApprove, onReload, onError }) {
+function CoursesTab({ catalogue, courses, organisationCourses, canManage, canApprove, onReload, onError, detailSuffix }) {
   const [adding, setAdding] = useState(false)
   const available = organisationCourses.filter((course) => !courses.some((assigned) => assigned.id === course.id))
 
@@ -297,8 +307,8 @@ function CoursesTab({ catalogue, courses, organisationCourses, canManage, canApp
         <ul className="divide-y divide-hairline border-y border-hairline">
           {courses.map((course) => (
             <li key={course.id} className="flex items-center justify-between gap-4 py-4">
-              <div className="min-w-0"><Link to={`/provider/training/${course.id}`} className="font-medium text-ink hover:text-moss">{course.name}</Link><p className="mt-1 text-sm text-secondary">{course.course_type || 'Course'}{course.duration ? ` · ${course.duration}` : ''}</p></div>
-              <div className="flex items-center gap-3"><span className="text-xs text-secondary">{COURSE_STATUS_LABELS[course.status] ?? course.status}</span>{(canManage || (canApprove && course.status === 'pending_approval')) && <CogMenu label={`Manage ${course.name}`} href={canManage ? `/provider/training/${course.id}` : null} options={canApprove && course.status === 'pending_approval' ? [{ label: 'Approve course', action: () => handleApprove(course.id) }] : []} />}</div>
+              <div className="min-w-0"><Link to={`/organisation/training/${course.id}${detailSuffix}`} className="font-medium text-ink hover:text-moss">{course.name}</Link><p className="mt-1 text-sm text-secondary">{course.course_type || 'Course'}{course.duration ? ` · ${course.duration}` : ''}</p></div>
+              <div className="flex items-center gap-3"><span className="text-xs text-secondary">{COURSE_STATUS_LABELS[course.status] ?? course.status}</span>{(canManage || (canApprove && course.status === 'pending_approval')) && <CogMenu label={`Manage ${course.name}`} href={canManage ? `/organisation/training/${course.id}${detailSuffix}` : null} options={canApprove && course.status === 'pending_approval' ? [{ label: 'Approve course', action: () => handleApprove(course.id) }] : []} />}</div>
             </li>
           ))}
         </ul>

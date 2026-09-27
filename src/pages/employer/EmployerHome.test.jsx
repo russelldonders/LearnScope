@@ -14,7 +14,7 @@ afterEach(cleanup)
 
 describe('EmployerHome learner LMS navigation', () => {
   it('shows the focused employer home without the global navigation', async () => {
-    render(<MemoryRouter initialEntries={['/employer/home?org=acme']}><EmployerHome /></MemoryRouter>)
+    render(<MemoryRouter initialEntries={['/organisation/learning?org=acme']}><EmployerHome /></MemoryRouter>)
 
     expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
     expect(screen.getByTestId('app-header')).toHaveAttribute('data-hidden', 'true')
@@ -25,13 +25,13 @@ describe('EmployerHome learner LMS navigation', () => {
   })
 
   it('switches between dedicated learning and role sections while preserving the organisation', async () => {
-    render(<MemoryRouter initialEntries={['/employer/home?org=acme']}><EmployerHome /></MemoryRouter>)
+    render(<MemoryRouter initialEntries={['/organisation/learning?org=acme']}><EmployerHome /></MemoryRouter>)
     await screen.findByRole('heading', { name: 'Welcome back' })
 
     fireEvent.click(screen.getByRole('link', { name: 'My learning' }))
     expect(await screen.findByRole('heading', { name: 'My learning' })).toBeInTheDocument()
     expect(screen.getByTestId('learning-panel')).toHaveAttribute('data-variant', 'full')
-    expect(screen.getByRole('link', { name: 'My learning' })).toHaveAttribute('href', '/employer/home?org=acme&section=learning')
+    expect(screen.getByRole('link', { name: 'My learning' })).toHaveAttribute('href', '/organisation/learning?org=acme&section=learning')
 
     fireEvent.click(screen.getByRole('link', { name: 'Role & skills' }))
     expect(await screen.findByRole('heading', { name: 'Role & skills' })).toBeInTheDocument()
@@ -39,7 +39,7 @@ describe('EmployerHome learner LMS navigation', () => {
   })
 
   it('opens the employer catalogue as a separate learner section', async () => {
-    render(<MemoryRouter initialEntries={['/employer/home?org=acme&section=catalogue']}><EmployerHome /></MemoryRouter>)
+    render(<MemoryRouter initialEntries={['/organisation/learning?org=acme&section=catalogue']}><EmployerHome /></MemoryRouter>)
 
     expect(await screen.findByRole('heading', { name: 'Catalogue' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Catalogue' })).toHaveAttribute('aria-current', 'page')

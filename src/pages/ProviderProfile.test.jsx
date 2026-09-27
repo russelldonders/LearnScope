@@ -59,7 +59,7 @@ function renderProfile() {
     <MemoryRouter initialEntries={['/providers/acme']}>
       <Routes>
         <Route path="/providers/:slug" element={<ProviderProfile />} />
-        <Route path="/employer/home" element={<Destination label="Learner LMS" />} />
+        <Route path="/organisation/learning" element={<Destination label="Learner LMS" />} />
         <Route path="/login" element={<Destination label="Login" />} />
       </Routes>
     </MemoryRouter>,
@@ -76,7 +76,7 @@ describe('ProviderProfile canonical organisation URL', () => {
 
     renderProfile()
 
-    expect(await screen.findByText('Learner LMS: /employer/home?org=acme')).toBeInTheDocument()
+    expect(await screen.findByText('Learner LMS: /organisation/learning?org=acme')).toBeInTheDocument()
   })
 
   it('continues to show the public catalogue to a visitor', async () => {

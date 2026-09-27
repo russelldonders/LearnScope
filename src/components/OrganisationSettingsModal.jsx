@@ -201,14 +201,14 @@ export default function OrganisationSettingsModal({ organisation, learnerPortal,
             General
           </span>
           <Link
-            to={`/provider/organisations/${organisation.id}/lms-connections`}
+            to={`/organisation/organisations/${organisation.id}/lms-connections`}
             onClick={onClose}
             className="text-sm px-3 py-2 -mb-px border-b-2 border-transparent text-secondary hover:text-ink hover:border-hairline whitespace-nowrap"
           >
             LMS connections
           </Link>
           <Link
-            to={`/provider/organisations/${organisation.id}/lti-tools`}
+            to={`/organisation/organisations/${organisation.id}/lti-tools`}
             onClick={onClose}
             className="text-sm px-3 py-2 -mb-px border-b-2 border-transparent text-secondary hover:text-ink hover:border-hairline whitespace-nowrap"
           >
