@@ -1,10 +1,12 @@
 import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
+import ipaddr from 'ipaddr.js'
 import { Agent, fetch as undiciFetch } from 'undici'
 import Anthropic from '@anthropic-ai/sdk'
 import mammoth from 'mammoth'
 import { PDFDocument, PDFName, PDFRawStream } from 'pdf-lib'
 import { verifySupabaseUser } from './_lib/auth.js'
+import { consumeQuota, sendQuotaExceeded } from './_lib/quota.js'
 
 export const config = {
   api: {
@@ -26,33 +28,15 @@ const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingm
 // pinning the connection to this validated address (see pinnedDispatcher
 // below), so this function only needs to get the range check itself right.
 function isPrivateOrReservedIp(ip) {
-  const version = isIP(ip)
-  if (version === 4) {
-    const [a, b] = ip.split('.').map(Number)
-    if (a === 127 || a === 10 || a === 0) return true
-    if (a === 172 && b >= 16 && b <= 31) return true
-    if (a === 192 && b === 168) return true
-    if (a === 169 && b === 254) return true
-    if (a === 100 && b >= 64 && b <= 127) return true
-    if (a === 192 && b === 0) return true // 192.0.0.0/24 (IETF protocol assignments)
-    if (a === 192 && b === 88) return true // 192.88.99.0/24 (former 6to4 relay anycast)
-    if (a === 198 && (b === 18 || b === 19)) return true // 198.18.0.0/15 (benchmarking)
-    return false
+  // Anything ipaddr.js doesn't classify as ordinary public unicast (private,
+  // loopback, link-local, multicast, reserved/documentation ranges, NAT64
+  // and 6to4 mappings, ...) is refused -- same check as the LTI client and
+  // the brand-colour fetcher, rather than a hand-maintained range list.
+  try {
+    return ipaddr.process(ip).range() !== 'unicast'
+  } catch {
+    return true
   }
-  if (version === 6) {
-    const lower = ip.toLowerCase()
-    if (lower === '::1' || lower === '::') return true
-    if (lower.startsWith('::ffff:')) return isPrivateOrReservedIp(lower.slice(7))
-    if (lower.startsWith('::') && lower.includes('.')) {
-      // Deprecated IPv4-compatible form (::a.b.c.d) -- check the embedded IPv4.
-      return isPrivateOrReservedIp(lower.slice(2))
-    }
-    if (/^fe[89ab]/.test(lower)) return true // fe80::/10 link-local
-    if (/^f[cd]/.test(lower)) return true // fc00::/7 unique local
-    if (/^ff/.test(lower)) return true // ff00::/8 multicast
-    return false
-  }
-  return true
 }
 
 function userFacingError(message) {
@@ -361,6 +345,11 @@ export default async function handler(req, res) {
   }
 
   const { fileBase64, fileType: bodyFileType, url } = req.body ?? {}
+
+  if (!(await consumeQuota(user.id, 'cv'))) {
+    sendQuotaExceeded(res)
+    return
+  }
 
   try {
     let buffer

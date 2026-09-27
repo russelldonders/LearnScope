@@ -25,6 +25,26 @@ describe('website brand colour extraction', () => {
       .rejects.toThrow('not publicly reachable')
   })
 
+  it.each([
+    ['NAT64-mapped', '64:ff9b::7f00:1', 6],
+    ['IPv4-mapped IPv6 loopback', '::ffff:127.0.0.1', 6],
+    ['multicast', '224.0.0.1', 4],
+    ['cloud metadata', '169.254.169.254', 4],
+  ])('rejects %s destinations', async (_label, address, family) => {
+    const lookup = vi.fn().mockResolvedValue([{ address, family }])
+
+    await expect(validatePublicWebsiteUrl('https://sneaky.example', lookup))
+      .rejects.toThrow('not publicly reachable')
+  })
+
+  it('rejects non-default ports without resolving the host', async () => {
+    const lookup = vi.fn()
+
+    await expect(validatePublicWebsiteUrl('https://example.com:8443', lookup))
+      .rejects.toThrow('public http or https website URL')
+    expect(lookup).not.toHaveBeenCalled()
+  })
+
   it('allows public websites', async () => {
     const lookup = vi.fn().mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
 

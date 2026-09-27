@@ -1,5 +1,6 @@
 import dns from 'node:dns/promises'
-import net from 'node:net'
+import ipaddr from 'ipaddr.js'
+import { Agent, fetch } from 'undici'
 
 const MAX_REDIRECTS = 4
 const MAX_HTML_BYTES = 2 * 1024 * 1024
@@ -90,45 +91,57 @@ export function extractWebsiteBrandColours(html, stylesheets = []) {
   return distinct
 }
 
+// Same check as the LTI client (lti/security.js): anything ipaddr.js doesn't
+// classify as ordinary public unicast -- private, loopback, link-local,
+// reserved, NAT64/6to4-mapped and so on -- is refused.
 function isPublicAddress(address) {
-  const version = net.isIP(address)
-  if (version === 4) {
-    const [first, second, third] = address.split('.').map(Number)
-    if (first === 0 || first === 10 || first === 127 || first >= 224) return false
-    if (first === 100 && second >= 64 && second <= 127) return false
-    if (first === 169 && second === 254) return false
-    if (first === 172 && second >= 16 && second <= 31) return false
-    if (first === 192 && second === 168) return false
-    if (first === 192 && second === 0 && third <= 2) return false
-    if (first === 198 && (second === 18 || second === 19 || second === 51)) return false
-    if (first === 203 && second === 0 && third === 113) return false
-    return true
+  try {
+    return ipaddr.process(address).range() === 'unicast'
+  } catch {
+    return false
   }
-  if (version === 6) {
-    const normalised = address.toLowerCase().split('%')[0]
-    if (normalised === '::' || normalised === '::1') return false
-    if (/^(?:fc|fd|fe[89ab]|ff)/.test(normalised) || normalised.startsWith('2001:db8:')) return false
-    if (normalised.startsWith('::ffff:')) return isPublicAddress(normalised.slice(7))
-    return true
-  }
-  return false
 }
 
-export async function validatePublicWebsiteUrl(value, lookup = dns.lookup) {
+async function resolvePublicWebsite(value, lookup) {
   let url
   try {
     url = new URL(value)
   } catch {
     throw new Error('Enter a complete website URL, including https://.')
   }
-  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+  // Default ports only (url.port is '' for the scheme's own port), so this
+  // can't be pointed at other services on a public host.
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.port) {
     throw new Error('Enter a public http or https website URL.')
   }
-  const addresses = await lookup(url.hostname, { all: true, verbatim: true })
+  const addresses = await lookup(url.hostname.replace(/^[|]$/g, ''), { all: true, verbatim: true })
   if (!addresses.length || addresses.some(({ address }) => !isPublicAddress(address))) {
     throw new Error('That website address is not publicly reachable.')
   }
-  return url
+  return { url, addresses }
+}
+
+export async function validatePublicWebsiteUrl(value, lookup = dns.lookup) {
+  return (await resolvePublicWebsite(value, lookup)).url
+}
+
+// Connects only to the addresses that were just validated, rather than
+// letting fetch resolve the name again -- otherwise a DNS answer that
+// changes between the check and the request could reach an internal host.
+async function fetchPinned(url, addresses, options) {
+  const agent = new Agent({
+    connect: {
+      lookup: (_host, opts, callback) =>
+        opts.all ? callback(null, addresses) : callback(null, addresses[0].address, addresses[0].family),
+    },
+  })
+  try {
+    const response = await fetch(url, { ...options, dispatcher: agent })
+    return { response, close: () => agent.close() }
+  } catch (error) {
+    await agent.close()
+    throw error
+  }
 }
 
 async function readLimitedBody(response, maximumBytes) {
@@ -158,21 +171,29 @@ async function readLimitedBody(response, maximumBytes) {
 }
 
 async function fetchPublicText(initialUrl, maximumBytes, acceptedTypes) {
-  let url = await validatePublicWebsiteUrl(initialUrl)
+  let target = await resolvePublicWebsite(initialUrl, dns.lookup)
   for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
-    const response = await fetch(url, {
+    const { response, close } = await fetchPinned(target.url, target.addresses, {
       redirect: 'manual',
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       headers: { 'User-Agent': 'LearnScope brand colour analyser/1.0', Accept: acceptedTypes },
     })
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get('location')
-      if (!location || redirect === MAX_REDIRECTS) throw new Error('The website redirected too many times.')
-      url = await validatePublicWebsiteUrl(new URL(location, url).href)
-      continue
+    try {
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get('location')
+        if (!location || redirect === MAX_REDIRECTS) throw new Error('The website redirected too many times.')
+        target = await resolvePublicWebsite(new URL(location, target.url).href, dns.lookup)
+        continue
+      }
+      if (!response.ok) throw new Error(`The website returned ${response.status}.`)
+      return {
+        text: await readLimitedBody(response, maximumBytes),
+        url: target.url,
+        contentType: response.headers.get('content-type') ?? '',
+      }
+    } finally {
+      await close()
     }
-    if (!response.ok) throw new Error(`The website returned ${response.status}.`)
-    return { text: await readLimitedBody(response, maximumBytes), url, contentType: response.headers.get('content-type') ?? '' }
   }
   throw new Error('The website could not be reached.')
 }

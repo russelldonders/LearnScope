@@ -1,5 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { verifySupabaseUser } from './_lib/auth.js'
+import { consumeQuota, sendQuotaExceeded } from './_lib/quota.js'
+
+// Longer names are trimmed rather than rejected: nothing else in the app
+// limits a custom skill's name, so rejecting would break the feature for it.
+const MAX_SKILL_NAME_LENGTH = 200
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -79,13 +84,28 @@ export default async function handler(req, res) {
     return
   }
 
-  const { skillName, selfLevel, selfComments, activities, peerRatings } = req.body ?? {}
+  let { skillName } = req.body ?? {}
+  const { selfLevel, selfComments, activities, peerRatings } = req.body ?? {}
   if (!skillName || typeof skillName !== 'string') {
     res.status(400).json({ error: 'Missing skillName' })
     return
   }
+  skillName = skillName.slice(0, MAX_SKILL_NAME_LENGTH)
 
-  const prompt = buildPrompt({ skillName, selfLevel, selfComments, activities, peerRatings })
+  // Free text from the learner is trimmed rather than rejected (the comment
+  // box has no limit) -- it only bounds what gets sent to the model.
+  const prompt = buildPrompt({
+    skillName,
+    selfLevel,
+    selfComments: typeof selfComments === 'string' ? selfComments.slice(0, 4000) : null,
+    activities,
+    peerRatings,
+  })
+
+  if (!(await consumeQuota(user.id, 'ai'))) {
+    sendQuotaExceeded(res)
+    return
+  }
 
   try {
     const response = await anthropic.messages.create({

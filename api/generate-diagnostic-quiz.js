@@ -1,7 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { verifySupabaseUser } from './_lib/auth.js'
+import { consumeQuota, sendQuotaExceeded } from './_lib/quota.js'
 import { supabaseAdmin } from './_lib/supabaseAdmin.js'
 import { readableLibrarySkillName } from './_lib/skillLibrary.js'
+
+// Longer names are trimmed rather than rejected: nothing else in the app
+// limits a custom skill's name, so rejecting would break the feature for it.
+const MAX_SKILL_NAME_LENGTH = 200
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -91,10 +96,11 @@ export default async function handler(req, res) {
 
   let { skillName, librarySkillId } = req.body ?? {}
   const { level } = req.body ?? {}
-  if (!skillName || typeof skillName !== 'string' || skillName.length > 200) {
-    res.status(400).json({ error: 'Missing or invalid skillName' })
+  if (!skillName || typeof skillName !== 'string') {
+    res.status(400).json({ error: 'Missing skillName' })
     return
   }
+  skillName = skillName.slice(0, MAX_SKILL_NAME_LENGTH)
   if (!Number.isInteger(level) || level < 1 || level > 5) {
     res.status(400).json({ error: 'Missing or invalid level' })
     return
@@ -139,6 +145,11 @@ export default async function handler(req, res) {
 Pitch every question's difficulty and depth specifically at level ${level} ("${levelLabel}") -- someone genuinely at this level should be able to answer most of these correctly, and someone below it should struggle with several. Avoid trick questions. Each question needs exactly 4 answer options with exactly one correct answer (correctIndex is the 0-based index of the correct option).
 
 Return exactly 10 questions.`
+
+  if (!(await consumeQuota(user.id, 'ai'))) {
+    sendQuotaExceeded(res)
+    return
+  }
 
   try {
     const response = await anthropic.messages.create({

@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { verifySupabaseUser } from './_lib/auth.js'
+import { consumeQuota, sendQuotaExceeded } from './_lib/quota.js'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -147,6 +148,11 @@ export default async function handler(req, res) {
       : buildTagSuggestionRequest(body)
   if (request.error) {
     res.status(400).json({ error: request.error })
+    return
+  }
+
+  if (!(await consumeQuota(user.id, 'ai'))) {
+    sendQuotaExceeded(res)
     return
   }
 

@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { verifySupabaseUser } from './_lib/auth.js'
+import { consumeQuota, sendQuotaExceeded } from './_lib/quota.js'
 import { supabaseAdmin } from './_lib/supabaseAdmin.js'
 import { readableLibrarySkillName } from './_lib/skillLibrary.js'
 
@@ -8,6 +9,10 @@ import { readableLibrarySkillName } from './_lib/skillLibrary.js'
 // actions" merge send-email.js already did for its 3 email types, freeing
 // the function slot api/strava/[...path].js needs under Vercel's Hobby
 // 12-function cap (see api/xapi/[...path].js for the other precedent).
+
+// Longer names are trimmed rather than rejected: nothing else in the app
+// limits a custom skill's name, so rejecting would break the feature for it.
+const MAX_SKILL_NAME_LENGTH = 200
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -50,13 +55,14 @@ const TURN_SCHEMA = {
   additionalProperties: false,
 }
 
-async function handlePlan(req, res) {
+async function handlePlan(req, res, user) {
   let { skillName, librarySkillId } = req.body ?? {}
   const { level, calibrate } = req.body ?? {}
-  if (!skillName || typeof skillName !== 'string' || skillName.length > 200) {
-    res.status(400).json({ error: 'Missing or invalid skillName' })
+  if (!skillName || typeof skillName !== 'string') {
+    res.status(400).json({ error: 'Missing skillName' })
     return
   }
+  skillName = skillName.slice(0, MAX_SKILL_NAME_LENGTH)
   if (!calibrate && (!Number.isInteger(level) || level < 1 || level > 5)) {
     res.status(400).json({ error: 'Missing or invalid level' })
     return
@@ -116,6 +122,11 @@ Produce:
 - rubric: 2-4 sentences describing what a genuine level-${level} answer sounds like versus a weaker one, for an interviewer to judge against.
 
 Pitch everything specifically at level ${level} ("${levelLabel}") -- not easier, not harder.`
+
+  if (!(await consumeQuota(user.id, 'ai'))) {
+    sendQuotaExceeded(res)
+    return
+  }
 
   try {
     const response = await anthropic.messages.create({
@@ -211,12 +222,14 @@ ${conclusion} While done is false, still fill confirmedLevel with your current b
   }`
 }
 
-async function handleTurn(req, res) {
-  const { skillName, level, calibrate, plan, transcript } = req.body ?? {}
-  if (!skillName || typeof skillName !== 'string' || skillName.length > 200) {
-    res.status(400).json({ error: 'Missing or invalid skillName' })
+async function handleTurn(req, res, user) {
+  let { skillName } = req.body ?? {}
+  const { level, calibrate, plan, transcript } = req.body ?? {}
+  if (!skillName || typeof skillName !== 'string') {
+    res.status(400).json({ error: 'Missing skillName' })
     return
   }
+  skillName = skillName.slice(0, MAX_SKILL_NAME_LENGTH)
   if (!calibrate && (!level || level < 1 || level > 5)) {
     res.status(400).json({ error: 'Missing or invalid level' })
     return
@@ -257,6 +270,11 @@ async function handleTurn(req, res) {
 
   const turnCount = transcript.filter((t) => t.role === 'user').length
   const mustConclude = turnCount >= MAX_LEARNER_TURNS
+
+  if (!(await consumeQuota(user.id, 'ai'))) {
+    sendQuotaExceeded(res)
+    return
+  }
 
   try {
     const response = await anthropic.messages.create({
@@ -312,10 +330,10 @@ export default async function handler(req, res) {
   const { type } = req.body ?? {}
   switch (type) {
     case 'plan':
-      await handlePlan(req, res)
+      await handlePlan(req, res, user)
       return
     case 'turn':
-      await handleTurn(req, res)
+      await handleTurn(req, res, user)
       return
     default:
       res.status(400).json({ error: 'Unknown interview action' })

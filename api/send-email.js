@@ -1,4 +1,5 @@
 import { verifySupabaseUser } from './_lib/auth.js'
+import { consumeQuota, sendQuotaExceeded } from './_lib/quota.js'
 import { supabaseAdmin } from './_lib/supabaseAdmin.js'
 
 // Single dispatcher for the app's two Resend-backed transactional emails,
@@ -191,12 +192,16 @@ export default async function handler(req, res) {
     res.status(400).json({ error: `Missing toEmail, skillName, or ${emailType.urlField}` })
     return
   }
-  if (typeof skillName !== 'string' || skillName.length > MAX_SKILL_NAME_LENGTH) {
+  if (typeof skillName !== 'string') {
     res.status(400).json({ error: 'Invalid skillName' })
     return
   }
   if (!isAppLink(url, type, req.headers.host)) {
     res.status(400).json({ error: `Invalid ${emailType.urlField}` })
+    return
+  }
+  if (!(await consumeQuota(user.id, 'email'))) {
+    sendQuotaExceeded(res)
     return
   }
 
@@ -205,7 +210,7 @@ export default async function handler(req, res) {
       templateKey: emailType.templateKey,
       toEmail,
       fromName: await senderName(user),
-      skillName,
+      skillName: skillName.slice(0, MAX_SKILL_NAME_LENGTH),
       url,
     })
   } catch (err) {

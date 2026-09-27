@@ -1,6 +1,7 @@
 import ltiHandler from '../_lib/lti/handler.js'
 import { verifySupabaseUser } from '../_lib/auth.js'
 import { supabaseAdmin } from '../_lib/supabaseAdmin.js'
+import { consumeQuota, sendQuotaExceeded } from '../_lib/quota.js'
 import { deleteUserEvidenceFiles } from '../_lib/evidenceStorage.js'
 import { getWebsiteBrandColours } from '../_lib/websiteBrandColours.js'
 
@@ -99,8 +100,18 @@ export default async function handler(req, res) {
     }
   } catch (err) {
     console.error(`admin/actions (${action}) error:`, err)
-    res.status(500).json({ error: err.message || 'Request failed.' })
+    res.status(500).json({ error: clientErrorMessage(err) })
   }
+}
+
+// Messages raised by our own SQL functions (`raise exception`, P0001 or the
+// app's LSxxx codes) and by Supabase Auth are written for people, so they
+// still reach the UI. Anything else -- constraint/table names, SQL detail --
+// is only logged above.
+function clientErrorMessage(err) {
+  const code = typeof err?.code === 'string' ? err.code : ''
+  if (err?.message && (code === 'P0001' || /^LS\d+$/.test(code) || err.__isAuthError)) return err.message
+  return 'Request failed.'
 }
 
 // GoTrue reports the total page count on the first page's response (via a
@@ -1158,6 +1169,12 @@ async function inviteManagerTeamMemberByEmail(admin, caller, { teamId, email }, 
     return
   }
 
+  // Anyone can lead a team, so cap how many invites one person can send.
+  if (!(await consumeQuota(caller.id, 'invite'))) {
+    sendQuotaExceeded(res)
+    return
+  }
+
   const trimmedEmail = email.trim()
   const existingUserId = await findUserIdByEmail(admin, trimmedEmail)
   if (existingUserId === caller.id) {
@@ -1208,7 +1225,10 @@ async function inviteManagerTeamMemberByEmail(admin, caller, { teamId, email }, 
     await notifyManagerTeamInvitePending(admin, trimmedEmail, caller.id, team.name)
   }
 
-  res.status(200).json({ ok: true, userId, alreadyExisted: Boolean(existingUserId) })
+  // No alreadyExisted here (unlike the admin-only invite actions): any
+  // signed-in user can lead a team, so it would reveal whether an email
+  // address has a LearnScope account.
+  res.status(200).json({ ok: true, userId })
 }
 
 // Nudges someone who hasn't answered a pending team invite yet. Re-checks

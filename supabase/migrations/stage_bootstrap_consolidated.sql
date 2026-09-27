@@ -25826,3 +25826,149 @@ create policy "Validators can view evidence files for skills they're validating"
         and svr.requester_id::text = (storage.foldername(name))[1]
     )
   );
+
+
+
+-- =============================================================================
+-- 20260927120000_guard_validated_skill_stage.sql
+-- =============================================================================
+
+-- Learners could write skills.lifecycle_stage = 'validated' directly through
+-- "Users manage their own skills" (0001), making a skill look peer/AI
+-- verified to connections and employers without any validation -- and also
+-- making them eligible to act as a validator for others.
+--
+-- 'validated'/'maintained' are only ever reached through server paths:
+--   * decide_validation_request (SECURITY DEFINER, runs as its owner)
+--   * api/validate-skill's save action (service_role)
+-- so this only blocks the learner-facing roles from *moving* a skill into
+-- those stages. Other updates to an already-validated skill (level, notes,
+-- archiving, restoring) are unaffected, and no existing data is changed.
+
+create or replace function private.guard_verified_skill_stage()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if current_user in ('authenticated', 'anon')
+     and new.lifecycle_stage in ('validated', 'maintained')
+     and (tg_op = 'INSERT' or old.lifecycle_stage is distinct from new.lifecycle_stage) then
+    raise exception 'A skill can only be marked as validated through a validation.'
+      using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+-- "skills_a_..." so it runs before skills_sync_highest_lifecycle_stage
+-- (same-timing triggers fire in name order) -- nothing gets recorded as the
+-- skill's highest stage for a write that is about to be rejected anyway.
+create trigger skills_a_guard_verified_stage
+  before insert or update of lifecycle_stage on public.skills
+  for each row execute function private.guard_verified_skill_stage();
+
+
+
+-- =============================================================================
+-- 20260927130000_shared_guides_and_employer_evidence_hardening.sql
+-- =============================================================================
+
+-- Security hardening from the 2026-09-27 review, part 3. No schema or data
+-- changes.
+
+-- 1. set_skill_library_level_guide (0089) let any signed-in user write the
+-- shared level-guide text on any library skill whose guide was still empty,
+-- which every learner tracking that skill then sees. api/generate-level-guide
+-- now generates guides from the library entry's own name and writes the
+-- cache with the service role, so learners no longer need this at all.
+revoke execute on function public.set_skill_library_level_guide(uuid, text, jsonb) from public, anon, authenticated;
+
+-- 2. Employer evidence access (20260921075057) matched any storage path a
+-- learner listed in their own assessment's evidence_paths -- including a
+-- path in someone else's folder. Evidence is stored at
+-- {owner_user_id}/{skill_id}/..., so also require the file to sit in the
+-- assessment owner's own folder.
+drop policy "Scoped managers can read explicitly shared skill evidence files" on storage.objects;
+
+create policy "Scoped managers can read explicitly shared skill evidence files"
+  on storage.objects for select
+  to authenticated
+  using (
+    bucket_id = 'skill-evidence'
+    and exists (
+      select 1
+      from public.skill_assessments assessment
+      where name = any(coalesce(assessment.evidence_paths, array[]::text[]))
+        and (storage.foldername(name))[1] = assessment.user_id::text
+        and public.is_skill_evidence_shared_with_employer(
+          assessment.skill_id,
+          (select auth.uid())
+        )
+    )
+  );
+
+
+
+-- =============================================================================
+-- 20260927140000_api_usage_quotas.sql
+-- =============================================================================
+
+-- Per-user usage caps for the paid/abusable serverless endpoints (AI calls,
+-- CV parsing, outgoing emails, team invites). Before this, one throwaway
+-- account could loop any of them without limit -- running up the Anthropic
+-- bill or sending mail/invites at volume.
+--
+-- A plain sliding-window event log, written and read only by the service
+-- role through consume_api_quota; learners have no access at all. Rows only
+-- record that a call happened (user, bucket, time) -- no content -- and are
+-- pruned as they age out of the window. Deleting the account cascades.
+
+create table public.api_usage_events (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  bucket text not null check (char_length(bucket) between 1 and 40),
+  created_at timestamptz not null default now()
+);
+
+create index api_usage_events_user_bucket_time_idx
+  on public.api_usage_events (user_id, bucket, created_at);
+
+alter table public.api_usage_events enable row level security;
+revoke all on table public.api_usage_events from public, anon, authenticated;
+
+-- Returns true (and records the call) when the user is still under p_limit
+-- calls in the trailing window, false otherwise. The advisory lock makes the
+-- count-then-insert atomic per user+bucket, so parallel requests can't all
+-- slip under the limit together.
+create function public.consume_api_quota(p_user_id uuid, p_bucket text, p_limit integer, p_window_seconds integer)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_count integer;
+begin
+  perform pg_advisory_xact_lock(hashtextextended(p_user_id::text || ':' || p_bucket, 0));
+
+  delete from public.api_usage_events
+  where user_id = p_user_id
+    and bucket = p_bucket
+    and created_at < now() - make_interval(secs => p_window_seconds);
+
+  select count(*) into v_count
+  from public.api_usage_events
+  where user_id = p_user_id and bucket = p_bucket;
+
+  if v_count >= p_limit then
+    return false;
+  end if;
+
+  insert into public.api_usage_events (user_id, bucket) values (p_user_id, p_bucket);
+  return true;
+end;
+$$;
+
+revoke all on function public.consume_api_quota(uuid, text, integer, integer) from public, anon, authenticated;
+grant execute on function public.consume_api_quota(uuid, text, integer, integer) to service_role;

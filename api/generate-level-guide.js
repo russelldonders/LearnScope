@@ -1,7 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { verifySupabaseUser } from './_lib/auth.js'
+import { consumeQuota, sendQuotaExceeded } from './_lib/quota.js'
 import { readableLibrarySkillName } from './_lib/skillLibrary.js'
 import { supabaseAdmin } from './_lib/supabaseAdmin.js'
+
+// Longer names are trimmed rather than rejected: nothing else in the app
+// limits a custom skill's name, so rejecting would break the feature for it.
+const MAX_SKILL_NAME_LENGTH = 200
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -64,10 +69,11 @@ export default async function handler(req, res) {
 
   let { skillName } = req.body ?? {}
   const { axis, librarySkillId } = req.body ?? {}
-  if (!skillName || typeof skillName !== 'string' || skillName.length > 200) {
-    res.status(400).json({ error: 'Missing or invalid skillName' })
+  if (!skillName || typeof skillName !== 'string') {
+    res.status(400).json({ error: 'Missing skillName' })
     return
   }
+  skillName = skillName.slice(0, MAX_SKILL_NAME_LENGTH)
   const buildPrompt = Object.hasOwn(PROMPTS, axis) ? PROMPTS[axis] : null
   if (!buildPrompt) {
     res.status(400).json({ error: 'Missing or invalid axis' })
@@ -98,6 +104,11 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error(`generate-level-guide (${axis}) library lookup error:`, err)
     res.status(500).json({ error: 'Failed to generate level guidance.' })
+    return
+  }
+
+  if (!(await consumeQuota(user.id, 'ai'))) {
+    sendQuotaExceeded(res)
     return
   }
 
