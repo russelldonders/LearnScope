@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient'
 
-export async function generateKnowledgeLevelGuide(skillName) {
+export async function generateKnowledgeLevelGuide(skillName, librarySkillId = null) {
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -10,7 +10,7 @@ export async function generateKnowledgeLevelGuide(skillName) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify({ skillName, axis: 'knowledge' }),
+    body: JSON.stringify({ skillName, axis: 'knowledge', librarySkillId }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
@@ -27,7 +27,8 @@ export async function generateKnowledgeLevelGuide(skillName) {
 // -- every learner tracking the same library skill reuses the same
 // generated guide instead of each regenerating their own. Only a fully
 // custom, unlinked skill falls back to caching on the learner's own skills
-// row, same as before.
+// row, same as before. The shared cache is written by the API (from the
+// library entry's own name), not from here.
 export async function ensureKnowledgeLevelGuide(skill) {
   if (skill.knowledge_level_guide?.length === 5) return skill.knowledge_level_guide
 
@@ -40,16 +41,7 @@ export async function ensureKnowledgeLevelGuide(skill) {
     if (libError) console.error('Failed to read cached knowledge level guide:', libError)
     if (libRow?.knowledge_level_guide?.length === 5) return libRow.knowledge_level_guide
 
-    const statements = await generateKnowledgeLevelGuide(skill.name)
-    if (statements.length === 5) {
-      const { error } = await supabase.rpc('set_skill_library_level_guide', {
-        p_skill_library_id: skill.library_skill_id,
-        p_axis: 'knowledge',
-        p_statements: statements,
-      })
-      if (error) console.error('Failed to cache knowledge level guide:', error)
-    }
-    return statements
+    return generateKnowledgeLevelGuide(skill.name, skill.library_skill_id)
   }
 
   const statements = await generateKnowledgeLevelGuide(skill.name)

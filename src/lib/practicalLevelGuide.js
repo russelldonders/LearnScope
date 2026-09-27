@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient'
 
-export async function generatePracticalLevelGuide(skillName) {
+export async function generatePracticalLevelGuide(skillName, librarySkillId = null) {
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -10,7 +10,7 @@ export async function generatePracticalLevelGuide(skillName) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify({ skillName, axis: 'practical' }),
+    body: JSON.stringify({ skillName, axis: 'practical', librarySkillId }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
@@ -27,6 +27,7 @@ export async function generatePracticalLevelGuide(skillName) {
 // skill_library row instead of the learner's own skills row -- every
 // learner tracking the same library skill reuses the same generated guide.
 // Only a fully custom, unlinked skill falls back to per-instance caching.
+// The shared cache is written by the API, not from here.
 export async function ensurePracticalLevelGuide(skill) {
   if (skill.practical_level_guide?.length === 5) return skill.practical_level_guide
 
@@ -39,16 +40,7 @@ export async function ensurePracticalLevelGuide(skill) {
     if (libError) console.error('Failed to read cached practical level guide:', libError)
     if (libRow?.practical_level_guide?.length === 5) return libRow.practical_level_guide
 
-    const statements = await generatePracticalLevelGuide(skill.name)
-    if (statements.length === 5) {
-      const { error } = await supabase.rpc('set_skill_library_level_guide', {
-        p_skill_library_id: skill.library_skill_id,
-        p_axis: 'practical',
-        p_statements: statements,
-      })
-      if (error) console.error('Failed to cache practical level guide:', error)
-    }
-    return statements
+    return generatePracticalLevelGuide(skill.name, skill.library_skill_id)
   }
 
   const statements = await generatePracticalLevelGuide(skill.name)

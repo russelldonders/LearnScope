@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { verifySupabaseUser } from './_lib/auth.js'
 import { supabaseAdmin } from './_lib/supabaseAdmin.js'
+import { readableLibrarySkillName } from './_lib/skillLibrary.js'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -88,14 +89,30 @@ export default async function handler(req, res) {
     return
   }
 
-  const { skillName, level, librarySkillId } = req.body ?? {}
-  if (!skillName || typeof skillName !== 'string') {
-    res.status(400).json({ error: 'Missing skillName' })
+  let { skillName, librarySkillId } = req.body ?? {}
+  const { level } = req.body ?? {}
+  if (!skillName || typeof skillName !== 'string' || skillName.length > 200) {
+    res.status(400).json({ error: 'Missing or invalid skillName' })
     return
   }
-  if (!level || level < 1 || level > 5) {
+  if (!Number.isInteger(level) || level < 1 || level > 5) {
     res.status(400).json({ error: 'Missing or invalid level' })
     return
+  }
+
+  // Shared cache entries are keyed by library skill, so generate them from
+  // that entry's own name; a library id the caller can't see just means no
+  // shared caching (see api/_lib/skillLibrary.js).
+  if (librarySkillId) {
+    try {
+      const libraryName = await readableLibrarySkillName(authHeader.slice(7), librarySkillId)
+      if (libraryName) skillName = libraryName
+      else librarySkillId = null
+    } catch (err) {
+      console.error('generate-diagnostic-quiz library lookup error:', err)
+      res.status(500).json({ error: 'Failed to generate knowledge check.' })
+      return
+    }
   }
 
   const admin = supabaseAdmin()

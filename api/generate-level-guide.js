@@ -1,5 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { verifySupabaseUser } from './_lib/auth.js'
+import { readableLibrarySkillName } from './_lib/skillLibrary.js'
+import { supabaseAdmin } from './_lib/supabaseAdmin.js'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -60,14 +62,42 @@ export default async function handler(req, res) {
     return
   }
 
-  const { skillName, axis } = req.body ?? {}
-  if (!skillName || typeof skillName !== 'string') {
-    res.status(400).json({ error: 'Missing skillName' })
+  let { skillName } = req.body ?? {}
+  const { axis, librarySkillId } = req.body ?? {}
+  if (!skillName || typeof skillName !== 'string' || skillName.length > 200) {
+    res.status(400).json({ error: 'Missing or invalid skillName' })
     return
   }
-  const buildPrompt = PROMPTS[axis]
+  const buildPrompt = Object.hasOwn(PROMPTS, axis) ? PROMPTS[axis] : null
   if (!buildPrompt) {
     res.status(400).json({ error: 'Missing or invalid axis' })
+    return
+  }
+
+  // For a library skill the guide is shared by everyone tracking it, so it
+  // is generated from the library entry's own name and cached here, server-
+  // side -- learners can no longer write shared guide text themselves.
+  const guideColumn = `${axis}_level_guide`
+  let cacheLibraryId = null
+  try {
+    const libraryName = await readableLibrarySkillName(authHeader.slice(7), librarySkillId)
+    if (libraryName) {
+      skillName = libraryName
+      cacheLibraryId = librarySkillId
+      const { data: row, error } = await supabaseAdmin()
+        .from('skill_library')
+        .select(guideColumn)
+        .eq('id', cacheLibraryId)
+        .maybeSingle()
+      if (error) throw error
+      if (row?.[guideColumn]?.length === 5) {
+        res.status(200).json({ statements: row[guideColumn] })
+        return
+      }
+    }
+  } catch (err) {
+    console.error(`generate-level-guide (${axis}) library lookup error:`, err)
+    res.status(500).json({ error: 'Failed to generate level guidance.' })
     return
   }
 
@@ -88,6 +118,16 @@ export default async function handler(req, res) {
 
     const textBlock = response.content.find((b) => b.type === 'text')
     const data = JSON.parse(textBlock.text)
+    if (cacheLibraryId && data.statements?.length === 5) {
+      // Only fills an empty column, so a slower concurrent generation never
+      // replaces one that already landed.
+      const { error } = await supabaseAdmin()
+        .from('skill_library')
+        .update({ [guideColumn]: data.statements })
+        .eq('id', cacheLibraryId)
+        .is(guideColumn, null)
+      if (error) console.error(`generate-level-guide (${axis}) cache error:`, error)
+    }
     res.status(200).json(data)
   } catch (err) {
     console.error(`generate-level-guide (${axis}) error:`, err)

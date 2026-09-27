@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { verifySupabaseUser } from './_lib/auth.js'
 import { supabaseAdmin } from './_lib/supabaseAdmin.js'
+import { readableLibrarySkillName } from './_lib/skillLibrary.js'
 
 // Single dispatcher for the two halves of the spoken-interview diagnostic
 // (generate a plan, then continue it turn by turn) -- same "one file, many
@@ -50,14 +51,30 @@ const TURN_SCHEMA = {
 }
 
 async function handlePlan(req, res) {
-  const { skillName, level, librarySkillId, calibrate } = req.body ?? {}
-  if (!skillName || typeof skillName !== 'string') {
-    res.status(400).json({ error: 'Missing skillName' })
+  let { skillName, librarySkillId } = req.body ?? {}
+  const { level, calibrate } = req.body ?? {}
+  if (!skillName || typeof skillName !== 'string' || skillName.length > 200) {
+    res.status(400).json({ error: 'Missing or invalid skillName' })
     return
   }
-  if (!calibrate && (!level || level < 1 || level > 5)) {
+  if (!calibrate && (!Number.isInteger(level) || level < 1 || level > 5)) {
     res.status(400).json({ error: 'Missing or invalid level' })
     return
+  }
+
+  // Shared plans are keyed by library skill, so generate them from that
+  // entry's own name; a library id the caller can't see just means no
+  // shared caching (see api/_lib/skillLibrary.js).
+  if (librarySkillId) {
+    try {
+      const libraryName = await readableLibrarySkillName(req.headers.authorization.slice(7), librarySkillId)
+      if (libraryName) skillName = libraryName
+      else librarySkillId = null
+    } catch (err) {
+      console.error('interview plan library lookup error:', err)
+      res.status(500).json({ error: 'Failed to prepare interview.' })
+      return
+    }
   }
 
   const admin = supabaseAdmin()
