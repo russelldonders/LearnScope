@@ -9,7 +9,6 @@ import { useLanguage } from '../context/LanguageContext'
 
 export default function ValidateSkillModal({
   skill,
-  user,
   target,
   assessments,
   peerRatings,
@@ -64,7 +63,7 @@ export default function ValidateSkillModal({
   async function handleConfirm(goToDeveloping) {
     setSaving(true)
     try {
-      await saveValidationResult(user, skill, result, goToDeveloping)
+      await saveValidationResult(skill, result, goToDeveloping)
       onValidated()
     } catch (err) {
       setError(err.message)

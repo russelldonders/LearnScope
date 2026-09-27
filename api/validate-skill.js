@@ -1,7 +1,90 @@
+import { createHmac, timingSafeEqual } from 'node:crypto'
 import Anthropic from '@anthropic-ai/sdk'
 import { verifySupabaseUser } from './_lib/auth.js'
+import { supabaseAdmin } from './_lib/supabaseAdmin.js'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+// A skill may only become "validated" from the server (the database blocks
+// learners writing that stage directly). The AI result is returned with a
+// short-lived signed grant; the learner's "Confirm" sends it back to the
+// save action below, which checks the signature before writing -- so the
+// learner still chooses whether to accept the result, but can't make one up.
+const GRANT_TTL_MS = 30 * 60 * 1000
+
+function grantKey() {
+  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!secret) throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY')
+  return createHmac('sha256', secret).update('learnscope:validate-skill-grant:v1').digest()
+}
+
+export function signGrant(payload, key = grantKey()) {
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url')
+  const signature = createHmac('sha256', key).update(body).digest('base64url')
+  return `${body}.${signature}`
+}
+
+export function verifyGrant(grant, key = grantKey(), now = Date.now()) {
+  if (typeof grant !== 'string') return null
+  const [body, signature, extra] = grant.split('.')
+  if (!body || !signature || extra !== undefined) return null
+  const expected = Buffer.from(createHmac('sha256', key).update(body).digest('base64url'))
+  const actual = Buffer.from(signature)
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null
+  let payload
+  try {
+    payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'))
+  } catch {
+    return null
+  }
+  if (!payload || typeof payload.exp !== 'number' || payload.exp < now) return null
+  return payload
+}
+
+async function findOwnSkill(userId, skillId) {
+  if (typeof skillId !== 'string') return null
+  const { data, error } = await supabaseAdmin()
+    .from('skills')
+    .select('id')
+    .eq('id', skillId)
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
+async function saveResult(res, user, { grant, goToDeveloping }) {
+  const payload = verifyGrant(grant)
+  if (!payload || payload.sub !== user.id) {
+    res.status(400).json({ error: 'This result has expired. Please run the check again.' })
+    return
+  }
+  if (!(await findOwnSkill(user.id, payload.skillId))) {
+    res.status(404).json({ error: 'Skill not found.' })
+    return
+  }
+
+  const db = supabaseAdmin()
+  const { error: assessError } = await db.from('skill_assessments').insert({
+    skill_id: payload.skillId,
+    user_id: user.id,
+    level: payload.level,
+    comments: payload.feedback,
+    source: 'ai_evaluation',
+  })
+  if (assessError) throw assessError
+
+  const skillUpdate = { level: payload.level }
+  if (payload.passed) {
+    skillUpdate.lifecycle_stage = 'validated'
+  } else if (goToDeveloping) {
+    skillUpdate.lifecycle_stage = 'developing'
+  }
+  const { error: skillError } = await db.from('skills').update(skillUpdate).eq('id', payload.skillId).eq('user_id', user.id)
+  if (skillError) throw skillError
+
+  res.status(200).json({ ok: true })
+}
 
 const VALIDATION_SCHEMA = {
   type: 'object',
@@ -85,7 +168,27 @@ export default async function handler(req, res) {
     return
   }
 
-  const { skillName, targetLevel, selfLevel, selfComments, activities, peerRatings } = req.body ?? {}
+  if (req.body?.action === 'save') {
+    try {
+      await saveResult(res, user, req.body)
+    } catch (err) {
+      console.error('validate-skill save error:', err)
+      res.status(500).json({ error: 'Failed to save the result.' })
+    }
+    return
+  }
+
+  const { skillId, skillName, targetLevel, selfLevel, selfComments, activities, peerRatings } = req.body ?? {}
+  try {
+    if (!(await findOwnSkill(user.id, skillId))) {
+      res.status(404).json({ error: 'Skill not found.' })
+      return
+    }
+  } catch (err) {
+    console.error('validate-skill lookup error:', err)
+    res.status(500).json({ error: 'Failed to validate skill.' })
+    return
+  }
   if (!skillName || typeof skillName !== 'string') {
     res.status(400).json({ error: 'Missing skillName' })
     return
@@ -115,7 +218,10 @@ export default async function handler(req, res) {
     const textBlock = response.content.find((b) => b.type === 'text')
     const data = JSON.parse(textBlock.text)
     const level = Math.min(5, Math.max(1, Math.round(Number(data.level) || 1)))
-    res.status(200).json({ level, passed: Boolean(data.passed), feedback: data.feedback })
+    const passed = Boolean(data.passed)
+    const feedback = data.feedback
+    const grant = signGrant({ sub: user.id, skillId, level, passed, feedback, exp: Date.now() + GRANT_TTL_MS })
+    res.status(200).json({ level, passed, feedback, grant })
   } catch (err) {
     console.error('validate-skill error:', err)
     res.status(500).json({ error: 'Failed to validate skill.' })

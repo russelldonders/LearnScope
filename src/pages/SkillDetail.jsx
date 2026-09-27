@@ -1130,7 +1130,6 @@ export default function SkillDetail({ skillId, embedded = false }) {
             {validateOpen && targets[0] && (
               <ValidateSkillModal
                 skill={skill}
-                user={user}
                 target={targets[0]}
                 assessments={history}
                 peerRatings={peerRatings}

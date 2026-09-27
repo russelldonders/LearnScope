@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { isAppLink } from './send-email.js'
+import { isAppLink } from '../send-email.js'
 
 const HOST = 'learnscope.example.com'
 const REQUEST_ID = '0f8fad5b-d9cb-469f-a165-70867728950e'
