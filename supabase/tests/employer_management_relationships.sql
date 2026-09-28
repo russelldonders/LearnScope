@@ -102,13 +102,11 @@ insert into auth.users (id, email, email_confirmed_at) values
   ('70000000-0000-0000-0000-000000000007', 'unrelated@example.com', now()),
   ('80000000-0000-0000-0000-000000000008', 'admin-b@example.com', now());
 
-insert into public.organisations (id, name, type) values
-  ('a0000000-0000-0000-0000-000000000001', 'Employer A provider', 'provider'),
-  ('b0000000-0000-0000-0000-000000000001', 'Employer B provider', 'provider');
-
-insert into public.employers (id, name, provider_organisation_id) values
-  ('a0000000-0000-0000-0000-000000000002', 'Employer A', 'a0000000-0000-0000-0000-000000000001'),
-  ('b0000000-0000-0000-0000-000000000002', 'Employer B', 'b0000000-0000-0000-0000-000000000001');
+insert into public.organisations (id, name) values
+  ('a0000000-0000-0000-0000-000000000001', 'Employer A provider'),
+  ('b0000000-0000-0000-0000-000000000001', 'Employer B provider'),
+  ('a0000000-0000-0000-0000-000000000002', 'Employer A'),
+  ('b0000000-0000-0000-0000-000000000002', 'Employer B');
 
 update public.profiles set
   first_name = case id

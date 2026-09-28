@@ -14,7 +14,8 @@ import {
   getEmployerRoleProfileReadiness,
 } from '../../lib/employerRoleProfiles'
 import { listEmployerSkillConfirmations, confirmEmployerSkillLevel } from '../../lib/employerSkillTargets'
-import { getEmployer, listEmployerCatalogueCourses, listEmployerCatalogueSkills, listEmployerMembers } from '../../lib/admin/employers'
+import { listEmployerCatalogueCourses, listEmployerCatalogueSkills, listEmployerMembers } from '../../lib/admin/employers'
+import { getOrganisation } from '../../lib/admin/organisations'
 import RoleProfileDetailsForm from './roles/RoleProfileDetailsForm'
 import RoleProfileSkillsPanel from './roles/RoleProfileSkillsPanel'
 import RoleProfileTrainingPanel from './roles/RoleProfileTrainingPanel'
@@ -60,7 +61,7 @@ export default function EmployerRoleProfileDetail() {
         return
       }
       const [employerData, membersData, assignments] = await Promise.all([
-        getEmployer(rawProfile.employerId),
+        getOrganisation(rawProfile.employerId),
         listEmployerMembers(rawProfile.employerId),
         listEmployerRoleAssignments(roleProfileId),
       ])
@@ -72,7 +73,7 @@ export default function EmployerRoleProfileDetail() {
       // (list_employer_shared_courses, 20260912152917), not just anything
       // published in the attached org.
       const [skillsData, coursesData] = await Promise.all([
-        listEmployerCatalogueSkills(employerData.provider_organisation_id),
+        listEmployerCatalogueSkills(employerData.id),
         listEmployerCatalogueCourses(employerData.id),
       ])
       const memberByUserId = new Map(membersData.map((m) => [m.user_id, m]))

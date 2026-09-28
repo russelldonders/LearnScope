@@ -106,28 +106,16 @@ export default function AppHeader({
   const activeEmployerSlug = location.pathname === '/organisation/learning'
     ? new URLSearchParams(location.search).get('org')
     : null
-  const organisationParams = new URLSearchParams(location.search)
-  const activeOrganisationId = location.pathname.startsWith('/organisation') ? organisationParams.get('org') : null
   const isPersonalWorkspace = !activeEmployerSlug
     && !location.pathname.startsWith('/admin')
     && !location.pathname.startsWith('/organisation')
   const inPlatformConsole = location.pathname.startsWith('/admin')
   const hasEmployerAdminWorkspace = employerMemberships?.some((membership) => membership.role === 'admin') ?? false
   const hasAdminWorkspaces = Boolean(organisationMemberships?.length || hasEmployerAdminWorkspace || isPlatformAdmin)
-  const employerAdminIds = new Set(
-    (employerMemberships ?? [])
-      .filter((membership) => membership.role === 'admin')
-      .map((membership) => membership.employer_id)
-  )
   const employerIds = new Set((employerMemberships ?? []).map((membership) => membership.employer_id))
   const employerPortals = organisationPortals
     .filter((organisation) => employerIds.has(organisation.id) && organisation.slug)
     .map((organisation) => ({ ...organisation, organisation }))
-  const employerAdminPortals = employerPortals.filter((employer) => employerAdminIds.has(employer.id))
-  const independentOrganisationPortals = organisationPortals.filter((organisation) =>
-    (organisationMemberships ?? []).some((membership) => membership.organisation_id === organisation.id && membership.role === 'admin')
-    && !employerAdminIds.has(organisation.id)
-  )
 
   useEffect(() => {
     if (!menuOpen) return
@@ -268,48 +256,26 @@ export default function AppHeader({
                     {hasAdminWorkspaces && (
                       <div role="group" aria-labelledby="admin-workspaces-label" className="border-b border-hairline py-2">
                         <p id="admin-workspaces-label" className="px-4 pb-1.5 text-xs font-medium text-secondary">{t('menu.administration')}</p>
-                        {employerAdminPortals.map((employer) => (
+                        {(organisationMemberships?.length || hasEmployerAdminWorkspace) && (
                           <Link
-                            key={employer.id}
-                            to={`/organisation?org=${encodeURIComponent(employer.id)}`}
+                            to="/organisation"
                             onClick={() => setMenuOpen(false)}
-                            aria-current={activeOrganisationId === employer.id ? 'page' : undefined}
+                            aria-current={location.pathname === '/organisation' ? 'page' : undefined}
                             className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
                           >
-                            <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-hairline bg-paper text-xs font-medium text-ink">
-                              {employer.organisation.logo_url
-                                ? <img src={employer.organisation.logo_url} alt="" className="h-full w-full object-contain" />
-                                : employer.name.trim().charAt(0).toUpperCase()}
+                            <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-hairline bg-paper text-ink">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M3 21h18M5 21V7l7-4 7 4v14M9 10h1m4 0h1M9 14h1m4 0h1M9 18h1m4 0h1" />
+                              </svg>
                             </span>
-                            <span className="min-w-0 flex-1 truncate font-medium">{employer.name}</span>
-                            {activeOrganisationId === employer.id && (
+                            <span className="min-w-0 flex-1 font-medium">{t('menu.organisationConsole')}</span>
+                            {location.pathname === '/organisation' && (
                               <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="m5 12 4 4L19 6" />
                               </svg>
                             )}
                           </Link>
-                        ))}
-                        {independentOrganisationPortals.map((organisation) => (
-                          <Link
-                            key={organisation.id}
-                            to={`/organisation?org=${encodeURIComponent(organisation.id)}`}
-                            onClick={() => setMenuOpen(false)}
-                            aria-current={activeOrganisationId === organisation.id ? 'page' : undefined}
-                            className="flex items-center gap-3 px-4 py-2 text-sm text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]"
-                          >
-                            <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-hairline bg-paper text-xs font-medium text-ink">
-                              {organisation.logo_url
-                                ? <img src={organisation.logo_url} alt="" className="h-full w-full object-contain" />
-                                : organisation.name.trim().charAt(0).toUpperCase()}
-                            </span>
-                            <span className="min-w-0 flex-1 truncate font-medium">{organisation.name}</span>
-                            {activeOrganisationId === organisation.id && (
-                              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="m5 12 4 4L19 6" />
-                              </svg>
-                            )}
-                          </Link>
-                        ))}
+                        )}
                         {isPlatformAdmin && (
                           <Link
                             to="/admin"

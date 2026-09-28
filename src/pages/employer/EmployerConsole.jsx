@@ -222,22 +222,11 @@ function employerLearnerColumns(attachedProviderOrg, dataAccessByLearner) {
 // reset for the Training tab.
 const EMPLOYER_FILTER_RESET = { usersView: null, q: null, status: null, page: null, aq: null, aPage: null, sq: null, sPage: null }
 
-// Foundation console for an employer's own admin (employer_members
-// role = 'admin', gated by OrganisationAdminRoute). Training/Skills and the
-// training-team controls inside Users reuse
-// the existing provider console components verbatim, scoped to the
-// employer's own auto-provisioned attached provider organisation
-// (create_employer, 20260902090000) -- no forked UI. Authoring there is
-// enabled/disabled by this same employer admin's real organisation_members
-// role on that attached org (myProviderRole below), exactly as it would be
-// in the standalone Provider console -- this stays the *only* place an
-// employer admin manages that org's training, so there's no separate
-// /provider hand-off to a second page (and no exposure to any *other*
-// provider organisation they might separately belong to). The Users tab
-// combines the employer's managed learner/admin roster
-// (employer_members) alongside the attached provider organisation's
-// training-team permissions, while keeping their distinct access scopes
-// clear inside the combined page.
+// One organisation console. Workforce sections use employer_members to keep
+// employment relationships distinct from authoring permissions, while the
+// training and skills sections use organisation_members. Both scopes share
+// the same canonical organisation identity and are composed here according
+// to its enabled capabilities.
 export default function EmployerConsole() {
   const { user, employerMemberships, organisationMemberships } = useAuth()
   const navigate = useNavigate()

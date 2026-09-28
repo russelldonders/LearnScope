@@ -48,13 +48,11 @@ insert into auth.users (id, email, email_confirmed_at) values
   ('d2000000-0000-0000-0000-000000000002', 'target-learner@example.com', now()),
   ('d3000000-0000-0000-0000-000000000003', 'target-manager-b@example.com', now());
 
-insert into public.organisations (id, name, type) values
-  ('d4000000-0000-0000-0000-000000000004', 'Target provider A', 'provider'),
-  ('d5000000-0000-0000-0000-000000000005', 'Target provider B', 'provider');
-
-insert into public.employers (id, name, provider_organisation_id) values
-  ('d6000000-0000-0000-0000-000000000006', 'Target employer A', 'd4000000-0000-0000-0000-000000000004'),
-  ('d7000000-0000-0000-0000-000000000007', 'Target employer B', 'd5000000-0000-0000-0000-000000000005');
+insert into public.organisations (id, name) values
+  ('d4000000-0000-0000-0000-000000000004', 'Target provider A'),
+  ('d5000000-0000-0000-0000-000000000005', 'Target provider B'),
+  ('d6000000-0000-0000-0000-000000000006', 'Target employer A'),
+  ('d7000000-0000-0000-0000-000000000007', 'Target employer B');
 
 insert into public.employer_members (id, employer_id, user_id, role, status) values
   ('d1100000-0000-0000-0000-000000000001', 'd6000000-0000-0000-0000-000000000006', 'd1000000-0000-0000-0000-000000000001', 'member', 'active'),
@@ -66,8 +64,8 @@ insert into public.skill_library (id, name) values
   ('d8000000-0000-0000-0000-000000000008', 'Target coaching');
 
 insert into public.organisation_offered_skills (organisation_id, skill_library_id, created_by) values
-  ('d4000000-0000-0000-0000-000000000004', 'd8000000-0000-0000-0000-000000000008', 'd1000000-0000-0000-0000-000000000001'),
-  ('d5000000-0000-0000-0000-000000000005', 'd8000000-0000-0000-0000-000000000008', 'd3000000-0000-0000-0000-000000000003');
+  ('d6000000-0000-0000-0000-000000000006', 'd8000000-0000-0000-0000-000000000008', 'd1000000-0000-0000-0000-000000000001'),
+  ('d7000000-0000-0000-0000-000000000007', 'd8000000-0000-0000-0000-000000000008', 'd3000000-0000-0000-0000-000000000003');
 
 insert into public.employer_management_relationships (
   id, employer_id, manager_member_id, employee_member_id, relationship_type,

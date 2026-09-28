@@ -34,6 +34,7 @@ vi.mock('../context/LanguageContext', () => ({
       'menu.switchWorkspace': 'Switch workspace',
       'menu.learningWorkspaces': 'Learning workspaces',
       'menu.administration': 'Administration',
+      'menu.organisationConsole': 'Organisation console',
       'menu.personalAccount': 'Personal account',
     })[key] ?? key,
   }),
@@ -150,7 +151,7 @@ describe('AppHeader organisation branding', () => {
     expect(screen.getByRole('link', { name: 'Personal LearnScope' })).not.toHaveAttribute('aria-current')
   })
 
-  it('shows the same organisation separately as a learner and administration context', async () => {
+  it('shows a learner workspace and one organisation console entry for its administration', async () => {
     authMock.value = {
       ...authMock.value,
       employerMemberships: [{ employer_id: 'employer-1', role: 'admin' }],
@@ -166,10 +167,8 @@ describe('AppHeader organisation branding', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
-    const links = await screen.findAllByRole('link', { name: 'Acme Stores' })
-    expect(links).toHaveLength(2)
-    expect(links[0]).toHaveAttribute('aria-current', 'page')
-    expect(links[1]).toHaveAttribute('href', '/organisation?org=employer-1')
+    expect(await screen.findByRole('link', { name: 'Acme Stores' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Organisation console' })).toHaveAttribute('href', '/organisation')
   })
 
   it('separates learner-facing workspaces from organisation and platform administration', async () => {
@@ -193,10 +192,8 @@ describe('AppHeader organisation branding', () => {
 
     expect(within(learningWorkspaces).getByRole('link', { name: 'Personal LearnScope' })).toBeVisible()
     expect(await within(learningWorkspaces).findByRole('link', { name: 'Acme Stores' })).toBeVisible()
-    const organisationLinks = within(administration).getAllByRole('link', { name: 'Acme Stores' })
-    expect(organisationLinks).toHaveLength(1)
-    expect(organisationLinks[0]).toHaveAttribute('href', '/organisation?org=employer-1')
-    expect(organisationLinks[0]).toHaveAttribute('aria-current', 'page')
+    expect(within(administration).getByRole('link', { name: 'Organisation console' })).toHaveAttribute('href', '/organisation')
+    expect(within(administration).queryByRole('link', { name: 'Acme Stores' })).not.toBeInTheDocument()
     expect(within(administration).getByRole('link', { name: 'menu.platformConsole' })).toHaveAttribute('href', '/admin')
     expect(learningWorkspaces.compareDocumentPosition(administration) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.queryByText('Personal account')).not.toBeInTheDocument()

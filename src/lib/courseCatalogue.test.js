@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const supabaseMock = vi.hoisted(() => ({ from: vi.fn() }))
 vi.mock('./supabaseClient', () => ({ supabase: supabaseMock }))
 
-const { formatCohortDateRange, respondToCourseAssignment } = await import('./courseCatalogue')
+const { formatCohortDateRange, listMyAssignedCourseEmployers, respondToCourseAssignment } = await import('./courseCatalogue')
 
 beforeEach(() => {
   supabaseMock.from.mockReset()
@@ -73,5 +73,26 @@ describe('respondToCourseAssignment', () => {
     })
 
     expect(result).toEqual(learnerCourse)
+  })
+})
+
+describe('listMyAssignedCourseEmployers', () => {
+  it('uses the canonical organisation relationship for assignment badges', async () => {
+    const select = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        eq: vi.fn(() => Promise.resolve({
+          data: [{ catalogue_course_id: 'course-1', organisation: { name: 'Acme' } }],
+          error: null,
+        })),
+      })),
+    }))
+    supabaseMock.from.mockReturnValue({ select })
+
+    const result = await listMyAssignedCourseEmployers('user-1')
+
+    expect(select).toHaveBeenCalledWith(
+      'catalogue_course_id, organisation:organisations!course_assignments_organisation_fkey(name)',
+    )
+    expect(result.get('course-1')).toBe('Acme')
   })
 })

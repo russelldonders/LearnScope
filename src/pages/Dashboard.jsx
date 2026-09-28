@@ -228,6 +228,10 @@ async function loadRecentGrowth(userId) {
 
 const STAGE_ORDER = Object.fromEntries(SKILL_LIFECYCLE_FLOW_STAGES.map((s, i) => [s.value, i]))
 
+export function dashboardResultValue(results, index, fallback) {
+  return results[index].status === 'fulfilled' ? results[index].value : fallback
+}
+
 // One recommended next step per skill, reusing the same priority rules as
 // the skill page's own Up Next checklist (computeUpNextItems) so the two
 // never disagree -- just picking the first thing not already done, across
@@ -353,21 +357,7 @@ export default function Dashboard() {
 
   async function loadSummary() {
     setLoading(true)
-    const [
-      skills,
-      courses,
-      experience,
-      connections,
-      growth,
-      upNextRecommendations,
-      learning,
-      activityResult,
-      selfAssessmentsDue,
-      targetsDue,
-      reviewTasks,
-      importBannerState,
-      assignedCourseEmployers,
-    ] = await Promise.all([
+    const results = await Promise.allSettled([
       countRows('skills', user.id),
       countRows('courses', user.id),
       countRows('experience', user.id),
@@ -382,6 +372,36 @@ export default function Dashboard() {
       loadImportBannerState(user.id),
       listMyAssignedCourseEmployers(user.id),
     ])
+    const valueOr = (index, fallback) => dashboardResultValue(results, index, fallback)
+    const [
+      skills,
+      courses,
+      experience,
+      connections,
+      growth,
+      upNextRecommendations,
+      learning,
+      activityResult,
+      selfAssessmentsDue,
+      targetsDue,
+      reviewTasks,
+      importBannerState,
+      assignedCourseEmployers,
+    ] = [
+      valueOr(0, 0),
+      valueOr(1, 0),
+      valueOr(2, 0),
+      valueOr(3, 0),
+      valueOr(4, []),
+      valueOr(5, []),
+      valueOr(6, []),
+      valueOr(7, { data: [], error: null }),
+      valueOr(8, []),
+      valueOr(9, []),
+      valueOr(10, []),
+      valueOr(11, null),
+      valueOr(12, new Map()),
+    ]
     setCounts({ skills, courses, experience, connections })
     setRecentGrowth(growth)
     setUpNext(upNextRecommendations)

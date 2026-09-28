@@ -31,8 +31,7 @@ import {
   linkCatalogueToOrganisation,
   unlinkCatalogueFromOrganisation,
 } from '../../lib/admin/providerCatalogues'
-import { listOrganisations } from '../../lib/admin/organisations'
-import { listEmployers } from '../../lib/admin/employers'
+import { listOrganisations, listWorkforceOrganisations } from '../../lib/admin/organisations'
 import { useColumnPreferences, useRowSelection, useSortedPage, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
 import { handleTabListKeyDown } from '../../lib/tabsKeyboard'
 import { COURSE_STATUS_LABELS } from '../../lib/statusLabels'
@@ -143,10 +142,10 @@ export default function ProviderConsole() {
 
   useEffect(() => {
     reloadOrganisations().finally(() => setLoading(false))
-    // listEmployers() is already scoped by RLS to employers this user
+    // Workforce organisations are already scoped by RLS to organisations this user
     // actually belongs to -- best-effort here, since not being able to show
     // the "Employer console" cross-link shouldn't take down this page.
-    listEmployers()
+    listWorkforceOrganisations()
       .then(setEmployers)
       .catch(() => {})
   }, [])
@@ -158,7 +157,7 @@ export default function ProviderConsole() {
   // genuinely lead somewhere the user can act, not just view.
   const linkedEmployer = employers.find(
     (e) =>
-      e.provider_organisation_id === selectedOrgId &&
+      e.id === selectedOrgId &&
       (employerMemberships ?? []).some((m) => m.employer_id === e.id && m.role === 'admin')
   )
 
@@ -305,7 +304,7 @@ export default function ProviderConsole() {
                       <span className="inline-flex items-center">
                         <span className="mx-1 h-5 w-px bg-hairline shrink-0" aria-hidden="true" />
                         <Link
-                          to={`/organisation?employer=${linkedEmployer.id}`}
+                          to={`/organisation?org=${linkedEmployer.id}`}
                           className="text-sm px-3 py-2 -mb-px border-b-2 border-transparent whitespace-nowrap text-gold hover:border-gold"
                         >
                           Manage people at {linkedEmployer.name}

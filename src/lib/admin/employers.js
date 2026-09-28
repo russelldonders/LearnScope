@@ -1,44 +1,6 @@
 import { supabase } from '../supabaseClient'
 import { callAdminApi } from './adminApi'
 
-// Mirrors src/lib/admin/organisations.js's shape/conventions. employers'
-// RLS select policy (is_employer_member, unlike organisations' open
-// "any authenticated user can view") already scopes a direct client query
-// correctly for both audiences: a platform admin sees every row (the
-// is_platform_admin bypass baked into is_employer_member), and an
-// employer's own admin sees only their own employer(s) -- no service-role
-// round trip needed for either.
-export async function listEmployers() {
-  const { data, error } = await supabase
-    .from('organisations')
-    .select('*, organisation_capabilities!inner(capability, status)')
-    .eq('organisation_capabilities.capability', 'employs_people')
-    .eq('organisation_capabilities.status', 'active')
-    .order('name')
-  if (error) throw error
-  return (data ?? []).map((organisation) => ({
-    ...organisation,
-    employer_code: organisation.org_code,
-    provider_organisation_id: organisation.id,
-  }))
-}
-
-export async function getEmployer(id) {
-  const { data, error } = await supabase.from('organisations').select('*').eq('id', id).single()
-  if (error) throw error
-  return { ...data, employer_code: data.org_code, provider_organisation_id: data.id }
-}
-
-// create_employer (20260902090000) is security definer and platform-admin-
-// gated internally -- creates the employer's attached provider organisation
-// and the employer row together, atomically, so the two can never be
-// created out of step with each other.
-export async function createEmployer(name) {
-  const { data, error } = await supabase.rpc('create_employer', { p_name: name.trim() })
-  if (error) throw error
-  return data
-}
-
 // employer_members only stores user_id -- profiles has no email column
 // (same reasoning as organisation_members' listOrganisationMembers), so the
 // roster needs the service-role dispatcher to show something more useful

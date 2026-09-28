@@ -256,13 +256,13 @@ export async function respondToCourseAssignment(userId, assignmentId, { enrol, c
 export async function listMyAssignedCourseEmployers(userId) {
   const { data, error } = await supabase
     .from('course_assignments')
-    .select('catalogue_course_id, employers(name)')
+    .select('catalogue_course_id, organisation:organisations!course_assignments_organisation_fkey(name)')
     .eq('assigned_to', userId)
     .eq('status', 'enrolled')
   if (error) throw error
   const map = new Map()
   for (const row of data ?? []) {
-    if (row.employers?.name) map.set(row.catalogue_course_id, row.employers.name)
+    if (row.organisation?.name) map.set(row.catalogue_course_id, row.organisation.name)
   }
   return map
 }

@@ -25,11 +25,8 @@ values
 insert into organisations (id, name)
 values ('80000000-0000-0000-0000-00000000aaaa', 'Acme Corp');
 
-insert into employers (id, name, provider_organisation_id)
-values ('80000000-0000-0000-0000-00000000bbbb', 'Acme Corp', '80000000-0000-0000-0000-00000000aaaa');
-
 insert into employer_members (employer_id, user_id, role, status)
-values ('80000000-0000-0000-0000-00000000bbbb', '80000000-0000-0000-0000-000000000001', 'admin', 'active');
+values ('80000000-0000-0000-0000-00000000aaaa', '80000000-0000-0000-0000-000000000001', 'admin', 'active');
 
 insert into organisation_members (organisation_id, user_id, role, status)
 values
@@ -83,7 +80,7 @@ $$;
 --    becomes freely removable.
 delete from employer_members
 where user_id = '80000000-0000-0000-0000-000000000001'
-  and employer_id = '80000000-0000-0000-0000-00000000bbbb';
+  and employer_id = '80000000-0000-0000-0000-00000000aaaa';
 
 delete from organisation_members
 where organisation_id = '80000000-0000-0000-0000-00000000aaaa'

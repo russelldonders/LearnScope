@@ -168,7 +168,7 @@ export default function ProfilePrivacy() {
   // share has ever happened). employerMemberships (useAuth) only carries
   // employer_id/role, not the employer's name, so that's fetched separately
   // here -- scoped by "Employer members can view their employer" RLS, same
-  // as listEmployers relies on elsewhere.
+  // as the workforce-organisation directory relies on elsewhere.
   async function loadEmployerDataAccess() {
     if (activeEmployerIds.length === 0) {
       setEmployers([])

@@ -10,6 +10,23 @@ export async function listOrganisations() {
   return data ?? []
 }
 
+export async function listWorkforceOrganisations() {
+  const { data, error } = await supabase
+    .from('organisations')
+    .select('*, organisation_capabilities!inner(capability, status)')
+    .eq('organisation_capabilities.capability', 'employs_people')
+    .eq('organisation_capabilities.status', 'active')
+    .order('name')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function getOrganisation(id) {
+  const { data, error } = await supabase.from('organisations').select('*').eq('id', id).single()
+  if (error) throw error
+  return data
+}
+
 export async function createOrganisation(name, capabilities = []) {
   const { data, error } = await supabase.rpc('create_organisation', {
     p_name: name.trim(),

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('../lib/supabaseClient', () => ({ supabase: {} }))
 
 import ConnectionsActivityFeed from '../components/ConnectionsActivityFeed'
-import { FocusPanel, OverviewStrip } from './Dashboard'
+import { dashboardResultValue, FocusPanel, OverviewStrip } from './Dashboard'
 
 function renderWithRouter(ui) {
   return render(<MemoryRouter>{ui}</MemoryRouter>)
@@ -49,6 +49,18 @@ describe('dashboard focus hierarchy', () => {
       'href',
       '/connections',
     )
+  })
+})
+
+describe('dashboard loading resilience', () => {
+  it('keeps the rest of the homepage usable when an optional query fails', () => {
+    const results = [
+      { status: 'fulfilled', value: 4 },
+      { status: 'rejected', reason: new Error('relationship missing') },
+    ]
+
+    expect(dashboardResultValue(results, 0, 0)).toBe(4)
+    expect(dashboardResultValue(results, 1, new Map())).toEqual(new Map())
   })
 })
 

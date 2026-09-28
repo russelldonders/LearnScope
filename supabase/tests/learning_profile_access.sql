@@ -492,11 +492,10 @@ select pg_temp.assert_sees_connection_request('60000000-0000-0000-0000-000000000
 -- (...004) and its already-active linked account (...005).
 -- ----------------------------------------------------------------------------
 
-insert into public.organisations (id, name, type)
-values ('d0000000-0000-0000-0000-00000000000d', 'Test Provider Org', 'provider');
-
-insert into public.employers (id, name, provider_organisation_id)
-values ('d0000000-0000-0000-0000-0000000000d1', 'Test Employer', 'd0000000-0000-0000-0000-00000000000d');
+insert into public.organisations (id, name)
+values
+  ('d0000000-0000-0000-0000-00000000000d', 'Test Provider Org'),
+  ('d0000000-0000-0000-0000-0000000000d1', 'Test Employer');
 
 insert into public.employer_data_access_requests (id, employer_id, learner_id, status)
 values ('d0000000-0000-0000-0000-0000000000d2', 'd0000000-0000-0000-0000-0000000000d1', '40000000-0000-0000-0000-000000000004', 'approved');
