@@ -49,8 +49,18 @@ update public.course_assignments t set employer_id = m.organisation_id from cano
 update public.employer_catalogue_access t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
 update public.employer_data_access_requests t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
 update public.employer_field_definitions t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
+-- This guard enforces interactive sharing decisions via auth.uid(). The ID
+-- rewrite is a trusted schema migration, not a sharing decision, so suspend
+-- only this user trigger for the remap and restore it immediately afterwards.
+alter table public.employer_linked_providers disable trigger guard_employer_provider_sharing;
 update public.employer_linked_providers t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
+alter table public.employer_linked_providers enable trigger guard_employer_provider_sharing;
+-- Relationship validation compares this key with employer_members. Both are
+-- remapped in the same transaction, so row-by-row validation would observe a
+-- transient mixed-ID state. Constraints are restored before commit.
+alter table public.employer_management_relationships disable trigger validate_employer_management_relationship_trigger;
 update public.employer_management_relationships t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
+alter table public.employer_management_relationships enable trigger validate_employer_management_relationship_trigger;
 update public.employer_members t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
 update public.employer_role_profiles t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
 update public.employer_skill_confirmations t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
