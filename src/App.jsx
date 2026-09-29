@@ -1,12 +1,12 @@
-import LtiSession from './pages/LtiSession'
-import LmsConnectionsPage from './pages/provider/LtiConfiguration'
-import LtiToolsPage from './pages/provider/LtiTools'
+import { Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { LanguageProvider } from './context/LanguageContext'
 import { PendingActionsProvider } from './context/PendingActionsContext'
 import { NavVisibilityProvider } from './context/NavVisibilityContext'
+import { lazyRoute } from './lib/lazyRoute'
+import RouteLoading from './components/RouteLoading'
 import ProtectedRoute from './components/ProtectedRoute'
 import PlatformAdminRoute from './components/PlatformAdminRoute'
 import OrganisationAdminRoute from './components/OrganisationAdminRoute'
@@ -14,54 +14,60 @@ import EmployerMemberRoute from './components/EmployerMemberRoute'
 import ManagerRoute from './components/ManagerRoute'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
-import Signup from './pages/Signup'
-import ForgotPassword from './pages/ForgotPassword'
-import ResetPassword from './pages/ResetPassword'
-import Welcome from './pages/Welcome'
-import Onboarding from './pages/Onboarding'
-import Dashboard from './pages/Dashboard'
-import Activity from './pages/Activity'
-import Skills from './pages/Skills'
-import SkillDetail from './pages/SkillDetail'
-import Experience from './pages/Experience'
-import ExperienceDetail from './pages/ExperienceDetail'
-import Profile from './pages/Profile'
-import ProfilePrivacy from './pages/ProfilePrivacy'
-import ConnectedAccounts from './pages/ConnectedAccounts'
-import ProfileImport from './pages/ProfileImport'
-import ProfileExport from './pages/ProfileExport'
-import Help from './pages/Help'
-import Rate from './pages/Rate'
-import Recommend from './pages/Recommend'
-import SharedProfile from './pages/SharedProfile'
-import ProviderProfile from './pages/ProviderProfile'
-import Connections from './pages/Connections'
-import Actions from './pages/Actions'
-import SkillsProfile from './pages/SkillsProfile'
-import CourseCatalogue from './pages/CourseCatalogue'
-import CourseDetail from './pages/CourseDetail'
-import CourseLearn from './pages/CourseLearn'
-import Learning from './pages/Learning'
-import MyTeam from './pages/MyTeam'
-import ValidateRequest from './pages/ValidateRequest'
-import AdminOverview from './pages/admin/AdminOverview'
-import AdminUsers from './pages/admin/AdminUsers'
-import AdminUserDetail from './pages/admin/AdminUserDetail'
-import AdminProviders from './pages/admin/AdminProviders'
-import AdminCatalogue from './pages/admin/AdminCatalogue'
-import AdminCourseDetail from './pages/admin/AdminCourseDetail'
-import AdminSkills from './pages/admin/AdminSkills'
-import AdminSkillDetail from './pages/admin/AdminSkillDetail'
-import AdminTags from './pages/admin/AdminTags'
-import AdminSettings from './pages/admin/AdminSettings'
-import EmployerHome from './pages/employer/EmployerHome'
-import EmployerRoleProfileDetail from './pages/employer/EmployerRoleProfileDetail'
-import ProviderCourseEditor from './pages/provider/ProviderCourseEditor'
-import ProviderCatalogueDetail from './pages/provider/ProviderCatalogueDetail'
-import ProviderSkillDetail from './pages/provider/ProviderSkillDetail'
-import OrganisationWorkspace from './pages/organisation/OrganisationWorkspace'
 import RouteTitle from './components/RouteTitle'
 import ErrorBoundary from './components/ErrorBoundary'
+
+// Each page is its own chunk, so a visitor only downloads the screens they
+// open -- the login page no longer ships the admin console or course editor.
+const LtiSession = lazyRoute(() => import('./pages/LtiSession'))
+const LmsConnectionsPage = lazyRoute(() => import('./pages/provider/LtiConfiguration'))
+const LtiToolsPage = lazyRoute(() => import('./pages/provider/LtiTools'))
+const Signup = lazyRoute(() => import('./pages/Signup'))
+const ForgotPassword = lazyRoute(() => import('./pages/ForgotPassword'))
+const ResetPassword = lazyRoute(() => import('./pages/ResetPassword'))
+const Welcome = lazyRoute(() => import('./pages/Welcome'))
+const Onboarding = lazyRoute(() => import('./pages/Onboarding'))
+const Dashboard = lazyRoute(() => import('./pages/Dashboard'))
+const Activity = lazyRoute(() => import('./pages/Activity'))
+const Skills = lazyRoute(() => import('./pages/Skills'))
+const SkillDetail = lazyRoute(() => import('./pages/SkillDetail'))
+const Experience = lazyRoute(() => import('./pages/Experience'))
+const ExperienceDetail = lazyRoute(() => import('./pages/ExperienceDetail'))
+const Profile = lazyRoute(() => import('./pages/Profile'))
+const ProfilePrivacy = lazyRoute(() => import('./pages/ProfilePrivacy'))
+const ConnectedAccounts = lazyRoute(() => import('./pages/ConnectedAccounts'))
+const ProfileImport = lazyRoute(() => import('./pages/ProfileImport'))
+const ProfileExport = lazyRoute(() => import('./pages/ProfileExport'))
+const Help = lazyRoute(() => import('./pages/Help'))
+const Rate = lazyRoute(() => import('./pages/Rate'))
+const Recommend = lazyRoute(() => import('./pages/Recommend'))
+const SharedProfile = lazyRoute(() => import('./pages/SharedProfile'))
+const ProviderProfile = lazyRoute(() => import('./pages/ProviderProfile'))
+const Connections = lazyRoute(() => import('./pages/Connections'))
+const Actions = lazyRoute(() => import('./pages/Actions'))
+const SkillsProfile = lazyRoute(() => import('./pages/SkillsProfile'))
+const CourseCatalogue = lazyRoute(() => import('./pages/CourseCatalogue'))
+const CourseDetail = lazyRoute(() => import('./pages/CourseDetail'))
+const CourseLearn = lazyRoute(() => import('./pages/CourseLearn'))
+const Learning = lazyRoute(() => import('./pages/Learning'))
+const MyTeam = lazyRoute(() => import('./pages/MyTeam'))
+const ValidateRequest = lazyRoute(() => import('./pages/ValidateRequest'))
+const AdminOverview = lazyRoute(() => import('./pages/admin/AdminOverview'))
+const AdminUsers = lazyRoute(() => import('./pages/admin/AdminUsers'))
+const AdminUserDetail = lazyRoute(() => import('./pages/admin/AdminUserDetail'))
+const AdminProviders = lazyRoute(() => import('./pages/admin/AdminProviders'))
+const AdminCatalogue = lazyRoute(() => import('./pages/admin/AdminCatalogue'))
+const AdminCourseDetail = lazyRoute(() => import('./pages/admin/AdminCourseDetail'))
+const AdminSkills = lazyRoute(() => import('./pages/admin/AdminSkills'))
+const AdminSkillDetail = lazyRoute(() => import('./pages/admin/AdminSkillDetail'))
+const AdminTags = lazyRoute(() => import('./pages/admin/AdminTags'))
+const AdminSettings = lazyRoute(() => import('./pages/admin/AdminSettings'))
+const EmployerHome = lazyRoute(() => import('./pages/employer/EmployerHome'))
+const EmployerRoleProfileDetail = lazyRoute(() => import('./pages/employer/EmployerRoleProfileDetail'))
+const ProviderCourseEditor = lazyRoute(() => import('./pages/provider/ProviderCourseEditor'))
+const ProviderCatalogueDetail = lazyRoute(() => import('./pages/provider/ProviderCatalogueDetail'))
+const ProviderSkillDetail = lazyRoute(() => import('./pages/provider/ProviderSkillDetail'))
+const OrganisationWorkspace = lazyRoute(() => import('./pages/organisation/OrganisationWorkspace'))
 
 function App() {
   return (
@@ -73,6 +79,7 @@ function App() {
         <LanguageProvider>
         <PendingActionsProvider>
         <NavVisibilityProvider>
+        <Suspense fallback={<RouteLoading />}>
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/lti/session" element={<LtiSession />} />
@@ -413,6 +420,7 @@ function App() {
           <Route path="/admin/activity" element={<Navigate to="/admin/settings#audit-log" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
         </NavVisibilityProvider>
         </PendingActionsProvider>
         </LanguageProvider>

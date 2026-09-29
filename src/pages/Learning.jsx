@@ -8,6 +8,7 @@ import { listMyAssignedCourseEmployers } from '../lib/courseCatalogue'
 import AppHeader from '../components/AppHeader'
 import CourseThumbnail from '../components/CourseThumbnail'
 import ProgressBar from '../components/ProgressBar'
+import { formatFullDate } from '../lib/dates'
 
 export default function Learning() {
   const { user } = useAuth()
@@ -159,7 +160,7 @@ function CourseGrid({ courses, skillsByCourse, progressByCatalogueId, assignedBy
               <p className="font-mono text-xs mt-2">
                 {course.completed_date ? (
                   <span className="text-moss">
-                    {t('learning.completed')} {new Date(course.completed_date).toLocaleDateString()}
+                    {t('learning.completed')} {formatFullDate(course.completed_date)}
                   </span>
                 ) : (
                   <span className="text-secondary">{t('learning.inProgress')}</span>

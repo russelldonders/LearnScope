@@ -14,16 +14,16 @@ const DEFAULT_NAV_VISIBILITY = { hasSkills: true, hasCourses: true, hasConnectio
 // the result up here instead means it's fetched once per session and just
 // carried across navigations.
 export function NavVisibilityProvider({ children }) {
-  const { user } = useAuth()
+  const userId = useAuth().user?.id ?? null
   const [navVisibility, setNavVisibility] = useState(DEFAULT_NAV_VISIBILITY)
 
   const refreshNavVisibility = useCallback(async () => {
-    if (!user) {
+    if (!userId) {
       setNavVisibility(DEFAULT_NAV_VISIBILITY)
       return
     }
-    setNavVisibility(await getNavVisibility(user.id))
-  }, [user])
+    setNavVisibility(await getNavVisibility(userId))
+  }, [userId])
 
   useEffect(() => {
     refreshNavVisibility()

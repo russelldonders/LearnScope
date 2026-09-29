@@ -31,6 +31,10 @@ export function sanitiseRichText(value = '') {
       }
       if (child.nodeType !== Node.ELEMENT_NODE) continue
       if (!ALLOWED_TAGS.has(child.tagName)) {
+        // Clean the subtree before unwrapping it: the children being hoisted
+        // aren't in this loop's snapshot, so they'd otherwise skip cleaning
+        // entirely (e.g. <span><img onerror=…></span>).
+        clean(child)
         child.replaceWith(...child.childNodes)
         continue
       }

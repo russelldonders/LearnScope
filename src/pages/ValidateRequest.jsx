@@ -10,6 +10,7 @@ import { activityName, verbLabel } from '../lib/xapiStatement'
 import { fetchStatementsForSkill } from '../lib/activitySkillLinks'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
+import { formatFullDate } from '../lib/dates'
 
 const SOURCE_LABELS = {
   self: 'Self-assessed',
@@ -186,7 +187,7 @@ export default function ValidateRequest() {
                       {l.courses?.completed_date && (
                         <span className="text-secondary">
                           {' '}
-                          — completed {new Date(l.courses.completed_date).toLocaleDateString()}
+                          — completed {formatFullDate(l.courses.completed_date)}
                         </span>
                       )}
                     </div>

@@ -28,7 +28,7 @@ function interpolate(value, params) {
 const LanguageContext = createContext(undefined)
 
 export function LanguageProvider({ children }) {
-  const { user } = useAuth()
+  const userId = useAuth().user?.id ?? null
   const [language, setLanguageState] = useState(() => {
     const stored = localStorage.getItem(STORAGE_KEY)
     return LANGUAGE_VALUES.includes(stored) ? stored : DEFAULT_LANGUAGE
@@ -37,7 +37,7 @@ export function LanguageProvider({ children }) {
   // A saved DB preference is the source of truth once signed in, same
   // reasoning as ThemeContext's own profile-preference effect.
   useEffect(() => {
-    if (!user) return
+    if (!userId) return
     supabase
       .rpc('get_my_profile')
       .select('language_preference')
@@ -48,17 +48,17 @@ export function LanguageProvider({ children }) {
           localStorage.setItem(STORAGE_KEY, data.language_preference)
         }
       })
-  }, [user])
+  }, [userId])
 
   const setLanguage = useCallback(
     async (next) => {
       setLanguageState(next)
       localStorage.setItem(STORAGE_KEY, next)
-      if (user) {
-        await supabase.from('profiles').update({ language_preference: next }).eq('id', user.id)
+      if (userId) {
+        await supabase.from('profiles').update({ language_preference: next }).eq('id', userId)
       }
     },
-    [user]
+    [userId]
   )
 
   const t = useCallback(

@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import { uploadEvidenceFiles } from '../lib/skillEvidence'
 import { isSelfAssessmentDue, todayDateString } from '../lib/checkin'
-import { formatMonthYear } from '../lib/dates'
+import { formatMonthYear, formatFullDate } from '../lib/dates'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import EvidenceAttachmentLink from '../components/EvidenceAttachmentLink'
@@ -1964,7 +1964,7 @@ function TimelineEntry({
         </div>
         <div className="min-w-0 flex-1 mb-6 flex items-center gap-2">
           <span className="font-mono text-[10px] uppercase tracking-wide text-ink font-semibold">
-            {t('skillDetail.today')} · {new Date(event.date).toLocaleDateString()}
+            {t('skillDetail.today')} · {formatFullDate(event.date)}
           </span>
           <span className="flex-1 h-px bg-hairline" />
         </div>
@@ -2044,7 +2044,7 @@ function TimelineEntry({
             <p className="text-sm font-medium text-ink truncate min-w-0">{course.name}</p>
           </div>
           <p className="font-mono text-xs text-secondary mt-0.5">
-            {new Date(course.completed_date).toLocaleDateString()}
+            {formatFullDate(course.completed_date)}
           </p>
           {onSelect && <p className="font-mono text-[10px] text-moss mt-1">{t('skillDetail.viewCourseArrow')}</p>}
         </div>
@@ -2069,7 +2069,7 @@ function TimelineEntry({
             </p>
           )}
           <p className="font-mono text-xs text-secondary mt-0.5">
-            {new Date(event.date).toLocaleDateString()}
+            {formatFullDate(event.date)}
           </p>
         </div>
       </div>

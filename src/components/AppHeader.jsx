@@ -43,6 +43,7 @@ export default function AppHeader({
   notificationsHref = '/actions',
 }) {
   const { signOut, user, isPlatformAdmin, organisationMemberships, employerMemberships, managerContexts } = useAuth()
+  const userId = user?.id ?? null
   const {
     pendingActionCount,
     pendingActionItems = [],
@@ -68,17 +69,17 @@ export default function AppHeader({
     .join(',')
 
   useEffect(() => {
-    if (!user) return
+    if (!userId) return
     supabase
       .from('profiles')
       .select('avatar_url, full_name')
-      .eq('id', user.id)
+      .eq('id', userId)
       .single()
       .then(({ data }) => {
         setAvatarUrl(data?.avatar_url ?? null)
         setFullName(data?.full_name ?? null)
       })
-  }, [user])
+  }, [userId])
 
   useEffect(() => {
     const organisationIds = [...new Set([

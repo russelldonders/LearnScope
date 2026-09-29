@@ -711,12 +711,14 @@ async function requireOrgAdmin(admin, caller, organisationId, res) {
   if (await isPlatformAdmin(admin, caller.id)) return true
   const { data: memberRow, error: memberCheckError } = await admin
     .from('organisation_members')
-    .select('role, organisations(status)')
+    .select('role, status, organisations(status)')
     .eq('organisation_id', organisationId)
     .eq('user_id', caller.id)
     .maybeSingle()
   if (memberCheckError) throw memberCheckError
-  if (!memberRow || memberRow.role !== 'admin' || memberRow.organisations?.status !== 'active') {
+  // A pending (not yet accepted) admin invite grants nothing -- same rule as
+  // requireEmployerAdmin below and as the accept step in decide_org_invite.
+  if (!memberRow || memberRow.role !== 'admin' || memberRow.status !== 'active' || memberRow.organisations?.status !== 'active') {
     res.status(403).json({ error: 'Organisation admin access required' })
     return false
   }

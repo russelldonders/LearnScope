@@ -8,6 +8,13 @@ describe('page builder content', () => {
     )
   })
 
+  it('cleans markup hoisted out of an unwrapped disallowed element', () => {
+    expect(sanitiseRichText('<span><img src=x onerror=alert(1)></span>')).toBe('')
+    expect(sanitiseRichText('<div><svg><svg onload=alert(1)></svg></svg></div>')).toBe('')
+    expect(sanitiseRichText('<span><a href="javascript:alert(1)" onclick="x()"><em>Hi</em></a></span>')).toBe('<a><em>Hi</em></a>')
+    expect(sanitiseRichText('<section><p>One <strong onmouseover="x()">two</strong></p></section>')).toBe('One <strong>two</strong>')
+  })
+
   it('normalises unknown blocks to safe text blocks', () => {
     const result = normalisePageDocument({ version: 99, blocks: [{ id: 'one', type: 'embed', content: '<b>Hi</b>' }] })
     expect(result).toEqual({ version: 1, blocks: [{ id: 'one', type: 'text', content: '<b>Hi</b>' }] })

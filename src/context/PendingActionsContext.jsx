@@ -9,7 +9,7 @@ const PendingActionsContext = createContext(undefined)
 // whichever page just resolved an item (e.g. Actions.jsx accepting a
 // request) instead of only refetching on the next full page/header mount.
 export function PendingActionsProvider({ children }) {
-  const { user } = useAuth()
+  const userId = useAuth().user?.id ?? null
   const [pendingActionCount, setPendingActionCount] = useState(0)
   const [pendingActionItems, setPendingActionItems] = useState([])
   const [pendingActionsLoading, setPendingActionsLoading] = useState(false)
@@ -26,7 +26,7 @@ export function PendingActionsProvider({ children }) {
   // checks, and it clears itself once they visit Actions.jsx (see
   // markPeerRatingsSeen there).
   const refreshPendingActionCount = useCallback(async () => {
-    if (!user) {
+    if (!userId) {
       setPendingActionCount(0)
       setPendingActionItems([])
       setPendingActionsError(null)
@@ -34,7 +34,7 @@ export function PendingActionsProvider({ children }) {
     }
     setPendingActionsLoading(true)
     try {
-      const { items, failures } = await loadNotifications(user.id)
+      const { items, failures } = await loadNotifications(userId)
       setPendingActionItems(items)
       setPendingActionCount(items.length)
       setPendingActionsError(
@@ -45,7 +45,7 @@ export function PendingActionsProvider({ children }) {
     } finally {
       setPendingActionsLoading(false)
     }
-  }, [user])
+  }, [userId])
 
   useEffect(() => {
     refreshPendingActionCount()

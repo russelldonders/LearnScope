@@ -18,6 +18,7 @@ import {
   sendInviteEmail,
   revokeInvite,
 } from '../lib/connections'
+import { formatFullDate } from '../lib/dates'
 import {
   createManagerTeam,
   createManagerWorkspace,
@@ -433,7 +434,7 @@ function ConnectionCard({ connection: c, sharedSkillCount, sharedTeams, showTeam
                 )}
               </p>
               <p className="font-mono text-xs text-secondary">
-                {new Date(e.date).toLocaleDateString()}
+                {formatFullDate(e.date)}
                 {e.skillCategory ? ` · ${e.skillCategory}` : ''}
               </p>
               {e.comments && <p className="text-sm text-secondary mt-0.5">{e.comments}</p>}

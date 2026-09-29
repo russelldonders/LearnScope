@@ -6,6 +6,11 @@ describe('formatFullDate', () => {
     const timestamp = '2026-08-29T09:41:27Z'
     expect(formatFullDate(timestamp)).toBe(new Date(timestamp).toLocaleDateString())
   })
+
+  it('keeps a date-only value on the same calendar day in every timezone', () => {
+    // new Date('2026-03-01') is UTC midnight, which is still 28 Feb west of UTC.
+    expect(formatFullDate('2026-03-01')).toBe(new Date(2026, 2, 1).toLocaleDateString())
+  })
 })
 
 describe('formatDateRange', () => {

@@ -196,6 +196,12 @@ export default async function handler(req, res) {
     res.status(400).json({ error: 'Invalid skillName' })
     return
   }
+  // One address per call: Resend also accepts an array, which would let a
+  // single quota unit fan out to many recipients.
+  if (typeof toEmail !== 'string') {
+    res.status(400).json({ error: 'Invalid toEmail' })
+    return
+  }
   if (!isAppLink(url, type, req.headers.host)) {
     res.status(400).json({ error: `Invalid ${emailType.urlField}` })
     return

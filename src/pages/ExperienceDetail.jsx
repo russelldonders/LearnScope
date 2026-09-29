@@ -1162,7 +1162,7 @@ function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse, highligh
         </div>
         <div className="min-w-0 flex-1 mb-6 flex items-center gap-2">
           <span className="font-mono text-[10px] uppercase tracking-wide text-ink font-semibold">
-            {t('skillDetail.today')} · {new Date(event.date).toLocaleDateString()}
+            {t('skillDetail.today')} · {formatFullDate(event.date)}
           </span>
           <span className="flex-1 h-px bg-hairline" />
         </div>
@@ -1197,7 +1197,7 @@ function ExperienceTimelineEntry({ item, event, isLast, onSelectCourse, highligh
           <span className="font-mono text-[10px] uppercase tracking-wide shrink-0">{t('skillDetail.trainingLabel')}</span>
           <span className="truncate min-w-0">{course.name}</span>
           <span className="font-mono text-[10px] text-secondary/70 shrink-0">
-            {new Date(course.completed_date).toLocaleDateString()}
+            {formatFullDate(course.completed_date)}
           </span>
         </div>
       </div>

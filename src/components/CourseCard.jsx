@@ -1,4 +1,5 @@
 import CourseThumbnail from './CourseThumbnail'
+import { formatFullDate } from '../lib/dates'
 
 export default function CourseCard({ course, onEdit }) {
   return (
@@ -13,7 +14,7 @@ export default function CourseCard({ course, onEdit }) {
         {course.notes && <p className="text-sm text-secondary mt-1 line-clamp-2">{course.notes}</p>}
         {course.completed_date && (
           <p className="font-mono text-xs text-secondary mt-2">
-            Completed {new Date(course.completed_date).toLocaleDateString()}
+            Completed {formatFullDate(course.completed_date)}
           </p>
         )}
       </div>
