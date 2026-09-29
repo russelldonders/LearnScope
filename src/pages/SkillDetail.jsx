@@ -42,7 +42,7 @@ import { listOutgoingValidationRequests } from '../lib/skillValidationRequests'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
 import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
-import { computeTrustStatus, TRUST_STATUS, TRUST_STATUS_COLORS } from '../lib/skillProficiencyModel'
+import { computeTrustStatus, isPersonValidated, TRUST_STATUS, TRUST_STATUS_COLORS } from '../lib/skillProficiencyModel'
 import { countSkillTrackers, listConnectionsWithSkill } from '../lib/skillStats'
 import { getLearnerCompositeProgress, getParentCompositesForSkill } from '../lib/skillComposites'
 import { getEmployerTargetsForUser, getLatestEmployerSkillConfirmations } from '../lib/employerSkillTargets'
@@ -478,7 +478,10 @@ export default function SkillDetail({ skillId, embedded = false }) {
         selfAssessedCount,
         evidenceCount: practicalStatements.length,
         peerRatingsCount: peerRatings.length,
-        formallyValidated: ['validated', 'maintained'].includes(skill.lifecycle_stage),
+        formallyValidated: isPersonValidated(
+          skill.lifecycle_stage,
+          validationRequests.some((r) => r.status === 'confirmed')
+        ),
       })
     : null
   const knowledgeVerification = computeTrustStatus({

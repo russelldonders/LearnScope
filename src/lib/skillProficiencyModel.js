@@ -57,6 +57,15 @@ export function computeTrustStatus({
   return null
 }
 
+// The Validated tier means a person confirmed the skill: a
+// skill_validation_requests row a validator accepted. An AI check that
+// passed also moves the lifecycle on to maintaining, but it's a synthesis of
+// the learner's own evidence, not independent verification -- so on its own
+// it earns whatever tier that evidence supports, never Validated.
+export function isPersonValidated(lifecycleStage, hasConfirmedValidation) {
+  return Boolean(hasConfirmedValidation) && ['validated', 'maintained'].includes(lifecycleStage)
+}
+
 // "Fully validated" requires both dimensions to independently be at the
 // Validated tier. Correctly unreachable today (knowledge caps at Confirmed)
 // -- not a bug, a placeholder for the per-dimension validation follow-up.

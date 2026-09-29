@@ -112,6 +112,7 @@ export default function SkillsSection() {
       { data: skillTargets },
       employerTargetsByLibraryId,
       employerConfirmationsByKey,
+      { data: confirmedValidations },
     ] = await Promise.all([
       supabase
         .from('skills')
@@ -132,6 +133,7 @@ export default function SkillsSection() {
         .order('created_at', { ascending: false }),
       getEmployerTargetsForUser(),
       getLatestEmployerSkillConfirmations(),
+      supabase.from('skill_validation_requests').select('skill_id').eq('requester_id', user.id).eq('status', 'confirmed'),
     ])
     if (error) {
       setError(error.message)
@@ -156,6 +158,7 @@ export default function SkillsSection() {
       // Most recent target per skill (a skill can be re-targeted over time,
       // same history-preserving pattern as skill_assessments) -- matches
       // currentTarget = targets[0] on the skill's own detail page.
+      const personValidatedSkillIds = new Set((confirmedValidations ?? []).map((v) => v.skill_id))
       const latestTargetLevelBySkillId = new Map()
       for (const t of skillTargets ?? []) {
         if (!latestTargetLevelBySkillId.has(t.skill_id)) latestTargetLevelBySkillId.set(t.skill_id, t.target_level)
@@ -175,6 +178,7 @@ export default function SkillsSection() {
             ...s,
             displayedLevel: s.level ?? latestPracticalBySkillId.get(s.id) ?? null,
             displayedLevelIsSelfAssessed: selfAssessedSkillIds.has(s.id),
+            hasConfirmedValidation: personValidatedSkillIds.has(s.id),
             targetLevel: visibleTarget?.level ?? null,
             targetSource: visibleTarget?.source ?? null,
             employerTargetLevel: visibleTarget?.employerTargetLevel ?? null,

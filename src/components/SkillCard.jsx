@@ -5,7 +5,7 @@ import { isSelfAssessmentDue } from '../lib/checkin'
 import { TRACKING_REASON_LABELS } from '../lib/trackingReasons'
 import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
 import { LEVEL_LABELS, KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
-import { TRUST_STATUS, TRUST_STATUS_COLORS, computeTrustStatus } from '../lib/skillProficiencyModel'
+import { TRUST_STATUS, TRUST_STATUS_COLORS, computeTrustStatus, isPersonValidated } from '../lib/skillProficiencyModel'
 import LifecycleStageIcon from './LifecycleStageIcon'
 import { useLanguage } from '../context/LanguageContext'
 
@@ -32,7 +32,7 @@ export default function SkillCard({ skill, onEdit, compact = false }) {
     // Self-assessed just because something is shown on the icon -- see
     // SkillsSection.jsx for how it's derived.
     selfAssessedCount: skill.displayedLevelIsSelfAssessed ? 1 : 0,
-    formallyValidated: ['validated', 'maintained'].includes(skill.lifecycle_stage),
+    formallyValidated: isPersonValidated(skill.lifecycle_stage, skill.hasConfirmedValidation),
   })
   const knowledgeTrust = computeTrustStatus({
     axis: 'knowledge',

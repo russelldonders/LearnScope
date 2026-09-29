@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import { formatMonthYear, formatFullDate } from '../lib/dates'
 import { LEVEL_LABELS } from '../lib/levels'
-import { translations } from '../lib/i18n/translations'
+import { english } from '../lib/i18n/translations'
 import { EXPERIENCE_TYPE_CONFIG, experienceTypeLabel, formatStudyDuration, nestedExperienceTypesFor } from '../lib/experienceTypes'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
@@ -32,7 +32,7 @@ import RoleProfileAlignmentDetail from '../components/RoleProfileAlignmentDetail
 // (this is exported and used outside the React tree) keeps working exactly
 // as before. The real page passes its live useLanguage() `t` through instead.
 function defaultT(key, params) {
-  const value = key.split('.').reduce((v, part) => v?.[part], translations.en)
+  const value = key.split('.').reduce((v, part) => v?.[part], english)
   if (typeof value !== 'string' || !params) return value ?? key
   return value.replace(/\{(\w+)\}/g, (match, name) => (name in params ? params[name] : match))
 }
@@ -1358,11 +1358,18 @@ export function SkillsSubsection({
       return
     }
     setLoading(true)
-    const [{ data: skillRows }, { data: tagLinks }] = await Promise.all([
+    const [{ data: skillRows }, { data: tagLinks }, { data: confirmedValidations }] = await Promise.all([
       supabase.from('skills').select('*').eq('user_id', user.id).in('id', skillIds),
       supabase.from('skill_tags').select('skill_id, tags(name)').eq('user_id', user.id).in('skill_id', skillIds),
+      supabase
+        .from('skill_validation_requests')
+        .select('skill_id')
+        .eq('requester_id', user.id)
+        .eq('status', 'confirmed')
+        .in('skill_id', skillIds),
     ])
-    setSkills(skillRows ?? [])
+    const personValidatedSkillIds = new Set((confirmedValidations ?? []).map((v) => v.skill_id))
+    setSkills((skillRows ?? []).map((s) => ({ ...s, hasConfirmedValidation: personValidatedSkillIds.has(s.id) })))
     const map = new Map()
     for (const link of tagLinks ?? []) {
       if (!link.tags?.name) continue
