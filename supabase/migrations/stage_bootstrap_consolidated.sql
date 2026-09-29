@@ -26083,3 +26083,729 @@ grant select (
   profile_visible_to_skill_matches,
   allow_connection_skill_ratings
 ) on table public.profiles to authenticated;
+
+
+
+-- =============================================================================
+-- 20260927203632_organisation_workspace_capabilities.sql
+-- =============================================================================
+
+-- Consolidate the former employer/provider workspace distinction into one
+-- organisation workspace. Capabilities describe what an organisation can do;
+-- memberships remain separate grants because workforce data and learning
+-- authoring have different security boundaries.
+
+create table organisation_capabilities (
+  organisation_id uuid not null references organisations(id) on delete cascade,
+  capability text not null check (capability in (
+    'employs_people',
+    'manages_workforce_development',
+    'authors_learning',
+    'supplies_learning_externally'
+  )),
+  status text not null default 'active' check (status in ('active', 'inactive')),
+  enabled_at timestamptz not null default now(),
+  enabled_by uuid references auth.users(id) on delete set null,
+  primary key (organisation_id, capability)
+);
+
+create index organisation_capabilities_active_idx
+  on organisation_capabilities (organisation_id, capability)
+  where status = 'active';
+
+alter table organisation_capabilities enable row level security;
+grant select on organisation_capabilities to authenticated;
+
+create policy "Members can view their organisation capabilities"
+  on organisation_capabilities for select
+  to authenticated
+  using (
+    exists (
+      select 1
+      from organisation_members om
+      where om.organisation_id = organisation_capabilities.organisation_id
+        and om.user_id = (select auth.uid())
+        and om.status = 'active'
+    )
+    or exists (
+      select 1
+      from employers e
+      join employer_members em on em.employer_id = e.id
+      where e.provider_organisation_id = organisation_capabilities.organisation_id
+        and em.user_id = (select auth.uid())
+        and em.status = 'active'
+    )
+    or exists (
+      select 1 from platform_admins pa
+      where pa.user_id = (select auth.uid())
+    )
+  );
+
+-- Every existing organisation is already a learning-content owner. Employer-
+-- backed organisations additionally gain workforce capabilities. An
+-- organisation may carry both sets: that is the central purpose of this
+-- model, rather than creating parallel employer and provider identities.
+insert into organisation_capabilities (organisation_id, capability)
+select id, capability
+from organisations
+cross join lateral (
+  values ('authors_learning'), ('supplies_learning_externally')
+) capabilities(capability)
+on conflict (organisation_id, capability) do nothing;
+
+insert into organisation_capabilities (organisation_id, capability)
+select distinct e.provider_organisation_id, capability
+from employers e
+cross join lateral (
+  values ('employs_people'), ('manages_workforce_development')
+) capabilities(capability)
+where e.provider_organisation_id is not null
+on conflict (organisation_id, capability) do nothing;
+
+-- Replace the short-lived employer/provider navigation abstraction with a
+-- durable organisation owner. Learning profiles continue to be employer-
+-- scoped: this migration changes workspace identity, not learner-data
+-- ownership or its RLS boundary.
+alter table workspaces add column organisation_id uuid references organisations(id) on delete cascade;
+
+update workspaces w
+set organisation_id = coalesce(w.provider_organisation_id, e.provider_organisation_id),
+    workspace_type = 'organisation'
+from employers e
+where w.workspace_type = 'employer'
+  and e.id = w.employer_id;
+
+update workspaces
+set organisation_id = provider_organisation_id,
+    workspace_type = 'organisation'
+where workspace_type = 'provider';
+
+alter table workspaces drop constraint if exists workspaces_owner_shape_check;
+alter table workspaces drop constraint if exists workspaces_workspace_type_check;
+drop index if exists workspaces_employer_idx;
+drop index if exists workspaces_provider_organisation_idx;
+alter table workspaces drop column employer_id;
+alter table workspaces drop column provider_organisation_id;
+
+alter table workspaces
+  add constraint workspaces_workspace_type_check
+  check (workspace_type in ('personal', 'manager', 'organisation', 'platform_admin'));
+
+alter table workspaces
+  add constraint workspaces_owner_shape_check
+  check (
+    (workspace_type = 'personal'
+      and personal_profile_id is not null
+      and owner_person_id is not null
+      and organisation_id is null)
+    or (workspace_type = 'manager'
+      and personal_profile_id is null
+      and owner_person_id is not null
+      and organisation_id is null)
+    or (workspace_type = 'organisation'
+      and personal_profile_id is null
+      and owner_person_id is null
+      and organisation_id is not null)
+    or (workspace_type = 'platform_admin'
+      and personal_profile_id is null
+      and owner_person_id is null
+      and organisation_id is null)
+  );
+
+create index workspaces_organisation_idx
+  on workspaces (organisation_id, status)
+  where organisation_id is not null;
+
+-- One canonical workspace per organisation. Reuse the organisation UUID to
+-- make the backfill deterministic and keep later membership grants simple.
+insert into workspaces (id, workspace_type, name, organisation_id)
+select o.id, 'organisation', o.name, o.id
+from organisations o
+where not exists (
+  select 1 from workspaces w
+  where w.workspace_type = 'organisation'
+    and w.organisation_id = o.id
+)
+on conflict (id) do nothing;
+
+alter table workspace_access drop constraint if exists workspace_access_access_role_check;
+update workspace_access set access_role = 'organisation_admin' where access_role = 'lms_admin';
+update workspace_access set access_role = 'content_editor' where access_role = 'provider';
+update workspace_access set access_role = 'member' where access_role = 'employee';
+
+alter table workspace_access
+  add constraint workspace_access_access_role_check
+  check (access_role in (
+    'owner', 'member', 'manager', 'organisation_admin', 'content_editor', 'platform_admin'
+  ));
+
+insert into workspace_access (workspace_id, auth_account_id, access_role)
+select w.id, paa.id,
+  case when om.role = 'admin' then 'organisation_admin' else 'content_editor' end
+from organisation_members om
+join workspaces w
+  on w.organisation_id = om.organisation_id
+ and w.workspace_type = 'organisation'
+join person_auth_accounts paa on paa.auth_user_id = om.user_id
+where om.status = 'active'
+on conflict (workspace_id, auth_account_id, access_role) do nothing;
+
+insert into workspace_access (workspace_id, auth_account_id, access_role)
+select w.id, paa.id,
+  case when em.role = 'admin' then 'organisation_admin' else 'member' end
+from employer_members em
+join employers e on e.id = em.employer_id
+join workspaces w
+  on w.organisation_id = e.provider_organisation_id
+ and w.workspace_type = 'organisation'
+join person_auth_accounts paa on paa.auth_user_id = em.user_id
+where em.status = 'active'
+on conflict (workspace_id, auth_account_id, access_role) do nothing;
+
+
+
+-- =============================================================================
+-- 20260927212035_canonical_organisation_domain.sql
+-- =============================================================================
+
+-- Make organisations the sole persisted business identity. "Employer" now
+-- describes a workforce relationship/capability, not a second entity type.
+
+-- Preserve the old-to-canonical id mapping while dependent rows are moved.
+create temporary table canonical_organisation_map on commit drop as
+select id as legacy_employer_id, provider_organisation_id as organisation_id
+from public.employers;
+
+-- Ensure every former employer organisation advertises its workforce role.
+insert into public.organisation_capabilities (organisation_id, capability)
+select m.organisation_id, capability
+from canonical_organisation_map m
+cross join lateral (
+  values ('employs_people'), ('manages_workforce_development')
+) capabilities(capability)
+on conflict (organisation_id, capability) do update set status = 'active';
+
+-- Keep the canonical organisation's public identity complete before the
+-- duplicate record is removed.
+update public.organisations o
+set name = e.name,
+    created_by = coalesce(o.created_by, e.created_by),
+    updated_at = greatest(o.updated_at, e.updated_at)
+from public.employers e
+where o.id = e.provider_organisation_id;
+
+-- The organisation-capability policy was the sole external schema dependency
+-- on the employers table. It is recreated against canonical memberships below.
+drop policy if exists "Members can view their organisation capabilities"
+  on public.organisation_capabilities;
+
+drop function if exists public.create_employer(text);
+
+alter table public.course_assignments drop constraint course_assignments_employer_id_fkey;
+alter table public.employer_catalogue_access drop constraint employer_catalogue_access_employer_id_fkey;
+alter table public.employer_data_access_requests drop constraint employer_data_access_requests_employer_id_fkey;
+alter table public.employer_field_definitions drop constraint employer_field_definitions_employer_id_fkey;
+alter table public.employer_linked_providers drop constraint employer_linked_providers_employer_id_fkey;
+alter table public.employer_management_relationships drop constraint employer_management_relationships_employer_id_fkey;
+alter table public.employer_members drop constraint employer_members_employer_id_fkey;
+alter table public.employer_role_profiles drop constraint employer_role_profiles_employer_id_fkey;
+alter table public.employer_skill_confirmations drop constraint employer_skill_confirmations_employer_id_fkey;
+alter table public.employer_skill_development_targets drop constraint employer_skill_development_targets_employer_id_fkey;
+alter table public.employer_skill_suggestions drop constraint employer_skill_suggestions_employer_id_fkey;
+alter table public.learning_profiles drop constraint learning_profiles_employer_id_fkey;
+alter table public.person_auth_accounts drop constraint person_auth_accounts_employer_id_fkey;
+
+update public.course_assignments t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
+update public.employer_catalogue_access t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
+update public.employer_data_access_requests t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
+update public.employer_field_definitions t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
+-- This guard enforces interactive sharing decisions via auth.uid(). The ID
+-- rewrite is a trusted schema migration, not a sharing decision, so suspend
+-- only this user trigger for the remap and restore it immediately afterwards.
+alter table public.employer_linked_providers disable trigger guard_employer_provider_sharing;
+update public.employer_linked_providers t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
+alter table public.employer_linked_providers enable trigger guard_employer_provider_sharing;
+-- Relationship validation compares this key with employer_members. Both are
+-- remapped in the same transaction, so row-by-row validation would observe a
+-- transient mixed-ID state. Constraints are restored before commit.
+alter table public.employer_management_relationships disable trigger validate_employer_management_relationship_trigger;
+update public.employer_management_relationships t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
+alter table public.employer_management_relationships enable trigger validate_employer_management_relationship_trigger;
+update public.employer_members t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
+update public.employer_role_profiles t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
+update public.employer_skill_confirmations t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
+update public.employer_skill_development_targets t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
+update public.employer_skill_suggestions t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
+update public.learning_profiles t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
+update public.person_auth_accounts t set employer_id = m.organisation_id from canonical_organisation_map m where t.employer_id = m.legacy_employer_id;
+
+alter table public.course_assignments add constraint course_assignments_organisation_fkey foreign key (employer_id) references public.organisations(id) on delete cascade;
+alter table public.employer_catalogue_access add constraint employer_catalogue_access_organisation_fkey foreign key (employer_id) references public.organisations(id) on delete cascade;
+alter table public.employer_data_access_requests add constraint employer_data_access_requests_organisation_fkey foreign key (employer_id) references public.organisations(id) on delete cascade;
+alter table public.employer_field_definitions add constraint employer_field_definitions_organisation_fkey foreign key (employer_id) references public.organisations(id) on delete cascade;
+alter table public.employer_linked_providers add constraint employer_linked_providers_organisation_fkey foreign key (employer_id) references public.organisations(id) on delete cascade;
+alter table public.employer_management_relationships add constraint employer_management_relationships_organisation_fkey foreign key (employer_id) references public.organisations(id) on delete cascade;
+alter table public.employer_members add constraint employer_members_organisation_fkey foreign key (employer_id) references public.organisations(id) on delete cascade;
+alter table public.employer_role_profiles add constraint employer_role_profiles_organisation_fkey foreign key (employer_id) references public.organisations(id) on delete cascade;
+alter table public.employer_skill_confirmations add constraint employer_skill_confirmations_organisation_fkey foreign key (employer_id) references public.organisations(id) on delete cascade;
+alter table public.employer_skill_development_targets add constraint employer_skill_development_targets_organisation_fkey foreign key (employer_id) references public.organisations(id) on delete cascade;
+alter table public.employer_skill_suggestions add constraint employer_skill_suggestions_organisation_fkey foreign key (employer_id) references public.organisations(id) on delete cascade;
+alter table public.learning_profiles add constraint learning_profiles_organisation_fkey foreign key (employer_id) references public.organisations(id) on delete cascade;
+alter table public.person_auth_accounts add constraint person_auth_accounts_organisation_fkey foreign key (employer_id) references public.organisations(id) on delete set null;
+
+drop table public.employers;
+drop sequence if exists public.employer_code_seq;
+drop function if exists public.set_employer_code();
+drop function if exists public.generate_employer_code();
+
+-- No discriminator remains: capabilities compose an organisation's behaviour.
+alter table public.organisations drop column if exists type;
+
+-- Compatibility projection for the existing workforce SQL API. It contains no
+-- separate identity or storage: id and provider_organisation_id are both the
+-- canonical organisation id. New application code reads organisations.
+create view public.employers
+with (security_invoker = true)
+as
+select
+  o.id,
+  o.name,
+  o.org_code as employer_code,
+  o.id as provider_organisation_id,
+  o.created_by,
+  o.created_at,
+  o.updated_at
+from public.organisations o
+where exists (
+  select 1
+  from public.organisation_capabilities oc
+  where oc.organisation_id = o.id
+    and oc.capability = 'employs_people'
+    and oc.status = 'active'
+);
+
+revoke all on public.employers from public, anon;
+grant select on public.employers to authenticated;
+
+create policy "Members can view their organisation capabilities"
+  on public.organisation_capabilities for select
+  to authenticated
+  using (
+    exists (
+      select 1 from public.organisation_members om
+      where om.organisation_id = organisation_capabilities.organisation_id
+        and om.user_id = (select auth.uid())
+        and om.status = 'active'
+    )
+    or exists (
+      select 1 from public.employer_members em
+      where em.employer_id = organisation_capabilities.organisation_id
+        and em.user_id = (select auth.uid())
+        and em.status = 'active'
+    )
+    or exists (
+      select 1 from public.platform_admins pa
+      where pa.user_id = (select auth.uid())
+    )
+  );
+
+-- Canonical creation API. Capabilities are validated and supplied explicitly;
+-- workforce management implies employing people, and external supply implies
+-- learning authoring.
+-- These pre-existing trigger functions used the caller's search path. Pin them
+-- before calling the hardened RPC (whose own search path is deliberately empty).
+alter function public.set_organisation_slug() set search_path = public;
+alter function public.generate_unique_organisation_slug(text, uuid) set search_path = public;
+
+create or replace function public.create_organisation(
+  p_name text,
+  p_capabilities text[] default array[]::text[]
+)
+returns public.organisations
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_caller uuid := (select auth.uid());
+  v_organisation public.organisations;
+  v_capability text;
+  v_capabilities text[] := coalesce(p_capabilities, array[]::text[]);
+begin
+  if v_caller is null or not public.is_platform_admin(v_caller) then
+    raise exception 'Not authorized';
+  end if;
+  if nullif(btrim(p_name), '') is null then
+    raise exception 'Organisation name is required';
+  end if;
+  if exists (
+    select 1 from unnest(v_capabilities) capability
+    where capability not in ('employs_people', 'manages_workforce_development', 'authors_learning', 'supplies_learning_externally')
+  ) then
+    raise exception 'Unknown organisation capability';
+  end if;
+
+  if 'manages_workforce_development' = any(v_capabilities) and not ('employs_people' = any(v_capabilities)) then
+    v_capabilities := array_append(v_capabilities, 'employs_people');
+  end if;
+  if 'supplies_learning_externally' = any(v_capabilities) and not ('authors_learning' = any(v_capabilities)) then
+    v_capabilities := array_append(v_capabilities, 'authors_learning');
+  end if;
+
+  insert into public.organisations (name, created_by)
+  values (btrim(p_name), v_caller)
+  returning * into v_organisation;
+
+  foreach v_capability in array v_capabilities loop
+    insert into public.organisation_capabilities (organisation_id, capability, enabled_by)
+    values (v_organisation.id, v_capability, v_caller)
+    on conflict (organisation_id, capability) do update
+      set status = 'active', enabled_by = excluded.enabled_by, enabled_at = now();
+  end loop;
+
+  return v_organisation;
+end;
+$$;
+
+revoke all on function public.create_organisation(text, text[]) from public, anon;
+grant execute on function public.create_organisation(text, text[]) to authenticated;
+
+create or replace function public.set_organisation_capabilities(
+  p_organisation_id uuid,
+  p_capabilities text[]
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_caller uuid := (select auth.uid());
+  v_capability text;
+  v_capabilities text[] := coalesce(p_capabilities, array[]::text[]);
+begin
+  if v_caller is null or not public.is_platform_admin(v_caller) then
+    raise exception 'Not authorized';
+  end if;
+  if not exists (select 1 from public.organisations where id = p_organisation_id) then
+    raise exception 'Organisation not found';
+  end if;
+  if exists (
+    select 1 from unnest(v_capabilities) capability
+    where capability not in ('employs_people', 'manages_workforce_development', 'authors_learning', 'supplies_learning_externally')
+  ) then
+    raise exception 'Unknown organisation capability';
+  end if;
+
+  if 'manages_workforce_development' = any(v_capabilities) and not ('employs_people' = any(v_capabilities)) then
+    v_capabilities := array_append(v_capabilities, 'employs_people');
+  end if;
+  if 'supplies_learning_externally' = any(v_capabilities) and not ('authors_learning' = any(v_capabilities)) then
+    v_capabilities := array_append(v_capabilities, 'authors_learning');
+  end if;
+
+  update public.organisation_capabilities
+  set status = 'inactive'
+  where organisation_id = p_organisation_id
+    and not (capability = any(v_capabilities));
+
+  foreach v_capability in array v_capabilities loop
+    insert into public.organisation_capabilities (organisation_id, capability, enabled_by)
+    values (p_organisation_id, v_capability, v_caller)
+    on conflict (organisation_id, capability) do update
+      set status = 'active', enabled_by = excluded.enabled_by, enabled_at = now();
+  end loop;
+end;
+$$;
+
+revoke all on function public.set_organisation_capabilities(uuid, text[]) from public, anon;
+grant execute on function public.set_organisation_capabilities(uuid, text[]) to authenticated;
+
+-- Transitional RPC alias for clients deployed during the cutover. It creates
+-- only the canonical organisation and returns the compatibility view shape.
+create or replace function public.create_employer(p_name text)
+returns public.employers
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_organisation public.organisations;
+  v_employer public.employers;
+begin
+  v_organisation := public.create_organisation(
+    p_name,
+    array['employs_people', 'manages_workforce_development', 'authors_learning']
+  );
+  select * into v_employer from public.employers where id = v_organisation.id;
+  return v_employer;
+end;
+$$;
+
+revoke all on function public.create_employer(text) from public, anon;
+grant execute on function public.create_employer(text) to authenticated;
+
+
+
+-- =============================================================================
+-- 20260928202323_remove_employers_compatibility_view.sql
+-- =============================================================================
+
+-- The canonical organisation cutover kept a short-lived public.employers
+-- projection so the already-deployed workforce routines could continue to
+-- resolve their old relation name. Rewrite those stored routines against the
+-- canonical table, then remove both compatibility entry points.
+
+drop function if exists public.create_employer(text);
+
+do $$
+declare
+  routine record;
+  definition text;
+begin
+  for routine in
+    select procedure.oid
+    from pg_catalog.pg_proc procedure
+    join pg_catalog.pg_namespace namespace on namespace.oid = procedure.pronamespace
+    where namespace.nspname in ('public', 'private')
+      and (
+        procedure.prosrc like '%public.employers%'
+        or procedure.prosrc like '%from employers%'
+        or procedure.prosrc like '%join employers%'
+      )
+  loop
+    definition := pg_catalog.pg_get_functiondef(routine.oid);
+    definition := replace(definition, 'public.employers', 'public.organisations');
+    definition := replace(definition, 'from employers', 'from organisations');
+    definition := replace(definition, 'join employers', 'join organisations');
+    definition := replace(definition, 'employer.provider_organisation_id', 'employer.id');
+    definition := replace(definition, 'e.provider_organisation_id', 'e.id');
+    definition := replace(definition, 'select provider_organisation_id into', 'select id into');
+    execute definition;
+  end loop;
+
+  if exists (
+    select 1
+    from pg_catalog.pg_proc procedure
+    join pg_catalog.pg_namespace namespace on namespace.oid = procedure.pronamespace
+    where namespace.nspname in ('public', 'private')
+      and (
+        procedure.prosrc like '%public.employers%'
+        or procedure.prosrc like '%from employers%'
+        or procedure.prosrc like '%join employers%'
+      )
+  ) then
+    raise exception 'Stored routines still reference the employers compatibility view';
+  end if;
+end;
+$$;
+
+revoke all on public.employers from public, anon, authenticated;
+drop view public.employers;
+
+
+
+-- =============================================================================
+-- 20260929210000_peer_ratings_do_not_set_skill_level.sql
+-- =============================================================================
+
+-- Peer ratings are informational history (0033): only the learner's own
+-- dated assessments or a validation move skills.level. 0095 redefined this
+-- function for recommend invites and brought back the recompute that 0033
+-- removed -- so accepting a rating invite let the rater's level (and, via the
+-- unfiltered union, a knowledge-axis assessment) overwrite the learner's
+-- current practical level. Same function, minus that update.
+--
+-- No existing data is changed. Checked on Staging before writing this: no
+-- skill currently holds a level that only a newer peer rating explains.
+create or replace function accept_invite_and_rate(p_code text, p_level int, p_comments text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_invite connection_invites%rowtype;
+  v_skill skills%rowtype;
+  v_rater_name text;
+  v_rater_email text;
+  v_rating_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select * into v_invite from connection_invites where share_code = p_code for update;
+  if not found then
+    raise exception 'Invite not found';
+  end if;
+  if v_invite.invite_type != 'rate' then
+    raise exception 'This invite is not a rating invite.';
+  end if;
+  if v_invite.status != 'pending' then
+    raise exception 'This invite has already been used.';
+  end if;
+  if v_invite.inviter_id = auth.uid() then
+    raise exception 'You can''t rate your own skill.';
+  end if;
+  if p_level < 1 or p_level > 5 then
+    raise exception 'Invalid level';
+  end if;
+
+  select * into v_skill from skills where id = v_invite.skill_id;
+  select full_name into v_rater_name from profiles where id = auth.uid();
+  select email into v_rater_email from auth.users where id = auth.uid();
+
+  insert into skill_peer_ratings (
+    skill_id, skill_name, skill_category, skill_owner_id,
+    invite_id, rater_id, rater_name, rater_email, level, comments
+  )
+  values (
+    v_invite.skill_id, v_skill.name, v_skill.category, v_skill.user_id,
+    v_invite.id, auth.uid(), v_rater_name, v_rater_email, p_level, nullif(p_comments, '')
+  )
+  returning id into v_rating_id;
+
+  update connection_invites
+  set status = 'accepted', accepted_by = auth.uid(), accepted_at = now()
+  where id = v_invite.id;
+
+  return v_rating_id;
+end;
+$$;
+
+
+
+-- =============================================================================
+-- 20260929220000_rls_initplan_auth_uid_and_indexes.sql
+-- =============================================================================
+
+-- RLS performance, no change in who can see or write what. Each policy
+-- below is restated exactly as it's live on Staging, except auth.uid() is
+-- wrapped as (select auth.uid()) -- Postgres then evaluates it once per
+-- query (an initplan) instead of once per row. Generated from pg_policies
+-- so the expressions match the current definitions, not older migrations.
+--
+-- Plus the two foreign-key indexes the owner policies and skill pages
+-- filter on but never had.
+
+alter policy "Users manage their own course-experience links" on public.course_experience_links
+  using (((select auth.uid()) = user_id))
+  with check ((((select auth.uid()) = user_id) AND (EXISTS ( SELECT 1
+   FROM courses
+  WHERE ((courses.id = course_experience_links.course_id) AND (courses.user_id = (select auth.uid()))))) AND (EXISTS ( SELECT 1
+   FROM experience
+  WHERE ((experience.id = course_experience_links.experience_id) AND (experience.user_id = (select auth.uid())))))));
+
+alter policy "Users manage their own courses" on public.courses
+  using (((select auth.uid()) = user_id))
+  with check (((select auth.uid()) = user_id));
+
+alter policy "Validators can view courses linked to skills they're validating" on public.courses
+  using (is_course_linked_to_validating_skill(id, (select auth.uid())));
+
+alter policy "Users manage their own experience" on public.experience
+  using (((select auth.uid()) = user_id))
+  with check (((select auth.uid()) = user_id));
+
+alter policy "Users manage their own profile" on public.profiles
+  using (((select auth.uid()) = id))
+  with check (((select auth.uid()) = id));
+
+alter policy "Users manage their own skill assessments" on public.skill_assessments
+  using (((select auth.uid()) = user_id))
+  with check (((select auth.uid()) = user_id));
+
+alter policy "Validators can view assessments for skills they're validating" on public.skill_assessments
+  using (is_skill_validator(skill_id, (select auth.uid())));
+
+alter policy "Users manage their own skill-course links" on public.skill_course_links
+  using (((select auth.uid()) = user_id))
+  with check ((((select auth.uid()) = user_id) AND (EXISTS ( SELECT 1
+   FROM skills
+  WHERE ((skills.id = skill_course_links.skill_id) AND (skills.user_id = (select auth.uid()))))) AND (EXISTS ( SELECT 1
+   FROM courses
+  WHERE ((courses.id = skill_course_links.course_id) AND (courses.user_id = (select auth.uid())))))));
+
+alter policy "Validators can view course links for skills they're validating" on public.skill_course_links
+  using (is_skill_validator(skill_id, (select auth.uid())));
+
+alter policy "Users manage their own skill-experience links" on public.skill_experience_links
+  using (((select auth.uid()) = user_id))
+  with check ((((select auth.uid()) = user_id) AND (EXISTS ( SELECT 1
+   FROM skills
+  WHERE ((skills.id = skill_experience_links.skill_id) AND (skills.user_id = (select auth.uid()))))) AND (EXISTS ( SELECT 1
+   FROM experience
+  WHERE ((experience.id = skill_experience_links.experience_id) AND (experience.user_id = (select auth.uid())))))));
+
+alter policy "Raters can view ratings they gave" on public.skill_peer_ratings
+  using (((select auth.uid()) = rater_id));
+
+alter policy "Skill owners can view ratings on their skills" on public.skill_peer_ratings
+  using (((select auth.uid()) = skill_owner_id));
+
+alter policy "Validators can view peer ratings for skills they're validating" on public.skill_peer_ratings
+  using (is_skill_validator(skill_id, (select auth.uid())));
+
+alter policy "Connections can view tags on visible skills" on public.skill_tags
+  using ((EXISTS ( SELECT 1
+   FROM (skills s
+     JOIN profiles p ON ((p.id = s.user_id)))
+  WHERE ((s.id = skill_tags.skill_id) AND (s.visible_on_profile = true) AND (p.skills_profile_visible = true) AND is_connected((select auth.uid()), s.user_id)))));
+
+alter policy "Users manage their own skill tags" on public.skill_tags
+  using (((select auth.uid()) = user_id))
+  with check ((((select auth.uid()) = user_id) AND (EXISTS ( SELECT 1
+   FROM skills
+  WHERE ((skills.id = skill_tags.skill_id) AND (skills.user_id = (select auth.uid())))))));
+
+alter policy "Users manage their own skill targets" on public.skill_targets
+  using (((select auth.uid()) = user_id))
+  with check (((select auth.uid()) = user_id));
+
+alter policy "Validators can view targets for skills they're validating" on public.skill_targets
+  using (is_skill_validator(skill_id, (select auth.uid())));
+
+alter policy "Connections can view visible skills profiles" on public.skills
+  using (((visible_on_profile = true) AND (EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = skills.user_id) AND (p.skills_profile_visible = true)))) AND is_connected((select auth.uid()), user_id)));
+
+alter policy "Employers with granted access can view skills" on public.skills
+  using (is_skill_shared_with_employer(id, (select auth.uid())));
+
+alter policy "Skill-search matches can view opted-in profiles" on public.skills
+  using (((visible_on_profile = true) AND (EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = skills.user_id) AND (p.profile_visible_to_skill_matches = true)))) AND is_skill_search_match((select auth.uid()), user_id, library_skill_id)));
+
+alter policy "Skills open to being asked to validate are discoverable" on public.skills
+  using (((lifecycle_stage = ANY (ARRAY['validated'::text, 'maintained'::text])) AND ((offer_validate_others = true) OR ((offer_validate_connections = true) AND is_connected((select auth.uid()), user_id)))));
+
+alter policy "Users manage their own skills" on public.skills
+  using (((select auth.uid()) = user_id))
+  with check (((select auth.uid()) = user_id));
+
+alter policy "Validators can view skills they're validating" on public.skills
+  using (is_skill_validator(id, (select auth.uid())));
+
+alter policy "Users manage their own activity-skill links" on public.xapi_statement_skills
+  using (((select auth.uid()) = user_id))
+  with check ((((select auth.uid()) = user_id) AND (EXISTS ( SELECT 1
+   FROM xapi_statements xs
+  WHERE ((xs.id = xapi_statement_skills.statement_id) AND (xs.user_id = (select auth.uid())))))));
+
+alter policy "Validators can view activity-skill links for skills they're val" on public.xapi_statement_skills
+  using ((EXISTS ( SELECT 1
+   FROM skill_validation_requests svr
+  WHERE ((svr.skill_id = xapi_statement_skills.skill_id) AND (svr.validator_id = (select auth.uid()))))));
+
+alter policy "Users manage their own xapi statements" on public.xapi_statements
+  using (((select auth.uid()) = user_id))
+  with check (((select auth.uid()) = user_id));
+
+alter policy "Validators can view activity for skills they're validating" on public.xapi_statements
+  using (((skill_id IS NOT NULL) AND is_skill_validator(skill_id, (select auth.uid()))));
+
+create index if not exists skill_assessments_user_id_idx on public.skill_assessments (user_id);
+create index if not exists skill_peer_ratings_skill_owner_id_idx on public.skill_peer_ratings (skill_owner_id);
