@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from './AuthContext'
-import { translations, INTERFACE_LANGUAGES } from '../lib/i18n/translations'
+import { DEFAULT_LANGUAGE, INTERFACE_LANGUAGES, english, getLoadedTranslations, loadTranslations } from '../lib/i18n/translations'
 
 // Same "localStorage first, DB overrides once signed in" shape as
 // ThemeContext.jsx's theme_preference -- kept as a separate context (not
@@ -9,7 +9,6 @@ import { translations, INTERFACE_LANGUAGES } from '../lib/i18n/translations'
 // this one didn't exist when that one was built.
 const STORAGE_KEY = 'learnscope-language'
 const LANGUAGE_VALUES = INTERFACE_LANGUAGES.map((l) => l.value)
-const DEFAULT_LANGUAGE = 'en'
 
 function resolve(dictionary, key) {
   return key.split('.').reduce((value, part) => value?.[part], dictionary)
@@ -28,27 +27,32 @@ function interpolate(value, params) {
 const LanguageContext = createContext(undefined)
 
 export function LanguageProvider({ children }) {
-  const userId = useAuth().user?.id ?? null
+  const { user, profileSettings } = useAuth()
+  const userId = user?.id ?? null
+  const savedPreference = profileSettings?.languagePreference
   const [language, setLanguageState] = useState(() => {
     const stored = localStorage.getItem(STORAGE_KEY)
     return LANGUAGE_VALUES.includes(stored) ? stored : DEFAULT_LANGUAGE
   })
+  // The dictionary actually in use. Switching language keeps showing the
+  // current one until the new chunk arrives, rather than flashing English.
+  const [dictionary, setDictionary] = useState(() => getLoadedTranslations(language))
+
+  useEffect(() => {
+    let cancelled = false
+    loadTranslations(language)
+      .then((loaded) => { if (!cancelled) setDictionary(loaded) })
+      .catch(() => { if (!cancelled) setDictionary((current) => current ?? english) })
+    return () => { cancelled = true }
+  }, [language])
 
   // A saved DB preference is the source of truth once signed in, same
   // reasoning as ThemeContext's own profile-preference effect.
   useEffect(() => {
-    if (!userId) return
-    supabase
-      .rpc('get_my_profile')
-      .select('language_preference')
-      .single()
-      .then(({ data, error }) => {
-        if (!error && LANGUAGE_VALUES.includes(data?.language_preference)) {
-          setLanguageState(data.language_preference)
-          localStorage.setItem(STORAGE_KEY, data.language_preference)
-        }
-      })
-  }, [userId])
+    if (!LANGUAGE_VALUES.includes(savedPreference)) return
+    setLanguageState(savedPreference)
+    localStorage.setItem(STORAGE_KEY, savedPreference)
+  }, [savedPreference])
 
   const setLanguage = useCallback(
     async (next) => {
@@ -63,11 +67,15 @@ export function LanguageProvider({ children }) {
 
   const t = useCallback(
     (key, params) =>
-      interpolate(resolve(translations[language], key) ?? resolve(translations[DEFAULT_LANGUAGE], key) ?? key, params),
-    [language]
+      interpolate(resolve(dictionary ?? english, key) ?? resolve(english, key) ?? key, params),
+    [dictionary]
   )
 
   const value = useMemo(() => ({ language, setLanguage, t }), [language, setLanguage, t])
+
+  // Only on a first load in a non-English language: hold the page for the
+  // one small chunk rather than rendering it in English and then swapping.
+  if (!dictionary) return null
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>
 }

@@ -1,5 +1,5 @@
 import { Component } from 'react'
-import { translations, INTERFACE_LANGUAGES } from '../lib/i18n/translations'
+import { INTERFACE_LANGUAGES, english, getLoadedTranslations } from '../lib/i18n/translations'
 
 // No error-reporting service (Sentry etc.) exists in this app, and nothing
 // else catches render-time exceptions -- without this, any uncaught throw
@@ -15,7 +15,7 @@ const LANGUAGE_VALUES = INTERFACE_LANGUAGES.map((l) => l.value)
 function fallbackT(key) {
   const stored = localStorage.getItem('learnscope-language')
   const language = LANGUAGE_VALUES.includes(stored) ? stored : 'en'
-  return key.split('.').reduce((v, part) => v?.[part], translations[language]) ?? key
+  return key.split('.').reduce((v, part) => v?.[part], getLoadedTranslations(language) ?? english) ?? key
 }
 
 export default class ErrorBoundary extends Component {

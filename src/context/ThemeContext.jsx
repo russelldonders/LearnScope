@@ -20,7 +20,9 @@ function applyTheme(preference) {
 const ThemeContext = createContext(undefined)
 
 export function ThemeProvider({ children }) {
-  const userId = useAuth().user?.id ?? null
+  const { user, profileSettings } = useAuth()
+  const userId = user?.id ?? null
+  const savedPreference = profileSettings?.themePreference
   const [preference, setPreferenceState] = useState(() => {
     const stored = localStorage.getItem(STORAGE_KEY)
     return THEME_VALUES.includes(stored) ? stored : 'system'
@@ -42,18 +44,10 @@ export function ThemeProvider({ children }) {
   // follows the learner's account across devices rather than staying
   // per-browser.
   useEffect(() => {
-    if (!userId) return
-    supabase
-      .rpc('get_my_profile')
-      .select('theme_preference')
-      .single()
-      .then(({ data, error }) => {
-        if (!error && THEME_VALUES.includes(data?.theme_preference)) {
-          setPreferenceState(data.theme_preference)
-          localStorage.setItem(STORAGE_KEY, data.theme_preference)
-        }
-      })
-  }, [userId])
+    if (!THEME_VALUES.includes(savedPreference)) return
+    setPreferenceState(savedPreference)
+    localStorage.setItem(STORAGE_KEY, savedPreference)
+  }, [savedPreference])
 
   const setPreference = useCallback(
     async (next) => {

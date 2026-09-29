@@ -14,8 +14,8 @@ vi.mock('../context/AuthContext', () => ({
 // so this doesn't pull in the real supabaseClient the way useLanguage's own
 // module does.
 vi.mock('../context/LanguageContext', async () => {
-  const { translations } = await import('../lib/i18n/translations')
-  const t = (key) => key.split('.').reduce((value, part) => value?.[part], translations.en) ?? key
+  const { english } = await import('../lib/i18n/translations')
+  const t = (key) => key.split('.').reduce((value, part) => value?.[part], english) ?? key
   return { useLanguage: () => ({ language: 'en', setLanguage: vi.fn(), t }) }
 })
 vi.mock('../components/AppHeader', () => ({ default: () => <header>Header</header> }))

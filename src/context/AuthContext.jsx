@@ -7,6 +7,11 @@ import { listMyEmployerManagementContexts } from '../lib/employerManagement'
 
 const AuthContext = createContext(undefined)
 
+// One read of the signed-in learner's own profile settings, shared by the
+// onboarding/name gates here and by ThemeContext/LanguageContext -- rather
+// than each provider fetching its own column on every sign-in.
+const PROFILE_SETTINGS_COLUMNS = 'onboarding_completed_at, first_name, last_name, theme_preference, language_preference'
+
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -19,6 +24,9 @@ export function AuthProvider({ children }) {
   // last_name can still land null (see api/admin/actions.js's inviteUser/
   // inviteOrgStaff, which call inviteUserByEmail with no name metadata).
   const [needsName, setNeedsName] = useState(null)
+  // The saved theme/language preferences from that same read; null until
+  // known (or signed out), so those providers keep their local choice.
+  const [profileSettings, setProfileSettings] = useState(null)
   // Same null-until-known pattern as needsOnboarding -- PlatformAdminRoute
   // needs to distinguish "not yet checked" from "checked, not an admin" so
   // it doesn't redirect an actual admin away before the check resolves.
@@ -65,15 +73,19 @@ export function AuthProvider({ children }) {
     if (!userId) {
       setNeedsOnboarding(null)
       setNeedsName(null)
+      setProfileSettings(null)
       return
     }
     supabase
       .rpc('get_my_profile')
-      .select('onboarding_completed_at, first_name, last_name')
+      .select(PROFILE_SETTINGS_COLUMNS)
       .single()
       .then(({ data, error }) => {
         setNeedsOnboarding(!error && data ? !data.onboarding_completed_at : false)
         setNeedsName(!error && data ? !data.first_name?.trim() || !data.last_name?.trim() : false)
+        setProfileSettings(!error && data
+          ? { themePreference: data.theme_preference, languagePreference: data.language_preference }
+          : null)
       })
   }, [userId])
 
@@ -189,6 +201,7 @@ export function AuthProvider({ children }) {
     loading,
     needsOnboarding,
     needsName,
+    profileSettings,
     isPlatformAdmin,
     organisationMemberships,
     refreshOrganisationMemberships,
