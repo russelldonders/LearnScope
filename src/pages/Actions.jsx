@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePendingActions } from '../context/PendingActionsContext'
 import { useLanguage } from '../context/LanguageContext'
@@ -31,6 +31,8 @@ import {
   dismissManagerTeamSkillSuggestion,
 } from '../lib/managerTeams'
 import { loadActionSources } from '../lib/actionLoading'
+import { getOrganisationBranding } from '../lib/orgBranding'
+import { getEmployerLoginContext } from '../lib/employerRoleProfiles'
 
 // Everything actually waiting on this learner to act -- the same sources
 // PendingActionsContext counts for the header badge, just rendered in full
@@ -41,9 +43,12 @@ import { loadActionSources } from '../lib/actionLoading'
 // a learner already checks; loading them here is also what marks them seen
 // (see markPeerRatingsSeen below), clearing the bell.
 export default function Actions() {
-  const { user, refreshOrganisationMemberships, refreshEmployerMemberships } = useAuth()
+  const { user, employerMemberships, refreshOrganisationMemberships, refreshEmployerMemberships } = useAuth()
   const { refreshPendingActionCount } = usePendingActions()
   const { t } = useLanguage()
+  const [searchParams] = useSearchParams()
+  const orgSlug = searchParams.get('org')
+  const [workspaceContext, setWorkspaceContext] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [incomingRateInvites, setIncomingRateInvites] = useState([])
@@ -82,6 +87,27 @@ export default function Actions() {
   const [respondingId, setRespondingId] = useState(null)
   const [respondError, setRespondError] = useState(null)
   const [profiles, setProfiles] = useState({})
+
+  useEffect(() => {
+    let cancelled = false
+    if (!orgSlug || employerMemberships === null) {
+      setWorkspaceContext(null)
+      return () => { cancelled = true }
+    }
+
+    Promise.all([
+      getEmployerLoginContext(orgSlug),
+      getOrganisationBranding(orgSlug).catch(() => null),
+    ]).then(([employer, branding]) => {
+      if (cancelled) return
+      const isMember = employer && employerMemberships.some((membership) => membership.employer_id === employer.id)
+      setWorkspaceContext(isMember ? { employer, branding } : null)
+    }).catch(() => {
+      if (!cancelled) setWorkspaceContext(null)
+    })
+
+    return () => { cancelled = true }
+  }, [employerMemberships, orgSlug])
 
   useEffect(() => {
     load()
@@ -441,11 +467,30 @@ export default function Actions() {
 
   return (
     <div className="min-h-screen bg-paper">
-      <AppHeader />
+      <AppHeader
+        brandLogoUrl={workspaceContext?.branding?.logoUrl}
+        brandName={workspaceContext?.branding?.name || workspaceContext?.employer?.name}
+        brandHomeHref={workspaceContext ? `/organisation/learning?org=${encodeURIComponent(orgSlug)}` : '/dashboard'}
+        notificationsHref={workspaceContext ? `/actions?org=${encodeURIComponent(orgSlug)}` : '/actions'}
+      />
 
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8 space-y-10">
         <div>
+          {workspaceContext && (
+            <Link
+              to={`/organisation/learning?org=${encodeURIComponent(orgSlug)}`}
+              className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-moss underline-offset-4 hover:underline"
+            >
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+              Back to {workspaceContext.employer.name}
+            </Link>
+          )}
           <h1 className="font-display text-2xl text-ink">{t('actions.heading')}</h1>
+          {workspaceContext && (
+            <p className="mt-1 text-sm text-secondary">Across all your LearnScope workspaces</p>
+          )}
           {!loading && !error && (actionableCount > 0 || unseenRatings.length > 0) && (
             <p className="text-sm text-secondary mt-1">
               {actionableCount > 0

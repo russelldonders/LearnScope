@@ -14,13 +14,26 @@ const authMock = vi.hoisted(() => ({
   },
 }))
 const databaseMock = vi.hoisted(() => ({ employerRows: [], organisationRows: [] }))
+const refreshPendingActionCount = vi.hoisted(() => vi.fn())
 
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => authMock.value,
 }))
 
 vi.mock('../context/PendingActionsContext', () => ({
-  usePendingActions: () => ({ pendingActionCount: 1 }),
+  usePendingActions: () => ({
+    pendingActionCount: 1,
+    pendingActionItems: [{
+      id: 'course:1',
+      title: 'Course Assigned',
+      detail: 'Safe Handling',
+      source: 'Acme',
+      occurredAt: '2026-09-29T10:00:00Z',
+    }],
+    pendingActionsLoading: false,
+    pendingActionsError: null,
+    refreshPendingActionCount,
+  }),
 }))
 
 vi.mock('../context/NavVisibilityContext', () => ({
@@ -68,6 +81,7 @@ afterEach(() => {
   }
   databaseMock.employerRows = []
   databaseMock.organisationRows = []
+  refreshPendingActionCount.mockClear()
 })
 
 describe('AppHeader organisation branding', () => {
@@ -85,7 +99,7 @@ describe('AppHeader organisation branding', () => {
 
     const organisationTextClass = 'text-[var(--org-text,var(--color-ink))]'
     expect(screen.getByRole('link', { name: 'Leeds United' }).className).toContain(organisationTextClass)
-    expect(screen.getByRole('link', { name: 'Actions, 1 pending' }).className).toContain(organisationTextClass)
+    expect(screen.getByRole('button', { name: 'Actions, 1 pending' }).className).toContain(organisationTextClass)
     expect(screen.getByRole('button', { name: 'Account menu' }).firstElementChild.className)
       .toContain(organisationTextClass)
     expect(screen.getByText('1').className)
@@ -197,5 +211,32 @@ describe('AppHeader organisation branding', () => {
     expect(within(administration).getByRole('link', { name: 'menu.platformConsole' })).toHaveAttribute('href', '/admin')
     expect(learningWorkspaces.compareDocumentPosition(administration) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.queryByText('Personal account')).not.toBeInTheDocument()
+  })
+})
+
+describe('AppHeader notifications', () => {
+  it('opens the account-wide drawer without navigating and keeps the organisation in View All', () => {
+    render(
+      <MemoryRouter initialEntries={['/organisation/learning?org=acme']}>
+        <AppHeader
+          brandName="Acme"
+          brandHomeHref="/organisation/learning?org=acme"
+          notificationsHref="/actions?org=acme"
+        />
+      </MemoryRouter>
+    )
+
+    const bell = screen.getByRole('button', { name: 'Actions, 1 pending' })
+    bell.focus()
+    fireEvent.click(bell)
+
+    expect(refreshPendingActionCount).toHaveBeenCalledOnce()
+    expect(screen.getByRole('dialog', { name: 'Notifications' })).toBeInTheDocument()
+    expect(screen.getAllByText('Acme')).toHaveLength(2)
+    expect(screen.getByRole('link', { name: 'View All Actions' })).toHaveAttribute('href', '/actions?org=acme')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close notifications' }))
+    expect(screen.queryByRole('dialog', { name: 'Notifications' })).not.toBeInTheDocument()
+    expect(bell).toHaveFocus()
   })
 })

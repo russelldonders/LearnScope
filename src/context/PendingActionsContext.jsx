@@ -1,13 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { useAuth } from './AuthContext'
-import { supabase } from '../lib/supabaseClient'
-import { listIncomingRateInvites, listIncomingRecommendInvites, listUnseenPeerRatings } from '../lib/connections'
-import { listMyPendingOrgInvites } from '../lib/organisationInvites'
-import { listMyPendingEmployerInvites, listMyPendingDataAccessRequests } from '../lib/admin/employers'
-import { listMyCourseAssignments } from '../lib/courseCatalogue'
-import { listMySkillSuggestions } from '../lib/skillSuggestions'
-import { listMyManagerTeamInvites } from '../lib/managerTeams'
-import { loadActionSources } from '../lib/actionLoading'
+import { loadNotifications } from '../lib/notifications'
 
 const PendingActionsContext = createContext(undefined)
 
@@ -18,6 +11,9 @@ const PendingActionsContext = createContext(undefined)
 export function PendingActionsProvider({ children }) {
   const { user } = useAuth()
   const [pendingActionCount, setPendingActionCount] = useState(0)
+  const [pendingActionItems, setPendingActionItems] = useState([])
+  const [pendingActionsLoading, setPendingActionsLoading] = useState(false)
+  const [pendingActionsError, setPendingActionsError] = useState(null)
 
   // Everything actually waiting on this learner to do something -- pending
   // connection requests, validation requests, organisation staff invites,
@@ -32,45 +28,23 @@ export function PendingActionsProvider({ children }) {
   const refreshPendingActionCount = useCallback(async () => {
     if (!user) {
       setPendingActionCount(0)
+      setPendingActionItems([])
+      setPendingActionsError(null)
       return
     }
-    const loadCount = async (query) => {
-      const { count, error } = await query
-      if (error) throw error
-      return count ?? 0
+    setPendingActionsLoading(true)
+    try {
+      const { items, failures } = await loadNotifications(user.id)
+      setPendingActionItems(items)
+      setPendingActionCount(items.length)
+      setPendingActionsError(
+        failures.length > 0 ? 'Some notifications could not be loaded. Try again to refresh the full list.' : null
+      )
+    } catch {
+      setPendingActionsError('Notifications could not be loaded. Check your connection and try again.')
+    } finally {
+      setPendingActionsLoading(false)
     }
-    const { values } = await loadActionSources([
-      {
-        key: 'requests', label: 'connection requests', fallback: 0,
-        load: () => loadCount(supabase.from('connection_requests').select('id', { count: 'exact', head: true }).eq('recipient_id', user.id).eq('status', 'pending')),
-      },
-      {
-        key: 'validations', label: 'validation requests', fallback: 0,
-        load: () => loadCount(supabase.from('skill_validation_requests').select('id', { count: 'exact', head: true }).eq('validator_id', user.id).eq('status', 'pending')),
-      },
-      { key: 'rateInvites', label: 'rating invitations', fallback: [], load: listIncomingRateInvites },
-      { key: 'recommendInvites', label: 'skill recommendations', fallback: [], load: listIncomingRecommendInvites },
-      { key: 'orgInvites', label: 'organisation invitations', fallback: [], load: () => listMyPendingOrgInvites(user.id) },
-      { key: 'employerInvites', label: 'employer invitations', fallback: [], load: () => listMyPendingEmployerInvites(user.id) },
-      { key: 'dataAccessRequests', label: 'data-access requests', fallback: [], load: () => listMyPendingDataAccessRequests(user.id) },
-      { key: 'courseAssignments', label: 'course assignments', fallback: [], load: () => listMyCourseAssignments(user.id) },
-      { key: 'skillSuggestions', label: 'skill suggestions', fallback: [], load: () => listMySkillSuggestions(user.id) },
-      { key: 'managerTeamInvites', label: 'manager-team invitations', fallback: [], load: listMyManagerTeamInvites },
-      { key: 'unseenRatings', label: 'ratings received', fallback: [], load: () => listUnseenPeerRatings(user.id) },
-    ])
-    setPendingActionCount(
-      values.requests +
-        values.validations +
-        values.rateInvites.length +
-        values.recommendInvites.length +
-        values.orgInvites.length +
-        values.employerInvites.length +
-        values.dataAccessRequests.length +
-        values.courseAssignments.length +
-        values.skillSuggestions.length +
-        values.managerTeamInvites.length +
-        values.unseenRatings.length
-    )
   }, [user])
 
   useEffect(() => {
@@ -78,7 +52,13 @@ export function PendingActionsProvider({ children }) {
   }, [refreshPendingActionCount])
 
   return (
-    <PendingActionsContext.Provider value={{ pendingActionCount, refreshPendingActionCount }}>
+    <PendingActionsContext.Provider value={{
+      pendingActionCount,
+      pendingActionItems,
+      pendingActionsLoading,
+      pendingActionsError,
+      refreshPendingActionCount,
+    }}>
       {children}
     </PendingActionsContext.Provider>
   )

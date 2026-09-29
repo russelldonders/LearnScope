@@ -43,7 +43,7 @@ export default function EmployerHome() {
     return (
       <div className="min-h-screen bg-paper">
         <AppHeader />
-        <main className="max-w-3xl mx-auto px-4 py-10">
+        <main id="main-content" tabIndex={-1} className="max-w-3xl mx-auto px-4 py-10">
           <p className="text-sm text-red-700">{error}</p>
         </main>
       </div>
@@ -69,9 +69,10 @@ export default function EmployerHome() {
       <AppHeader
         hideNavLinks
         brandLogoUrl={branding?.logoUrl}
-        brandName={branding?.name}
+        brandName={branding?.name || employer?.name}
         brandHomeHref={orgSlug ? `/organisation/learning?org=${orgSlug}` : '/dashboard'}
         contextExitHref="/dashboard"
+        notificationsHref={orgSlug ? `/actions?org=${encodeURIComponent(orgSlug)}` : '/actions'}
       />
       <div className="border-b border-hairline bg-[var(--org-background,var(--color-card))]">
         <nav aria-label="Employer learning" className="max-w-4xl mx-auto px-4 flex gap-6 overflow-x-auto">
@@ -91,7 +92,7 @@ export default function EmployerHome() {
           ))}
         </nav>
       </div>
-      <main id="main-content" className="max-w-4xl mx-auto px-4 py-8 sm:py-10">
+      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8 sm:py-10">
         <div className="mb-8 sm:mb-10">
           <p className="text-xs font-medium text-secondary uppercase tracking-[0.12em]">
             {employer ? `Learning with ${employer.name}` : 'Employer learning'}
