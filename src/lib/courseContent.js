@@ -231,8 +231,11 @@ export async function unlinkResourceFromCourse(linkId) {
 // players' own iframe sandbox grants. Inside a player that changes nothing,
 // but a malicious upload navigated to directly, top-level, now also gets an
 // opaque origin -- so it can run, but can't read this app's localStorage
-// (the Supabase session) or cookies. An isolated content origin would still
-// be the stronger long-term fix.
+// (the Supabase session) or cookies. Every other extension gets a plain
+// `sandbox` policy too, since Supabase echoes whatever content type the
+// uploader chose (e.g. application/xhtml+xml); PDFs are forced to
+// application/pdf instead, as browsers won't render a sandboxed PDF. An
+// isolated content origin would still be the stronger long-term fix.
 function publicUrlFor(path) {
   return `/course-content/${path}`
 }
