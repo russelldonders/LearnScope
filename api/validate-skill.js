@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { verifySupabaseUser } from './_lib/auth.js'
 import { consumeQuota, sendQuotaExceeded } from './_lib/quota.js'
 import { supabaseAdmin } from './_lib/supabaseAdmin.js'
+import { loadValidationEvidence } from './_lib/skillValidationEvidence.js'
 
 // Longer names are trimmed rather than rejected: nothing else in the app
 // limits a custom skill's name, so rejecting would break the feature for it.
@@ -76,6 +77,7 @@ async function saveResult(res, user, { grant, goToDeveloping }) {
     level: payload.level,
     comments: payload.feedback,
     source: 'ai_evaluation',
+    axis: 'practical',
   })
   if (assessError) throw assessError
 
@@ -183,38 +185,23 @@ export default async function handler(req, res) {
     return
   }
 
-  let { skillName } = req.body ?? {}
-  const { skillId, targetLevel, selfLevel, selfComments, activities, peerRatings } = req.body ?? {}
+  // Evidence comes from the database, not the request: the result can mark
+  // the skill validated, so it must not rest on levels or ratings the
+  // browser could invent.
+  const { skillId } = req.body ?? {}
+  let evidence
   try {
-    if (!(await findOwnSkill(user.id, skillId))) {
-      res.status(404).json({ error: 'Skill not found.' })
-      return
-    }
+    evidence = await loadValidationEvidence(supabaseAdmin(), user.id, skillId)
   } catch (err) {
     console.error('validate-skill lookup error:', err)
     res.status(500).json({ error: 'Failed to validate skill.' })
     return
   }
-  if (!skillName || typeof skillName !== 'string') {
-    res.status(400).json({ error: 'Missing skillName' })
+  if (!evidence) {
+    res.status(404).json({ error: 'Skill or target not found.' })
     return
   }
-  skillName = skillName.slice(0, MAX_SKILL_NAME_LENGTH)
-  if (!targetLevel || typeof targetLevel !== 'string') {
-    res.status(400).json({ error: 'Missing targetLevel' })
-    return
-  }
-
-  // Free text from the learner is trimmed rather than rejected (the comment
-  // box has no limit) -- it only bounds what gets sent to the model.
-  const prompt = buildPrompt({
-    skillName,
-    targetLevel,
-    selfLevel,
-    selfComments: typeof selfComments === 'string' ? selfComments.slice(0, 4000) : null,
-    activities,
-    peerRatings,
-  })
+  const prompt = buildPrompt({ ...evidence, skillName: evidence.skillName.slice(0, MAX_SKILL_NAME_LENGTH) })
 
   if (!(await consumeQuota(user.id, 'ai'))) {
     sendQuotaExceeded(res)

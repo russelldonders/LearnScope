@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
 import GrowthRing from './GrowthRing'
 import { LEVEL_LABELS } from '../lib/levels'
-import { activityName, verbLabel } from '../lib/xapiStatement'
-import { fetchPeerRaterProgress, buildWeightedPeerRatings } from '../lib/baselineAssessment'
 import { validateSkillAgainstTarget, saveValidationResult } from '../lib/skillValidation'
 import AccessibleDialog from './AccessibleDialog'
 import { useLanguage } from '../context/LanguageContext'
@@ -10,9 +8,6 @@ import { useLanguage } from '../context/LanguageContext'
 export default function ValidateSkillModal({
   skill,
   target,
-  assessments,
-  peerRatings,
-  statements,
   onClose,
   onValidated,
 }) {
@@ -25,31 +20,7 @@ export default function ValidateSkillModal({
   useEffect(() => {
     async function run() {
       try {
-        // axis === 'practical' -- see AssessBaselineModal for why this
-        // matters: without it a knowledge self-assessment could leak into
-        // this practical-only synthesis if it happened to be more recent.
-        const latestSelf = assessments
-          .filter((a) => (a.source === 'self' || !a.source) && a.axis === 'practical')
-          .sort((a, b) => new Date(b.assessed_at) - new Date(a.assessed_at))[0]
-
-        const raterProgress = peerRatings.length > 0 ? await fetchPeerRaterProgress(skill.id) : []
-        const weightedPeerRatings = buildWeightedPeerRatings(peerRatings, raterProgress)
-
-        const activities = statements.map((s) => ({
-          verb: verbLabel(s.statement),
-          activity: activityName(s.statement),
-          description: s.statement.object?.definition?.description?.['en-US'] ?? null,
-          date: new Date(s.recorded_at).toLocaleDateString(),
-        }))
-
-        const res = await validateSkillAgainstTarget({
-          skill,
-          targetLevel: target.target_level,
-          selfLevel: latestSelf?.level ?? null,
-          selfComments: latestSelf?.comments,
-          activities,
-          peerRatings: weightedPeerRatings,
-        })
+        const res = await validateSkillAgainstTarget({ skill })
         setResult(res)
       } catch (err) {
         setError(err.message)

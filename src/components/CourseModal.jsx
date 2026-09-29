@@ -664,6 +664,7 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
         .from('skill_assessments')
         .select('id, assessed_at')
         .eq('skill_id', targetSkillId)
+        .eq('axis', 'practical')
         .order('assessed_at', { ascending: false })
         .limit(1)
         .maybeSingle()
@@ -691,8 +692,16 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
     }
   }
 
+  // Only ever offered from an existing dated practical assessment (just
+  // recorded, or the newest one left after a removal), so the history that
+  // explains the new current level is already in place.
   async function applyLevelSync() {
-    await supabase.from('skills').update({ level: levelSyncPrompt.newLevel }).eq('id', levelSyncPrompt.skillId)
+    setError(null)
+    const { error } = await supabase.from('skills').update({ level: levelSyncPrompt.newLevel }).eq('id', levelSyncPrompt.skillId)
+    if (error) {
+      setError(error.message)
+      return
+    }
     await onRefreshPickerData()
     setLevelSyncPrompt(null)
   }
@@ -716,6 +725,9 @@ function AchievementsSubsection({ course, skills, achievements, librarySkills, o
           .from('skill_assessments')
           .select('level, assessed_at')
           .eq('skill_id', target.skill_id)
+          // skills.level is the practical axis -- a knowledge assessment
+          // must never be offered as the new current practical level.
+          .eq('axis', 'practical')
           .order('assessed_at', { ascending: false })
           .limit(1)
           .maybeSingle()

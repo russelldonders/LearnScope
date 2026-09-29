@@ -1,14 +1,9 @@
 import { supabase } from './supabaseClient'
-import { LEVEL_LABELS } from './levels'
 
-export async function validateSkillAgainstTarget({
-  skill,
-  targetLevel,
-  selfLevel,
-  selfComments,
-  activities,
-  peerRatings,
-}) {
+// Only the skill id is sent: the server loads the target, self-assessment,
+// activities and peer ratings itself, so a result that can mark the skill
+// validated never rests on evidence supplied by the browser.
+export async function validateSkillAgainstTarget({ skill }) {
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -18,15 +13,7 @@ export async function validateSkillAgainstTarget({
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify({
-      skillId: skill.id,
-      skillName: skill.name,
-      targetLevel: LEVEL_LABELS[targetLevel],
-      selfLevel: selfLevel ? LEVEL_LABELS[selfLevel] : null,
-      selfComments: selfComments || null,
-      activities,
-      peerRatings,
-    }),
+    body: JSON.stringify({ skillId: skill.id }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))

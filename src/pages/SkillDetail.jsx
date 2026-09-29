@@ -1131,9 +1131,6 @@ export default function SkillDetail({ skillId, embedded = false }) {
               <ValidateSkillModal
                 skill={skill}
                 target={targets[0]}
-                assessments={history}
-                peerRatings={peerRatings}
-                statements={practicalStatements}
                 onClose={() => setValidateOpen(false)}
                 onValidated={() => {
                   loadHistory()
