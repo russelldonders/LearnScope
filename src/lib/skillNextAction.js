@@ -15,6 +15,10 @@ export function computeUpNextItems({
   invitesSentCount,
   statementsCount,
   courseLinks,
+  // Optional precomputed flags (the dashboard gets these from
+  // get_my_skill_progress_counts); otherwise derived from courseLinks.
+  hasPendingCourse: pendingCourseFlag,
+  hasCompletedCourse: completedCourseFlag,
   hasTarget,
   hasPendingExpertValidation,
 }) {
@@ -99,8 +103,8 @@ export function computeUpNextItems({
     // least one course has ever been completed for this skill, moving on to
     // demonstrating it becomes an option too (in addition to, not instead
     // of, finding further training).
-    const hasPendingCourse = (courseLinks ?? []).some((link) => link.courses && !link.courses.completed_date)
-    const hasCompletedCourse = (courseLinks ?? []).some((link) => link.courses?.completed_date)
+    const hasPendingCourse = pendingCourseFlag ?? (courseLinks ?? []).some((link) => link.courses && !link.courses.completed_date)
+    const hasCompletedCourse = completedCourseFlag ?? (courseLinks ?? []).some((link) => link.courses?.completed_date)
     const items = []
     if (!hasPendingCourse) {
       items.push({

@@ -27,7 +27,6 @@ import GrowthArrow from '../components/GrowthArrow'
 import { LEVEL_LABELS } from '../lib/levels'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
-import { isDiagnosticStatement } from '../lib/xapiStatement'
 import { saveActivity } from '../lib/activitySkillLinks'
 import { isSelfAssessmentDue, todayDateString } from '../lib/checkin'
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
@@ -244,80 +243,27 @@ async function loadUpNextRecommendations(userId) {
     .not('lifecycle_stage', 'is', null)
   if (!skills || skills.length === 0) return []
 
-  const ids = skills.map((s) => s.id)
-  const [
-    { data: assessments },
-    { data: peerRatings },
-    { data: sentInvites },
-    { data: statementLinks },
-    { data: courseLinks },
-    { data: targets },
-    { data: validationRequests },
-  ] = await Promise.all([
-    supabase.from('skill_assessments').select('skill_id, source, axis').in('skill_id', ids),
-    supabase.from('skill_peer_ratings').select('skill_id').in('skill_id', ids),
-    // invite_type='rate' only -- see the matching filter in SkillDetail.jsx.
-    supabase.from('connection_invites').select('skill_id').in('skill_id', ids).eq('invite_type', 'rate'),
-    // Reads through xapi_statement_skills (every related skill, primary
-    // included, see 20260901090000) rather than xapi_statements.skill_id
-    // directly, so an activity logged against several skills counts for
-    // all of them, not just whichever was picked first.
-    supabase
-      .from('xapi_statement_skills')
-      .select('skill_id, xapi_statements(statement)')
-      .eq('user_id', userId)
-      .in('skill_id', ids),
-    supabase.from('skill_course_links').select('skill_id, courses(completed_date)').in('skill_id', ids),
-    supabase.from('skill_targets').select('skill_id').in('skill_id', ids),
-    supabase.from('skill_validation_requests').select('skill_id, status').in('skill_id', ids),
-  ])
-
-  const countBy = (rows) => {
-    const map = {}
-    for (const r of rows ?? []) map[r.skill_id] = (map[r.skill_id] ?? 0) + 1
-    return map
-  }
-  const selfAssessedCounts = {}
-  const knowledgeSelfAssessedCounts = {}
-  for (const a of assessments ?? []) {
-    if (a.source !== 'self' && a.source) continue
-    if (a.axis === 'knowledge') {
-      knowledgeSelfAssessedCounts[a.skill_id] = (knowledgeSelfAssessedCounts[a.skill_id] ?? 0) + 1
-    } else {
-      selfAssessedCounts[a.skill_id] = (selfAssessedCounts[a.skill_id] ?? 0) + 1
-    }
-  }
-  const peerCounts = countBy(peerRatings)
-  const inviteCounts = countBy(sentInvites)
-  // Excludes the Confirming Baseline knowledge quiz's own xAPI attempt --
-  // that's knowledge-axis evidence, not practical activity (see
-  // isDiagnosticStatement / SkillDetail.jsx for the full reasoning).
-  const statementCounts = countBy(
-    (statementLinks ?? []).filter((link) => link.xapi_statements && !isDiagnosticStatement(link.xapi_statements.statement))
-  )
-  const targetSkillIds = new Set((targets ?? []).map((t) => t.skill_id))
-  const pendingValidationSkillIds = new Set(
-    (validationRequests ?? []).filter((r) => r.status === 'pending').map((r) => r.skill_id)
-  )
-  const courseLinksBySkill = {}
-  for (const link of courseLinks ?? []) {
-    if (!courseLinksBySkill[link.skill_id]) courseLinksBySkill[link.skill_id] = []
-    courseLinksBySkill[link.skill_id].push(link)
-  }
+  // One row of counts/flags per skill, computed in the database rather than
+  // downloading every assessment, rating and activity to count them here.
+  const { data: progressRows, error: progressError } = await supabase.rpc('get_my_skill_progress_counts')
+  if (progressError) throw progressError
+  const progressBySkill = new Map((progressRows ?? []).map((row) => [row.skill_id, row]))
 
   const recommendations = skills
     .map((skill) => {
+      const progress = progressBySkill.get(skill.id)
       const items = computeUpNextItems({
         stage: skill.lifecycle_stage,
-        selfAssessedCount: selfAssessedCounts[skill.id] ?? 0,
-        knowledgeSelfAssessedCount: knowledgeSelfAssessedCounts[skill.id] ?? 0,
+        selfAssessedCount: progress?.self_practical_count ?? 0,
+        knowledgeSelfAssessedCount: progress?.self_knowledge_count ?? 0,
         hasKnowledgeLevel: Boolean(skill.knowledge_level),
-        peerRatingsCount: peerCounts[skill.id] ?? 0,
-        invitesSentCount: inviteCounts[skill.id] ?? 0,
-        statementsCount: statementCounts[skill.id] ?? 0,
-        courseLinks: courseLinksBySkill[skill.id] ?? [],
-        hasTarget: targetSkillIds.has(skill.id),
-        hasPendingExpertValidation: pendingValidationSkillIds.has(skill.id),
+        peerRatingsCount: progress?.peer_rating_count ?? 0,
+        invitesSentCount: progress?.rate_invite_count ?? 0,
+        statementsCount: progress?.activity_count ?? 0,
+        hasPendingCourse: progress?.has_pending_course ?? false,
+        hasCompletedCourse: progress?.has_completed_course ?? false,
+        hasTarget: progress?.has_target ?? false,
+        hasPendingExpertValidation: progress?.has_pending_validation ?? false,
       })
       const next = items.find((item) => !item.done && !item.locked)
       return next ? { skill, item: next } : null

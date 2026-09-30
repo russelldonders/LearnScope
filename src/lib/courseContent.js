@@ -158,13 +158,11 @@ export async function deleteCourseSection(sectionId) {
 }
 
 // Persists a complete drag-and-drop order. Positions are normalized to a
-// contiguous sequence so repeated reorders cannot leave gaps behind.
+// contiguous sequence so repeated reorders cannot leave gaps behind. One
+// statement server-side, so the whole order saves or none of it does.
 export async function reorderCourseSections(sections) {
-  for (const [position, section] of sections.entries()) {
-    if (section.position === position) continue
-    const { error } = await supabase.from('course_sections').update({ position }).eq('id', section.id)
-    if (error) throw error
-  }
+  const { error } = await supabase.rpc('reorder_course_sections', { p_section_ids: sections.map((section) => section.id) })
+  if (error) throw error
 }
 
 async function nextLinkPosition(sectionId) {
@@ -185,14 +183,12 @@ export async function linkResourceToCourse(courseId, resourceId, sectionId) {
 }
 
 export async function reorderContentLinks(sectionItems, sectionId = sectionItems[0]?.sectionId ?? null) {
-  for (const [position, item] of sectionItems.entries()) {
-    if (item.position === position && item.sectionId === sectionId) continue
-    const { error } = await supabase
-      .from('course_content_links')
-      .update({ section_id: sectionId, position })
-      .eq('id', item.linkId)
-    if (error) throw error
-  }
+  if (sectionItems.length === 0) return
+  const { error } = await supabase.rpc('reorder_course_content_links', {
+    p_section_id: sectionId,
+    p_link_ids: sectionItems.map((item) => item.linkId),
+  })
+  if (error) throw error
 }
 
 // Detaches a resource from this course -- the resource itself (and any
