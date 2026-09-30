@@ -6,6 +6,7 @@ import { useNavVisibility } from '../context/NavVisibilityContext'
 import { useLanguage } from '../context/LanguageContext'
 import { supabase } from '../lib/supabaseClient'
 import NotificationDrawer from './NotificationDrawer'
+import { loadHeaderCache, peekHeaderCache } from '../lib/headerCache'
 
 // label is a translation key (LanguageContext) rather than literal text --
 // resolved per-item below so this nav/menu stays in one place regardless of
@@ -54,10 +55,6 @@ export default function AppHeader({
   const { navVisibility } = useNavVisibility()
   const { t } = useLanguage()
   const location = useLocation()
-  const [avatarUrl, setAvatarUrl] = useState(null)
-  const [fullName, setFullName] = useState(null)
-  const [organisationPortals, setOrganisationPortals] = useState([])
-  const [employerPortalsLoading, setEmployerPortalsLoading] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const menuRef = useRef(null)
@@ -67,46 +64,56 @@ export default function AppHeader({
   const organisationIdsKey = [...new Set((organisationMemberships ?? []).map((membership) => membership.organisation_id))]
     .sort()
     .join(',')
+  const portalIdsKey = [...new Set([
+    ...(organisationIdsKey ? organisationIdsKey.split(',') : []),
+    ...(employerIdsKey ? employerIdsKey.split(',') : []),
+  ])].sort().join(',')
+  // Cached across page navigations (see headerCache.js), so a header that
+  // mounts on the next page starts with these already filled in.
+  const identityCacheKey = userId ? `identity:${userId}` : null
+  const portalsCacheKey = `portals:${portalIdsKey}`
+  const [identity, setIdentity] = useState(() => (identityCacheKey && peekHeaderCache(identityCacheKey)) ?? null)
+  const cachedPortals = portalIdsKey ? peekHeaderCache(portalsCacheKey) : []
+  const [organisationPortals, setOrganisationPortals] = useState(() => cachedPortals ?? [])
+  const [employerPortalsLoading, setEmployerPortalsLoading] = useState(() => cachedPortals === undefined)
+  const avatarUrl = identity?.avatar_url ?? null
+  const fullName = identity?.full_name ?? null
 
   useEffect(() => {
-    if (!userId) return
-    supabase
-      .from('profiles')
-      .select('avatar_url, full_name')
-      .eq('id', userId)
-      .single()
-      .then(({ data }) => {
-        setAvatarUrl(data?.avatar_url ?? null)
-        setFullName(data?.full_name ?? null)
-      })
-  }, [userId])
+    if (!identityCacheKey) return
+    let cancelled = false
+    loadHeaderCache(identityCacheKey, async () => {
+      const { data, error } = await supabase.from('profiles').select('avatar_url, full_name').eq('id', userId).single()
+      if (error) throw error
+      return data
+    })
+      .then((data) => { if (!cancelled) setIdentity(data) })
+      .catch(() => { if (!cancelled) setIdentity(null) })
+    return () => { cancelled = true }
+  }, [identityCacheKey, userId])
 
   useEffect(() => {
-    const organisationIds = [...new Set([
-      ...(organisationIdsKey ? organisationIdsKey.split(',') : []),
-      ...(employerIdsKey ? employerIdsKey.split(',') : []),
-    ])]
-    if (organisationIds.length === 0) {
+    if (!portalIdsKey) {
       setOrganisationPortals([])
       setEmployerPortalsLoading(false)
       return
     }
 
     let cancelled = false
-    setEmployerPortalsLoading(true)
-    supabase
-      .from('organisations')
-      .select('id, name, slug, logo_url')
-      .in('id', organisationIds)
-      .order('name')
-      .then(({ data, error }) => {
-        if (!cancelled) {
-          setOrganisationPortals(error ? [] : (data ?? []))
-          setEmployerPortalsLoading(false)
-        }
-      })
+    loadHeaderCache(portalsCacheKey, async () => {
+      const { data, error } = await supabase
+        .from('organisations')
+        .select('id, name, slug, logo_url')
+        .in('id', portalIdsKey.split(','))
+        .order('name')
+      if (error) throw error
+      return data ?? []
+    })
+      .then((data) => { if (!cancelled) setOrganisationPortals(data) })
+      .catch(() => { if (!cancelled) setOrganisationPortals([]) })
+      .finally(() => { if (!cancelled) setEmployerPortalsLoading(false) })
     return () => { cancelled = true }
-  }, [organisationIdsKey, employerIdsKey])
+  }, [portalIdsKey, portalsCacheKey])
 
   const visibleNavLinks = NAV_LINKS.filter((link) => {
     if (link.requires === 'managerContexts') return managerContexts?.length > 0

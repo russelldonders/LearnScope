@@ -11,6 +11,7 @@ import { COUNTRIES } from '../lib/countries'
 import { LANGUAGES } from '../lib/languages'
 import { getMyAccountOwnership } from '../lib/accountOwnership'
 import { formatAbsoluteDate } from '../lib/dates'
+import { invalidateHeaderCache } from '../lib/headerCache'
 
 const THEME_OPTIONS = [
   { value: 'light', label: 'Light' },
@@ -96,6 +97,7 @@ export default function Profile() {
       return
     }
     refreshNeedsName()
+    invalidateHeaderCache()
 
     if (email.trim() !== user.email) {
       const { error: emailError } = await updateEmail(email.trim())

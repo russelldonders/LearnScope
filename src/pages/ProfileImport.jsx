@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
 import ImportProfileDataButton from '../components/ImportProfileDataButton'
+import { invalidateHeaderCache } from '../lib/headerCache'
 
 export default function ProfileImport() {
   const { user } = useAuth()
@@ -34,7 +35,10 @@ export default function ProfileImport() {
     if (Object.keys(updates).length === 0) return
     updates.updated_at = new Date().toISOString()
     const { error } = await supabase.from('profiles').update(updates).eq('id', user.id)
-    if (!error) setProfileFields((prev) => ({ ...prev, ...updates }))
+    if (!error) {
+      setProfileFields((prev) => ({ ...prev, ...updates }))
+      invalidateHeaderCache()
+    }
   }
 
   return (

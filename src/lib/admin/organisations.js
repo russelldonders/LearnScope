@@ -1,5 +1,6 @@
 import { supabase } from '../supabaseClient'
 import { callAdminApi } from './adminApi'
+import { invalidateHeaderCache } from '../headerCache'
 
 export async function listOrganisations() {
   const { data, error } = await supabase
@@ -76,6 +77,7 @@ export async function updateOrganisation(
 
   const { data, error } = await supabase.from('organisations').update(fields).eq('id', id).select().single()
   if (error) throw error
+  invalidateHeaderCache()
   return data
 }
 
@@ -98,6 +100,7 @@ export async function uploadOrganisationLogo(organisationId, fileOrBlob) {
     .update({ logo_url: url, updated_at: new Date().toISOString() })
     .eq('id', organisationId)
   if (orgError) throw orgError
+  invalidateHeaderCache()
 
   return url
 }
@@ -108,6 +111,7 @@ export async function removeOrganisationLogo(organisationId) {
     .update({ logo_url: null, updated_at: new Date().toISOString() })
     .eq('id', organisationId)
   if (error) throw error
+  invalidateHeaderCache()
 }
 
 export async function getOrganisationWebsiteBrandColours(organisationId, websiteUrl) {

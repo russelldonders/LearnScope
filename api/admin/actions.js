@@ -2,6 +2,7 @@ import ltiHandler from '../_lib/lti/handler.js'
 import { verifySupabaseUser } from '../_lib/auth.js'
 import { supabaseAdmin } from '../_lib/supabaseAdmin.js'
 import { escapeHtml } from '../_lib/html.js'
+import { selectAllRows } from '../_lib/selectAllRows.js'
 import { consumeQuota, sendQuotaExceeded } from '../_lib/quota.js'
 import { deleteUserEvidenceFiles } from '../_lib/evidenceStorage.js'
 import { getWebsiteBrandColours } from '../_lib/websiteBrandColours.js'
@@ -214,13 +215,13 @@ async function listUsers(admin, caller, res) {
   // latency is the slowest of the five, not the sum of all five.
   const [users, profilesResult, adminRowsResult, orgMemberRowsResult, orgsResult] = await Promise.all([
     listAllAuthUsers(admin),
-    admin.from('profiles').select('id, full_name, account_status, user_code'),
+    selectAllRows(() => admin.from('profiles').select('id, full_name, account_status, user_code'), 'id'),
     admin.from('platform_admins').select('user_id'),
     // Active org memberships only -- a 'pending' row (0070) isn't a real role
     // yet, the invite just hasn't been accepted, so it shouldn't read as one
     // in a list that's meant to show what access someone actually has.
-    admin.from('organisation_members').select('user_id, organisation_id, role').eq('status', 'active'),
-    admin.from('organisations').select('id, name'),
+    selectAllRows(() => admin.from('organisation_members').select('id, user_id, organisation_id, role').eq('status', 'active'), 'id'),
+    selectAllRows(() => admin.from('organisations').select('id, name'), 'id'),
   ])
 
   const { data: profiles, error: profilesError } = profilesResult

@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { invalidateHeaderCache } from './headerCache'
 
 export async function uploadAvatar(userId, fileOrBlob, extHint) {
   const ext = extHint || fileOrBlob.type?.split('/')[1] || 'jpg'
@@ -17,6 +18,7 @@ export async function uploadAvatar(userId, fileOrBlob, extHint) {
     .update({ avatar_url: url, updated_at: new Date().toISOString() })
     .eq('id', userId)
   if (profileError) throw profileError
+  invalidateHeaderCache()
 
   return url
 }
@@ -27,6 +29,7 @@ export async function removeAvatar(userId) {
     .update({ avatar_url: null, updated_at: new Date().toISOString() })
     .eq('id', userId)
   if (error) throw error
+  invalidateHeaderCache()
 }
 
 export function base64ToBlob(base64, contentType) {

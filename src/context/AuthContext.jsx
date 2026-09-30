@@ -4,6 +4,7 @@ import { getPendingInviteCode } from '../lib/connections'
 import { getPendingEnrolCourseId } from '../lib/courseCatalogue'
 import { chooseActiveWorkspace, listAvailableWorkspaces } from '../lib/workspaces'
 import { listMyEmployerManagementContexts } from '../lib/employerManagement'
+import { invalidateHeaderCache } from '../lib/headerCache'
 
 const AuthContext = createContext(undefined)
 
@@ -247,7 +248,10 @@ export function AuthProvider({ children }) {
         provider: 'google',
         options: { redirectTo: redirectTo ?? `${window.location.origin}/dashboard` },
       }),
-    signOut: () => supabase.auth.signOut(),
+    signOut: () => {
+      invalidateHeaderCache()
+      return supabase.auth.signOut()
+    },
     resetPasswordForEmail: (email) =>
       supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,

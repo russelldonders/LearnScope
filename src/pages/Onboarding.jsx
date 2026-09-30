@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import ImportProfileDataButton from '../components/ImportProfileDataButton'
 import SkillsToLearnStep from '../components/onboarding/SkillsToLearnStep'
+import { invalidateHeaderCache } from '../lib/headerCache'
 
 // Fallback if onboarding_steps can't be read for some reason -- keeps the
 // wizard working (both steps, current order) rather than stranding a new
@@ -62,7 +63,10 @@ export default function Onboarding() {
     // Best-effort -- if this fails, the learner can still fill these in
     // from the profile page, so it shouldn't block the wizard.
     const { error } = await supabase.from('profiles').update(updates).eq('id', user.id)
-    if (!error) setProfileFields((prev) => ({ ...prev, ...updates }))
+    if (!error) {
+      setProfileFields((prev) => ({ ...prev, ...updates }))
+      invalidateHeaderCache()
+    }
   }
 
   async function finish() {
