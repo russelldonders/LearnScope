@@ -1,6 +1,8 @@
 import { supabase } from './supabaseClient'
 
-export async function listProviderCatalogues(organisationId) {
+// Just this organisation's own catalogues, no counts or linked ones -- see
+// lib/admin/providerCatalogues.js's listProviderCatalogues for the console view.
+export async function listOwnCatalogues(organisationId) {
   const { data, error } = await supabase
     .from('catalogues')
     .select('id, name, description, organisation_id, is_global, created_at')

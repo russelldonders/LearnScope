@@ -1,5 +1,5 @@
 import { supabase } from '../supabaseClient'
-import { listProviderCatalogues } from '../catalogues'
+import { listOwnCatalogues } from '../catalogues'
 import { composeDurationText } from '../courseDuration'
 import { listCourseSections, listCourseResources } from '../courseContent'
 
@@ -402,21 +402,6 @@ export async function removeCourseImage(courseId) {
   if (error) throw error
 }
 
-// Deleting a catalogue cascades to course_catalogue_publications (0111),
-// which can drop a course's only remaining publication destination and
-// make an otherwise-still-"Approved" course invisible to learners with no
-// course-specific warning -- surfaced so the delete confirmation can tell
-// an org admin how many currently-live courses that would affect.
-export async function countPublishedCoursesInCatalogue(catalogueId) {
-  const { count, error } = await supabase
-    .from('course_catalogue_publications')
-    .select('course_id', { count: 'exact', head: true })
-    .eq('catalogue_id', catalogueId)
-    .not('published_at', 'is', null)
-  if (error) throw error
-  return count ?? 0
-}
-
 // Coarse "is this user an approver of at least one of this org's own
 // catalogues" check for the provider console's moderation buttons -- purely
 // a UI affordance, computed client-side since that's just as cheap as a
@@ -426,7 +411,7 @@ export async function countPublishedCoursesInCatalogue(catalogueId) {
 // deactivate_course_publication's own per-catalogue authorization
 // regardless of what this returns.
 export async function listOrganisationCatalogueApprovers(organisationId) {
-  const catalogues = await listProviderCatalogues(organisationId)
+  const catalogues = await listOwnCatalogues(organisationId)
   if (catalogues.length === 0) return []
   const { data, error } = await supabase
     .from('catalogue_approvers')

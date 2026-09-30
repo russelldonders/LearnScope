@@ -18,10 +18,6 @@ async function countRows(table, column, value) {
   return count ?? 0
 }
 
-export function countPendingCourseApprovals() {
-  return countRows('course_catalogue', 'status', 'pending_approval')
-}
-
 export function countRejectedCourses() {
   return countRows('course_catalogue', 'status', 'rejected')
 }

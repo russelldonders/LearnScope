@@ -1,6 +1,7 @@
 import ltiHandler from '../_lib/lti/handler.js'
 import { verifySupabaseUser } from '../_lib/auth.js'
 import { supabaseAdmin } from '../_lib/supabaseAdmin.js'
+import { escapeHtml } from '../_lib/html.js'
 import { consumeQuota, sendQuotaExceeded } from '../_lib/quota.js'
 import { deleteUserEvidenceFiles } from '../_lib/evidenceStorage.js'
 import { getWebsiteBrandColours } from '../_lib/websiteBrandColours.js'
@@ -1063,12 +1064,6 @@ async function addEmployerMember(admin, caller, { employerId, email, role, field
   }
 
   res.status(200).json({ ok: true, userId, alreadyExisted: Boolean(existingUserId) })
-}
-
-function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, (c) => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-  ))
 }
 
 async function notifyOrgInvitePending(admin, email, organisationId, role) {

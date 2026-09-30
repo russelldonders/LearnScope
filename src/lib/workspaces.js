@@ -7,14 +7,6 @@ export const WORKSPACE_TYPES = Object.freeze({
   PLATFORM_ADMIN: 'platform_admin',
 })
 
-export const WORKSPACE_ACCESS_ROLES = Object.freeze({
-  OWNER: 'owner',
-  MEMBER: 'member',
-  MANAGER: 'manager',
-  ORGANISATION_ADMIN: 'organisation_admin',
-  CONTENT_EDITOR: 'content_editor',
-})
-
 export function toWorkspaceViewModel(accessRow) {
   const workspace = accessRow?.workspaces
   if (!workspace) return null

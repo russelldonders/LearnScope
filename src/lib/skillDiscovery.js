@@ -66,16 +66,6 @@ export async function listIncomingConnectionRequests(userId) {
   return data ?? []
 }
 
-export async function listSentConnectionRequests(userId) {
-  const { data, error } = await supabase
-    .from('connection_requests')
-    .select('id, recipient_id, skill_id, message, status, created_at, skills(name)')
-    .eq('requester_id', userId)
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  return data ?? []
-}
-
 // Goes through the respond_to_connection_request RPC rather than a direct
 // table update -- RLS can restrict which rows are updatable but not which
 // columns change, so accept/decline is handled server-side (see
@@ -90,7 +80,7 @@ export async function respondToConnectionRequest(requestId, accept) {
   if (error) throw error
 }
 
-export async function getSearchPrivacySettings(userId) {
+export async function getSearchPrivacySettings() {
   const { data, error } = await supabase
     .rpc('get_my_profile')
     .select(

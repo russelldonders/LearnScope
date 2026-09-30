@@ -1,6 +1,7 @@
 import { verifySupabaseUser } from './_lib/auth.js'
 import { consumeQuota, sendQuotaExceeded } from './_lib/quota.js'
 import { supabaseAdmin } from './_lib/supabaseAdmin.js'
+import { escapeHtml } from './_lib/html.js'
 
 // Single dispatcher for the app's two Resend-backed transactional emails,
 // rather than one function per email type -- Vercel's Hobby plan caps
@@ -13,12 +14,6 @@ import { supabaseAdmin } from './_lib/supabaseAdmin.js'
 // templates table (editable via /admin/notifications) rather than being
 // hardcoded here -- DEFAULT_TEMPLATES below is only a fallback for a
 // missing/not-yet-migrated row, so sending never breaks on a stale DB.
-
-function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, (c) => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-  ))
-}
 
 // {{token}} substitution, HTML-escaped -- safe both as inline text and
 // inside a double-quoted href, which is all these templates ever use it for.

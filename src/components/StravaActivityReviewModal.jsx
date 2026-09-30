@@ -8,29 +8,7 @@ import { suggestedSkillNameForActivity } from '../lib/strava'
 import { formatMonthYear } from '../lib/dates'
 import AccessibleDialog from './AccessibleDialog'
 import { useLanguage } from '../context/LanguageContext'
-
-// Same per-row select/edit shape as ResumeImportReviewModal's useSelection --
-// re-implemented locally rather than extracted/shared, matching how that
-// file keeps its own copy too.
-function useSelection(items) {
-  const [selected, setSelected] = useState(() => new Set(items.map((_, i) => i)))
-  const [values, setValues] = useState(items)
-
-  function toggle(i) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(i)) next.delete(i)
-      else next.add(i)
-      return next
-    })
-  }
-
-  function updateField(i, field, value) {
-    setValues((prev) => prev.map((item, idx) => (idx === i ? { ...item, [field]: value } : item)))
-  }
-
-  return { selected, values, toggle, updateField }
-}
+import { useReviewSelection } from '../lib/useReviewSelection'
 
 function formatStravaDuration(seconds) {
   if (!seconds) return null
@@ -47,7 +25,7 @@ function formatStravaDistance(meters) {
 export default function StravaActivityReviewModal({ activities, onClose, onImported }) {
   const { user } = useAuth()
   const { t } = useLanguage()
-  const items = useSelection(activities.map((a) => ({ ...a, skillName: suggestedSkillNameForActivity(a) ?? '' })))
+  const items = useReviewSelection(activities.map((a) => ({ ...a, skillName: suggestedSkillNameForActivity(a) ?? '' })))
   const [existingSkills, setExistingSkills] = useState(null)
   const [alreadyImportedIds, setAlreadyImportedIds] = useState(null)
   const [actorName, setActorName] = useState('')

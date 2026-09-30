@@ -20,12 +20,12 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import RecordActivityModal from '../components/RecordActivityModal'
 import EvidenceAttachmentLink from '../components/EvidenceAttachmentLink'
 import { activityName, relatedSkillsFromStatement, verbLabel } from '../lib/xapiStatement'
-import { insertStatementSkillLinks } from '../lib/activitySkillLinks'
-import { uploadEvidenceFiles } from '../lib/skillEvidence'
+import { saveActivity } from '../lib/activitySkillLinks'
 import { linkSkillToExperiences } from '../lib/currentRole'
 import { addRecommendedSkills, recommendExperienceSkills } from '../lib/experienceSkillRecommendations'
 import { useMyRoleAssignments } from './roles/useMyRoleAssignments'
 import RoleProfileAlignmentDetail from '../components/RoleProfileAlignmentDetail'
+import PendingTrainingEntry from '../components/PendingTrainingEntry'
 
 // A plain (non-component) translator used as this function's default `t` --
 // falls back to English so every existing caller/test that doesn't pass one
@@ -323,29 +323,7 @@ export default function ExperienceDetail() {
 
   async function handleLogActivity(statement, evidence) {
     const relatedSkills = relatedSkillsFromStatement(statement)
-    const primarySkill = relatedSkills[0]
-    const { data, error } = await supabase
-      .from('xapi_statements')
-      .insert({
-        user_id: user.id,
-        statement,
-        recorded_at: statement.timestamp,
-        skill_id: primarySkill.id,
-        experience_id: item.id,
-        evidence_url: evidence?.evidenceUrl || null,
-      })
-      .select()
-      .single()
-    if (error) throw error
-    await insertStatementSkillLinks(user.id, data.id, relatedSkills.map((s) => s.id))
-    if (evidence?.files.length > 0) {
-      const paths = await uploadEvidenceFiles(user.id, primarySkill.id, data.id, evidence.files)
-      const { error: updateError } = await supabase
-        .from('xapi_statements')
-        .update({ evidence_paths: paths })
-        .eq('id', data.id)
-      if (updateError) throw updateError
-    }
+    await saveActivity({ userId: user.id, statement, evidence, skillIds: relatedSkills.map((s) => s.id), experienceId: item.id })
     // Logging an activity against a skill within this experience is itself
     // evidence the skill was applied here -- link it the same way an
     // explicit "Find a skill" link would, per the "reusable records"
@@ -862,7 +840,7 @@ function OverviewTab({ item, linkedCourses, skillLinks, skillHistory, achievemen
       <div>
         <h4 className="font-mono text-xs uppercase tracking-wide text-secondary mb-3">{t('experience.timelineHeading')}</h4>
         {pendingCourseLinks.map((link, i) => (
-          <PendingCourseEntry
+          <PendingTrainingEntry
             key={link.id}
             link={link}
             hasMore={i < total - 1}
@@ -1083,36 +1061,6 @@ function SkillProgressHistory({ progress }) {
           ))}
         </ol>
       )}
-    </div>
-  )
-}
-
-function PendingCourseEntry({ link, hasMore, onClick }) {
-  const { t } = useLanguage()
-  return (
-    <div className="flex gap-3">
-      <div className="flex flex-col items-center w-12 shrink-0">
-        <div className="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-hairline">
-          <span className="w-1.5 h-1.5 rounded-full bg-secondary/40" />
-        </div>
-        {hasMore && <span className="w-px flex-1 bg-hairline mt-1" />}
-      </div>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onClick}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            onClick()
-          }
-        }}
-        className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper/60 p-3 cursor-pointer hover:border-moss/60 transition-colors"
-      >
-        <p className="text-sm text-secondary">
-          {t('skillDetail.enrolledInPrefix')} <span className="text-ink font-medium">{link.courses.name}</span> — {t('skillDetail.inProgressSuffix')}
-        </p>
-      </div>
     </div>
   )
 }

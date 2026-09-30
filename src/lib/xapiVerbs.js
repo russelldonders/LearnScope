@@ -18,5 +18,4 @@ export const XAPI_VERBS = [
   { value: 'assessed', label: 'Got assessed', iri: 'https://learnscope.app/xapi/verbs/assessed' },
 ]
 
-export const XAPI_VERB_LABELS = Object.fromEntries(XAPI_VERBS.map((v) => [v.value, v.label]))
 export const XAPI_VERB_BY_IRI = Object.fromEntries(XAPI_VERBS.map((v) => [v.iri, v]))

@@ -89,22 +89,6 @@ export async function getProviderCatalogue(id) {
   return data
 }
 
-export async function createProviderCatalogue(userId, organisationId, { name, description, learnerVisible = false }) {
-  const { data, error } = await supabase
-    .from('catalogues')
-    .insert({
-      organisation_id: organisationId,
-      name: name.trim(),
-      description: description?.trim() || null,
-      learner_visible: learnerVisible,
-      created_by: userId,
-    })
-    .select()
-    .single()
-  if (error) throw error
-  return data
-}
-
 export async function updateProviderCatalogue(id, { name, description, learnerVisible }) {
   const { data, error } = await supabase
     .from('catalogues')

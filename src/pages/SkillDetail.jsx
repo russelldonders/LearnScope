@@ -4,7 +4,6 @@ import { handleTabListKeyDown } from '../lib/tabsKeyboard'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
-import { uploadEvidenceFiles } from '../lib/skillEvidence'
 import { isSelfAssessmentDue, todayDateString } from '../lib/checkin'
 import { formatMonthYear, formatFullDate } from '../lib/dates'
 import AppHeader from '../components/AppHeader'
@@ -21,7 +20,7 @@ import { SKILL_LIFECYCLE_LABELS } from '../lib/skillLifecycle'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
 import { activityName, verbLabel, formatDuration, durationMinutes, formatMinutes, isDiagnosticStatement, isPeerRatingStatement, relatedExperienceFromStatement, experienceTrail, provenanceFromStatement, PROVENANCE_SOURCE_LABELS } from '../lib/xapiStatement'
 import { applyCurrentRoleSelection, getCurrentRoleTrackingStatus, trackUnderCurrentRole } from '../lib/currentRole'
-import { fetchStatementsForSkill, insertStatementSkillLinks } from '../lib/activitySkillLinks'
+import { fetchStatementsForSkill, saveActivity } from '../lib/activitySkillLinks'
 import CurrentRoleSelectModal from '../components/CurrentRoleSelectModal'
 import AccessibleDialog from '../components/AccessibleDialog'
 import { listTags, listSkillTags, addTagToSkill, removeSkillTagLink } from '../lib/skillTags'
@@ -48,6 +47,7 @@ import { getLearnerCompositeProgress, getParentCompositesForSkill } from '../lib
 import { getEmployerTargetsForUser, getLatestEmployerSkillConfirmations } from '../lib/employerSkillTargets'
 import { computeVisibleTarget } from '../lib/skillTargetPrecedence'
 import CompositeSkillProgress from '../components/CompositeSkillProgress'
+import PendingTrainingEntry from '../components/PendingTrainingEntry'
 
 const SKILL_DETAIL_TABS = [
   { key: 'overview' },
@@ -395,27 +395,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
   }
 
   async function handleRecordActivity(statement, evidence) {
-    const { data, error } = await supabase
-      .from('xapi_statements')
-      .insert({
-        user_id: user.id,
-        statement,
-        recorded_at: statement.timestamp,
-        skill_id: skill.id,
-        evidence_url: evidence?.evidenceUrl || null,
-      })
-      .select()
-      .single()
-    if (error) throw error
-    await insertStatementSkillLinks(user.id, data.id, [skill.id])
-    if (evidence?.files.length > 0) {
-      const paths = await uploadEvidenceFiles(user.id, skill.id, data.id, evidence.files)
-      const { error: updateError } = await supabase
-        .from('xapi_statements')
-        .update({ evidence_paths: paths })
-        .eq('id', data.id)
-      if (updateError) throw updateError
-    }
+    await saveActivity({ userId: user.id, statement, evidence, skillIds: [skill.id] })
     setRecordActivityOpen(false)
     await loadHistory()
   }
@@ -1880,36 +1860,6 @@ function HistorySection({
   )
 }
 
-function PendingTrainingEntry({ link, hasMore, onClick }) {
-  const { t } = useLanguage()
-  return (
-    <div className="flex gap-3">
-      <div className="flex flex-col items-center w-12 shrink-0">
-        <div className="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-hairline">
-          <span className="w-1.5 h-1.5 rounded-full bg-secondary/40" />
-        </div>
-        {hasMore && <span className="w-px flex-1 bg-hairline mt-1" />}
-      </div>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onClick}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            onClick()
-          }
-        }}
-        className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper/60 p-3 cursor-pointer hover:border-moss/60 transition-colors"
-      >
-        <p className="text-sm text-secondary">
-          {t('skillDetail.enrolledInPrefix')} <span className="text-ink font-medium">{link.courses.name}</span> — {t('skillDetail.inProgressSuffix')}
-        </p>
-      </div>
-    </div>
-  )
-}
-
 function PendingValidationEntry({ request, validatorName, hasMore }) {
   const { t } = useLanguage()
   return (
@@ -2900,7 +2850,7 @@ function SettingsSection({ skill, user, onUpdated }) {
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([getSearchPrivacySettings(user.id), listSearchableSkillIds(user.id)])
+    Promise.all([getSearchPrivacySettings(), listSearchableSkillIds(user.id)])
       .then(([settings, ids]) => {
         if (cancelled) return
         setSearchVisibilityMode(settings.skill_search_visibility)

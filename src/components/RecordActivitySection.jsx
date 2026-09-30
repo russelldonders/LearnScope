@@ -5,9 +5,8 @@ import { useAuth } from '../context/AuthContext'
 import RecordActivityModal from './RecordActivityModal'
 import ActivityRow from './ActivityRow'
 import { relatedSkillsFromStatement, relatedExperienceFromStatement } from '../lib/xapiStatement'
-import { uploadEvidenceFiles } from '../lib/skillEvidence'
 import { linkSkillToExperiences } from '../lib/currentRole'
-import { insertStatementSkillLinks } from '../lib/activitySkillLinks'
+import { saveActivity } from '../lib/activitySkillLinks'
 
 const RECENT_LIMIT = 6
 
@@ -82,29 +81,13 @@ export default function RecordActivitySection() {
   async function handleSave(statement, evidence) {
     const relatedSkills = relatedSkillsFromStatement(statement)
     const relatedExperience = relatedExperienceFromStatement(statement)
-    const primarySkill = relatedSkills[0] ?? null
-    const { data, error } = await supabase
-      .from('xapi_statements')
-      .insert({
-        user_id: user.id,
-        statement,
-        recorded_at: statement.timestamp,
-        skill_id: primarySkill?.id ?? null,
-        experience_id: relatedExperience?.id ?? null,
-        evidence_url: evidence?.evidenceUrl || null,
-      })
-      .select()
-      .single()
-    if (error) throw error
-    await insertStatementSkillLinks(user.id, data.id, relatedSkills.map((s) => s.id))
-    if (evidence?.files.length > 0) {
-      const paths = await uploadEvidenceFiles(user.id, primarySkill.id, data.id, evidence.files)
-      const { error: updateError } = await supabase
-        .from('xapi_statements')
-        .update({ evidence_paths: paths })
-        .eq('id', data.id)
-      if (updateError) throw updateError
-    }
+    await saveActivity({
+      userId: user.id,
+      statement,
+      evidence,
+      skillIds: relatedSkills.map((s) => s.id),
+      experienceId: relatedExperience?.id ?? null,
+    })
     if (relatedExperience) {
       for (const skill of relatedSkills) {
         await linkSkillToExperiences(user.id, skill.id, [relatedExperience.id])

@@ -28,8 +28,7 @@ import { LEVEL_LABELS } from '../lib/levels'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
 import { isDiagnosticStatement } from '../lib/xapiStatement'
-import { insertStatementSkillLinks } from '../lib/activitySkillLinks'
-import { uploadEvidenceFiles } from '../lib/skillEvidence'
+import { saveActivity } from '../lib/activitySkillLinks'
 import { isSelfAssessmentDue, todayDateString } from '../lib/checkin'
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 
@@ -38,7 +37,7 @@ import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 // ResumeImportReviewModal on first successful import from either the
 // onboarding wizard or /profile/import) or explicitly dismissed it --
 // and the "add your current role" banner, dismissible independently.
-async function loadImportBannerState(userId) {
+async function loadImportBannerState() {
   const { data } = await supabase
     .rpc('get_my_profile')
     .select('cv_imported_at, cv_import_banner_dismissed_at, current_role_banner_dismissed_at')
@@ -369,7 +368,7 @@ export default function Dashboard() {
       loadUpcomingSelfAssessments(user.id),
       loadUpcomingTargets(user.id),
       loadPendingReviewTasks(user.id),
-      loadImportBannerState(user.id),
+      loadImportBannerState(),
       listMyAssignedCourseEmployers(user.id),
     ])
     const valueOr = (index, fallback) => dashboardResultValue(results, index, fallback)
@@ -995,27 +994,7 @@ function UpNextActionTrigger({ skill, item, className, children, onDone }) {
   }
 
   async function handleSaveActivity(statement, evidence) {
-    const { data, error } = await supabase
-      .from('xapi_statements')
-      .insert({
-        user_id: user.id,
-        statement,
-        recorded_at: statement.timestamp,
-        skill_id: skill.id,
-        evidence_url: evidence?.evidenceUrl || null,
-      })
-      .select()
-      .single()
-    if (error) throw error
-    await insertStatementSkillLinks(user.id, data.id, [skill.id])
-    if (evidence?.files.length > 0) {
-      const paths = await uploadEvidenceFiles(user.id, skill.id, data.id, evidence.files)
-      const { error: updateError } = await supabase
-        .from('xapi_statements')
-        .update({ evidence_paths: paths })
-        .eq('id', data.id)
-      if (updateError) throw updateError
-    }
+    await saveActivity({ userId: user.id, statement, evidence, skillIds: [skill.id] })
     setRecordActivityOpen(false)
     onDone?.()
   }

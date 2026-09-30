@@ -16,26 +16,7 @@ import {
 } from '../lib/currentRole'
 import CurrentRoleSelectModal from './CurrentRoleSelectModal'
 import { useLanguage } from '../context/LanguageContext'
-
-function useSelection(items) {
-  const [selected, setSelected] = useState(() => new Set(items.map((_, i) => i)))
-  const [values, setValues] = useState(items)
-
-  function toggle(i) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(i)) next.delete(i)
-      else next.add(i)
-      return next
-    })
-  }
-
-  function updateField(i, field, value) {
-    setValues((prev) => prev.map((item, idx) => (idx === i ? { ...item, [field]: value } : item)))
-  }
-
-  return { selected, values, toggle, updateField }
-}
+import { useReviewSelection } from '../lib/useReviewSelection'
 
 const courseKey = (c) => `${(c.name ?? '').toLowerCase().trim()}|${(c.provider ?? '').toLowerCase().trim()}`
 const experienceKey = (e) =>
@@ -55,9 +36,9 @@ export default function ResumeImportReviewModal({
   // came off a CV/LinkedIn export, which is inherently a work-history
   // document, so 'work' is the safe default; still just a starting point,
   // shown and editable per skill in SkillRow below, never applied silently.
-  const skills = useSelection((extracted.skills ?? []).map((s) => ({ ...s, tracking_reason: 'work' })))
-  const courses = useSelection(extracted.courses ?? [])
-  const experience = useSelection(extracted.experience ?? [])
+  const skills = useReviewSelection((extracted.skills ?? []).map((s) => ({ ...s, tracking_reason: 'work' })))
+  const courses = useReviewSelection(extracted.courses ?? [])
+  const experience = useReviewSelection(extracted.experience ?? [])
   const [existingSkillNames, setExistingSkillNames] = useState(null)
   const [existingCourseKeys, setExistingCourseKeys] = useState(null)
   const [existingExperienceKeys, setExistingExperienceKeys] = useState(null)

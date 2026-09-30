@@ -1,4 +1,35 @@
 import { supabase } from './supabaseClient'
+import { uploadEvidenceFiles } from './skillEvidence'
+
+// Saves one logged activity with everything that hangs off it: the statement
+// row (primary skill + optional experience), its full related-skill links,
+// and any evidence files. The single path every "record activity" surface
+// uses, so they can't drift apart.
+export async function saveActivity({ userId, statement, evidence, skillIds, experienceId = null }) {
+  const primarySkillId = skillIds[0] ?? null
+  const { data, error } = await supabase
+    .from('xapi_statements')
+    .insert({
+      user_id: userId,
+      statement,
+      recorded_at: statement.timestamp,
+      skill_id: primarySkillId,
+      experience_id: experienceId,
+      evidence_url: evidence?.evidenceUrl || null,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  await insertStatementSkillLinks(userId, data.id, skillIds)
+  if (evidence?.files?.length > 0) {
+    // Evidence is filed under the primary skill so validators of that skill
+    // can see it; an activity with no skill keeps it in the owner's own area.
+    const paths = await uploadEvidenceFiles(userId, primarySkillId ?? 'unlinked', data.id, evidence.files)
+    const { error: updateError } = await supabase.from('xapi_statements').update({ evidence_paths: paths }).eq('id', data.id)
+    if (updateError) throw updateError
+  }
+  return data
+}
 
 // Records which skills a logged activity relates to. xapi_statements.skill_id
 // stays set to the first (primary) skill for every existing query/index that

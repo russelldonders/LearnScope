@@ -74,6 +74,7 @@ import { COURSE_STATUS_LABELS, RESOURCE_TYPE_LABELS } from '../../lib/statusLabe
 import { COURSE_TYPES } from '../../lib/courseTypes'
 import { DURATION_UNITS } from '../../lib/courseDuration'
 import { CURRENCIES } from '../../lib/currencies'
+import Chevron from '../../components/Chevron'
 
 const MAX_IMAGE_BYTES = COURSE_IMAGE_MAX_INPUT_BYTES
 
@@ -105,25 +106,6 @@ function DropLine({ side }) {
       aria-hidden="true"
       className={`pointer-events-none absolute inset-x-1 h-0.5 rounded-full bg-moss ${side === 'before' ? '-top-px' : '-bottom-px'}`}
     />
-  )
-}
-
-function Chevron({ open, className = '' }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="12"
-      height="12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''} ${className}`}
-    >
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
   )
 }
 

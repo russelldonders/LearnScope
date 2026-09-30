@@ -51,11 +51,8 @@ export function formatRelativeDate(dateStr) {
 }
 
 // The exact-date companion to formatRelativeDate, for a title/tooltip so the
-// precise date is still one hover away.
-export function formatAbsoluteDate(dateStr) {
-  if (!dateStr) return ''
-  return toDate(dateStr).toLocaleDateString()
-}
+// precise date is still one hover away. Same formatting as formatFullDate.
+export const formatAbsoluteDate = formatFullDate
 
 // A compact range label for short-lived items (e.g. a sub-experience nested
 // under a role): a single-day item shows its exact date rather than a

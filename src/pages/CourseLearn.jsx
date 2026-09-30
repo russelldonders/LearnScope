@@ -21,6 +21,7 @@ import AppHeader from '../components/AppHeader'
 import ProgressBar from '../components/ProgressBar'
 import CourseModal from '../components/CourseModal'
 import PageContent from '../components/PageContent'
+import Chevron from '../components/Chevron'
 
 // Items come back ordered by their own `position`, which only resets to 0
 // within each section (see courseContent.js's nextLinkPosition) -- sorting
@@ -142,25 +143,6 @@ function CourseItemPlayer({
         </div>
       )}
     </>
-  )
-}
-
-function Chevron({ open, className = '' }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="12"
-      height="12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''} ${className}`}
-    >
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
   )
 }
 

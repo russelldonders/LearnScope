@@ -1,9 +1,5 @@
 import { supabase } from './supabaseClient'
 
-export function isCurrentEmployment(experience) {
-  return experience?.type === 'employment' && !experience?.end_date
-}
-
 // Every ongoing (no end date) job on the learner's Experience timeline --
 // the candidate targets for "part of my current role".
 export async function listCurrentRoleExperiences(userId) {
