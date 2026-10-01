@@ -1,5 +1,5 @@
-// Reconciles an employer-set target (role profile requirement or direct
-// suggestion, whichever is higher -- see getEmployerTargetsForUser) against
+// Reconciles a target set by someone else (a team or organisation -- see
+// pickTargetSetByOthers in managerSkillActions.js for which one applies) against
 // the learner's own personal skill_targets history into the single "visible
 // target" the skills UI should show. An employer target only counts as met
 // once it's been confirmed by an employer admin (employerConfirmedLevel,

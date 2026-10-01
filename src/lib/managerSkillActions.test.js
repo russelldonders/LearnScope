@@ -23,7 +23,7 @@ vi.mock('./skillLibrary', () => ({
   findOrCreatePersonalSkill: async (userId, name) => ({ skill: { id: 'skill-1', name } }),
 }))
 
-const { listMyManagerSkillSuggestions, adoptManagerSkillSuggestion, dismissManagerSkillSuggestion } = await import('./managerSkillActions')
+const { listMyManagerSkillSuggestions, adoptManagerSkillSuggestion, dismissManagerSkillSuggestion, pickTargetSetByOthers } = await import('./managerSkillActions')
 
 beforeEach(() => {
   state.updates = []
@@ -65,5 +65,32 @@ describe('manager skill suggestions (learner side)', () => {
     const [team] = await listMyManagerSkillSuggestions('me')
     await expect(adoptManagerSkillSuggestion('me', team, { targetLevel: 3 })).rejects.toThrow('Target date is required')
     await expect(dismissManagerSkillSuggestion({ ...team, legacySource: null })).rejects.toThrow('can no longer be updated')
+  })
+})
+
+describe('pickTargetSetByOthers', () => {
+  const team = { libraryId: null, skillId: 'skill-1', level: 3, contextType: 'team', contextKey: 'team:circle', contextName: 'Study circle' }
+  const org = { libraryId: 'lib-1', skillId: null, level: 4, contextType: 'organisation', contextKey: 'organisation:acme', contextName: 'Acme' }
+  const skill = { libraryId: 'lib-1', skillId: 'skill-1' }
+
+  it('shows the highest target nobody from that context has rated as reached yet', () => {
+    expect(pickTargetSetByOthers(skill, [team, org], new Map())).toEqual({ level: 4, met: false, contextType: 'organisation', contextName: 'Acme' })
+  })
+
+  it('only counts a target met by a rating from its own context', () => {
+    // A team rating of 4 doesn't meet Acme's target of 4 -- only Acme's own rating can.
+    const ratings = new Map([['team:circle|skill:skill-1', 4]])
+    expect(pickTargetSetByOthers(skill, [team, org], ratings)).toMatchObject({ contextName: 'Acme', met: false })
+    ratings.set('organisation:acme|lib-1', 4)
+    expect(pickTargetSetByOthers(skill, [team, org], ratings)).toMatchObject({ level: 4, met: true })
+  })
+
+  it('treats a team target the same way: shown until the team rates it reached', () => {
+    expect(pickTargetSetByOthers(skill, [team], new Map())).toMatchObject({ contextType: 'team', met: false })
+    expect(pickTargetSetByOthers(skill, [team], new Map([['team:circle|skill:skill-1', 3]]))).toMatchObject({ contextType: 'team', met: true })
+  })
+
+  it('returns nothing when no one else set a target for this skill', () => {
+    expect(pickTargetSetByOthers({ libraryId: 'other', skillId: 'other' }, [team, org], new Map())).toBeNull()
   })
 })

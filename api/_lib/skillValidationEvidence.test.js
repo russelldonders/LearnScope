@@ -13,6 +13,7 @@ function fakeDb(tables) {
       const chain = {
         select: () => chain,
         eq: (column, value) => { rows = rows.filter((row) => row[column] === value); return chain },
+        is: (column, value) => { rows = rows.filter((row) => (row[column] ?? null) === value); return chain },
         in: (column, values) => { rows = rows.filter((row) => values.includes(row[column])); return chain },
         or: (expression) => {
           if (expression === 'source.eq.self,source.is.null') rows = rows.filter((row) => row.source === 'self' || row.source == null)

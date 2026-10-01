@@ -184,7 +184,6 @@ export default function SetTargetModal({ skill, user, targets = [], currentLevel
                       })}
                     </p>
                     {target.comments && <p className="text-xs text-secondary mt-0.5">{target.comments}</p>}
-                    {target.set_by_manager && <p className="text-xs text-secondary mt-0.5">{t('modals.setTarget.setByYourManager')}</p>}
                   </div>
                 </li>
               ))}

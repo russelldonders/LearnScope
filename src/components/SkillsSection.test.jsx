@@ -40,9 +40,10 @@ let supabaseMock = defaultSupabaseMock()
 vi.mock('../lib/supabaseClient', () => ({ supabase: { from: (...args) => supabaseMock.from(...args) } }))
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user-1' } }) }))
 vi.mock('../context/LanguageContext', () => ({ useLanguage: () => ({ t: (key) => key }) }))
-vi.mock('../lib/employerSkillTargets', () => ({
-  getEmployerTargetsForUser: vi.fn().mockResolvedValue(new Map()),
-  getLatestEmployerSkillConfirmations: vi.fn().mockResolvedValue(new Map()),
+vi.mock('../lib/managerSkillActions', async (importOriginal) => ({
+  ...(await importOriginal()),
+  listTargetsSetByOthers: vi.fn().mockResolvedValue([]),
+  listLatestManagerRatings: vi.fn().mockResolvedValue(new Map()),
 }))
 vi.mock('../lib/skillDevelopmentTargets', () => ({
   listMySkillDevelopmentTargets: vi.fn().mockResolvedValue({

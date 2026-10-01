@@ -35,7 +35,7 @@ import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
 import { computeTrustStatus, isPersonValidated, TRUST_STATUS, TRUST_STATUS_COLORS } from '../lib/skillProficiencyModel'
 import { countSkillTrackers, listConnectionsWithSkill } from '../lib/skillStats'
 import { getLearnerCompositeProgress, getParentCompositesForSkill } from '../lib/skillComposites'
-import { getEmployerTargetsForUser, getLatestEmployerSkillConfirmations } from '../lib/employerSkillTargets'
+import { listTargetsSetByOthers, listLatestManagerRatings, pickTargetSetByOthers } from '../lib/managerSkillActions'
 import { computeVisibleTarget } from '../lib/skillTargetPrecedence'
 import CompositeSkillProgress from '../components/CompositeSkillProgress'
 import { HistorySection, TimelineEntry, TimelineDetailModal } from './SkillHistorySection'
@@ -126,8 +126,9 @@ export default function SkillDetail({ skillId, embedded = false }) {
   const [startingComponentId, setStartingComponentId] = useState(null)
   const [startComponentError, setStartComponentError] = useState(null)
   const [parentComposites, setParentComposites] = useState([])
-  const [employerTargetLevel, setEmployerTargetLevel] = useState(null)
-  const [employerConfirmedLevel, setEmployerConfirmedLevel] = useState(null)
+  // The target a team or organisation set for this skill, if any -- see
+  // pickTargetSetByOthers for which one applies and when it counts as met.
+  const [targetSetByOthers, setTargetSetByOthers] = useState(null)
 
   useEffect(() => {
     loadSkill()
@@ -190,35 +191,25 @@ export default function SkillDetail({ skillId, embedded = false }) {
     return () => { active = false }
   }, [skill?.library_skill_id, user.id])
 
-  // Employer target = the higher of any accepted role profile's required
-  // level and any active direct suggestion for this skill (see
-  // getEmployerTargetsForUser); only counts as met once an employer admin
-  // has actually confirmed the learner's level (employerConfirmedLevel),
-  // never from a self-assessment alone -- see computeVisibleTarget.
+  // A target set by a team manager or an organisation for this skill. It
+  // shows until a rating from that same context reaches it, then the
+  // learner's own higher target takes over -- see computeVisibleTarget.
   useEffect(() => {
     let active = true
-    if (!skill?.library_skill_id) {
-      setEmployerTargetLevel(null)
-      setEmployerConfirmedLevel(null)
+    if (!skill?.id) {
+      setTargetSetByOthers(null)
       return undefined
     }
-    Promise.all([getEmployerTargetsForUser(), getLatestEmployerSkillConfirmations()])
-      .then(([targetsByLibraryId, confirmationsByKey]) => {
-        if (!active) return
-        const target = targetsByLibraryId.get(skill.library_skill_id)
-        setEmployerTargetLevel(target?.level ?? null)
-        setEmployerConfirmedLevel(
-          target ? confirmationsByKey.get(`${target.employerId}:${skill.library_skill_id}`) ?? null : null
-        )
+    Promise.all([listTargetsSetByOthers(user.id), listLatestManagerRatings(user.id)])
+      .then(([targets, ratings]) => {
+        if (active) setTargetSetByOthers(pickTargetSetByOthers({ libraryId: skill.library_skill_id, skillId: skill.id }, targets, ratings))
       })
       .catch(() => {
-        if (active) {
-          setEmployerTargetLevel(null)
-          setEmployerConfirmedLevel(null)
-        }
+        if (active) setTargetSetByOthers(null)
       })
     return () => { active = false }
-  }, [skill?.library_skill_id])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
+  }, [skill?.id, skill?.library_skill_id])
 
   // Starts tracking a not-yet-tracked composite component directly from
   // here, instead of sending the learner off to find and add it themselves
@@ -313,10 +304,13 @@ export default function SkillDetail({ skillId, embedded = false }) {
           .eq('skill_id', skill.id),
         fetchStatementsForSkill(skill.id),
         listSkillTags(skill.id),
+        // The learner's own targets only: a target a team manager set
+        // belongs to that team and comes from targetSetByOthers instead.
         supabase
           .from('skill_targets')
           .select('*')
           .eq('skill_id', skill.id)
+          .is('set_by_manager', null)
           .order('created_at', { ascending: false }),
         supabase
           .from('skill_course_links')
@@ -519,8 +513,8 @@ export default function SkillDetail({ skillId, embedded = false }) {
   const completedCourseLinksCount = courseLinks.filter((l) => l.courses?.completed_date).length
   const currentTarget = targets[0] ?? null
   const visibleTarget = computeVisibleTarget({
-    employerTargetLevel,
-    employerConfirmedLevel,
+    employerTargetLevel: targetSetByOthers?.level ?? null,
+    employerConfirmedLevel: targetSetByOthers?.met ? targetSetByOthers.level : null,
     personalTargetLevel: currentTarget?.target_level ?? null,
   })
   const pendingValidationRequestsCount = validationRequests.filter((r) => r.status === 'pending').length
@@ -1169,14 +1163,14 @@ export default function SkillDetail({ skillId, embedded = false }) {
               </AccessibleDialog>
             )}
 
-            {(skill.next_checkin_date || currentTarget || employerTargetLevel) && (
+            {(skill.next_checkin_date || currentTarget || targetSetByOthers) && (
               <div className="mt-4 pt-4 border-t border-hairline">
                 <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-3">{t('skillDetail.upcoming')}</h3>
                 <div className="space-y-2">
-                  {employerTargetLevel && (
+                  {targetSetByOthers && (
                     <div className="flex items-center justify-between rounded-md border border-hairline bg-paper px-3 py-2">
                       <span className="font-mono text-xs uppercase tracking-wide text-secondary">
-                        {t('skillDetail.employerTargetPrefix')} {LEVEL_LABELS[employerTargetLevel]}
+                        {t('skillDetail.targetSetByPrefix', { name: targetSetByOthers.contextName })} {LEVEL_LABELS[targetSetByOthers.level]}
                       </span>
                       <span className={`text-sm font-medium ${visibleTarget?.employerTargetMet ? 'text-moss' : 'text-ink'}`}>
                         {visibleTarget?.employerTargetMet
@@ -1185,9 +1179,9 @@ export default function SkillDetail({ skillId, embedded = false }) {
                       </span>
                     </div>
                   )}
-                  {employerTargetLevel && visibleTarget?.employerTargetMet && visibleTarget.source === 'personal' && (
+                  {targetSetByOthers && visibleTarget?.employerTargetMet && visibleTarget.source === 'personal' && (
                     <p className="text-xs text-secondary px-1">
-                      {t('skillDetail.employerTargetMetWorkingTowardOwn')}
+                      {t('skillDetail.otherTargetMetWorkingTowardOwn', { name: targetSetByOthers.contextName })}
                     </p>
                   )}
                   {skill.next_checkin_date && (
@@ -1545,7 +1539,6 @@ function LevelDetailModal({
                 </div>
               </div>
               {targetDescription && <p className="text-sm text-secondary mt-2">{targetDescription}</p>}
-              {currentTarget.set_by_manager && <p className="text-sm text-secondary mt-2">{t('skillDetail.setByYourManager')}</p>}
               {currentTarget.comments && <p className="text-sm text-secondary mt-2 whitespace-pre-wrap">{currentTarget.comments}</p>}
             </div>
           )

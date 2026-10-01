@@ -13,7 +13,7 @@ import SetSkillTargetFlow from './SetSkillTargetFlow'
 import { TRACKING_REASONS } from '../lib/trackingReasons'
 import { LEVEL_LABELS } from '../lib/levels'
 import { isSelfAssessmentDue } from '../lib/checkin'
-import { getEmployerTargetsForUser, getLatestEmployerSkillConfirmations } from '../lib/employerSkillTargets'
+import { listTargetsSetByOthers, listLatestManagerRatings, pickTargetSetByOthers } from '../lib/managerSkillActions'
 import { computeVisibleTarget } from '../lib/skillTargetPrecedence'
 import { listMySkillDevelopmentTargets } from '../lib/skillDevelopmentTargets'
 
@@ -111,8 +111,8 @@ export default function SkillsSection() {
       { data: tagLinks },
       { data: practicalAssessments },
       { data: skillTargets },
-      employerTargetsByLibraryId,
-      employerConfirmationsByKey,
+      targetsSetByOthers,
+      latestManagerRatings,
       { data: confirmedValidations },
     ] = await Promise.all([
       supabase
@@ -131,9 +131,10 @@ export default function SkillsSection() {
         .from('skill_targets')
         .select('skill_id, target_level, created_at')
         .eq('user_id', user.id)
+        .is('set_by_manager', null)
         .order('created_at', { ascending: false }),
-      getEmployerTargetsForUser(),
-      getLatestEmployerSkillConfirmations(),
+      listTargetsSetByOthers(user.id),
+      listLatestManagerRatings(user.id),
       supabase.from('skill_validation_requests').select('skill_id').eq('requester_id', user.id).eq('status', 'confirmed'),
     ])
     if (error) {
@@ -166,13 +167,17 @@ export default function SkillsSection() {
       }
       setSkills(
         data.map((s) => {
-          const employerTarget = s.library_skill_id ? employerTargetsByLibraryId.get(s.library_skill_id) : null
-          const employerConfirmedLevel = employerTarget
-            ? employerConfirmationsByKey.get(`${employerTarget.employerId}:${s.library_skill_id}`) ?? null
-            : null
+          // A target set by a team or organisation shows until a rating
+          // from that same context reaches it (pickTargetSetByOthers); then
+          // the learner's own higher target takes over.
+          const setByOthers = pickTargetSetByOthers(
+            { libraryId: s.library_skill_id, skillId: s.id },
+            targetsSetByOthers,
+            latestManagerRatings
+          )
           const visibleTarget = computeVisibleTarget({
-            employerTargetLevel: employerTarget?.level ?? null,
-            employerConfirmedLevel,
+            employerTargetLevel: setByOthers?.level ?? null,
+            employerConfirmedLevel: setByOthers?.met ? setByOthers.level : null,
             personalTargetLevel: latestTargetLevelBySkillId.get(s.id) ?? null,
           })
           return {
@@ -184,6 +189,7 @@ export default function SkillsSection() {
             targetSource: visibleTarget?.source ?? null,
             employerTargetLevel: visibleTarget?.employerTargetLevel ?? null,
             employerTargetMet: visibleTarget?.employerTargetMet ?? false,
+            targetContextName: setByOthers?.contextName ?? null,
           }
         })
       )
@@ -219,8 +225,12 @@ export default function SkillsSection() {
   const targetRows = useMemo(() => {
     const personalBySkillId = new Map(developmentTargets.personal.map((t) => [t.skillId, t]))
     const activeEmployerTargets = developmentTargets.employer.filter((t) => t.status === 'active')
-    const employerByLibraryId = new Map(activeEmployerTargets.map((t) => [t.skillLibraryId, t]))
-    const matchedLibraryIds = new Set()
+    // Team targets can be on a custom skill with no library entry, so match
+    // by library skill or by the learner's own skill row.
+    const otherTargetFor = (skill) =>
+      activeEmployerTargets.find((t) => t.targetLevel === skill.targetLevel && ((t.skillLibraryId && t.skillLibraryId === skill.library_skill_id) || (t.skillId && t.skillId === skill.id)))
+      ?? activeEmployerTargets.find((t) => (t.skillLibraryId && t.skillLibraryId === skill.library_skill_id) || (t.skillId && t.skillId === skill.id))
+    const matchedTargetIds = new Set()
 
     const rows = []
     for (const skill of activeSkills) {
@@ -238,14 +248,16 @@ export default function SkillsSection() {
           targetDate: raw?.targetDate ?? null,
         })
       } else {
-        const raw = skill.library_skill_id ? employerByLibraryId.get(skill.library_skill_id) : null
-        if (raw) matchedLibraryIds.add(skill.library_skill_id)
+        const raw = otherTargetFor(skill)
+        for (const t of activeEmployerTargets) {
+          if ((t.skillLibraryId && t.skillLibraryId === skill.library_skill_id) || (t.skillId && t.skillId === skill.id)) matchedTargetIds.add(t.id)
+        }
         rows.push({
           id: `skill-${skill.id}`,
           skillId: skill.id,
           skillName: skill.name,
           ownership: 'employer',
-          employerName: raw?.employerName ?? '',
+          employerName: raw?.employerName ?? skill.targetContextName ?? '',
           targetLevel: skill.targetLevel,
           currentLevel: skill.displayedLevel,
           notes: raw?.notes ?? null,
@@ -257,7 +269,7 @@ export default function SkillsSection() {
     // showing (the learner hasn't started it yet), just with no current
     // level to compare against.
     for (const raw of activeEmployerTargets) {
-      if (matchedLibraryIds.has(raw.skillLibraryId)) continue
+      if (matchedTargetIds.has(raw.id)) continue
       rows.push({
         id: `employer-${raw.id}`,
         skillId: null,
