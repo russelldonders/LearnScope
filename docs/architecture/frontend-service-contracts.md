@@ -13,11 +13,10 @@ buttons.
 ```js
 {
   id: 'uuid',
-  kind: 'personal' | 'manager' | 'employer' | 'provider' | 'platform_admin',
-  employerId: 'uuid' | null,
-  providerOrganisationId: 'uuid' | null,
+  kind: 'personal' | 'manager' | 'organisation' | 'platform_admin',
+  organisationId: 'uuid' | null,
   name: 'My personal profile',
-  role: 'owner' | 'employee' | 'manager' | 'lms_admin' | 'provider',
+  role: 'owner' | 'member' | 'manager' | 'organisation_admin' | 'content_editor' | 'platform_admin',
   status: 'active' | 'suspended' | 'ended',
   requiresReauthentication: false,
   allowedActions: ['workspace:enter'],

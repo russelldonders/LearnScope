@@ -48,11 +48,20 @@ explicitly so a future security review doesn't mistake it for a hole.
 
 ### Organisation-owned
 
-**Does not exist yet.** No `organisations` table, no `organisation_id`
-anywhere, no membership/tenancy concept. (`experience.organization` is a
-free-text employer/institution name on a learner's own timeline row — not
-a tenant.) Built only when a real feature needs it — see "Deferred, by
-design" below.
+One `organisations` table for every kind of organisation. What an
+organisation does is recorded as `organisation_capabilities` rows
+(`employs_people`, `manages_workforce_development`, `authors_learning`,
+`supplies_learning_externally`) rather than as separate employer/provider
+tables (unified in `20260927203632` and `20260927212035`). Staff belong
+through `organisation_members` (admin/trainer); an employer's managed
+workforce through `employer_members`. Tables and helpers named `employer_*`
+predate the unification and now key on `organisations.id`.
+
+Organisation-owned rows (catalogues, courses, content, role profiles) are
+the organisation's. A learner's own records stay learner-owned: an
+organisation only sees them through an explicit, consented access path.
+(`experience.organization` is still a free-text employer/institution name
+on a learner's own timeline row, not a link to a tenant.)
 
 ### Auth/system
 
@@ -124,8 +133,6 @@ feature to need it, rather than being scaffolded ahead of use:
   `revoked_at`). `skill_peer_ratings`/`skill_validation_requests` are
   existing narrow-purpose precedents a future generalization *could*
   migrate onto this table — not a requirement to do so.
-- **Organisation domain** — `organisations`/`organisation_memberships` (or
-  similar), referencing learner records via grants, never owning them.
 - **Regional data hosting** — the boundary is `getDataClient()` (today:
   returns the single existing client). When a second region is real, that
   function gains the ability to inspect a region marker (proposed home: a

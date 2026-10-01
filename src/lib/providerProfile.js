@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient'
 
-// Backs the public /providers/:slug page -- reachable logged-out (Rate.jsx
+// Backs the public /organisations/:slug page -- reachable logged-out (Rate.jsx
 // is the only other page that works this way), so this calls the
 // get_provider_profile RPC (0090) rather than querying organisations/
 // course_catalogue/organisation_offered_skills directly, since those

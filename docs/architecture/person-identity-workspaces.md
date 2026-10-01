@@ -21,9 +21,10 @@ after control of both accounts has been proven.
 - **Authentication account**: one Supabase user used to prove identity. It is
   classified as personal, work SSO or company-managed.
 - **Workspace**: the access/navigation context in which an action takes place:
-  personal, independent manager, employer, provider or platform administration.
-  It sits above rather than replaces the distinct `employers` and
-  `organisations` domain entities.
+  personal, independent manager, organisation or platform administration.
+  It sits above rather than replaces the `organisations` domain entity (one
+  table for employers and providers alike since `20260927212035`; what an
+  organisation does is its `organisation_capabilities`).
 - **Profile**: skills, experience and learning records owned within a personal
   or organisation context.
 - **Workspace access**: the explicit relationship authorising an authentication
