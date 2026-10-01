@@ -553,6 +553,8 @@ export default {
       sendRequest: '发送请求',
       sending: '发送中…',
       cancel: '取消',
+      basisPerson: '其技能已由他人确认',
+      basisAiCheck: '其技能已通过 AI 检查，尚未由他人确认',
     },
     confirmingBaselineQuiz: {
       titleCalibrating: '找出你的知识水平',

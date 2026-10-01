@@ -885,6 +885,8 @@ export default {
       sendRequest: 'Anfrage senden',
       sending: 'Wird gesendet…',
       cancel: 'Abbrechen',
+      basisPerson: 'Die eigene Fähigkeit ist von einer anderen Person bestätigt',
+      basisAiCheck: 'Die eigene Fähigkeit hat eine KI-Prüfung bestanden, ist aber noch nicht von einer Person bestätigt',
     },
     confirmingBaselineQuiz: {
       titleCalibrating: 'Finde dein Wissensniveau',

@@ -882,6 +882,8 @@ export default {
       sendRequest: 'Send request',
       sending: 'Sending…',
       cancel: 'Cancel',
+      basisPerson: 'Their skill is confirmed by another person',
+      basisAiCheck: 'Their skill passed an AI check, not yet confirmed by a person',
     },
     confirmingBaselineQuiz: {
       titleCalibrating: 'Find your knowledge level',

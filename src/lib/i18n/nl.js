@@ -559,6 +559,8 @@ export default {
       sendRequest: 'Verzoek verzenden',
       sending: 'Verzenden…',
       cancel: 'Annuleren',
+      basisPerson: 'Eigen vaardigheid is bevestigd door een ander persoon',
+      basisAiCheck: 'Eigen vaardigheid is door AI gecontroleerd, nog niet door een persoon bevestigd',
     },
     confirmingBaselineQuiz: {
       titleCalibrating: 'Vind je kennisniveau',

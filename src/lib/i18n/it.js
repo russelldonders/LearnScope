@@ -561,6 +561,8 @@ export default {
       sendRequest: 'Invia richiesta',
       sending: 'Invio…',
       cancel: 'Annulla',
+      basisPerson: 'La sua competenza è confermata da un’altra persona',
+      basisAiCheck: 'La sua competenza ha superato una verifica con IA, non ancora confermata da una persona',
     },
     confirmingBaselineQuiz: {
       titleCalibrating: 'Trova il tuo livello di conoscenza',

@@ -9,7 +9,7 @@ export async function listValidatorCandidates(librarySkillId, minLevel) {
   if (!librarySkillId) return []
   const { data, error } = await supabase
     .from('validator_directory')
-    .select('skill_id, validator_id, level, full_name, avatar_url, is_connection')
+    .select('skill_id, validator_id, level, full_name, avatar_url, is_connection, person_confirmed')
     .eq('library_skill_id', librarySkillId)
     .gte('level', minLevel)
     .order('is_connection', { ascending: false })

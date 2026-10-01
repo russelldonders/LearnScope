@@ -164,7 +164,10 @@ export default function RequestValidationModal({ skill, user, targetLevel, onClo
   )
 }
 
+// Shows what the validator's own skill rests on, so the learner can weigh
+// a person-confirmed validator above one whose skill only passed an AI check.
 function CandidateRow({ candidate, selected, onSelect }) {
+  const { t } = useLanguage()
   return (
     <button
       type="button"
@@ -181,6 +184,9 @@ function CandidateRow({ candidate, selected, onSelect }) {
       <div className="min-w-0 flex-1">
         <p className="text-sm text-ink font-medium truncate">{candidate.full_name}</p>
         <p className="text-xs text-secondary">{LEVEL_LABELS[candidate.level]}</p>
+        <p className="text-xs text-secondary">
+          {candidate.person_confirmed ? t('modals.requestValidation.basisPerson') : t('modals.requestValidation.basisAiCheck')}
+        </p>
       </div>
     </button>
   )
