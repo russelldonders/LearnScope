@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { MemoryRouter, useSearchParams } from 'react-router-dom'
-import { EmployerLearnersPanel, EmployerUsersPanel } from './EmployerConsole'
+import { EmployerUsersPanel } from './EmployerConsole'
+import { EmployerLearnersPanel } from './EmployerLearnersPanel'
 import {
   listEmployerMembers,
   listEmployerDataAccessRequests,

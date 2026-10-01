@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../lib/supabaseClient', () => ({ supabase: {} }))
 
-import { reorderById } from './ProviderCourseEditor'
+import { reorderById } from './CourseSections'
 
 describe('reorderById', () => {
   const list = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }]
