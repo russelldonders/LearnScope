@@ -20,8 +20,6 @@ const {
   setManagerTeamSharedSkills,
   setManagerTeamSkillAssessmentEvidence,
   suggestManagerTeamSkill,
-  listMyManagerTeamSkillSuggestions,
-  dismissManagerTeamSkillSuggestion,
   addManagerTeamSkill,
   listManagerTeamSkills,
   removeManagerTeamSkill,
@@ -151,27 +149,6 @@ describe('manager team service', () => {
       p_membership_id: 'membership-1', p_skill_library_id: 'lib-1', p_skill_name: 'Facilitation',
       p_target_level: 4, p_target_date: '2027-01-01', p_comments: 'Focus area',
     })
-  })
-
-  it('maps only the current learner’s pending team skill suggestions', async () => {
-    rpc.mockResolvedValue({ data: [{
-      id: 'suggestion-1', membership_id: 'membership-1', skill_name: 'Facilitation',
-      suggested_target_level: 4, target_date: '2027-01-01', comments: 'Focus area',
-      status: 'suggested', created_at: '2026-09-07', team_name: 'Coaching circle', suggested_by_name: 'Morgan',
-    }], error: null })
-    await expect(listMyManagerTeamSkillSuggestions()).resolves.toEqual([{
-      id: 'suggestion-1', membershipId: 'membership-1', skillName: 'Facilitation',
-      suggestedTargetLevel: 4, targetDate: '2027-01-01', comments: 'Focus area',
-      status: 'suggested', createdAt: '2026-09-07', teamName: 'Coaching circle', suggestedByName: 'Morgan',
-    }])
-  })
-
-  it('dismisses a team skill suggestion without ever writing to skills/skill_targets', async () => {
-    const update = vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) })
-    from.mockReturnValue({ update })
-    await dismissManagerTeamSkillSuggestion('suggestion-1')
-    expect(from).toHaveBeenCalledWith('manager_team_skill_suggestions')
-    expect(update).toHaveBeenCalledWith({ status: 'dismissed' })
   })
 
   it('adds a skill to the team through the leader-authorised RPC, independent of any member', async () => {

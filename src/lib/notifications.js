@@ -9,8 +9,8 @@ import { listIncomingPendingValidationRequests } from './skillValidationRequests
 import { listMyPendingOrgInvites } from './organisationInvites'
 import { listMyPendingEmployerInvites, listMyPendingDataAccessRequests } from './admin/employers'
 import { listMyCourseAssignments } from './courseCatalogue'
-import { listMySkillSuggestions } from './skillSuggestions'
-import { listMyManagerTeamInvites, listMyManagerTeamSkillSuggestions } from './managerTeams'
+import { listMyManagerSkillSuggestions } from './managerSkillActions'
+import { listMyManagerTeamInvites } from './managerTeams'
 import { loadActionSources } from './actionLoading'
 
 const personalSource = 'Personal'
@@ -95,13 +95,17 @@ export function buildNotificationItems(values, profiles = {}) {
       source: item.employers?.name || item.course_catalogue?.provider || 'Learning',
       occurredAt: item.created_at,
     })),
+    // One list for suggestions from an organisation and from a team leader
+    // (manager_skill_suggestions), labelled with where each came from.
     ...values.skillSuggestions.map((item) => notification({
       id: item.id,
       kind: 'skill-suggestion',
       title: 'Skill Suggestion',
-      detail: item.skill_name || 'A new skill was suggested for you.',
-      source: item.employers?.name || 'Employer',
-      occurredAt: item.created_at,
+      detail: item.contextType === 'team'
+        ? `${item.suggestedByName || 'A manager'} suggested ${item.skillName || 'a new skill'}.`
+        : item.skillName || 'A new skill was suggested for you.',
+      source: item.contextName || (item.contextType === 'team' ? 'Manager Team' : 'Employer'),
+      occurredAt: item.createdAt,
     })),
     ...values.managerTeamInvites.map((item) => notification({
       id: item.id,
@@ -110,14 +114,6 @@ export function buildNotificationItems(values, profiles = {}) {
       detail: `${item.managerName || 'A manager'} invited you to join ${item.teamName || 'their team'}.`,
       source: item.teamName || 'Manager Team',
       occurredAt: item.invitedAt,
-    })),
-    ...values.managerTeamSkillSuggestions.map((item) => notification({
-      id: item.id,
-      kind: 'manager-team-skill-suggestion',
-      title: 'Skill Suggestion',
-      detail: `${item.suggestedByName || 'A manager'} suggested ${item.skillName || 'a new skill'}.`,
-      source: item.teamName || 'Manager Team',
-      occurredAt: item.createdAt,
     })),
   ]
 
@@ -135,9 +131,8 @@ export async function loadNotifications(userId) {
     { key: 'employerInvites', label: 'employer invitations', fallback: [], load: () => listMyPendingEmployerInvites(userId) },
     { key: 'dataAccessRequests', label: 'data-access requests', fallback: [], load: () => listMyPendingDataAccessRequests(userId) },
     { key: 'courseAssignments', label: 'course assignments', fallback: [], load: () => listMyCourseAssignments(userId) },
-    { key: 'skillSuggestions', label: 'skill suggestions', fallback: [], load: () => listMySkillSuggestions(userId) },
+    { key: 'skillSuggestions', label: 'skill suggestions', fallback: [], load: () => listMyManagerSkillSuggestions(userId) },
     { key: 'managerTeamInvites', label: 'manager-team invitations', fallback: [], load: listMyManagerTeamInvites },
-    { key: 'managerTeamSkillSuggestions', label: 'team skill suggestions', fallback: [], load: listMyManagerTeamSkillSuggestions },
   ])
 
   const requesterIds = [

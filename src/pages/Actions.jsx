@@ -17,7 +17,7 @@ import {
   listCourseCohorts,
   respondToCourseAssignmentWithCohort,
 } from '../lib/courseCatalogue'
-import { listMySkillSuggestions, adoptSkillSuggestion, dismissSkillSuggestion } from '../lib/skillSuggestions'
+import { listMyManagerSkillSuggestions, adoptManagerSkillSuggestion, dismissManagerSkillSuggestion } from '../lib/managerSkillActions'
 import { supabase } from '../lib/supabaseClient'
 import EmployerDataAccessConsentDialog from '../components/EmployerDataAccessConsentDialog'
 import { requestedDataSummary } from '../lib/employerDataAccess'
@@ -26,9 +26,6 @@ import ManagerTeamInviteCard from './manager/learner/ManagerTeamInviteCard'
 import {
   decideManagerTeamInvite,
   listMyManagerTeamInvites,
-  listMyManagerTeamSkillSuggestions,
-  adoptManagerTeamSkillSuggestion,
-  dismissManagerTeamSkillSuggestion,
 } from '../lib/managerTeams'
 import { loadActionSources } from '../lib/actionLoading'
 import { getOrganisationBranding } from '../lib/orgBranding'
@@ -129,8 +126,7 @@ export default function Actions() {
         { key: 'managerInvites', label: 'manager-team invitations', fallback: [], load: listMyManagerTeamInvites },
         { key: 'dataAccessRequests', label: 'employer data-access requests', fallback: [], load: () => listMyPendingDataAccessRequests(user.id) },
         { key: 'courseAssignments', label: 'course assignments', fallback: [], load: () => listMyCourseAssignments(user.id) },
-        { key: 'skillSuggestions', label: 'skill suggestions', fallback: [], load: () => listMySkillSuggestions(user.id) },
-        { key: 'managerTeamSkillSuggestions', label: 'team skill suggestions', fallback: [], load: listMyManagerTeamSkillSuggestions },
+        { key: 'skillSuggestions', label: 'skill suggestions', fallback: [], load: () => listMyManagerSkillSuggestions(user.id) },
         {
           key: 'skills',
           label: 'skills available to share',
@@ -155,25 +151,10 @@ export default function Actions() {
       const managerTeamInvitesData = values.managerInvites
       const dataAccessRequestsData = values.dataAccessRequests
       const courseAssignmentsData = values.courseAssignments
-      // Two independent sources (an employer admin, or a manager-team
-      // leader) feed the same "push, don't force" pending-suggestion list --
-      // normalized to one shape here so the rest of this page (adopt/
-      // dismiss handlers, the render below) doesn't need to branch on
-      // field-naming per source, only on `kind` for which underlying
-      // adopt/dismiss function to call. `raw` keeps each suggestion's own
-      // native shape (skill_name vs skillName) for that call.
-      const skillSuggestionsData = [
-        ...values.skillSuggestions.map((s) => ({
-          id: s.id, kind: 'employer', skillName: s.skill_name, suggestedTargetLevel: s.suggested_target_level,
-          targetDate: s.target_date, comments: s.comments, createdAt: s.created_at,
-          sourceLabel: s.employers?.name || 'An employer', raw: s,
-        })),
-        ...values.managerTeamSkillSuggestions.map((s) => ({
-          id: s.id, kind: 'managerTeam', skillName: s.skillName, suggestedTargetLevel: s.suggestedTargetLevel,
-          targetDate: s.targetDate, comments: s.comments, createdAt: s.createdAt,
-          sourceLabel: `${s.suggestedByName} (${s.teamName})`, raw: s,
-        })),
-      ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      // Suggestions from an organisation and from a team leader arrive as one
+      // list (manager_skill_suggestions), already newest first and labelled
+      // with where each came from.
+      const skillSuggestionsData = values.skillSuggestions
       setIncomingRateInvites(incomingRateInvitesData)
       setIncomingRecommendInvites(incomingRecommendInvitesData)
       setValidationRequests(validationRequestsData)
@@ -383,14 +364,9 @@ export default function Actions() {
     setAdoptingSuggestion(null)
   }
 
-  // Calls adoptSkillSuggestion (an employer's suggestion) or
-  // adoptManagerTeamSkillSuggestion (a team leader's) -- both resolve-or-
-  // create the real skills row via the same unchanged findOrCreatePersonalSkill,
-  // then (only if the learner kept a target) insert a skill_targets row
-  // shaped like SetTargetModal's own -- never a silent copy of the
+  // Resolves-or-creates the real skills row and (only if the learner kept a
+  // target) adds it as their own target -- never a silent copy of the
   // suggester's values, since adoptForm was already reviewed/edited above.
-  // `suggestion.raw` is each source's own native shape, which is what these
-  // two functions expect (skill_name vs skillName).
   async function handleAdoptSuggestion(suggestion) {
     if (adoptForm.setTarget && !adoptForm.targetDate) {
       setSuggestionError({ id: suggestion.id, message: 'Target date is required when setting a target level.' })
@@ -399,8 +375,7 @@ export default function Actions() {
     setSuggestionError(null)
     setSuggestionActingId(suggestion.id)
     try {
-      const adopt = suggestion.kind === 'managerTeam' ? adoptManagerTeamSkillSuggestion : adoptSkillSuggestion
-      await adopt(user.id, suggestion.raw, {
+      await adoptManagerSkillSuggestion(user.id, suggestion, {
         targetLevel: adoptForm.setTarget ? Number(adoptForm.targetLevel) : null,
         targetDate: adoptForm.setTarget ? adoptForm.targetDate : null,
         comments: adoptForm.setTarget ? adoptForm.comments : null,
@@ -419,8 +394,7 @@ export default function Actions() {
     setSuggestionError(null)
     setSuggestionActingId(suggestion.id)
     try {
-      const dismiss = suggestion.kind === 'managerTeam' ? dismissManagerTeamSkillSuggestion : dismissSkillSuggestion
-      await dismiss(suggestion.id)
+      await dismissManagerSkillSuggestion(suggestion)
       setSkillSuggestions((prev) => prev.filter((s) => s.id !== suggestion.id))
       if (adoptingSuggestion === suggestion.id) setAdoptingSuggestion(null)
       refreshPendingActionCount()
