@@ -38,3 +38,30 @@ the invitation, target date and team visibility. Each participant links their
 own course record to the activity. Removing the association does not delete the
 course.
 
+
+## Manager actions across contexts (decided 2026-10-01)
+
+Two management relationships exist and stay separate, because they are
+different things: an independent team the learner chose to join, and an
+organisation reporting line (`employer_management_relationships`, dated, with
+indirect reports and an access scope). The organisation mode of teams
+described above was not built; reporting lines took its place.
+
+What a manager does is the same in both, so each action has one table that
+records its context (`context_type` = `team` or `organisation`):
+
+- `manager_skill_suggestions` — skills suggested to a learner;
+- `manager_skill_ratings` — a manager's rating of a learner's skill;
+- `manager_skill_targets` — targets set by someone else. These belong to
+  their context and are separate from the learner's own `skill_targets`.
+
+When a team or organisation link ends, its suggestions, ratings and targets
+stay with the learner as dated history (context links are `ON DELETE SET
+NULL`, with a name snapshot). Consent is unchanged: a team manager still sees
+only skills a member shared with the team; an organisation manager only
+organisation records plus what the learner shared with that employer.
+
+Rollout: phase 1 (`20261001110000`) added the tables, backfilled them and
+mirrors the old `manager_team_*` / `employer_skill_*` tables by trigger.
+Phase 2 moves readers and writers to the new tables; phase 3 removes the old
+tables and the manager-set rows from `skill_targets`.
