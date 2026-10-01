@@ -120,11 +120,14 @@ export default function ProfilePrivacy() {
 
   useEffect(() => {
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the listed values change; the loaders are recreated every render
   }, [])
 
+  const activeEmployerIdsKey = activeEmployerIds.join(',')
   useEffect(() => {
     loadEmployerDataAccess()
-  }, [activeEmployerIds.join(',')])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the listed values change; the loaders are recreated every render
+  }, [activeEmployerIdsKey])
 
   useEffect(() => {
     loadShareLinks()

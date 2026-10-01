@@ -29,6 +29,7 @@ export default function ValidateSkillModal({
       }
     }
     run()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [])
 
   async function handleConfirm(goToDeveloping) {

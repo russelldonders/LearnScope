@@ -26,6 +26,7 @@ export default function RecordActivitySection() {
     loadSkills()
     loadExperiences()
     loadActorName()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the listed values change; the loaders are recreated every render
   }, [])
 
   async function loadStatements() {

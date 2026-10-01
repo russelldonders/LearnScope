@@ -47,6 +47,7 @@ export default function InviteRaterModal({ skill, afterSelfAssessment = false, o
     getOrCreateShareLink(skill.id, user.id)
       .then(setLink)
       .catch((err) => setLinkError(err.message))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [user])
 
   async function sendInviteTo(toEmail) {

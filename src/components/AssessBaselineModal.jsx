@@ -66,6 +66,7 @@ export default function AssessBaselineModal({
       }
     }
     run()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [])
 
   async function handleConfirm() {

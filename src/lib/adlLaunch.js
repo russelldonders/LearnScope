@@ -52,6 +52,7 @@ export function useAdlLaunchUrl(contentItem, userId, courseId = null) {
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [contentItem.id, userId, courseId])
 
   return { launchUrl, error }

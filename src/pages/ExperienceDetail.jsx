@@ -169,6 +169,7 @@ export default function ExperienceDetail() {
 
   useEffect(() => {
     loadItem()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the listed values change; the loaders are recreated every render
   }, [id])
 
   useEffect(() => {
@@ -176,6 +177,7 @@ export default function ExperienceDetail() {
       loadLearning()
       loadRelated()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the listed values change; the loaders are recreated every render
   }, [item?.id])
 
   useEffect(() => {
@@ -1296,6 +1298,7 @@ export function SkillsSubsection({
 
   useEffect(() => {
     loadSkills()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the listed values change; the loaders are recreated every render
   }, [skillLinks])
 
   async function loadSkills() {

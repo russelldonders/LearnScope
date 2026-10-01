@@ -61,6 +61,7 @@ export default function ResumeImportReviewModal({
           }
         })
       })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [])
 
   // Same idea as existingSkillNames, but for courses/experience -- re-importing
@@ -77,6 +78,7 @@ export default function ResumeImportReviewModal({
           if (keys.has(courseKey(c)) && courses.selected.has(i)) courses.toggle(i)
         })
       })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [])
 
   useEffect(() => {
@@ -91,6 +93,7 @@ export default function ResumeImportReviewModal({
           if (keys.has(experienceKey(e)) && experience.selected.has(i)) experience.toggle(i)
         })
       })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [])
 
   // Lets each skill row show whether it'll link to an existing shared-library

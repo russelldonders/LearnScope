@@ -91,6 +91,7 @@ export default function Onboarding() {
   // rendering an empty wizard shell.
   useEffect(() => {
     if (stepKeys && stepKeys.length === 0 && !finishing) finish()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [stepKeys])
 
   if (stepKeys === null || (stepKeys.length === 0 && !error)) {

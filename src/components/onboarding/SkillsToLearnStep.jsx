@@ -30,6 +30,7 @@ export default function SkillsToLearnStep({ onDone }) {
       .select('name')
       .eq('user_id', user.id)
       .then(({ data }) => setOwnedNames(new Set((data ?? []).map((s) => s.name.toLowerCase().trim()))))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [])
 
   useEffect(() => {

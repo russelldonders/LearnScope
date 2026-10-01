@@ -37,6 +37,7 @@ export default function SetTargetModal({ skill, user, targets = [], currentLevel
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [skill.id])
 
   async function handleSubmit(e) {

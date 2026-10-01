@@ -90,6 +90,7 @@ export default function SelfAssessSection({
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [isKnowledge, skill.id])
 
   async function handleSubmit(e) {

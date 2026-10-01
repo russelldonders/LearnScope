@@ -58,6 +58,7 @@ export default function FindSkillModal({ onClose, onCreated, experienceId }) {
       .select('name')
       .eq('user_id', user.id)
       .then(({ data }) => setOwnedNames(new Set((data ?? []).map((s) => s.name.toLowerCase()))))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [])
 
   const availableLibrary = useMemo(

@@ -45,6 +45,7 @@ export default function StravaActivityReviewModal({ activities, onClose, onImpor
       .then(({ data }) => {
         setExistingSkills(new Map((data ?? []).map((s) => [s.name.toLowerCase().trim(), s.id])))
       })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [])
 
   // A Strava activity already imported in a previous sync+review shouldn't
@@ -69,6 +70,7 @@ export default function StravaActivityReviewModal({ activities, onClose, onImpor
           if (ids.has(activity.id) && items.selected.has(i)) items.toggle(i)
         })
       })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [])
 
   useEffect(() => {
@@ -78,6 +80,7 @@ export default function StravaActivityReviewModal({ activities, onClose, onImpor
       .eq('id', user.id)
       .single()
       .then(({ data }) => setActorName(data?.full_name ?? ''))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [])
 
   const totalSelected = items.selected.size

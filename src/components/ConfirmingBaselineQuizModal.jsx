@@ -87,6 +87,7 @@ export default function ConfirmingBaselineQuizModal({
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [roundLevel])
 
   async function next() {

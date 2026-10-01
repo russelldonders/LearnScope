@@ -60,6 +60,7 @@ export default function InterviewModal({
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [])
 
   useEffect(() => {

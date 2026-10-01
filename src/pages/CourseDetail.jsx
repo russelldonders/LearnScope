@@ -15,6 +15,7 @@ export default function CourseDetail() {
 
   useEffect(() => {
     navigate(`/courses/${id}/learn`, { replace: true, state: location.state })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [id])
 
   return <div className="min-h-screen bg-paper" />

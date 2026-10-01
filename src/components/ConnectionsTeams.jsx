@@ -179,6 +179,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       .catch((err) => { if (active) setError(err.message || 'Could not load your teams. Try again.') })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [user.id, retry])
 
   const teamOptions = useMemo(

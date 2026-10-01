@@ -68,6 +68,7 @@ export default function RecommendSkillModal({ skill, onClose }) {
     getOrCreateShareLink(skill.id, user.id, 'recommend')
       .then(setLink)
       .catch((err) => setLinkError(err.message))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [user])
 
   async function sendInviteTo(toEmail) {

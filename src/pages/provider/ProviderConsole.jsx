@@ -113,6 +113,7 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate, rea
 
   useEffect(() => {
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the listed values change; the loaders are recreated every render
   }, [organisation.id])
 
   async function load() {
@@ -500,6 +501,7 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
 
   useEffect(() => {
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the listed values change; the loaders are recreated every render
   }, [organisation.id])
 
   async function load() {

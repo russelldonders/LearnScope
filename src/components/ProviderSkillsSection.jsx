@@ -50,6 +50,7 @@ export default function ProviderSkillsSection({ organisationId, userId }) {
 
   useEffect(() => {
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the listed values change; the loaders are recreated every render
   }, [organisationId])
 
   async function load() {

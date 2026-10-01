@@ -23,6 +23,7 @@ export default function LtiSession() {
       setView(result)
     }catch(err){if(version===requestVersion.current){if(action==='session')setView(null);setError(err.message)}}finally{if(version===requestVersion.current)setBusy(false)}
   }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- bumping the request counter on cleanup is intended
   useEffect(()=>{setView(null);if(!loading) act('session');return()=>{requestVersion.current++}},[loading,user?.id,act])
   return <div className="min-h-screen bg-paper text-ink">
     <header className="border-b border-hairline px-4 py-4 flex justify-between gap-4"><Link to="/dashboard" target="_blank" rel="noopener noreferrer" className="font-medium text-moss">LearnScope</Link><a href="/lti/session" target="_blank" rel="opener" className="text-sm underline">Open in a new window</a></header>

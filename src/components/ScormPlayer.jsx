@@ -60,6 +60,12 @@ export default function ScormPlayer({ contentItem, userId, onProgress }) {
   const scoreRef = useRef(null)
   const initializedRef = useRef(false)
   const lastErrorRef = useRef('0')
+  // window.API is built once per item, so it reads the callback through a
+  // ref -- a commit always reaches the parent's current onProgress.
+  const onProgressRef = useRef(onProgress)
+  useEffect(() => {
+    onProgressRef.current = onProgress
+  })
 
   const launchUrl = scormLaunchUrl(contentItem)
 
@@ -87,7 +93,7 @@ export default function ScormPlayer({ contentItem, userId, onProgress }) {
               score: scoreRef.current,
               cmiData: cmiRef.current,
             })
-            onProgress?.()
+            onProgressRef.current?.()
           },
         })
         setApiReady(true)

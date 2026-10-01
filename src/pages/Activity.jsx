@@ -32,6 +32,7 @@ export default function Activity() {
   useEffect(() => {
     loadStatements()
     loadSkills()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the listed values change; the loaders are recreated every render
   }, [])
 
   async function loadStatements() {
