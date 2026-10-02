@@ -65,3 +65,15 @@ Rollout: phase 1 (`20261001110000`) added the tables, backfilled them and
 mirrors the old `manager_team_*` / `employer_skill_*` tables by trigger.
 Phase 2 moves readers and writers to the new tables; phase 3 removes the old
 tables and the manager-set rows from `skill_targets`.
+
+Phase 2 so far: learner screens read the new tables (2a suggestions, 2b
+targets), and manager and organisation-admin screens do too (2c,
+`20261002090000`), still returning the old rows' ids because the writers
+haven't moved. For phase 2d, when writers move:
+
+- Deletes on the old tables aren't mirrored, so an explicit retraction
+  (an admin deleting a suggestion, a learner deleting a target a manager set
+  in `skill_targets`) currently reappears from the new tables. The new
+  writers need a proper retract/cancel (a status, not a mirrored cascade).
+- Record `team_id` when a team target is written; the phase 1 backfill had
+  to infer it from the setter's most recent team.

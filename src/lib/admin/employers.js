@@ -286,15 +286,17 @@ export async function suggestSkillToEmployerMembers(
 // made, whatever its status (suggested/adopted/dismissed) -- mirrors
 // listEmployerCourseAssignments' shape. Doesn't resolve the learner's
 // email -- callers already have that from listEmployerMembers (keyed by
-// user_id).
+// user_id). Reads the unified manager_skill_suggestions table; ids stay
+// the original row's while the old table is still the one written to.
 export async function listEmployerSkillSuggestions(employerId) {
   const { data, error } = await supabase
-    .from('employer_skill_suggestions')
-    .select('id, skill_library_id, skill_name, learner_id, suggested_target_level, target_date, comments, status, created_at')
+    .from('manager_skill_suggestions')
+    .select('id, legacy_id, skill_library_id, skill_name, learner_id, suggested_target_level, target_date, comments, status, created_at')
+    .eq('context_type', 'organisation')
     .eq('employer_id', employerId)
     .order('created_at', { ascending: false })
   if (error) throw error
-  return data ?? []
+  return (data ?? []).map(({ legacy_id: legacyId, ...row }) => ({ ...row, id: legacyId ?? row.id }))
 }
 
 // Member roster fields (20260911130000): a single table serves both tiers --
