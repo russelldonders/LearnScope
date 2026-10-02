@@ -79,12 +79,14 @@ team rather than in the learner's `skill_targets`. The unified tables have no
 delete path, so a suggestion or target can't be removed behind the
 learner's back.
 
+The profile export (`ProfileExport.jsx`) deliberately leaves out targets
+others set, suggestions and ratings: it covers what the learner has
+actually achieved (decided 2026-10-02).
+
 Open follow-ups, not yet decided:
 
 - A learner can't close or remove a target someone else set (previously a
   team-set target was an editable row of their own). This follows decision
   B, but a "not working towards this" option may be wanted.
-- The profile export (`ProfileExport.jsx`) includes only the learner's own
-  `skill_targets`, not targets others set, suggestions or ratings.
 - Records from an earlier membership of the same team stay visible to that
   team's current leader (decision C keeps them as history).
