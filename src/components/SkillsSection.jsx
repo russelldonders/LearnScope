@@ -131,7 +131,6 @@ export default function SkillsSection() {
         .from('skill_targets')
         .select('skill_id, target_level, created_at')
         .eq('user_id', user.id)
-        .is('set_by_manager', null)
         .order('created_at', { ascending: false }),
       listTargetsSetByOthers(user.id),
       listLatestManagerRatings(user.id),

@@ -53,10 +53,4 @@ describe('skill development targets', () => {
       ['team', 'Study circle', 'SQL'],
     ])
   })
-
-  it('leaves manager-set rows out of the learner’s own targets', async () => {
-    await listMySkillDevelopmentTargets('user-1')
-    const own = calls.find((c) => c.table === 'skill_targets')
-    expect(own.filters).toContainEqual(['is', 'set_by_manager', null])
-  })
 })

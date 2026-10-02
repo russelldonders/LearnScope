@@ -16,7 +16,6 @@ export async function listMySkillDevelopmentTargets(userId) {
       .from('skill_targets')
       .select('id, skill_id, target_level, target_date, comments, created_at, skills!inner(id, name)')
       .eq('user_id', userId)
-      .is('set_by_manager', null)
       .order('created_at', { ascending: false }),
     supabase
       .from('manager_skill_targets')

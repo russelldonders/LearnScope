@@ -304,13 +304,12 @@ export default function SkillDetail({ skillId, embedded = false }) {
           .eq('skill_id', skill.id),
         fetchStatementsForSkill(skill.id),
         listSkillTags(skill.id),
-        // The learner's own targets only: a target a team manager set
-        // belongs to that team and comes from targetSetByOthers instead.
+        // The learner's own targets (skill_targets holds only those): a target
+        // someone else set comes from targetSetByOthers instead.
         supabase
           .from('skill_targets')
           .select('*')
           .eq('skill_id', skill.id)
-          .is('set_by_manager', null)
           .order('created_at', { ascending: false }),
         supabase
           .from('skill_course_links')

@@ -81,7 +81,7 @@ export async function loadValidationEvidence(db, userId, skillId) {
   if (!skill) return null
 
   const [targets, selfAssessments, ratings, primaryStatements, statementLinks] = await Promise.all([
-    run(db.from('skill_targets').select('target_level').eq('skill_id', skillId).eq('user_id', userId).is('set_by_manager', null)
+    run(db.from('skill_targets').select('target_level').eq('skill_id', skillId).eq('user_id', userId)
       .order('created_at', { ascending: false }).limit(1)),
     run(db.from('skill_assessments').select('level, comments, source').eq('skill_id', skillId).eq('user_id', userId)
       .eq('axis', 'practical').or('source.eq.self,source.is.null').order('assessed_at', { ascending: false }).limit(1)),

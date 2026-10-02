@@ -67,9 +67,8 @@ trigger. Phase 2 moved readers and writers to the new tables; phase 3
 (`20261002110000`) dropped the old tables and deleted the manager-set rows
 from `skill_targets`. Phase 3 aborts without changing anything if any old
 row lacks its copy, so the four migrations are safe to apply to Production
-together, in order. `skill_targets.set_by_manager` is kept (always null)
-until the app code that still filters on it has been released, then can be
-dropped.
+together, in order. `20261002120000` then dropped the emptied
+`skill_targets.set_by_manager` column.
 
 Phase 2 is complete. Learner screens read the new tables (2a suggestions,
 2b targets), manager and organisation-admin screens do too (2c,
