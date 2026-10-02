@@ -257,7 +257,7 @@ export async function listMyEmployerDataAccessStatus(userId) {
 // their prior suggestion was dismissed, which gets reset to a fresh one).
 // It never creates or modifies the learner's own skills/skill_targets rows
 // -- that only happens via the learner's own explicit "Add to my skills"
-// action (adoptSkillSuggestion, src/lib/skillSuggestions.js). Returns only
+// action (adoptManagerSkillSuggestion, src/lib/managerSkillActions.js). Returns only
 // the rows that were actually newly inserted/reset -- callers should
 // compare against the requested userIds to report any that were silently
 // skipped (not an active member, or already suggested/adopted) rather than
@@ -286,17 +286,16 @@ export async function suggestSkillToEmployerMembers(
 // made, whatever its status (suggested/adopted/dismissed) -- mirrors
 // listEmployerCourseAssignments' shape. Doesn't resolve the learner's
 // email -- callers already have that from listEmployerMembers (keyed by
-// user_id). Reads the unified manager_skill_suggestions table; ids stay
-// the original row's while the old table is still the one written to.
+// user_id). Reads the unified manager_skill_suggestions table.
 export async function listEmployerSkillSuggestions(employerId) {
   const { data, error } = await supabase
     .from('manager_skill_suggestions')
-    .select('id, legacy_id, skill_library_id, skill_name, learner_id, suggested_target_level, target_date, comments, status, created_at')
+    .select('id, skill_library_id, skill_name, learner_id, suggested_target_level, target_date, comments, status, created_at')
     .eq('context_type', 'organisation')
     .eq('employer_id', employerId)
     .order('created_at', { ascending: false })
   if (error) throw error
-  return (data ?? []).map(({ legacy_id: legacyId, ...row }) => ({ ...row, id: legacyId ?? row.id }))
+  return data ?? []
 }
 
 // Member roster fields (20260911130000): a single table serves both tiers --

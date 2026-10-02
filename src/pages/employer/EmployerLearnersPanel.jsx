@@ -976,9 +976,9 @@ function EmployerTrainingAssignmentsHistory({ employer, members, searchParams, s
 // learner picker; folded into a modal opened from a selection made on that
 // one roster instead, mirroring AssignTrainingModal's shape exactly.
 // Suggesting never creates or modifies anyone's actual skills/skill_targets
-// rows by itself -- suggest_skill_to_employer_members only creates an
-// employer_skill_suggestions row; the learner still has to click "Add to my
-// skills" on their own /actions page (adoptSkillSuggestion) to create the
+// rows by itself -- suggest_skill_to_employer_members only creates a
+// manager_skill_suggestions row; the learner still has to click "Add to my
+// skills" on their own /actions page (adoptManagerSkillSuggestion) to create the
 // real skill (and, if they choose, a target) via the same unmodified
 // findOrCreatePersonalSkill/skill_targets path any other learner-initiated
 // skill-add already uses. Skill choices come from listLibrarySkills

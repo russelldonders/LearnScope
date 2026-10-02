@@ -3,7 +3,7 @@
 // the learner's own personal skill_targets history into the single "visible
 // target" the skills UI should show. An employer target only counts as met
 // once it's been confirmed by an employer admin (employerConfirmedLevel,
-// from employer_skill_confirmations) -- a self-assessment isn't enough,
+// from manager_skill_ratings) -- a self-assessment isn't enough,
 // since the employer is the one who set the bar. Once met, the learner's
 // own higher target (if any) takes back over; employerTargetMet stays true
 // either way so the UI can still note the employer target was reached.

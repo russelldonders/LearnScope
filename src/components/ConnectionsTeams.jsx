@@ -513,7 +513,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     await loadTeamDetail(teamId)
   }
 
-  // Push, don't force: only ever creates a manager_team_skill_suggestions
+  // Push, don't force: only ever creates a manager_skill_suggestions
   // row -- the member still has to explicitly adopt it (or not) from their
   // own Actions page, same as an employer's skill suggestion.
   async function handleSuggestSkill(membershipId, skillLibraryId, skillName, payload) {

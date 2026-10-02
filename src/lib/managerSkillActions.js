@@ -4,13 +4,9 @@ import { getProfiles } from './connections'
 
 // Learner side of what managers do -- suggest a skill, rate a skill, set a
 // target -- across both management contexts: an independent manager team
-// and an organisation reporting line. Reads the unified manager_skill_*
-// tables (20261001110000). While the merge is in progress the original
-// per-context tables are still the ones written to (a trigger mirrors them
-// here), so a learner's response is applied to the original row, found via
-// legacy_source/legacy_id.
-
-const LEGACY_SUGGESTION_TABLES = new Set(['manager_team_skill_suggestions', 'employer_skill_suggestions'])
+// and an organisation reporting line. Reads and responds through the unified
+// manager_skill_* tables (20261001110000, written directly since
+// 20261002100000).
 
 export function suggestionSourceLabel({ contextType, contextName, suggestedByName }) {
   if (contextType === 'team') return suggestedByName ? `${suggestedByName} (${contextName})` : contextName
@@ -22,7 +18,7 @@ export function suggestionSourceLabel({ contextType, contextName, suggestedByNam
 export async function listMyManagerSkillSuggestions(userId) {
   const { data, error } = await supabase
     .from('manager_skill_suggestions')
-    .select('id, context_type, context_name, skill_library_id, skill_name, suggested_target_level, target_date, comments, suggested_by, created_at, legacy_source, legacy_id')
+    .select('id, context_type, context_name, skill_library_id, skill_name, suggested_target_level, target_date, comments, suggested_by, created_at')
     .eq('learner_id', userId)
     .eq('status', 'suggested')
     .order('created_at', { ascending: false })
@@ -41,18 +37,13 @@ export async function listMyManagerSkillSuggestions(userId) {
       comments: row.comments,
       createdAt: row.created_at,
       suggestedByName: profiles[row.suggested_by]?.name ?? null,
-      legacySource: row.legacy_source,
-      legacyId: row.legacy_id,
     }
     return { ...suggestion, sourceLabel: suggestionSourceLabel(suggestion) }
   })
 }
 
 async function setSuggestionStatus(suggestion, status) {
-  if (!LEGACY_SUGGESTION_TABLES.has(suggestion.legacySource) || !suggestion.legacyId) {
-    throw new Error('This suggestion can no longer be updated.')
-  }
-  const { error } = await supabase.from(suggestion.legacySource).update({ status }).eq('id', suggestion.legacyId)
+  const { error } = await supabase.rpc('respond_to_manager_skill_suggestion', { p_suggestion_id: suggestion.id, p_status: status })
   if (error) throw error
 }
 

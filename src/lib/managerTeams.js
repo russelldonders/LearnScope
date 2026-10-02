@@ -369,9 +369,9 @@ export async function removeManagerTeamSkill(id) {
 
 // Leader side of a "push, don't force" skill suggestion (mirrors
 // suggestSkillToEmployerMembers in src/lib/admin/employers.js) -- this only
-// ever creates a manager_team_skill_suggestions row. It never touches the
+// ever creates a manager_skill_suggestions row. It never touches the
 // member's own skills/skill_targets; they still have to explicitly adopt it
-// via /actions (adoptManagerTeamSkillSuggestion below).
+// via /actions (adoptManagerSkillSuggestion, src/lib/managerSkillActions.js).
 export async function suggestManagerTeamSkill(membershipId, skillLibraryId, skillName, { targetLevel = null, targetDate = null, comments = null } = {}) {
   const { data, error } = await supabase.rpc('suggest_manager_team_skill', {
     p_membership_id: membershipId, p_skill_library_id: skillLibraryId, p_skill_name: skillName,

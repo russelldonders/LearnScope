@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const state = vi.hoisted(() => ({ rows: [], updates: [], inserts: [] }))
+const state = vi.hoisted(() => ({ rows: [], rpcs: [], inserts: [] }))
 
 vi.mock('./supabaseClient', () => ({
   supabase: {
@@ -9,11 +9,11 @@ vi.mock('./supabaseClient', () => ({
         select: () => chain,
         eq: () => chain,
         order: async () => ({ data: state.rows, error: null }),
-        update: (values) => ({ eq: async (column, id) => { state.updates.push({ table, values, id }); return { error: null } } }),
         insert: async (row) => { state.inserts.push({ table, row }); return { error: null } },
       }
       return chain
     },
+    rpc: async (name, args) => { state.rpcs.push({ name, args }); return { error: null } },
   },
 }))
 vi.mock('./connections', () => ({
@@ -26,15 +26,13 @@ vi.mock('./skillLibrary', () => ({
 const { listMyManagerSkillSuggestions, adoptManagerSkillSuggestion, dismissManagerSkillSuggestion, pickTargetSetByOthers } = await import('./managerSkillActions')
 
 beforeEach(() => {
-  state.updates = []
+  state.rpcs = []
   state.inserts = []
   state.rows = [
     { id: 'n1', context_type: 'team', context_name: 'Coaching circle', skill_library_id: 'lib', skill_name: 'Facilitation',
-      suggested_target_level: 4, target_date: '2027-01-01', comments: 'Focus', suggested_by: 'leader', created_at: '2026-09-07',
-      legacy_source: 'manager_team_skill_suggestions', legacy_id: 'old-team-1' },
+      suggested_target_level: 4, target_date: '2027-01-01', comments: 'Focus', suggested_by: 'leader', created_at: '2026-09-07' },
     { id: 'n2', context_type: 'organisation', context_name: 'Acme Ltd', skill_library_id: 'lib', skill_name: 'Negotiation',
-      suggested_target_level: null, target_date: null, comments: null, suggested_by: 'admin', created_at: '2026-09-06',
-      legacy_source: 'employer_skill_suggestions', legacy_id: 'old-org-1' },
+      suggested_target_level: null, target_date: null, comments: null, suggested_by: 'admin', created_at: '2026-09-06' },
   ]
 })
 
@@ -47,24 +45,25 @@ describe('manager skill suggestions (learner side)', () => {
     ])
   })
 
-  it('adopting adds the skill and the learner-reviewed target as their own, then marks the original suggestion', async () => {
+  it('adopting adds the skill and the learner-reviewed target as their own, then marks the suggestion adopted', async () => {
     const [team] = await listMyManagerSkillSuggestions('me')
     await adoptManagerSkillSuggestion('me', team, { targetLevel: 3, targetDate: '2027-02-01', comments: ' mine ' })
     expect(state.inserts).toEqual([{ table: 'skill_targets', row: { skill_id: 'skill-1', user_id: 'me', target_level: 3, target_date: '2027-02-01', comments: 'mine' } }])
-    expect(state.updates).toEqual([{ table: 'manager_team_skill_suggestions', values: { status: 'adopted' }, id: 'old-team-1' }])
+    expect(state.rpcs).toEqual([{ name: 'respond_to_manager_skill_suggestion', args: { p_suggestion_id: 'n1', p_status: 'adopted' } }])
   })
 
-  it('dismissing only marks the original suggestion, never touching skills or targets', async () => {
+  it('dismissing only marks the suggestion, never touching skills or targets', async () => {
     const [, org] = await listMyManagerSkillSuggestions('me')
     await dismissManagerSkillSuggestion(org)
     expect(state.inserts).toEqual([])
-    expect(state.updates).toEqual([{ table: 'employer_skill_suggestions', values: { status: 'dismissed' }, id: 'old-org-1' }])
+    expect(state.rpcs).toEqual([{ name: 'respond_to_manager_skill_suggestion', args: { p_suggestion_id: 'n2', p_status: 'dismissed' } }])
   })
 
-  it('refuses a level without a date, and a suggestion with no original row', async () => {
+  it('refuses a level without a date before changing anything', async () => {
     const [team] = await listMyManagerSkillSuggestions('me')
     await expect(adoptManagerSkillSuggestion('me', team, { targetLevel: 3 })).rejects.toThrow('Target date is required')
-    await expect(dismissManagerSkillSuggestion({ ...team, legacySource: null })).rejects.toThrow('can no longer be updated')
+    expect(state.inserts).toEqual([])
+    expect(state.rpcs).toEqual([])
   })
 })
 

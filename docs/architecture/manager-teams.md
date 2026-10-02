@@ -66,14 +66,21 @@ mirrors the old `manager_team_*` / `employer_skill_*` tables by trigger.
 Phase 2 moves readers and writers to the new tables; phase 3 removes the old
 tables and the manager-set rows from `skill_targets`.
 
-Phase 2 so far: learner screens read the new tables (2a suggestions, 2b
-targets), and manager and organisation-admin screens do too (2c,
-`20261002090000`), still returning the old rows' ids because the writers
-haven't moved. For phase 2d, when writers move:
+Phase 2 is complete. Learner screens read the new tables (2a suggestions,
+2b targets), manager and organisation-admin screens do too (2c,
+`20261002090000`), and every writer writes them directly (2d,
+`20261002100000`): the mirror triggers are gone, the old tables are
+read-only, and a team target is stored in `manager_skill_targets` with its
+team rather than in the learner's `skill_targets`. The unified tables have no
+delete path, so a suggestion or target can't be removed behind the
+learner's back.
 
-- Deletes on the old tables aren't mirrored, so an explicit retraction
-  (an admin deleting a suggestion, a learner deleting a target a manager set
-  in `skill_targets`) currently reappears from the new tables. The new
-  writers need a proper retract/cancel (a status, not a mirrored cascade).
-- Record `team_id` when a team target is written; the phase 1 backfill had
-  to infer it from the setter's most recent team.
+Open follow-ups, not yet decided:
+
+- A learner can't close or remove a target someone else set (previously a
+  team-set target was an editable row of their own). This follows decision
+  B, but a "not working towards this" option may be wanted.
+- The profile export (`ProfileExport.jsx`) includes only the learner's own
+  `skill_targets`, not targets others set, suggestions or ratings.
+- Records from an earlier membership of the same team stay visible to that
+  team's current leader (decision C keeps them as history).
