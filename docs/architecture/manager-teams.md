@@ -61,16 +61,20 @@ NULL`, with a name snapshot). Consent is unchanged: a team manager still sees
 only skills a member shared with the team; an organisation manager only
 organisation records plus what the learner shared with that employer.
 
-Rollout: phase 1 (`20261001110000`) added the tables, backfilled them and
-mirrors the old `manager_team_*` / `employer_skill_*` tables by trigger.
-Phase 2 moves readers and writers to the new tables; phase 3 removes the old
-tables and the manager-set rows from `skill_targets`.
+Rollout (complete): phase 1 (`20261001110000`) added the tables, backfilled
+them and mirrored the old `manager_team_*` / `employer_skill_*` tables by
+trigger. Phase 2 moved readers and writers to the new tables; phase 3
+(`20261002110000`) dropped the old tables and deleted the manager-set rows
+from `skill_targets`. Phase 3 aborts without changing anything if any old
+row lacks its copy, so the four migrations are safe to apply to Production
+together, in order. `skill_targets.set_by_manager` is kept (always null)
+until the app code that still filters on it has been released, then can be
+dropped.
 
 Phase 2 is complete. Learner screens read the new tables (2a suggestions,
 2b targets), manager and organisation-admin screens do too (2c,
 `20261002090000`), and every writer writes them directly (2d,
-`20261002100000`): the mirror triggers are gone, the old tables are
-read-only, and a team target is stored in `manager_skill_targets` with its
+`20261002100000`): the mirror triggers are gone, and a team target is stored in `manager_skill_targets` with its
 team rather than in the learner's `skill_targets`. The unified tables have no
 delete path, so a suggestion or target can't be removed behind the
 learner's back.
