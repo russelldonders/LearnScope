@@ -3,9 +3,9 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import EmployerHome from './EmployerHome'
 
-vi.mock('../../components/AppHeader', () => ({ default: (props) => <div data-testid="app-header" data-hidden={props.hideNavLinks} data-exit={props.contextExitHref} /> }))
-vi.mock('../../lib/orgBranding', () => ({ getOrganisationBranding: () => Promise.resolve({ name: 'Acme', logoUrl: '/acme.png' }), orgBrandStyle: () => ({}) }))
-vi.mock('../../lib/employerRoleProfiles', () => ({ getEmployerLoginContext: () => Promise.resolve({ id: 'employer-1', name: 'Acme Ltd' }) }))
+vi.mock('../../components/AppHeader', () => ({ default: (props) => <div data-testid="app-header" data-hidden={props.hideNavLinks} data-exit={props.contextExitHref} data-logo={props.brandLogoUrl} data-name={props.brandName} /> }))
+vi.mock('../../lib/orgBranding', () => ({ orgBrandStyle: () => ({}) }))
+vi.mock('../../lib/employerRoleProfiles', () => ({ getEmployerLoginContext: () => Promise.resolve({ id: 'employer-1', name: 'Acme Ltd', branding: { name: 'Acme Ltd', logoUrl: '/acme.png' } }) }))
 vi.mock('./EmployerAssignedTrainingPanel', () => ({ default: (props) => <div data-testid="learning-panel" data-variant={props.variant || 'full'}>{props.employerName}</div> }))
 vi.mock('./EmployerCataloguePanel', () => ({ default: (props) => <div data-testid="catalogue-panel">{props.employerName}</div> }))
 vi.mock('../roles/LearnerRoleAlignmentContainer', () => ({ default: (props) => <div data-testid="role-panel" data-variant={props.variant || 'full'} /> }))
@@ -44,5 +44,15 @@ describe('EmployerHome learner LMS navigation', () => {
     expect(await screen.findByRole('heading', { name: 'Catalogue' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Catalogue' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByTestId('catalogue-panel')).toHaveTextContent('Acme Ltd')
+  })
+})
+
+describe('EmployerHome branding', () => {
+  it('uses the members-only branding from the employer context', async () => {
+    render(<MemoryRouter initialEntries={['/organisation/learning?org=acme']}><EmployerHome /></MemoryRouter>)
+
+    await screen.findByRole('heading', { name: 'Welcome back' })
+    expect(screen.getByTestId('app-header')).toHaveAttribute('data-logo', '/acme.png')
+    expect(screen.getByTestId('app-header')).toHaveAttribute('data-name', 'Acme Ltd')
   })
 })

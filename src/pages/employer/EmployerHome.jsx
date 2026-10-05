@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import AppHeader from '../../components/AppHeader'
-import { getOrganisationBranding, orgBrandStyle } from '../../lib/orgBranding'
+import { orgBrandStyle } from '../../lib/orgBranding'
 import { getEmployerLoginContext } from '../../lib/employerRoleProfiles'
 import LearnerRoleAlignmentContainer from '../roles/LearnerRoleAlignmentContainer'
 import EmployerAssignedTrainingPanel from './EmployerAssignedTrainingPanel'
@@ -21,13 +21,15 @@ export default function EmployerHome() {
   const [searchParams] = useSearchParams()
   const orgSlug = searchParams.get('org')
   const section = ['learning', 'catalogue', 'role'].includes(searchParams.get('section')) ? searchParams.get('section') : 'home'
-  const [branding, setBranding] = useState(null)
   const [employer, setEmployer] = useState(undefined)
   const [error, setError] = useState(null)
+  // Members-only branding from get_employer_login_context (20261005090000)
+  // rather than the public provider profile, so it still shows when the
+  // organisation keeps its public page turned off.
+  const branding = employer?.branding ?? null
 
   useEffect(() => {
     if (!orgSlug) return
-    getOrganisationBranding(orgSlug).then(setBranding).catch(() => {})
     getEmployerLoginContext(orgSlug)
       .then((result) => {
         if (!result) throw new Error('This employer page isn\'t available.')

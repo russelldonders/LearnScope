@@ -28,7 +28,6 @@ import {
   listMyManagerTeamInvites,
 } from '../lib/managerTeams'
 import { loadActionSources } from '../lib/actionLoading'
-import { getOrganisationBranding } from '../lib/orgBranding'
 import { getEmployerLoginContext } from '../lib/employerRoleProfiles'
 
 // Everything actually waiting on this learner to act -- the same sources
@@ -92,13 +91,10 @@ export default function Actions() {
       return () => { cancelled = true }
     }
 
-    Promise.all([
-      getEmployerLoginContext(orgSlug),
-      getOrganisationBranding(orgSlug).catch(() => null),
-    ]).then(([employer, branding]) => {
+    getEmployerLoginContext(orgSlug).then((employer) => {
       if (cancelled) return
       const isMember = employer && employerMemberships.some((membership) => membership.employer_id === employer.id)
-      setWorkspaceContext(isMember ? { employer, branding } : null)
+      setWorkspaceContext(isMember ? { employer, branding: employer.branding ?? null } : null)
     }).catch(() => {
       if (!cancelled) setWorkspaceContext(null)
     })
