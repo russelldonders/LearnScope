@@ -24,8 +24,14 @@ import {
 // fires, and a caller that wires real data is expected to override every
 // prop, including `alignmentByAssignmentId` (already-calculated aligned/
 // gaps data; this component does not compute alignment itself).
+//
+// displayedCurrentRoles narrows only the "Your current role" card (an
+// employer workspace shows just the roles shared with that employer, and
+// hides the card when there are none); the accept picker still offers every
+// current role, since choosing one there is how the learner shares it.
 export default function LearnerRoleAlignmentSection({
   currentRoles = FIXTURE_CURRENT_ROLES,
+  displayedCurrentRoles,
   pendingAssignments = FIXTURE_PENDING_ASSIGNMENTS,
   linkedAssignments = FIXTURE_LINKED_ASSIGNMENTS,
   alignmentByAssignmentId = FIXTURE_ALIGNMENT_BY_ASSIGNMENT_ID,
@@ -38,7 +44,9 @@ export default function LearnerRoleAlignmentSection({
 }) {
   return (
     <div className="space-y-6">
-      <CurrentRoleCard currentRoles={currentRoles} />
+      {displayedCurrentRoles === undefined
+        ? <CurrentRoleCard currentRoles={currentRoles} />
+        : displayedCurrentRoles.length > 0 && <CurrentRoleCard currentRoles={displayedCurrentRoles} />}
 
       {/* One shared banner for whichever action last failed -- `error` has
           no assignmentId of its own, so passing it into every linked

@@ -80,7 +80,7 @@ function RoleDevelopmentSummary({ pendingAssignments, linkedAssignments, alignme
 
 export default function LearnerRoleAlignmentContainer({ employerId, variant = 'full', roleHref = '#' } = {}) {
   const {
-    currentRoles, pendingAssignments, linkedAssignments, alignmentByAssignmentId,
+    currentRoles, sharedCurrentRoles, pendingAssignments, linkedAssignments, alignmentByAssignmentId,
     loading, error, acceptAssignment, declineAssignment, disconnectAssignment,
   } = useMyRoleAssignments(employerId)
 
@@ -108,6 +108,7 @@ export default function LearnerRoleAlignmentContainer({ employerId, variant = 'f
       </div>
       <LearnerRoleAlignmentSection
         currentRoles={currentRoles}
+        displayedCurrentRoles={employerId ? sharedCurrentRoles : undefined}
         pendingAssignments={pendingAssignments}
         linkedAssignments={linkedAssignments}
         alignmentByAssignmentId={alignmentByAssignmentId}

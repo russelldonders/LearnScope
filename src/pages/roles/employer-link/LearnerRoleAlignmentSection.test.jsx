@@ -80,4 +80,19 @@ describe('LearnerRoleAlignmentSection (controlled)', () => {
     renderSection({ error: "Couldn't respond -- try again." })
     expect(screen.getAllByRole('alert')).toHaveLength(1)
   })
+
+  it('hides the current role card when nothing is shared with this employer, but still offers every role to link', () => {
+    renderSection({ displayedCurrentRoles: [] })
+    expect(screen.queryByText('Your current role')).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /Senior Support Engineer/ })).toBeInTheDocument()
+  })
+
+  it('shows only the shared current roles on the card', () => {
+    renderSection({
+      currentRoles: [...FIXTURE_CURRENT_ROLES, { id: 'experience-2', title: 'Private Side Role', organization: 'Elsewhere', since: '2023-01-01' }],
+      displayedCurrentRoles: FIXTURE_CURRENT_ROLES,
+    })
+    expect(screen.getAllByRole('heading', { name: 'Senior Support Engineer' }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('heading', { name: 'Private Side Role' })).not.toBeInTheDocument()
+  })
 })

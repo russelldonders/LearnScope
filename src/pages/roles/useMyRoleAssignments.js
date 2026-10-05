@@ -38,6 +38,7 @@ export function useMyRoleAssignments(employerId) {
   const { user } = useAuth()
   const { refreshNavVisibility } = useNavVisibility()
   const [currentRoles, setCurrentRoles] = useState([])
+  const [sharedCurrentRoles, setSharedCurrentRoles] = useState([])
   const [assignments, setAssignments] = useState([])
   const [personalSkills, setPersonalSkills] = useState([])
   const [personalCourses, setPersonalCourses] = useState([])
@@ -49,14 +50,19 @@ export function useMyRoleAssignments(employerId) {
     setLoading(true)
     setError(null)
     try {
-      const [roles, allRoleAssignments, skillsResult, coursesResult] = await Promise.all([
+      const [roles, allRoleAssignments, skillsResult, coursesResult, accessResult] = await Promise.all([
         listCurrentRoleExperiences(user.id),
         listMyEmployerRoleAssignments(user.id),
         supabase.from('skills').select('id, name, level, library_skill_id').eq('user_id', user.id),
         supabase.from('courses').select('id, catalogue_course_id, completed_date').eq('user_id', user.id),
+        employerId
+          ? supabase.from('employer_data_access_requests').select('approved_data')
+            .eq('employer_id', employerId).eq('learner_id', user.id).eq('status', 'approved').maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
       ])
       if (skillsResult.error) throw skillsResult.error
       if (coursesResult.error) throw coursesResult.error
+      if (accessResult.error) throw accessResult.error
       const roleAssignments = employerId
         ? allRoleAssignments.filter((assignment) => assignment.employer?.id === employerId)
         : allRoleAssignments
@@ -66,7 +72,20 @@ export function useMyRoleAssignments(employerId) {
           .map((requirement) => requirement.skillId)
       ))]
       const nextCompositeProgress = await getLearnerCompositeProgressForSkills(compositeSkillIds, user.id)
-      setCurrentRoles(roles.map((role) => ({ ...role, since: role.start_date })))
+      const mappedRoles = roles.map((role) => ({ ...role, since: role.start_date }))
+      // Inside one employer's workspace, only show current roles this learner
+      // has actually shared with that employer: every one if they approved
+      // its experience access, otherwise just those linked to one of its
+      // role profiles. The unscoped (Experience page) view shows them all.
+      const sharesExperience = accessResult.data?.approved_data?.includes('experience')
+      const linkedExperienceIds = new Set(roleAssignments
+        .filter((assignment) => assignment.status === 'linked')
+        .map((assignment) => assignment.currentRole?.id)
+        .filter(Boolean))
+      setCurrentRoles(mappedRoles)
+      setSharedCurrentRoles(!employerId || sharesExperience
+        ? mappedRoles
+        : mappedRoles.filter((role) => linkedExperienceIds.has(role.id)))
       setAssignments(roleAssignments)
       setPersonalSkills((skillsResult.data ?? []).map((skill) => ({ ...skill, librarySkillId: skill.library_skill_id })))
       setPersonalCourses((coursesResult.data ?? []).map((course) => ({ ...course, catalogueCourseId: course.catalogue_course_id, completedDate: course.completed_date })))
@@ -119,6 +138,7 @@ export function useMyRoleAssignments(employerId) {
 
   return {
     currentRoles,
+    sharedCurrentRoles,
     pendingAssignments,
     linkedAssignments,
     alignmentByAssignmentId,
