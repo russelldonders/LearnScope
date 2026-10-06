@@ -92,8 +92,6 @@ or just delete it.
      CourseCatalogue.jsx, ProviderProfile.jsx (public route), Onboarding.jsx
      + SkillsToLearnStep.jsx, Help.jsx, ProfileExport.jsx/ProfileImport.jsx,
      Welcome.jsx, Landing.jsx, ResetPassword.jsx, LtiSession.jsx.
-   - Public token-link pages: Rate.jsx, Recommend.jsx, ValidateRequest.jsx,
-     SharedProfile.jsx — no login required, worth polishing.
    - Dashboard/Connections inline sections: ConnectionsTeams.jsx (698
      lines, largest single component found), RecordActivitySection,
      ConnectionsActivityFeed, ConnectionTeamInviteControl, ActivityRow,
@@ -110,6 +108,12 @@ or just delete it.
    - MyTeam.jsx sits directly under src/pages/ but is manager/team-lead
      tooling (behind ManagerRoute) — treat as out of scope like the rest
      of the manager console, despite the file location.
+   The public token-link pages (Rate.jsx, Recommend.jsx, SharedProfile.jsx)
+   and ValidateRequest.jsx are now translated, under new `invites`,
+   `sharedProfile` and `validateRequest` namespaces; a key-coverage test
+   (src/lib/i18n/tokenLinkPages.test.js) fails if any of their keys is
+   missing from a language. Level labels, experience-type labels and
+   duplicateSkillMessage() stay English there, as everywhere else.
    Separately, deeply dynamic/AI-generated content (level guides,
    diagnostic questions, quiz/interview content, and the auto-generated
    audit strings some diagnostic flows save into skill_assessments.comments)
