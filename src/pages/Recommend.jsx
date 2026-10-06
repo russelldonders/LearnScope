@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePendingActions } from '../context/PendingActionsContext'
+import { useLanguage } from '../context/LanguageContext'
 import TrackingReasonPicker from '../components/TrackingReasonPicker'
 import {
   getInvitePreview,
@@ -21,6 +22,7 @@ export default function Recommend() {
   const { user, loading: authLoading } = useAuth()
   const { refreshPendingActionCount } = usePendingActions()
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const [preview, setPreview] = useState(undefined)
   const [trackingReason, setTrackingReason] = useState(null)
   const [submitting, setSubmitting] = useState(false)
@@ -42,7 +44,7 @@ export default function Recommend() {
   async function handleSubmit(e) {
     e.preventDefault()
     if (!trackingReason) {
-      setError('Please choose why you\'d be tracking this.')
+      setError(t('invites.recommend.chooseReason'))
       return
     }
     setError(null)
@@ -89,31 +91,31 @@ export default function Recommend() {
         </Link>
 
         {preview === undefined || authLoading ? (
-          <p className="text-sm text-secondary mt-4">Loading…</p>
+          <p className="text-sm text-secondary mt-4">{t('common.loading')}</p>
         ) : preview === null ? (
-          <p className="text-sm text-ink mt-4">This invite link doesn't exist.</p>
+          <p className="text-sm text-ink mt-4">{t('invites.notFound')}</p>
         ) : preview.invite_type !== 'recommend' ? (
-          <p className="text-sm text-ink mt-4">This link isn't a skill recommendation.</p>
+          <p className="text-sm text-ink mt-4">{t('invites.recommend.wrongType')}</p>
         ) : newSkillId ? (
           <>
             <p className="text-ink mt-4">
-              "{preview.skill_name}" has been added to your profile. Time to start your own journey with it.
+              {t('invites.recommend.added', { skill: preview.skill_name })}
             </p>
             <Link
               to={`/skills/${newSkillId}`}
               className="inline-block mt-6 rounded-md bg-moss text-paper py-2 px-6 font-medium hover:opacity-90"
             >
-              Go to your skill
+              {t('invites.recommend.goToSkill')}
             </Link>
           </>
         ) : declined ? (
-          <p className="text-ink mt-4">You've dismissed this recommendation.</p>
+          <p className="text-ink mt-4">{t('invites.recommend.dismissed')}</p>
         ) : preview.status !== 'pending' ? (
-          <p className="text-sm text-ink mt-4">This invite has already been used.</p>
+          <p className="text-sm text-ink mt-4">{t('invites.alreadyUsed')}</p>
         ) : (
           <>
             <p className="text-ink mt-4 mb-6">
-              {preview.inviter_name || 'Someone'} recommends you start tracking:{' '}
+              {t('invites.recommend.requestPrefix', { name: preview.inviter_name || t('invites.someone') })}{' '}
               <strong>{preview.skill_name}</strong>
               {preview.skill_category ? ` (${preview.skill_category})` : ''}.
             </p>
@@ -125,14 +127,14 @@ export default function Recommend() {
                   onClick={() => goToAuth('/login')}
                   className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90"
                 >
-                  Log in to add it
+                  {t('invites.recommend.logIn')}
                 </button>
                 <button
                   type="button"
                   onClick={() => goToAuth('/signup')}
                   className="w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper"
                 >
-                  Sign up to add it
+                  {t('invites.recommend.signUp')}
                 </button>
               </div>
             ) : (
@@ -146,7 +148,7 @@ export default function Recommend() {
                   disabled={submitting || declining}
                   className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
                 >
-                  {submitting ? 'Adding…' : 'Add to my profile'}
+                  {submitting ? t('invites.recommend.adding') : t('invites.recommend.add')}
                 </button>
                 <button
                   type="button"
@@ -154,7 +156,7 @@ export default function Recommend() {
                   disabled={submitting || declining}
                   className="w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper disabled:opacity-60"
                 >
-                  {declining ? 'Dismissing…' : 'Not for me'}
+                  {declining ? t('invites.dismissing') : t('invites.notForMe')}
                 </button>
                 <button
                   type="button"
@@ -162,7 +164,7 @@ export default function Recommend() {
                   disabled={submitting || declining}
                   className="w-full text-secondary text-sm py-1 hover:text-ink disabled:opacity-60"
                 >
-                  Cancel
+                  {t('invites.recommend.cancel')}
                 </button>
               </form>
             )}

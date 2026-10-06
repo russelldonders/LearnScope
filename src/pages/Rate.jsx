@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePendingActions } from '../context/PendingActionsContext'
+import { useLanguage } from '../context/LanguageContext'
 import GrowthRing from '../components/GrowthRing'
 import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import {
@@ -17,6 +18,7 @@ export default function Rate() {
   const { user, loading: authLoading } = useAuth()
   const { refreshPendingActionCount } = usePendingActions()
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const [preview, setPreview] = useState(undefined)
   const [level, setLevel] = useState(3)
   const [comments, setComments] = useState('')
@@ -78,31 +80,31 @@ export default function Rate() {
         </Link>
 
         {preview === undefined || authLoading ? (
-          <p className="text-sm text-secondary mt-4">Loading…</p>
+          <p className="text-sm text-secondary mt-4">{t('common.loading')}</p>
         ) : preview === null ? (
-          <p className="text-sm text-ink mt-4">This invite link doesn't exist.</p>
+          <p className="text-sm text-ink mt-4">{t('invites.notFound')}</p>
         ) : done ? (
           <>
             <p className="text-ink mt-4">
-              Thanks! Your rating on "{preview.skill_name}" has been recorded.
+              {t('invites.rate.recorded', { skill: preview.skill_name })}
             </p>
             <Link
               to="/dashboard"
               className="inline-block mt-6 rounded-md bg-moss text-paper py-2 px-6 font-medium hover:opacity-90"
             >
-              Go to your dashboard
+              {t('invites.rate.goToDashboard')}
             </Link>
           </>
         ) : preview.invite_type !== 'rate' ? (
-          <p className="text-sm text-ink mt-4">This link isn't a rating invite.</p>
+          <p className="text-sm text-ink mt-4">{t('invites.rate.wrongType')}</p>
         ) : declined ? (
-          <p className="text-ink mt-4">You've dismissed this invite.</p>
+          <p className="text-ink mt-4">{t('invites.rate.dismissed')}</p>
         ) : preview.status !== 'pending' ? (
-          <p className="text-sm text-ink mt-4">This invite has already been used.</p>
+          <p className="text-sm text-ink mt-4">{t('invites.alreadyUsed')}</p>
         ) : (
           <>
             <p className="text-ink mt-4 mb-6">
-              {preview.inviter_name || 'Someone'} wants your rating on their skill:{' '}
+              {t('invites.rate.requestPrefix', { name: preview.inviter_name || t('invites.someone') })}{' '}
               <strong>{preview.skill_name}</strong>
               {preview.skill_category ? ` (${preview.skill_category})` : ''}.
             </p>
@@ -114,20 +116,20 @@ export default function Rate() {
                   onClick={() => goToAuth('/login')}
                   className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90"
                 >
-                  Log in to rate
+                  {t('invites.rate.logIn')}
                 </button>
                 <button
                   type="button"
                   onClick={() => goToAuth('/signup')}
                   className="w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper"
                 >
-                  Sign up to rate
+                  {t('invites.rate.signUp')}
                 </button>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <span className="block text-sm text-secondary mb-2">Your rating</span>
+                  <span className="block text-sm text-secondary mb-2">{t('invites.rate.yourRating')}</span>
                   <div className="flex items-center justify-between">
                     {LEVELS.map((l) => (
                       <button
@@ -149,7 +151,7 @@ export default function Rate() {
                   rows={3}
                   value={comments}
                   onChange={(e) => setComments(e.target.value)}
-                  placeholder="Why this level? (optional)"
+                  placeholder={t('invites.rate.commentsPlaceholder')}
                   className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
                 />
 
@@ -160,7 +162,7 @@ export default function Rate() {
                   disabled={submitting || declining}
                   className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
                 >
-                  {submitting ? 'Submitting…' : 'Submit rating'}
+                  {submitting ? t('invites.rate.submitting') : t('invites.rate.submit')}
                 </button>
                 <button
                   type="button"
@@ -168,7 +170,7 @@ export default function Rate() {
                   disabled={submitting || declining}
                   className="w-full rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper disabled:opacity-60"
                 >
-                  {declining ? 'Dismissing…' : 'Not for me'}
+                  {declining ? t('invites.dismissing') : t('invites.notForMe')}
                 </button>
               </form>
             )}

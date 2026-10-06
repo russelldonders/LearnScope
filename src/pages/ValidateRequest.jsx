@@ -9,22 +9,21 @@ import { LEVEL_LABELS } from '../lib/levels'
 import { activityName, verbLabel } from '../lib/xapiStatement'
 import { fetchStatementsForSkill } from '../lib/activitySkillLinks'
 import AppHeader from '../components/AppHeader'
+import { useLanguage } from '../context/LanguageContext'
 import GrowthRing from '../components/GrowthRing'
 import { formatFullDate } from '../lib/dates'
 
-const SOURCE_LABELS = {
-  self: 'Self-assessed',
-  course: 'Earned by completing a course',
-  ai_baseline: 'AI-assessed baseline',
-  ai_evaluation: 'AI assessment',
-}
+// Assessment sources with their own label under validateRequest.sources;
+// anything else falls back to the self-assessed label, as before.
+const SOURCES = ['self', 'course', 'ai_baseline', 'ai_evaluation']
 
 export default function ValidateRequest() {
   const { requestId } = useParams()
   const { user } = useAuth()
   const { refreshPendingActionCount } = usePendingActions()
+  const { t } = useLanguage()
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [notFound, setNotFound] = useState(false)
   const [request, setRequest] = useState(null)
   const [requesterName, setRequesterName] = useState('')
   const [skill, setSkill] = useState(null)
@@ -44,14 +43,14 @@ export default function ValidateRequest() {
 
   async function load() {
     setLoading(true)
-    setError(null)
+    setNotFound(false)
     const { data: req, error: reqError } = await supabase
       .from('skill_validation_requests')
       .select('*')
       .eq('id', requestId)
       .single()
     if (reqError || !req) {
-      setError("This request couldn't be found, or you don't have access to it.")
+      setNotFound(true)
       setLoading(false)
       return
     }
@@ -62,7 +61,7 @@ export default function ValidateRequest() {
       .select('full_name')
       .eq('id', req.requester_id)
       .single()
-    setRequesterName(profile?.full_name || 'This person')
+    setRequesterName(profile?.full_name || '')
 
     const isValidator = req.validator_id === user.id
     if (isValidator) {
@@ -111,25 +110,26 @@ export default function ValidateRequest() {
 
   const isValidator = request && request.validator_id === user.id
   const isRequester = request && request.requester_id === user.id
+  const displayRequesterName = requesterName || t('validateRequest.defaultRequesterName')
 
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader />
       <main id="main-content" tabIndex={-1} className="max-w-2xl mx-auto px-4 py-8">
         <Link to="/actions" className="text-sm text-secondary hover:text-ink mb-6 inline-block">
-          ← Back to actions
+          {t('validateRequest.backToActions')}
         </Link>
 
-        {loading && <p className="text-secondary">Loading…</p>}
-        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+        {loading && <p className="text-secondary">{t('common.loading')}</p>}
+        {notFound && <p role="alert" className="text-sm text-red-700">{t('validateRequest.notFound')}</p>}
 
         {request && !loading && (
           <div className="bg-card border border-hairline rounded-lg p-6">
-            <h1 className="font-display text-2xl text-ink mb-1">Validation request</h1>
+            <h1 className="font-display text-2xl text-ink mb-1">{t('validateRequest.title')}</h1>
             <p className="text-sm text-secondary mb-4">
-              {requesterName} asked you to confirm they've reached{' '}
+              {t('validateRequest.askedPrefix', { name: displayRequesterName })}{' '}
               <strong className="text-ink">{LEVEL_LABELS[request.target_level]}</strong>
-              {skill ? ` on "${skill.name}"` : ''}.
+              {skill ? t('validateRequest.onSkill', { skill: skill.name }) : ''}.
             </p>
 
             <StatusBadge status={request.status} />
@@ -137,7 +137,9 @@ export default function ValidateRequest() {
             {request.status !== 'pending' && (
               <div className="mt-4 space-y-1">
                 <p className="text-sm text-ink">
-                  Decided {request.decided_at ? new Date(request.decided_at).toLocaleDateString() : ''}
+                  {t('validateRequest.decided', {
+                    date: request.decided_at ? new Date(request.decided_at).toLocaleDateString() : '',
+                  })}
                 </p>
                 {request.decision_comments && (
                   <p className="text-sm text-secondary">"{request.decision_comments}"</p>
@@ -146,12 +148,14 @@ export default function ValidateRequest() {
             )}
 
             {!isValidator && !isRequester && (
-              <p className="text-sm text-secondary mt-4">You don't have access to review this request.</p>
+              <p className="text-sm text-secondary mt-4">{t('validateRequest.noAccess')}</p>
             )}
 
             {isRequester && !isValidator && (
               <p className="text-sm text-secondary mt-4">
-                You'll see the outcome on the skill's timeline once {requesterName === 'This person' ? 'they' : requesterName} responds.
+                {requesterName
+                  ? t('validateRequest.outcomeNoticeNamed', { name: requesterName })
+                  : t('validateRequest.outcomeNotice')}
               </p>
             )}
 
@@ -161,41 +165,48 @@ export default function ValidateRequest() {
                   <GrowthRing level={skill.level} size={40} />
                   <div>
                     <p className="text-sm text-ink font-medium">{skill.name}</p>
-                    <p className="text-xs text-secondary">Currently self-tracked at {LEVEL_LABELS[skill.level] || 'no level'}</p>
+                    <p className="text-xs text-secondary">
+                      {t('validateRequest.currentlyTracked', {
+                        level: LEVEL_LABELS[skill.level] || t('validateRequest.noLevel'),
+                      })}
+                    </p>
                   </div>
                 </div>
 
-                <EvidenceSection title="Assessments" empty="No assessments recorded yet.">
+                <EvidenceSection title={t('validateRequest.assessments')} empty={t('validateRequest.noAssessments')}>
                   {assessments.map((a) => (
                     <AssessmentRow key={a.id} assessment={a} />
                   ))}
                 </EvidenceSection>
 
-                <EvidenceSection title="Peer ratings" empty="No peer ratings yet.">
+                <EvidenceSection title={t('validateRequest.peerRatings')} empty={t('validateRequest.noPeerRatings')}>
                   {peerRatings.map((r) => (
                     <div key={r.id} className="text-sm text-ink">
-                      {raterNames[r.rater_id] || 'A connection'} rated {LEVEL_LABELS[r.level]} on{' '}
-                      {new Date(r.rated_at).toLocaleDateString()}
+                      {t('validateRequest.peerRatingLine', {
+                        name: raterNames[r.rater_id] || t('validateRequest.aConnection'),
+                        level: LEVEL_LABELS[r.level],
+                        date: new Date(r.rated_at).toLocaleDateString(),
+                      })}
                       {r.comments && <span className="text-secondary"> — "{r.comments}"</span>}
                     </div>
                   ))}
                 </EvidenceSection>
 
-                <EvidenceSection title="Linked training" empty="No linked courses.">
+                <EvidenceSection title={t('validateRequest.linkedTraining')} empty={t('validateRequest.noLinkedTraining')}>
                   {courseLinks.map((l) => (
                     <div key={l.id} className="text-sm text-ink">
                       {l.courses?.name}
                       {l.courses?.completed_date && (
                         <span className="text-secondary">
                           {' '}
-                          — completed {formatFullDate(l.courses.completed_date)}
+                          — {t('validateRequest.completedOn', { date: formatFullDate(l.courses.completed_date) })}
                         </span>
                       )}
                     </div>
                   ))}
                 </EvidenceSection>
 
-                <EvidenceSection title="Recorded activity" empty="No recorded activity.">
+                <EvidenceSection title={t('validateRequest.recordedActivity')} empty={t('validateRequest.noRecordedActivity')}>
                   {statements.map((s) => (
                     <div key={s.id} className="text-sm text-ink">
                       {verbLabel(s.statement)} {activityName(s.statement)}
@@ -207,7 +218,7 @@ export default function ValidateRequest() {
                 {request.status === 'pending' && (
                   <div className="pt-2 border-t border-hairline">
                     <label className="block text-sm text-secondary mb-1" htmlFor="decisionComments">
-                      Feedback (optional)
+                      {t('validateRequest.feedbackLabel')}
                     </label>
                     <textarea
                       id="decisionComments"
@@ -215,7 +226,7 @@ export default function ValidateRequest() {
                       onChange={(e) => setComments(e.target.value)}
                       rows={3}
                       className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss mb-3"
-                      placeholder="Any comments for them, whichever way you decide"
+                      placeholder={t('validateRequest.feedbackPlaceholder')}
                     />
                     {decideError && <p className="text-sm text-red-700 mb-3">{decideError}</p>}
                     <div className="flex items-center gap-2">
@@ -225,7 +236,9 @@ export default function ValidateRequest() {
                         disabled={deciding}
                         className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
                       >
-                        {deciding ? 'Saving…' : `Confirm ${LEVEL_LABELS[request.target_level]}`}
+                        {deciding
+                          ? t('validateRequest.saving')
+                          : t('validateRequest.confirmLevel', { level: LEVEL_LABELS[request.target_level] })}
                       </button>
                       <button
                         type="button"
@@ -233,7 +246,7 @@ export default function ValidateRequest() {
                         disabled={deciding}
                         className="flex-1 rounded-md border border-hairline text-ink py-2 font-medium hover:bg-paper disabled:opacity-60"
                       >
-                        Decline
+                        {t('validateRequest.decline')}
                       </button>
                     </div>
                   </div>
@@ -248,15 +261,15 @@ export default function ValidateRequest() {
 }
 
 function StatusBadge({ status }) {
+  const { t } = useLanguage()
   const styles = {
     pending: 'text-gold border-gold bg-gold/10',
     confirmed: 'text-moss border-moss bg-moss/10',
     declined: 'text-red-700 border-red-700 bg-red-50',
   }
-  const labels = { pending: 'Awaiting your decision', confirmed: 'Confirmed', declined: 'Declined' }
   return (
     <span className={`font-mono text-xs uppercase tracking-wide rounded-full px-2.5 py-1 inline-block border ${styles[status]}`}>
-      {labels[status]}
+      {styles[status] ? t(`validateRequest.status.${status}`) : null}
     </span>
   )
 }
@@ -272,6 +285,8 @@ function EvidenceSection({ title, empty, children }) {
 }
 
 function AssessmentRow({ assessment }) {
+  const { t } = useLanguage()
+  const source = SOURCES.includes(assessment.source) ? assessment.source : 'self'
   const paths = assessment.evidence_paths?.length
     ? assessment.evidence_paths
     : assessment.evidence_path
@@ -283,7 +298,7 @@ function AssessmentRow({ assessment }) {
         {LEVEL_LABELS[assessment.level]}
         <span className="text-secondary">
           {' '}
-          — {SOURCE_LABELS[assessment.source] || 'Self-assessed'} ·{' '}
+          — {t(`validateRequest.sources.${source}`)} ·{' '}
           {new Date(assessment.assessed_at).toLocaleDateString()}
         </span>
       </p>
@@ -292,7 +307,7 @@ function AssessmentRow({ assessment }) {
         <div className="flex flex-wrap items-center gap-3 mt-1">
           {assessment.evidence_url && (
             <a href={assessment.evidence_url} target="_blank" rel="noopener noreferrer" className="text-xs text-moss font-medium">
-              Evidence link
+              {t('validateRequest.evidenceLink')}
             </a>
           )}
           {paths.map((path, i) => (
@@ -305,6 +320,7 @@ function AssessmentRow({ assessment }) {
 }
 
 function EvidenceLink({ path, index }) {
+  const { t } = useLanguage()
   const [url, setUrl] = useState(null)
   const [loading, setLoading] = useState(false)
 
@@ -325,7 +341,7 @@ function EvidenceLink({ path, index }) {
 
   return (
     <button type="button" onClick={handleClick} disabled={loading} className="text-xs text-moss font-medium">
-      {loading ? 'Loading…' : `Evidence ${index + 1}`}
+      {loading ? t('common.loading') : t('validateRequest.evidenceN', { n: index + 1 })}
     </button>
   )
 }

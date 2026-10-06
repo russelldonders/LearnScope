@@ -4,6 +4,7 @@ import { getSharedProfile } from '../lib/profileShareLinks'
 import { formatMonthYear } from '../lib/dates'
 import { LEVEL_LABELS } from '../lib/levels'
 import { experienceTypeLabel } from '../lib/experienceTypes'
+import { useLanguage } from '../context/LanguageContext'
 import GrowthRing from '../components/GrowthRing'
 import OrganizationLogo from '../components/OrganizationLogo'
 
@@ -15,6 +16,7 @@ import OrganizationLogo from '../components/OrganizationLogo'
 export default function SharedProfile() {
   const { token } = useParams()
   const [profile, setProfile] = useState(undefined)
+  const { t } = useLanguage()
 
   useEffect(() => {
     getSharedProfile(token)
@@ -30,21 +32,21 @@ export default function SharedProfile() {
         </Link>
 
         {profile === undefined ? (
-          <p className="text-sm text-secondary">Loading…</p>
+          <p className="text-sm text-secondary">{t('common.loading')}</p>
         ) : profile === null ? (
           <div className="bg-card border border-hairline rounded-lg p-8 text-center">
-            <p className="text-ink">This link is invalid or has expired.</p>
+            <p className="text-ink">{t('sharedProfile.invalid')}</p>
           </div>
         ) : (
           <>
             <div className="bg-card border border-hairline rounded-lg p-6 mb-6">
-              <h1 className="font-display text-2xl text-ink">{profile.owner_name || 'A LearnScope learner'}</h1>
+              <h1 className="font-display text-2xl text-ink">{profile.owner_name || t('sharedProfile.defaultOwnerName')}</h1>
               {profile.label && <p className="text-sm text-secondary mt-1">{profile.label}</p>}
             </div>
 
             {profile.skills?.length > 0 && (
               <div className="mb-8">
-                <h2 className="font-display text-xl text-ink mb-4">Skills</h2>
+                <h2 className="font-display text-xl text-ink mb-4">{t('sharedProfile.skills')}</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {profile.skills.map((skill) => (
                     <div
@@ -68,7 +70,7 @@ export default function SharedProfile() {
 
             {profile.experience?.length > 0 && (
               <div>
-                <h2 className="font-display text-xl text-ink mb-4">Experience</h2>
+                <h2 className="font-display text-xl text-ink mb-4">{t('sharedProfile.experience')}</h2>
                 <div className="space-y-3">
                   {profile.experience.map((item) => (
                     <div key={item.id} className="bg-card border border-hairline rounded-lg p-4">
@@ -85,7 +87,7 @@ export default function SharedProfile() {
                         </div>
                       )}
                       <p className="font-mono text-xs text-secondary mt-2">
-                        {formatMonthYear(item.start_date)} – {item.end_date ? formatMonthYear(item.end_date) : 'Present'}
+                        {formatMonthYear(item.start_date)} – {item.end_date ? formatMonthYear(item.end_date) : t('sharedProfile.present')}
                       </p>
                       {item.description && (
                         <p className="text-sm text-ink mt-2 whitespace-pre-line">{item.description}</p>
@@ -98,7 +100,7 @@ export default function SharedProfile() {
 
             {!profile.skills?.length && !profile.experience?.length && (
               <div className="bg-card border border-hairline rounded-lg p-8 text-center">
-                <p className="text-secondary">Nothing has been shared on this link yet.</p>
+                <p className="text-secondary">{t('sharedProfile.nothingShared')}</p>
               </div>
             )}
           </>
