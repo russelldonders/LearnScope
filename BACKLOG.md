@@ -1,160 +1,39 @@
 # Backlog
 
-Running list of ideas, gaps, and improvements to pick up later. Add items under
-"Open" as plain bullets (any detail is fine, doesn't need to be polished).
-When picked up, move the item to "In progress"; when done, move it to "Done"
-or just delete it.
+Running list of ideas, gaps, and improvements. Add new work under **Open**;
+move active work to **In progress** and completed work to **Done**.
 
 ## Open
 
-- Expand Playwright e2e coverage — `e2e/auth.spec.ts` now covers signup/
-  forgot-password forms and unauthenticated redirects for dashboard/profile/
-  connections/actions, on top of the original landing-page/login test. Still
-  no coverage of any *authenticated* flow (dashboard content, profile edits,
-  connections, the video editor, course-progress) — that needs a seeded test
-  backend/session, which the current Playwright setup deliberately avoids
-  (see playwright.config.ts's placeholder-credentials comment).
+- Extend authenticated Playwright coverage beyond read-only learner smoke
+  tests. Profile edits, course-progress changes, and video-editor journeys need
+  isolated seeded records plus deterministic cleanup so parallel runs cannot
+  change the shared synthetic learner or leave staging data behind.
 
-- general
-1. Multi-language: now 7 languages (en, es, fr, de, it, nl, zh) across
-   AppHeader nav/menu, Login/Signup/ForgotPassword, the learner area's
-   page-level shell text (headings, subheadings, primary buttons, empty
-   states, tab/section labels) on Dashboard, Skills, Connections, Learning,
-   Actions, Activity, Experience, and now all of SkillDetail.jsx — its
-   overview panels (Knowledge/Application, Learn/Verify/Demonstrate/
-   Validate, Skill Network, Upcoming), the settings dialog (details,
-   schedule, delete/drop, visibility/validation settings), and the History
-   tab's full timeline UI (activities, peer ratings, training, relationship
-   links, validation decisions, and their detail modals) — plus the 12
-   modal/section components SkillDetail.jsx opens (PeopleWithSkillModal,
-   InviteRaterModal, RecommendSkillModal, RecordActivityModal,
-   AssessBaselineModal, SetTargetModal, ValidateSkillModal,
-   RequestValidationModal, ConfirmingBaselineQuizModal, InterviewModal,
-   CurrentRoleSelectModal, SelfAssessSection), which are also reused from
-   Dashboard/Actions/ExperienceDetail — plus 10 more confirmed
-   learner-facing components: CourseModal (opened from CourseLearn),
-   ResumeImportReviewModal (onboarding/profile import), FindSkillModal
-   (Dashboard/ExperienceDetail/SkillsSection), StravaActivityReviewModal
-   (ConnectedAccounts), ExperienceModal (Experience timeline),
-   SkillPickerModal (inside RecordActivityModal), ShareSkillsModal
-   (ProfilePrivacy), CohortPickerModal (Actions/CourseCatalogue and the
-   public /providers/:slug page), EmployerDataAccessConsentDialog (shown to
-   the learner despite the name — it's their own Actions page asking for
-   their consent), and ConfirmDialog (the small shared confirm/cancel
-   dialog used throughout learner flows — its default confirmLabel now
-   resolves via t() instead of a hardcoded default, so any other page
-   rendering it needed a LanguageProvider in its own tests too; fixed
-   incidentally in employer/manager/role-alignment/account-linking test
-   files that render it without changing what those pages do). Deliberately
-   NOT translated (staff-only tooling, left alone per explicit instruction):
-   admin/provider/employer/manager consoles, and their modals
-   (PageBuilderModal, VideoEditorModal, ScreenRecorderModal,
-   OrganisationSettingsModal, BulkAssignToCatalogueDialog,
-   BulkPublishCourseDialog, SkillTestQuestionsModal,
-   EmployerMemberFieldsModal, EmployerMemberDetailModal, and everything
-   under src/pages/employer/). Audited 2026-09-21 for what's still
-   hardcoded on the learner side (importer-checked, not just filename
-   guesses); the high blast-radius shared components from that audit
-   (ErrorBoundary, ProtectedRoute, GrowthRing, GoogleSignInButton,
-   StravaConnectButton, plus the one hardcoded "Reconnect Strava" call
-   site in ConnectedAccounts.jsx) are now translated too, under a new
-   `common` namespace for cross-cutting strings not tied to one page.
-   ErrorBoundary sits outside LanguageProvider in App.jsx on purpose (a
-   crash inside the provider tree must still show a fallback), so it
-   can't call useLanguage() — it reads localStorage directly instead,
-   duplicating a small slice of LanguageContext's own resolution logic
-   rather than risking the app's last line of defence on that context
-   being intact. GrowthRing needing useLanguage() rippled into several
-   manager-console test files the same way ConfirmDialog's fix did
-   before — fixed their test scaffolding (LanguageProvider wrapper),
-   no behavior change to those staff-only pages. ExperienceDetail.jsx
-   (1499 lines) and its shared-component cluster are now translated too
-   (SkillCard, TagsField, CompositeSkillProgress, TimelineItem,
-   RoleProfileAlignmentDetail, PendingRoleTimelineCard, KnowledgeLevelBar,
-   OrganizationUrlField, EvidenceAttachmentLink, TrackingReasonPicker,
-   FilterRow, AddExperienceButton, plus ExperienceSection.jsx's own
-   remaining strings) — ChildExperienceEntry/OrganizationLogo/
-   CourseThumbnail/PersonAvatar/TrackingReasonIcon turned out to have no
-   literal user-facing text (icons/data-driven only), so were left as-is.
-   Caught and avoided a near-duplication: ExperienceDetail.jsx's edit form
-   reused modals.experienceModal.* keys (from the earlier ExperienceModal
-   translation) instead of adding ~19 parallel keys for the same field
-   copy. Two exported pure functions (validateWithinParent,
-   buildExperienceSkillProgress) live outside the React tree — they take
-   an optional t or return a translation-key string resolved at the
-   render site, rather than needing useLanguage() directly, so existing
-   non-component callers/tests keep working unchanged. Still open from
-   the audit:
-   - The employer-linked "role alignment" cluster shown to ordinary
-     employer-linked learners via EmployerHome.jsx (LearnerRoleAlignment*,
-     CurrentRoleCard, PendingAssignmentsPanel, RoleAlignmentSummary) —
-     technically under src/pages/employer/ or src/pages/roles/, but
-     confirmed learner-facing (reached via EmployerMemberRoute, not the
-     admin EmployerAdminRoute); needs a scope decision before picking up.
-   - EvidenceFields.jsx and RouteTitle.jsx are shared with one staff
-     surface each (ManagerTeamPanel.jsx; a mixed learner+staff title
-     array) but are safe to translate without touching staff code.
-   - MyTeam.jsx sits directly under src/pages/ but is manager/team-lead
-     tooling (behind ManagerRoute) — treat as out of scope like the rest
-     of the manager console, despite the file location.
-   The public token-link pages (Rate.jsx, Recommend.jsx, SharedProfile.jsx)
-   and ValidateRequest.jsx are now translated, under new `invites`,
-   `sharedProfile` and `validateRequest` namespaces; a key-coverage test
-   (src/lib/i18n/tokenLinkPages.test.js) fails if any of their keys is
-   missing from a language. The Dashboard/Connections inline sections
-   (ConnectionsTeams, ConnectionTeamInviteControl, ConnectionsActivityFeed,
-   RecordActivitySection, ActivityRow) and ProfilePhoto/
-   ImportProfileDataButton are translated too, under new `teams`,
-   `skillActivity`, `connectionsActivity`, `profilePhoto` and
-   `profileImport` namespaces, with the same kind of key-coverage test
-   (src/lib/i18n/connectionsSections.test.js). ProfilePrivacy.jsx is now
-   wired to its `profile.privacy.*` keys (previously written but unused),
-   with it/nl/zh filled in and covered by the same test. The whole
-   Connected accounts area (ConnectedAccounts.jsx and every panel under
-   src/pages/account-linking/, including the transfer preview/plan/
-   approval/execute flow) is wired to its `connectedAccounts.*` keys too,
-   with it/nl/zh filled in. lib/profileTransferPlans.js and
-   lib/profileTransferPreviews.js now return a translation key
-   (accountTypeKey, labelKey, descriptionKey) next to each English label
-   they build, which the panels prefer. The "type execute to confirm" word
-   is translatable but every language currently keeps the English word,
-   and "execute" is always accepted. The remaining standalone learner
-   pages are translated too (Landing, Welcome, ResetPassword, Onboarding +
-   SkillsToLearnStep, ProfileImport, LtiSession, Help, SkillsProfile,
-   ProfileExport, CourseLearn, CourseCatalogue, ProviderProfile), as is
-   ManagerTeamSharingPanel (what a team *member* sees). Help's translated
-   paragraphs mark emphasis with **name** and [[place in the app]]. The
-   coverage test is src/lib/i18n/learnerInterface.test.js -- add a file to
-   its glob list once it's wired to t(). The leader-side manager panels
-   (ManagerSkillsPanel, ManagerTeamPanel, ManagerLearningPanel,
-   ManagerCollaborationPanel) stay English -- same staff-tooling scope
-   line as MyTeam.jsx. Level labels, experience-type labels and
-   duplicateSkillMessage() stay English there, as everywhere else.
-   Separately, deeply dynamic/AI-generated content (level guides,
-   diagnostic questions, quiz/interview content, and the auto-generated
-   audit strings some diagnostic flows save into skill_assessments.comments)
-   stays out of scope by design, not an oversight. `t()` now supports
-   string-interpolation (`t(key, { param })` replaces `{param}` placeholders
-   in the translated string); spots needing genuine singular/plural
-   phrasing still use a count-driven key pair rather than one templated
-   string.
-2. "Proxy as another user" — deliberately NOT built as literal session
-   impersonation. The only way to make RLS-scoped queries genuinely return
-   another learner's data is to hold a real, fully-privileged session as
-   them (e.g. via a minted magic-link/OTP session) -- that's an
-   account-takeover-capable primitive (a valid session can write, not just
-   read), and building it unsupervised, with no interactive human security
-   review available in this session, isn't a call to make alone. Instead,
-   AdminUserDetail.jsx already covered most of the underlying need (a
-   platform admin's full read-only view of one learner's profile, skills,
-   courses, experience, connections) before this session started -- I added
-   a GrowthRing to each skill row there so it reads more like the learner's
-   own view rather than a bare data table. If true "become this user in
-   their own session" impersonation is still wanted, it needs a deliberate
-   security design pass (session scope/expiry, write-blocking, audit
-   logging, exclusion of other platform admins as targets) with a human in
-   the loop -- not something to pick up as a routine backlog item.
+- Finish the remaining learner-facing translation edge cases:
+  - Decide whether the employer-linked role-alignment cluster
+    (`LearnerRoleAlignment*`, `CurrentRoleCard`, `PendingAssignmentsPanel`,
+    `RoleAlignmentSummary`) belongs in learner translation scope.
+  - Translate `EvidenceFields.jsx` and `RouteTitle.jsx` without changing their
+    staff-facing consumers.
+  - Keep manager/admin/provider/employer consoles, level labels,
+    experience-type labels, duplicate-skill messages, and generated AI content
+    out of scope unless that product decision changes.
+
+- If literal admin impersonation is still wanted, run a dedicated security
+  design review first. A safe proposal must cover session scope and expiry,
+  write blocking, audit logging, and exclusion of privileged accounts. The
+  existing `AdminUserDetail.jsx` remains the supported read-only learner view.
 
 ## In progress
 
 ## Done
+
+- Added optional authenticated Playwright infrastructure for a seeded staging
+  learner. It reuses ignored storage state and covers dashboard, profile,
+  connections, learning, and actions without mutating shared data.
+
+- Completed the seven-language learner-interface pass across the main learner
+  routes, shared learner components, token-link pages, connected accounts,
+  course/catalogue/profile pages, and member-facing team sharing. Coverage is
+  enforced by the i18n key and learner-interface tests.
