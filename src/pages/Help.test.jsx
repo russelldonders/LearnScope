@@ -33,6 +33,13 @@ function renderHelp() {
 }
 
 describe('Help', () => {
+  it('renders emphasis markers as styled text, not literal symbols', () => {
+    renderHelp()
+    expect(screen.getByText('Skills', { selector: 'span.font-medium' })).toBeInTheDocument()
+    expect(screen.getAllByText('Profile → Privacy Settings', { selector: 'span' }).length).toBeGreaterThan(0)
+    expect(document.body.textContent).not.toMatch(/\*\*|\[\[|\]\]/)
+  })
+
   it('defaults to the learner perspective', () => {
     renderHelp()
     expect(screen.getByRole('tab', { name: 'As a learner', selected: true })).toBeInTheDocument()

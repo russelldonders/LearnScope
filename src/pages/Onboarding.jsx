@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import ImportProfileDataButton from '../components/ImportProfileDataButton'
 import SkillsToLearnStep from '../components/onboarding/SkillsToLearnStep'
 import { invalidateHeaderCache } from '../lib/headerCache'
+import { useLanguage } from '../context/LanguageContext'
 
 // Fallback if onboarding_steps can't be read for some reason -- keeps the
 // wizard working (both steps, current order) rather than stranding a new
@@ -14,6 +15,7 @@ const DEFAULT_STEP_KEYS = ['import', 'skills']
 export default function Onboarding() {
   const { user, markOnboardingComplete } = useAuth()
   const navigate = useNavigate()
+  const { t } = useLanguage()
   // Where ProtectedRoute bounced in from, if this wizard was reached via its
   // needsOnboarding redirect (see ProtectedRoute.jsx) -- falls through to
   // /dashboard for the normal case where nothing set it.
@@ -74,7 +76,7 @@ export default function Onboarding() {
     const { error } = await markOnboardingComplete()
     if (error) {
       setFinishing(false)
-      setError("Couldn't finish setup — check your connection and try again.")
+      setError(t('onboarding.finishError'))
       return
     }
     navigate(redirectFrom ?? '/dashboard', { replace: true })
@@ -97,7 +99,7 @@ export default function Onboarding() {
   if (stepKeys === null || (stepKeys.length === 0 && !error)) {
     return (
       <div className="min-h-screen bg-paper px-4 py-10 flex items-center justify-center">
-        <p className="text-secondary">Loading…</p>
+        <p className="text-secondary">{t('common.loading')}</p>
       </div>
     )
   }
@@ -107,15 +109,12 @@ export default function Onboarding() {
   return (
     <div className="min-h-screen bg-paper px-4 py-10">
       <div className="w-full max-w-xl mx-auto bg-card border border-hairline rounded-lg p-8">
-        <span className="font-display text-2xl text-ink mb-1 block">Welcome to LearnScope</span>
+        <span className="font-display text-2xl text-ink mb-1 block">{t('onboarding.welcome')}</span>
 
         {currentStep === 'import' && (
           <>
             <p className="text-sm text-secondary mb-6">
-              Let's get some starting information into your profile. If you have a CV, LinkedIn
-              export, or similar document handy, we can pull out your skills, courses and
-              experience automatically — you'll review and choose exactly what to keep before
-              anything is saved. Or skip this and add things yourself later.
+              {t('onboarding.importIntro')}
             </p>
 
             <ImportProfileDataButton
@@ -132,7 +131,7 @@ export default function Onboarding() {
                 onClick={handleStepComplete}
                 className="text-sm text-secondary hover:text-ink"
               >
-                Skip this step →
+                {t('onboarding.skipStep')}
               </button>
             </div>
           </>
@@ -142,7 +141,7 @@ export default function Onboarding() {
 
         {error && <p className="text-sm text-red-700 mt-4">{error}</p>}
         {finishing && !error && (
-          <p className="text-sm text-secondary mt-4">Finishing up…</p>
+          <p className="text-sm text-secondary mt-4">{t('onboarding.finishing')}</p>
         )}
       </div>
     </div>

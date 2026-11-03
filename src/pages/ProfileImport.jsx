@@ -4,9 +4,11 @@ import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
 import ImportProfileDataButton from '../components/ImportProfileDataButton'
 import { invalidateHeaderCache } from '../lib/headerCache'
+import { useLanguage } from '../context/LanguageContext'
 
 export default function ProfileImport() {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const [profileFields, setProfileFields] = useState(null)
   const [avatarUrl, setAvatarUrl] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -46,15 +48,13 @@ export default function ProfileImport() {
       <AppHeader />
 
       <main id="main-content" tabIndex={-1} className="max-w-2xl mx-auto px-4 py-8">
-        <h1 className="font-display text-xl text-ink mb-2">Import skills & experience</h1>
+        <h1 className="font-display text-xl text-ink mb-2">{t('profileImport.button')}</h1>
         <p className="text-sm text-secondary mb-6">
-          Upload a CV, LinkedIn export, or similar document — or link to one online — and we'll
-          pull out skills, courses, and experience for you to review. Nothing is saved until you
-          choose what to keep.
+          {t('profileImportPage.intro')}
         </p>
 
         {loading ? (
-          <p className="text-secondary">Loading…</p>
+          <p className="text-secondary">{t('common.loading')}</p>
         ) : (
           <div className="bg-card border border-hairline rounded-lg p-6">
             <ImportProfileDataButton

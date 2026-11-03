@@ -2,9 +2,11 @@ import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import GrowthRing from '../components/GrowthRing'
 import { LEVELS } from '../lib/levels'
+import { useLanguage } from '../context/LanguageContext'
 
 export default function Landing() {
   const { user, loading } = useAuth()
+  const { t } = useLanguage()
 
   if (user) {
     return <Navigate to="/dashboard" replace />
@@ -24,18 +26,18 @@ export default function Landing() {
                 to="/dashboard"
                 className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90"
               >
-                Go to dashboard
+                {t('landing.goToDashboard')}
               </Link>
             ) : (
               <>
                 <Link to="/login" className="text-sm text-secondary hover:text-ink">
-                  Log in
+                  {t('landing.logIn')}
                 </Link>
                 <Link
                   to="/signup"
                   className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90"
                 >
-                  Sign up
+                  {t('landing.signUp')}
                 </Link>
               </>
             )}
@@ -46,24 +48,23 @@ export default function Landing() {
       <main className="max-w-4xl mx-auto px-4">
         <section className="py-16 sm:py-24 text-center">
           <h1 className="font-display text-4xl sm:text-5xl text-ink max-w-2xl mx-auto leading-tight">
-            Track the skills you're growing, for life.
+            {t('landing.heroTitle')}
           </h1>
           <p className="text-secondary text-lg max-w-xl mx-auto mt-4">
-            Skills, experience, learning and the evidence behind them — recorded with real dates
-            and shown as growth rings, not progress bars. It's your record, not your employer's.
+            {t('landing.heroDescription')}
           </p>
           <div className="flex items-center justify-center gap-3 mt-8">
             <Link
               to="/signup"
               className="rounded-md bg-moss text-paper py-3 px-6 font-medium hover:opacity-90"
             >
-              Start your skills log
+              {t('landing.startButton')}
             </Link>
             <Link
               to="/login"
               className="rounded-md border border-hairline text-ink py-3 px-6 font-medium hover:bg-card"
             >
-              Log in
+              {t('landing.logIn')}
             </Link>
           </div>
         </section>
@@ -75,38 +76,34 @@ export default function Landing() {
             ))}
           </div>
           <p className="text-center text-secondary text-sm mt-6 max-w-md mx-auto">
-            Every skill grows one ring at a time — from beginner to expert.
+            {t('landing.ringsCaption')}
           </p>
         </section>
 
         <section className="py-12 border-t border-hairline">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="bg-card border border-hairline rounded-lg p-6">
-              <h3 className="font-display text-lg text-ink mb-1">A real history, not a snapshot</h3>
+              <h3 className="font-display text-lg text-ink mb-1">{t('landing.historyTitle')}</h3>
               <p className="text-sm text-secondary">
-                Proficiency, courses and achievements keep the date they actually happened, so you
-                can see how you got here — not just where you are now.
+                {t('landing.historyText')}
               </p>
             </div>
             <div className="bg-card border border-hairline rounded-lg p-6">
-              <h3 className="font-display text-lg text-ink mb-1">Evidence, not just claims</h3>
+              <h3 className="font-display text-lg text-ink mb-1">{t('landing.evidenceTitle')}</h3>
               <p className="text-sm text-secondary">
-                Self-assessments, courses, peer ratings and formal validations each carry their own
-                weight — a skill you've proven looks different from one you've only logged.
+                {t('landing.evidenceText')}
               </p>
             </div>
             <div className="bg-card border border-hairline rounded-lg p-6">
-              <h3 className="font-display text-lg text-ink mb-1">Your whole development story</h3>
+              <h3 className="font-display text-lg text-ink mb-1">{t('landing.storyTitle')}</h3>
               <p className="text-sm text-secondary">
-                Employment and education, courses and training, and the skills tied to each one —
-                connected in one record instead of scattered across CVs and certificates.
+                {t('landing.storyText')}
               </p>
             </div>
             <div className="bg-card border border-hairline rounded-lg p-6">
-              <h3 className="font-display text-lg text-ink mb-1">You control who sees it</h3>
+              <h3 className="font-display text-lg text-ink mb-1">{t('landing.controlTitle')}</h3>
               <p className="text-sm text-secondary">
-                Nothing is shared with an employer, recruiter or connection unless you explicitly
-                allow it.
+                {t('landing.controlText')}
               </p>
             </div>
           </div>

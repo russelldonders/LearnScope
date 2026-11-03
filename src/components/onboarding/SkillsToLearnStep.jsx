@@ -4,11 +4,13 @@ import { useAuth } from '../../context/AuthContext'
 import { listLibrarySkills, listLibrarySkillIdsForTags } from '../../lib/skillLibrary'
 import { listTags } from '../../lib/skillTags'
 import { isDuplicateSkillNameError } from '../../lib/skillDuplicates'
+import { useLanguage } from '../../context/LanguageContext'
 
 const MAX_VISIBLE = 30
 
 export default function SkillsToLearnStep({ onDone }) {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const [allTags, setAllTags] = useState([])
   const [selectedTagIds, setSelectedTagIds] = useState(new Set())
   const [matchedLibraryIds, setMatchedLibraryIds] = useState(null)
@@ -123,7 +125,7 @@ export default function SkillsToLearnStep({ onDone }) {
     if (error) {
       setError(
         isDuplicateSkillNameError(error)
-          ? 'One of these is already in your skills — deselect it and try again.'
+          ? t('onboarding.skillsToLearn.duplicateError')
           : error.message
       )
       return
@@ -133,16 +135,14 @@ export default function SkillsToLearnStep({ onDone }) {
 
   return (
     <div>
-      <h2 className="font-display text-2xl text-ink mb-1">Skills you want to learn</h2>
+      <h2 className="font-display text-2xl text-ink mb-1">{t('onboarding.skillsToLearn.heading')}</h2>
       <p className="text-sm text-secondary mb-6">
-        Pick a few skills to start tracking — no level or assessment needed yet, this just adds
-        them to your list so you can develop them over time. You can always add more later from
-        the Skills page.
+        {t('onboarding.skillsToLearn.intro')}
       </p>
 
       <div className="mb-4">
         <p className="font-mono text-xs uppercase tracking-wide text-secondary mb-2">
-          What are you interested in?
+          {t('onboarding.skillsToLearn.interestsLabel')}
         </p>
         <div className="flex flex-wrap gap-2">
           {allTags.map((tag) => (
@@ -165,20 +165,20 @@ export default function SkillsToLearnStep({ onDone }) {
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search skills…"
+        placeholder={t('onboarding.skillsToLearn.searchPlaceholder')}
         className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink mb-3 focus:outline-none focus:ring-2 focus:ring-moss"
       />
 
       {noMatchesForInterests && (
         <p className="text-xs text-secondary mb-2">
-          No library matches for those interests yet — search above to browse everything instead.
+          {t('onboarding.skillsToLearn.noInterestMatches')}
         </p>
       )}
 
       <div className="max-h-64 overflow-y-auto divide-y divide-hairline border border-hairline rounded-md">
-        {libraryLoading && <p className="text-sm text-secondary p-3">Loading…</p>}
+        {libraryLoading && <p className="text-sm text-secondary p-3">{t('common.loading')}</p>}
         {!libraryLoading && filtered.length === 0 && !noMatchesForInterests && (
-          <p className="text-sm text-secondary p-3">No matches.</p>
+          <p className="text-sm text-secondary p-3">{t('onboarding.skillsToLearn.noMatches')}</p>
         )}
         {filtered.slice(0, MAX_VISIBLE).map((s) => (
           <label key={s.id} className="flex items-center gap-3 p-2.5 cursor-pointer">
@@ -194,7 +194,7 @@ export default function SkillsToLearnStep({ onDone }) {
       </div>
       {filtered.length > MAX_VISIBLE && (
         <p className="text-xs text-secondary mt-1">
-          Showing the first {MAX_VISIBLE} — search to narrow it down.
+          {t('onboarding.skillsToLearn.showingFirst', { count: MAX_VISIBLE })}
         </p>
       )}
 
@@ -208,10 +208,10 @@ export default function SkillsToLearnStep({ onDone }) {
           className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90 disabled:opacity-60"
         >
           {saving
-            ? 'Saving…'
+            ? t('onboarding.skillsToLearn.saving')
             : selectedIds.size > 0
-              ? `Add ${selectedIds.size} skill${selectedIds.size === 1 ? '' : 's'} & finish`
-              : 'Finish'}
+              ? t(selectedIds.size === 1 ? 'onboarding.skillsToLearn.addOneAndFinish' : 'onboarding.skillsToLearn.addManyAndFinish', { count: selectedIds.size })
+              : t('onboarding.skillsToLearn.finish')}
         </button>
         <button
           type="button"
@@ -219,7 +219,7 @@ export default function SkillsToLearnStep({ onDone }) {
           disabled={saving}
           className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper"
         >
-          Skip
+          {t('onboarding.skillsToLearn.skip')}
         </button>
       </div>
     </div>

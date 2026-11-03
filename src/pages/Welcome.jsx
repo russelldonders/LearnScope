@@ -3,9 +3,11 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getPendingInviteCode, clearPendingInviteCode } from '../lib/connections'
 import { getPendingEnrolCourseId, resumePendingEnrolment } from '../lib/courseCatalogue'
+import { useLanguage } from '../context/LanguageContext'
 
 export default function Welcome() {
   const { user, loading } = useAuth()
+  const { t } = useLanguage()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
 
@@ -35,24 +37,24 @@ export default function Welcome() {
         <span className="font-display text-3xl text-ink mb-1 block">LearnScope</span>
 
         {loading ? (
-          <p className="text-sm text-secondary mt-4">Confirming your email…</p>
+          <p className="text-sm text-secondary mt-4">{t('welcome.confirming')}</p>
         ) : user ? (
           <>
-            <p className="text-ink mt-4">Your email is confirmed. Welcome to LearnScope.</p>
+            <p className="text-ink mt-4">{t('welcome.confirmed')}</p>
             <Link
               to="/dashboard"
               className="inline-block mt-6 rounded-md bg-moss text-paper py-2 px-6 font-medium hover:opacity-90"
             >
-              Go to your dashboard
+              {t('welcome.goToDashboard')}
             </Link>
           </>
         ) : (
           <>
             <p className="text-ink mt-4">
-              We couldn't confirm this link automatically — it may have expired.
+              {t('welcome.couldNotConfirm')}
             </p>
             <Link to="/login" className="inline-block mt-6 text-moss font-medium">
-              Log in instead
+              {t('welcome.logInInstead')}
             </Link>
           </>
         )}

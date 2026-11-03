@@ -6,6 +6,7 @@ import { ltiRequest } from '../lib/lti/session'
 const auth=vi.hoisted(()=>({user:{id:'one',email:'learner@example.com'},loading:false,needsName:false,needsOnboarding:false}))
 vi.mock('../context/AuthContext',()=>({useAuth:()=>auth}))
 vi.mock('../lib/lti/session',()=>({ltiRequest:vi.fn()}))
+vi.mock('../context/LanguageContext',()=>import('../test/languageMock'))
 vi.mock('./SkillDetail',()=>({default:({skillId})=><div>Personal skill {skillId}</div>}))
 afterEach(cleanup)
 beforeEach(()=>{vi.clearAllMocks();auth.user={id:'one',email:'learner@example.com'};sessionStorage.clear()})
