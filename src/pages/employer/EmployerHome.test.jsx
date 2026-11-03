@@ -3,6 +3,8 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import EmployerHome from './EmployerHome'
 
+vi.mock('../../context/LanguageContext', () => import('../../test/languageMock'))
+
 vi.mock('../../components/AppHeader', () => ({ default: (props) => <div data-testid="app-header" data-hidden={props.hideNavLinks} data-exit={props.contextExitHref} data-logo={props.brandLogoUrl} data-name={props.brandName} /> }))
 vi.mock('../../lib/orgBranding', () => ({ orgBrandStyle: () => ({}) }))
 vi.mock('../../lib/employerRoleProfiles', () => ({ getEmployerLoginContext: () => Promise.resolve({ id: 'employer-1', name: 'Acme Ltd', branding: { name: 'Acme Ltd', logoUrl: '/acme.png' } }) }))

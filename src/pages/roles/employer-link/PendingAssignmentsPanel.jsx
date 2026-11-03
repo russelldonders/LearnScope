@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { formatAbsoluteDate, formatRelativeDate } from '../../../lib/dates'
+import { useLanguage } from '../../../context/LanguageContext'
 
 // Employer-proposed role assignments awaiting the learner's response -- the
 // learner can never fabricate or freely browse-and-link a role profile
@@ -20,13 +21,14 @@ export default function PendingAssignmentsPanel({
   onAcceptAssignment,
   onDeclineAssignment,
 }) {
+  const { t } = useLanguage()
   const [targetByAssignment, setTargetByAssignment] = useState({})
 
   if (pendingAssignments.length === 0) {
     return (
       <div className="bg-card border border-hairline rounded-lg p-6">
-        <h3 className="font-display text-lg text-ink mb-1">Role assignments</h3>
-        <p className="text-sm text-secondary">No role assignments from your employer right now.</p>
+        <h3 className="font-display text-lg text-ink mb-1">{t('roleAlignment.pending.heading')}</h3>
+        <p className="text-sm text-secondary">{t('roleAlignment.pending.none')}</p>
       </div>
     )
   }
@@ -38,8 +40,8 @@ export default function PendingAssignmentsPanel({
         return (
           <div key={assignment.assignmentId} className="bg-card border border-hairline rounded-lg p-4">
             <p className="text-sm text-ink">
-              <strong>{assignment.employerName}</strong> proposed the role profile{' '}
-              <strong>{assignment.roleProfile.name}</strong>
+              {t('roleAlignment.pending.proposedBefore')}<strong>{assignment.employerName}</strong>{t('roleAlignment.pending.proposedMiddle')}
+              <strong>{assignment.roleProfile.name}</strong>{t('roleAlignment.pending.proposedAfter')}
             </p>
             {assignment.roleProfile.description && (
               <p className="text-sm text-secondary mt-1">{assignment.roleProfile.description}</p>
@@ -54,7 +56,7 @@ export default function PendingAssignmentsPanel({
                   htmlFor={`assignment-target-${assignment.assignmentId}`}
                   className="block text-xs text-secondary mb-1"
                 >
-                  Link to
+                  {t('roleAlignment.pending.linkTo')}
                 </label>
                 <select
                   id={`assignment-target-${assignment.assignmentId}`}
@@ -65,10 +67,10 @@ export default function PendingAssignmentsPanel({
                   }
                   className="w-full rounded-md border border-hairline bg-paper px-2 py-1.5 text-sm text-ink"
                 >
-                  <option value="">Create a new role for this</option>
+                  <option value="">{t('roleAlignment.pending.createNew')}</option>
                   {currentRoles.map((role) => (
                     <option key={role.id} value={role.id}>
-                      {role.title} -- {role.organization}
+                      {t('roleAlignment.pending.roleOption', { title: role.title, organization: role.organization })}
                     </option>
                   ))}
                 </select>
@@ -77,9 +79,9 @@ export default function PendingAssignmentsPanel({
 
             <p className="text-sm text-secondary mt-2">
               {target
-                ? 'Accepting links this to the role you chose above, with an alignment view against your own skills.'
-                : "Accepting adds a new current role to your Experience timeline (titled after this role profile) and an alignment view against your own skills."}
-              {' '}Its required skills are added to your own skill list too. You can disconnect at any time.
+                ? t('roleAlignment.pending.acceptLinked')
+                : t('roleAlignment.pending.acceptNew')}
+              {t('roleAlignment.pending.alsoSkills')}
             </p>
 
             <div className="flex flex-wrap items-center gap-2 mt-3">
@@ -89,7 +91,7 @@ export default function PendingAssignmentsPanel({
                 disabled={responding}
                 className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
               >
-                Accept
+                {t('roleAlignment.pending.accept')}
               </button>
               <button
                 type="button"
@@ -97,7 +99,7 @@ export default function PendingAssignmentsPanel({
                 disabled={responding}
                 className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
               >
-                Decline
+                {t('roleAlignment.pending.decline')}
               </button>
             </div>
           </div>

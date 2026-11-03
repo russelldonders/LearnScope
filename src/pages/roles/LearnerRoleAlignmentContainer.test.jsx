@@ -3,6 +3,8 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import LearnerRoleAlignmentContainer from './LearnerRoleAlignmentContainer'
 
+vi.mock('../../context/LanguageContext', () => import('../../test/languageMock'))
+
 const hookMock = vi.hoisted(() => ({ value: {} }))
 vi.mock('./useMyRoleAssignments', () => ({ useMyRoleAssignments: () => hookMock.value }))
 vi.mock('./employer-link/LearnerRoleAlignmentSection', () => ({ default: () => <div /> }))

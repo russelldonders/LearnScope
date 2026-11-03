@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import EmployerCataloguePanel from './EmployerCataloguePanel'
 
+vi.mock('../../context/LanguageContext', () => import('../../test/languageMock'))
+
 const listCoursesMock = vi.hoisted(() => vi.fn())
 const enrolMock = vi.hoisted(() => vi.fn())
 

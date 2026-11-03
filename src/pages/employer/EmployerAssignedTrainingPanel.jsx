@@ -5,13 +5,15 @@ import StatusBadge from '../../components/StatusBadge'
 import { useAuth } from '../../context/AuthContext'
 import { listMyCourseAssignmentsForEmployer, respondToCourseAssignment } from '../../lib/courseCatalogue'
 import { supabase } from '../../lib/supabaseClient'
+import { useLanguage } from '../../context/LanguageContext'
 
 function courseMeta(course) {
   return [course.course_type, course.duration, course.provider].filter(Boolean).join(' · ')
 }
 
 function CourseAction({ assignment, course, status, busy, onOpen }) {
-  const labels = { 'not-started': 'Start learning', 'in-progress': 'Continue', completed: 'Review' }
+  const { t } = useLanguage()
+  const labels = { 'not-started': t('employerTraining.start'), 'in-progress': t('employerTraining.continue'), completed: t('employerTraining.review') }
   return (
     <button
       type="button"
@@ -19,7 +21,7 @@ function CourseAction({ assignment, course, status, busy, onOpen }) {
       disabled={busy}
       className="shrink-0 rounded-md bg-[var(--org-primary,var(--color-moss))] px-4 py-2 text-sm font-medium text-[var(--org-primary-contrast,var(--color-paper))] hover:bg-[var(--org-hover,var(--org-primary,var(--color-moss)))] hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
     >
-      {busy ? 'Opening…' : labels[status.key]}
+      {busy ? t('employerTraining.opening') : labels[status.key]}
     </button>
   )
 }
@@ -50,12 +52,14 @@ function LearningRow({ assignment, course, status, busy, onOpen }) {
 
 export default function EmployerAssignedTrainingPanel({
   employerId,
-  employerName = 'your employer',
+  employerName: employerNameProp,
   employerLogoUrl,
   variant = 'full',
   viewAllHref,
 }) {
   const { user } = useAuth()
+  const { t } = useLanguage()
+  const employerName = employerNameProp ?? t('employerTraining.defaultEmployer')
   const navigate = useNavigate()
   const location = useLocation()
   const [assignments, setAssignments] = useState([])
@@ -90,9 +94,9 @@ export default function EmployerAssignedTrainingPanel({
 
   function statusFor(assignment) {
     const learnerCourse = learnerCourses.get(assignment.catalogue_course_id)
-    if (learnerCourse?.completed_date) return { key: 'completed', label: 'Completed', tone: 'success' }
-    if (assignment.status === 'enrolled' || learnerCourse) return { key: 'in-progress', label: 'In progress', tone: 'warning' }
-    return { key: 'not-started', label: 'Not started', tone: 'neutral' }
+    if (learnerCourse?.completed_date) return { key: 'completed', label: t('employerTraining.completed'), tone: 'success' }
+    if (assignment.status === 'enrolled' || learnerCourse) return { key: 'in-progress', label: t('employerTraining.inProgress'), tone: 'warning' }
+    return { key: 'not-started', label: t('employerTraining.notStarted'), tone: 'neutral' }
   }
 
   const grouped = (() => {
@@ -128,7 +132,7 @@ export default function EmployerAssignedTrainingPanel({
     }
   }
 
-  if (loading) return <p className="text-sm text-secondary" aria-live="polite">Loading your learning…</p>
+  if (loading) return <p className="text-sm text-secondary" aria-live="polite">{t('employerTraining.loading')}</p>
 
   if (variant === 'home') {
     const focus = grouped['in-progress'][0] ?? grouped['not-started'][0] ?? grouped.completed[0]
@@ -140,15 +144,15 @@ export default function EmployerAssignedTrainingPanel({
         {error && <p role="alert" className="text-sm text-red-700 mb-4">{error}</p>}
         <div className="flex items-end justify-between gap-4 mb-5">
           <div>
-            <p className="text-xs font-medium text-secondary uppercase tracking-[0.12em]">Your learning</p>
+            <p className="text-xs font-medium text-secondary uppercase tracking-[0.12em]">{t('employerTraining.eyebrow')}</p>
             <h2 id="continue-learning-heading" className="font-display text-2xl text-ink mt-1">
-              {focus && statusFor(focus).key === 'not-started' && 'Start learning'}
-              {focus && statusFor(focus).key === 'in-progress' && 'Continue learning'}
-              {focus && statusFor(focus).key === 'completed' && 'Review learning'}
-              {!focus && 'Your learning'}
+              {focus && statusFor(focus).key === 'not-started' && t('employerTraining.headingStart')}
+              {focus && statusFor(focus).key === 'in-progress' && t('employerTraining.headingContinue')}
+              {focus && statusFor(focus).key === 'completed' && t('employerTraining.headingReview')}
+              {!focus && t('employerTraining.headingNone')}
             </h2>
           </div>
-          {viewAllHref && <Link to={viewAllHref} className="text-sm font-medium text-[var(--org-text,var(--color-ink))] underline underline-offset-4 decoration-hairline hover:decoration-current">View all</Link>}
+          {viewAllHref && <Link to={viewAllHref} className="text-sm font-medium text-[var(--org-text,var(--color-ink))] underline underline-offset-4 decoration-hairline hover:decoration-current">{t('employerTraining.viewAll')}</Link>}
         </div>
 
         {focus ? (
@@ -165,7 +169,7 @@ export default function EmployerAssignedTrainingPanel({
               <StatusBadge label={statusFor(focus).label} tone={statusFor(focus).tone} />
               <h3 className="font-display text-2xl text-ink mt-4">{focus.course_catalogue.name}</h3>
               {courseMeta(focus.course_catalogue) && <p className="text-sm text-secondary mt-2">{courseMeta(focus.course_catalogue)}</p>}
-              <p className="text-xs text-secondary mt-2">Assigned by {employerName}</p>
+              <p className="text-xs text-secondary mt-2">{t('employerTraining.assignedBy', { employer: employerName })}</p>
               <div className="mt-6">
                 <CourseAction assignment={focus} course={focus.course_catalogue} status={statusFor(focus)} busy={openingId === focus.id} onOpen={openCourse} />
               </div>
@@ -173,14 +177,14 @@ export default function EmployerAssignedTrainingPanel({
           </div>
         ) : (
           <div className="border-y border-hairline py-6">
-            <p className="font-medium text-ink">You are all caught up.</p>
-            <p className="text-sm text-secondary mt-1">There is no learning assigned by {employerName} yet.</p>
+            <p className="font-medium text-ink">{t('employerTraining.caughtUp')}</p>
+            <p className="text-sm text-secondary mt-1">{t('employerTraining.noneAssigned', { employer: employerName })}</p>
           </div>
         )}
 
         {upNext.length > 0 && (
           <div className="mt-9">
-            <h3 className="font-display text-xl text-ink">Up next</h3>
+            <h3 className="font-display text-xl text-ink">{t('employerTraining.upNext')}</h3>
             <ul className="mt-2 divide-y divide-hairline border-y border-hairline">
               {upNext.map((assignment) => (
                 <LearningRow key={assignment.id} assignment={assignment} course={assignment.course_catalogue} status={statusFor(assignment)} busy={openingId === assignment.id} onOpen={openCourse} />
@@ -191,7 +195,7 @@ export default function EmployerAssignedTrainingPanel({
 
         {completed.length > 0 && (
           <div className="mt-9">
-            <h3 className="font-display text-xl text-ink">Recently completed</h3>
+            <h3 className="font-display text-xl text-ink">{t('employerTraining.recentlyCompleted')}</h3>
             <ul className="mt-2 divide-y divide-hairline border-y border-hairline">
               {completed.map((assignment) => (
                 <LearningRow key={assignment.id} assignment={assignment} course={assignment.course_catalogue} status={statusFor(assignment)} busy={false} onOpen={openCourse} />
@@ -204,23 +208,23 @@ export default function EmployerAssignedTrainingPanel({
   }
 
   const sections = [
-    { key: 'in-progress', title: 'In progress' },
-    { key: 'not-started', title: 'Not started' },
-    { key: 'completed', title: 'Completed' },
+    { key: 'in-progress', title: t('employerTraining.inProgress') },
+    { key: 'not-started', title: t('employerTraining.notStarted') },
+    { key: 'completed', title: t('employerTraining.completed') },
   ]
 
   return (
     <section aria-labelledby="employer-assigned-training-heading">
       <div className="mb-6">
-        <p className="text-xs font-medium text-secondary uppercase tracking-[0.12em]">Assigned by {employerName}</p>
-        <h2 id="employer-assigned-training-heading" className="font-display text-2xl text-ink mt-1">Learning plan</h2>
-        <p className="text-sm text-secondary mt-2">Start new courses, continue active learning, or revisit completed training.</p>
+        <p className="text-xs font-medium text-secondary uppercase tracking-[0.12em]">{t('employerTraining.assignedBy', { employer: employerName })}</p>
+        <h2 id="employer-assigned-training-heading" className="font-display text-2xl text-ink mt-1">{t('employerTraining.planHeading')}</h2>
+        <p className="text-sm text-secondary mt-2">{t('employerTraining.planIntro')}</p>
       </div>
       {error && <p role="alert" className="text-sm text-red-700 mb-4">{error}</p>}
       {assignments.length === 0 ? (
         <div className="border-y border-hairline py-6">
-          <p className="font-medium text-ink">No assigned learning yet.</p>
-          <p className="text-sm text-secondary mt-1">New learning from {employerName} will appear here.</p>
+          <p className="font-medium text-ink">{t('employerTraining.noAssigned')}</p>
+          <p className="text-sm text-secondary mt-1">{t('employerTraining.noAssignedDetail', { employer: employerName })}</p>
         </div>
       ) : (
         <div className="space-y-9">

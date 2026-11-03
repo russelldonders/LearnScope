@@ -9,9 +9,11 @@ import {
   listEnrolledCatalogueIds,
 } from '../../lib/courseCatalogue'
 import { listMyEmployerCatalogueCourses } from '../../lib/employerCatalogues'
+import { useLanguage } from '../../context/LanguageContext'
 
 export default function EmployerCataloguePanel({ employerId, employerName, employerLogoUrl }) {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const userId = user?.id
   const [courses, setCourses] = useState([])
   const [enrolledIds, setEnrolledIds] = useState(new Map())
@@ -86,23 +88,23 @@ export default function EmployerCataloguePanel({ employerId, employerName, emplo
     }
   }
 
-  if (loading) return <p className="text-sm text-secondary">Loading catalogue…</p>
+  if (loading) return <p className="text-sm text-secondary">{t('employerCatalogue.loading')}</p>
 
   return (
     <section aria-labelledby="employer-catalogue-heading">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 id="employer-catalogue-heading" className="font-display text-2xl text-ink">Available through {employerName}</h2>
-          <p className="text-sm text-secondary mt-1">Browse learning your employer has made available to you.</p>
+          <h2 id="employer-catalogue-heading" className="font-display text-2xl text-ink">{t('employerCatalogue.heading', { employer: employerName })}</h2>
+          <p className="text-sm text-secondary mt-1">{t('employerCatalogue.intro')}</p>
         </div>
         {courses.length > 0 && (
           <label className="block sm:w-72">
-            <span className="sr-only">Search catalogue</span>
+            <span className="sr-only">{t('employerCatalogue.searchLabel')}</span>
             <input
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search catalogue"
+              placeholder={t('employerCatalogue.searchPlaceholder')}
               className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink placeholder:text-secondary"
             />
           </label>
@@ -112,11 +114,11 @@ export default function EmployerCataloguePanel({ employerId, employerName, emplo
       {error && <p role="alert" className="text-sm text-red-700 mt-4">{error}</p>}
       {courses.length === 0 && !error && (
         <div className="mt-6 rounded-lg border border-dashed border-hairline p-8 text-center">
-          <p className="text-secondary">There are no catalogues available to you yet.</p>
+          <p className="text-secondary">{t('employerCatalogue.none')}</p>
         </div>
       )}
       {courses.length > 0 && filteredCourses.length === 0 && (
-        <p className="text-sm text-secondary mt-6">No learning matches “{query}”.</p>
+        <p className="text-sm text-secondary mt-6">{t('employerCatalogue.noMatch', { query })}</p>
       )}
 
       <div className="grid grid-cols-1 gap-4 mt-6 sm:grid-cols-2">
@@ -146,7 +148,7 @@ export default function EmployerCataloguePanel({ employerId, employerName, emplo
                   disabled={Boolean(enrolment) || enrollingId === course.id}
                   className="mt-4 self-start rounded-md bg-[var(--org-primary,var(--color-moss))] px-3 py-2 text-sm font-medium text-paper disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {enrolment?.completedDate ? 'Completed ✓' : enrolment ? 'Enrolled ✓' : enrollingId === course.id ? 'Enrolling…' : 'Enrol'}
+                  {enrolment?.completedDate ? t('courses.completed') : enrolment ? t('courses.enrolled') : enrollingId === course.id ? t('courses.enrolling') : t('courses.enrol')}
                 </button>
               </div>
             </article>

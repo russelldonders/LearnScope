@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import PendingAssignmentsPanel from './PendingAssignmentsPanel'
 import { FIXTURE_CURRENT_ROLES, FIXTURE_PENDING_ASSIGNMENTS } from './roleAlignmentFixtures'
 
+vi.mock('../../../context/LanguageContext', () => import('../../../test/languageMock'))
+
 afterEach(cleanup)
 
 describe('PendingAssignmentsPanel', () => {

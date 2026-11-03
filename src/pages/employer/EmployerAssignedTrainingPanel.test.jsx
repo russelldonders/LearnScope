@@ -3,6 +3,8 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import EmployerAssignedTrainingPanel from './EmployerAssignedTrainingPanel'
 
+vi.mock('../../context/LanguageContext', () => import('../../test/languageMock'))
+
 const catalogueMock = vi.hoisted(() => ({
   list: vi.fn(),
   respond: vi.fn(),

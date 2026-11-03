@@ -1,4 +1,5 @@
 import { formatAbsoluteDate } from '../../../lib/dates'
+import { useLanguage } from '../../../context/LanguageContext'
 
 // Read-only display of the learner's own current role(s) -- sourced from
 // their independently-managed Experience timeline
@@ -8,15 +9,15 @@ import { formatAbsoluteDate } from '../../../lib/dates'
 // disconnecting a role assignment (see PendingAssignmentsPanel,
 // RoleAlignmentSummary) never edits this.
 export default function CurrentRoleCard({ currentRoles }) {
+  const { t } = useLanguage()
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
       <p className="text-xs font-medium text-secondary uppercase tracking-wide mb-2">
-        Your current role{currentRoles.length === 1 ? '' : 's'}
+        {t(currentRoles.length === 1 ? 'roleAlignment.currentRole.one' : 'roleAlignment.currentRole.many')}
       </p>
       {currentRoles.length === 0 ? (
         <p className="text-sm text-secondary">
-          You haven't added a current role yet -- add one from your Experience before you can accept a role
-          assignment.
+          {t('roleAlignment.currentRole.none')}
         </p>
       ) : (
         <ul className="space-y-3">
@@ -24,14 +25,14 @@ export default function CurrentRoleCard({ currentRoles }) {
             <li key={role.id}>
               <h3 className="font-display text-lg text-ink">{role.title}</h3>
               <p className="text-sm text-secondary mt-0.5">
-                {role.organization} · since {formatAbsoluteDate(role.since)}
+                {t('roleAlignment.currentRole.since', { organization: role.organization, date: formatAbsoluteDate(role.since) })}
               </p>
             </li>
           ))}
         </ul>
       )}
       <p className="text-xs text-secondary mt-3">
-        This is yours to edit from your profile -- accepting or linking a role assignment below never changes it.
+        {t('roleAlignment.currentRole.footer')}
       </p>
     </div>
   )

@@ -40,6 +40,12 @@ const SOURCES = Object.values(import.meta.glob([
   '../../pages/manager/ManagerMemberProfile.jsx',
   '../../components/EvidenceFields.jsx',
   '../../components/TableControls.jsx',
+  '../../pages/employer/EmployerHome.jsx',
+  '../../pages/employer/EmployerAssignedTrainingPanel.jsx',
+  '../../pages/employer/EmployerCataloguePanel.jsx',
+  '../../pages/roles/LearnerRoleAlignmentContainer.jsx',
+  '../../pages/roles/employer-link/*.jsx',
+  '!../../pages/roles/employer-link/*.test.jsx',
 ], { query: '?raw', import: 'default', eager: true }))
 
 function flatKeys(object, prefix) {

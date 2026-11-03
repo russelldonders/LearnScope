@@ -3,11 +3,9 @@ import ConfirmDialog from '../../../components/ConfirmDialog'
 import MutationFeedback from '../../../components/MutationFeedback'
 import { LEVEL_LABELS } from '../../../lib/levels'
 import { formatAbsoluteDate } from '../../../lib/dates'
+import { useLanguage } from '../../../context/LanguageContext'
 
-const REQUIREMENT_LABELS = {
-  required: 'Required',
-  recommended: 'Recommended',
-}
+const REQUIREMENTS = ['required', 'recommended']
 
 // Bidirectional alignment view for an accepted role assignment -- read-only
 // except for disconnecting it entirely. Everything under "Employer
@@ -31,6 +29,7 @@ export default function RoleAlignmentSummary({
   error = null,
   onDisconnect,
 }) {
+  const { t } = useLanguage()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const wasDisconnecting = useRef(disconnecting)
 
@@ -52,32 +51,38 @@ export default function RoleAlignmentSummary({
           onClick={() => setConfirmOpen(true)}
           className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper whitespace-nowrap self-start"
         >
-          Disconnect
+          {t('roleAlignment.card.disconnect')}
         </button>
       </div>
       <p className="text-sm text-secondary mb-4">
-        Linked to {assignment.employerName}'s role profile · since {formatAbsoluteDate(assignment.linkedAt)}
+        {t('roleAlignment.card.linkedSince', { employer: assignment.employerName, date: formatAbsoluteDate(assignment.linkedAt) })}
       </p>
 
       <p className="text-xs font-medium text-secondary uppercase tracking-wide mb-2">
-        Employer requirements -- managed by {assignment.employerName}
+        {t('roleAlignment.card.requirementsBy', { employer: assignment.employerName })}
       </p>
 
       <div className="space-y-4">
         <div>
-          <p className="text-sm font-medium text-ink mb-1">Aligned ({aligned.length})</p>
+          <p className="text-sm font-medium text-ink mb-1">{t('roleAlignment.card.aligned', { count: aligned.length })}</p>
           {aligned.length === 0 ? (
-            <p className="text-sm text-secondary">No requirements met yet.</p>
+            <p className="text-sm text-secondary">{t('roleAlignment.card.noneAligned')}</p>
           ) : (
             <ul className="text-sm text-ink space-y-1">
               {aligned.map((skill) => (
                 <li key={skill.skillId}>
-                  {skill.name} -- at {LEVEL_LABELS[skill.learnerLevel] ?? skill.learnerLevel}, requires{' '}
-                  {LEVEL_LABELS[skill.targetLevel] ?? skill.targetLevel}
+                  {t('roleAlignment.card.alignedLine', {
+                    name: skill.name,
+                    level: LEVEL_LABELS[skill.learnerLevel] ?? skill.learnerLevel,
+                    target: LEVEL_LABELS[skill.targetLevel] ?? skill.targetLevel,
+                  })}
                   {skill.componentCoverage && (
                     <span className="block text-xs text-secondary">
-                      Component coverage {skill.componentCoverage.percentage}% · {skill.componentCoverage.requiredMet} of{' '}
-                      {skill.componentCoverage.requiredTotal} required targets met
+                      {t('roleAlignment.card.coverage', {
+                        percentage: skill.componentCoverage.percentage,
+                        met: skill.componentCoverage.requiredMet,
+                        total: skill.componentCoverage.requiredTotal,
+                      })}
                     </span>
                   )}
                 </li>
@@ -87,21 +92,24 @@ export default function RoleAlignmentSummary({
         </div>
 
         <div>
-          <p className="text-sm font-medium text-ink mb-1">Gaps ({gaps.length})</p>
+          <p className="text-sm font-medium text-ink mb-1">{t('roleAlignment.card.gaps', { count: gaps.length })}</p>
           {gaps.length === 0 ? (
-            <p className="text-sm text-secondary">No gaps -- every required skill is met.</p>
+            <p className="text-sm text-secondary">{t('roleAlignment.card.noGaps')}</p>
           ) : (
             <ul className="text-sm text-ink space-y-1">
               {gaps.map((skill) => (
                 <li key={skill.skillId}>
-                  {skill.name} -- requires {LEVEL_LABELS[skill.targetLevel] ?? skill.targetLevel}
+                  {t('roleAlignment.card.gapLine', { name: skill.name, target: LEVEL_LABELS[skill.targetLevel] ?? skill.targetLevel })}
                   {skill.learnerLevel !== null
-                    ? `, you're at ${LEVEL_LABELS[skill.learnerLevel] ?? skill.learnerLevel}`
-                    : ", you haven't tracked this skill yet"}
+                    ? t('roleAlignment.card.gapAt', { level: LEVEL_LABELS[skill.learnerLevel] ?? skill.learnerLevel })
+                    : t('roleAlignment.card.gapUntracked')}
                   {skill.componentCoverage && (
                     <span className="block text-xs text-secondary">
-                      Component coverage {skill.componentCoverage.percentage}% · {skill.componentCoverage.requiredMet} of{' '}
-                      {skill.componentCoverage.requiredTotal} required targets met
+                      {t('roleAlignment.card.coverage', {
+                        percentage: skill.componentCoverage.percentage,
+                        met: skill.componentCoverage.requiredMet,
+                        total: skill.componentCoverage.requiredTotal,
+                      })}
                     </span>
                   )}
                 </li>
@@ -111,15 +119,15 @@ export default function RoleAlignmentSummary({
         </div>
 
         <div>
-          <p className="text-sm font-medium text-ink mb-1">Employer training</p>
+          <p className="text-sm font-medium text-ink mb-1">{t('roleAlignment.card.training')}</p>
           {training.length === 0 ? (
-            <p className="text-sm text-secondary">No training assigned for this role.</p>
+            <p className="text-sm text-secondary">{t('roleAlignment.card.noTraining')}</p>
           ) : (
             <ul className="text-sm text-ink space-y-1">
               {training.map((item) => (
                 <li key={item.courseId}>
                   {item.title}{' '}
-                  <span className="text-secondary">({REQUIREMENT_LABELS[item.requirement] ?? item.requirement})</span>
+                  <span className="text-secondary">({REQUIREMENTS.includes(item.requirement) ? t(`roleAlignment.card.${item.requirement}`) : item.requirement})</span>
                 </li>
               ))}
             </ul>
@@ -133,7 +141,7 @@ export default function RoleAlignmentSummary({
         <ConfirmDialog
           message={
             <>
-              {`Disconnect from ${roleProfile.name}? You'll stop seeing this alignment view. Your current role and skill history stay exactly as they are -- nothing is deleted.`}
+              {t('roleAlignment.card.confirm', { name: roleProfile.name })}
               {error && (
                 <span role="alert" className="block mt-2 text-red-700">
                   {error}
@@ -141,7 +149,7 @@ export default function RoleAlignmentSummary({
               )}
             </>
           }
-          confirmLabel="Disconnect"
+          confirmLabel={t('roleAlignment.card.disconnect')}
           confirming={disconnecting}
           onConfirm={() => onDisconnect?.()}
           onCancel={() => setConfirmOpen(false)}
