@@ -436,6 +436,18 @@ export default {
       executeDialogExecutingButton: 'Executing…',
       executeDialogCancelButton: 'Cancel',
     },
+    transferText: {
+      accountTypePersonal: 'Personal account',
+      accountTypeWorkSso: 'Work SSO account',
+      accountTypeWorkManaged: 'Work-managed account',
+      conflictSkills: '“{label}” is tracked on both accounts.',
+      conflictCourses: '“{label}” appears on both accounts.',
+      conflictExperience: '“{label}” may describe the same experience on both accounts.',
+      keepDurableLevel: 'Keep the durable account’s level',
+      keepDurableRecord: 'Keep the durable account’s record',
+      useSourceLevel: 'Use the source account’s level',
+      useSourceRecord: 'Use the source account’s record',
+    },
   },
   learning: {
     heading: 'Your learning',

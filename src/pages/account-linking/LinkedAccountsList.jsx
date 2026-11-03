@@ -1,21 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import { formatAbsoluteDate } from '../../lib/dates'
+import { useLanguage } from '../../context/LanguageContext'
 
-const DIRECTION_LABELS = {
-  sent: 'Invited by you',
-  received: 'Invited you',
+const DIRECTION_KEYS = {
+  sent: 'directionSent',
+  received: 'directionReceived',
 }
 
-const STATUS_LABELS = {
-  active: 'Verified',
-  revoked: 'Revoked',
+const STATUS_KEYS = {
+  active: 'statusActive',
+  revoked: 'statusRevoked',
 }
 
-const ACCOUNT_TYPE_LABELS = {
-  personal: 'Personal login',
-  work_sso: 'Work SSO',
-  work_managed: 'Work-managed login',
+const ACCOUNT_TYPE_KEYS = {
+  personal: 'accountTypePersonal',
+  work_sso: 'accountTypeWorkSso',
+  work_managed: 'accountTypeWorkManaged',
 }
 
 // List of this learner's verified linked accounts. Revoking is the only
@@ -29,6 +30,8 @@ const ACCOUNT_TYPE_LABELS = {
 // shown inline in that same dialog rather than a generic banner that could
 // be misread as belonging to a different row.
 export default function LinkedAccountsList({ linkedAccounts, revokingId = null, error = null, onRevoke }) {
+  const { t } = useLanguage()
+  const label = (keys, value) => (keys[value] ? t(`connectedAccounts.linkedAccountsList.${keys[value]}`) : value)
   const [confirmTargetId, setConfirmTargetId] = useState(null)
   const wasRevoking = useRef(revokingId)
 
@@ -43,14 +46,13 @@ export default function LinkedAccountsList({ linkedAccounts, revokingId = null, 
 
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
-      <h3 className="font-display text-lg text-ink mb-1">Linked accounts</h3>
+      <h3 className="font-display text-lg text-ink mb-1">{t('connectedAccounts.linkedAccountsList.heading')}</h3>
       <p className="text-sm text-secondary mb-4">
-        Accounts verified as belonging to you. Each keeps its own separate profile, skills and history --
-        nothing here is merged or shared automatically.
+        {t('connectedAccounts.linkedAccountsList.description')}
       </p>
 
       {linkedAccounts.length === 0 ? (
-        <p className="text-sm text-secondary py-2">You haven't linked any other accounts yet.</p>
+        <p className="text-sm text-secondary py-2">{t('connectedAccounts.linkedAccountsList.emptyState')}</p>
       ) : (
         <ul className="divide-y divide-hairline">
           {linkedAccounts.map((account) => (
@@ -60,9 +62,12 @@ export default function LinkedAccountsList({ linkedAccounts, revokingId = null, 
                   {account.email}
                 </p>
                 <p className="text-xs text-secondary">
-                  {ACCOUNT_TYPE_LABELS[account.accountType] ?? account.accountType} ·{' '}
-                  {DIRECTION_LABELS[account.direction] ?? account.direction} · verified{' '}
-                  {formatAbsoluteDate(account.verifiedAt)} · {STATUS_LABELS[account.status] ?? account.status}
+                  {t('connectedAccounts.linkedAccountsList.metaLine', {
+                    accountType: label(ACCOUNT_TYPE_KEYS, account.accountType),
+                    direction: label(DIRECTION_KEYS, account.direction),
+                    date: formatAbsoluteDate(account.verifiedAt),
+                    status: label(STATUS_KEYS, account.status),
+                  })}
                 </p>
               </div>
               <button
@@ -70,7 +75,7 @@ export default function LinkedAccountsList({ linkedAccounts, revokingId = null, 
                 onClick={() => setConfirmTargetId(account.id)}
                 className="text-xs font-medium text-red-700 hover:underline whitespace-nowrap"
               >
-                Revoke
+                {t('connectedAccounts.linkedAccountsList.revokeButton')}
               </button>
             </li>
           ))}
@@ -81,7 +86,7 @@ export default function LinkedAccountsList({ linkedAccounts, revokingId = null, 
         <ConfirmDialog
           message={
             <>
-              {`Revoke the verified link with ${confirmTarget.email}? Neither account's profile, skills or history are affected -- this only removes the verified connection between them. You can re-verify later if you both want to.`}
+              {t('connectedAccounts.linkedAccountsList.confirmMessage', { email: confirmTarget.email })}
               {error && (
                 <span role="alert" className="block mt-2 text-red-700">
                   {error}
@@ -89,7 +94,7 @@ export default function LinkedAccountsList({ linkedAccounts, revokingId = null, 
               )}
             </>
           }
-          confirmLabel="Revoke"
+          confirmLabel={t('connectedAccounts.linkedAccountsList.confirmLabel')}
           confirming={revokingId === confirmTarget.id}
           onConfirm={() => onRevoke?.(confirmTarget.id)}
           onCancel={() => setConfirmTargetId(null)}

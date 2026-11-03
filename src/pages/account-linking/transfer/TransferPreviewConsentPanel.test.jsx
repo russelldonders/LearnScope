@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import TransferPreviewConsentPanel from './TransferPreviewConsentPanel'
 
+vi.mock('../../../context/LanguageContext', () => import('../../../test/languageMock'))
+
 afterEach(cleanup)
 
 const account = { id: 'link-1', email: 'work@example.com', status: 'active' }

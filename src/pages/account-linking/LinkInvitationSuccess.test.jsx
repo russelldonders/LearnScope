@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import LinkInvitationSuccess from './LinkInvitationSuccess'
 import { FIXTURE_ACTIVE_INVITATION } from './accountLinkingFixtures'
 
+vi.mock('../../context/LanguageContext', () => import('../../test/languageMock'))
+
 afterEach(cleanup)
 
 beforeEach(() => {

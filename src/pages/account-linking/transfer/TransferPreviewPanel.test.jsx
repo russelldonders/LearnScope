@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import TransferPreviewPanel from './TransferPreviewPanel'
 import { FIXTURE_TRANSFER_PREVIEW } from './transferFixtures'
 
+vi.mock('../../../context/LanguageContext', () => import('../../../test/languageMock'))
+
 afterEach(cleanup)
 
 describe('TransferPreviewPanel', () => {

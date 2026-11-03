@@ -3,22 +3,15 @@ import AccessibleDialog from '../../../components/AccessibleDialog'
 import ConfirmDialog from '../../../components/ConfirmDialog'
 import MutationFeedback from '../../../components/MutationFeedback'
 import { formatAbsoluteDate, formatRelativeDate } from '../../../lib/dates'
+import { useLanguage } from '../../../context/LanguageContext'
 
-const STATUS_LABELS = {
-  pending: 'Pending approval',
-  approved: 'Approved -- not yet executed',
+// status -> its planApprovalPanel.status{Key} / description{Key} strings.
+const STATUS_KEYS = {
+  pending: 'Pending',
+  approved: 'Approved',
   executed: 'Executed',
   cancelled: 'Cancelled',
   expired: 'Expired',
-}
-
-const STATUS_DESCRIPTIONS = {
-  pending: 'Waiting for both accounts to approve this exact plan version. Nothing has moved.',
-  approved:
-    'Both accounts have approved this exact plan version. Nothing has moved yet -- execution below is a separate, final step, and either account can still withdraw instead.',
-  executed: 'This plan was executed.',
-  cancelled: 'This plan was cancelled before execution. Nothing was moved.',
-  expired: 'This plan expired before both accounts approved it. Nothing was moved.',
 }
 
 const TERMINAL_STATUSES = new Set(['executed', 'cancelled', 'expired'])
@@ -50,6 +43,7 @@ export default function PlanApprovalPanel({
   onWithdrawApproval,
   onExecute,
 }) {
+  const { t } = useLanguage()
   const [approveOpen, setApproveOpen] = useState(false)
   const [withdrawOpen, setWithdrawOpen] = useState(false)
   const [executeOpen, setExecuteOpen] = useState(false)
@@ -77,8 +71,8 @@ export default function PlanApprovalPanel({
   const myApprovalIsCurrent = Boolean(myApproval) && myApproval.approvedVersion === version
 
   const accountsWithRole = [
-    { ...durableAccount, roleLabel: 'Durable account' },
-    { ...sourceAccount, roleLabel: 'Source account' },
+    { ...durableAccount, roleLabel: t('connectedAccounts.planApprovalPanel.durableAccountRole') },
+    { ...sourceAccount, roleLabel: t('connectedAccounts.planApprovalPanel.sourceAccountRole') },
   ]
 
   const anyDialogOpen = approveOpen || withdrawOpen || executeOpen
@@ -86,17 +80,16 @@ export default function PlanApprovalPanel({
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
       <div className="flex flex-wrap items-center gap-2 mb-1">
-        <h3 className="font-display text-lg text-ink">Approval</h3>
+        <h3 className="font-display text-lg text-ink">{t('connectedAccounts.planApprovalPanel.heading')}</h3>
         <span className="text-xs font-medium rounded-full px-2 py-0.5 bg-paper border border-hairline text-ink">
-          {STATUS_LABELS[status] ?? status}
+          {STATUS_KEYS[status] ? t(`connectedAccounts.planApprovalPanel.status${STATUS_KEYS[status]}`) : status}
         </span>
       </div>
-      <p className="text-sm text-secondary mb-4">{STATUS_DESCRIPTIONS[status] ?? ''}</p>
+      <p className="text-sm text-secondary mb-4">{STATUS_KEYS[status] ? t(`connectedAccounts.planApprovalPanel.description${STATUS_KEYS[status]}`) : ''}</p>
 
       {!isTerminal && expiresAt && (
         <p className="text-xs text-secondary mb-4">
-          This plan version expires {formatRelativeDate(expiresAt)} ({formatAbsoluteDate(expiresAt)}) if it
-          isn't approved by both accounts before then.
+          {t('connectedAccounts.planApprovalPanel.expiresNotice', { relative: formatRelativeDate(expiresAt), absolute: formatAbsoluteDate(expiresAt) })}
         </p>
       )}
 
@@ -108,14 +101,14 @@ export default function PlanApprovalPanel({
             <li key={account.id} className="py-2">
               <p className="text-sm text-ink truncate" title={account.email}>
                 {account.email} <span className="text-xs text-secondary">({account.roleLabel})</span>
-                {account.id === currentAccountId && <span className="text-xs text-secondary"> -- you</span>}
+                {account.id === currentAccountId && <span className="text-xs text-secondary">{t('connectedAccounts.planApprovalPanel.youSuffix')}</span>}
               </p>
               <p className="text-xs text-secondary">
-                {!approval && 'Has not approved this plan yet.'}
+                {!approval && t('connectedAccounts.planApprovalPanel.notApprovedYet')}
                 {approval &&
                   isCurrent &&
-                  `Approved this version ${formatRelativeDate(approval.approvedAt)} (${formatAbsoluteDate(approval.approvedAt)}).`}
-                {approval && !isCurrent && 'Approved an earlier version of this plan -- needs to approve this version.'}
+                  t('connectedAccounts.planApprovalPanel.approvedVersionLine', { relative: formatRelativeDate(approval.approvedAt), absolute: formatAbsoluteDate(approval.approvedAt) })}
+                {approval && !isCurrent && t('connectedAccounts.planApprovalPanel.approvedEarlierVersion')}
               </p>
             </li>
           )
@@ -133,7 +126,7 @@ export default function PlanApprovalPanel({
                 onClick={() => setWithdrawOpen(true)}
                 className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper whitespace-nowrap"
               >
-                Withdraw approval
+                {t('connectedAccounts.planApprovalPanel.withdrawButton')}
               </button>
             ) : (
               <button
@@ -142,12 +135,12 @@ export default function PlanApprovalPanel({
                 disabled={!allConflictsResolved}
                 className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60 whitespace-nowrap"
               >
-                Approve this plan
+                {t('connectedAccounts.planApprovalPanel.approveButton')}
               </button>
             )}
           </div>
           {!allConflictsResolved && !myApprovalIsCurrent && (
-            <p className="text-xs text-secondary mt-2">Resolve every conflict above before approving.</p>
+            <p className="text-xs text-secondary mt-2">{t('connectedAccounts.planApprovalPanel.resolveConflictsNotice')}</p>
           )}
         </>
       )}
@@ -155,7 +148,7 @@ export default function PlanApprovalPanel({
       {status === 'approved' && (
         <div className="mt-4 pt-4 border-t border-hairline">
           <p className="text-sm text-ink mb-2">
-            Both accounts have approved. Executing is the final, separate step that actually moves this data.
+            {t('connectedAccounts.planApprovalPanel.bothApprovedNotice')}
           </p>
           {!anyDialogOpen && <MutationFeedback status="error" message={executeError} className="mb-3" />}
           <button
@@ -163,7 +156,7 @@ export default function PlanApprovalPanel({
             onClick={() => setExecuteOpen(true)}
             className="rounded-md bg-red-700 text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 whitespace-nowrap"
           >
-            Execute this transfer
+            {t('connectedAccounts.planApprovalPanel.executeButton')}
           </button>
         </div>
       )}
@@ -181,7 +174,7 @@ export default function PlanApprovalPanel({
         <ConfirmDialog
           message={
             <>
-              {"Withdraw your approval of this plan? The other account's approval status is unaffected, but the plan can't execute until you approve again."}
+              {t('connectedAccounts.planApprovalPanel.withdrawConfirmMessage')}
               {error && (
                 <span role="alert" className="block mt-2 text-red-700">
                   {error}
@@ -189,7 +182,7 @@ export default function PlanApprovalPanel({
               )}
             </>
           }
-          confirmLabel="Withdraw approval"
+          confirmLabel={t('connectedAccounts.planApprovalPanel.withdrawConfirmLabel')}
           confirming={withdrawing}
           onConfirm={() => onWithdrawApproval?.()}
           onCancel={() => setWithdrawOpen(false)}
@@ -209,6 +202,7 @@ export default function PlanApprovalPanel({
 }
 
 function ApproveDialog({ approving, error, onApprove, onClose }) {
+  const { t } = useLanguage()
   const [acknowledged, setAcknowledged] = useState(false)
   const titleId = useId()
 
@@ -220,20 +214,16 @@ function ApproveDialog({ approving, error, onApprove, onClose }) {
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
       <h2 id={titleId} className="font-display text-xl text-ink mb-1">
-        Approve this transfer plan
+        {t('connectedAccounts.planApprovalPanel.approveDialogHeading')}
       </h2>
       <p className="text-sm text-secondary mb-4">
-        Approving records your consent to this exact plan version. It does not move, merge, or delete anything
-        by itself -- the transfer only runs once <strong>both</strong> accounts have approved this same
-        version, and execution happens as a separate step.
+        {t('connectedAccounts.planApprovalPanel.approveDialogDescriptionPrefix')} <strong>{t('connectedAccounts.planApprovalPanel.approveDialogDescriptionBoth')}</strong>{' '}
+        {t('connectedAccounts.planApprovalPanel.approveDialogDescriptionSuffix')}
       </p>
       <ul className="text-sm text-secondary list-disc pl-5 mb-4 space-y-1">
-        <li>
-          If either account changes a conflict resolution afterwards, this approval no longer applies and both
-          accounts need to approve again.
-        </li>
-        <li>You can withdraw your approval at any time before execution.</li>
-        <li>Neither account's profile, skills, or history changes until the plan actually executes.</li>
+        <li>{t('connectedAccounts.planApprovalPanel.approveDialogBullet1')}</li>
+        <li>{t('connectedAccounts.planApprovalPanel.approveDialogBullet2')}</li>
+        <li>{t('connectedAccounts.planApprovalPanel.approveDialogBullet3')}</li>
       </ul>
 
       <label className="flex items-start gap-3 mb-4">
@@ -245,8 +235,7 @@ function ApproveDialog({ approving, error, onApprove, onClose }) {
           className="mt-0.5"
         />
         <span className="text-sm text-ink">
-          I understand this approval applies only to this exact plan version and doesn't move any data by
-          itself.
+          {t('connectedAccounts.planApprovalPanel.approveDialogAcknowledgeLabel')}
         </span>
       </label>
 
@@ -259,7 +248,7 @@ function ApproveDialog({ approving, error, onApprove, onClose }) {
           disabled={approving || !acknowledged}
           className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
         >
-          {approving ? 'Approving…' : 'Approve this plan'}
+          {approving ? t('connectedAccounts.planApprovalPanel.approveDialogApprovingButton') : t('connectedAccounts.planApprovalPanel.approveDialogApproveButton')}
         </button>
         <button
           type="button"
@@ -267,7 +256,7 @@ function ApproveDialog({ approving, error, onApprove, onClose }) {
           disabled={approving}
           className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper disabled:opacity-60"
         >
-          Cancel
+          {t('connectedAccounts.planApprovalPanel.approveDialogCancelButton')}
         </button>
       </div>
     </AccessibleDialog>
@@ -281,9 +270,14 @@ function ApproveDialog({ approving, error, onApprove, onClose }) {
 // checkbox, since this is the one action in this whole feature area that
 // actually moves data instead of only recording consent.
 function ExecuteDialog({ executing, error, onExecute, onClose }) {
+  const { t } = useLanguage()
   const [confirmationText, setConfirmationText] = useState('')
   const titleId = useId()
-  const canExecute = confirmationText.trim().toLowerCase() === 'execute'
+  // The word to type is shown in the viewer's language, but the English
+  // word is always accepted too.
+  const typeWord = t('connectedAccounts.planApprovalPanel.executeDialogTypeWord')
+  const typed = confirmationText.trim().toLowerCase()
+  const canExecute = typed === typeWord.toLowerCase() || typed === 'execute'
 
   return (
     <AccessibleDialog
@@ -293,21 +287,20 @@ function ExecuteDialog({ executing, error, onExecute, onClose }) {
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
       <h2 id={titleId} className="font-display text-xl text-ink mb-1">
-        Execute this transfer
+        {t('connectedAccounts.planApprovalPanel.executeDialogHeading')}
       </h2>
       <p className="text-sm text-secondary mb-4">
-        This is the step that actually moves data between the two accounts, exactly as resolved and approved
-        above. It cannot be undone from here afterward.
+        {t('connectedAccounts.planApprovalPanel.executeDialogDescription')}
       </p>
       <ul className="text-sm text-secondary list-disc pl-5 mb-4 space-y-1">
-        <li>Every item above is applied in one all-or-nothing step -- either everything happens, or nothing does.</li>
-        <li>If either record has changed since this plan was approved, execution is refused rather than run against stale data.</li>
-        <li>Records kept over a duplicate, or replaced by one, are retired -- not merged -- so nothing is silently lost.</li>
+        <li>{t('connectedAccounts.planApprovalPanel.executeDialogBullet1')}</li>
+        <li>{t('connectedAccounts.planApprovalPanel.executeDialogBullet2')}</li>
+        <li>{t('connectedAccounts.planApprovalPanel.executeDialogBullet3')}</li>
       </ul>
 
       <label className="block mb-4">
         <span className="text-sm text-ink">
-          Type <strong>execute</strong> to confirm.
+          {t('connectedAccounts.planApprovalPanel.executeDialogTypePrefix')} <strong>{typeWord}</strong> {t('connectedAccounts.planApprovalPanel.executeDialogTypeSuffix')}
         </span>
         <input
           type="text"
@@ -328,7 +321,7 @@ function ExecuteDialog({ executing, error, onExecute, onClose }) {
           disabled={executing || !canExecute}
           className="flex-1 rounded-md bg-red-700 text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
         >
-          {executing ? 'Executing…' : 'Execute this transfer'}
+          {executing ? t('connectedAccounts.planApprovalPanel.executeDialogExecutingButton') : t('connectedAccounts.planApprovalPanel.executeDialogExecuteButton')}
         </button>
         <button
           type="button"
@@ -336,7 +329,7 @@ function ExecuteDialog({ executing, error, onExecute, onClose }) {
           disabled={executing}
           className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper disabled:opacity-60"
         >
-          Cancel
+          {t('connectedAccounts.planApprovalPanel.executeDialogCancelButton')}
         </button>
       </div>
     </AccessibleDialog>

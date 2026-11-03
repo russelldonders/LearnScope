@@ -3,6 +3,7 @@ import PlanCategoryBreakdown from './PlanCategoryBreakdown'
 import PlanConflictResolutionList from './PlanConflictResolutionList'
 import PlanApprovalPanel from './PlanApprovalPanel'
 import { FIXTURE_CURRENT_ACCOUNT_ID, FIXTURE_PLAN_PENDING } from './transferPlanFixtures'
+import { useLanguage } from '../../../context/LanguageContext'
 
 const TERMINAL_STATUSES = new Set(['executed', 'cancelled', 'expired'])
 
@@ -31,10 +32,11 @@ export default function TransferPlanReviewPanel({
   onWithdrawApproval,
   onExecute,
 }) {
+  const { t } = useLanguage()
   if (loading) {
     return (
       <div className="bg-card border border-hairline rounded-lg p-6">
-        <p className="text-sm text-secondary">Loading transfer plan…</p>
+        <p className="text-sm text-secondary">{t('connectedAccounts.transferPlanReviewPanel.loading')}</p>
       </div>
     )
   }
@@ -52,8 +54,8 @@ export default function TransferPlanReviewPanel({
   if (!plan) {
     return (
       <div className="bg-card border border-hairline rounded-lg p-6">
-        <h3 className="font-display text-lg text-ink mb-1">Transfer plan</h3>
-        <p className="text-sm text-secondary">No transfer plan has been proposed yet.</p>
+        <h3 className="font-display text-lg text-ink mb-1">{t('connectedAccounts.transferPlanReviewPanel.heading')}</h3>
+        <p className="text-sm text-secondary">{t('connectedAccounts.transferPlanReviewPanel.noPlanYet')}</p>
       </div>
     )
   }
@@ -70,11 +72,9 @@ export default function TransferPlanReviewPanel({
   return (
     <div className="space-y-6">
       <div className="bg-card border border-hairline rounded-lg p-6">
-        <h3 className="font-display text-lg text-ink mb-1">Transfer plan review</h3>
+        <h3 className="font-display text-lg text-ink mb-1">{t('connectedAccounts.transferPlanReviewPanel.reviewHeading')}</h3>
         <p className="text-sm text-secondary">
-          This is a proposed plan, not a completed action. Choosing a conflict resolution and approving here
-          doesn't move, merge, delete, or share any data -- the transfer only runs once both accounts have
-          approved this exact plan version, and even then execution is a separate, final step below.
+          {t('connectedAccounts.transferPlanReviewPanel.reviewDescription')}
         </p>
       </div>
 

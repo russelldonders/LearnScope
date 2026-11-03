@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import { formatAbsoluteDate } from '../../lib/dates'
+import { useLanguage } from '../../context/LanguageContext'
 import { FIXTURE_LINKED_ACCOUNTS } from './accountLinkingFixtures'
 import { FIXTURE_WORKSPACE_ACCESS_GRANTS, FIXTURE_WORKSPACE_ACCESS_REQUESTS } from './linkedWorkspaceAccessFixtures'
 
@@ -50,6 +51,7 @@ export default function LinkedWorkspaceAccessPanel({
   // cancelling a request (which never touches live access), so -- matching
   // LinkedAccountsList's confirm-before-revoke pattern -- these two go
   // through a confirmation step; the others act immediately.
+  const { t } = useLanguage()
   const [confirming, setConfirming] = useState(null)
   const wasBusyKey = useRef(busyKey)
 
@@ -68,10 +70,9 @@ export default function LinkedWorkspaceAccessPanel({
 
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
-      <h3 className="font-display text-lg text-ink mb-1">Share access between your logins</h3>
+      <h3 className="font-display text-lg text-ink mb-1">{t('connectedAccounts.linkedWorkspaceAccessPanel.heading')}</h3>
       <p className="text-sm text-secondary mb-4">
-        Sharing gives a linked login full view access to a personal profile — yours or theirs. Nothing here
-        moves or copies your records; either side can end it at any time.
+        {t('connectedAccounts.linkedWorkspaceAccessPanel.description')}
       </p>
       {errors.load && <p role="alert" className="text-sm text-red-700 mb-3">{errors.load}</p>}
 
@@ -89,12 +90,12 @@ export default function LinkedWorkspaceAccessPanel({
               <div className="text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-secondary">
-                    <span className="font-medium text-ink">Your profile: </span>
+                    <span className="font-medium text-ink">{t('connectedAccounts.linkedWorkspaceAccessPanel.yourProfileLabel')} </span>
                     {outgoingGrant
-                      ? `they can view it, since ${formatAbsoluteDate(outgoingGrant.grantedAt)}`
+                      ? t('connectedAccounts.linkedWorkspaceAccessPanel.outgoingGranted', { date: formatAbsoluteDate(outgoingGrant.grantedAt) })
                       : outgoingRequest
-                        ? 'sharing request sent — waiting for them to accept'
-                        : 'they cannot view it'}
+                        ? t('connectedAccounts.linkedWorkspaceAccessPanel.outgoingRequestSent')
+                        : t('connectedAccounts.linkedWorkspaceAccessPanel.outgoingNone')}
                   </span>
                   {outgoingGrant ? (
                     <button
@@ -102,7 +103,7 @@ export default function LinkedWorkspaceAccessPanel({
                       onClick={() => setConfirming({ type: 'revoke', linkId: account.id, email: account.email })}
                       className="text-xs font-medium text-red-700 hover:underline whitespace-nowrap"
                     >
-                      Remove access
+                      {t('connectedAccounts.linkedWorkspaceAccessPanel.removeAccessButton')}
                     </button>
                   ) : outgoingRequest ? (
                     <button
@@ -111,7 +112,7 @@ export default function LinkedWorkspaceAccessPanel({
                       disabled={busyKey === `cancel:${outgoingRequest.id}`}
                       className="text-xs font-medium text-ink hover:underline whitespace-nowrap disabled:opacity-60"
                     >
-                      {busyKey === `cancel:${outgoingRequest.id}` ? 'Cancelling…' : 'Cancel request'}
+                      {busyKey === `cancel:${outgoingRequest.id}` ? t('connectedAccounts.linkedWorkspaceAccessPanel.cancellingButton') : t('connectedAccounts.linkedWorkspaceAccessPanel.cancelRequestButton')}
                     </button>
                   ) : (
                     <button
@@ -120,7 +121,7 @@ export default function LinkedWorkspaceAccessPanel({
                       disabled={busyKey === `request:${account.id}`}
                       className="text-xs font-medium text-moss hover:underline whitespace-nowrap disabled:opacity-60"
                     >
-                      {busyKey === `request:${account.id}` ? 'Sending…' : 'Share your profile with them'}
+                      {busyKey === `request:${account.id}` ? t('connectedAccounts.linkedWorkspaceAccessPanel.sendingButton') : t('connectedAccounts.linkedWorkspaceAccessPanel.shareButton')}
                     </button>
                   )}
                 </div>
@@ -132,12 +133,12 @@ export default function LinkedWorkspaceAccessPanel({
               <div className="text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-secondary">
-                    <span className="font-medium text-ink">Their profile: </span>
+                    <span className="font-medium text-ink">{t('connectedAccounts.linkedWorkspaceAccessPanel.theirProfileLabel')} </span>
                     {incomingGrant
-                      ? `you can view it, since ${formatAbsoluteDate(incomingGrant.grantedAt)}`
+                      ? t('connectedAccounts.linkedWorkspaceAccessPanel.incomingGranted', { date: formatAbsoluteDate(incomingGrant.grantedAt) })
                       : incomingRequest
-                        ? 'they want to share it with you'
-                        : 'you cannot view it'}
+                        ? t('connectedAccounts.linkedWorkspaceAccessPanel.incomingRequested')
+                        : t('connectedAccounts.linkedWorkspaceAccessPanel.incomingNone')}
                   </span>
                   {incomingGrant ? (
                     <button
@@ -145,7 +146,7 @@ export default function LinkedWorkspaceAccessPanel({
                       onClick={() => setConfirming({ type: 'renounce', linkId: account.id, email: account.email })}
                       className="text-xs font-medium text-ink hover:underline whitespace-nowrap"
                     >
-                      Give up access
+                      {t('connectedAccounts.linkedWorkspaceAccessPanel.giveUpAccessButton')}
                     </button>
                   ) : incomingRequest ? (
                     <div className="flex gap-3">
@@ -155,7 +156,7 @@ export default function LinkedWorkspaceAccessPanel({
                         disabled={busyKey === `decline:${incomingRequest.id}`}
                         className="text-xs font-medium text-ink hover:underline whitespace-nowrap disabled:opacity-60"
                       >
-                        Decline
+                        {t('connectedAccounts.linkedWorkspaceAccessPanel.declineButton')}
                       </button>
                       <button
                         type="button"
@@ -163,7 +164,7 @@ export default function LinkedWorkspaceAccessPanel({
                         disabled={busyKey === `accept:${incomingRequest.id}`}
                         className="text-xs font-medium text-moss hover:underline whitespace-nowrap disabled:opacity-60"
                       >
-                        {busyKey === `accept:${incomingRequest.id}` ? 'Accepting…' : 'Accept'}
+                        {busyKey === `accept:${incomingRequest.id}` ? t('connectedAccounts.linkedWorkspaceAccessPanel.acceptingButton') : t('connectedAccounts.linkedWorkspaceAccessPanel.acceptButton')}
                       </button>
                     </div>
                   ) : null}
@@ -181,13 +182,13 @@ export default function LinkedWorkspaceAccessPanel({
         <ConfirmDialog
           message={
             <>
-              {`Remove ${confirming.email}'s access to your profile? They'll no longer be able to view your skills, courses or experience through that login. You can share again later if you want to.`}
+              {t('connectedAccounts.linkedWorkspaceAccessPanel.revokeConfirmMessage', { email: confirming.email })}
               {errors[`revoke:${confirming.linkId}`] && (
                 <span role="alert" className="block mt-2 text-red-700">{errors[`revoke:${confirming.linkId}`]}</span>
               )}
             </>
           }
-          confirmLabel="Remove access"
+          confirmLabel={t('connectedAccounts.linkedWorkspaceAccessPanel.revokeConfirmLabel')}
           confirming={busyKey === `revoke:${confirming.linkId}`}
           onConfirm={() => onRevoke?.(confirming.linkId)}
           onCancel={() => setConfirming(null)}
@@ -198,13 +199,13 @@ export default function LinkedWorkspaceAccessPanel({
         <ConfirmDialog
           message={
             <>
-              {`Give up your access to ${confirming.email}'s profile? You'll no longer be able to view their skills, courses or experience. They can share it with you again later if you want.`}
+              {t('connectedAccounts.linkedWorkspaceAccessPanel.renounceConfirmMessage', { email: confirming.email })}
               {errors[`renounce:${confirming.linkId}`] && (
                 <span role="alert" className="block mt-2 text-red-700">{errors[`renounce:${confirming.linkId}`]}</span>
               )}
             </>
           }
-          confirmLabel="Give up access"
+          confirmLabel={t('connectedAccounts.linkedWorkspaceAccessPanel.renounceConfirmLabel')}
           confirming={busyKey === `renounce:${confirming.linkId}`}
           onConfirm={() => onRenounce?.(confirming.linkId)}
           onCancel={() => setConfirming(null)}

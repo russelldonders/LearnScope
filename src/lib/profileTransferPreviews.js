@@ -1,3 +1,4 @@
+import { ACCOUNT_TYPE_LABEL_KEYS } from './profileTransferPlans'
 import { supabase } from './supabaseClient'
 
 export async function requestProfileTransferPreview(linkId) {
@@ -41,8 +42,8 @@ export async function getProfileTransferComparison(previewId) {
   }
   const profiles = data?.profiles ?? []
   return {
-    accountA: profiles[0] ? { ...profiles[0], id: profiles[0].profileId, accountType: accountTypeLabels[profiles[0].accountType] ?? profiles[0].accountType, countsError: null } : null,
-    accountB: profiles[1] ? { ...profiles[1], id: profiles[1].profileId, accountType: accountTypeLabels[profiles[1].accountType] ?? profiles[1].accountType, countsError: null } : null,
+    accountA: profiles[0] ? { ...profiles[0], id: profiles[0].profileId, accountType: accountTypeLabels[profiles[0].accountType] ?? profiles[0].accountType, accountTypeKey: ACCOUNT_TYPE_LABEL_KEYS[profiles[0].accountType] ?? null, countsError: null } : null,
+    accountB: profiles[1] ? { ...profiles[1], id: profiles[1].profileId, accountType: accountTypeLabels[profiles[1].accountType] ?? profiles[1].accountType, accountTypeKey: ACCOUNT_TYPE_LABEL_KEYS[profiles[1].accountType] ?? null, countsError: null } : null,
     conflicts: {
       duplicateSkills: data?.conflicts?.skills ?? [],
       overlappingCourses: data?.conflicts?.courses ?? [],

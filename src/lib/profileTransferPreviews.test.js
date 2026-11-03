@@ -42,8 +42,8 @@ describe('profile transfer preview service', () => {
       conflicts: { skills: [{ name: 'Coaching', levelA: 4, levelB: 3 }], courses: [{ title: 'Safety' }], experience: [] },
     }, error: null })
     await expect(service.getProfileTransferComparison('preview-1')).resolves.toMatchObject({
-      accountA: { id: 'profile-a', accountType: 'Personal account' },
-      accountB: { id: 'profile-b', accountType: 'Work SSO account' },
+      accountA: { id: 'profile-a', accountType: 'Personal account', accountTypeKey: 'connectedAccounts.transferText.accountTypePersonal' },
+      accountB: { id: 'profile-b', accountType: 'Work SSO account', accountTypeKey: 'connectedAccounts.transferText.accountTypeWorkSso' },
       conflicts: { duplicateSkills: [{ name: 'Coaching', levelA: 4, levelB: 3 }], overlappingCourses: [{ title: 'Safety' }] },
     })
   })

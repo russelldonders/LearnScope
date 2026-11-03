@@ -73,6 +73,30 @@ const ACCOUNT_TYPE_LABELS = {
   work_managed: 'Work-managed account',
 }
 
+// Interface-translation keys for the English labels built here, so the
+// components can show them in the viewer's language; the English labels
+// stay alongside as the fallback.
+export const ACCOUNT_TYPE_LABEL_KEYS = {
+  personal: 'connectedAccounts.transferText.accountTypePersonal',
+  work_sso: 'connectedAccounts.transferText.accountTypeWorkSso',
+  work_managed: 'connectedAccounts.transferText.accountTypeWorkManaged',
+}
+
+const CATEGORY_LABEL_KEYS = {
+  skills: 'connectedAccounts.accountProfileSummaryCard.countFieldSkills',
+  experience: 'connectedAccounts.accountProfileSummaryCard.countFieldExperience',
+  courses: 'connectedAccounts.accountProfileSummaryCard.countFieldCourses',
+  evidence: 'connectedAccounts.accountProfileSummaryCard.countFieldEvidence',
+  connections: 'connectedAccounts.accountProfileSummaryCard.countFieldConnections',
+  integrations: 'connectedAccounts.accountProfileSummaryCard.countFieldIntegrations',
+}
+
+const CONFLICT_DESCRIPTION_KEYS = {
+  skills: 'connectedAccounts.transferText.conflictSkills',
+  courses: 'connectedAccounts.transferText.conflictCourses',
+  experience: 'connectedAccounts.transferText.conflictExperience',
+}
+
 const CATEGORY_LABELS = {
   skills: 'Skills',
   experience: 'Experience',
@@ -87,6 +111,7 @@ function accountFromSummary(summary) {
     id: summary.profileId,
     email: summary.email,
     accountType: ACCOUNT_TYPE_LABELS[summary.accountType] ?? summary.accountType,
+    accountTypeKey: ACCOUNT_TYPE_LABEL_KEYS[summary.accountType] ?? null,
   }
 }
 
@@ -114,6 +139,7 @@ export async function getProfileTransferPlan(planId) {
     categories: Object.entries(CATEGORY_LABELS).map(([key, label]) => ({
       key,
       label,
+      labelKey: CATEGORY_LABEL_KEYS[key],
       sourceCount: source.counts?.[key] ?? null,
       durableCount: durable.counts?.[key] ?? null,
     })),
@@ -121,9 +147,23 @@ export async function getProfileTransferPlan(planId) {
       id: item.id,
       category: item.domain,
       description: conflictDescription(item),
+      descriptionKey: CONFLICT_DESCRIPTION_KEYS[item.domain === 'skills' || item.domain === 'courses' ? item.domain : 'experience'],
+      descriptionParams: { label: item.label },
       options: [
-        { value: 'keep_durable', label: `Keep the durable account’s ${item.domain === 'skills' ? 'level' : 'record'}` },
-        { value: 'use_source', label: `Use the source account’s ${item.domain === 'skills' ? 'level' : 'record'}` },
+        {
+          value: 'keep_durable',
+          label: `Keep the durable account’s ${item.domain === 'skills' ? 'level' : 'record'}`,
+          labelKey: item.domain === 'skills'
+            ? 'connectedAccounts.transferText.keepDurableLevel'
+            : 'connectedAccounts.transferText.keepDurableRecord',
+        },
+        {
+          value: 'use_source',
+          label: `Use the source account’s ${item.domain === 'skills' ? 'level' : 'record'}`,
+          labelKey: item.domain === 'skills'
+            ? 'connectedAccounts.transferText.useSourceLevel'
+            : 'connectedAccounts.transferText.useSourceRecord',
+        },
       ],
       resolution: item.action === 'unresolved' ? null : item.action,
     })),

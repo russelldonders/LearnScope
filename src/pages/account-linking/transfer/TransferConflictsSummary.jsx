@@ -1,29 +1,33 @@
 import { LEVEL_LABELS } from '../../../lib/levels'
+import { useLanguage } from '../../../context/LanguageContext'
 
 // Read-only summary of potential conflicts between two verified accounts'
 // profiles -- informational only, nothing here can be resolved, merged or
 // edited from this view. Each category has its own empty state so "no
 // conflicts found" reads distinctly from an actual list.
 export default function TransferConflictsSummary({ conflicts }) {
+  const { t } = useLanguage()
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
-      <h3 className="font-display text-lg text-ink mb-1">Potential conflicts</h3>
+      <h3 className="font-display text-lg text-ink mb-1">{t('connectedAccounts.transferConflictsSummary.heading')}</h3>
       <p className="text-sm text-secondary mb-4">
-        Things worth reviewing before choosing a durable profile -- shown for awareness only. Nothing here is
-        changed, resolved, or merged by viewing it.
+        {t('connectedAccounts.transferConflictsSummary.description')}
       </p>
 
       <div className="space-y-4">
         <div>
-          <p className="text-sm font-medium text-ink mb-1">Same-name skills ({conflicts.duplicateSkills.length})</p>
+          <p className="text-sm font-medium text-ink mb-1">{t('connectedAccounts.transferConflictsSummary.duplicateSkillsHeading', { count: conflicts.duplicateSkills.length })}</p>
           {conflicts.duplicateSkills.length === 0 ? (
-            <p className="text-sm text-secondary">No same-name skills between these accounts.</p>
+            <p className="text-sm text-secondary">{t('connectedAccounts.transferConflictsSummary.noDuplicateSkills')}</p>
           ) : (
             <ul className="text-sm text-ink space-y-1">
               {conflicts.duplicateSkills.map((skill) => (
                 <li key={skill.name}>
-                  {skill.name} -- {LEVEL_LABELS[skill.levelA] ?? skill.levelA} on one account,{' '}
-                  {LEVEL_LABELS[skill.levelB] ?? skill.levelB} on the other
+                  {t('connectedAccounts.transferConflictsSummary.duplicateSkillLine', {
+                    name: skill.name,
+                    levelA: LEVEL_LABELS[skill.levelA] ?? skill.levelA,
+                    levelB: LEVEL_LABELS[skill.levelB] ?? skill.levelB,
+                  })}
                 </li>
               ))}
             </ul>
@@ -32,10 +36,10 @@ export default function TransferConflictsSummary({ conflicts }) {
 
         <div>
           <p className="text-sm font-medium text-ink mb-1">
-            Overlapping courses ({conflicts.overlappingCourses.length})
+            {t('connectedAccounts.transferConflictsSummary.overlappingCoursesHeading', { count: conflicts.overlappingCourses.length })}
           </p>
           {conflicts.overlappingCourses.length === 0 ? (
-            <p className="text-sm text-secondary">No overlapping courses between these accounts.</p>
+            <p className="text-sm text-secondary">{t('connectedAccounts.transferConflictsSummary.noOverlappingCourses')}</p>
           ) : (
             <ul className="text-sm text-ink space-y-1">
               {conflicts.overlappingCourses.map((course) => (
@@ -47,16 +51,20 @@ export default function TransferConflictsSummary({ conflicts }) {
 
         <div>
           <p className="text-sm font-medium text-ink mb-1">
-            Possible duplicate experience ({conflicts.possibleDuplicateExperience.length})
+            {t('connectedAccounts.transferConflictsSummary.duplicateExperienceHeading', { count: conflicts.possibleDuplicateExperience.length })}
           </p>
           {conflicts.possibleDuplicateExperience.length === 0 ? (
-            <p className="text-sm text-secondary">No likely duplicate experience entries found.</p>
+            <p className="text-sm text-secondary">{t('connectedAccounts.transferConflictsSummary.noDuplicateExperience')}</p>
           ) : (
             <ul className="text-sm text-ink space-y-1">
               {conflicts.possibleDuplicateExperience.map((pair, index) => (
                 <li key={index}>
-                  {pair.titleA} at {pair.organizationA} -- may be the same as {pair.titleB} at{' '}
-                  {pair.organizationB}
+                  {t('connectedAccounts.transferConflictsSummary.duplicateExperienceLine', {
+                    titleA: pair.titleA,
+                    organizationA: pair.organizationA,
+                    titleB: pair.titleB,
+                    organizationB: pair.organizationB,
+                  })}
                 </li>
               ))}
             </ul>

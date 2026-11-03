@@ -436,6 +436,18 @@ export default {
       executeDialogExecutingButton: 'Wird ausgeführt…',
       executeDialogCancelButton: 'Abbrechen',
     },
+    transferText: {
+      accountTypePersonal: 'Persönliches Konto',
+      accountTypeWorkSso: 'Arbeitskonto mit SSO',
+      accountTypeWorkManaged: 'Vom Arbeitgeber verwaltetes Konto',
+      conflictSkills: '„{label}“ wird in beiden Konten verfolgt.',
+      conflictCourses: '„{label}“ ist in beiden Konten vorhanden.',
+      conflictExperience: '„{label}“ beschreibt möglicherweise dieselbe Erfahrung in beiden Konten.',
+      keepDurableLevel: 'Niveau des dauerhaften Kontos behalten',
+      keepDurableRecord: 'Eintrag des dauerhaften Kontos behalten',
+      useSourceLevel: 'Niveau des Quellkontos verwenden',
+      useSourceRecord: 'Eintrag des Quellkontos verwenden',
+    },
   },
   learning: {
     heading: 'Dein Lernen',

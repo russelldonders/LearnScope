@@ -1,7 +1,9 @@
 import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import TransferConflictsSummary from './TransferConflictsSummary'
 import { FIXTURE_CONFLICTS, FIXTURE_NO_CONFLICTS } from './transferFixtures'
+
+vi.mock('../../../context/LanguageContext', () => import('../../../test/languageMock'))
 
 afterEach(cleanup)
 

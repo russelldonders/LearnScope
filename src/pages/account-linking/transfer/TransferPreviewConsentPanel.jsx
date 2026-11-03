@@ -1,4 +1,5 @@
 import MutationFeedback from '../../../components/MutationFeedback'
+import { useLanguage } from '../../../context/LanguageContext'
 
 export default function TransferPreviewConsentPanel({
   linkedAccounts,
@@ -10,19 +11,19 @@ export default function TransferPreviewConsentPanel({
   onCancel,
   onOpen,
 }) {
+  const { t } = useLanguage()
   const activeAccounts = linkedAccounts.filter((account) => account.status === 'active')
 
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
-      <h3 className="font-display text-lg text-ink mb-1">Compare profiles</h3>
+      <h3 className="font-display text-lg text-ink mb-1">{t('connectedAccounts.transferPreviewConsentPanel.heading')}</h3>
       <p className="text-sm text-secondary mb-4">
-        Both accounts must approve before either can see profile totals or potential duplicates. Approval only
-        opens a read-only comparison; it does not merge, move, delete, or share any records.
+        {t('connectedAccounts.transferPreviewConsentPanel.description')}
       </p>
       <MutationFeedback status="error" message={error} />
 
       {activeAccounts.length === 0 ? (
-        <p className="text-sm text-secondary">Verify another account before requesting a comparison.</p>
+        <p className="text-sm text-secondary">{t('connectedAccounts.transferPreviewConsentPanel.verifyAnotherAccount')}</p>
       ) : (
         <ul className="divide-y divide-hairline">
           {activeAccounts.map((account) => {
@@ -33,31 +34,31 @@ export default function TransferPreviewConsentPanel({
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-ink truncate" title={account.email}>{account.email}</p>
                   <p className="text-xs text-secondary mt-0.5">
-                    {!preview && 'No comparison requested.'}
-                    {preview?.status === 'pending' && preview.approvedByMe && 'Your approval is recorded. Waiting for the other account.'}
-                    {preview?.status === 'pending' && !preview.approvedByMe && 'The other account requested a comparison. Your approval is required.'}
-                    {preview?.status === 'approved' && 'Both accounts approved. The read-only comparison is available.'}
+                    {!preview && t('connectedAccounts.transferPreviewConsentPanel.noComparisonRequested')}
+                    {preview?.status === 'pending' && preview.approvedByMe && t('connectedAccounts.transferPreviewConsentPanel.yourApprovalRecorded')}
+                    {preview?.status === 'pending' && !preview.approvedByMe && t('connectedAccounts.transferPreviewConsentPanel.otherAccountRequested')}
+                    {preview?.status === 'approved' && t('connectedAccounts.transferPreviewConsentPanel.bothApproved')}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2 shrink-0">
                   {!preview && (
                     <button type="button" disabled={busy} onClick={() => onRequest?.(account.id)} className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60">
-                      {busy ? 'Requesting…' : 'Request comparison'}
+                      {busy ? t('connectedAccounts.transferPreviewConsentPanel.requestingButton') : t('connectedAccounts.transferPreviewConsentPanel.requestComparisonButton')}
                     </button>
                   )}
                   {preview?.status === 'pending' && !preview.approvedByMe && (
                     <button type="button" disabled={busy} onClick={() => onApprove?.(preview.id)} className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60">
-                      {busy ? 'Approving…' : 'Approve comparison'}
+                      {busy ? t('connectedAccounts.transferPreviewConsentPanel.approvingButton') : t('connectedAccounts.transferPreviewConsentPanel.approveComparisonButton')}
                     </button>
                   )}
                   {preview?.status === 'approved' && (
                     <button type="button" disabled={busy} onClick={() => onOpen?.(preview.id)} className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60">
-                      {busy ? 'Loading…' : 'View comparison'}
+                      {busy ? t('connectedAccounts.transferPreviewConsentPanel.loadingButton') : t('connectedAccounts.transferPreviewConsentPanel.viewComparisonButton')}
                     </button>
                   )}
                   {preview && (
                     <button type="button" disabled={busy} onClick={() => onCancel?.(preview.id)} className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60">
-                      Cancel
+                      {t('connectedAccounts.transferPreviewConsentPanel.cancelButton')}
                     </button>
                   )}
                 </div>

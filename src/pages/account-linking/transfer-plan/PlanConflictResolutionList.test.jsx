@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import PlanConflictResolutionList from './PlanConflictResolutionList'
 import { FIXTURE_CONFLICTS_RESOLVED, FIXTURE_CONFLICTS_UNRESOLVED } from './transferPlanFixtures'
 
+vi.mock('../../../context/LanguageContext', () => import('../../../test/languageMock'))
+
 afterEach(cleanup)
 
 describe('PlanConflictResolutionList', () => {
@@ -17,6 +19,26 @@ describe('PlanConflictResolutionList', () => {
     render(<PlanConflictResolutionList conflicts={FIXTURE_CONFLICTS_RESOLVED} />)
     expect(screen.queryByText('Not yet resolved.')).not.toBeInTheDocument()
     expect(screen.getByRole('radio', { name: "Keep the durable account's level (Skilled)" })).toBeChecked()
+  })
+
+  it('shows caller-supplied translation keys instead of the English text', () => {
+    const conflicts = [{
+      id: 'conflict-k',
+      category: 'courses',
+      description: 'English fallback description',
+      descriptionKey: 'connectedAccounts.transferText.conflictCourses',
+      descriptionParams: { label: 'Safety' },
+      options: [
+        { value: 'keep_durable', label: 'English fallback option', labelKey: 'connectedAccounts.transferText.keepDurableRecord' },
+        { value: 'use_source', label: 'Option without a key' },
+      ],
+      resolution: null,
+    }]
+    render(<PlanConflictResolutionList conflicts={conflicts} />)
+    expect(screen.getByText('“Safety” appears on both accounts.')).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Keep the durable account’s record' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Option without a key' })).toBeInTheDocument()
+    expect(screen.queryByText('English fallback description')).not.toBeInTheDocument()
   })
 
   it('shows an empty state when there are no conflicts', () => {

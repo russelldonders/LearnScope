@@ -1,6 +1,7 @@
 import AccountProfileSummaryCard from './AccountProfileSummaryCard'
 import TransferConflictsSummary from './TransferConflictsSummary'
 import { FIXTURE_TRANSFER_PREVIEW } from './transferFixtures'
+import { useLanguage } from '../../../context/LanguageContext'
 
 // Purely presentational preview of a potential transfer between two
 // already-verified linked accounts (see ../LinkedAccountsList) --
@@ -25,10 +26,11 @@ export default function TransferPreviewPanel({
   onSelectDurableProfile,
   onContinue,
 }) {
+  const { t } = useLanguage()
   if (loading) {
     return (
       <div className="bg-card border border-hairline rounded-lg p-6">
-        <p className="text-sm text-secondary">Loading account comparison…</p>
+        <p className="text-sm text-secondary">{t('connectedAccounts.transferPreviewPanel.loadingComparison')}</p>
       </div>
     )
   }
@@ -46,9 +48,9 @@ export default function TransferPreviewPanel({
   if (!preview) {
     return (
       <div className="bg-card border border-hairline rounded-lg p-6">
-        <h3 className="font-display text-lg text-ink mb-1">Transfer preview</h3>
+        <h3 className="font-display text-lg text-ink mb-1">{t('connectedAccounts.transferPreviewPanel.heading')}</h3>
         <p className="text-sm text-secondary">
-          You need two verified linked accounts to preview a transfer. Link and verify a second account first.
+          {t('connectedAccounts.transferPreviewPanel.needTwoAccounts')}
         </p>
       </div>
     )
@@ -59,11 +61,9 @@ export default function TransferPreviewPanel({
   return (
     <div className="space-y-6">
       <div className="bg-card border border-hairline rounded-lg p-6">
-        <h3 className="font-display text-lg text-ink mb-1">Transfer preview</h3>
+        <h3 className="font-display text-lg text-ink mb-1">{t('connectedAccounts.transferPreviewPanel.heading')}</h3>
         <p className="text-sm text-secondary">
-          Compare these two verified accounts before choosing a durable personal profile. Previewing and
-          selecting here doesn't move, merge, delete, or share any data between the accounts -- nothing changes
-          until a transfer plan is actually reviewed and run.
+          {t('connectedAccounts.transferPreviewPanel.description')}
         </p>
       </div>
 
@@ -85,8 +85,8 @@ export default function TransferPreviewPanel({
       <div className="bg-card border border-hairline rounded-lg p-6">
         <p className="text-sm text-secondary mb-3">
           {continueAvailable
-            ? 'Once you choose a durable profile, you can review a full transfer plan before anything happens.'
-            : "Reviewing and running an actual transfer plan isn't available yet -- this page is a preview only."}
+            ? t('connectedAccounts.transferPreviewPanel.continueAvailableText')
+            : t('connectedAccounts.transferPreviewPanel.continueUnavailableText')}
         </p>
         <button
           type="button"
@@ -94,7 +94,7 @@ export default function TransferPreviewPanel({
           disabled={!continueAvailable || !durableProfileId}
           className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 disabled:opacity-60"
         >
-          Review transfer plan
+          {t('connectedAccounts.transferPreviewPanel.reviewPlanButton')}
         </button>
       </div>
     </div>

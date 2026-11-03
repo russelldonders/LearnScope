@@ -1,7 +1,9 @@
 import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import PlanAccountsSummary from './PlanAccountsSummary'
 import { FIXTURE_DURABLE_ACCOUNT, FIXTURE_SOURCE_ACCOUNT } from './transferPlanFixtures'
+
+vi.mock('../../../context/LanguageContext', () => import('../../../test/languageMock'))
 
 afterEach(cleanup)
 

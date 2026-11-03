@@ -436,6 +436,18 @@ export default {
       executeDialogExecutingButton: 'Exécution…',
       executeDialogCancelButton: 'Annuler',
     },
+    transferText: {
+      accountTypePersonal: 'Compte personnel',
+      accountTypeWorkSso: 'Compte professionnel SSO',
+      accountTypeWorkManaged: "Compte géré par l'employeur",
+      conflictSkills: '« {label} » est suivie sur les deux comptes.',
+      conflictCourses: '« {label} » figure sur les deux comptes.',
+      conflictExperience: '« {label} » décrit peut-être la même expérience sur les deux comptes.',
+      keepDurableLevel: 'Conserver le niveau du compte permanent',
+      keepDurableRecord: "Conserver l'enregistrement du compte permanent",
+      useSourceLevel: 'Utiliser le niveau du compte source',
+      useSourceRecord: "Utiliser l'enregistrement du compte source",
+    },
   },
   learning: {
     heading: 'Votre formation',

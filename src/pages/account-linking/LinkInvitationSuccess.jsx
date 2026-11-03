@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { formatAbsoluteDate, formatRelativeDate } from '../../lib/dates'
+import { useLanguage } from '../../context/LanguageContext'
 
 // Shown once a link invitation has been created -- `invitation.url` is the
 // ready-to-copy one-time link (built by the caller from the real token +
@@ -7,6 +8,7 @@ import { formatAbsoluteDate, formatRelativeDate } from '../../lib/dates'
 // presentational and read-only except for the clipboard copy and the
 // optional `onDismiss` to go back to the create form.
 export default function LinkInvitationSuccess({ invitation, onDismiss }) {
+  const { t } = useLanguage()
   const [copied, setCopied] = useState(false)
 
   async function handleCopy() {
@@ -22,10 +24,13 @@ export default function LinkInvitationSuccess({ invitation, onDismiss }) {
 
   return (
     <div className="bg-card border border-hairline rounded-lg p-6 space-y-4">
-      <h3 className="font-display text-lg text-ink">Invitation created</h3>
+      <h3 className="font-display text-lg text-ink">{t('connectedAccounts.linkInvitationSuccess.heading')}</h3>
       <p className="text-sm text-secondary">
-        Share this one-time link with <strong>{invitation.invitedEmail}</strong>. It only works once, and expires{' '}
-        {formatRelativeDate(invitation.expiresAt)} ({formatAbsoluteDate(invitation.expiresAt)}).
+        {t('connectedAccounts.linkInvitationSuccess.shareWithPrefix')} <strong>{invitation.invitedEmail}</strong>
+        {t('connectedAccounts.linkInvitationSuccess.shareWithSuffix', {
+          relative: formatRelativeDate(invitation.expiresAt),
+          absolute: formatAbsoluteDate(invitation.expiresAt),
+        })}
       </p>
 
       <div className="flex items-center gap-2">
@@ -33,7 +38,7 @@ export default function LinkInvitationSuccess({ invitation, onDismiss }) {
           readOnly
           value={invitation.url}
           onFocus={(e) => e.target.select()}
-          aria-label="One-time link"
+          aria-label={t('connectedAccounts.linkInvitationSuccess.linkAriaLabel')}
           className="flex-1 min-w-0 rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink"
         />
         <button
@@ -41,18 +46,17 @@ export default function LinkInvitationSuccess({ invitation, onDismiss }) {
           onClick={handleCopy}
           className="shrink-0 rounded-md border border-hairline text-ink py-2 px-3 text-sm font-medium hover:bg-paper"
         >
-          {copied ? 'Copied!' : 'Copy link'}
+          {copied ? t('connectedAccounts.linkInvitationSuccess.copiedButton') : t('connectedAccounts.linkInvitationSuccess.copyButton')}
         </button>
       </div>
 
       <p className="text-sm text-secondary">
-        <strong>{invitation.invitedEmail}</strong> needs to sign out of any other LearnScope account, then open
-        this link while signed in as that account, to confirm it's theirs.
+        <strong>{invitation.invitedEmail}</strong>
+        {t('connectedAccounts.linkInvitationSuccess.signOutSuffix')}
       </p>
 
       <p className="text-xs text-secondary border-t border-hairline pt-3">
-        Verifying this link won't merge either account's profile, move records between them, or automatically
-        share employer or private information -- both accounts stay completely separate.
+        {t('connectedAccounts.linkInvitationSuccess.disclaimer')}
       </p>
 
       {onDismiss && (
@@ -61,7 +65,7 @@ export default function LinkInvitationSuccess({ invitation, onDismiss }) {
           onClick={() => onDismiss?.()}
           className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
         >
-          Create another invitation
+          {t('connectedAccounts.linkInvitationSuccess.createAnotherButton')}
         </button>
       )}
     </div>

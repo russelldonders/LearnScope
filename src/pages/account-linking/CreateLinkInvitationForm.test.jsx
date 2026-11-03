@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import CreateLinkInvitationForm from './CreateLinkInvitationForm'
 
+vi.mock('../../context/LanguageContext', () => import('../../test/languageMock'))
+
 afterEach(cleanup)
 
 describe('CreateLinkInvitationForm', () => {

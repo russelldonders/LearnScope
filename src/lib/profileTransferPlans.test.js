@@ -65,9 +65,22 @@ describe('profile transfer plan service', () => {
     await expect(service.getProfileTransferPlan('plan-1')).resolves.toMatchObject({
       id: 'plan-1', version: 'hash-1', rawStatus: 'pending_approval', status: 'pending',
       currentAccountId: 'durable',
-      sourceAccount: { id: 'source', accountType: 'Work SSO account' },
-      durableAccount: { id: 'durable', accountType: 'Personal account' },
-      conflicts: [{ id: 'item-1', resolution: 'use_source' }],
+      sourceAccount: { id: 'source', accountType: 'Work SSO account', accountTypeKey: 'connectedAccounts.transferText.accountTypeWorkSso' },
+      durableAccount: { id: 'durable', accountType: 'Personal account', accountTypeKey: 'connectedAccounts.transferText.accountTypePersonal' },
+      categories: expect.arrayContaining([
+        { key: 'skills', label: 'Skills', labelKey: 'connectedAccounts.accountProfileSummaryCard.countFieldSkills', sourceCount: 2, durableCount: 4 },
+      ]),
+      conflicts: [{
+        id: 'item-1',
+        resolution: 'use_source',
+        description: '“SQL” is tracked on both accounts.',
+        descriptionKey: 'connectedAccounts.transferText.conflictSkills',
+        descriptionParams: { label: 'SQL' },
+        options: [
+          { value: 'keep_durable', labelKey: 'connectedAccounts.transferText.keepDurableLevel' },
+          { value: 'use_source', labelKey: 'connectedAccounts.transferText.useSourceLevel' },
+        ],
+      }],
       approvals: [{ accountId: 'source', approvedVersion: 'hash-1' }],
     })
   })

@@ -1,10 +1,12 @@
+import { useLanguage } from '../../../context/LanguageContext'
+
 const COUNT_FIELDS = [
-  { key: 'skills', label: 'Skills' },
-  { key: 'experience', label: 'Experience' },
-  { key: 'courses', label: 'Courses & training' },
-  { key: 'evidence', label: 'Evidence' },
-  { key: 'connections', label: 'Connections' },
-  { key: 'integrations', label: 'External integrations' },
+  { key: 'skills', labelKey: 'connectedAccounts.accountProfileSummaryCard.countFieldSkills' },
+  { key: 'experience', labelKey: 'connectedAccounts.accountProfileSummaryCard.countFieldExperience' },
+  { key: 'courses', labelKey: 'connectedAccounts.accountProfileSummaryCard.countFieldCourses' },
+  { key: 'evidence', labelKey: 'connectedAccounts.accountProfileSummaryCard.countFieldEvidence' },
+  { key: 'connections', labelKey: 'connectedAccounts.accountProfileSummaryCard.countFieldConnections' },
+  { key: 'integrations', labelKey: 'connectedAccounts.accountProfileSummaryCard.countFieldIntegrations' },
 ]
 
 // Read-only summary of one verified account's profile, for side-by-side
@@ -17,6 +19,7 @@ const COUNT_FIELDS = [
 // it with this card's own account id when wiring onSelectDurableProfile,
 // so this card stays reusable without needing to know that callback's name.
 export default function AccountProfileSummaryCard({ account, selected = false, onSelect }) {
+  const { t } = useLanguage()
   return (
     <div
       className={`bg-card border rounded-lg p-6 ${selected ? 'border-moss ring-1 ring-moss' : 'border-hairline'}`}
@@ -24,12 +27,12 @@ export default function AccountProfileSummaryCard({ account, selected = false, o
       <p className="text-sm font-medium text-ink truncate" title={account.email}>
         {account.email}
       </p>
-      <p className="text-xs text-secondary mb-4">{account.accountType}</p>
+      <p className="text-xs text-secondary mb-4">{account.accountTypeKey ? t(account.accountTypeKey) : account.accountType}</p>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 mb-4">
-        {COUNT_FIELDS.map(({ key, label }) => (
+        {COUNT_FIELDS.map(({ key, labelKey }) => (
           <div key={key}>
-            <dt className="text-xs text-secondary">{label}</dt>
+            <dt className="text-xs text-secondary">{t(labelKey)}</dt>
             <dd className="text-sm text-ink font-medium">
               {account.counts[key] === null || account.counts[key] === undefined ? '—' : account.counts[key]}
             </dd>
@@ -47,7 +50,7 @@ export default function AccountProfileSummaryCard({ account, selected = false, o
           selected ? 'bg-moss text-paper hover:opacity-90' : 'border border-hairline text-ink hover:bg-paper'
         }`}
       >
-        {selected ? 'Selected as durable profile' : 'Select as durable profile'}
+        {selected ? t('connectedAccounts.accountProfileSummaryCard.selectedButton') : t('connectedAccounts.accountProfileSummaryCard.selectButton')}
       </button>
     </div>
   )

@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import AccountProfileSummaryCard from './AccountProfileSummaryCard'
 import { FIXTURE_ACCOUNT_A, FIXTURE_ACCOUNT_B } from './transferFixtures'
 
+vi.mock('../../../context/LanguageContext', () => import('../../../test/languageMock'))
+
 afterEach(cleanup)
 
 describe('AccountProfileSummaryCard', () => {

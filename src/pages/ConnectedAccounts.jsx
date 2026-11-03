@@ -55,8 +55,8 @@ import {
 const OAUTH_STATE_KEY = 'stravaOAuthState'
 
 const CONNECTED_ACCOUNTS_TABS = [
-  { key: 'apps', label: 'Connected apps' },
-  { key: 'accounts', label: 'Accounts & data transfer' },
+  { key: 'apps', labelKey: 'connectedAccounts.tabApps' },
+  { key: 'accounts', labelKey: 'connectedAccounts.tabAccounts' },
 ]
 
 export default function ConnectedAccounts() {
@@ -386,14 +386,14 @@ export default function ConnectedAccounts() {
     navigate('/profile/connected-accounts', { replace: true })
 
     if (deniedError) {
-      setError('Strava connection was cancelled.')
+      setError(t('connectedAccounts.strava.connectionCancelled'))
       return
     }
 
     const expectedState = sessionStorage.getItem(OAUTH_STATE_KEY)
     sessionStorage.removeItem(OAUTH_STATE_KEY)
     if (!returnedState || returnedState !== expectedState) {
-      setError('Could not verify the Strava connection request — please try again.')
+      setError(t('connectedAccounts.strava.couldNotVerify'))
       return
     }
 
@@ -424,7 +424,7 @@ export default function ConnectedAccounts() {
     try {
       const activities = await syncStrava()
       if (activities.length === 0) {
-        setSuccessMessage('Synced — no new activities since your last sync.')
+        setSuccessMessage(t('connectedAccounts.strava.syncedNoNewActivities'))
       } else {
         setReviewActivities(activities)
       }
@@ -459,15 +459,15 @@ export default function ConnectedAccounts() {
       <AppHeader />
       <main id="main-content" tabIndex={-1} className="max-w-2xl mx-auto px-4 py-8 space-y-6">
         <div>
-          <h1 className="font-display text-2xl text-ink">Connected accounts and apps</h1>
+          <h1 className="font-display text-2xl text-ink">{t('connectedAccounts.heading')}</h1>
           <p className="text-secondary mt-1 text-sm">
-            Manage the external services and logins connected to your profile.
+            {t('connectedAccounts.subheading')}
           </p>
         </div>
 
         <div
           role="tablist"
-          aria-label="Connected accounts sections"
+          aria-label={t('connectedAccounts.tabsLabel')}
           className="flex items-center flex-wrap gap-1 border-b border-hairline"
         >
           {CONNECTED_ACCOUNTS_TABS.map((tabDef) => (
@@ -495,7 +495,7 @@ export default function ConnectedAccounts() {
                   : 'border-transparent text-secondary hover:text-ink'
               }`}
             >
-              {tabDef.label}
+              {t(tabDef.labelKey)}
             </button>
           ))}
         </div>
@@ -514,9 +514,9 @@ export default function ConnectedAccounts() {
 
         <section aria-labelledby="account-linking-heading" className="space-y-4">
           <div>
-            <h2 id="account-linking-heading" className="font-display text-xl text-ink">Your LearnScope logins</h2>
+            <h2 id="account-linking-heading" className="font-display text-xl text-ink">{t('connectedAccounts.accountLinkingHeading')}</h2>
             <p className="text-sm text-secondary mt-1">
-              Verify personal and work logins that belong to you while keeping their profiles and permissions separate.
+              {t('connectedAccounts.accountLinkingDescription')}
             </p>
           </div>
           <AccountLinkingSection
@@ -587,9 +587,7 @@ export default function ConnectedAccounts() {
         {tab === 'apps' && (
         <div id="connected-accounts-panel-apps" role="tabpanel" aria-labelledby="connected-accounts-tab-apps" className="space-y-6">
         <p className="text-sm text-secondary -mt-2">
-          Bring in activity from other services so it can count as skill evidence, without typing it in by
-          hand. You choose what gets imported and which skill it counts toward — nothing is added
-          automatically.
+          {t('connectedAccounts.appsDescription')}
         </p>
 
         {error && <p className="text-sm text-red-700">{error}</p>}
@@ -598,18 +596,17 @@ export default function ConnectedAccounts() {
         <div className="bg-card border border-hairline rounded-lg p-6">
           <h3 className="flex items-center gap-2 font-display text-lg text-ink mb-1">
             <StravaIcon size={20} />
-            Strava
+            {t('connectedAccounts.strava.title')}
           </h3>
           {loading || connecting ? (
-            <p className="text-sm text-secondary">{connecting ? 'Connecting…' : 'Loading…'}</p>
+            <p className="text-sm text-secondary">{connecting ? t('connectedAccounts.strava.connecting') : t('common.loading')}</p>
           ) : connection ? (
             <div className="space-y-3">
               <p className="text-sm text-secondary">
-                Connected
                 {connection.last_synced_at
-                  ? ` · last synced ${formatRelativeDate(connection.last_synced_at)}`
-                  : ' · not yet synced'}
-                {connection.status === 'error' ? ' · needs to be reconnected' : ''}
+                  ? t('connectedAccounts.strava.connectedLastSynced', { when: formatRelativeDate(connection.last_synced_at) })
+                  : t('connectedAccounts.strava.connectedNotSynced')}
+                {connection.status === 'error' ? t('connectedAccounts.strava.needsReconnectSuffix') : ''}
               </p>
               <div className="flex items-center gap-2">
                 {connection.status === 'error' ? (
@@ -621,7 +618,7 @@ export default function ConnectedAccounts() {
                     disabled={syncing}
                     className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90 disabled:opacity-60"
                   >
-                    {syncing ? 'Syncing…' : 'Sync now'}
+                    {syncing ? t('connectedAccounts.strava.syncingButton') : t('connectedAccounts.strava.syncNowButton')}
                   </button>
                 )}
                 <button
@@ -629,14 +626,14 @@ export default function ConnectedAccounts() {
                   onClick={() => setConfirmingDisconnect(true)}
                   className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper"
                 >
-                  Disconnect
+                  {t('connectedAccounts.strava.disconnectButton')}
                 </button>
               </div>
             </div>
           ) : (
             <div className="max-w-xs">
               <p className="text-sm text-secondary mb-3">
-                Bring in your runs, rides, and other logged activity as skill evidence.
+                {t('connectedAccounts.strava.notConnectedDescription')}
               </p>
               <StravaConnectButton onClick={handleConnectClick} />
             </div>
@@ -645,8 +642,8 @@ export default function ConnectedAccounts() {
 
         {confirmingDisconnect && (
           <ConfirmDialog
-            message="Disconnect Strava? Activity you've already imported stays in your log — only the connection itself is removed."
-            confirmLabel="Disconnect"
+            message={t('connectedAccounts.strava.disconnectConfirmMessage')}
+            confirmLabel={t('connectedAccounts.strava.disconnectConfirmLabel')}
             onConfirm={handleDisconnect}
             onCancel={() => setConfirmingDisconnect(false)}
             confirming={disconnecting}
@@ -659,7 +656,7 @@ export default function ConnectedAccounts() {
             onClose={() => setReviewActivities(null)}
             onImported={(count) => {
               setReviewActivities(null)
-              setSuccessMessage(`Imported ${count} ${count === 1 ? 'activity' : 'activities'}.`)
+              setSuccessMessage(t(count === 1 ? 'connectedAccounts.strava.importedActivitiesSingular' : 'connectedAccounts.strava.importedActivitiesPlural', { count }))
             }}
           />
         )}

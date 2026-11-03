@@ -8,14 +8,35 @@ import recordActivitySource from '../../components/RecordActivitySection.jsx?raw
 import importDataSource from '../../components/ImportProfileDataButton.jsx?raw'
 import profilePhotoSource from '../../components/ProfilePhoto.jsx?raw'
 import profilePrivacySource from '../../pages/ProfilePrivacy.jsx?raw'
+import connected0 from '../../pages/ConnectedAccounts.jsx?raw'
+import connected1 from '../../pages/account-linking/LtiAccounts.jsx?raw'
+import connected2 from '../../pages/account-linking/CreateLinkInvitationForm.jsx?raw'
+import connected3 from '../../pages/account-linking/LinkInvitationSuccess.jsx?raw'
+import connected4 from '../../pages/account-linking/RedeemInvitationPanel.jsx?raw'
+import connected5 from '../../pages/account-linking/LinkedAccountsList.jsx?raw'
+import connected6 from '../../pages/account-linking/LinkedWorkspaceAccessPanel.jsx?raw'
+import transferPlansSource from '../profileTransferPlans.js?raw'
+import transferPreviewsSource from '../profileTransferPreviews.js?raw'
+import connected8 from '../../pages/account-linking/transfer/TransferPreviewConsentPanel.jsx?raw'
+import connected9 from '../../pages/account-linking/transfer/TransferPreviewPanel.jsx?raw'
+import connected10 from '../../pages/account-linking/transfer/AccountProfileSummaryCard.jsx?raw'
+import connected11 from '../../pages/account-linking/transfer/TransferConflictsSummary.jsx?raw'
+import connected12 from '../../pages/account-linking/transfer-plan/TransferPlanReviewPanel.jsx?raw'
+import connected13 from '../../pages/account-linking/transfer-plan/PlanAccountsSummary.jsx?raw'
+import connected14 from '../../pages/account-linking/transfer-plan/PlanCategoryBreakdown.jsx?raw'
+import connected15 from '../../pages/account-linking/transfer-plan/PlanConflictResolutionList.jsx?raw'
+import connected16 from '../../pages/account-linking/transfer-plan/PlanApprovalPanel.jsx?raw'
 
 // The Connections/Dashboard inline sections, the profile photo/import
-// controls and the privacy settings page -- same rule as
-// tokenLinkPages.test.js: every key they use is translated in every language
-// rather than silently falling back to English.
+// controls, the privacy settings page and the connected accounts area -- same
+// rule as tokenLinkPages.test.js: every key they use is translated in every
+// language rather than silently falling back to English.
 const SOURCES = [
   teamsSource, teamInviteSource, activityFeedSource, activityRowSource,
   recordActivitySource, importDataSource, profilePhotoSource, profilePrivacySource,
+  connected0, connected1, connected2, connected3, connected4, connected5, connected6, transferPlansSource, connected8,
+  connected9, connected10, connected11, connected12, connected13, connected14, connected15, connected16,
+  transferPreviewsSource,
 ]
 
 // Any quoted dotted string starting with a top-level namespace, not just
@@ -33,15 +54,20 @@ const dynamicKeys = [
     `profile.privacy.skillSearch.option${key}Label`, `profile.privacy.skillSearch.option${key}Detail`,
   ]),
   'profile.privacy.employers.categoryTraining', 'profile.privacy.employers.categoryExperience',
+  ...['Pending', 'Approved', 'Executed', 'Cancelled', 'Expired'].flatMap((key) => [
+    `connectedAccounts.planApprovalPanel.status${key}`, `connectedAccounts.planApprovalPanel.description${key}`,
+  ]),
+  ...['directionSent', 'directionReceived', 'statusActive', 'statusRevoked', 'accountTypePersonal',
+    'accountTypeWorkSso', 'accountTypeWorkManaged'].map((key) => `connectedAccounts.linkedAccountsList.${key}`),
 ]
 
 function resolve(dictionary, key) {
   return key.split('.').reduce((value, part) => value?.[part], dictionary)
 }
 
-describe('connections, dashboard and privacy settings translations', () => {
+describe('connections, dashboard, privacy and connected accounts translations', () => {
   it('finds the keys the sections use', () => {
-    expect(staticKeys.length).toBeGreaterThan(150)
+    expect(staticKeys.length).toBeGreaterThan(300)
   })
 
   it.each(INTERFACE_LANGUAGES.map((l) => l.value))('has every key in %s', async (language) => {

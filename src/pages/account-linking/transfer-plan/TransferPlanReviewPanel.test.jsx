@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import TransferPlanReviewPanel from './TransferPlanReviewPanel'
+
+vi.mock('../../../context/LanguageContext', () => import('../../../test/languageMock'))
 import {
   FIXTURE_DURABLE_ACCOUNT,
   FIXTURE_PLAN_EXECUTED,

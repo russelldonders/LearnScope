@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import RedeemInvitationPanel from './RedeemInvitationPanel'
 import { FIXTURE_INVITATION_PREVIEW, FIXTURE_REDEEM_TOKEN } from './accountLinkingFixtures'
 
+vi.mock('../../context/LanguageContext', () => import('../../test/languageMock'))
+
 afterEach(cleanup)
 
 describe('RedeemInvitationPanel', () => {
