@@ -85,10 +85,13 @@ or just delete it.
    render site, rather than needing useLanguage() directly, so existing
    non-component callers/tests keep working unchanged. Still open from
    the audit:
-   - Large standalone learner pages, untouched: ProfilePrivacy.jsx (892),
-     the whole ConnectedAccounts.jsx flow (669 lines plus ~15
+   - Large standalone learner pages, untouched: the whole
+     ConnectedAccounts.jsx flow (669 lines plus ~15
      account-linking/transfer-plan sub-panels under
-     src/pages/account-linking/), CourseLearn.jsx, SkillsProfile.jsx,
+     src/pages/account-linking/) -- its `connectedAccounts.*` dictionary
+     entries already exist in en/es/fr/de (commit 4abe449, never wired up)
+     but are missing from it/nl/zh (198 keys), and should be re-checked
+     against the current component text when wiring, CourseLearn.jsx, SkillsProfile.jsx,
      CourseCatalogue.jsx, ProviderProfile.jsx (public route), Onboarding.jsx
      + SkillsToLearnStep.jsx, Help.jsx, ProfileExport.jsx/ProfileImport.jsx,
      Welcome.jsx, Landing.jsx, ResetPassword.jsx, LtiSession.jsx.
@@ -114,7 +117,9 @@ or just delete it.
    ImportProfileDataButton are translated too, under new `teams`,
    `skillActivity`, `connectionsActivity`, `profilePhoto` and
    `profileImport` namespaces, with the same kind of key-coverage test
-   (src/lib/i18n/connectionsSections.test.js). The manager panels
+   (src/lib/i18n/connectionsSections.test.js). ProfilePrivacy.jsx is now
+   wired to its `profile.privacy.*` keys (previously written but unused),
+   with it/nl/zh filled in and covered by the same test. The manager panels
    ConnectionsTeams embeds for a team leader (ManagerSkillsPanel,
    ManagerTeamPanel, ManagerLearningPanel, ManagerCollaborationPanel,
    ManagerTeamSharingPanel, all under src/pages/manager/) are still

@@ -25,16 +25,12 @@ import {
 import { formatAbsoluteDate } from '../lib/dates'
 import ShareSkillsModal from '../components/ShareSkillsModal'
 import { listMyManagerShareableSkills } from '../lib/managerTeams'
+import { useLanguage } from '../context/LanguageContext'
 
 // Presets shown in the "Share via link" duration select -- deliberately
 // short-lived options only; create_profile_share_link still enforces a hard
 // 90-day server-side cap regardless of what a client sends.
-const SHARE_LINK_DURATIONS = [
-  { value: '1', label: '1 day' },
-  { value: '3', label: '3 days' },
-  { value: '7', label: '7 days' },
-  { value: '30', label: '30 days' },
-]
+const SHARE_LINK_DURATIONS = ['1', '3', '7', '30']
 
 function shareLinkStatus(link) {
   if (link.revoked_at) return 'revoked'
@@ -42,34 +38,27 @@ function shareLinkStatus(link) {
   return 'active'
 }
 
-function shareLinkDescription(link) {
+function shareLinkDescription(link, t) {
   if (link.label) return link.label
-  if (link.share_skills && link.share_experience) return 'Skills + Experience'
-  if (link.share_skills) return 'Skills'
-  if (link.share_experience) return 'Experience'
-  return 'Shared profile'
+  if (link.share_skills && link.share_experience) return t('profile.privacy.shareLink.descriptionBoth')
+  if (link.share_skills) return t('profile.privacy.shareLink.descriptionSkillsOnly')
+  if (link.share_experience) return t('profile.privacy.shareLink.descriptionExperienceOnly')
+  return t('profile.privacy.shareLink.descriptionGeneric')
 }
 
+// value -> its profile.privacy.skillSearch.option{Key}Label/Detail strings.
 const VISIBILITY_OPTIONS = [
-  {
-    value: 'hidden',
-    label: "Don't show me in skill searches",
-    detail: "You won't appear when other learners search for people tracking the same skill.",
-  },
-  {
-    value: 'all',
-    label: 'Show me for all my skills',
-    detail: 'Anyone tracking the same skill as you can find you in that skill’s search, and send a connection request.',
-  },
-  {
-    value: 'selective',
-    label: 'Choose which skills to show',
-    detail: 'Pick individual skills below — you can also control this from each skill’s own settings.',
-  },
+  { value: 'hidden', key: 'Hidden' },
+  { value: 'all', key: 'All' },
+  { value: 'selective', key: 'Selective' },
 ]
+
+// employer_data_access_requests.approved_data categories other than skills.
+const SHARED_CATEGORY_KEYS = { training: 'categoryTraining', experience: 'categoryExperience' }
 
 export default function ProfilePrivacy() {
   const { user, employerMemberships } = useAuth()
+  const { t } = useLanguage()
   const [skillsProfileVisible, setSkillsProfileVisible] = useState(false)
   const [allowConnectionRatings, setAllowConnectionRatings] = useState(true)
   const [activityFeedVisible, setActivityFeedVisible] = useState(false)
@@ -105,7 +94,7 @@ export default function ProfilePrivacy() {
   const [newLinkSkills, setNewLinkSkills] = useState(false)
   const [newLinkExperience, setNewLinkExperience] = useState(false)
   const [newLinkSkillIds, setNewLinkSkillIds] = useState(new Set())
-  const [newLinkDuration, setNewLinkDuration] = useState(SHARE_LINK_DURATIONS[2].value)
+  const [newLinkDuration, setNewLinkDuration] = useState(SHARE_LINK_DURATIONS[2])
   const [newLinkLabel, setNewLinkLabel] = useState('')
   const [creatingLink, setCreatingLink] = useState(false)
   const [createdLinkUrl, setCreatedLinkUrl] = useState(null)
@@ -272,7 +261,7 @@ export default function ProfilePrivacy() {
     e.preventDefault()
     setShareLinkError(null)
     if (!newLinkSkills && !newLinkExperience) {
-      setShareLinkError('Choose at least one thing to share.')
+      setShareLinkError(t('profile.privacy.shareLink.chooseAtLeastOneError'))
       return
     }
     setCreatingLink(true)
@@ -292,7 +281,7 @@ export default function ProfilePrivacy() {
       setNewLinkExperience(false)
       setNewLinkSkillIds(new Set())
       setNewLinkLabel('')
-      setNewLinkDuration(SHARE_LINK_DURATIONS[2].value)
+      setNewLinkDuration(SHARE_LINK_DURATIONS[2])
     } catch (err) {
       setShareLinkError(err.message)
     } finally {
@@ -409,16 +398,16 @@ export default function ProfilePrivacy() {
       <AppHeader />
 
       <main id="main-content" tabIndex={-1} className="max-w-2xl mx-auto px-4 py-8 space-y-6">
-        <h1 className="font-display text-xl text-ink mb-2">Privacy settings</h1>
+        <h1 className="font-display text-xl text-ink mb-2">{t('profile.privacy.heading')}</h1>
 
         {loading ? (
-          <p className="text-secondary">Loading…</p>
+          <p className="text-secondary">{t('common.loading')}</p>
         ) : (
           <>
             <div className="bg-card border border-hairline rounded-lg p-6">
-              <h3 className="font-display text-lg text-ink mb-1">Skills profile</h3>
+              <h3 className="font-display text-lg text-ink mb-1">{t('profile.privacy.skillsProfile.title')}</h3>
               <p className="text-sm text-secondary mb-4">
-                Control what people you're connected with can see about you.
+                {t('profile.privacy.skillsProfile.description')}
               </p>
               <label className="flex items-start gap-3">
                 <input
@@ -429,12 +418,9 @@ export default function ProfilePrivacy() {
                   className="mt-0.5 rounded border-hairline"
                 />
                 <span className="text-sm text-ink">
-                  Let connections view your skills profile by clicking your name on their
-                  Connections list
+                  {t('profile.privacy.skillsProfile.viewProfileLabel')}
                   <span className="block text-xs text-secondary mt-0.5">
-                    Shows only skill names, categories, and levels — not notes, evidence, or why
-                    you're tracking them. Only visible to people you've already exchanged a skill
-                    rating with. On by default — turn it off here if you'd rather keep it private.
+                    {t('profile.privacy.skillsProfile.viewProfileDetail')}
                   </span>
                 </span>
               </label>
@@ -448,10 +434,9 @@ export default function ProfilePrivacy() {
                   className="mt-0.5 rounded border-hairline"
                 />
                 <span className="text-sm text-ink">
-                  Show my profile to people I'm not connected with yet, if we track the same skill
+                  {t('profile.privacy.skillsProfile.visibleToMatchesLabel')}
                   <span className="block text-xs text-secondary mt-0.5">
-                    Only applies to people who find you via skill search below — doesn't change
-                    who can find you in the first place.
+                    {t('profile.privacy.skillsProfile.visibleToMatchesDetail')}
                   </span>
                 </span>
               </label>
@@ -465,21 +450,18 @@ export default function ProfilePrivacy() {
                   className="mt-0.5 rounded border-hairline"
                 />
                 <span className="text-sm text-ink">
-                  Let connections rate your shared skills
+                  {t('profile.privacy.skillsProfile.allowRatingsLabel')}
                   <span className="block text-xs text-secondary mt-0.5">
-                    Lets a connection open one of your shared skills from their view of your skills profile and
-                    leave their own rating on it, without you having to send them an invite first. Applies to all
-                    your shared skills — on by default.
+                    {t('profile.privacy.skillsProfile.allowRatingsDetail')}
                   </span>
                 </span>
               </label>
             </div>
 
             <div className="bg-card border border-hairline rounded-lg p-6">
-              <h3 className="font-display text-lg text-ink mb-1">Activity feed</h3>
+              <h3 className="font-display text-lg text-ink mb-1">{t('profile.privacy.activityFeed.title')}</h3>
               <p className="text-sm text-secondary mb-4">
-                Control whether your milestones show up in your connections' "What your
-                connections are up to" feed.
+                {t('profile.privacy.activityFeed.description')}
               </p>
               <label className="flex items-start gap-3">
                 <input
@@ -490,21 +472,18 @@ export default function ProfilePrivacy() {
                   className="mt-0.5 rounded border-hairline"
                 />
                 <span className="text-sm text-ink">
-                  Let your connections see your activity
+                  {t('profile.privacy.activityFeed.label')}
                   <span className="block text-xs text-secondary mt-0.5">
-                    Shows things like skills confirmed, new skills or experience added, and
-                    courses started — only to people you're already connected with. On by
-                    default — turn it off here if you'd rather keep it private.
+                    {t('profile.privacy.activityFeed.detail')}
                   </span>
                 </span>
               </label>
             </div>
 
             <div className="bg-card border border-hairline rounded-lg p-6">
-              <h3 className="font-display text-lg text-ink mb-1">Skill search</h3>
+              <h3 className="font-display text-lg text-ink mb-1">{t('profile.privacy.skillSearch.title')}</h3>
               <p className="text-sm text-secondary mb-4">
-                Control whether people tracking the same skill as you can find and connect with
-                you, even before you're connected.
+                {t('profile.privacy.skillSearch.description')}
               </p>
               <div className="space-y-3">
                 {VISIBILITY_OPTIONS.map((opt) => (
@@ -518,8 +497,8 @@ export default function ProfilePrivacy() {
                       className="mt-0.5"
                     />
                     <span className="text-sm text-ink">
-                      {opt.label}
-                      <span className="block text-xs text-secondary mt-0.5">{opt.detail}</span>
+                      {t(`profile.privacy.skillSearch.option${opt.key}Label`)}
+                      <span className="block text-xs text-secondary mt-0.5">{t(`profile.privacy.skillSearch.option${opt.key}Detail`)}</span>
                     </span>
                   </label>
                 ))}
@@ -535,14 +514,14 @@ export default function ProfilePrivacy() {
                       onChange={(e) => handleAutoIncludeToggle(e.target.checked)}
                       className="mt-0.5 rounded border-hairline"
                     />
-                    <span className="text-sm text-ink">Show in searches for any newly added skills</span>
+                    <span className="text-sm text-ink">{t('profile.privacy.skillSearch.autoIncludeLabel')}</span>
                   </label>
                   <button
                     type="button"
                     onClick={() => setPickerOpen(true)}
                     className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
                   >
-                    Choose which skills…
+                    {t('profile.privacy.skillSearch.chooseSkillsButton')}
                   </button>
                 </div>
               )}
@@ -550,15 +529,9 @@ export default function ProfilePrivacy() {
 
             {employers.length > 0 && (
               <div className="bg-card border border-hairline rounded-lg p-6">
-                <h3 className="font-display text-lg text-ink mb-1">Employers</h3>
+                <h3 className="font-display text-lg text-ink mb-1">{t('profile.privacy.employers.title')}</h3>
                 <p className="text-sm text-secondary mb-4">
-                  Control which specific skills an employer you belong to can see. This is
-                  separate from any training they've assigned you — sharing here also lets their
-                  admins see the skills you choose and the evidence behind them. You choose which
-                  skills, and you can change your selection or revoke access entirely at any
-                  time; revoking only removes what you've explicitly shared here — it doesn't
-                  affect anything the employer already sees automatically from training they've
-                  assigned you.
+                  {t('profile.privacy.employers.description')}
                 </p>
                 <ul className="space-y-3">
                   {employers.map((employer) => {
@@ -576,13 +549,13 @@ export default function ProfilePrivacy() {
                           <p className="text-xs text-secondary">
                             {isShared
                               ? sharedCount > 0
-                                ? `Shared — ${sharedCount} skill${sharedCount === 1 ? '' : 's'} visible to this employer`
-                                : 'Shared — no skills selected yet'
+                                ? t(sharedCount === 1 ? 'profile.privacy.employers.sharedCountSingular' : 'profile.privacy.employers.sharedCountPlural', { count: sharedCount })
+                                : t('profile.privacy.employers.sharedNoneYet')
                               : access?.status === 'pending'
-                                ? 'This employer has requested access — respond from your Actions page, or share directly below'
-                                : 'Not shared'}
+                                ? t('profile.privacy.employers.pendingRequest')
+                                : t('profile.privacy.employers.notShared')}
                           </p>
-                          {isShared && access.approved_data?.some((category) => category !== 'skills') && <p className="text-xs text-secondary">Also shared: {access.approved_data.filter((category) => category !== 'skills').join(', ')}. Revoke access stops all sharing with this employer.</p>}
+                          {isShared && access.approved_data?.some((category) => category !== 'skills') && <p className="text-xs text-secondary">{t('profile.privacy.employers.alsoShared', { list: access.approved_data.filter((category) => category !== 'skills').map((category) => (SHARED_CATEGORY_KEYS[category] ? t(`profile.privacy.employers.${SHARED_CATEGORY_KEYS[category]}`) : category)).join(', ') })}</p>}
                           {dataAccessError?.id === employer.id && (
                             <p className="text-xs text-red-700 mt-1">{dataAccessError.message}</p>
                           )}
@@ -595,7 +568,7 @@ export default function ProfilePrivacy() {
                               disabled={acting}
                               className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60 whitespace-nowrap"
                             >
-                              Edit shared skills
+                              {t('profile.privacy.employers.editSharedButton')}
                             </button>}
                             <button
                               type="button"
@@ -603,7 +576,7 @@ export default function ProfilePrivacy() {
                               disabled={acting}
                               className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60 whitespace-nowrap"
                             >
-                              {acting ? 'Revoking…' : 'Revoke access'}
+                              {acting ? t('profile.privacy.employers.revokingButton') : t('profile.privacy.employers.revokeButton')}
                             </button>
                           </div>
                         ) : (
@@ -613,7 +586,7 @@ export default function ProfilePrivacy() {
                             disabled={acting}
                             className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60 whitespace-nowrap"
                           >
-                            Share my skills profile
+                            {t('profile.privacy.employers.shareButton')}
                           </button>
                         )}
                       </li>
@@ -624,10 +597,9 @@ export default function ProfilePrivacy() {
             )}
 
             <div className="bg-card border border-hairline rounded-lg p-6">
-              <h3 className="font-display text-lg text-ink mb-1">Share via link</h3>
+              <h3 className="font-display text-lg text-ink mb-1">{t('profile.privacy.shareLink.title')}</h3>
               <p className="text-sm text-secondary mb-4">
-                Generate a link you can send to anyone — they don't need a LearnScope account to
-                view it. Links expire automatically and you can revoke one at any time.
+                {t('profile.privacy.shareLink.description')}
               </p>
 
               <form onSubmit={handleCreateShareLink} className="space-y-3">
@@ -640,7 +612,7 @@ export default function ProfilePrivacy() {
                       onChange={(e) => setNewLinkSkills(e.target.checked)}
                       className="rounded border-hairline"
                     />
-                    <span className="text-sm text-ink">Skills</span>
+                    <span className="text-sm text-ink">{t('profile.privacy.shareLink.skillsLabel')}</span>
                   </label>
                   {newLinkSkills && (
                     <div className="ml-7">
@@ -651,8 +623,8 @@ export default function ProfilePrivacy() {
                         className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper disabled:opacity-60"
                       >
                         {newLinkSkillIds.size > 0
-                          ? `${newLinkSkillIds.size} skill${newLinkSkillIds.size === 1 ? '' : 's'} selected`
-                          : 'Choose skills…'}
+                          ? t(newLinkSkillIds.size === 1 ? 'profile.privacy.shareLink.skillsSelectedSingular' : 'profile.privacy.shareLink.skillsSelectedPlural', { count: newLinkSkillIds.size })
+                          : t('profile.privacy.shareLink.chooseSkillsButton')}
                       </button>
                     </div>
                   )}
@@ -664,14 +636,14 @@ export default function ProfilePrivacy() {
                       onChange={(e) => setNewLinkExperience(e.target.checked)}
                       className="rounded border-hairline"
                     />
-                    <span className="text-sm text-ink">Experience</span>
+                    <span className="text-sm text-ink">{t('profile.privacy.shareLink.experienceLabel')}</span>
                   </label>
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-3">
                   <div className="flex-1">
                     <label className="block text-xs text-secondary mb-1" htmlFor="share-link-duration">
-                      Expires after
+                      {t('profile.privacy.shareLink.expiresAfterLabel')}
                     </label>
                     <select
                       id="share-link-duration"
@@ -680,16 +652,16 @@ export default function ProfilePrivacy() {
                       onChange={(e) => setNewLinkDuration(e.target.value)}
                       className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
                     >
-                      {SHARE_LINK_DURATIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
+                      {SHARE_LINK_DURATIONS.map((days) => (
+                        <option key={days} value={days}>
+                          {t(days === '1' ? 'profile.privacy.shareLink.durationDaySingular' : 'profile.privacy.shareLink.durationDayPlural', { days })}
                         </option>
                       ))}
                     </select>
                   </div>
                   <div className="flex-1">
                     <label className="block text-xs text-secondary mb-1" htmlFor="share-link-label">
-                      Label (optional)
+                      {t('profile.privacy.shareLink.labelOptional')}
                     </label>
                     <input
                       id="share-link-label"
@@ -697,7 +669,7 @@ export default function ProfilePrivacy() {
                       value={newLinkLabel}
                       disabled={creatingLink}
                       onChange={(e) => setNewLinkLabel(e.target.value)}
-                      placeholder="e.g. For Acme Corp interview"
+                      placeholder={t('profile.privacy.shareLink.labelPlaceholder')}
                       className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
                     />
                   </div>
@@ -710,13 +682,13 @@ export default function ProfilePrivacy() {
                   disabled={creatingLink}
                   className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
                 >
-                  {creatingLink ? 'Creating…' : 'Create link'}
+                  {creatingLink ? t('profile.privacy.shareLink.creatingButton') : t('profile.privacy.shareLink.createButton')}
                 </button>
               </form>
 
               {createdLinkUrl && (
                 <div className="mt-4 pt-4 border-t border-hairline">
-                  <p className="text-xs text-secondary mb-1">Share this link:</p>
+                  <p className="text-xs text-secondary mb-1">{t('profile.privacy.shareLink.shareThisLink')}</p>
                   <div className="flex items-center gap-2">
                     <input
                       readOnly
@@ -729,7 +701,7 @@ export default function ProfilePrivacy() {
                       onClick={() => navigator.clipboard?.writeText(createdLinkUrl)}
                       className="shrink-0 rounded-md border border-hairline text-ink py-2 px-3 text-sm font-medium hover:bg-paper"
                     >
-                      Copy
+                      {t('profile.privacy.shareLink.copyButton')}
                     </button>
                   </div>
                 </div>
@@ -746,11 +718,11 @@ export default function ProfilePrivacy() {
                         className="flex items-center justify-between gap-3 pt-3 border-t border-hairline first:border-0 first:pt-0"
                       >
                         <div className="min-w-0">
-                          <p className="text-sm text-ink truncate">{shareLinkDescription(link)}</p>
+                          <p className="text-sm text-ink truncate">{shareLinkDescription(link, t)}</p>
                           <p className="text-xs text-secondary">
-                            {status === 'active' && `Expires ${formatAbsoluteDate(link.expires_at)}`}
-                            {status === 'expired' && `Expired ${formatAbsoluteDate(link.expires_at)}`}
-                            {status === 'revoked' && 'Revoked'}
+                            {status === 'active' && t('profile.privacy.shareLink.expiresStatus', { date: formatAbsoluteDate(link.expires_at) })}
+                            {status === 'expired' && t('profile.privacy.shareLink.expiredStatus', { date: formatAbsoluteDate(link.expires_at) })}
+                            {status === 'revoked' && t('profile.privacy.shareLink.revokedStatus')}
                           </p>
                         </div>
                         {status === 'active' && (
@@ -760,7 +732,7 @@ export default function ProfilePrivacy() {
                               onClick={() => handleCopyShareLink(link.id, link.token)}
                               className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper whitespace-nowrap"
                             >
-                              {copiedLinkId === link.id ? 'Copied!' : 'Copy link'}
+                              {copiedLinkId === link.id ? t('profile.privacy.shareLink.copiedButton') : t('profile.privacy.shareLink.copyLinkButton')}
                             </button>
                             <button
                               type="button"
@@ -768,7 +740,7 @@ export default function ProfilePrivacy() {
                               disabled={acting}
                               className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60 whitespace-nowrap"
                             >
-                              {acting ? 'Revoking…' : 'Revoke'}
+                              {acting ? t('profile.privacy.shareLink.revokingButton') : t('profile.privacy.shareLink.revokeButton')}
                             </button>
                           </div>
                         )}
@@ -790,13 +762,9 @@ export default function ProfilePrivacy() {
         <ShareSkillsModal
           skills={mySkills}
           initiallySelectedIds={skillShareModal.initialSkillIds}
-          title={skillShareModal.requestId ? 'Edit shared skills' : 'Choose skills to share'}
-          description={
-            skillShareModal.requestId
-              ? 'Add or remove which of your skills this employer can see.'
-              : 'Pick which of your skills this employer can see. You can change this any time.'
-          }
-          confirmLabel={skillShareModal.requestId ? 'Save' : 'Share'}
+          title={t(skillShareModal.requestId ? 'profile.privacy.shareSkillsModal.editTitle' : 'profile.privacy.shareSkillsModal.chooseTitle')}
+          description={t(skillShareModal.requestId ? 'profile.privacy.shareSkillsModal.editDescription' : 'profile.privacy.shareSkillsModal.chooseDescription')}
+          confirmLabel={t(skillShareModal.requestId ? 'profile.privacy.shareSkillsModal.saveButton' : 'profile.privacy.shareSkillsModal.shareButton')}
           onConfirm={handleConfirmSkillShare}
           onClose={() => setSkillShareModal(null)}
         />
@@ -806,9 +774,9 @@ export default function ProfilePrivacy() {
         <ShareSkillsModal
           skills={mySkills}
           initiallySelectedIds={[...newLinkSkillIds]}
-          title="Choose skills to share"
-          description="Pick which of your skills this link's viewer can see."
-          confirmLabel="Confirm"
+          title={t('profile.privacy.shareSkillsModal.chooseTitle')}
+          description={t('profile.privacy.shareSkillsModal.linkChooseDescription')}
+          confirmLabel={t('profile.privacy.shareSkillsModal.linkConfirmButton')}
           onConfirm={(ids) => {
             setNewLinkSkillIds(new Set(ids))
             setSkillPickerForLinkOpen(false)
@@ -821,6 +789,7 @@ export default function ProfilePrivacy() {
 }
 
 function SearchableSkillsModal({ userId, onClose }) {
+  const { t } = useLanguage()
   const [skills, setSkills] = useState([])
   const [selected, setSelected] = useState(new Set())
   const [loading, setLoading] = useState(true)
@@ -866,14 +835,14 @@ function SearchableSkillsModal({ userId, onClose }) {
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
         <div className="flex items-center justify-between mb-4">
-          <h2 id="search-skills-dialog-title" className="font-display text-2xl text-ink">Skills shown in search</h2>
+          <h2 id="search-skills-dialog-title" className="font-display text-2xl text-ink">{t('profile.privacy.searchableSkillsModal.title')}</h2>
           <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
-            Close
+            {t('profile.privacy.searchableSkillsModal.close')}
           </button>
         </div>
-        {loading && <p className="text-sm text-secondary">Loading…</p>}
+        {loading && <p className="text-sm text-secondary">{t('common.loading')}</p>}
         {error && <p role="alert" className="text-sm text-red-700 mb-2">{error}</p>}
-        {!loading && skills.length === 0 && <p className="text-sm text-secondary">You haven't added any skills yet.</p>}
+        {!loading && skills.length === 0 && <p className="text-sm text-secondary">{t('profile.privacy.searchableSkillsModal.noSkillsYet')}</p>}
         <ul className="space-y-2">
           {skills.map((s) => (
             <li key={s.id}>
