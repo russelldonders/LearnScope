@@ -24,6 +24,7 @@ import ManagerTeamPanel from '../pages/manager/ManagerTeamPanel'
 import ManagerLearningPanel from '../pages/manager/ManagerLearningPanel'
 import ManagerCollaborationPanel from '../pages/manager/ManagerCollaborationPanel'
 import ManagerTeamSharingPanel from '../pages/manager/learner/ManagerTeamSharingPanel'
+import { useLanguage } from '../context/LanguageContext'
 
 const fieldClass = 'mt-1 block w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink'
 const buttonClass = 'rounded-md border border-hairline px-3 py-2 text-sm font-medium text-ink hover:bg-card disabled:opacity-60'
@@ -35,23 +36,15 @@ const buttonClass = 'rounded-md border border-hairline px-3 py-2 text-sm font-me
 // console's own section shape (Skills/Members/Learning/Collaboration)
 // exactly, reusing its panels verbatim; only the shell around them (this
 // component) and where their data loads from changed.
-const PANELS = [
-  { key: 'skills', label: 'Skills' },
-  { key: 'members', label: 'Members' },
-  { key: 'learning', label: 'Learning' },
-  { key: 'collaboration', label: 'Collaboration' },
-  { key: 'settings', label: 'Settings' },
-]
-const PANEL_KEYS = PANELS.map((panel) => panel.key)
+const PANEL_KEYS = ['skills', 'members', 'learning', 'collaboration', 'settings']
 
 // Builds "Alex", "Alex and Sam", or "Alex, Sam and Jo" from the leader's own
 // name plus whoever is currently checked in the create-team member picker --
 // only ever used to seed the (still-editable) name field's initial value.
-function buildDefaultTeamName(selfName, memberNames) {
+function buildDefaultTeamName(selfName, memberNames, t) {
   const names = [selfName, ...memberNames].filter(Boolean)
   if (names.length <= 1) return names[0] || ''
-  if (names.length === 2) return `${names[0]} and ${names[1]}`
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+  return t('teams.defaultName', { names: names.slice(0, -1).join(', '), last: names[names.length - 1] })
 }
 
 // Every team a person is part of -- whether they lead it or joined someone
@@ -90,6 +83,7 @@ function pickDefaultKey(options) {
 
 export default function ConnectionsTeams({ connections = [], currentUserName = '', initialTeamId = null }) {
   const { user, refreshWorkspaces } = useAuth()
+  const { t } = useLanguage()
   const [ledTeams, setLedTeams] = useState([])
   const [archivedLedTeams, setArchivedLedTeams] = useState([])
   const [relationships, setRelationships] = useState([])
@@ -176,7 +170,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
           return fromUrl?.key ?? pickDefaultKey(options)
         })
       })
-      .catch((err) => { if (active) setError(err.message || 'Could not load your teams. Try again.') })
+      .catch((err) => { if (active) setError(err.message || t('teams.loadError')) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
@@ -229,11 +223,11 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     } catch (err) {
       if (isStale()) return
       setMembersError(true)
-      setError(err.message || 'Could not load team members. Try again.')
+      setError(err.message || t('teams.membersLoadError'))
     } finally {
       if (!isStale()) setMembersLoading(false)
     }
-  }, [])
+  }, [t])
 
   // Switching to a team restores the tab last used on it (Skills for one
   // not visited yet). Archiving/restoring/retrying the *same* team (both
@@ -331,7 +325,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     const onlyConnection = connections.length === 1 ? connections[0] : null
     const seeded = onlyConnection ? new Set([onlyConnection.id]) : new Set()
     setInitialMemberIds(seeded)
-    setName(buildDefaultTeamName(currentUserName, onlyConnection ? [onlyConnection.name] : []))
+    setName(buildDefaultTeamName(currentUserName, onlyConnection ? [onlyConnection.name] : [], t))
     setNameEdited(false)
     setCreating(true)
     setNotice('')
@@ -345,7 +339,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       else next.add(connectionId)
       if (!nameEdited) {
         const memberNames = connections.filter((c) => next.has(c.id)).map((c) => c.name)
-        setName(buildDefaultTeamName(currentUserName, memberNames))
+        setName(buildDefaultTeamName(currentUserName, memberNames, t))
       }
       return next
     })
@@ -369,13 +363,13 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
         await loadTeamDetail(id)
         setNotice(
           failureCount > 0
-            ? `Team created, but ${failureCount} of ${memberIds.length} member invitations couldn't be sent. Try inviting them again below.`
-            : 'Team created and members invited.'
+            ? t('teams.notices.createdPartial', { failed: failureCount, total: memberIds.length })
+            : t('teams.notices.createdWithMembers')
         )
       } else {
-        setNotice('Team created. Invite people to get started.')
+        setNotice(t('teams.notices.created'))
       }
-    } catch (err) { setError(err.message || 'Could not create your team. Try again.') }
+    } catch (err) { setError(err.message || t('teams.errors.create')) }
     finally { setBusy(false) }
   }
 
@@ -385,8 +379,8 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       await archiveManagerTeam(teamId)
       setArchiveConfirmOpen(false)
       setRetry((n) => n + 1)
-      setNotice('Team archived. You can still view it, but it can no longer be changed -- restore it any time.')
-    } catch (err) { setError(err.message || 'Could not archive this team. Try again.') }
+      setNotice(t('teams.notices.archived'))
+    } catch (err) { setError(err.message || t('teams.errors.archive')) }
     finally { setArchiving(false) }
   }
 
@@ -395,8 +389,8 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     try {
       await restoreManagerTeam(teamId)
       setRetry((n) => n + 1)
-      setNotice('Team restored.')
-    } catch (err) { setError(err.message || 'Could not restore this team. Try again.') }
+      setNotice(t('teams.notices.restored'))
+    } catch (err) { setError(err.message || t('teams.errors.restore')) }
     finally { setArchiving(false) }
   }
 
@@ -406,10 +400,10 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     setBusy(true); setError(null); setNotice('')
     try {
       await transferManagerTeamLeadership(teamId, successorId)
-      setNotice('Team leader changed. You are now a member of this team.')
+      setNotice(t('teams.notices.leaderChanged'))
       setLedTeams((previous) => previous.filter((team) => team.id !== teamId))
       setTransferOpen(false); setRetry((n) => n + 1)
-    } catch (err) { setError(err.message || 'Could not change the team leader. Try again.') }
+    } catch (err) { setError(err.message || t('teams.errors.transfer')) }
     finally { setBusy(false) }
   }
 
@@ -424,7 +418,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       const result = results[i]
       return result.status === 'fulfilled'
         ? { email, ok: true }
-        : { email, ok: false, error: result.reason?.message || 'Could not send this invitation' }
+        : { email, ok: false, error: result.reason?.message || t('teams.errors.sendInvitation') }
     })
   }
 
@@ -437,7 +431,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       const result = results[i]
       return result.status === 'fulfilled'
         ? { id, ok: true }
-        : { id, ok: false, error: result.reason?.message || 'Could not send this invitation' }
+        : { id, ok: false, error: result.reason?.message || t('teams.errors.sendInvitation') }
     })
   }
 
@@ -456,11 +450,11 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
         const key = `member:${membership.teamId}`
         setSelectedKey(key)
         setShareOnOpenKey(key)
-        setNotice(`You joined ${membership.teamName}. Choose which skills to share with ${membership.managerName}.`)
+        setNotice(t('teams.notices.joined', { team: membership.teamName, manager: membership.managerName }))
       }
       refreshPendingActionCount?.()
     } catch (err) {
-      setInviteDecisionError({ id: membership.id, message: err.message || 'Could not respond to this invitation. Try again.' })
+      setInviteDecisionError({ id: membership.id, message: err.message || t('teams.errors.respondToInvitation') })
     } finally {
       setDecidingInviteId(null)
     }
@@ -472,7 +466,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       await revokeManagerTeamInvite(revokeTarget.id)
       setRevokeTarget(null)
       await loadTeamDetail(teamId)
-    } catch (err) { setError(err.message || 'Could not revoke this invitation. Try again.') }
+    } catch (err) { setError(err.message || t('teams.errors.revoke')) }
     finally { setRevoking(false) }
   }
 
@@ -490,8 +484,8 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
     try {
       await updateManagerTeamDetails(teamId, { name: nextName, description: nextDescription })
       setLedTeams((previous) => previous.map((team) => (team.id === teamId ? { ...team, name: nextName, description: nextDescription } : team)))
-      setNotice('Team details saved.')
-    } catch (err) { setError(err.message || 'Could not save the team details. Try again.') }
+      setNotice(t('teams.notices.detailsSaved'))
+    } catch (err) { setError(err.message || t('teams.errors.saveDetails')) }
     finally { setDetailsSaving(false) }
   }
 
@@ -543,7 +537,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
         r.id === selected.membership.id ? { ...r, sharedSkillIds: skillIds } : r
       ))
     } catch (err) {
-      setMemberActionError(err.message || 'Could not save your shared skills. Try again.')
+      setMemberActionError(err.message || t('teams.errors.saveShared'))
     } finally {
       setMemberSaving(false)
     }
@@ -559,7 +553,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       setRelationships(nextRelationships)
       setSelectedKey(pickDefaultKey(buildTeamOptions(ledTeams, archivedLedTeams, nextRelationships)))
     } catch (err) {
-      setMemberActionError(err.message || 'Could not leave this team. Try again.')
+      setMemberActionError(err.message || t('teams.errors.leave'))
     } finally {
       setMemberSaving(false)
     }
@@ -579,10 +573,10 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
 
   return <section aria-labelledby="connections-teams-title" className="space-y-4 border-b border-hairline pb-8">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <h2 id="connections-teams-title" className="font-display text-xl text-ink">Teams you are part of</h2>
-      {!creating && <button type="button" disabled={busy || loading} onClick={startCreating} className={buttonClass}>Create a team</button>}
+      <h2 id="connections-teams-title" className="font-display text-xl text-ink">{t('teams.title')}</h2>
+      {!creating && <button type="button" disabled={busy || loading} onClick={startCreating} className={buttonClass}>{t('teams.createTeam')}</button>}
     </div>
-    <p className="text-sm text-secondary">Create and lead multiple teams, or join teams led by others. Invite your connections to learn together. Members choose which skills to share with their team leader.</p>
+    <p className="text-sm text-secondary">{t('teams.intro')}</p>
 
     {/* Surfaced up here rather than at the bottom of the whole section --
         these need a response, unlike everything below them, and previously
@@ -590,20 +584,20 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
         it was easy to never scroll far enough to notice. */}
     {pendingInvites.length > 0 && (
       <div className="rounded-lg border border-gold/40 bg-gold/10 p-4 space-y-3">
-        <h3 className="font-display text-lg text-ink">Team invitations waiting on you</h3>
+        <h3 className="font-display text-lg text-ink">{t('teams.invitations.title')}</h3>
         <ul className="divide-y divide-hairline">{pendingInvites.map((membership) => (
           <li key={membership.id} className="flex flex-wrap items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
-            <div><p className="text-sm font-medium text-ink">{membership.teamName}</p><p className="text-sm text-secondary">Led by {membership.managerName}</p></div>
+            <div><p className="text-sm font-medium text-ink">{membership.teamName}</p><p className="text-sm text-secondary">{t('teams.invitations.ledBy', { name: membership.managerName })}</p></div>
             <div className="flex flex-wrap items-center gap-2">
               <button type="button" disabled={decidingInviteId !== null} onClick={() => handleInviteDecision(membership, true)}
-                aria-label={`Accept invitation to ${membership.teamName}`}
+                aria-label={t('teams.invitations.acceptLabel', { team: membership.teamName })}
                 className="rounded-md bg-moss px-3 py-1.5 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-60">
-                {decidingInviteId === membership.id ? 'Saving…' : 'Accept'}
+                {decidingInviteId === membership.id ? t('teams.invitations.saving') : t('teams.invitations.accept')}
               </button>
               <button type="button" disabled={decidingInviteId !== null} onClick={() => handleInviteDecision(membership, false)}
-                aria-label={`Decline invitation to ${membership.teamName}`}
+                aria-label={t('teams.invitations.declineLabel', { team: membership.teamName })}
                 className="rounded-md border border-hairline px-3 py-1.5 text-sm font-medium text-ink hover:bg-card disabled:opacity-60">
-                Decline
+                {t('teams.invitations.decline')}
               </button>
             </div>
             {inviteDecisionError?.id === membership.id && (
@@ -614,19 +608,19 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       </div>
     )}
 
-    {loading && <p role="status" className="text-sm text-secondary">Loading your teams…</p>}
+    {loading && <p role="status" className="text-sm text-secondary">{t('teams.loadingTeams')}</p>}
     <MutationFeedback status="error" message={error} />
-    {error && <button type="button" disabled={busy} className={buttonClass} onClick={() => setRetry((n) => n + 1)}>Reload teams</button>}
+    {error && <button type="button" disabled={busy} className={buttonClass} onClick={() => setRetry((n) => n + 1)}>{t('teams.reloadTeams')}</button>}
     <MutationFeedback status="success" message={notice} />
     {creating && <form onSubmit={handleCreate} className="max-w-lg space-y-3">
-      <label className="block text-sm text-ink">Team name
+      <label className="block text-sm text-ink">{t('teams.createForm.teamName')}
         <input required maxLength={120} value={name} disabled={busy}
           onChange={(e) => { setName(e.target.value); setNameEdited(true) }} className={fieldClass} />
       </label>
       {connections.length > 0 && <fieldset>
-        <legend className="text-sm text-ink">Add members (optional)</legend>
+        <legend className="text-sm text-ink">{t('teams.createForm.addMembers')}</legend>
         {connections.length > 6 && (
-          <input type="text" value={memberQuery} disabled={busy} placeholder="Search connections…"
+          <input type="text" value={memberQuery} disabled={busy} placeholder={t('teams.createForm.searchConnections')}
             onChange={(e) => setMemberQuery(e.target.value)}
             className="mt-1 mb-1 block w-full rounded-md border border-hairline bg-card px-3 py-1.5 text-sm text-ink" />
         )}
@@ -642,11 +636,11 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
             ))}
         </div>
       </fieldset>}
-      <div className="flex gap-2"><button type="submit" disabled={busy || !name.trim()} className={buttonClass}>{busy ? 'Creating…' : 'Create team'}</button>
-        <button type="button" disabled={busy} className={buttonClass} onClick={() => setCreating(false)}>Cancel</button></div>
+      <div className="flex gap-2"><button type="submit" disabled={busy || !name.trim()} className={buttonClass}>{busy ? t('teams.createForm.creating') : t('teams.createForm.create')}</button>
+        <button type="button" disabled={busy} className={buttonClass} onClick={() => setCreating(false)}>{t('teams.createForm.cancel')}</button></div>
     </form>}
     {!loading && teamOptions.length === 0 && pendingInvites.length === 0 && !creating && !error && (
-      <p className="text-sm text-secondary">No teams yet. Create your first team, or wait for an invitation.</p>
+      <p className="text-sm text-secondary">{t('teams.empty')}</p>
     )}
 
     {teamOptions.length > 0 && <div className="space-y-4">
@@ -654,7 +648,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       {selected && (
         <div>
           <h3 className="font-display text-lg text-ink">
-            {selected.name}{isArchived ? ' (Archived)' : ''}
+            {isArchived ? t('teams.archivedName', { name: selected.name }) : selected.name}
           </h3>
           {selected.description && <p className="text-sm text-secondary">{selected.description}</p>}
         </div>
@@ -662,8 +656,8 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
 
       {isArchived && (
         <p role="status" className="text-sm text-ink bg-gold/10 border border-gold/40 rounded-md px-3 py-2">
-          This team has been archived -- you can still view it below, but nothing new can be added.
-          {selected.role === 'leader' && ' Restore it to make changes again.'}
+          {t('teams.archivedNotice')}
+          {selected.role === 'leader' && ` ${t('teams.archivedNoticeLeader')}`}
         </p>
       )}
 
@@ -672,8 +666,8 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
           <TeamSetupChecklist members={teamMemberSummaries} pendingMembers={pendingMembers}
             onOpenPanel={selectPanel} />
         )}
-        <div role="tablist" aria-label="Team section" className="flex items-center flex-wrap gap-1 border-b border-hairline">
-          {PANELS.map((panel) => (
+        <div role="tablist" aria-label={t('teams.sectionLabel')} className="flex items-center flex-wrap gap-1 border-b border-hairline">
+          {PANEL_KEYS.map((key) => ({ key, label: t(`teams.panels.${key}`) })).map((panel) => (
             <button key={panel.key} type="button" role="tab"
               ref={(el) => { panelTabRefs.current[panel.key] = el }}
               id={`team-panel-tab-${panel.key}`}
@@ -725,69 +719,69 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
           {activePanel === 'settings' && (
             <div className="space-y-6 max-w-lg">
               <div className="bg-card border border-hairline rounded-lg p-6">
-                <h3 className="font-display text-lg text-ink mb-1">Team details</h3>
+                <h3 className="font-display text-lg text-ink mb-1">{t('teams.settings.detailsTitle')}</h3>
                 {isArchived ? (
-                  <p className="text-sm text-secondary">Restore this team to rename it or change its description.</p>
+                  <p className="text-sm text-secondary">{t('teams.settings.detailsArchived')}</p>
                 ) : (
                   <form onSubmit={handleSaveDetails} className="space-y-3">
-                    <label className="block text-sm text-ink">Team name
+                    <label className="block text-sm text-ink">{t('teams.settings.teamName')}
                       <input required maxLength={120} value={detailsName} disabled={detailsSaving}
                         onChange={(e) => setDetailsName(e.target.value)} className={fieldClass} />
                     </label>
-                    <label className="block text-sm text-ink">Description (optional)
+                    <label className="block text-sm text-ink">{t('teams.settings.description')}
                       <textarea rows={2} maxLength={500} value={detailsDescription} disabled={detailsSaving}
                         onChange={(e) => setDetailsDescription(e.target.value)}
-                        placeholder="What is this team working on together?" className={fieldClass} />
+                        placeholder={t('teams.settings.descriptionPlaceholder')} className={fieldClass} />
                     </label>
                     <button type="submit" className={buttonClass}
                       disabled={detailsSaving || !detailsName.trim()
                         || (detailsName.trim() === selectedName && (detailsDescription.trim() || '') === (selectedDescription || ''))}>
-                      {detailsSaving ? 'Saving…' : 'Save details'}
+                      {detailsSaving ? t('teams.settings.saving') : t('teams.settings.saveDetails')}
                     </button>
                   </form>
                 )}
               </div>
 
               <div className="bg-card border border-hairline rounded-lg p-6">
-                <h3 className="font-display text-lg text-ink mb-1">Team leadership</h3>
+                <h3 className="font-display text-lg text-ink mb-1">{t('teams.settings.leadershipTitle')}</h3>
                 <p className="text-sm text-secondary mb-4">
                   {isArchived
-                    ? 'Restore this team to change who leads it.'
-                    : 'Hand this team over to another member. You’ll remain a member but lose leader controls.'}
+                    ? t('teams.settings.leadershipArchived')
+                    : t('teams.settings.leadershipDescription')}
                 </p>
                 {!isArchived && !transferOpen && (
                   <button type="button" disabled={busy || membersLoading || membersError} onClick={() => setTransferOpen(true)} className={buttonClass}>
-                    Change team leader
+                    {t('teams.settings.changeLeader')}
                   </button>
                 )}
                 {!isArchived && transferOpen && (
                   <form onSubmit={handleTransfer} className="space-y-3">
-                    <label className="block text-sm text-ink">New team leader
+                    <label className="block text-sm text-ink">{t('teams.settings.newLeader')}
                       <select value={successorId} disabled={busy} onChange={(e) => setSuccessorId(e.target.value)} className={fieldClass}>
-                        <option value="">Choose a team member</option>
+                        <option value="">{t('teams.settings.chooseMember')}</option>
                         {roster.filter((person) => person.role === 'member').map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
                       </select>
                     </label>
-                    <p className="text-sm text-secondary">Choose a member who has accepted their invitation. Members will need to share their skills with the new leader.</p>
+                    <p className="text-sm text-secondary">{t('teams.settings.newLeaderHint')}</p>
                     <div className="flex gap-2">
-                      <button type="submit" disabled={busy || !successorId} className={buttonClass}>{busy ? 'Changing…' : 'Transfer leadership'}</button>
-                      <button type="button" disabled={busy} onClick={() => setTransferOpen(false)} className={buttonClass}>Cancel</button>
+                      <button type="submit" disabled={busy || !successorId} className={buttonClass}>{busy ? t('teams.settings.changing') : t('teams.settings.transfer')}</button>
+                      <button type="button" disabled={busy} onClick={() => setTransferOpen(false)} className={buttonClass}>{t('teams.settings.cancel')}</button>
                     </div>
                   </form>
                 )}
               </div>
 
               <div className={`bg-card border rounded-lg p-6 ${isArchived ? 'border-hairline' : 'border-red-200'}`}>
-                <h3 className="font-display text-lg text-ink mb-1">{isArchived ? 'Restore team' : 'Archive team'}</h3>
+                <h3 className="font-display text-lg text-ink mb-1">{isArchived ? t('teams.settings.restoreTitle') : t('teams.settings.archiveTitle')}</h3>
                 <p className="text-sm text-secondary mb-4">
                   {isArchived
-                    ? 'Bring this team back so members can be invited, skills rated, and new activity logged again.'
-                    : 'Members, ratings and history stay viewable, but no one can invite new members, rate skills, or log new activities or collaboration records until you restore it.'}
+                    ? t('teams.settings.restoreDescription')
+                    : t('teams.settings.archiveDescription')}
                 </p>
                 {isArchived ? (
-                  <button type="button" disabled={archiving} onClick={handleRestore} className={buttonClass}>{archiving ? 'Restoring…' : 'Restore team'}</button>
+                  <button type="button" disabled={archiving} onClick={handleRestore} className={buttonClass}>{archiving ? t('teams.settings.restoring') : t('teams.settings.restore')}</button>
                 ) : (
-                  <button type="button" disabled={archiving || membersLoading} onClick={() => setArchiveConfirmOpen(true)} className={`${buttonClass} text-red-700`}>Archive team</button>
+                  <button type="button" disabled={archiving || membersLoading} onClick={() => setArchiveConfirmOpen(true)} className={`${buttonClass} text-red-700`}>{t('teams.settings.archive')}</button>
                 )}
               </div>
             </div>
@@ -796,7 +790,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
       </div>}
 
       {selected?.role === 'member' && memberDetailLoading && (
-        <p className="text-sm text-secondary">Loading…</p>
+        <p className="text-sm text-secondary">{t('common.loading')}</p>
       )}
       {selected?.role === 'member' && !memberDetailLoading && (
         <ManagerTeamSharingPanel
@@ -809,7 +803,7 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
           assessments={memberAssessments}
           teamSkills={memberTeamSkills}
           saving={memberSaving}
-          error={memberDetailError ? 'Could not load this team’s details.' : memberActionError}
+          error={memberDetailError ? t('teams.memberDetailsLoadError') : memberActionError}
           onSave={handleManagerTeamShare}
           onLeaveTeam={handleLeaveTeam}
           readOnly={isArchived}
@@ -819,8 +813,8 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
 
     {archiveConfirmOpen && (
       <ConfirmDialog
-        message={`Archive "${selected?.name}"? It stays viewable -- including its members, ratings and history -- but no one can invite new members, rate skills, or log new activities or collaboration records until you restore it.`}
-        confirmLabel="Archive team"
+        message={t('teams.confirmArchive', { name: selected?.name })}
+        confirmLabel={t('teams.settings.archive')}
         onConfirm={handleArchive}
         onCancel={() => setArchiveConfirmOpen(false)}
         confirming={archiving}
@@ -829,8 +823,8 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
 
     {revokeTarget && (
       <ConfirmDialog
-        message={`Revoke the invitation to "${revokeTarget.name}"? They'll no longer be able to accept it -- you can invite them again later if you change your mind.`}
-        confirmLabel="Revoke"
+        message={t('teams.confirmRevoke', { name: revokeTarget.name })}
+        confirmLabel={t('teams.revoke')}
         onConfirm={handleRevokeInvite}
         onCancel={() => setRevokeTarget(null)}
         confirming={revoking}
@@ -846,7 +840,8 @@ export default function ConnectionsTeams({ connections = [], currentUserName = '
 // choosing, not buried in an option's trailing text. Shown even for a
 // single team so the layout doesn't change shape once a second one appears.
 function TeamList({ options, selectedKey, disabled, onSelect }) {
-  return <ul aria-label="Your teams" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+  const { t } = useLanguage()
+  return <ul aria-label={t('teams.list.label')} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
     {options.map((team) => {
       const isSelected = team.key === selectedKey
       const isArchived = team.teamStatus === 'archived'
@@ -858,9 +853,9 @@ function TeamList({ options, selectedKey, disabled, onSelect }) {
           <span className="block text-sm font-medium text-ink">{team.name}</span>
           <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-secondary">
             <span className={`rounded-full border px-2 py-0.5 ${team.role === 'leader' ? 'border-moss/40 text-ink' : 'border-hairline'}`}>
-              {team.role === 'leader' ? 'You lead' : `Led by ${team.membership.managerName}`}
+              {team.role === 'leader' ? t('teams.list.youLead') : t('teams.list.ledBy', { name: team.membership.managerName })}
             </span>
-            {isArchived && <span className="rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 text-ink">Archived</span>}
+            {isArchived && <span className="rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 text-ink">{t('teams.list.archived')}</span>}
           </span>
         </button>
       </li>
@@ -874,27 +869,28 @@ function TeamList({ options, selectedKey, disabled, onSelect }) {
 // has actually shared a skill; nothing here is persisted, it's derived
 // entirely from the team's own loaded data.
 function TeamSetupChecklist({ members, pendingMembers, onOpenPanel }) {
+  const { t } = useLanguage()
   const steps = [
-    { label: 'Invite people to the team', done: members.length > 0 || pendingMembers.length > 0, panel: 'members', action: 'Invite people' },
-    { label: 'They accept the invitation', done: members.length > 0, panel: 'members', action: 'See who’s invited' },
-    { label: 'Members choose skills to share with you', done: members.some((m) => m.sharedSkills?.length > 0), panel: 'skills', action: 'Add team skills meanwhile' },
+    { key: 'invite', done: members.length > 0 || pendingMembers.length > 0, panel: 'members' },
+    { key: 'accept', done: members.length > 0, panel: 'members' },
+    { key: 'share', done: members.some((m) => m.sharedSkills?.length > 0), panel: 'skills' },
   ]
   if (steps.every((step) => step.done)) return null
   const nextIndex = steps.findIndex((step) => !step.done)
   return <div className="rounded-lg border border-hairline bg-card p-4">
-    <h4 className="text-sm font-medium text-ink">Getting your team started</h4>
+    <h4 className="text-sm font-medium text-ink">{t('teams.checklist.title')}</h4>
     <ol className="mt-2 space-y-1.5">
       {steps.map((step, index) => (
-        <li key={step.label} className="flex flex-wrap items-center gap-2 text-sm">
+        <li key={step.key} className="flex flex-wrap items-center gap-2 text-sm">
           <span aria-hidden="true" className={`inline-flex size-5 items-center justify-center rounded-full text-xs ${step.done ? 'bg-moss text-paper' : 'border border-hairline text-secondary'}`}>
             {step.done ? '✓' : index + 1}
           </span>
           <span className={step.done ? 'text-secondary line-through' : 'text-ink'}>
-            {step.label}<span className="sr-only">{step.done ? ' (done)' : ' (to do)'}</span>
+            {t(`teams.checklist.${step.key}`)}<span className="sr-only">{step.done ? t('teams.checklist.done') : t('teams.checklist.toDo')}</span>
           </span>
           {index === nextIndex && (
             <button type="button" onClick={() => onOpenPanel(step.panel)} className="text-sm font-medium text-moss hover:underline">
-              {step.action}
+              {t(`teams.checklist.${step.key}Action`)}
             </button>
           )}
         </li>

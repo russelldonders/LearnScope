@@ -3,6 +3,14 @@ import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('../lib/supabaseClient', () => ({ supabase: {} }))
+vi.mock('../context/LanguageContext', async () => {
+  const { english } = await import('../lib/i18n/translations')
+  const t = (key, params) => {
+    const value = key.split('.').reduce((v, part) => v?.[part], english) ?? key
+    return params ? value.replace(/\{(\w+)\}/g, (m, name) => (name in params ? params[name] : m)) : value
+  }
+  return { useLanguage: () => ({ language: 'en', setLanguage: vi.fn(), t }) }
+})
 
 import ConnectionsActivityFeed from '../components/ConnectionsActivityFeed'
 import { dashboardResultValue, FocusPanel, OverviewStrip } from './Dashboard'

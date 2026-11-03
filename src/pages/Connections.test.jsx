@@ -15,7 +15,10 @@ vi.mock('../context/AuthContext', () => ({
 // module does.
 vi.mock('../context/LanguageContext', async () => {
   const { english } = await import('../lib/i18n/translations')
-  const t = (key) => key.split('.').reduce((value, part) => value?.[part], english) ?? key
+  const t = (key, params) => {
+    const value = key.split('.').reduce((v, part) => v?.[part], english) ?? key
+    return params ? value.replace(/\{(\w+)\}/g, (m, name) => (name in params ? params[name] : m)) : value
+  }
   return { useLanguage: () => ({ language: 'en', setLanguage: vi.fn(), t }) }
 })
 vi.mock('../components/AppHeader', () => ({ default: () => <header>Header</header> }))

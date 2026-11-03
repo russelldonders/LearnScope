@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { fileToBase64 } from '../lib/fileToBase64'
 import ResumeImportReviewModal from './ResumeImportReviewModal'
+import { useLanguage } from '../context/LanguageContext'
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
@@ -18,6 +19,7 @@ export default function ImportProfileDataButton({
   onImported,
   autoOpen = false,
 }) {
+  const { t } = useLanguage()
   const inputRef = useRef(null)
   const [open, setOpen] = useState(autoOpen)
   const [url, setUrl] = useState('')
@@ -45,11 +47,11 @@ export default function ImportProfileDataButton({
         body: JSON.stringify(body),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to import.')
+      if (!res.ok) throw new Error(data.error || t('profileImport.failed'))
 
       const { skills = [], courses = [], experience = [] } = data
       if (skills.length + courses.length + experience.length === 0) {
-        setError("Couldn't find anything to import there.")
+        setError(t('profileImport.nothingFound'))
       } else {
         setExtracted(data)
       }
@@ -69,11 +71,11 @@ export default function ImportProfileDataButton({
     if (file.type === 'application/pdf') fileType = 'pdf'
     else if (file.type === DOCX_MIME) fileType = 'docx'
     else {
-      setError('Please upload a PDF or Word (.docx) file.')
+      setError(t('profileImport.wrongFileType'))
       return
     }
     if (file.size > MAX_FILE_BYTES) {
-      setError('That file is too large (max 8MB).')
+      setError(t('profileImport.tooLarge'))
       return
     }
 
@@ -96,11 +98,10 @@ export default function ImportProfileDataButton({
             onClick={() => setOpen(true)}
             className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper"
           >
-            Import skills & experience
+            {t('profileImport.button')}
           </button>
           <p className="text-xs text-secondary mt-1">
-            From a CV, LinkedIn export, or similar — we'll pull out skills, courses, experience,
-            and your photo, if there isn't one already.
+            {t('profileImport.hint')}
           </p>
         </div>
       ) : (
@@ -112,7 +113,7 @@ export default function ImportProfileDataButton({
               disabled={loading}
               className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
             >
-              {loading ? 'Reading…' : 'Upload a PDF or Word file'}
+              {loading ? t('profileImport.reading') : t('profileImport.uploadFile')}
             </button>
             <input
               ref={inputRef}
@@ -125,7 +126,7 @@ export default function ImportProfileDataButton({
 
           <div className="flex items-center gap-3 max-w-sm">
             <span className="flex-1 h-px bg-hairline" />
-            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">or</span>
+            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{t('profileImport.or')}</span>
             <span className="flex-1 h-px bg-hairline" />
           </div>
 
@@ -134,7 +135,7 @@ export default function ImportProfileDataButton({
               type="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://example.com/my-cv.pdf"
+              placeholder={t('profileImport.urlPlaceholder')}
               disabled={loading}
               className="flex-1 rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
             />
@@ -143,7 +144,7 @@ export default function ImportProfileDataButton({
               disabled={loading || !url.trim()}
               className="shrink-0 rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
             >
-              Import
+              {t('profileImport.import')}
             </button>
           </form>
 

@@ -1,11 +1,13 @@
 import EvidenceAttachmentLink from './EvidenceAttachmentLink'
 import { activityName, verbLabel, relatedSkillsFromStatement, relatedExperienceFromStatement, experienceTrail, formatDuration } from '../lib/xapiStatement'
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
+import { useLanguage } from '../context/LanguageContext'
 
 // A single logged skill activity, shared by the dashboard's capped "Skill
 // activity" list and the full /activity page -- same card, same optional
 // click-to-navigate behaviour, so the two never drift apart visually.
 export default function ActivityRow({ row, onClick }) {
+  const { t } = useLanguage()
   const relatedSkills = relatedSkillsFromStatement(row.statement)
   const relatedExperience = relatedExperienceFromStatement(row.statement)
   const duration = formatDuration(row.statement)
@@ -50,7 +52,7 @@ export default function ActivityRow({ row, onClick }) {
               rel="noopener noreferrer"
               className="text-xs text-moss font-medium"
             >
-              Evidence link
+              {t('skillDetail.evidenceLink')}
             </a>
           )}
           {evidencePaths.map((path, i) => (

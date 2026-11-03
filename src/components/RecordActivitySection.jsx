@@ -7,11 +7,13 @@ import ActivityRow from './ActivityRow'
 import { relatedSkillsFromStatement, relatedExperienceFromStatement } from '../lib/xapiStatement'
 import { linkSkillToExperiences } from '../lib/currentRole'
 import { saveActivity } from '../lib/activitySkillLinks'
+import { useLanguage } from '../context/LanguageContext'
 
 const RECENT_LIMIT = 6
 
 export default function RecordActivitySection() {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const navigate = useNavigate()
   const [statements, setStatements] = useState([])
   const [skills, setSkills] = useState([])
@@ -109,24 +111,24 @@ export default function RecordActivitySection() {
   return (
     <section>
       <div className="flex items-center justify-between mb-1">
-        <h2 className="font-display text-xl text-ink">Skill activity</h2>
+        <h2 className="font-display text-xl text-ink">{t('activity.heading')}</h2>
         <button
           onClick={() => setModalOpen(true)}
           className="rounded-md bg-moss text-paper py-2 px-4 font-medium hover:opacity-90"
         >
-          + Log skill activity
+          {t('skillActivity.logActivity')}
         </button>
       </div>
       <p className="text-sm text-secondary mb-6">
-        Quick notes about things you did that contributed to developing a skill.
+        {t('skillActivity.description')}
       </p>
 
-      {loading && <p className="text-secondary">Loading…</p>}
+      {loading && <p className="text-secondary">{t('common.loading')}</p>}
       {error && <p className="text-red-700 text-sm">{error}</p>}
 
       {!loading && statements.length === 0 && (
         <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
-          <p className="text-secondary">Nothing recorded yet. Log your first activity.</p>
+          <p className="text-secondary">{t('skillActivity.emptyState')}</p>
         </div>
       )}
 
@@ -147,7 +149,7 @@ export default function RecordActivitySection() {
 
       {statements.length > RECENT_LIMIT && (
         <Link to="/activity" className="block text-xs text-moss font-medium mt-2 hover:underline">
-          Showing your {RECENT_LIMIT} most recent of {statements.length} — see all activity →
+          {t('skillActivity.showingRecent', { limit: RECENT_LIMIT, total: statements.length })}
         </Link>
       )}
 

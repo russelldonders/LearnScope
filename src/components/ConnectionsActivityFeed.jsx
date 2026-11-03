@@ -1,30 +1,33 @@
 import PersonAvatar from './PersonAvatar'
 import { LEVEL_LABELS } from '../lib/levels'
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
+import { useLanguage } from '../context/LanguageContext'
 
 // Turns one list_connections_activity (0063/0102) row into a plain-language
 // sentence -- everything needed to say it is already in the row itself
 // (skill_name/level/detail), never a client-side lookup, since each row is
 // independently privacy-checked server-side and shouldn't need extra trust.
-export function describeActivityEvent(event) {
+// Level labels stay English, as everywhere else they're shown.
+export function describeActivityEvent(event, t) {
   const level = event.level ? LEVEL_LABELS[event.level] : null
   const additionalSkills = (event.skills?.length ?? 1) - 1
-  const skillLabel = additionalSkills > 0
-    ? `${event.skill_name} and ${additionalSkills} other ${additionalSkills === 1 ? 'skill' : 'skills'}`
+  const skill = additionalSkills > 0
+    ? t(additionalSkills === 1 ? 'connectionsActivity.skillAndOneOther' : 'connectionsActivity.skillAndOthers',
+      { skill: event.skill_name, count: additionalSkills })
     : event.skill_name
   switch (event.event_type) {
     case 'skill_confirmed':
-      return `confirmed ${level ?? 'a level'} in ${skillLabel}`
+      return t('connectionsActivity.confirmed', { level: level ?? t('connectionsActivity.aLevel'), skill })
     case 'skill_validated':
-      return `had ${skillLabel} validated at ${level ?? 'their target level'}`
+      return t('connectionsActivity.validated', { level: level ?? t('connectionsActivity.theirTargetLevel'), skill })
     case 'skill_added':
-      return `started tracking ${skillLabel}`
+      return t('connectionsActivity.skillAdded', { skill })
     case 'experience_added':
-      return `added ${event.detail}`
+      return t('connectionsActivity.experienceAdded', { detail: event.detail })
     case 'course_started':
-      return `started ${event.detail}`
+      return t('connectionsActivity.courseStarted', { detail: event.detail })
     case 'target_set':
-      return `set a target of ${level ?? 'a new level'} for ${skillLabel}`
+      return t('connectionsActivity.targetSet', { level: level ?? t('connectionsActivity.aNewLevel'), skill })
     default:
       return null
   }
@@ -59,12 +62,13 @@ function groupConnectionsActivity(events) {
 // across every connection) and SkillsProfile.jsx (scoped to just the one
 // person being viewed) -- same event shape either way, so one rendering.
 export default function ConnectionsActivityFeed({ events }) {
+  const { t } = useLanguage()
   const groupedEvents = groupConnectionsActivity(events).slice(0, 5)
 
   return (
     <div className="space-y-2">
       {groupedEvents.map((event, i) => {
-        const description = describeActivityEvent(event)
+        const description = describeActivityEvent(event, t)
         if (!description) return null
         return (
           <div
@@ -74,7 +78,7 @@ export default function ConnectionsActivityFeed({ events }) {
             <PersonAvatar name={event.full_name} avatarUrl={event.avatar_url} size={9} />
             <div className="min-w-0 flex-1">
               <p className="text-sm text-ink">
-                <span className="font-medium">{event.full_name || 'A connection'}</span> {description}
+                <span className="font-medium">{event.full_name || t('connectionsActivity.aConnection')}</span> {description}
               </p>
               {event.event_type === 'skill_confirmed' && event.detail && (
                 <p className="text-xs text-secondary mt-0.5">{event.detail}</p>

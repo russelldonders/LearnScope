@@ -92,10 +92,6 @@ or just delete it.
      CourseCatalogue.jsx, ProviderProfile.jsx (public route), Onboarding.jsx
      + SkillsToLearnStep.jsx, Help.jsx, ProfileExport.jsx/ProfileImport.jsx,
      Welcome.jsx, Landing.jsx, ResetPassword.jsx, LtiSession.jsx.
-   - Dashboard/Connections inline sections: ConnectionsTeams.jsx (698
-     lines, largest single component found), RecordActivitySection,
-     ConnectionsActivityFeed, ConnectionTeamInviteControl, ActivityRow,
-     ImportProfileDataButton, ProfilePhoto.
    - The employer-linked "role alignment" cluster shown to ordinary
      employer-linked learners via EmployerHome.jsx (LearnerRoleAlignment*,
      CurrentRoleCard, PendingAssignmentsPanel, RoleAlignmentSummary) —
@@ -112,7 +108,19 @@ or just delete it.
    and ValidateRequest.jsx are now translated, under new `invites`,
    `sharedProfile` and `validateRequest` namespaces; a key-coverage test
    (src/lib/i18n/tokenLinkPages.test.js) fails if any of their keys is
-   missing from a language. Level labels, experience-type labels and
+   missing from a language. The Dashboard/Connections inline sections
+   (ConnectionsTeams, ConnectionTeamInviteControl, ConnectionsActivityFeed,
+   RecordActivitySection, ActivityRow) and ProfilePhoto/
+   ImportProfileDataButton are translated too, under new `teams`,
+   `skillActivity`, `connectionsActivity`, `profilePhoto` and
+   `profileImport` namespaces, with the same kind of key-coverage test
+   (src/lib/i18n/connectionsSections.test.js). The manager panels
+   ConnectionsTeams embeds for a team leader (ManagerSkillsPanel,
+   ManagerTeamPanel, ManagerLearningPanel, ManagerCollaborationPanel,
+   ManagerTeamSharingPanel, all under src/pages/manager/) are still
+   English -- same staff-tooling scope line as MyTeam.jsx, although
+   ManagerTeamSharingPanel is what an ordinary team *member* sees, so it
+   is the one worth picking up next. Level labels, experience-type labels and
    duplicateSkillMessage() stay English there, as everywhere else.
    Separately, deeply dynamic/AI-generated content (level guides,
    diagnostic questions, quiz/interview content, and the auto-generated

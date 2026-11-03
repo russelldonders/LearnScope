@@ -2,11 +2,13 @@ import { useRef, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { uploadAvatar, removeAvatar } from '../lib/avatar'
 import ConfirmDialog from './ConfirmDialog'
+import { useLanguage } from '../context/LanguageContext'
 
 const MAX_BYTES = 5 * 1024 * 1024
 
 export default function ProfilePhoto({ avatarUrl, onUploaded }) {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const inputRef = useRef(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState(null)
@@ -17,11 +19,11 @@ export default function ProfilePhoto({ avatarUrl, onUploaded }) {
     e.target.value = ''
     if (!file) return
     if (!file.type.startsWith('image/')) {
-      setError('Please choose an image file.')
+      setError(t('profilePhoto.notAnImage'))
       return
     }
     if (file.size > MAX_BYTES) {
-      setError('That image is too large (max 5MB).')
+      setError(t('profilePhoto.tooLarge'))
       return
     }
     setError(null)
@@ -54,7 +56,7 @@ export default function ProfilePhoto({ avatarUrl, onUploaded }) {
     <div className="flex items-center gap-4">
       <div className="w-20 h-20 rounded-full overflow-hidden border border-hairline bg-paper flex items-center justify-center shrink-0">
         {avatarUrl ? (
-          <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+          <img src={avatarUrl} alt={t('profilePhoto.alt')} className="w-full h-full object-cover" />
         ) : (
           <svg
             width="32"
@@ -78,7 +80,7 @@ export default function ProfilePhoto({ avatarUrl, onUploaded }) {
             disabled={uploading}
             className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
           >
-            {uploading ? 'Uploading…' : avatarUrl ? 'Change photo' : 'Upload photo'}
+            {uploading ? t('profilePhoto.uploading') : avatarUrl ? t('profilePhoto.change') : t('profilePhoto.upload')}
           </button>
           {avatarUrl && (
             <button
@@ -87,7 +89,7 @@ export default function ProfilePhoto({ avatarUrl, onUploaded }) {
               disabled={uploading}
               className="text-sm text-secondary hover:text-red-700 disabled:opacity-60"
             >
-              Remove
+              {t('profilePhoto.remove')}
             </button>
           )}
         </div>
@@ -103,7 +105,7 @@ export default function ProfilePhoto({ avatarUrl, onUploaded }) {
 
       {confirmingRemove && (
         <ConfirmDialog
-          message="Remove your profile photo?"
+          message={t('profilePhoto.confirmRemove')}
           onConfirm={handleRemove}
           onCancel={() => setConfirmingRemove(false)}
           confirming={uploading}
