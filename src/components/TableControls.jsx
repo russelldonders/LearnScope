@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { PAGE_SIZE_OPTIONS } from '../lib/useSortedPage'
+import { useLanguage } from '../context/LanguageContext'
 
 // A <th> whose whole label is a button toggling sort on that column --
 // matches how every list table in the two consoles now sorts, so a column
 // header always looks and behaves the same wherever it appears.
 export function SortableTh({ label, columnKey, sortKey, sortDir, onSort, className = '', align = 'left' }) {
+  const { t } = useLanguage()
   const active = sortKey === columnKey
   return (
     <th className={`px-4 py-2 font-medium ${className}`}>
@@ -12,7 +14,7 @@ export function SortableTh({ label, columnKey, sortKey, sortDir, onSort, classNa
         type="button"
         onClick={() => onSort(columnKey)}
         className={`flex items-center gap-1 hover:text-ink ${align === 'right' ? 'ml-auto' : ''}`}
-        aria-label={`Sort by ${label}${active ? (sortDir === 'asc' ? ', ascending' : ', descending') : ''}`}
+        aria-label={t(active ? (sortDir === 'asc' ? 'tableControls.sortByAscending' : 'tableControls.sortByDescending') : 'tableControls.sortBy', { label })}
       >
         {label}
         <span aria-hidden="true" className={`text-[10px] ${active ? 'text-ink' : 'text-hairline'}`}>
@@ -30,15 +32,16 @@ export function SortableTh({ label, columnKey, sortKey, sortDir, onSort, classNa
 // className="overflow-x-auto"><table>...</table></div><TablePagination
 // .../></div>.
 export function TablePagination({ page, setPage, pageSize, setPageSize, totalItems, pageSizeOptions = PAGE_SIZE_OPTIONS, idPrefix }) {
+  const { t } = useLanguage()
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize))
   const from = totalItems === 0 ? 0 : (page - 1) * pageSize + 1
   const to = Math.min(page * pageSize, totalItems)
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-hairline px-4 py-2.5 text-xs text-secondary">
-      <p>{totalItems === 0 ? 'No results' : `Showing ${from}–${to} of ${totalItems}`}</p>
+      <p>{totalItems === 0 ? t('tableControls.noResults') : t('tableControls.showing', { from, to, total: totalItems })}</p>
       <div className="flex items-center gap-3">
         <label className="flex items-center gap-1.5" htmlFor={`${idPrefix}-page-size`}>
-          Per page
+          {t('tableControls.perPage')}
           <select
             id={`${idPrefix}-page-size`}
             value={pageSize}
@@ -51,11 +54,11 @@ export function TablePagination({ page, setPage, pageSize, setPageSize, totalIte
           </select>
         </label>
         <div className="flex items-center gap-1">
-          <button type="button" onClick={() => setPage(1)} disabled={page <= 1} className="flex h-11 w-11 items-center justify-center rounded-md border border-hairline disabled:opacity-40 hover:bg-paper" aria-label="First page">«</button>
-          <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="flex h-11 w-11 items-center justify-center rounded-md border border-hairline disabled:opacity-40 hover:bg-paper" aria-label="Previous page">‹</button>
+          <button type="button" onClick={() => setPage(1)} disabled={page <= 1} className="flex h-11 w-11 items-center justify-center rounded-md border border-hairline disabled:opacity-40 hover:bg-paper" aria-label={t('tableControls.firstPage')}>«</button>
+          <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="flex h-11 w-11 items-center justify-center rounded-md border border-hairline disabled:opacity-40 hover:bg-paper" aria-label={t('tableControls.previousPage')}>‹</button>
           <span className="px-1 tabular-nums">{page} / {totalPages}</span>
-          <button type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="flex h-11 w-11 items-center justify-center rounded-md border border-hairline disabled:opacity-40 hover:bg-paper" aria-label="Next page">›</button>
-          <button type="button" onClick={() => setPage(totalPages)} disabled={page >= totalPages} className="flex h-11 w-11 items-center justify-center rounded-md border border-hairline disabled:opacity-40 hover:bg-paper" aria-label="Last page">»</button>
+          <button type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="flex h-11 w-11 items-center justify-center rounded-md border border-hairline disabled:opacity-40 hover:bg-paper" aria-label={t('tableControls.nextPage')}>›</button>
+          <button type="button" onClick={() => setPage(totalPages)} disabled={page >= totalPages} className="flex h-11 w-11 items-center justify-center rounded-md border border-hairline disabled:opacity-40 hover:bg-paper" aria-label={t('tableControls.lastPage')}>»</button>
         </div>
       </div>
     </div>

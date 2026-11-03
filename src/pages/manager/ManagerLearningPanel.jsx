@@ -1,8 +1,9 @@
 import MutationFeedback from '../../components/MutationFeedback'
 import { formatRelativeDate, formatAbsoluteDate } from '../../lib/dates'
+import { useLanguage } from '../../context/LanguageContext'
 
-const KIND_LABELS = { course: 'Course', session: 'Session', other: 'Learning' }
-const STATUS_LABELS = { planned: 'Planned', in_progress: 'In progress', completed: 'Completed' }
+const KINDS = ['course', 'session', 'other']
+const STATUSES = ['planned', 'in_progress', 'completed']
 
 // Team-scoped collaborative learning -- courses, cohorts or sessions the
 // team did together, visible to the manager because the record is
@@ -14,20 +15,20 @@ const STATUS_LABELS = { planned: 'Planned', in_progress: 'In progress', complete
 // `records`, `loading` and `error` are its whole contract with the data
 // layer.
 export default function ManagerLearningPanel({ records = [], loading = false, error = null }) {
+  const { t } = useLanguage()
   return (
     <div className="space-y-4">
       <p className="text-sm text-secondary">
-        Courses and sessions your team has done together. This doesn't include any member's personal
-        learning history outside the team.
+        {t('managerTeam.learning.intro')}
       </p>
 
       <MutationFeedback status="error" message={error} />
 
       {loading ? (
-        <p className="text-secondary text-sm">Loading…</p>
+        <p className="text-secondary text-sm">{t('common.loading')}</p>
       ) : records.length === 0 ? (
         <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
-          <p className="text-secondary text-sm">No collaborative learning logged for your team yet.</p>
+          <p className="text-secondary text-sm">{t('managerTeam.learning.empty')}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -36,7 +37,7 @@ export default function ManagerLearningPanel({ records = [], loading = false, er
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-mono text-[11px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5">
-                    {KIND_LABELS[record.kind] ?? record.kind}
+                    {KINDS.includes(record.kind) ? t(`managerTeam.learning.kinds.${record.kind}`) : record.kind}
                   </span>
                   <p className="text-sm font-medium text-ink">{record.title}</p>
                 </div>
@@ -47,7 +48,7 @@ export default function ManagerLearningPanel({ records = [], loading = false, er
                 )}
               </div>
               <p className="text-xs text-secondary mt-1.5">
-                {STATUS_LABELS[record.status] ?? record.status}
+                {STATUSES.includes(record.status) ? t(`managerTeam.learning.statuses.${record.status}`) : record.status}
                 {record.memberNames?.length > 0 ? ` · ${record.memberNames.join(', ')}` : ''}
               </p>
             </div>

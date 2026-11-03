@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useLanguage } from '../context/LanguageContext'
 
 function UploadIcon() {
   return (
@@ -11,6 +12,7 @@ function UploadIcon() {
 }
 
 export default function EvidenceFields({ evidenceUrl, onEvidenceUrlChange, files, onFilesChange, onHide }) {
+  const { t } = useLanguage()
   const inputRef = useRef(null)
   const [dragging, setDragging] = useState(false)
   const dragCounter = useRef(0)
@@ -55,21 +57,21 @@ export default function EvidenceFields({ evidenceUrl, onEvidenceUrlChange, files
   return (
     <div className="border-t border-hairline pt-4 space-y-2">
       <div className="flex items-center justify-between">
-        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary">Evidence</h4>
+        <h4 className="font-mono text-xs uppercase tracking-wide text-secondary">{t('evidenceFields.heading')}</h4>
         {onHide && (
           <button
             type="button"
             onClick={onHide}
             className="text-xs text-secondary hover:text-ink underline normal-case"
           >
-            Hide
+            {t('evidenceFields.hide')}
           </button>
         )}
       </div>
 
       <div>
         <label className="block text-xs text-secondary mb-1" htmlFor="evidenceUrl">
-          Link
+          {t('evidenceFields.link')}
         </label>
         <input
           id="evidenceUrl"
@@ -82,7 +84,7 @@ export default function EvidenceFields({ evidenceUrl, onEvidenceUrlChange, files
       </div>
 
       <div>
-        <label className="block text-xs text-secondary mb-1">Files</label>
+        <label className="block text-xs text-secondary mb-1">{t('evidenceFields.files')}</label>
         <div
           onDragEnter={handleDragEnter}
           onDragLeave={handleDragLeave}
@@ -94,7 +96,7 @@ export default function EvidenceFields({ evidenceUrl, onEvidenceUrlChange, files
         >
           <UploadIcon />
           <p className="text-xs text-secondary">
-            Drag and drop files here, or
+            {t('evidenceFields.dropHint')}
           </p>
           <button
             type="button"
@@ -102,8 +104,8 @@ export default function EvidenceFields({ evidenceUrl, onEvidenceUrlChange, files
             className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
           >
             {files.length > 0
-              ? `Add more files (${files.length} attached)`
-              : 'Attach files'}
+              ? t('evidenceFields.addMoreFiles', { count: files.length })
+              : t('evidenceFields.attachFiles')}
           </button>
         </div>
         <input
@@ -127,7 +129,7 @@ export default function EvidenceFields({ evidenceUrl, onEvidenceUrlChange, files
                   onClick={() => removeFile(i)}
                   className="text-red-700 shrink-0"
                 >
-                  Remove
+                  {t('evidenceFields.remove')}
                 </button>
               </li>
             ))}

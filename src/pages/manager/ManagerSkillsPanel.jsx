@@ -6,6 +6,7 @@ import { LEVELS, LEVEL_LABELS } from '../../lib/levels'
 import { listLibrarySkills } from '../../lib/skillLibrary'
 import ManagerMemberProfile from './ManagerMemberProfile'
 import { RateSkillDialog } from './ManagerTeamPanel'
+import { useLanguage } from '../../context/LanguageContext'
 
 const actionClass = 'rounded-md border border-hairline px-3 py-2 text-sm font-medium text-ink hover:bg-paper focus-visible:outline-2 focus-visible:outline-moss'
 
@@ -21,9 +22,9 @@ const LEVEL_CELL_CLASSES = {
 }
 
 const FILTERS = [
-  { key: 'all', label: 'All skills' },
-  { key: 'unrated', label: 'Not yet rated by you' },
-  { key: 'gaps', label: 'Shared by fewer than half' },
+  { key: 'all', labelKey: 'managerTeam.skills.filterAll' },
+  { key: 'unrated', labelKey: 'managerTeam.skills.filterUnrated' },
+  { key: 'gaps', labelKey: 'managerTeam.skills.filterGaps' },
 ]
 
 function skillKey(skill) {
@@ -34,6 +35,7 @@ export default function ManagerSkillsPanel({
   members = [], teamSkills = [], loading = false, error = null,
   onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget, onSuggestSkill, onAddSkill, onRemoveTeamSkill,
 }) {
+  const { t } = useLanguage()
   const [selection, setSelection] = useState(null)
   const [addSkillOpen, setAddSkillOpen] = useState(false)
   const [rateTarget, setRateTarget] = useState(null)
@@ -79,43 +81,43 @@ export default function ManagerSkillsPanel({
   return <section aria-labelledby="team-skills-title" className="space-y-6">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="max-w-3xl">
-        <h2 id="team-skills-title" className="font-display text-2xl text-ink">Skills across your team</h2>
-        <p className="mt-1 text-sm text-secondary">Compare who has which skill and at what level, add your own rating or a target, or add a skill for the team to work on together.</p>
+        <h2 id="team-skills-title" className="font-display text-2xl text-ink">{t('managerTeam.skills.heading')}</h2>
+        <p className="mt-1 text-sm text-secondary">{t('managerTeam.skills.intro')}</p>
       </div>
       {onAddSkill && (
         <button type="button" onClick={() => setAddSkillOpen(true)} className={`${actionClass} shrink-0`}>
-          + Add a skill
+          {t('managerTeam.skills.addSkill')}
         </button>
       )}
     </div>
     <MutationFeedback status="error" message={error} />
-    {loading ? <p role="status" className="text-sm text-secondary">Loading team skills…</p> : skills.length === 0 ?
+    {loading ? <p role="status" className="text-sm text-secondary">{t('managerTeam.skills.loading')}</p> : skills.length === 0 ?
       <div className="rounded-lg border border-dashed border-hairline px-5 py-12 text-center">
-        <h3 className="font-display text-lg text-ink">No shared skills yet</h3>
+        <h3 className="font-display text-lg text-ink">{t('managerTeam.skills.emptyTitle')}</h3>
         <p className="mx-auto mt-1 max-w-xl text-sm text-secondary">
           {onAddSkill
-            ? 'Add a skill for the team to work on, or wait for learners to share their own from the Members tab.'
-            : 'Invite learners from the Members tab. Their skills will appear here when they choose to share them with you.'}
+            ? t('managerTeam.skills.emptyWithAdd')
+            : t('managerTeam.skills.emptyNoAdd')}
         </p>
       </div> : <>
         <p className="border-y border-hairline py-3 text-sm text-secondary">
-          <span className="font-medium text-ink">{skills.length} {skills.length === 1 ? 'skill' : 'skills'}</span>
-          {' · '}{members.length} team {members.length === 1 ? 'member' : 'members'}
-          {' · '}{ratedCount} rated by you
+          <span className="font-medium text-ink">{t(skills.length === 1 ? 'managerTeam.skills.skillOne' : 'managerTeam.skills.skillMany', { count: skills.length })}</span>
+          {' · '}{t(members.length === 1 ? 'managerTeam.skills.memberOne' : 'managerTeam.skills.memberMany', { count: members.length })}
+          {' · '}{t('managerTeam.skills.ratedByYouCount', { count: ratedCount })}
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm text-ink">
-            <span className="sr-only">Search team skills</span>
-            <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search skills…"
+            <span className="sr-only">{t('managerTeam.skills.searchLabel')}</span>
+            <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('managerTeam.skills.searchPlaceholder')}
               className="rounded-md border border-hairline bg-card px-3 py-1.5 text-sm text-ink" />
           </label>
-          <div role="group" aria-label="Filter skills" className="flex flex-wrap gap-1">
+          <div role="group" aria-label={t('managerTeam.skills.filterLabel')} className="flex flex-wrap gap-1">
             {FILTERS.map((option) => (
               <button key={option.key} type="button" aria-pressed={filter === option.key} onClick={() => setFilter(option.key)}
                 className={`rounded-full border px-3 py-1 text-xs font-medium ${filter === option.key
                   ? 'border-moss bg-moss/10 text-ink'
                   : 'border-hairline text-secondary hover:text-ink'}`}>
-                {option.label}
+                {t(option.labelKey)}
               </button>
             ))}
           </div>
@@ -126,13 +128,13 @@ export default function ManagerSkillsPanel({
           </p>
         </div>
         {visibleSkills.length === 0 ? (
-          <p className="py-6 text-center text-sm text-secondary">No skills match this view.</p>
+          <p className="py-6 text-center text-sm text-secondary">{t('managerTeam.skills.noMatch')}</p>
         ) : (
         <div className="overflow-x-auto border border-hairline rounded-lg">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr>
-                <th scope="col" className="sticky left-0 bg-card px-3 py-2 text-left font-medium text-secondary border-b border-r border-hairline">Skill</th>
+                <th scope="col" className="sticky left-0 bg-card px-3 py-2 text-left font-medium text-secondary border-b border-r border-hairline">{t('managerTeam.skills.skillColumn')}</th>
                 {members.map((member) => (
                   <th key={member.id} scope="col" className="px-3 py-2 text-center font-medium text-secondary border-b border-hairline whitespace-nowrap">
                     <div className="flex flex-col items-center gap-1">
@@ -153,9 +155,9 @@ export default function ManagerSkillsPanel({
                         row, so removing it wouldn't make the row disappear anyway. */}
                     {group.trackedId && group.byMemberId.size === 0 && onRemoveTeamSkill && (
                       <button type="button" onClick={() => onRemoveTeamSkill(group.trackedId)}
-                        aria-label={`Remove ${group.name} from the team's skill list`}
+                        aria-label={t('managerTeam.skills.removeLabel', { skill: group.name })}
                         className="ml-2 text-xs font-normal text-red-700 hover:underline align-middle">
-                        Remove
+                        {t('managerTeam.skills.remove')}
                       </button>
                     )}
                   </th>
@@ -166,16 +168,16 @@ export default function ManagerSkillsPanel({
                         {skill ? (
                           <div className="flex flex-col items-center gap-0.5">
                             <button type="button" onClick={() => setSelection({ memberId: member.id, skillId: skill.id })}
-                              aria-label={`Review ${group.name} for ${member.name}`}
+                              aria-label={t('managerTeam.skills.reviewLabel', { skill: group.name, name: member.name })}
                               className="inline-flex flex-col items-center gap-0.5 rounded-md px-2 py-1 hover:bg-card/60 focus-visible:outline-2 focus-visible:outline-moss">
-                              <span className="text-xs font-medium text-ink whitespace-nowrap">{LEVEL_LABELS[skill.level] ?? 'Not assessed'}</span>
-                              {skill.managerRating && <span className="text-[10px] text-ink">Rated by you</span>}
+                              <span className="text-xs font-medium text-ink whitespace-nowrap">{LEVEL_LABELS[skill.level] ?? t('managerTeam.skills.notAssessed')}</span>
+                              {skill.managerRating && <span className="text-[10px] text-ink">{t('managerTeam.skills.ratedByYou')}</span>}
                             </button>
                             {onRateSkill && (
                               <button type="button" onClick={() => setRateTarget({ member, skill })}
-                                aria-label={`${skill.managerRating ? 'Rate again' : 'Rate'}: ${group.name} for ${member.name}`}
+                                aria-label={t('managerTeam.skills.rateLabel', { action: skill.managerRating ? t('managerTeam.skills.rateAgain') : t('managerTeam.skills.rate'), skill: group.name, name: member.name })}
                                 className="text-[11px] font-medium text-ink underline underline-offset-2 hover:opacity-80">
-                                {skill.managerRating ? 'Rate again' : 'Rate'}
+                                {skill.managerRating ? t('managerTeam.skills.rateAgain') : t('managerTeam.skills.rate')}
                               </button>
                             )}
                           </div>
@@ -215,6 +217,7 @@ export default function ManagerSkillsPanel({
 // suggestion doesn't sink the rest, and a partial failure leaves only the
 // still-failed members checked, ready to retry.
 function AddTeamSkillModal({ members, onClose, onAdd, onSuggest }) {
+  const { t } = useLanguage()
   const [librarySkills, setLibrarySkills] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
@@ -255,7 +258,7 @@ function AddTeamSkillModal({ members, onClose, onAdd, onSuggest }) {
     event.preventDefault()
     if (!selectedSkill) return
     if (targetLevel && !targetDate) {
-      setError('A target date is required when a target level is set.')
+      setError(t('managerTeam.addSkill.dateRequired'))
       return
     }
     setSubmitting(true)
@@ -263,7 +266,7 @@ function AddTeamSkillModal({ members, onClose, onAdd, onSuggest }) {
     try {
       await onAdd(selectedSkill.id, selectedSkill.name)
     } catch (err) {
-      setError(err.message || 'Could not add this skill. Try again.')
+      setError(err.message || t('managerTeam.addSkill.addError'))
       setSubmitting(false)
       return
     }
@@ -289,8 +292,9 @@ function AddTeamSkillModal({ members, onClose, onAdd, onSuggest }) {
       const nameById = new Map(members.map((m) => [m.id, m.name]))
       setSelectedMemberIds(new Set(failures.map((f) => f.id)))
       setError(
-        `Added to the team. ${failures.length < memberIds.length ? `Suggested to ${memberIds.length - failures.length}. ` : ''}` +
-        `Could not suggest to: ${failures.map(({ id, result }) => `${nameById.get(id)} (${result.reason?.message || 'failed'})`).join('; ')}`
+        t('managerTeam.addSkill.addedPrefix') +
+        (failures.length < memberIds.length ? t('managerTeam.addSkill.suggestedTo', { count: memberIds.length - failures.length }) : '') +
+        t('managerTeam.addSkill.couldNotSuggest', { list: failures.map(({ id, result }) => `${nameById.get(id)} (${result.reason?.message || t('managerTeam.addSkill.failed')})`).join('; ') })
       )
     } finally {
       setSubmitting(false)
@@ -299,35 +303,33 @@ function AddTeamSkillModal({ members, onClose, onAdd, onSuggest }) {
 
   return (
     <AccessibleDialog
-      label="Add a skill for the team"
+      label={t('managerTeam.addSkill.title')}
       onClose={submitting ? undefined : onClose}
       closeOnBackdrop={!submitting}
       panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
-      <h2 className="font-display text-xl text-ink mb-1">Add a skill for the team</h2>
+      <h2 className="font-display text-xl text-ink mb-1">{t('managerTeam.addSkill.title')}</h2>
       <p className="text-sm text-secondary mb-4">
-        Add a skill for the team to work on. Optionally suggest it to specific members now (they’ll each see it on
-        their own Actions page and decide whether to add it to their profile), or leave everyone unchecked and just
-        track it for now -- this never touches anyone’s skills automatically.
+        {t('managerTeam.addSkill.intro')}
       </p>
       {loadError && <MutationFeedback status="error" message={loadError} className="mb-4" />}
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="relative">
-          <label htmlFor="add-team-skill-query" className="block text-sm font-medium text-ink mb-1">Skill</label>
+          <label htmlFor="add-team-skill-query" className="block text-sm font-medium text-ink mb-1">{t('managerTeam.addSkill.skill')}</label>
           <input
             id="add-team-skill-query"
             data-dialog-initial-focus
             value={skillQuery}
             disabled={loading || submitting}
             onChange={(e) => { setSkillQuery(e.target.value); setSelectedSkill(null) }}
-            placeholder="Search skills…"
+            placeholder={t('managerTeam.addSkill.searchPlaceholder')}
             autoComplete="off"
             className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
           />
           {skillQuery.trim() && !selectedSkill && (
             <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto bg-card border border-hairline rounded-md">
               {skillMatches.length === 0 ? (
-                <p className="px-3 py-2 text-xs text-secondary">No matching skills.</p>
+                <p className="px-3 py-2 text-xs text-secondary">{t('managerTeam.addSkill.noMatch')}</p>
               ) : (
                 skillMatches.map((s) => (
                   <button type="button" key={s.id} onClick={() => chooseSkill(s)}
@@ -341,15 +343,15 @@ function AddTeamSkillModal({ members, onClose, onAdd, onSuggest }) {
         </div>
         {onSuggest && members.length > 0 && <div>
           <div className="flex items-center justify-between mb-1">
-            <span className="text-sm font-medium text-ink">Suggest to team members (optional)</span>
+            <span className="text-sm font-medium text-ink">{t('managerTeam.addSkill.suggestTo')}</span>
             <div className="flex gap-3 text-xs">
               <button type="button" onClick={() => setSelectedMemberIds(new Set(members.map((m) => m.id)))}
                 disabled={submitting} className="text-moss hover:underline disabled:opacity-60">
-                Select all
+                {t('managerTeam.addSkill.selectAll')}
               </button>
               <button type="button" onClick={() => setSelectedMemberIds(new Set())}
                 disabled={submitting} className="text-moss hover:underline disabled:opacity-60">
-                Clear
+                {t('managerTeam.addSkill.clear')}
               </button>
             </div>
           </div>
@@ -365,24 +367,24 @@ function AddTeamSkillModal({ members, onClose, onAdd, onSuggest }) {
         </div>}
         {selectedMemberIds.size > 0 && <>
           <div>
-            <label htmlFor="add-team-skill-level" className="block text-sm font-medium text-ink mb-1">Target level (optional)</label>
+            <label htmlFor="add-team-skill-level" className="block text-sm font-medium text-ink mb-1">{t('managerTeam.addSkill.targetLevel')}</label>
             <select id="add-team-skill-level" value={targetLevel} disabled={submitting}
               onChange={(e) => setTargetLevel(e.target.value)}
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss">
-              <option value="">No target level</option>
+              <option value="">{t('managerTeam.addSkill.noTargetLevel')}</option>
               {LEVELS.map((l) => <option key={l} value={l}>{LEVEL_LABELS[l]}</option>)}
             </select>
           </div>
           {targetLevel && (
             <div>
-              <label htmlFor="add-team-skill-date" className="block text-sm font-medium text-ink mb-1">Achieve by</label>
+              <label htmlFor="add-team-skill-date" className="block text-sm font-medium text-ink mb-1">{t('managerTeam.addSkill.achieveBy')}</label>
               <input id="add-team-skill-date" type="date" required value={targetDate} disabled={submitting}
                 onChange={(e) => setTargetDate(e.target.value)}
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
             </div>
           )}
           <div>
-            <label htmlFor="add-team-skill-comments" className="block text-sm font-medium text-ink mb-1">Comments (optional)</label>
+            <label htmlFor="add-team-skill-comments" className="block text-sm font-medium text-ink mb-1">{t('managerTeam.addSkill.comments')}</label>
             <textarea id="add-team-skill-comments" rows={3} value={comments} disabled={submitting}
               onChange={(e) => setComments(e.target.value)}
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss" />
@@ -390,10 +392,10 @@ function AddTeamSkillModal({ members, onClose, onAdd, onSuggest }) {
         </>}
         <MutationFeedback status="error" message={error} />
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} disabled={submitting} className={actionClass}>Cancel</button>
+          <button type="button" onClick={onClose} disabled={submitting} className={actionClass}>{t('managerTeam.addSkill.cancel')}</button>
           <button type="submit" disabled={submitting || !selectedSkill}
             className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 disabled:opacity-60">
-            {submitting ? 'Saving…' : selectedMemberIds.size > 0 ? `Add & suggest to ${selectedMemberIds.size}` : 'Add skill'}
+            {submitting ? t('managerTeam.addSkill.saving') : selectedMemberIds.size > 0 ? t('managerTeam.addSkill.addAndSuggest', { count: selectedMemberIds.size }) : t('managerTeam.addSkill.add')}
           </button>
         </div>
       </form>

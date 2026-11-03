@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import EmployerRoleProfilesConsole from './EmployerRoleProfilesConsole'
 import { FIXTURE_ROLE_PROFILES } from './roleProfileFixtures'
 
+vi.mock('../../../context/LanguageContext', () => import('../../../test/languageMock'))
+
 afterEach(cleanup)
 
 function renderConsole(props = {}) {

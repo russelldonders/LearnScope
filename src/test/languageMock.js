@@ -13,3 +13,9 @@ function t(key, params) {
 export function useLanguage() {
   return { language: 'en', setLanguage: vi.fn(), t }
 }
+
+// Pass-through, so a test that also wraps renders in LanguageProvider keeps
+// working when it mocks the context with this module.
+export function LanguageProvider({ children }) {
+  return children
+}

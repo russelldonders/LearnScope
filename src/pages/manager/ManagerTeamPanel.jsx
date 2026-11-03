@@ -8,6 +8,7 @@ import { useSortedPage } from '../../lib/useSortedPage'
 import { LEVELS, LEVEL_LABELS } from '../../lib/levels'
 import { formatRelativeDate, formatAbsoluteDate } from '../../lib/dates'
 import ManagerMemberProfile from './ManagerMemberProfile'
+import { useLanguage } from '../../context/LanguageContext'
 
 const SORT_ACCESSORS = {
   name: (m) => m.name?.toLowerCase() ?? '',
@@ -45,6 +46,7 @@ export default function ManagerTeamPanel({
   onRevokeInvite, onResendInvite, connections = [], teamMemberships = [], onOpenCollaboration,
   onRateSkill, onLoadSkillAssessments, onLoadSkillDetail, onSetTarget, readOnly = false,
 }) {
+  const { t } = useLanguage()
   const [inviteOpen, setInviteOpen] = useState(false)
   const [profileId, setProfileId] = useState(null)
   const [resendingId, setResendingId] = useState(null)
@@ -66,9 +68,9 @@ export default function ManagerTeamPanel({
     setResendingId(member.id); setResendResult(null)
     try {
       await onResendInvite(member)
-      setResendResult({ id: member.id, ok: true, message: 'Invitation sent again.' })
+      setResendResult({ id: member.id, ok: true, message: t('managerTeam.members.resent') })
     } catch (err) {
-      setResendResult({ id: member.id, ok: false, message: err.message || 'Could not resend this invitation. Try again.' })
+      setResendResult({ id: member.id, ok: false, message: err.message || t('managerTeam.members.resendError') })
     } finally {
       setResendingId(null)
     }
@@ -76,7 +78,7 @@ export default function ManagerTeamPanel({
 
   const inviteButton = !readOnly && (
     <button type="button" onClick={() => setInviteOpen(true)} className={inviteButtonClass}>
-      Invite to team
+      {t('managerTeam.members.inviteButton')}
     </button>
   )
 
@@ -84,8 +86,7 @@ export default function ManagerTeamPanel({
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-secondary">
-          Open a team member’s skills profile to review their progress, rate a skill or set a target.
-          Profiles show only the skills they’ve shared with you.
+          {t('managerTeam.members.intro')}
         </p>
         {hasRows && inviteButton}
       </div>
@@ -93,11 +94,11 @@ export default function ManagerTeamPanel({
       <MutationFeedback status="error" message={error} />
 
       {loading ? (
-        <p className="text-secondary text-sm">Loading…</p>
+        <p className="text-secondary text-sm">{t('common.loading')}</p>
       ) : !hasRows ? (
         <div className="text-center py-16 border border-dashed border-hairline rounded-lg space-y-3">
           <p className="text-secondary text-sm">
-            No team members yet. Invite your connections, or anyone by email, to build out your team.
+            {t('managerTeam.members.empty')}
           </p>
           {inviteButton}
         </div>
@@ -107,22 +108,22 @@ export default function ManagerTeamPanel({
             <table className="w-full text-sm">
               <thead className="bg-paper border-b border-hairline text-left text-secondary">
                 <tr>
-                  <SortableTh label="Name" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortableTh label={t('managerTeam.members.name')} columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <SortableTh
-                    label="Team since"
+                    label={t('managerTeam.members.teamSince')}
                     columnKey="teamSince"
                     sortKey={sortKey}
                     sortDir={sortDir}
                     onSort={toggleSort}
                   />
                   <SortableTh
-                    label="Shared skills"
+                    label={t('managerTeam.members.sharedSkills')}
                     columnKey="sharedSkillCount"
                     sortKey={sortKey}
                     sortDir={sortDir}
                     onSort={toggleSort}
                   />
-                  <th className="px-4 py-2 font-medium">Collaborative learning</th>
+                  <th className="px-4 py-2 font-medium">{t('managerTeam.members.collaborativeLearning')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -135,21 +136,21 @@ export default function ManagerTeamPanel({
                           <PersonAvatar name={member.name} avatarUrl={member.avatarUrl} size={7} />
                           <span className="text-ink">{member.name}</span>
                           <span className="rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 text-[11px] font-medium text-ink">
-                            Invited
+                            {t('managerTeam.members.invited')}
                           </span>
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-3">
                           {onResendInvite && (
                             <button type="button" disabled={resendingId !== null} onClick={() => handleResend(member)}
-                              aria-label={`Resend invitation to ${member.name}`}
+                              aria-label={t('managerTeam.members.resendLabel', { name: member.name })}
                               className="text-sm font-medium text-moss underline underline-offset-4 hover:opacity-80 disabled:opacity-60">
-                              {resendingId === member.id ? 'Sending…' : 'Resend'}
+                              {resendingId === member.id ? t('managerTeam.members.sending') : t('managerTeam.members.resend')}
                             </button>
                           )}
                           {onRevokeInvite && (
                             <button type="button" onClick={() => onRevokeInvite(member)}
                               className="text-sm font-medium text-red-700 underline underline-offset-4 hover:opacity-80">
-                              Revoke
+                              {t('managerTeam.members.revoke')}
                             </button>
                           )}
                         </div>
@@ -158,10 +159,10 @@ export default function ManagerTeamPanel({
                         )}
                       </td>
                       <td className="px-4 py-2 text-secondary" title={formatAbsoluteDate(member.invitedAt)}>
-                        Invited {formatRelativeDate(member.invitedAt)}
-                        {isStale && <span className="block text-xs text-ink">No reply yet -- they may have missed it</span>}
+                        {t('managerTeam.members.invitedWhen', { when: formatRelativeDate(member.invitedAt) })}
+                        {isStale && <span className="block text-xs text-ink">{t('managerTeam.members.staleInvite')}</span>}
                       </td>
-                      <td className="px-4 py-2 text-secondary">Waiting to accept</td>
+                      <td className="px-4 py-2 text-secondary">{t('managerTeam.members.waitingToAccept')}</td>
                       <td className="px-4 py-2 text-secondary">—</td>
                     </tr>
                   )
@@ -174,7 +175,7 @@ export default function ManagerTeamPanel({
                     <tr key={member.id} className="border-b border-hairline last:border-b-0 align-top">
                       <td className="px-4 py-2">
                         <button type="button" onClick={() => setProfileId(member.id)}
-                          aria-label={`View skills profile for ${member.name}`}
+                          aria-label={t('managerTeam.members.viewProfileLabel', { name: member.name })}
                           className="flex items-center gap-2 group">
                           <PersonAvatar name={member.name} avatarUrl={member.avatarUrl} size={7} />
                           <span className="text-ink group-hover:text-moss group-hover:underline">{member.name}</span>
@@ -193,16 +194,16 @@ export default function ManagerTeamPanel({
                         {sharedCount > 0 ? (
                           <button type="button" onClick={() => setProfileId(member.id)}
                             className="text-left text-ink hover:text-moss hover:underline">
-                            {sharedCount} shared · {ratedCount} rated by you
+                            {t('managerTeam.members.sharedRated', { shared: sharedCount, rated: ratedCount })}
                           </button>
                         ) : (
-                          <span className="text-secondary">Nothing shared yet</span>
+                          <span className="text-secondary">{t('managerTeam.members.nothingShared')}</span>
                         )}
                       </td>
                       <td className="px-4 py-2 text-secondary">
                         {collaborationCount > 0 && onOpenCollaboration ? (
                           <button type="button" onClick={onOpenCollaboration}
-                            aria-label={`View ${collaborationCount} collaborative learning record${collaborationCount === 1 ? '' : 's'}`}
+                            aria-label={t(collaborationCount === 1 ? 'managerTeam.members.viewCollaborationOne' : 'managerTeam.members.viewCollaborationMany', { count: collaborationCount })}
                             className="text-moss hover:underline">
                             {collaborationCount}
                           </button>
@@ -249,6 +250,7 @@ const CONNECTION_SEARCH_THRESHOLD = 6
 // rather than throwing -- so one bad address doesn't sink the rest, and only
 // the failures stay in the form to fix and resend.
 function InviteToTeamDialog({ onClose, onInvite, onInviteConnections, connections, teamMemberships }) {
+  const { t } = useLanguage()
   const [emails, setEmails] = useState([''])
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [query, setQuery] = useState('')
@@ -309,14 +311,14 @@ function InviteToTeamDialog({ onClose, onInvite, onInviteConnections, connection
       setEmails(failedEmails.length > 0 ? failedEmails.map((f) => f.email) : [''])
       const nameById = new Map(connections.map((c) => [c.id, c.name]))
       setSubmitError(
-        (failureCount < totalToSend ? `${totalToSend - failureCount} sent. ` : '') +
+        (failureCount < totalToSend ? t('managerTeam.invite.partlySent', { count: totalToSend - failureCount }) : '') +
         [
-          ...failedConnections.map((f) => `${nameById.get(f.id) ?? 'Connection'}: ${f.error}`),
+          ...failedConnections.map((f) => `${nameById.get(f.id) ?? t('managerTeam.invite.connectionFallback')}: ${f.error}`),
           ...failedEmails.map((f) => `${f.email}: ${f.error}`),
         ].join('; ')
       )
     } catch (error) {
-      setSubmitError(error.message || 'Could not send the invitations. Try again.')
+      setSubmitError(error.message || t('managerTeam.invite.sendError'))
     } finally {
       setSubmitting(false)
     }
@@ -324,29 +326,28 @@ function InviteToTeamDialog({ onClose, onInvite, onInviteConnections, connection
 
   return (
     <AccessibleDialog
-      label="Invite to team"
+      label={t('managerTeam.invite.title')}
       onClose={submitting ? undefined : onClose}
       closeOnBackdrop={!submitting}
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
       <form onSubmit={handleSubmit}>
-        <h2 className="font-display text-lg text-ink mb-1">Invite to team</h2>
+        <h2 className="font-display text-lg text-ink mb-1">{t('managerTeam.invite.title')}</h2>
         <p className="text-sm text-secondary mb-5">
-          Choose connections, add email addresses, or both. They’ll appear here as invited until they accept
-          and choose which skills to share.
+          {t('managerTeam.invite.intro')}
         </p>
 
         {canInviteConnections && (
           <fieldset className="mb-5">
-            <legend className="text-sm font-medium text-ink">Your connections</legend>
+            <legend className="text-sm font-medium text-ink">{t('managerTeam.invite.yourConnections')}</legend>
             {connections.length > CONNECTION_SEARCH_THRESHOLD && (
-              <input type="text" value={query} disabled={submitting} placeholder="Search connections…"
-                aria-label="Search connections" onChange={(event) => setQuery(event.target.value)}
+              <input type="text" value={query} disabled={submitting} placeholder={t('managerTeam.invite.searchConnections')}
+                aria-label={t('managerTeam.invite.searchConnectionsLabel')} onChange={(event) => setQuery(event.target.value)}
                 className="mt-1 mb-1 block w-full rounded-md border border-hairline bg-paper px-3 py-1.5 text-sm text-ink" />
             )}
             <div className="mt-1 max-h-48 overflow-y-auto rounded-md border border-hairline bg-paper divide-y divide-hairline">
               {visibleConnections.length === 0 && (
-                <p className="px-3 py-2 text-sm text-secondary">No connections match “{query.trim()}”.</p>
+                <p className="px-3 py-2 text-sm text-secondary">{t('managerTeam.invite.noMatch', { query: query.trim() })}</p>
               )}
               {visibleConnections.map((connection) => {
                 const status = statusById.get(connection.id)
@@ -357,7 +358,7 @@ function InviteToTeamDialog({ onClose, onInvite, onInviteConnections, connection
                       data-dialog-initial-focus={connection.id === firstSelectableId ? true : undefined}
                       className="rounded border-hairline accent-moss" />
                     <span className="flex-1">{connection.name}</span>
-                    {status && <span className="text-xs">{status === 'pending' ? 'Invited' : 'On this team'}</span>}
+                    {status && <span className="text-xs">{status === 'pending' ? t('managerTeam.invite.invited') : t('managerTeam.invite.onTeam')}</span>}
                   </label>
                 )
               })}
@@ -366,14 +367,14 @@ function InviteToTeamDialog({ onClose, onInvite, onInviteConnections, connection
         )}
 
         <fieldset className="mb-2">
-          <legend className="text-sm font-medium text-ink mb-1">Invite by email</legend>
+          <legend className="text-sm font-medium text-ink mb-1">{t('managerTeam.invite.byEmail')}</legend>
           <p className="text-sm text-secondary mb-3">
-            No LearnScope account yet? They’ll get a sign-up invite. Already have one? They’ll see it on their Actions page.
+            {t('managerTeam.invite.byEmailHint')}
           </p>
           <div className="space-y-2">
             {emails.map((value, index) => (
               <div key={index} className="flex items-center gap-2">
-                <label htmlFor={`manager-team-invite-email-${index}`} className="sr-only">Email {index + 1}</label>
+                <label htmlFor={`manager-team-invite-email-${index}`} className="sr-only">{t('managerTeam.invite.emailLabel', { number: index + 1 })}</label>
                 <input
                   id={`manager-team-invite-email-${index}`}
                   type="email"
@@ -381,7 +382,7 @@ function InviteToTeamDialog({ onClose, onInvite, onInviteConnections, connection
                   value={value}
                   onChange={(e) => updateEmail(index, e.target.value)}
                   disabled={submitting}
-                  placeholder="name@example.com"
+                  placeholder={t('managerTeam.invite.emailPlaceholder')}
                   data-dialog-initial-focus={index === 0 && !firstSelectableId ? true : undefined}
                   className="flex-1 rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss"
                 />
@@ -390,7 +391,7 @@ function InviteToTeamDialog({ onClose, onInvite, onInviteConnections, connection
                     type="button"
                     onClick={() => removeEmailRow(index)}
                     disabled={submitting}
-                    aria-label={`Remove email ${index + 1}`}
+                    aria-label={t('managerTeam.invite.removeEmail', { number: index + 1 })}
                     className="shrink-0 rounded-md border border-hairline text-secondary hover:text-red-700 px-2 py-2 text-sm disabled:opacity-60"
                   >
                     ✕
@@ -407,7 +408,7 @@ function InviteToTeamDialog({ onClose, onInvite, onInviteConnections, connection
             disabled={submitting}
             className="text-xs font-medium text-moss hover:underline disabled:opacity-60 mb-3"
           >
-            + Add another
+            {t('managerTeam.invite.addAnother')}
           </button>
         )}
         <MutationFeedback status="error" message={submitError} className="mb-4" />
@@ -418,14 +419,14 @@ function InviteToTeamDialog({ onClose, onInvite, onInviteConnections, connection
             disabled={submitting}
             className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
           >
-            Cancel
+            {t('managerTeam.invite.cancel')}
           </button>
           <button
             type="submit"
             disabled={submitting || totalToSend === 0}
             className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90 disabled:opacity-60"
           >
-            {submitting ? 'Sending…' : totalToSend > 1 ? `Send ${totalToSend} invites` : 'Send invite'}
+            {submitting ? t('managerTeam.invite.sending') : totalToSend > 1 ? t('managerTeam.invite.sendMany', { count: totalToSend }) : t('managerTeam.invite.sendOne')}
           </button>
         </div>
       </form>
@@ -444,6 +445,7 @@ function InviteToTeamDialog({ onClose, onInvite, onInviteConnections, connection
 // (mirrors every other assessment-with-evidence flow: create the record,
 // then upload keyed by its id), not this dialog's.
 export function RateSkillDialog({ member, skill, onClose, onRate, onLoadHistory }) {
+  const { t } = useLanguage()
   const [level, setLevel] = useState(skill.managerRating?.level ?? skill.level ?? 1)
   const [comments, setComments] = useState('')
   const [evidenceUrl, setEvidenceUrl] = useState('')
@@ -485,7 +487,7 @@ export function RateSkillDialog({ member, skill, onClose, onRate, onLoadHistory 
       })
       onClose()
     } catch (err) {
-      setError(err.message || 'Could not save this rating. Try again.')
+      setError(err.message || t('managerTeam.rate.saveError'))
     } finally {
       setSubmitting(false)
     }
@@ -493,20 +495,19 @@ export function RateSkillDialog({ member, skill, onClose, onRate, onLoadHistory 
 
   return (
     <AccessibleDialog
-      label={`Rate ${skill.name}`}
+      label={t('managerTeam.rate.title', { skill: skill.name })}
       onClose={submitting ? undefined : onClose}
       closeOnBackdrop={!submitting}
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
-      <h2 className="font-display text-lg text-ink mb-1">Rate {skill.name}</h2>
+      <h2 className="font-display text-lg text-ink mb-1">{t('managerTeam.rate.title', { skill: skill.name })}</h2>
       <p className="text-sm text-secondary mb-4">
-        {member.name} rates themselves at {LEVEL_LABELS[skill.level]}. Your rating is your own view --
-        it's recorded separately and never changes {member.name}'s own self-assessment.
+        {t('managerTeam.rate.intro', { name: member.name, level: LEVEL_LABELS[skill.level] })}
       </p>
 
       {!historyLoading && history.length > 0 && (
         <div className="mb-4 pb-4 border-b border-hairline space-y-2">
-          <p className="font-mono text-[11px] uppercase tracking-wide text-secondary">Your past ratings</p>
+          <p className="font-mono text-[11px] uppercase tracking-wide text-secondary">{t('managerTeam.rate.pastRatings')}</p>
           {history.map((entry) => (
             <div key={entry.id} className="text-sm">
               <span className="text-ink">{LEVEL_LABELS[entry.level]}</span>
@@ -519,7 +520,7 @@ export function RateSkillDialog({ member, skill, onClose, onRate, onLoadHistory 
 
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
-          <span className="block text-sm text-secondary mb-2">Your rating</span>
+          <span className="block text-sm text-secondary mb-2">{t('managerTeam.rate.yourRating')}</span>
           <div className="flex flex-wrap gap-2">
             {LEVELS.map((l) => (
               <button
@@ -538,14 +539,14 @@ export function RateSkillDialog({ member, skill, onClose, onRate, onLoadHistory 
 
         <div>
           <label htmlFor="manager-rating-comments" className="block text-sm text-secondary mb-1">
-            Comments
+            {t('managerTeam.rate.comments')}
           </label>
           <textarea
             id="manager-rating-comments"
             rows={3}
             value={comments}
             onChange={(e) => setComments(e.target.value)}
-            placeholder="What have you observed?"
+            placeholder={t('managerTeam.rate.commentsPlaceholder')}
             className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
           />
         </div>
@@ -557,7 +558,7 @@ export function RateSkillDialog({ member, skill, onClose, onRate, onLoadHistory 
             onChange={(e) => setShowEvidence(e.target.checked)}
             className="rounded border-hairline"
           />
-          Provide evidence
+          {t('managerTeam.rate.provideEvidence')}
         </label>
         {showEvidence && (
           <EvidenceFields
@@ -576,7 +577,7 @@ export function RateSkillDialog({ member, skill, onClose, onRate, onLoadHistory 
             disabled={submitting}
             className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
           >
-            {submitting ? 'Saving…' : 'Save rating'}
+            {submitting ? t('managerTeam.rate.saving') : t('managerTeam.rate.save')}
           </button>
           <button
             type="button"
@@ -585,7 +586,7 @@ export function RateSkillDialog({ member, skill, onClose, onRate, onLoadHistory 
             data-dialog-initial-focus
             className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper disabled:opacity-60"
           >
-            Cancel
+            {t('managerTeam.rate.cancel')}
           </button>
         </div>
       </form>

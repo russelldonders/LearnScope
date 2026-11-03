@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import MutationFeedback from '../../components/MutationFeedback'
 import AccessibleDialog from '../../components/AccessibleDialog'
 import { formatRelativeDate, formatAbsoluteDate } from '../../lib/dates'
+import { useLanguage } from '../../context/LanguageContext'
 
 // Team-collaboration records are a new domain concept (decision: manager
 // mode adds these alongside connections, it isn't a lightweight employer) --
@@ -17,23 +18,24 @@ export default function ManagerCollaborationPanel({
   onCreateRecord,
   readOnly = false,
 }) {
+  const { t } = useLanguage()
   const [formOpen, setFormOpen] = useState(false)
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-secondary">
-          Notes, goals and other collaboration records you've logged with your team.
+          {t('managerTeam.collaboration.intro')}
         </p>
         {!readOnly && (
           <button
             type="button"
             onClick={() => setFormOpen(true)}
             disabled={teamOptions.length === 0}
-            title={teamOptions.length === 0 ? 'Add a team member first' : undefined}
+            title={teamOptions.length === 0 ? t('managerTeam.collaboration.addMemberFirst') : undefined}
             className="shrink-0 rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-50"
           >
-            New record
+            {t('managerTeam.collaboration.newRecord')}
           </button>
         )}
       </div>
@@ -41,11 +43,11 @@ export default function ManagerCollaborationPanel({
       <MutationFeedback status="error" message={error} />
 
       {loading ? (
-        <p className="text-secondary text-sm">Loading…</p>
+        <p className="text-secondary text-sm">{t('common.loading')}</p>
       ) : records.length === 0 ? (
         <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
           <p className="text-secondary text-sm">
-            No collaboration records yet. Log a note or goal against a team member to get started.
+            {t('managerTeam.collaboration.empty')}
           </p>
         </div>
       ) : (
@@ -90,6 +92,7 @@ export default function ManagerCollaborationPanel({
 }
 
 function NewRecordDialog({ teamOptions, onClose, onCreateRecord }) {
+  const { t } = useLanguage()
   const [title, setTitle] = useState('')
   const [note, setNote] = useState('')
   const [memberIds, setMemberIds] = useState([])
@@ -113,7 +116,7 @@ function NewRecordDialog({ teamOptions, onClose, onCreateRecord }) {
       await onCreateRecord({ title: title.trim(), note: note.trim(), memberIds })
       onClose()
     } catch (error) {
-      setSubmitError(error.message || 'Could not save the record. Try again.')
+      setSubmitError(error.message || t('managerTeam.collaboration.saveError'))
     } finally {
       setSubmitting(false)
     }
@@ -121,16 +124,16 @@ function NewRecordDialog({ teamOptions, onClose, onCreateRecord }) {
 
   return (
     <AccessibleDialog
-      label="New collaboration record"
+      label={t('managerTeam.collaboration.dialogTitle')}
       onClose={submitting ? undefined : onClose}
       closeOnBackdrop={!submitting}
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6"
     >
       <form onSubmit={handleSubmit}>
-        <h2 className="font-display text-lg text-ink mb-4">New collaboration record</h2>
+        <h2 className="font-display text-lg text-ink mb-4">{t('managerTeam.collaboration.dialogTitle')}</h2>
 
         <label htmlFor="manager-record-title" className="block text-sm font-medium text-ink mb-1">
-          Title
+          {t('managerTeam.collaboration.title')}
         </label>
         <input
           ref={initialFocusRef}
@@ -145,7 +148,7 @@ function NewRecordDialog({ teamOptions, onClose, onCreateRecord }) {
         />
 
         <label htmlFor="manager-record-note" className="block text-sm font-medium text-ink mb-1">
-          Note
+          {t('managerTeam.collaboration.note')}
         </label>
         <textarea
           id="manager-record-note"
@@ -160,7 +163,7 @@ function NewRecordDialog({ teamOptions, onClose, onCreateRecord }) {
         <MutationFeedback status="error" message={submitError} className="mb-4" />
 
         <fieldset className="mb-5">
-          <legend className="block text-sm font-medium text-ink mb-1.5">Team members</legend>
+          <legend className="block text-sm font-medium text-ink mb-1.5">{t('managerTeam.collaboration.teamMembers')}</legend>
           <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto">
             {teamOptions.map((member) => (
               <label key={member.id} className="flex items-center gap-2 text-sm text-ink">
@@ -183,14 +186,14 @@ function NewRecordDialog({ teamOptions, onClose, onCreateRecord }) {
             disabled={submitting}
             className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
           >
-            Cancel
+            {t('managerTeam.collaboration.cancel')}
           </button>
           <button
             type="submit"
             disabled={submitting || !title.trim() || !note.trim() || memberIds.length === 0}
             className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
           >
-            {submitting ? 'Saving…' : 'Save record'}
+            {submitting ? t('managerTeam.collaboration.saving') : t('managerTeam.collaboration.save')}
           </button>
         </div>
       </form>

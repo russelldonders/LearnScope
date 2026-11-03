@@ -4,6 +4,7 @@ import ManagerTeamPanel, { RateSkillDialog } from './ManagerTeamPanel'
 import { FIXTURE_TEAM } from './managerFixtures'
 import { LanguageProvider } from '../../context/LanguageContext'
 
+vi.mock('../../context/LanguageContext', () => import('../../test/languageMock'))
 vi.mock('../../context/AuthContext', () => ({ useAuth: () => ({ user: null }) }))
 
 afterEach(cleanup)
