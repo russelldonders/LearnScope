@@ -16,6 +16,7 @@ import {
   enrolInCourseCohort,
 } from '../lib/courseCatalogue'
 import CohortPickerModal from '../components/CohortPickerModal'
+import { useLanguage } from '../context/LanguageContext'
 
 // Public provider profile -- reachable logged out (0090's get_provider_profile
 // RPC is anon-safe), so unlike every other content page this can't assume
@@ -26,6 +27,7 @@ import CohortPickerModal from '../components/CohortPickerModal'
 export default function ProviderProfile() {
   const { slug } = useParams()
   const { user, loading: authLoading, employerMemberships } = useAuth()
+  const { t } = useLanguage()
   const [profile, setProfile] = useState(undefined)
   const [employerContext, setEmployerContext] = useState(undefined)
   const [publicEmployerCourses, setPublicEmployerCourses] = useState(undefined)
@@ -170,7 +172,7 @@ export default function ProviderProfile() {
   if (authLoading || employerContext === undefined || employerMembershipsLoading || publicEmployerCoursesLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-paper text-secondary">
-        Loading…
+        {t('common.loading')}
       </div>
     )
   }
@@ -202,12 +204,12 @@ export default function ProviderProfile() {
       )}
 
       <main className="max-w-4xl mx-auto px-4 py-10">
-        {loading && <p className="text-secondary">Loading…</p>}
+        {loading && <p className="text-secondary">{t('common.loading')}</p>}
         {error && <p className="text-sm text-red-700">{error}</p>}
 
         {!loading && !error && !profile && (
           <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
-            <p className="text-secondary">This provider page isn't available.</p>
+            <p className="text-secondary">{t('providerProfile.notAvailable')}</p>
           </div>
         )}
 
@@ -242,10 +244,10 @@ export default function ProviderProfile() {
 
             <section className="mb-10">
               <h2 className="font-display text-xl text-[var(--org-text,var(--color-ink))] mb-4 pb-1 border-b-2 border-[var(--org-primary,transparent)]">
-                Skills offered
+                {t('providerProfile.skillsOffered')}
               </h2>
               {profile.skills.length === 0 ? (
-                <p className="text-sm text-secondary">No skills listed yet.</p>
+                <p className="text-sm text-secondary">{t('providerProfile.noSkills')}</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {profile.skills.map((skill) => (
@@ -264,10 +266,10 @@ export default function ProviderProfile() {
 
             <section>
               <h2 className="font-display text-xl text-[var(--org-text,var(--color-ink))] mb-4 pb-1 border-b-2 border-[var(--org-primary,transparent)]">
-                Training offered
+                {t('providerProfile.trainingOffered')}
               </h2>
               {visibleCourses.length === 0 ? (
-                <p className="text-sm text-secondary">No training listed yet.</p>
+                <p className="text-sm text-secondary">{t('providerProfile.noTraining')}</p>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {visibleCourses.map((course) => {
@@ -305,12 +307,12 @@ export default function ProviderProfile() {
                                 {e.skillName} · {LEVEL_LABELS[e.level]}
                               </span>
                             ))}
-                            {course.tags.map((t) => (
+                            {course.tags.map((tag) => (
                               <span
-                                key={t.id}
+                                key={tag.id}
                                 className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
                               >
-                                {t.name}
+                                {tag.name}
                               </span>
                             ))}
                           </div>
@@ -326,12 +328,12 @@ export default function ProviderProfile() {
                             className={`mt-3 self-start rounded-md bg-[var(--org-primary,var(--color-moss))] hover:bg-[var(--org-hover,var(--org-primary,var(--color-moss)))] hover:opacity-90 ${ctaTextClass} py-1.5 px-3 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed`}
                           >
                             {completed
-                              ? 'Completed ✓'
+                              ? t('courses.completed')
                               : enrolled
-                                ? 'Enrolled ✓'
+                                ? t('courses.enrolled')
                                 : enrollingId === course.id
-                                  ? 'Enrolling…'
-                                  : 'Enrol'}
+                                  ? t('courses.enrolling')
+                                  : t('courses.enrol')}
                           </button>
                         ) : (
                           <Link
@@ -339,7 +341,7 @@ export default function ProviderProfile() {
                             onClick={() => setPendingEnrolCourseId(course.id)}
                             className={`mt-3 self-start rounded-md bg-[var(--org-primary,var(--color-moss))] hover:bg-[var(--org-hover,var(--org-primary,var(--color-moss)))] hover:opacity-90 ${ctaTextClass} py-1.5 px-3 text-sm font-medium`}
                           >
-                            Log in to enrol
+                            {t('providerProfile.logInToEnrol')}
                           </Link>
                         )}
                       </div>
@@ -376,6 +378,7 @@ function PublicHeader({ organisation, slug }) {
   const authLinkSuffix = slug ? `?org=${slug}` : ''
   // Same theme-flip reasoning as the main component's ctaTextClass.
   const ctaTextClass = organisation?.brandPrimaryColor ? 'text-white' : 'text-paper'
+  const { t } = useLanguage()
   return (
     <header className="max-w-4xl mx-auto px-4 py-6 flex items-center justify-between">
       <Link to={organisation?.logoUrl ? `/organisations/${slug}` : '/'} className="flex items-center gap-2 font-display text-2xl text-[var(--org-text,var(--color-ink))]">
@@ -388,13 +391,13 @@ function PublicHeader({ organisation, slug }) {
       </Link>
       <nav className="flex items-center gap-3">
         <Link to={`/login${authLinkSuffix}`} className="text-sm text-secondary hover:text-ink">
-          Log in
+          {t('landing.logIn')}
         </Link>
         <Link
           to={`/signup${authLinkSuffix}`}
           className={`rounded-md bg-[var(--org-primary,var(--color-moss))] hover:bg-[var(--org-hover,var(--org-primary,var(--color-moss)))] hover:opacity-90 ${ctaTextClass} py-2 px-4 font-medium`}
         >
-          Sign up
+          {t('landing.signUp')}
         </Link>
       </nav>
     </header>

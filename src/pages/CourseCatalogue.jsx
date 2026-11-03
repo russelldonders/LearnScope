@@ -16,9 +16,11 @@ import FilterRow from '../components/FilterRow'
 import CourseThumbnail from '../components/CourseThumbnail'
 import AccessibleDialog from '../components/AccessibleDialog'
 import CohortPickerModal from '../components/CohortPickerModal'
+import { useLanguage } from '../context/LanguageContext'
 
 export default function CourseCatalogue() {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const location = useLocation()
   const navigate = useNavigate()
   const scope = location.state ?? null
@@ -157,7 +159,7 @@ export default function CourseCatalogue() {
 
   const availableTags = useMemo(() => {
     const map = new Map()
-    for (const c of catalogue) for (const t of c.tags) map.set(t.id, t.name)
+    for (const c of catalogue) for (const tag of c.tags) map.set(tag.id, tag.name)
     return [...map.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
   }, [catalogue])
 
@@ -187,7 +189,7 @@ export default function CourseCatalogue() {
     if (q && ![course.name, course.provider, course.synopsis].filter(Boolean).some((v) => v.toLowerCase().includes(q))) {
       return false
     }
-    if (tagId && !course.tags.some((t) => t.id === tagId)) return false
+    if (tagId && !course.tags.some((tag) => tag.id === tagId)) return false
     if (catalogueId && !(course.catalogues ?? []).some((item) => item.id === catalogueId)) return false
     if (skillId) {
       const entries = course.skillEntries.filter((e) => e.skillId === skillId)
@@ -209,33 +211,33 @@ export default function CourseCatalogue() {
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
         {scope?.backTo && (
           <Link to={scope.backTo} className="text-sm text-secondary hover:text-ink mb-4 inline-block">
-            ← Back to {scope.skillName ?? 'skill'}
+            {t('courseCatalogue.backTo', { name: scope.skillName ?? t('courseCatalogue.skillFallback') })}
           </Link>
         )}
 
-        <h1 className="font-display text-xl text-ink mb-2">Find training</h1>
+        <h1 className="font-display text-xl text-ink mb-2">{t('courseCatalogue.heading')}</h1>
         <p className="text-sm text-secondary mb-6">
-          Browse the course catalogue and enrol in something new — enrolling adds it to your training record.
+          {t('courseCatalogue.intro')}
         </p>
 
         {scope?.skillName && (skillId || minLevel) && (
           <div className="flex items-center justify-between gap-3 rounded-md border border-moss/40 bg-moss/5 px-3 py-2 mb-4">
             <p className="text-sm text-ink">
-              Showing courses for <span className="font-medium">{scope.skillName}</span>
-              {minLevel ? ` at levels you haven't reached yet` : ''}
+              {t('courseCatalogue.showingFor')} <span className="font-medium">{scope.skillName}</span>
+              {minLevel ? t('courseCatalogue.showingForSuffix') : ''}
             </p>
             <button type="button" onClick={handleBrowseAll} className="shrink-0 text-xs text-moss font-medium">
-              Browse all courses
+              {t('courseCatalogue.browseAll')}
             </button>
           </div>
         )}
 
         <input
-          aria-label="Search training"
+          aria-label={t('courseCatalogue.searchLabel')}
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by name, provider or topic…"
+          placeholder={t('courseCatalogue.searchPlaceholder')}
           className="w-full rounded-md border border-hairline bg-card px-3 py-2 text-ink text-sm mb-6 focus:outline-none focus:ring-2 focus:ring-moss"
         />
 
@@ -244,39 +246,39 @@ export default function CourseCatalogue() {
           onClick={() => setShowFilters((v) => !v)}
           className="text-sm text-moss font-medium mb-4"
         >
-          {showFilters ? 'Hide filters' : `Show filters${activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}`}
+          {showFilters ? t('courseCatalogue.hideFilters') : activeFilterCount > 0 ? t('courseCatalogue.showFiltersCount', { count: activeFilterCount }) : t('courseCatalogue.showFilters')}
         </button>
 
         {showFilters && (
           <div className="space-y-3 mb-6 bg-card border border-hairline rounded-lg p-4">
             <FilterRow
-              label="Catalogue"
+              label={t('courseCatalogue.filterCatalogue')}
               value={catalogueId}
               onChange={setCatalogueId}
               options={availableCatalogues.map((item) => ({ value: item.id, label: item.name }))}
             />
             <FilterRow
-              label="Category tag"
+              label={t('courseCatalogue.filterTag')}
               value={tagId}
               onChange={setTagId}
-              options={availableTags.map((t) => ({ value: t.id, label: t.name }))}
+              options={availableTags.map((tag) => ({ value: tag.id, label: tag.name }))}
             />
             <FilterRow
-              label="Skill"
+              label={t('courseCatalogue.filterSkill')}
               value={skillId}
               onChange={handleSelectSkill}
               options={availableSkills.map((s) => ({ value: s.id, label: s.name }))}
             />
             {mySkills.length > 0 && (
               <FilterRow
-                label="My skill entry"
+                label={t('courseCatalogue.filterMySkill')}
                 value={myLevel}
                 onChange={setMyLevel}
                 options={Object.entries(LEVEL_LABELS).map(([value, label]) => ({ value: Number(value), label }))}
               />
             )}
             <FilterRow
-              label="Target level"
+              label={t('courseCatalogue.filterTargetLevel')}
               value={level}
               onChange={setLevel}
               options={Object.entries(LEVEL_LABELS).map(([value, label]) => ({ value: Number(value), label }))}
@@ -285,11 +287,11 @@ export default function CourseCatalogue() {
         )}
 
         {error && <p role="alert" className="text-sm text-red-700 mb-4">{error}</p>}
-        {loading && <p role="status" className="text-secondary">Loading…</p>}
+        {loading && <p role="status" className="text-secondary">{t('common.loading')}</p>}
 
         {!loading && filtered.length === 0 && (
           <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
-            <p className="text-secondary">No courses match your filters.</p>
+            <p className="text-secondary">{t('courseCatalogue.noMatch')}</p>
           </div>
         )}
 
@@ -348,15 +350,15 @@ export default function CourseCatalogue() {
                           key={e.skillId}
                           className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5"
                         >
-                          {e.skillName} · {LEVEL_LABELS[e.level]}{e.isComposite ? ' · Composite' : ''}
+                          {e.skillName} · {LEVEL_LABELS[e.level]}{e.isComposite ? t('courses.composite') : ''}
                         </span>
                       ))}
-                      {course.tags.map((t) => (
+                      {course.tags.map((tag) => (
                         <span
-                          key={t.id}
+                          key={tag.id}
                           className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
                         >
-                          {t.name}
+                          {tag.name}
                         </span>
                       ))}
                     </div>
@@ -371,12 +373,12 @@ export default function CourseCatalogue() {
                     className="mt-3 self-start rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {completed
-                      ? 'Completed ✓'
+                      ? t('courses.completed')
                       : enrolled
-                        ? 'Enrolled ✓'
+                        ? t('courses.enrolled')
                         : enrollingId === course.id
-                          ? 'Enrolling…'
-                          : 'Enrol'}
+                          ? t('courses.enrolling')
+                          : t('courses.enrol')}
                   </button>
                 </div>
               </div>
@@ -411,6 +413,7 @@ export default function CourseCatalogue() {
 }
 
 function CourseDetailModal({ course, enrolled, completed, enrolling, onEnrol, onClose }) {
+  const { t } = useLanguage()
   return (
     <AccessibleDialog
       labelledBy="catalogue-course-dialog-title"
@@ -420,7 +423,7 @@ function CourseDetailModal({ course, enrolled, completed, enrolling, onEnrol, on
         <div className="flex items-center justify-between mb-2 gap-4">
           <h2 id="catalogue-course-dialog-title" className="font-display text-xl text-ink">{course.name}</h2>
           <button type="button" onClick={onClose} className="shrink-0 text-secondary hover:text-ink text-sm">
-            Close
+            {t('courseCatalogue.close')}
           </button>
         </div>
         <p className="font-mono text-xs text-secondary mb-3">
@@ -443,15 +446,15 @@ function CourseDetailModal({ course, enrolled, completed, enrolling, onEnrol, on
                 key={e.skillId}
                 className="font-mono text-[10px] uppercase tracking-wide text-moss border border-moss rounded-full px-2 py-0.5"
               >
-                {e.skillName} · {LEVEL_LABELS[e.level]}{e.isComposite ? ` · Composite (${e.componentCount})` : ''}
+                {e.skillName} · {LEVEL_LABELS[e.level]}{e.isComposite ? t('courses.compositeCount', { count: e.componentCount }) : ''}
               </span>
             ))}
-            {course.tags.map((t) => (
+            {course.tags.map((tag) => (
               <span
-                key={t.id}
+                key={tag.id}
                 className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
               >
-                {t.name}
+                {tag.name}
               </span>
             ))}
           </div>
@@ -462,7 +465,7 @@ function CourseDetailModal({ course, enrolled, completed, enrolling, onEnrol, on
           disabled={enrolled || enrolling}
           className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {completed ? 'Completed ✓' : enrolled ? 'Enrolled ✓' : enrolling ? 'Enrolling…' : 'Enrol'}
+          {completed ? t('courses.completed') : enrolled ? t('courses.enrolled') : enrolling ? t('courses.enrolling') : t('courses.enrol')}
         </button>
     </AccessibleDialog>
   )

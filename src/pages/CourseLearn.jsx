@@ -22,6 +22,11 @@ import ProgressBar from '../components/ProgressBar'
 import CourseModal from '../components/CourseModal'
 import PageContent from '../components/PageContent'
 import Chevron from '../components/Chevron'
+import { useLanguage } from '../context/LanguageContext'
+
+// The fixed back-link labels callers pass in location.state (everything else
+// they pass is a record's own name, shown as-is).
+const BACK_LABEL_KEYS = { Dashboard: 'dashboard', Learning: 'learning', Training: 'training' }
 
 // Items come back ordered by their own `position`, which only resets to 0
 // within each section (see courseContent.js's nextLinkPosition) -- sorting
@@ -55,6 +60,7 @@ function CourseItemPlayer({
   onPrevious,
   onProgress,
 }) {
+  const { t } = useLanguage()
   return (
     <>
       {(item.type === 'video' || item.type === 'screen_recording') && (
@@ -75,7 +81,7 @@ function CourseItemPlayer({
             <polyline points="14 2 14 8 20 8" />
           </svg>
           <span className="text-sm text-ink flex-1 truncate">{item.file_name}</span>
-          <span className="font-mono text-[10px] uppercase tracking-wide text-moss shrink-0">Download</span>
+          <span className="font-mono text-[10px] uppercase tracking-wide text-moss shrink-0">{t('courseLearn.download')}</span>
         </a>
       )}
 
@@ -108,7 +114,7 @@ function CourseItemPlayer({
           className="flex items-center justify-between gap-3 rounded-md border border-hairline bg-paper px-4 py-3 text-sm text-ink hover:border-moss"
         >
           <span className="min-w-0 truncate">{item.external_url}</span>
-          <span className="font-medium text-moss shrink-0">Open link ↗</span>
+          <span className="font-medium text-moss shrink-0">{t('courseLearn.openLink')}</span>
         </a>
       )}
 
@@ -121,7 +127,7 @@ function CourseItemPlayer({
             onClick={onPrevious}
             className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper"
           >
-            Previous
+            {t('courseLearn.previous')}
           </button>
         ) : (
           <span />
@@ -132,14 +138,14 @@ function CourseItemPlayer({
             onClick={onMarkComplete}
             className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
           >
-            {isComplete ? (hasNext ? 'Next' : 'Done') : hasNext ? 'Mark complete & continue' : 'Mark complete'}
+            {isComplete ? (hasNext ? t('courseLearn.next') : t('courseLearn.done')) : hasNext ? t('courseLearn.markCompleteContinue') : t('courseLearn.markComplete')}
           </button>
         )}
       </div>
 
       {progress === 100 && (
         <div className="mt-4 rounded-md border border-moss bg-moss/5 px-3 py-2">
-          <p className="text-sm text-ink">All content complete.</p>
+          <p className="text-sm text-ink">{t('courseLearn.allComplete')}</p>
         </div>
       )}
     </>
@@ -152,7 +158,17 @@ export default function CourseLearn() {
   const navigate = useNavigate()
   const location = useLocation()
   const backTo = location.state?.backTo ?? '/learning'
-  const backLabel = location.state?.backLabel ? `← Back to ${location.state.backLabel}` : '← Back to Learning'
+  const { t } = useLanguage()
+  const rawBackLabel = location.state?.backLabel ?? 'Learning'
+  const backLabel = t('courseLearn.backTo', {
+    label: BACK_LABEL_KEYS[rawBackLabel] ? t(`courseLearn.backLabels.${BACK_LABEL_KEYS[rawBackLabel]}`) : rawBackLabel,
+  })
+  // Translated where known; the shared English map covers any other type.
+  const resourceTypeLabel = (type) => {
+    const key = `courseLearn.resourceTypes.${type}`
+    const label = t(key)
+    return label === key ? RESOURCE_TYPE_LABELS[type] : label
+  }
 
   const [course, setCourse] = useState(null)
   const [editOpen, setEditOpen] = useState(false)
@@ -261,10 +277,10 @@ export default function CourseLearn() {
       }
     }
     if (bySection.has('ungrouped')) {
-      groups.push({ key: 'ungrouped', title: sections.length > 0 ? 'Other' : null, items: bySection.get('ungrouped') })
+      groups.push({ key: 'ungrouped', title: sections.length > 0 ? t('courseLearn.otherSection') : null, items: bySection.get('ungrouped') })
     }
     return groups
-  }, [orderedItems, sections])
+  }, [orderedItems, sections, t])
 
   async function handleMarkComplete(item) {
     await markContentComplete(item.id, user.id)
@@ -352,7 +368,7 @@ export default function CourseLearn() {
               <p className="mb-4 whitespace-pre-wrap text-sm leading-relaxed text-secondary">{currentSection.instructions}</p>
             )}
             <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1 block">
-              {RESOURCE_TYPE_LABELS[item.type]}
+              {resourceTypeLabel(item.type)}
             </span>
             <CourseItemPlayer
               item={item}
@@ -380,8 +396,8 @@ export default function CourseLearn() {
           {backLabel}
         </Link>
 
-        {loading && <p className="text-secondary">Loading…</p>}
-        {notFound && <p className="text-secondary">Course not found.</p>}
+        {loading && <p className="text-secondary">{t('common.loading')}</p>}
+        {notFound && <p className="text-secondary">{t('courseLearn.notFound')}</p>}
 
         {course && (
           <div className="flex items-center justify-between gap-4 flex-wrap mb-2">
@@ -389,15 +405,15 @@ export default function CourseLearn() {
             <div className="flex items-center gap-3 shrink-0">
               {currentItem && (
                 <p className="font-mono text-xs text-secondary">
-                  {completedCount} / {orderedItems.length} complete
+                  {t('courseLearn.completeCount', { done: completedCount, total: orderedItems.length })}
                 </p>
               )}
               {canEditBasics && (
                 <button
                   type="button"
                   onClick={() => setEditOpen(true)}
-                  title="Edit course"
-                  aria-label="Edit course"
+                  title={t('courseLearn.editCourse')}
+                  aria-label={t('courseLearn.editCourse')}
                   className="w-8 h-8 rounded-md border border-hairline text-secondary hover:text-ink hover:bg-paper flex items-center justify-center"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -414,7 +430,7 @@ export default function CourseLearn() {
           <div className="bg-card border border-hairline rounded-lg p-4 mb-6">
             <p className="text-sm font-medium text-ink">{cohortDisplayName(cohort)}</p>
             <p className="text-xs text-secondary mt-0.5">
-              {cohort.start_date ? `Started ${formatCohortDateTime(cohort.start_date)}` : 'Start date to be confirmed'}
+              {cohort.start_date ? t('courseLearn.startedOn', { date: formatCohortDateTime(cohort.start_date) }) : t('courseLearn.startTbc')}
             </p>
             {cohort.sessions.length > 0 ? (
               <ul className="mt-3 space-y-1.5">
@@ -435,7 +451,7 @@ export default function CourseLearn() {
                 ))}
               </ul>
             ) : (
-              <p className="text-xs text-secondary mt-2">No sessions scheduled yet.</p>
+              <p className="text-xs text-secondary mt-2">{t('courseLearn.noSessions')}</p>
             )}
           </div>
         )}
@@ -444,8 +460,8 @@ export default function CourseLearn() {
           <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
             <p className="text-secondary">
               {course.catalogue_course_id
-                ? `${course.provider ? `${course.provider} hasn't` : "The provider hasn't"} added any content to this course yet.`
-                : "This is a personal record — there's no course content to work through here."}
+                ? (course.provider ? t('courseLearn.noContentProvider', { provider: course.provider }) : t('courseLearn.noContentGeneric'))
+                : t('courseLearn.personalRecord')}
             </p>
           </div>
         )}
@@ -498,7 +514,7 @@ export default function CourseLearn() {
                     </p>
                   )}
                   <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-1 block">
-                    {RESOURCE_TYPE_LABELS[currentItem.type]}
+                    {resourceTypeLabel(currentItem.type)}
                   </span>
                   <h3 className="font-display text-xl text-ink mb-4">{currentItem.title}</h3>
                   <CourseItemPlayer

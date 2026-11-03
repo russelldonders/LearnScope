@@ -85,10 +85,6 @@ or just delete it.
    render site, rather than needing useLanguage() directly, so existing
    non-component callers/tests keep working unchanged. Still open from
    the audit:
-   - Large standalone learner pages, untouched: CourseLearn.jsx, SkillsProfile.jsx,
-     CourseCatalogue.jsx, ProviderProfile.jsx (public route), Onboarding.jsx
-     + SkillsToLearnStep.jsx, Help.jsx, ProfileExport.jsx/ProfileImport.jsx,
-     Welcome.jsx, Landing.jsx, ResetPassword.jsx, LtiSession.jsx.
    - The employer-linked "role alignment" cluster shown to ordinary
      employer-linked learners via EmployerHome.jsx (LearnerRoleAlignment*,
      CurrentRoleCard, PendingAssignmentsPanel, RoleAlignmentSummary) —
@@ -122,13 +118,17 @@ or just delete it.
    (accountTypeKey, labelKey, descriptionKey) next to each English label
    they build, which the panels prefer. The "type execute to confirm" word
    is translatable but every language currently keeps the English word,
-   and "execute" is always accepted. The manager panels
-   ConnectionsTeams embeds for a team leader (ManagerSkillsPanel,
-   ManagerTeamPanel, ManagerLearningPanel, ManagerCollaborationPanel,
-   ManagerTeamSharingPanel, all under src/pages/manager/) are still
-   English -- same staff-tooling scope line as MyTeam.jsx, although
-   ManagerTeamSharingPanel is what an ordinary team *member* sees, so it
-   is the one worth picking up next. Level labels, experience-type labels and
+   and "execute" is always accepted. The remaining standalone learner
+   pages are translated too (Landing, Welcome, ResetPassword, Onboarding +
+   SkillsToLearnStep, ProfileImport, LtiSession, Help, SkillsProfile,
+   ProfileExport, CourseLearn, CourseCatalogue, ProviderProfile), as is
+   ManagerTeamSharingPanel (what a team *member* sees). Help's translated
+   paragraphs mark emphasis with **name** and [[place in the app]]. The
+   coverage test is src/lib/i18n/learnerInterface.test.js -- add a file to
+   its glob list once it's wired to t(). The leader-side manager panels
+   (ManagerSkillsPanel, ManagerTeamPanel, ManagerLearningPanel,
+   ManagerCollaborationPanel) stay English -- same staff-tooling scope
+   line as MyTeam.jsx. Level labels, experience-type labels and
    duplicateSkillMessage() stay English there, as everywhere else.
    Separately, deeply dynamic/AI-generated content (level guides,
    diagnostic questions, quiz/interview content, and the auto-generated

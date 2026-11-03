@@ -10,6 +10,7 @@ const publicEmployerCoursesMock = vi.hoisted(() => vi.fn())
 
 vi.mock('../context/AuthContext', () => ({ useAuth: () => authMock.value }))
 vi.mock('../components/AppHeader', () => ({ default: () => <header>App header</header> }))
+vi.mock('../context/LanguageContext', () => import('../test/languageMock'))
 vi.mock('../components/CohortPickerModal', () => ({ default: () => null }))
 vi.mock('../lib/providerProfile', () => ({ getProviderProfile: profileMock }))
 vi.mock('../lib/employerRoleProfiles', () => ({ getEmployerLoginContext: employerContextMock }))
