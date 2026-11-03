@@ -5,6 +5,7 @@ import MutationFeedback from '../../../components/MutationFeedback'
 import PersonAvatar from '../../../components/PersonAvatar'
 import { LEVEL_LABELS } from '../../../lib/levels'
 import { formatAbsoluteDate } from '../../../lib/dates'
+import { useLanguage } from '../../../context/LanguageContext'
 
 // Learner-facing consent panel for a manager-team membership -- mirrors
 // ProfilePrivacy.jsx's employer sharing card (summary + "Edit shared
@@ -63,6 +64,7 @@ export default function ManagerTeamSharingPanel({
 }) {
   // `initialEditOpen` -- set by the caller right after the learner accepts
   // an invite, since picking what to share is the obvious next step.
+  const { t } = useLanguage()
   const [editOpen, setEditOpen] = useState(initialEditOpen && !readOnly)
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false)
   const wasSaving = useRef(saving)
@@ -101,20 +103,17 @@ export default function ManagerTeamSharingPanel({
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
       <p className="text-sm text-secondary mb-4">
-        Led by {membership.managerName} · member since {formatAbsoluteDate(membership.joinedAt)}
+        {t('teamMembership.ledBySince', { manager: membership.managerName, date: formatAbsoluteDate(membership.joinedAt) })}
       </p>
 
       <p className="text-sm text-secondary mb-4">
-        {membership.managerName} can only see the specific skills (and any evidence behind them) you choose
-        to share below, plus any collaborative learning your team does together. Nothing else about your
-        profile -- including your experience or personal learning history -- is visible to them. You can
-        change your selection or leave the team at any time.
+        {t('teamMembership.visibility', { manager: membership.managerName })}
       </p>
 
       {roster.length > 0 && (
         <div className="mb-4 pt-3 border-t border-hairline">
           <p className="text-xs font-medium uppercase tracking-wide text-secondary mb-2">
-            {roster.length} {roster.length === 1 ? 'person' : 'people'} on this team
+            {t(roster.length === 1 ? 'teamMembership.rosterOne' : 'teamMembership.rosterMany', { count: roster.length })}
           </p>
           <ul className="flex flex-wrap gap-3">
             {roster.map((person) => (
@@ -122,7 +121,7 @@ export default function ManagerTeamSharingPanel({
                 <PersonAvatar name={person.name} avatarUrl={person.avatarUrl} size={6} />
                 <span className="text-sm text-ink">
                   {person.name}
-                  {person.role === 'manager' && <span className="text-secondary"> · team leader</span>}
+                  {person.role === 'manager' && <span className="text-secondary">{t('teamMembership.teamLeaderSuffix')}</span>}
                 </span>
               </li>
             ))}
@@ -133,7 +132,7 @@ export default function ManagerTeamSharingPanel({
       {teamSkills.length > 0 && (
         <div className="mb-4 pt-3 border-t border-hairline">
           <p className="text-xs font-medium uppercase tracking-wide text-secondary mb-2">
-            Skills this team is working on
+            {t('teamMembership.teamSkillsHeading')}
           </p>
           <ul className="divide-y divide-hairline">
             {teamSkills.map((teamSkill) => {
@@ -143,17 +142,17 @@ export default function ManagerTeamSharingPanel({
                 <li key={teamSkill.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-sm">
                   <span className="text-ink">{teamSkill.skillName}</span>
                   {!mine ? (
-                    <span className="text-xs text-secondary">Not on your profile yet</span>
+                    <span className="text-xs text-secondary">{t('teamMembership.notOnProfile')}</span>
                   ) : isShared ? (
-                    <span className="text-xs text-moss">Shared</span>
+                    <span className="text-xs text-moss">{t('teamMembership.shared')}</span>
                   ) : !readOnly ? (
                     <button type="button" disabled={saving} onClick={() => onSave?.([...sharedSkillIds, mine.id])}
-                      aria-label={`Share ${mine.name} with ${membership.managerName}`}
+                      aria-label={t('teamMembership.shareYoursLabel', { skill: mine.name, manager: membership.managerName })}
                       className="text-xs font-medium text-moss hover:underline disabled:opacity-60">
-                      Share yours ({LEVEL_LABELS[mine.level] ?? 'not assessed'})
+                      {t('teamMembership.shareYours', { level: LEVEL_LABELS[mine.level] ?? t('teamMembership.notAssessedLower') })}
                     </button>
                   ) : (
-                    <span className="text-xs text-secondary">Not shared</span>
+                    <span className="text-xs text-secondary">{t('teamMembership.notShared')}</span>
                   )}
                 </li>
               )
@@ -164,27 +163,26 @@ export default function ManagerTeamSharingPanel({
 
       <details className="mb-4 pt-3 border-t border-hairline group">
         <summary className="cursor-pointer text-sm font-medium text-moss">
-          Preview what {membership.managerName} sees
+          {t('teamMembership.previewSummary', { manager: membership.managerName })}
         </summary>
         <div className="mt-2 rounded-md border border-hairline bg-paper p-3 text-sm">
           {sharedSkills.length === 0 ? (
-            <p className="text-secondary">Nothing yet -- you haven’t shared any skills with this team.</p>
+            <p className="text-secondary">{t('teamMembership.previewEmpty')}</p>
           ) : (
             <ul className="space-y-1">
               {sharedSkills.map((skill) => (
                 <li key={skill.id} className="flex flex-wrap justify-between gap-2">
                   <span className="text-ink">{skill.name}</span>
                   <span className="text-secondary">
-                    {LEVEL_LABELS[skill.level] ?? 'Not assessed'}
-                    {' · '}{skill.evidenceCount ?? 0} evidence item{skill.evidenceCount === 1 ? '' : 's'}
+                    {LEVEL_LABELS[skill.level] ?? t('teamMembership.notAssessed')}
+                    {' · '}{t(skill.evidenceCount === 1 ? 'teamMembership.evidenceOne' : 'teamMembership.evidenceMany', { count: skill.evidenceCount ?? 0 })}
                   </span>
                 </li>
               ))}
             </ul>
           )}
           <p className="mt-2 text-xs text-secondary">
-            Plus any collaborative learning your team does together. Your experience, personal courses and
-            other skills are not shown.
+            {t('teamMembership.previewFooter')}
           </p>
         </div>
       </details>
@@ -192,7 +190,7 @@ export default function ManagerTeamSharingPanel({
       {sharedSkills.some((skill) => latestRatingBySkillId.has(skill.id)) && (
         <div className="mb-4 pt-3 border-t border-hairline space-y-2">
           <p className="text-xs font-medium uppercase tracking-wide text-secondary">
-            {membership.managerName}'s ratings
+            {t('teamMembership.ratingsHeading', { manager: membership.managerName })}
           </p>
           {sharedSkills.map((skill) => {
             const rating = latestRatingBySkillId.get(skill.id)
@@ -202,7 +200,7 @@ export default function ManagerTeamSharingPanel({
                 <span className="text-ink">{skill.name}</span>
                 <span className="text-secondary">
                   {' '}
-                  · {LEVEL_LABELS[rating.level]} · rated {formatAbsoluteDate(rating.assessedAt)}
+                  · {LEVEL_LABELS[rating.level]} · {t('teamMembership.ratedOn', { date: formatAbsoluteDate(rating.assessedAt) })}
                 </span>
                 {rating.comments && <p className="text-secondary text-xs mt-0.5">{rating.comments}</p>}
               </div>
@@ -214,8 +212,8 @@ export default function ManagerTeamSharingPanel({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-3 border-t border-hairline">
         <p className="text-sm text-ink">
           {sharedSkills.length === 0
-            ? 'No skills shared yet'
-            : `Sharing ${sharedSkills.length} skill${sharedSkills.length === 1 ? '' : 's'}`}
+            ? t('teamMembership.noneShared')
+            : t(sharedSkills.length === 1 ? 'teamMembership.sharingOne' : 'teamMembership.sharingMany', { count: sharedSkills.length })}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           {!readOnly && (
@@ -224,7 +222,7 @@ export default function ManagerTeamSharingPanel({
               onClick={() => setEditOpen(true)}
               className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper whitespace-nowrap"
             >
-              {sharedSkills.length === 0 ? 'Choose skills to share' : 'Edit shared skills'}
+              {sharedSkills.length === 0 ? t('teamMembership.chooseButton') : t('teamMembership.editButton')}
             </button>
           )}
           <button
@@ -232,7 +230,7 @@ export default function ManagerTeamSharingPanel({
             onClick={() => setLeaveConfirmOpen(true)}
             className="rounded-md border border-hairline text-red-700 py-1.5 px-3 text-sm font-medium hover:bg-paper whitespace-nowrap"
           >
-            Leave team
+            {t('teamMembership.leaveButton')}
           </button>
         </div>
       </div>
@@ -254,7 +252,7 @@ export default function ManagerTeamSharingPanel({
         <ConfirmDialog
           message={
             <>
-              {`Leave ${membership.teamName}? ${membership.managerName} will no longer see any skills or evidence you've shared, and you'll stop appearing on their team.`}
+              {t('teamMembership.leaveConfirm', { team: membership.teamName, manager: membership.managerName })}
               {error && (
                 <span role="alert" className="block mt-2 text-red-700">
                   {error}
@@ -262,7 +260,7 @@ export default function ManagerTeamSharingPanel({
               )}
             </>
           }
-          confirmLabel="Leave team"
+          confirmLabel={t('teamMembership.leaveButton')}
           confirming={saving}
           onConfirm={() => onLeaveTeam?.()}
           onCancel={() => setLeaveConfirmOpen(false)}
@@ -273,6 +271,7 @@ export default function ManagerTeamSharingPanel({
 }
 
 function EditSharedSkillsDialog({ availableSkills, initiallySelectedIds, saving, error, onSave, onClose }) {
+  const { t } = useLanguage()
   const [selected, setSelected] = useState(() => new Set(initiallySelectedIds))
   // A learner can belong to more than one manager team, so this dialog can
   // mount more than once on the same page -- a hardcoded id would collide
@@ -297,15 +296,14 @@ function EditSharedSkillsDialog({ availableSkills, initiallySelectedIds, saving,
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
       <h2 id={titleId} className="font-display text-xl text-ink mb-1">
-        Choose skills to share
+        {t('teamMembership.dialog.title')}
       </h2>
       <p className="text-sm text-secondary mb-4">
-        Only the skills you check here -- and their evidence, if any -- become visible to your team leader. You
-        can change this any time.
+        {t('teamMembership.dialog.description')}
       </p>
 
       {availableSkills.length === 0 ? (
-        <p className="text-sm text-secondary py-2">You haven't added any skills yet.</p>
+        <p className="text-sm text-secondary py-2">{t('teamMembership.dialog.noSkills')}</p>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
@@ -315,7 +313,7 @@ function EditSharedSkillsDialog({ availableSkills, initiallySelectedIds, saving,
               disabled={saving}
               className="text-xs font-medium text-moss hover:underline disabled:opacity-60"
             >
-              Select all
+              {t('teamMembership.dialog.selectAll')}
             </button>
             <button
               type="button"
@@ -323,9 +321,9 @@ function EditSharedSkillsDialog({ availableSkills, initiallySelectedIds, saving,
               disabled={saving}
               className="text-xs font-medium text-moss hover:underline disabled:opacity-60"
             >
-              Share nothing
+              {t('teamMembership.dialog.shareNothing')}
             </button>
-            <span className="text-xs text-secondary ml-auto">{selected.size} selected</span>
+            <span className="text-xs text-secondary ml-auto">{t('teamMembership.dialog.selected', { count: selected.size })}</span>
           </div>
 
           <div className="max-h-64 overflow-y-auto mt-2 mb-3 divide-y divide-hairline">
@@ -344,7 +342,7 @@ function EditSharedSkillsDialog({ availableSkills, initiallySelectedIds, saving,
                 <span className="text-xs text-secondary shrink-0">
                   {LEVEL_LABELS[skill.level] ?? skill.level}
                   {skill.evidenceCount > 0
-                    ? ` · ${skill.evidenceCount} evidence item${skill.evidenceCount === 1 ? '' : 's'}`
+                    ? ` · ${t(skill.evidenceCount === 1 ? 'teamMembership.evidenceOne' : 'teamMembership.evidenceMany', { count: skill.evidenceCount })}`
                     : ''}
                 </span>
               </label>
@@ -362,7 +360,7 @@ function EditSharedSkillsDialog({ availableSkills, initiallySelectedIds, saving,
           disabled={saving}
           className="flex-1 rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
         >
-          {saving ? 'Saving…' : `Save (${selected.size} shared)`}
+          {saving ? t('teamMembership.dialog.saving') : t('teamMembership.dialog.save', { count: selected.size })}
         </button>
         <button
           type="button"
@@ -371,7 +369,7 @@ function EditSharedSkillsDialog({ availableSkills, initiallySelectedIds, saving,
           data-dialog-initial-focus
           className="rounded-md border border-hairline text-ink py-2 px-4 hover:bg-paper disabled:opacity-60"
         >
-          Cancel
+          {t('teamMembership.dialog.cancel')}
         </button>
       </div>
     </AccessibleDialog>

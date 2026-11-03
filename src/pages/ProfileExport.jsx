@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
+import { useLanguage } from '../context/LanguageContext'
 
 function fmtDate(value) {
   if (!value) return '—'
@@ -10,6 +11,7 @@ function fmtDate(value) {
 
 export default function ProfileExport() {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [data, setData] = useState(null)
@@ -136,41 +138,41 @@ export default function ProfileExport() {
 
       <main id="main-content" tabIndex={-1} className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         <div className="flex items-center justify-between print:hidden">
-          <h1 className="font-display text-xl text-ink">Your data</h1>
+          <h1 className="font-display text-xl text-ink">{t('profileExport.heading')}</h1>
           {!loading && !error && (
             <button
               type="button"
               onClick={() => window.print()}
               className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
             >
-              Print / Save as PDF
+              {t('profileExport.print')}
             </button>
           )}
         </div>
 
-        {loading && <p className="text-secondary">Loading…</p>}
+        {loading && <p className="text-secondary">{t('common.loading')}</p>}
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
         {!loading && !error && data && (
           <>
-            <Section title="Profile">
-              <Field label="Name">
+            <Section title={t('profileExport.profile')}>
+              <Field label={t('profileExport.name')}>
                 {[data.profile?.first_name, data.profile?.last_name].filter(Boolean).join(' ') || '—'}
               </Field>
-              <Field label="Email">{user.email}</Field>
-              <Field label="Country">{data.profile?.country || '—'}</Field>
-              <Field label="Location">{data.profile?.location || '—'}</Field>
-              <Field label="Language">{data.profile?.language || '—'}</Field>
+              <Field label={t('profileExport.email')}>{user.email}</Field>
+              <Field label={t('profileExport.country')}>{data.profile?.country || '—'}</Field>
+              <Field label={t('profileExport.location')}>{data.profile?.location || '—'}</Field>
+              <Field label={t('profileExport.language')}>{data.profile?.language || '—'}</Field>
             </Section>
 
-            <Section title={`Employment & education (${data.experience.length})`}>
+            <Section title={t('profileExport.experience', { count: data.experience.length })}>
               {data.experience.map((e) => (
                 <div key={e.id} className="mb-3 pb-3 border-b border-hairline last:border-0">
                   <p className="text-sm font-medium text-ink">
                     {e.title} — {e.organization}
                   </p>
                   <p className="text-xs text-secondary">
-                    {e.type} · {fmtDate(e.start_date)} – {e.end_date ? fmtDate(e.end_date) : 'Present'}
+                    {e.type} · {fmtDate(e.start_date)} – {e.end_date ? fmtDate(e.end_date) : t('profileExport.present')}
                   </p>
                   {e.description && <p className="text-sm text-ink mt-1">{e.description}</p>}
                 </div>
@@ -178,12 +180,12 @@ export default function ProfileExport() {
               {data.experience.length === 0 && <Empty />}
             </Section>
 
-            <Section title={`Courses (${data.courses.length})`}>
+            <Section title={t('profileExport.courses', { count: data.courses.length })}>
               {data.courses.map((c) => (
                 <div key={c.id} className="mb-3 pb-3 border-b border-hairline last:border-0">
                   <p className="text-sm font-medium text-ink">{c.name}</p>
                   <p className="text-xs text-secondary">
-                    {c.provider || 'Unknown provider'} · Completed {fmtDate(c.completed_date)}
+                    {c.provider || t('profileExport.unknownProvider')} · {t('profileExport.completed', { date: fmtDate(c.completed_date) })}
                   </p>
                   {c.notes && <p className="text-sm text-ink mt-1">{c.notes}</p>}
                 </div>
@@ -191,7 +193,7 @@ export default function ProfileExport() {
               {data.courses.length === 0 && <Empty />}
             </Section>
 
-            <Section title={`Skills (${data.skills.length})`}>
+            <Section title={t('profileExport.skills', { count: data.skills.length })}>
               {data.skills.map((s) => (
                 <div key={s.id} className="mb-4 pb-4 border-b border-hairline last:border-0">
                   <p className="text-sm font-medium text-ink">
@@ -199,19 +201,19 @@ export default function ProfileExport() {
                     {s.category ? ` — ${s.category}` : ''}
                   </p>
                   <p className="text-xs text-secondary">
-                    Current level {s.level ?? '—'} · {s.lifecycle_stage || 'tracking'}
+                    {t('profileExport.currentLevel', { level: s.level ?? '—' })} · {s.lifecycle_stage || t('profileExport.tracking')}
                     {(data.tagsBySkillId.get(s.id) ?? []).length > 0
-                      ? ` · Tags: ${data.tagsBySkillId.get(s.id).join(', ')}`
+                      ? ` · ${t('profileExport.tags', { tags: data.tagsBySkillId.get(s.id).join(', ') })}`
                       : ''}
                   </p>
                   {s.notes && <p className="text-sm text-ink mt-1">{s.notes}</p>}
 
                   {(data.assessmentsBySkillId.get(s.id) ?? []).length > 0 && (
                     <div className="mt-2 pl-3 border-l-2 border-hairline">
-                      <p className="text-xs font-medium text-secondary mb-1">Proficiency history</p>
+                      <p className="text-xs font-medium text-secondary mb-1">{t('profileExport.proficiencyHistory')}</p>
                       {data.assessmentsBySkillId.get(s.id).map((a) => (
                         <p key={a.id} className="text-xs text-ink">
-                          {fmtDate(a.assessed_at)} — level {a.level}
+                          {t('profileExport.historyLine', { date: fmtDate(a.assessed_at), level: a.level })}
                           {a.comments ? `: ${a.comments}` : ''}
                         </p>
                       ))}
@@ -220,10 +222,10 @@ export default function ProfileExport() {
 
                   {(data.targetsBySkillId.get(s.id) ?? []).length > 0 && (
                     <div className="mt-2 pl-3 border-l-2 border-hairline">
-                      <p className="text-xs font-medium text-secondary mb-1">Targets set</p>
-                      {data.targetsBySkillId.get(s.id).map((t) => (
-                        <p key={t.id} className="text-xs text-ink">
-                          {fmtDate(t.created_at)} — target level {t.target_level} by {fmtDate(t.target_date)}
+                      <p className="text-xs font-medium text-secondary mb-1">{t('profileExport.targetsSet')}</p>
+                      {data.targetsBySkillId.get(s.id).map((target) => (
+                        <p key={target.id} className="text-xs text-ink">
+                          {t('profileExport.targetLine', { date: fmtDate(target.created_at), level: target.target_level, targetDate: fmtDate(target.target_date) })}
                         </p>
                       ))}
                     </div>
@@ -233,44 +235,44 @@ export default function ProfileExport() {
               {data.skills.length === 0 && <Empty />}
             </Section>
 
-            <Section title={`Peer ratings you gave (${data.ratingsGiven.length})`}>
+            <Section title={t('profileExport.ratingsGiven', { count: data.ratingsGiven.length })}>
               {data.ratingsGiven.map((r) => (
                 <p key={r.id} className="text-sm text-ink mb-1">
-                  {fmtDate(r.rated_at)} — rated "{r.skill_name}" level {r.level}
+                  {t('profileExport.ratingGivenLine', { date: fmtDate(r.rated_at), skill: r.skill_name, level: r.level })}
                   {r.comments ? `: ${r.comments}` : ''}
                 </p>
               ))}
               {data.ratingsGiven.length === 0 && <Empty />}
             </Section>
 
-            <Section title={`Peer ratings you received (${data.ratingsReceived.length})`}>
+            <Section title={t('profileExport.ratingsReceived', { count: data.ratingsReceived.length })}>
               {data.ratingsReceived.map((r) => (
                 <p key={r.id} className="text-sm text-ink mb-1">
-                  {fmtDate(r.rated_at)} — "{r.skill_name}" rated level {r.level} by {r.rater_name || 'a connection'}
+                  {t('profileExport.ratingReceivedLine', { date: fmtDate(r.rated_at), skill: r.skill_name, level: r.level, rater: r.rater_name || t('profileExport.aConnection') })}
                   {r.comments ? `: ${r.comments}` : ''}
                 </p>
               ))}
               {data.ratingsReceived.length === 0 && <Empty />}
             </Section>
 
-            <Section title={`Skill validations (${data.validationsRequested.length + data.validationsGiven.length})`}>
+            <Section title={t('profileExport.validations', { count: data.validationsRequested.length + data.validationsGiven.length })}>
               {data.validationsRequested.map((v) => (
                 <p key={v.id} className="text-sm text-ink mb-1">
-                  {fmtDate(v.created_at)} — you asked for validation at target level {v.target_level}: {v.status}
+                  {t('profileExport.validationRequestedLine', { date: fmtDate(v.created_at), level: v.target_level, status: v.status })}
                 </p>
               ))}
               {data.validationsGiven.map((v) => (
                 <p key={v.id} className="text-sm text-ink mb-1">
-                  {fmtDate(v.created_at)} — you validated a request for target level {v.target_level}: {v.status}
+                  {t('profileExport.validationGivenLine', { date: fmtDate(v.created_at), level: v.target_level, status: v.status })}
                 </p>
               ))}
               {data.validationsRequested.length + data.validationsGiven.length === 0 && <Empty />}
             </Section>
 
-            <Section title={`Connections (${data.connections.length})`}>
+            <Section title={t('profileExport.connections', { count: data.connections.length })}>
               {data.connections.map((c) => (
                 <p key={c.id} className="text-sm text-ink mb-1">
-                  Connected since {fmtDate(c.created_at)} ({c.source === 'peer_rating' ? 'via peer rating' : 'via request'})
+                  {t(c.source === 'peer_rating' ? 'profileExport.connectedViaRating' : 'profileExport.connectedViaRequest', { date: fmtDate(c.created_at) })}
                 </p>
               ))}
               {data.connections.length === 0 && <Empty />}
@@ -301,5 +303,6 @@ function Field({ label, children }) {
 }
 
 function Empty() {
-  return <p className="text-sm text-secondary">Nothing here.</p>
+  const { t } = useLanguage()
+  return <p className="text-sm text-secondary">{t('profileExport.empty')}</p>
 }

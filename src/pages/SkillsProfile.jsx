@@ -11,12 +11,14 @@ import AccessibleDialog from '../components/AccessibleDialog'
 import GrowthRing from '../components/GrowthRing'
 import GrowthArrow from '../components/GrowthArrow'
 import PersonAvatar from '../components/PersonAvatar'
+import { useLanguage } from '../context/LanguageContext'
 
 const EXPERT_LEVEL = 5
 
 export default function SkillsProfile() {
   const { userId } = useParams()
   const { user } = useAuth()
+  const { t } = useLanguage()
   const isOwnProfile = user.id === userId
   const [name, setName] = useState('')
   const [avatarUrl, setAvatarUrl] = useState(null)
@@ -64,11 +66,11 @@ export default function SkillsProfile() {
       supabase.rpc('get_profile_location', { p_user_id: userId }).maybeSingle(),
     ])
     if (profileError) {
-      setError("This person's profile couldn't be found.")
+      setError(t('skillsProfile.notFound'))
       setLoading(false)
       return
     }
-    setName(profile.full_name || 'This person')
+    setName(profile.full_name || '')
     setAvatarUrl(profile.avatar_url ?? null)
     setLocation(place?.location ?? '')
     setCountry(place?.country ?? '')
@@ -133,7 +135,7 @@ export default function SkillsProfile() {
       setGrowthError(null)
     } catch (err) {
       setGrowth([])
-      setGrowthError(err.message || 'Something went wrong.')
+      setGrowthError(err.message || t('common.somethingWentWrong'))
     }
 
     setLoading(false)
@@ -156,12 +158,13 @@ export default function SkillsProfile() {
   }
 
   async function handleSubmitRating(level, comments) {
-    await rateConnectionSkill(ratingSkill, name, level, comments)
+    await rateConnectionSkill(ratingSkill, name || 'This person', level, comments)
     setMyRatingBySkillId((prev) => ({ ...prev, [ratingSkill.id]: { level, ratedAt: new Date().toISOString() } }))
     setRatingSkill(null)
   }
 
   const canRate = !isOwnProfile && allowRatings
+  const displayName = name || t('skillsProfile.thisPerson')
 
   const commonSkills = useMemo(
     () => skills.filter((s) => s.library_skill_id && ownLibrarySkillIds.has(s.library_skill_id)),
@@ -176,29 +179,29 @@ export default function SkillsProfile() {
 
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
         <Link to="/connections" className="text-sm text-secondary hover:text-ink mb-6 inline-block">
-          ← Back to connections
+          {t('skillsProfile.back')}
         </Link>
 
         {loading ? (
-          <p className="text-secondary">Loading…</p>
+          <p className="text-secondary">{t('common.loading')}</p>
         ) : error ? (
           <p className="text-red-700 text-sm">{error}</p>
         ) : (
           <>
             <div className="bg-card border border-hairline rounded-lg p-6 mb-6 flex items-center gap-4">
-              <PersonAvatar name={name} avatarUrl={avatarUrl} size={20} />
+              <PersonAvatar name={displayName} avatarUrl={avatarUrl} size={20} />
               <div className="min-w-0">
-                <h1 className="font-display text-xl text-ink truncate">{name}</h1>
+                <h1 className="font-display text-xl text-ink truncate">{displayName}</h1>
                 {(location || country) && (
                   <p className="text-sm text-secondary truncate">{[location, country].filter(Boolean).join(', ')}</p>
                 )}
                 <p className="text-xs text-secondary mt-1">
-                  {memberSince && <span>Member since {formatMonthYear(memberSince.slice(0, 10))}</span>}
+                  {memberSince && <span>{t('skillsProfile.memberSince', { date: formatMonthYear(memberSince.slice(0, 10)) })}</span>}
                   {memberSince && visible && skills.length > 0 && <span> · </span>}
                   {visible && skills.length > 0 && (
                     <span>
-                      {skills.length} skill{skills.length === 1 ? '' : 's'} shared
-                      {expertCount > 0 ? ` · Expert in ${expertCount}` : ''}
+                      {t(skills.length === 1 ? 'skillsProfile.sharedOne' : 'skillsProfile.sharedMany', { count: skills.length })}
+                      {expertCount > 0 ? t('skillsProfile.expertIn', { count: expertCount }) : ''}
                     </span>
                   )}
                 </p>
@@ -207,14 +210,14 @@ export default function SkillsProfile() {
 
             {!visible ? (
               <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
-                <p className="text-secondary">{name} hasn't made their skills profile visible.</p>
+                <p className="text-secondary">{t('skillsProfile.notVisible', { name: displayName })}</p>
                 {!isOwnProfile && <RequestAccessButton
-                  name={name} requestSent={requestSent} onOpen={() => setRequestOpen(true)} />}
+                  name={displayName} requestSent={requestSent} onOpen={() => setRequestOpen(true)} />}
               </div>
             ) : (
               <div className="mb-10">
                 {!isOwnProfile && skills.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label="Filter skills">
+                  <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label={t('skillsProfile.filterLabel')}>
                     <button
                       type="button"
                       onClick={() => setFilterMode('common')}
@@ -225,7 +228,7 @@ export default function SkillsProfile() {
                           : 'border-hairline text-secondary hover:text-ink'
                       }`}
                     >
-                      In common ({commonSkills.length})
+                      {t('skillsProfile.inCommon', { count: commonSkills.length })}
                     </button>
                     <button
                       type="button"
@@ -237,7 +240,7 @@ export default function SkillsProfile() {
                           : 'border-hairline text-secondary hover:text-ink'
                       }`}
                     >
-                      All skills ({skills.length})
+                      {t('skillsProfile.allSkills', { count: skills.length })}
                     </button>
                   </div>
                 )}
@@ -246,11 +249,11 @@ export default function SkillsProfile() {
                   <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
                     <p className="text-secondary">
                       {filterMode === 'common' && skills.length > 0
-                        ? "You don't share any skills in common yet."
-                        : 'No skills tracked yet.'}
+                        ? t('skillsProfile.noneInCommon')
+                        : t('skillsProfile.noneTracked')}
                     </p>
                     {!isOwnProfile && skills.length === 0 && <RequestAccessButton
-                      name={name} requestSent={requestSent} onOpen={() => setRequestOpen(true)} />}
+                      name={displayName} requestSent={requestSent} onOpen={() => setRequestOpen(true)} />}
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -262,19 +265,19 @@ export default function SkillsProfile() {
                           <h3 className="font-display text-lg text-ink truncate">{skill.name}</h3>
                           {tagsBySkill.get(skill.id)?.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1">
-                              {tagsBySkill.get(skill.id).map((t) => (
+                              {tagsBySkill.get(skill.id).map((tag) => (
                                 <span
-                                  key={t}
+                                  key={tag}
                                   className="font-mono text-[10px] uppercase tracking-wide text-secondary border border-hairline rounded-full px-2 py-0.5"
                                 >
-                                  {t}
+                                  {tag}
                                 </span>
                               ))}
                             </div>
                           )}
                           {canRate && lastRatedAt && (
                             <p className="text-xs text-secondary mt-1" title={formatAbsoluteDate(lastRatedAt)}>
-                              You last rated this skill {formatRelativeDate(lastRatedAt)}
+                              {t('skillsProfile.lastRatedByYou', { when: formatRelativeDate(lastRatedAt) })}
                             </p>
                           )}
                         </div>
@@ -301,10 +304,10 @@ export default function SkillsProfile() {
 
             {(growth.length > 0 || growthError) && (
               <div>
-                <h2 className="font-display text-xl text-ink mb-6">Recent growth</h2>
+                <h2 className="font-display text-xl text-ink mb-6">{t('skillsProfile.recentGrowth')}</h2>
                 {growthError ? (
                   <div className="flex items-center justify-between gap-3 bg-card border border-hairline rounded-lg px-4 py-3">
-                    <p className="text-sm text-secondary">Couldn't load recent growth.</p>
+                    <p className="text-sm text-secondary">{t('skillsProfile.growthError')}</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -322,7 +325,7 @@ export default function SkillsProfile() {
                           <p className="text-sm font-medium text-ink truncate">{row.skill_name}</p>
                           <p className="text-sm">
                             <span className="text-secondary">
-                              {row.previous_level ? LEVEL_LABELS[row.previous_level] : 'New'} →{' '}
+                              {row.previous_level ? LEVEL_LABELS[row.previous_level] : t('skillsProfile.newLevel')} →{' '}
                             </span>
                             <span className="text-ink font-medium">{LEVEL_LABELS[row.level]}</span>
                           </p>
@@ -331,7 +334,7 @@ export default function SkillsProfile() {
                               className="font-mono text-[11px] uppercase tracking-wide text-secondary mt-1"
                               title={formatAbsoluteDate(row.target_date)}
                             >
-                              Target: {LEVEL_LABELS[row.target_level]} · {formatRelativeDate(row.target_date)}
+                              {t('skillsProfile.target', { level: LEVEL_LABELS[row.target_level], when: formatRelativeDate(row.target_date) })}
                             </p>
                           )}
                         </div>
@@ -369,21 +372,21 @@ export default function SkillsProfile() {
           panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6"
         >
           <h2 id="request-skill-access-title" className="font-display text-xl text-ink mb-2">
-            Request skill access
+            {t('skillsProfile.requestTitle')}
           </h2>
           <p className="text-sm text-secondary mb-4">
-            Ask {name} to consider sharing some of their skills with you. They choose what, if anything, to share.
+            {t('skillsProfile.requestDescription', { name: displayName })}
           </p>
           <form onSubmit={handleRequestAccess} className="space-y-3">
             <label className="block text-sm text-ink">
-              Note (optional)
+              {t('skillsProfile.noteLabel')}
               <textarea
                 rows={3}
                 maxLength={500}
                 value={requestNote}
                 disabled={requestSending}
                 onChange={(e) => setRequestNote(e.target.value)}
-                placeholder="Let them know why you're asking"
+                placeholder={t('skillsProfile.notePlaceholder')}
                 className="mt-1 block w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink"
               />
             </label>
@@ -395,14 +398,14 @@ export default function SkillsProfile() {
                 onClick={() => setRequestOpen(false)}
                 className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
               >
-                Cancel
+                {t('skillsProfile.cancel')}
               </button>
               <button
                 type="submit"
                 disabled={requestSending}
                 className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
               >
-                {requestSending ? 'Sending…' : 'Send request'}
+                {requestSending ? t('skillsProfile.sending') : t('skillsProfile.sendRequest')}
               </button>
             </div>
           </form>
@@ -417,6 +420,7 @@ export default function SkillsProfile() {
 // skill-owner's level or a mid-scale guess -- an unrated skill shouldn't
 // default toward "I already think this is Capable."
 function RateSkillDialog({ skill, initialLevel, lastRatedAt, onClose, onSubmit }) {
+  const { t } = useLanguage()
   const [level, setLevel] = useState(initialLevel ?? LEVELS[0])
   const [comments, setComments] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -442,11 +446,11 @@ function RateSkillDialog({ skill, initialLevel, lastRatedAt, onClose, onSubmit }
       panelClassName="w-full max-w-sm bg-card border border-hairline rounded-lg p-6"
     >
       <h2 id="rate-skill-dialog-title" className="font-display text-xl text-ink mb-4">
-        Rate {skill.name}
+        {t('skillsProfile.rateTitle', { skill: skill.name })}
       </h2>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <span className="block text-sm text-secondary mb-2">Your rating</span>
+          <span className="block text-sm text-secondary mb-2">{t('skillsProfile.yourRating')}</span>
           <div className="flex items-center justify-between">
             {LEVELS.map((l) => (
               <button
@@ -458,7 +462,7 @@ function RateSkillDialog({ skill, initialLevel, lastRatedAt, onClose, onSubmit }
               >
                 <GrowthRing level={l} size={36} />
                 <span className="font-mono text-[10px] text-secondary">{LEVEL_LABELS[l]}</span>
-                <span className="font-mono text-[9px] text-secondary/70 h-3">{l === initialLevel ? 'Most recent' : ''}</span>
+                <span className="font-mono text-[9px] text-secondary/70 h-3">{l === initialLevel ? t('skillsProfile.mostRecent') : ''}</span>
               </button>
             ))}
           </div>
@@ -469,7 +473,7 @@ function RateSkillDialog({ skill, initialLevel, lastRatedAt, onClose, onSubmit }
           value={comments}
           disabled={submitting}
           onChange={(e) => setComments(e.target.value)}
-          placeholder="Why this level? (optional)"
+          placeholder={t('skillsProfile.commentsPlaceholder')}
           className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
         />
 
@@ -477,7 +481,7 @@ function RateSkillDialog({ skill, initialLevel, lastRatedAt, onClose, onSubmit }
 
         {lastRatedAt && (
           <p className="text-[11px] text-secondary/70" title={formatAbsoluteDate(lastRatedAt)}>
-            Last rated {formatRelativeDate(lastRatedAt)}
+            {t('skillsProfile.lastRated', { when: formatRelativeDate(lastRatedAt) })}
           </p>
         )}
 
@@ -488,14 +492,14 @@ function RateSkillDialog({ skill, initialLevel, lastRatedAt, onClose, onSubmit }
             onClick={onClose}
             className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
           >
-            Cancel
+            {t('skillsProfile.cancel')}
           </button>
           <button
             type="submit"
             disabled={submitting}
             className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
           >
-            {submitting ? 'Submitting…' : 'Submit rating'}
+            {submitting ? t('skillsProfile.submitting') : t('skillsProfile.submitRating')}
           </button>
         </div>
       </form>
@@ -504,8 +508,9 @@ function RateSkillDialog({ skill, initialLevel, lastRatedAt, onClose, onSubmit }
 }
 
 function RequestAccessButton({ name, requestSent, onOpen }) {
+  const { t } = useLanguage()
   if (requestSent) {
-    return <p className="text-sm text-secondary mt-4">Request sent to {name}.</p>
+    return <p className="text-sm text-secondary mt-4">{t('skillsProfile.requestSent', { name })}</p>
   }
   return (
     <button
@@ -513,7 +518,7 @@ function RequestAccessButton({ name, requestSent, onOpen }) {
       onClick={onOpen}
       className="mt-4 rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
     >
-      Request skill access
+      {t('skillsProfile.requestTitle')}
     </button>
   )
 }
