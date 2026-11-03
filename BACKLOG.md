@@ -11,14 +11,11 @@ move active work to **In progress** and completed work to **Done**.
   change the shared synthetic learner or leave staging data behind.
 
 - Finish the remaining learner-facing translation edge cases:
-  - Decide whether the employer-linked role-alignment cluster
-    (`LearnerRoleAlignment*`, `CurrentRoleCard`, `PendingAssignmentsPanel`,
-    `RoleAlignmentSummary`) belongs in learner translation scope.
-  - Translate `EvidenceFields.jsx` and `RouteTitle.jsx` without changing their
-    staff-facing consumers.
-  - Keep manager/admin/provider/employer consoles, level labels,
-    experience-type labels, duplicate-skill messages, and generated AI content
-    out of scope unless that product decision changes.
+  - Translate `RouteTitle.jsx` without changing its staff-facing consumers.
+  - Keep admin/provider/employer-admin consoles, TableControls' admin-only
+    selection/bulk/column controls, level labels, experience-type labels,
+    duplicate-skill messages, and generated AI content out of scope unless
+    that product decision changes. (The team leader's panels are in scope.)
 
 - If literal admin impersonation is still wanted, run a dedicated security
   design review first. A safe proposal must cover session scope and expiry,
@@ -37,3 +34,8 @@ move active work to **In progress** and completed work to **Done**.
   routes, shared learner components, token-link pages, connected accounts,
   course/catalogue/profile pages, and member-facing team sharing. Coverage is
   enforced by the i18n key and learner-interface tests.
+
+- Extended translation to the team leader's panels (skills matrix, members,
+  invites, rating/targets, learning, collaboration, member profile),
+  `EvidenceFields`, TableControls' sorting/pagination, and the member's
+  employer home including the role-alignment cluster.
