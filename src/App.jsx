@@ -72,11 +72,11 @@ const OrganisationWorkspace = lazyRoute(() => import('./pages/organisation/Organ
 function App() {
   return (
     <BrowserRouter>
-      <RouteTitle />
       <ErrorBoundary>
       <AuthProvider>
         <ThemeProvider>
         <LanguageProvider>
+        <RouteTitle />
         <PendingActionsProvider>
         <NavVisibilityProvider>
         <Suspense fallback={<RouteLoading />}>

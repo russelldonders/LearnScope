@@ -10,12 +10,11 @@ move active work to **In progress** and completed work to **Done**.
   isolated seeded records plus deterministic cleanup so parallel runs cannot
   change the shared synthetic learner or leave staging data behind.
 
-- Finish the remaining learner-facing translation edge cases:
-  - Translate `RouteTitle.jsx` without changing its staff-facing consumers.
-  - Keep admin/provider/employer-admin consoles, TableControls' admin-only
-    selection/bulk/column controls, level labels, experience-type labels,
-    duplicate-skill messages, and generated AI content out of scope unless
-    that product decision changes. (The team leader's panels are in scope.)
+- Translation scope note (learner-facing translation is complete): admin,
+  provider and employer-admin consoles, TableControls' admin-only
+  selection/bulk/column controls, staff page titles, level labels,
+  experience-type labels, duplicate-skill messages, and generated AI content
+  stay English unless that product decision changes.
 
 - If literal admin impersonation is still wanted, run a dedicated security
   design review first. A safe proposal must cover session scope and expiry,

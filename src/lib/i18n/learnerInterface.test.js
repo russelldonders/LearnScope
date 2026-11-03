@@ -40,6 +40,7 @@ const SOURCES = Object.values(import.meta.glob([
   '../../pages/manager/ManagerMemberProfile.jsx',
   '../../components/EvidenceFields.jsx',
   '../../components/TableControls.jsx',
+  '../../components/RouteTitle.jsx',
   '../../pages/employer/EmployerHome.jsx',
   '../../pages/employer/EmployerAssignedTrainingPanel.jsx',
   '../../pages/employer/EmployerCataloguePanel.jsx',
@@ -75,6 +76,8 @@ const dynamicKeys = [
     'accountTypeWorkSso', 'accountTypeWorkManaged'].map((key) => `connectedAccounts.linkedAccountsList.${key}`),
   // Help.jsx builds every key from its section list.
   ...flatKeys(english.help, 'help.'),
+  // RouteTitle.jsx builds every key from its route list.
+  ...flatKeys(english.routeTitles, 'routeTitles.'),
 ]
 
 function resolve(dictionary, key) {

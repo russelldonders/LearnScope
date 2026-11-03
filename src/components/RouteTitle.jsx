@@ -1,58 +1,64 @@
 import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
+import { useLanguage } from '../context/LanguageContext'
 
+// [pattern, routeTitles key] for learner-facing routes, translated; staff
+// routes (organisation/admin consoles) keep a plain English title, same
+// scope line as the rest of the interface translation.
 const TITLES = [
-  [/^\/$/, 'Home'],
-  [/^\/login$/, 'Log in'],
-  [/^\/signup$/, 'Sign up'],
-  [/^\/forgot-password$/, 'Forgot password'],
-  [/^\/reset-password$/, 'Reset password'],
-  [/^\/welcome$/, 'Welcome'],
-  [/^\/onboarding$/, 'Set up your profile'],
-  [/^\/dashboard$/, 'Dashboard'],
-  [/^\/skills$/, 'Skills'],
-  [/^\/skills\/[^/]+$/, 'Skill details'],
-  [/^\/experience$/, 'Experience'],
-  [/^\/experience\/[^/]+$/, 'Experience details'],
-  [/^\/profile$/, 'Profile'],
-  [/^\/profile\/privacy$/, 'Privacy settings'],
-  [/^\/profile\/import$/, 'Import profile'],
-  [/^\/profile\/export$/, 'Export profile'],
-  [/^\/connections$/, 'Connections'],
-  [/^\/training$/, 'Find training'],
-  [/^\/learning$/, 'Learning'],
-  [/^\/team$/, 'My team'],
-  [/^\/team\/[^/]+$/, 'Team member'],
-  [/^\/courses\/[^/]+\/learn$/, 'Course player'],
-  [/^\/courses\/[^/]+$/, 'Course details'],
-  [/^\/skills-profile\/[^/]+$/, 'Skills profile'],
-  [/^\/validate-request\/[^/]+$/, 'Validation request'],
-  [/^\/rate\/[^/]+$/, 'Rate a skill'],
-  [/^\/organisation\/training\/[^/]+$/, 'Edit organisation course'],
-  [/^\/organisation\/catalogues\/[^/]+$/, 'Organisation catalogue'],
-  [/^\/organisation\/learning$/, 'Organisation learning'],
-  [/^\/organisation\/organisations\/[^/]+\/lms-connections$/, 'LMS connections'],
-  [/^\/organisation\/organisations\/[^/]+\/lti-tools$/, 'LTI tools'],
-  [/^\/organisation\/organisations\/[^/]+\/skills\/[^/]+$/, 'Organisation skill'],
-  [/^\/organisation$/, 'Organisation workspace'],
-  [/^\/organisation\/roles\/[^/]+$/, 'Role profile details'],
-  [/^\/admin\/users\/[^/]+$/, 'Admin user details'],
-  [/^\/admin\/providers$/, 'Admin providers'],
-  [/^\/admin\/catalogue\/[^/]+$/, 'Admin course details'],
-  [/^\/admin\/catalogue$/, 'Admin courses'],
-  [/^\/admin\/skills\/[^/]+$/, 'Admin skill details'],
-  [/^\/admin\/skills$/, 'Admin skills'],
-  [/^\/admin\/tags$/, 'Admin tags'],
-  [/^\/admin$/, 'Admin users'],
+  [/^\/$/, { key: 'home' }],
+  [/^\/login$/, { key: 'login' }],
+  [/^\/signup$/, { key: 'signup' }],
+  [/^\/forgot-password$/, { key: 'forgotPassword' }],
+  [/^\/reset-password$/, { key: 'resetPassword' }],
+  [/^\/welcome$/, { key: 'welcome' }],
+  [/^\/onboarding$/, { key: 'onboarding' }],
+  [/^\/dashboard$/, { key: 'dashboard' }],
+  [/^\/skills$/, { key: 'skills' }],
+  [/^\/skills\/[^/]+$/, { key: 'skillDetails' }],
+  [/^\/experience$/, { key: 'experience' }],
+  [/^\/experience\/[^/]+$/, { key: 'experienceDetails' }],
+  [/^\/profile$/, { key: 'profile' }],
+  [/^\/profile\/privacy$/, { key: 'privacy' }],
+  [/^\/profile\/import$/, { key: 'importProfile' }],
+  [/^\/profile\/export$/, { key: 'exportProfile' }],
+  [/^\/connections$/, { key: 'connections' }],
+  [/^\/training$/, { key: 'findTraining' }],
+  [/^\/learning$/, { key: 'learning' }],
+  [/^\/team$/, { key: 'myTeam' }],
+  [/^\/team\/[^/]+$/, { key: 'teamMember' }],
+  [/^\/courses\/[^/]+\/learn$/, { key: 'coursePlayer' }],
+  [/^\/courses\/[^/]+$/, { key: 'courseDetails' }],
+  [/^\/skills-profile\/[^/]+$/, { key: 'skillsProfile' }],
+  [/^\/validate-request\/[^/]+$/, { key: 'validationRequest' }],
+  [/^\/rate\/[^/]+$/, { key: 'rateSkill' }],
+  [/^\/organisation\/training\/[^/]+$/, { text: 'Edit organisation course' }],
+  [/^\/organisation\/catalogues\/[^/]+$/, { text: 'Organisation catalogue' }],
+  [/^\/organisation\/learning$/, { key: 'organisationLearning' }],
+  [/^\/organisation\/organisations\/[^/]+\/lms-connections$/, { text: 'LMS connections' }],
+  [/^\/organisation\/organisations\/[^/]+\/lti-tools$/, { text: 'LTI tools' }],
+  [/^\/organisation\/organisations\/[^/]+\/skills\/[^/]+$/, { text: 'Organisation skill' }],
+  [/^\/organisation$/, { text: 'Organisation workspace' }],
+  [/^\/organisation\/roles\/[^/]+$/, { text: 'Role profile details' }],
+  [/^\/admin\/users\/[^/]+$/, { text: 'Admin user details' }],
+  [/^\/admin\/providers$/, { text: 'Admin providers' }],
+  [/^\/admin\/catalogue\/[^/]+$/, { text: 'Admin course details' }],
+  [/^\/admin\/catalogue$/, { text: 'Admin courses' }],
+  [/^\/admin\/skills\/[^/]+$/, { text: 'Admin skill details' }],
+  [/^\/admin\/skills$/, { text: 'Admin skills' }],
+  [/^\/admin\/tags$/, { text: 'Admin tags' }],
+  [/^\/admin$/, { text: 'Admin users' }],
 ]
 
 export default function RouteTitle() {
   const { pathname } = useLocation()
+  const { t } = useLanguage()
 
   useEffect(() => {
-    const match = TITLES.find(([pattern]) => pattern.test(pathname))
-    document.title = match ? `${match[1]} | LearnScope` : 'LearnScope'
-  }, [pathname])
+    const match = TITLES.find(([pattern]) => pattern.test(pathname))?.[1]
+    const title = match ? (match.key ? t(`routeTitles.${match.key}`) : match.text) : null
+    document.title = title ? `${title} | LearnScope` : 'LearnScope'
+  }, [pathname, t])
 
   return null
 }
