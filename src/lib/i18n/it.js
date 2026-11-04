@@ -1023,6 +1023,7 @@ export default {
       notNow: 'Non ora',
     },
     resumeImportReview: {
+      duplicateSkillsError: 'Una di queste competenze è stata aggiunta al tuo profilo mentre stavi controllando. Non è stato importato nulla: riprova.',
       title: "Rivedi prima dell'importazione",
       subtitle: 'Deseleziona ciò che non vuoi, modifica nome/titolo se necessario, poi importa.',
       setAsProfilePhoto: 'Imposta come foto del profilo',

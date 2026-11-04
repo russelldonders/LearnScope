@@ -1023,6 +1023,7 @@ export default {
       notNow: 'Pas maintenant',
     },
     resumeImportReview: {
+      duplicateSkillsError: "L'une de ces compétences a été ajoutée à votre profil pendant votre vérification. Rien n'a été importé ; réessayez.",
       title: "Vérifier avant l'import",
       subtitle: "Décochez ce que vous ne voulez pas, ajustez le nom/titre si besoin, puis importez.",
       setAsProfilePhoto: 'Définir comme photo de profil',

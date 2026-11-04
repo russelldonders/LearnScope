@@ -17,6 +17,7 @@ import {
 import CurrentRoleSelectModal from './CurrentRoleSelectModal'
 import { useLanguage } from '../context/LanguageContext'
 import { useReviewSelection } from '../lib/useReviewSelection'
+import { isDuplicateSkillNameError, uniqueNewSkills } from '../lib/skillDuplicates'
 
 const courseKey = (c) => `${(c.name ?? '').toLowerCase().trim()}|${(c.provider ?? '').toLowerCase().trim()}`
 const experienceKey = (e) =>
@@ -122,8 +123,23 @@ export default function ResumeImportReviewModal({
     setError(null)
     setImporting(true)
 
-    const selectedSkills = skills.values.filter(
-      (s, i) => skills.selected.has(i) && !existingSkillNames?.has(s.name.toLowerCase().trim())
+    // Re-read the learner's skill names now rather than trusting the list
+    // loaded when the dialog opened -- it may still be loading, or a skill
+    // may have been added elsewhere since. uniqueNewSkills then also drops
+    // repeats within the CV itself ("SQL" and "sql" both selected), which
+    // the per-learner unique name index would otherwise reject outright.
+    const { data: currentSkills, error: currentSkillsError } = await supabase
+      .from('skills')
+      .select('name')
+      .eq('user_id', user.id)
+    if (currentSkillsError) {
+      setError(currentSkillsError.message)
+      setImporting(false)
+      return
+    }
+    const selectedSkills = uniqueNewSkills(
+      skills.values.filter((_, i) => skills.selected.has(i)),
+      new Set((currentSkills ?? []).map((s) => s.name.trim().toLowerCase()))
     )
     const courseRows = courses.values
       .filter((c, i) => courses.selected.has(i) && !existingCourseKeys?.has(courseKey(c)))
@@ -248,7 +264,7 @@ export default function ResumeImportReviewModal({
 
       onImported()
     } catch (err) {
-      setError(err.message)
+      setError(isDuplicateSkillNameError(err) ? t('modals.resumeImportReview.duplicateSkillsError') : err.message)
       setImporting(false)
     }
   }

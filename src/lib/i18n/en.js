@@ -1021,6 +1021,7 @@ export default {
       notNow: 'Not now',
     },
     resumeImportReview: {
+      duplicateSkillsError: 'One of these skills was already added to your profile while you were reviewing. Nothing was imported -- please try again.',
       title: 'Review before import',
       subtitle: "Uncheck anything you don't want, tweak the name/title if needed, then import.",
       setAsProfilePhoto: 'Set as your profile photo',

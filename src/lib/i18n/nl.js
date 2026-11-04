@@ -1021,6 +1021,7 @@ export default {
       notNow: 'Niet nu',
     },
     resumeImportReview: {
+      duplicateSkillsError: 'Een van deze vaardigheden is aan je profiel toegevoegd terwijl je aan het controleren was. Er is niets geïmporteerd; probeer het opnieuw.',
       title: 'Controleren vóór import',
       subtitle: 'Vink uit wat je niet wilt, pas naam/titel aan indien nodig, en importeer dan.',
       setAsProfilePhoto: 'Instellen als profielfoto',

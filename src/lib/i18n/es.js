@@ -1022,6 +1022,7 @@ export default {
       notNow: 'Ahora no',
     },
     resumeImportReview: {
+      duplicateSkillsError: 'Una de estas habilidades se añadió a tu perfil mientras revisabas. No se importó nada; inténtalo de nuevo.',
       title: 'Revisar antes de importar',
       subtitle: 'Desmarca lo que no quieras, ajusta el nombre/título si hace falta y luego importa.',
       setAsProfilePhoto: 'Usar como foto de perfil',

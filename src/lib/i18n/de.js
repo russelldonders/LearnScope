@@ -1023,6 +1023,7 @@ export default {
       notNow: 'Nicht jetzt',
     },
     resumeImportReview: {
+      duplicateSkillsError: 'Eine dieser Fähigkeiten wurde während deiner Prüfung zu deinem Profil hinzugefügt. Es wurde nichts importiert – bitte versuche es erneut.',
       title: 'Vor dem Import prüfen',
       subtitle: 'Deaktiviere, was du nicht möchtest, passe Name/Titel bei Bedarf an und importiere dann.',
       setAsProfilePhoto: 'Als Profilfoto festlegen',

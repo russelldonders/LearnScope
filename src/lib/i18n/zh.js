@@ -1009,6 +1009,7 @@ export default {
       notNow: '暂不',
     },
     resumeImportReview: {
+      duplicateSkillsError: '在你查看期间，其中一项技能已被添加到你的个人资料中。未导入任何内容——请重试。',
       title: '导入前审核',
       subtitle: '取消勾选不需要的内容，如有需要可调整名称/标题，然后导入。',
       setAsProfilePhoto: '设为个人头像',
