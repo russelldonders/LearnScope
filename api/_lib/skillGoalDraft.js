@@ -127,7 +127,10 @@ For a goal:
 - target_value: the number only, in the goal's unit. Use seconds for duration and seconds per km or mile for pace (5:00 per km is 300). Use minutes for practice_time. Null if they only want to keep track. Never invent a target they did not state.
 - target_date: YYYY-MM-DD if they gave a date or deadline, otherwise null. Never invent one.
 - title: a short restatement of the goal, in ${language}.
-- tracker_question: the one question to ask each time they log progress, specific to this goal, in ${language}, such as "How many push-ups did you do in your best set?". For pace, ask how far they went and how long it took.
+- tracker_question: the one question to ask each time they log progress, specific to this goal, in ${language}, such as "How many push-ups did you do in your best set?". The form beside it asks for the number, so the question must match it:
+  - For pace, the form asks for distance and time, so ask how far they went and how long it took, never for the pace itself.
+  - For a total, each entry is added to the others, so ask about one session or what was new since they last logged ("How many books did you finish since you last logged?"), never for a running total ("How many books have you read?").
+  - For activities, each entry counts as one time they did it, so ask what they did.
 - log_every_days: a sensible rhythm in days for logging (1, 2, 3, 7, 14 or 30), or null if there's no natural rhythm.
 
 Write message and options in ${language}.`,
