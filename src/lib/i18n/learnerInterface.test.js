@@ -10,6 +10,8 @@ const SOURCES = Object.values(import.meta.glob([
   '../../components/ConnectionTeamInviteControl.jsx',
   '../../components/ConnectionsActivityFeed.jsx',
   '../../components/ActivityRow.jsx',
+  '../../components/SkillGoal*.jsx',
+  '../skillGoalProgress.js',
   '../../components/RecordActivitySection.jsx',
   '../../components/ImportProfileDataButton.jsx',
   '../../components/ProfilePhoto.jsx',
@@ -76,6 +78,8 @@ const dynamicKeys = [
     'accountTypeWorkSso', 'accountTypeWorkManaged'].map((key) => `connectedAccounts.linkedAccountsList.${key}`),
   // Help.jsx builds every key from its section list.
   ...flatKeys(english.help, 'help.'),
+  // The goal components build their option and status keys from lists.
+  ...flatKeys(english.skillGoals, 'skillGoals.'),
   // RouteTitle.jsx builds every key from its route list.
   ...flatKeys(english.routeTitles, 'routeTitles.'),
 ]

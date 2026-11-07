@@ -38,6 +38,7 @@ import { getLearnerCompositeProgress, getParentCompositesForSkill } from '../lib
 import { listTargetsSetByOthers, listLatestManagerRatings, pickTargetSetByOthers } from '../lib/managerSkillActions'
 import { computeVisibleTarget } from '../lib/skillTargetPrecedence'
 import CompositeSkillProgress from '../components/CompositeSkillProgress'
+import SkillGoalsSection from '../components/SkillGoalsSection'
 import { HistorySection, TimelineEntry, TimelineDetailModal } from './SkillHistorySection'
 import { ScheduleSection, DetailsSection, DeleteSection, SettingsSection } from './SkillSettingsSections'
 
@@ -855,6 +856,18 @@ export default function SkillDetail({ skillId, embedded = false }) {
                 }
               />
             </div>
+
+            {/* Goals are private to the skill's owner, whoever else can view the skill. */}
+            {skill.user_id === user.id && (
+              <SkillGoalsSection
+                skill={skill}
+                user={user}
+                actor={{ name: assessorName, email: user.email }}
+                statements={statements}
+                onActivitiesChanged={loadHistory}
+                onSetLevelTarget={() => setTargetOpen(true)}
+              />
+            )}
 
             <CompositeSkillProgress
               composite={composite}

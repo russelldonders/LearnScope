@@ -12,6 +12,10 @@ export const PROVENANCE_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/
 // rate_connection_skill, 20260908090000) rather than something the learner
 // logged themselves.
 export const PEER_RATING_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/peer-rating'
+// Measured values on an activity, such as "32 push-ups" logged against a goal:
+// [{ metric, kind, value, unit }]. Each one describes itself, so the statement
+// still reads correctly without skill_goals (see skillGoalProgress.js).
+export const MEASUREMENT_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/measurement'
 
 // True for statements an automated diagnostic generated (e.g. the
 // Confirming Baseline knowledge-check quiz, see skillDiagnostics.js) rather
@@ -110,6 +114,7 @@ export function buildStatement({
   provenance,
   durationHours,
   durationMinutes,
+  measurements,
 }) {
   const verb = XAPI_VERBS.find((v) => v.value === verbValue)
   if (!verb) throw new Error('Choose a valid verb.')
@@ -140,6 +145,9 @@ export function buildStatement({
 
   const duration = buildDuration(durationHours, durationMinutes)
   if (duration) statement.result = { duration }
+  if (measurements?.length > 0) {
+    statement.result = { ...statement.result, extensions: { [MEASUREMENT_EXTENSION_IRI]: measurements } }
+  }
 
   if (skills.length > 0 || relatedExperience || provenance) {
     statement.context = { extensions: {} }
@@ -229,6 +237,46 @@ export function relatedSkillsFromStatement(statement) {
 
 export function relatedExperienceFromStatement(statement) {
   return statement.context?.extensions?.[EXPERIENCE_EXTENSION_IRI] ?? null
+}
+
+export function measurementsFromStatement(statement) {
+  const value = statement?.result?.extensions?.[MEASUREMENT_EXTENSION_IRI]
+  if (!Array.isArray(value)) return []
+  // Statements can also arrive from course packages, so nothing about their
+  // contents can be assumed. Anything malformed is treated as not being there.
+  return value.filter(
+    (m) =>
+      m &&
+      typeof m === 'object' &&
+      typeof m.metric === 'string' &&
+      typeof m.unit === 'string' &&
+      typeof m.value === 'number' &&
+      Number.isFinite(m.value),
+  )
+}
+
+// "m:ss", or "h:mm:ss" once it passes an hour.
+export function formatClock(totalSeconds) {
+  const seconds = Math.round(Number(totalSeconds))
+  if (!Number.isFinite(seconds) || seconds < 0) return ''
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = String(seconds % 60).padStart(2, '0')
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`
+}
+
+// A short label for the values on an activity, e.g. "32 push-ups" or
+// "5:00 min/km", wherever activities are listed. Empty for an activity with no
+// measured value, and for the entries that only mark that something happened.
+export function formatMeasurements(statement) {
+  return measurementsFromStatement(statement)
+    .filter((m) => m.kind !== 'activities' && m.kind !== 'practice_time')
+    .map((m) => {
+      if (m.kind === 'duration') return formatClock(m.value)
+      if (m.kind === 'pace') return `${formatClock(m.value)} ${m.unit}`
+      return `${Math.round(Number(m.value) * 100) / 100} ${m.unit}`
+    })
+    .join(' · ')
 }
 
 export function provenanceFromStatement(statement) {

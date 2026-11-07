@@ -1,5 +1,5 @@
 import EvidenceAttachmentLink from './EvidenceAttachmentLink'
-import { activityName, verbLabel, relatedSkillsFromStatement, relatedExperienceFromStatement, experienceTrail, formatDuration } from '../lib/xapiStatement'
+import { activityName, verbLabel, relatedSkillsFromStatement, relatedExperienceFromStatement, experienceTrail, formatDuration, formatMeasurements } from '../lib/xapiStatement'
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 import { useLanguage } from '../context/LanguageContext'
 
@@ -11,6 +11,7 @@ export default function ActivityRow({ row, onClick }) {
   const relatedSkills = relatedSkillsFromStatement(row.statement)
   const relatedExperience = relatedExperienceFromStatement(row.statement)
   const duration = formatDuration(row.statement)
+  const measurements = formatMeasurements(row.statement)
   const evidencePaths = row.evidence_paths ?? []
 
   return (
@@ -31,6 +32,7 @@ export default function ActivityRow({ row, onClick }) {
           {verbLabel(row.statement)}
         </span>{' '}
         {activityName(row.statement)}
+        {measurements ? <span className="font-medium"> · {measurements}</span> : null}
       </p>
       <p className="font-mono text-xs text-secondary mt-0.5" title={formatAbsoluteDate(row.recorded_at)}>
         {formatRelativeDate(row.recorded_at)}

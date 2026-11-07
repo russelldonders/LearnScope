@@ -6,7 +6,7 @@ import GrowthRing from '../components/GrowthRing'
 import EvidenceAttachmentLink from '../components/EvidenceAttachmentLink'
 import { LEVEL_LABELS, KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
 import { SKILL_SOURCE_LABELS } from '../lib/skillSource'
-import { activityName, verbLabel, formatDuration, durationMinutes, formatMinutes, isDiagnosticStatement, isPeerRatingStatement, relatedExperienceFromStatement, experienceTrail, provenanceFromStatement, PROVENANCE_SOURCE_LABELS } from '../lib/xapiStatement'
+import { activityName, verbLabel, formatDuration, formatMeasurements, durationMinutes, formatMinutes, isDiagnosticStatement, isPeerRatingStatement, relatedExperienceFromStatement, experienceTrail, provenanceFromStatement, PROVENANCE_SOURCE_LABELS } from '../lib/xapiStatement'
 import AccessibleDialog from '../components/AccessibleDialog'
 import LifecycleStageIcon from '../components/LifecycleStageIcon'
 import PendingTrainingEntry from '../components/PendingTrainingEntry'
@@ -308,6 +308,7 @@ export function TimelineEntry({
           </div>
           <p className="font-mono text-xs text-secondary mt-0.5">
             {new Date(s.recorded_at).toLocaleDateString()}
+            {formatMeasurements(s.statement) ? ` · ${formatMeasurements(s.statement)}` : ''}
             {formatDuration(s.statement) ? ` · ${formatDuration(s.statement)}` : ''}
           </p>
           {relatedExperience && (
@@ -694,6 +695,7 @@ export function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, 
         <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">{verbLabel(s.statement)}</p>
         <p className="font-mono text-xs text-secondary">
           {new Date(s.recorded_at).toLocaleDateString()}
+          {formatMeasurements(s.statement) ? ` · ${formatMeasurements(s.statement)}` : ''}
           {formatDuration(s.statement) ? ` · ${formatDuration(s.statement)}` : ''}
         </p>
         {relatedExperience && (

@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { verifySupabaseUser } from './_lib/auth.js'
 import { consumeQuota, sendQuotaExceeded } from './_lib/quota.js'
+import { buildGoalDraftRequest, normalizeGoalDraft } from './_lib/skillGoalDraft.js'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -141,11 +142,13 @@ export default async function handler(req, res) {
   }
 
   const body = req.body ?? {}
-  const request = body.operation === 'experience-skills'
-    ? buildExperienceRecommendationRequest(body)
-    : body.operation === 'activity-skills'
-      ? buildActivitySkillSuggestionRequest(body)
-      : buildTagSuggestionRequest(body)
+  const request = body.operation === 'skill-goal'
+    ? buildGoalDraftRequest(body)
+    : body.operation === 'experience-skills'
+      ? buildExperienceRecommendationRequest(body)
+      : body.operation === 'activity-skills'
+        ? buildActivitySkillSuggestionRequest(body)
+        : buildTagSuggestionRequest(body)
   if (request.error) {
     res.status(400).json({ error: request.error })
     return
@@ -173,6 +176,12 @@ export default async function handler(req, res) {
 
     const textBlock = response.content.find((block) => block.type === 'text')
     const data = JSON.parse(textBlock?.text ?? '{}')
+    if (body.operation === 'skill-goal') {
+      const draft = normalizeGoalDraft(data, request.today)
+      if (draft) res.status(200).json(draft)
+      else res.status(422).json({ error: request.refusalError })
+      return
+    }
     if (body.operation !== 'experience-skills' && body.operation !== 'activity-skills') {
       res.status(200).json({ tags: (data.tags ?? []).slice(0, 3) })
       return
