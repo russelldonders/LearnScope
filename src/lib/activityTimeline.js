@@ -77,24 +77,36 @@ export function displayLocale(language) {
   return browser?.toLowerCase().startsWith(language?.toLowerCase() ?? '') ? browser : language
 }
 
-// One group per local day, in the order the rows arrive, each with its
-// activities (check-ins not counted) and their total time. Grouped by when
-// each activity happened, or by when it was logged (field 'created_at') for a
-// "recently logged" view.
-export function dayGroups(rows, field = 'recorded_at') {
+// Activities (check-ins not counted) and total minutes per local day.
+function dayTotals(rows, field) {
+  const totals = new Map()
+  for (const row of rows) {
+    if (isCheckIn(row)) continue
+    const date = localDateString(new Date(row[field]))
+    const total = totals.get(date) ?? { activityCount: 0, minutes: 0 }
+    total.activityCount += 1
+    total.minutes += durationMinutes(row.statement)
+    totals.set(date, total)
+  }
+  return totals
+}
+
+// One group per local day, in the order the rows arrive. Grouped by when each
+// activity happened, or by when it was logged (field 'created_at') for a
+// "recently logged" view. Each day's activity count and time come from
+// allRows -- everything on that day, not just the rows being shown -- so a
+// day with more activities than fit on screen still says how much was done.
+export function dayGroups(rows, field = 'recorded_at', allRows = rows) {
+  const totals = dayTotals(allRows, field)
   const groups = []
   for (const row of rows) {
     const date = localDateString(new Date(row[field]))
     let group = groups.at(-1)
     if (!group || group.date !== date) {
-      group = { date, rows: [], activityCount: 0, minutes: 0 }
+      group = { date, rows: [], activityCount: 0, minutes: 0, ...totals.get(date) }
       groups.push(group)
     }
     group.rows.push(row)
-    if (!isCheckIn(row)) {
-      group.activityCount += 1
-      group.minutes += durationMinutes(row.statement)
-    }
   }
   return groups
 }

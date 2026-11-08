@@ -51,6 +51,17 @@ describe('dayGroups', () => {
     const groups = dayGroups([row('a', 8, { minutes: 20 }), row('b', 8, { minutes: 10 }), checkIn('c', 8), row('d', 7)])
     expect(groups.map((g) => [g.date, g.activityCount, g.minutes])).toEqual([['2026-11-08', 2, 30], ['2026-11-07', 1, 0]])
   })
+
+  it('counts the whole day from all rows, not just the ones shown', () => {
+    const all = [row('a', 8, { minutes: 20 }), row('b', 8, { minutes: 10 }), row('c', 8, { minutes: 5 }), checkIn('d', 8), row('e', 7)]
+    const groups = dayGroups(all.slice(0, 1), 'recorded_at', all)
+    expect(groups.map((g) => [g.date, g.rows.length, g.activityCount, g.minutes])).toEqual([['2026-11-08', 1, 3, 35]])
+  })
+
+  it('groups by the day logged when asked', () => {
+    const groups = dayGroups([row('late', 1, { created: 8 }), row('a', 7)], 'created_at')
+    expect(groups.map((g) => [g.date, g.activityCount])).toEqual([['2026-11-08', 1], ['2026-11-07', 1]])
+  })
 })
 
 describe('foldCheckIns', () => {

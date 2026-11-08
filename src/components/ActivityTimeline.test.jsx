@@ -63,6 +63,13 @@ describe('ActivityTimeline', () => {
     expect(screen.getAllByRole('link', { name: 'Running' })[0]).toHaveAttribute('href', '/skills/skill-run')
   })
 
+  it('totals the whole day even when only some of it is shown', () => {
+    const all = [activity('Run 1', 8, { minutes: 20 }), activity('Run 2', 8, { minutes: 15 }), activity('Run 3', 8, { minutes: 10 })]
+    renderTimeline(all.slice(0, 2), { allRows: all })
+    expect(screen.getByRole('heading', { name: 'Today · 3 activities · 45m' })).toBeInTheDocument()
+    expect(screen.queryByText('Run 3')).not.toBeInTheDocument()
+  })
+
   it('shows the source as a badge and the synced distance as a figure', () => {
     renderTimeline([activity('Morning ride', 8, {
       description: 'Synced from Strava · 12.4 km',

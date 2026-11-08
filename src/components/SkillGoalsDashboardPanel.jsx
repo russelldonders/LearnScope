@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import SkillGoalChart from './SkillGoalChart'
 import SkillGoalEntryForm from './SkillGoalEntryForm'
 import { useLanguage } from '../context/LanguageContext'
 import { supabase } from '../lib/supabaseClient'
@@ -13,7 +12,7 @@ const COLLAPSED_COUNT = 4
 // The learner's active goals on the dashboard, so progress can be logged
 // without first finding the skill. Items arrive already sorted by what needs
 // attention; each carries its goal, skill, activities, progress and next log
-// date. Editing goals and correcting entries stay on the skill's page.
+// date. Editing goals, charts and correcting entries stay on the skill's page.
 export default function SkillGoalsDashboardPanel({ items, user, openGoalId, onOpenGoal, onChanged }) {
   const { t } = useLanguage()
   const [expanded, setExpanded] = useState(false)
@@ -44,7 +43,9 @@ export default function SkillGoalsDashboardPanel({ items, user, openGoalId, onOp
         {t('skillGoals.dashboard.title')}
       </h2>
       <p className="text-sm text-secondary mb-6">{t('skillGoals.dashboard.subtitle')}</p>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {/* items-start: a tile opened for logging grows on its own, without
+          stretching the tile next to it. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
         {visible.map((item) => (
           <GoalCard
             key={item.goal.id}
@@ -71,6 +72,23 @@ export default function SkillGoalsDashboardPanel({ items, user, openGoalId, onOp
   )
 }
 
+// The one line under the progress bar: what was just saved, else the most
+// encouraging true thing (target reached, a streak), else when it was last
+// logged.
+function statusFor({ note, progress, streak, goal, t }) {
+  if (note) return { text: t(note), tone: 'text-moss', role: 'status' }
+  if (progress.reached) return { text: t('skillGoals.targetReached'), tone: 'text-moss font-medium' }
+  // A run of one is just "this week was met", so only from two.
+  if (streak >= 2) return { text: t(`skillGoals.streak.${goal.period}`, { count: streak }), tone: 'text-secondary' }
+  if (progress.lastLogged) {
+    return { text: t('skillGoals.lastLogged', { date: formatFullDate(progress.lastLogged.toISOString()) }), tone: 'text-secondary' }
+  }
+  return { text: t('skillGoals.dashboard.nothingLogged'), tone: 'text-secondary' }
+}
+
+// Every tile has the same parts in the same places -- title, skill, current
+// value against the target, progress bar, one status line, buttons -- so the
+// grid reads evenly whatever kind of goal each one is.
 function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
   const { t } = useLanguage()
   const { goal, skill, statements, progress, nextLog } = item
@@ -87,6 +105,11 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
     : goal.period
       ? `skillGoals.thisPeriod.${goal.period}`
       : 'skillGoals.totalSoFar'
+  const status = statusFor({ note, progress, streak, goal, t })
+  const targetText = [
+    goal.target_value != null ? `${t('skillGoals.targetShort')} ${formatGoalValue(goal, goal.target_value)}` : null,
+    goal.target_date ? `${t('skillGoals.byShort')} ${formatFullDate(goal.target_date)}` : null,
+  ].filter(Boolean).join(' · ')
 
   // Opened from a reminder: bring the card into view and move focus to it.
   useEffect(() => {
@@ -128,75 +151,70 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
     onToggle()
   }
 
+  function startLogging(withLastValues) {
+    setNote(null)
+    setPrefill(withLastValues)
+    onToggle()
+  }
+
   return (
     <article
       ref={cardRef}
       tabIndex={-1}
       aria-labelledby={`dashboard-goal-${goal.id}`}
-      className={`rounded-lg border bg-card p-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-moss ${
-        open ? 'border-moss md:col-span-2' : 'border-hairline'
+      className={`flex flex-col rounded-lg border bg-card p-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-moss ${
+        open ? 'border-moss' : 'border-hairline'
       }`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h3 id={`dashboard-goal-${goal.id}`} className="text-sm font-medium text-ink break-words">
+          {/* Always two lines tall, so long and short titles line up. */}
+          <h3 id={`dashboard-goal-${goal.id}`} className="text-sm font-medium text-ink line-clamp-2 min-h-[2.5rem]" title={goal.title}>
             {goal.title}
           </h3>
-          <Link to={`/skills/${skill.id}`} className="text-xs text-secondary hover:text-moss underline-offset-2 hover:underline break-words">
+          <Link to={`/skills/${skill.id}`} className="block text-xs text-secondary hover:text-moss underline-offset-2 hover:underline truncate">
             {skill.name}
           </Link>
         </div>
         {due && (
-          <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-gold">
+          <span className="shrink-0 rounded-full bg-gold/15 text-gold text-[11px] font-medium px-2 py-0.5">
             {t('skillGoals.dashboard.timeToLog')}
           </span>
         )}
       </div>
 
-      <dl className="flex flex-wrap gap-x-4 gap-y-1 mt-2 font-mono text-xs text-secondary">
-        {progress.current != null && (
-          <div className="flex gap-1">
-            <dt>{t(currentLabelKey)}</dt>
-            <dd className="text-ink">{formatGoalValue(goal, progress.current)}</dd>
-          </div>
-        )}
-        {goal.target_value != null && (
-          <div className="flex gap-1">
-            <dt>{t('skillGoals.targetShort')}</dt>
-            <dd className="text-ink">{formatGoalValue(goal, goal.target_value)}</dd>
-          </div>
-        )}
-        {goal.target_date && (
-          <div className="flex gap-1">
-            <dt>{t('skillGoals.byShort')}</dt>
-            <dd className="text-ink">{formatFullDate(goal.target_date)}</dd>
+      <dl className="mt-3 flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <dt className="text-xs text-secondary">{t(currentLabelKey)}</dt>
+          <dd className="font-display text-2xl leading-tight text-ink truncate">
+            {progress.current != null ? formatGoalValue(goal, progress.current) : '–'}
+          </dd>
+        </div>
+        {targetText && (
+          <div className="min-w-0 text-right">
+            <dt className="sr-only">{t('skillGoals.targetShort')}</dt>
+            <dd className="text-xs text-secondary truncate">{targetText}</dd>
           </div>
         )}
       </dl>
 
-      {progress.percent != null && (
+      {/* The bar's space is kept even without a target, so tiles stay level. */}
+      {progress.percent != null ? (
         <div
           role="progressbar"
           aria-label={t('skillGoals.progressLabel')}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(progress.percent)}
-          className="mt-2 h-1.5 rounded-full bg-hairline overflow-hidden"
+          className="mt-2 h-1.5 rounded-full bg-hairline/60 overflow-hidden"
         >
           <div className="h-full bg-moss" style={{ width: `${progress.percent}%` }} />
         </div>
-      )}
-      {progress.reached && <p className="text-xs font-medium text-moss mt-1">{t('skillGoals.targetReached')}</p>}
-      {/* A run of one is just "this week was met", so only from two. */}
-      {streak >= 2 && (
-        <p className="text-xs text-secondary mt-1">{t(`skillGoals.streak.${goal.period}`, { count: streak })}</p>
+      ) : (
+        <div aria-hidden="true" className="mt-2 h-1.5" />
       )}
 
-      {/* Only repeating totals: whether each day or week met the target is
-          what's worth seeing at a glance. Other charts stay on the skill page. */}
-      {goal.aggregation === 'total' && goal.period && (
-        <SkillGoalChart goal={goal} statements={statements} target={progress.target} />
-      )}
+      <p role={status.role} className={`mt-2 text-xs truncate ${status.tone}`}>{status.text}</p>
 
       {open ? (
         <div id={formId} className="mt-3 pt-3 border-t border-hairline">
@@ -213,41 +231,25 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
           />
         </div>
       ) : (
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mt-3">
-          <span className="text-xs text-secondary">
-            {progress.lastLogged
-              ? t('skillGoals.lastLogged', { date: formatFullDate(progress.lastLogged.toISOString()) })
-              : t('skillGoals.dashboard.nothingLogged')}
-          </span>
-          <div className="flex flex-wrap items-center gap-2">
-            {lastEntry && (
-              <button
-                type="button"
-                onClick={() => {
-                  setNote(null)
-                  setPrefill(true)
-                  onToggle()
-                }}
-                className="rounded-md border border-hairline text-ink text-xs font-medium px-3 py-1.5 hover:border-moss"
-              >
-                {t('skillGoals.dashboard.sameAsLast')}
-              </button>
-            )}
+        <div className="flex items-center gap-2 mt-3">
+          <button
+            type="button"
+            onClick={() => startLogging(false)}
+            className="rounded-md bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90"
+          >
+            {t('skillGoals.dashboard.logButton')}
+          </button>
+          {lastEntry && (
             <button
               type="button"
-              onClick={() => {
-                setNote(null)
-                setPrefill(false)
-                onToggle()
-              }}
-              className="rounded-md bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90"
+              onClick={() => startLogging(true)}
+              className="rounded-md border border-hairline text-ink text-xs font-medium px-3 py-1.5 hover:border-moss"
             >
-              {t('skillGoals.dashboard.logButton')}
+              {t('skillGoals.dashboard.sameAsLast')}
             </button>
-          </div>
+          )}
         </div>
       )}
-      {note && <p role="status" className="text-xs text-moss mt-2">{t(note)}</p>}
     </article>
   )
 }

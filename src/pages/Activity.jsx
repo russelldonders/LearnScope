@@ -210,6 +210,7 @@ export default function Activity() {
             ) : (
               <ActivityTimeline
                 rows={filteredStatements.slice(0, shownCount)}
+                allRows={filteredStatements}
                 groupBy={sortBy === 'logged_desc' ? 'created_at' : 'recorded_at'}
                 onOpen={(row) => {
                   const relatedSkills = relatedSkillsFromStatement(row.statement)

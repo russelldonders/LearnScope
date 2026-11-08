@@ -151,6 +151,7 @@ export default function RecordActivitySection({ formOpen, onFormOpenChange, refr
       {timeline.length > 0 && (
         <ActivityTimeline
           rows={timeline}
+          allRows={statements}
           onOpen={(row) => {
             const relatedSkills = relatedSkillsFromStatement(row.statement)
             const relatedExperience = relatedExperienceFromStatement(row.statement)
