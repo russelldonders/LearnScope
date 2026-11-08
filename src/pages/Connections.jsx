@@ -29,6 +29,26 @@ import {
   listMySharedTeamsByConnection,
 } from '../lib/managerTeams'
 
+const activitySeenKey = (userId) => `learnscope:connectionsActivitySeen:${userId}`
+
+function readActivitySeen(userId) {
+  try {
+    const value = window.localStorage.getItem(activitySeenKey(userId))
+    const date = value ? new Date(value) : null
+    return date && !Number.isNaN(date.getTime()) ? date : null
+  } catch {
+    return null
+  }
+}
+
+function writeActivitySeen(userId) {
+  try {
+    window.localStorage.setItem(activitySeenKey(userId), new Date().toISOString())
+  } catch {
+    // Private windows can refuse storage; nothing is marked new next time.
+  }
+}
+
 export default function Connections() {
   const { user, refreshWorkspaces } = useAuth()
   const { t } = useLanguage()
@@ -54,6 +74,9 @@ export default function Connections() {
   const [sharedTeamsByConnection, setSharedTeamsByConnection] = useState({})
   const [activity, setActivity] = useState([])
   const [activityError, setActivityError] = useState(null)
+  // When the learner last saw the feed on this device, to mark what's new.
+  // Kept in the browser only: it's a convenience, not part of their record.
+  const [activityLastSeen] = useState(() => readActivitySeen(user.id))
 
   useEffect(() => {
     load()
@@ -70,6 +93,7 @@ export default function Connections() {
       // collapse without leaving the feed unexpectedly sparse.
       setActivity(await listConnectionsActivity(30))
       setActivityError(null)
+      writeActivitySeen(user.id)
     } catch (err) {
       setActivity([])
       setActivityError(err.message || 'Something went wrong.')
@@ -274,7 +298,7 @@ export default function Connections() {
                   </button>
                 </div>
               ) : (
-                <ConnectionsActivityFeed events={activity} />
+                <ConnectionsActivityFeed events={activity} lastSeenAt={activityLastSeen} />
               )}
             </section>
           )}
