@@ -17,7 +17,8 @@ function context(body = {}) {
 function activity(overrides = {}) {
   return {
     title: 'Morning run',
-    date: TODAY,
+    day: 'today',
+    date: null,
     duration_minutes: null,
     verb: 'practiced',
     skills: [1],
@@ -110,9 +111,17 @@ describe('normalizeActivityDraft', () => {
 
   it('keeps dates real and never in the future', () => {
     const dates = ['2026-11-07', '2026-11-09', '2026-02-31', null].map((date) =>
-      normalizeActivityDraft({ outcome: 'activities', activities: [activity({ date })] }, context()).activities[0].date,
+      normalizeActivityDraft({ outcome: 'activities', activities: [activity({ day: 'date', date })] }, context()).activities[0].date,
     )
     expect(dates).toEqual(['2026-11-07', TODAY, TODAY, TODAY])
+  })
+
+  it('works out weekdays itself, as the most recent one', () => {
+    // 2026-11-08 is a Sunday.
+    const resolved = ['today', 'yesterday', 'monday', 'wednesday', 'saturday', 'sunday', 'someday'].map((day) =>
+      normalizeActivityDraft({ outcome: 'activities', activities: [activity({ day, date: '2026-01-01' })] }, context()).activities[0].date,
+    )
+    expect(resolved).toEqual([TODAY, '2026-11-07', '2026-11-02', '2026-11-04', '2026-11-07', TODAY, TODAY])
   })
 
   it('offers a new skill only when nothing matches, reusing an existing name', () => {

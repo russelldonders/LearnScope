@@ -12,6 +12,11 @@ const MAX_ACTIVITIES = 5
 const VERBS = ['experienced', 'practiced', 'completed', 'attempted']
 const MEASURED_KINDS = ['count', 'number', 'duration', 'pace']
 
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+// Which day the learner meant, as they said it. The date is worked out here,
+// because models are unreliable at turning "on Wednesday" into a date.
+const DAY_WORDS = ['today', 'yesterday', ...WEEKDAYS.map((name) => name.toLowerCase()), 'date']
+
 const nullable = (type) => ({ type: [type, 'null'] })
 
 export const ACTIVITY_DRAFT_SCHEMA = {
@@ -25,6 +30,7 @@ export const ACTIVITY_DRAFT_SCHEMA = {
         type: 'object',
         properties: {
           title: { type: 'string' },
+          day: { type: 'string', enum: DAY_WORDS },
           date: nullable('string'),
           duration_minutes: nullable('integer'),
           verb: { type: 'string', enum: VERBS },
@@ -46,7 +52,7 @@ export const ACTIVITY_DRAFT_SCHEMA = {
           },
           note: nullable('string'),
         },
-        required: ['title', 'date', 'duration_minutes', 'verb', 'skills', 'new_skill', 'goal_values', 'note'],
+        required: ['title', 'day', 'date', 'duration_minutes', 'verb', 'skills', 'new_skill', 'goal_values', 'note'],
         additionalProperties: false,
       },
     },
@@ -80,10 +86,7 @@ function describeGoal(goal, index, skillNames) {
   return `G${index + 1}: "${goal.title}"${on} -- ${goal.measure_kind} in ${goal.unit}, ${counting}. Asks: "${goal.question}"`
 }
 
-const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-
-// The past week spelled out, because models are unreliable at working out
-// which date "on Monday" or "Saturday" was.
+// The past week spelled out, for dates given some other way ("on the 3rd").
 export function recentDays(today) {
   const day = new Date(`${today}T00:00:00Z`)
   return Array.from({ length: 8 }, (_, offset) => {
@@ -135,7 +138,8 @@ Choose one outcome:
 
 For each activity:
 - title: a short name for what they did, in their own words and in ${language}, such as "Morning run" or "Push-ups". Never reuse a goal's wording as the title.
-- date: YYYY-MM-DD. For a weekday such as "on Monday" or "Saturday", use the most recent matching date from the past week listed above (a weekday that is today means today). Use today when they don't say. Never a date after today.
+- day: which day they meant, as they said it: "today" (also when they don't say), "yesterday", a weekday name in lowercase such as "wednesday" when they named a weekday, or "date" when they gave the day some other way.
+- date: only when day is "date", that day as YYYY-MM-DD, never after today; otherwise null.
 - duration_minutes: how long it took in whole minutes if they said or it follows from what they said, otherwise null.
 - verb: "practiced" for practice or training, "completed" for finishing something, "attempted" for trying something, otherwise "experienced".
 - skills: the numbers of the skills it clearly relates to (as integers, without the S), best match first. [] if none fits.
@@ -145,6 +149,22 @@ For each activity:
 
 Write message, titles and notes in ${language}.`,
   }
+}
+
+// A weekday means the most recent one, today included. A date given outright
+// must be real and not in the future; anything else falls back to today.
+export function resolveDay(day, date, today) {
+  const todayDate = new Date(`${today}T00:00:00Z`)
+  const shift = (days) => {
+    const result = new Date(todayDate)
+    result.setUTCDate(todayDate.getUTCDate() - days)
+    return result.toISOString().slice(0, 10)
+  }
+  if (day === 'yesterday') return shift(1)
+  const weekday = WEEKDAYS.findIndex((name) => name.toLowerCase() === day)
+  if (weekday >= 0) return shift((todayDate.getUTCDay() - weekday + 7) % 7)
+  if (day === 'date' && isRealDate(date) && date <= today) return date
+  return today
 }
 
 function wholeNumber(value, min, max) {
@@ -210,7 +230,7 @@ function normalizeActivity(activity, { today, skillNames, goals }) {
 
   return {
     title,
-    date: isRealDate(activity?.date) && activity.date <= today ? activity.date : today,
+    date: resolveDay(activity?.day, activity?.date, today),
     duration_minutes: durationMinutes,
     verb: VERBS.includes(activity?.verb) ? activity.verb : 'experienced',
     skills: skills.slice(0, 5),
