@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildActivityDraftRequest, normalizeActivityDraft } from './activityDraft.js'
+import { buildActivityDraftRequest, normalizeActivityDraft, recentDays } from './activityDraft.js'
 
 const TODAY = '2026-11-08'
 const skills = [{ name: 'Running' }, { name: 'Fitness' }, { name: 'Piano' }]
@@ -41,6 +41,21 @@ describe('buildActivityDraftRequest', () => {
     expect(prompt).toContain('G2: "Push-ups best set" on Fitness')
     expect(prompt).not.toContain('Run 3 times a week')
     expect(prompt).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/)
+  })
+
+  it('spells out the past week so weekdays resolve to the right dates', () => {
+    expect(recentDays(TODAY)).toEqual([
+      '2026-11-08: Sunday (today)',
+      '2026-11-07: Saturday (yesterday)',
+      '2026-11-06: Friday',
+      '2026-11-05: Thursday',
+      '2026-11-04: Wednesday',
+      '2026-11-03: Tuesday',
+      '2026-11-02: Monday',
+      '2026-11-01: Sunday',
+    ])
+    expect(buildActivityDraftRequest({ text: 'ran', skills }, TODAY).prompt).toContain('2026-11-02: Monday')
+    expect(recentDays('2026-03-01')[1]).toBe('2026-02-28: Saturday (yesterday)')
   })
 
   it('writes in the learner language and resolves their date', () => {
