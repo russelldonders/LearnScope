@@ -37,6 +37,7 @@ const SOURCES = Object.values(import.meta.glob([
   '../../pages/Help.jsx',
   '../../pages/manager/learner/ManagerTeamSharingPanel.jsx',
   '../../pages/SkillsProfile.jsx',
+  '../../pages/Activity.jsx',
   '../../pages/ProfileExport.jsx',
   '../../pages/CourseLearn.jsx',
   '../../pages/CourseCatalogue.jsx',

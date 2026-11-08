@@ -492,6 +492,10 @@ export default {
     },
     emptyState: 'Nothing recorded yet.',
     noMatch: 'No activity matches these filters.',
+    showMore: 'Show {count} more',
+    showingCount: 'Showing {shown} of {total} activities',
+    typeFilter: 'Type of activity',
+    anyType: 'Any type',
     timeline: {
       today: 'Today',
       yesterday: 'Yesterday',

@@ -492,6 +492,10 @@ export default {
     },
     emptyState: 'Nog niets vastgelegd.',
     noMatch: 'Geen activiteit komt overeen met deze filters.',
+    showMore: 'Toon nog {count}',
+    showingCount: '{shown} van {total} activiteiten',
+    typeFilter: 'Soort activiteit',
+    anyType: 'Elk soort',
     timeline: {
       today: 'Vandaag',
       yesterday: 'Gisteren',

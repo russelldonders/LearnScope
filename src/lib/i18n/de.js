@@ -492,6 +492,10 @@ export default {
     },
     emptyState: 'Noch nichts erfasst.',
     noMatch: 'Keine Aktivität passt zu diesen Filtern.',
+    showMore: '{count} weitere anzeigen',
+    showingCount: '{shown} von {total} Aktivitäten',
+    typeFilter: 'Art der Aktivität',
+    anyType: 'Alle Arten',
     timeline: {
       today: 'Heute',
       yesterday: 'Gestern',

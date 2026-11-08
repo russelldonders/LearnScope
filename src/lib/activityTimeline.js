@@ -77,12 +77,14 @@ export function displayLocale(language) {
   return browser?.toLowerCase().startsWith(language?.toLowerCase() ?? '') ? browser : language
 }
 
-// One group per local day, newest first, each with its activities (check-ins
-// not counted) and their total time.
-export function dayGroups(rows) {
+// One group per local day, in the order the rows arrive, each with its
+// activities (check-ins not counted) and their total time. Grouped by when
+// each activity happened, or by when it was logged (field 'created_at') for a
+// "recently logged" view.
+export function dayGroups(rows, field = 'recorded_at') {
   const groups = []
   for (const row of rows) {
-    const date = localDateString(new Date(row.recorded_at))
+    const date = localDateString(new Date(row[field]))
     let group = groups.at(-1)
     if (!group || group.date !== date) {
       group = { date, rows: [], activityCount: 0, minutes: 0 }

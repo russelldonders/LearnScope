@@ -492,6 +492,10 @@ export default {
     },
     emptyState: '还没有任何记录。',
     noMatch: '没有符合这些筛选条件的活动。',
+    showMore: '再显示 {count} 项',
+    showingCount: '显示 {shown} / {total} 项活动',
+    typeFilter: '活动类型',
+    anyType: '所有类型',
     timeline: {
       today: '今天',
       yesterday: '昨天',

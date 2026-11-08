@@ -4,10 +4,11 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import AppHeader from '../components/AppHeader'
-import ActivityRow from '../components/ActivityRow'
-import FilterRow from '../components/FilterRow'
+import ActivityTimeline from '../components/ActivityTimeline'
 import { relatedSkillsFromStatement, relatedExperienceFromStatement } from '../lib/xapiStatement'
 import { XAPI_VERBS, XAPI_VERB_BY_IRI } from '../lib/xapiVerbs'
+
+const PAGE_SIZE = 40
 
 const SORT_OPTIONS = [
   { value: 'happened_desc', labelKey: 'activity.sort.newest' },
@@ -28,6 +29,10 @@ export default function Activity() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [sortBy, setSortBy] = useState('happened_desc')
+  // Back to the first page whenever the filters or sort change.
+  const listKey = JSON.stringify([skillFilter, typeFilter, dateFrom, dateTo, sortBy])
+  const [paging, setPaging] = useState({ key: listKey, count: PAGE_SIZE })
+  const shownCount = paging.key === listKey ? paging.count : PAGE_SIZE
 
   useEffect(() => {
     loadStatements()
@@ -176,12 +181,24 @@ export default function Activity() {
                 </label>
               </div>
 
-              <FilterRow
-                label="Type"
-                value={typeFilter}
-                onChange={setTypeFilter}
-                options={XAPI_VERBS.map((v) => ({ value: v.value, label: v.label }))}
-              />
+              <div role="group" aria-label={t('activity.typeFilter')} className="flex flex-wrap items-center gap-2">
+                {[{ value: null, label: t('activity.anyType') }, ...XAPI_VERBS.map((v) => ({ value: v.value, label: t(`activity.verbs.${v.value}`) }))].map((option) => {
+                  const selected = typeFilter === option.value
+                  return (
+                    <button
+                      key={option.value ?? 'any'}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setTypeFilter(selected || option.value === null ? null : option.value)}
+                      className={`rounded-full px-3 py-1 text-xs border transition-colors ${selected
+                        ? 'bg-moss text-paper border-moss'
+                        : 'border-hairline text-secondary hover:text-ink hover:border-moss'}`}
+                    >
+                      {option.label}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
             {statements.length === 0 ? (
@@ -191,25 +208,34 @@ export default function Activity() {
             ) : filteredStatements.length === 0 ? (
               <p className="text-sm text-secondary">{t('activity.noMatch')}</p>
             ) : (
-              <div className="space-y-2">
-                {filteredStatements.map((row) => {
+              <ActivityTimeline
+                rows={filteredStatements.slice(0, shownCount)}
+                groupBy={sortBy === 'logged_desc' ? 'created_at' : 'recorded_at'}
+                onOpen={(row) => {
                   const relatedSkills = relatedSkillsFromStatement(row.statement)
                   const relatedExperience = relatedExperienceFromStatement(row.statement)
-                  const canNavigate = Boolean(relatedExperience || relatedSkills[0])
-                  return (
-                    <ActivityRow
-                      key={row.id}
-                      row={row}
-                      onClick={canNavigate ? () => goToActivity(row, relatedSkills, relatedExperience) : undefined}
-                    />
-                  )
-                })}
-              </div>
+                  if (relatedExperience || relatedSkills[0]) goToActivity(row, relatedSkills, relatedExperience)
+                }}
+                // The "What did you do?" box lives on the dashboard, so the
+                // activity is carried there to check and save.
+                onLogAgain={(row) => navigate('/dashboard', { state: { logAgainRow: row } })}
+                onReflected={loadStatements}
+              />
             )}
 
-            {filteredStatements.length > 0 && statements.length !== filteredStatements.length && (
-              <p className="text-xs text-secondary mt-2">
-                Showing {filteredStatements.length} of {statements.length}.
+            {filteredStatements.length > shownCount && (
+              <button
+                type="button"
+                onClick={() => setPaging({ key: listKey, count: shownCount + PAGE_SIZE })}
+                className="mt-6 rounded-md border border-hairline text-ink text-sm font-medium px-4 py-2 hover:border-moss hover:text-moss"
+              >
+                {t('activity.showMore', { count: Math.min(PAGE_SIZE, filteredStatements.length - shownCount) })}
+              </button>
+            )}
+
+            {filteredStatements.length > 0 && (
+              <p className="text-xs text-secondary mt-3">
+                {t('activity.showingCount', { shown: Math.min(shownCount, filteredStatements.length), total: filteredStatements.length })}
               </p>
             )}
           </>

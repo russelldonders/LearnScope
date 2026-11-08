@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useNavVisibility } from '../context/NavVisibilityContext'
 import { useLanguage } from '../context/LanguageContext'
@@ -296,6 +296,18 @@ export default function Dashboard() {
   const [fullFormOpen, setFullFormOpen] = useState(false)
   const [activityRefresh, setActivityRefresh] = useState(0)
   const [repeatRequest, setRepeatRequest] = useState(null)
+  const location = useLocation()
+
+  // "Log again" from the full activity page arrives here, since this is where
+  // the "What did you do?" box is. Cleared from history once taken, so going
+  // back or refreshing doesn't add the card a second time.
+  useEffect(() => {
+    const row = location.state?.logAgainRow
+    if (!row) return
+    setRepeatRequest({ row, nonce: Date.now() })
+    navigate(location.pathname, { replace: true, state: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reacts to a new hand-off
+  }, [location.state])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {

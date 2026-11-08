@@ -94,12 +94,12 @@ function CheckInsItem({ rows }) {
 // The learner's recent activity day by day, newest first, along a line with a
 // dot per activity. Each day says how much was done; check-ins the app
 // recorded stay compact so what the learner actually did leads.
-export default function ActivityTimeline({ rows, now = Date.now(), onOpen, onLogAgain, onReflected }) {
+export default function ActivityTimeline({ rows, now = Date.now(), groupBy = 'recorded_at', onOpen, onLogAgain, onReflected }) {
   const { t, language } = useLanguage()
 
   return (
     <ol className="space-y-6">
-      {dayGroups(rows).map((group) => {
+      {dayGroups(rows, groupBy).map((group) => {
         const label = dayLabel(group.date, { now, language: displayLocale(language), t })
         const total = [
           group.activityCount > 0
