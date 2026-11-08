@@ -18,6 +18,7 @@ import {
   goalLogFeedback,
   goalPeriodBars,
   goalReadings,
+  goalStreak,
   localDateString,
   nextLogDate,
   parseClock,
@@ -461,5 +462,38 @@ describe('goalPeriodBars', () => {
   it('ignores best-value goals and totals with no period', () => {
     expect(goalPeriodBars(pushUpGoal, [], now)).toEqual([])
     expect(goalPeriodBars({ ...weekly, period: null }, [], now)).toEqual([])
+  })
+})
+
+describe('goalStreak', () => {
+  // Weeks start Mon 5, 12, 19 and 26 October; "now" is Thu 29 October.
+  const weekly = { ...pushUpGoal, aggregation: 'total', period: 'week', target_value: 100, started_on: '2026-10-05' }
+  const now = new Date('2026-10-29T15:00:00')
+  const met = (id, day) => entry(id, day, 100)
+
+  it('counts weeks in a row that met the target, including this one once met', () => {
+    expect(goalStreak(weekly, [met('a', '2026-10-06'), met('b', '2026-10-13'), met('c', '2026-10-20'), met('d', '2026-10-27')], now)).toBe(4)
+  })
+
+  it('keeps the streak while this week can still be met', () => {
+    expect(goalStreak(weekly, [met('a', '2026-10-13'), met('b', '2026-10-20'), entry('c', '2026-10-27', 30)], now)).toBe(2)
+  })
+
+  it('restarts after a missed week', () => {
+    expect(goalStreak(weekly, [met('a', '2026-10-06'), met('b', '2026-10-20'), met('c', '2026-10-27')], now)).toBe(2)
+    expect(goalStreak(weekly, [met('a', '2026-10-13')], now)).toBe(0)
+  })
+
+  it('only applies to repeating goals with a target', () => {
+    const entries = [met('a', '2026-10-20'), met('b', '2026-10-27')]
+    expect(goalStreak(pushUpGoal, entries, now)).toBe(0)
+    expect(goalStreak({ ...weekly, period: null }, entries, now)).toBe(0)
+    expect(goalStreak({ ...weekly, target_value: null }, entries, now)).toBe(0)
+  })
+
+  it('counts beyond the periods the chart shows', () => {
+    const daily = { ...weekly, period: 'day', target_value: 1, started_on: '2026-10-01' }
+    const entries = Array.from({ length: 29 }, (_, i) => entry(`d${i}`, `2026-10-${String(i + 1).padStart(2, '0')}`, 1))
+    expect(goalStreak(daily, entries, now)).toBe(29)
   })
 })

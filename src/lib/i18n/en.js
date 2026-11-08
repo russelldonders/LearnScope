@@ -169,7 +169,6 @@ export default {
     moreWaysToProgress: 'More ways to make progress',
     currentLearning: 'Current learning',
     moreRecentProgress: 'More recent progress',
-    connectionsActivity: 'What your connections are up to',
   },
   skills: {
     heading: 'Your skills',
@@ -202,6 +201,7 @@ export default {
     subheading: 'Stay connected with people you trust, and organise learning together in teams.',
     tabs: { people: 'People', teams: 'Teams' },
     yourConnections: 'Your connections',
+    activityHeading: 'What your connections are up to',
     emptyState: "No connections yet. Invite someone to rate a skill, or connect with people tracking the same skill from that skill's detail view.",
     pendingInvites: 'Pending invites',
   },
@@ -1515,15 +1515,6 @@ export default {
       blocked: 'Your browser isn’t allowing the microphone. Allow it in the browser’s settings, or type instead.',
       failed: 'Couldn’t catch that. Try again, or type instead.',
     },
-    rhythm: {
-      start: 'Log something to start a weekly streak.',
-      keepGoing: 'Log something this week to keep your {count}-week streak going.',
-      weekStreak: '{count}-week streak',
-      lastSeven: 'Active on {count} of the last 7 days',
-      dayStreak: '{count} days in a row',
-      dayLogged: '{day}: activity logged',
-      dayEmpty: '{day}: nothing logged',
-    },
     reflect: {
       wentWell: 'What went well?',
       nextTime: 'What would you do differently next time?',
@@ -1682,6 +1673,12 @@ export default {
       week: 'This week',
       month: 'This month',
       year: 'This year',
+    },
+    streak: {
+      day: 'Met {count} days in a row',
+      week: 'Met {count} weeks in a row',
+      month: 'Met {count} months in a row',
+      year: 'Met {count} years in a row',
     },
     kind: {
       count: 'A count',

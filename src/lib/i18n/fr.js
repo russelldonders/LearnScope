@@ -169,7 +169,6 @@ export default {
     moreWaysToProgress: "D'autres façons de progresser",
     currentLearning: 'Formation en cours',
     moreRecentProgress: 'Progrès récents supplémentaires',
-    connectionsActivity: 'Ce que font vos connexions',
   },
   skills: {
     heading: 'Vos compétences',
@@ -202,6 +201,7 @@ export default {
     subheading: "Restez en contact avec des personnes de confiance et organisez l'apprentissage ensemble en équipes.",
     tabs: { people: 'Personnes', teams: 'Équipes' },
     yourConnections: 'Vos connexions',
+    activityHeading: 'Ce que font vos connexions',
     emptyState: "Pas encore de connexions. Invitez quelqu'un à évaluer une compétence, ou connectez-vous avec des personnes suivant la même compétence depuis sa page de détail.",
     pendingInvites: 'Invitations en attente',
   },
@@ -1518,15 +1518,6 @@ export default {
       blocked: 'Votre navigateur n’autorise pas le micro. Autorisez-le dans les paramètres du navigateur, ou saisissez le texte.',
       failed: 'Ce n’a pas été compris. Réessayez, ou saisissez le texte.',
     },
-    rhythm: {
-      start: 'Enregistrez une activité pour commencer une série hebdomadaire.',
-      keepGoing: 'Enregistrez une activité cette semaine pour garder votre série hebdomadaire ({count}).',
-      weekStreak: 'Série hebdomadaire : {count}',
-      lastSeven: 'Actif {count} des 7 derniers jours',
-      dayStreak: 'Série de jours : {count}',
-      dayLogged: '{day} : activité enregistrée',
-      dayEmpty: '{day} : rien d’enregistré',
-    },
     reflect: {
       wentWell: 'Qu’est-ce qui s’est bien passé ?',
       nextTime: 'Que feriez-vous différemment la prochaine fois ?',
@@ -1685,6 +1676,12 @@ export default {
       week: 'Cette semaine',
       month: 'Ce mois-ci',
       year: 'Cette année',
+    },
+    streak: {
+      day: 'Atteint {count} jours d’affilée',
+      week: 'Atteint {count} semaines d’affilée',
+      month: 'Atteint {count} mois d’affilée',
+      year: 'Atteint {count} ans d’affilée',
     },
     kind: {
       count: 'Un nombre de fois',

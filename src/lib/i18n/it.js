@@ -169,7 +169,6 @@ export default {
     moreWaysToProgress: 'Altri modi per progredire',
     currentLearning: 'Formazione in corso',
     moreRecentProgress: 'Altri progressi recenti',
-    connectionsActivity: 'Cosa stanno facendo le tue connessioni',
   },
   skills: {
     heading: 'Le tue competenze',
@@ -202,6 +201,7 @@ export default {
     subheading: "Resta in contatto con le persone di cui ti fidi e organizza l'apprendimento insieme in team.",
     tabs: { people: 'Persone', teams: 'Team' },
     yourConnections: 'Le tue connessioni',
+    activityHeading: 'Cosa stanno facendo le tue connessioni',
     emptyState: 'Nessuna connessione ancora. Invita qualcuno a valutare una competenza, oppure connettiti con persone che seguono la stessa competenza dalla sua pagina di dettaglio.',
     pendingInvites: 'Inviti in sospeso',
   },
@@ -1518,15 +1518,6 @@ export default {
       blocked: 'Il browser non consente il microfono. Consentilo nelle impostazioni del browser oppure scrivi il testo.',
       failed: 'Non è stato capito. Riprova oppure scrivi il testo.',
     },
-    rhythm: {
-      start: 'Registra qualcosa per iniziare una serie settimanale.',
-      keepGoing: 'Registra qualcosa questa settimana per mantenere la tua serie settimanale ({count}).',
-      weekStreak: 'Serie settimanale: {count}',
-      lastSeven: 'Attivo in {count} degli ultimi 7 giorni',
-      dayStreak: 'Serie di giorni: {count}',
-      dayLogged: '{day}: attività registrata',
-      dayEmpty: '{day}: niente registrato',
-    },
     reflect: {
       wentWell: 'Cosa è andato bene?',
       nextTime: 'Cosa faresti diversamente la prossima volta?',
@@ -1685,6 +1676,12 @@ export default {
       week: 'Questa settimana',
       month: 'Questo mese',
       year: 'Quest’anno',
+    },
+    streak: {
+      day: 'Raggiunto {count} giorni di fila',
+      week: 'Raggiunto {count} settimane di fila',
+      month: 'Raggiunto {count} mesi di fila',
+      year: 'Raggiunto {count} anni di fila',
     },
     kind: {
       count: 'Una quantità',

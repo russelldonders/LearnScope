@@ -5,7 +5,7 @@ import SkillGoalEntryForm from './SkillGoalEntryForm'
 import { useLanguage } from '../context/LanguageContext'
 import { supabase } from '../lib/supabaseClient'
 import { formatFullDate } from '../lib/dates'
-import { computeGoalProgress, formatGoalValue, goalLogFeedback, lastGoalEntry, localDateString } from '../lib/skillGoalProgress'
+import { computeGoalProgress, formatGoalValue, goalLogFeedback, goalStreak, lastGoalEntry, localDateString } from '../lib/skillGoalProgress'
 import { logGoalEntry } from '../lib/skillGoals'
 
 const COLLAPSED_COUNT = 4
@@ -79,6 +79,7 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
   const cardRef = useRef(null)
   const today = localDateString()
   const lastEntry = lastGoalEntry(goal, statements)
+  const streak = goalStreak(goal, statements)
   const due = nextLog != null && nextLog <= today
   const formId = `dashboard-goal-form-${goal.id}`
   const currentLabelKey = goal.aggregation === 'best'
@@ -186,6 +187,10 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
         </div>
       )}
       {progress.reached && <p className="text-xs font-medium text-moss mt-1">{t('skillGoals.targetReached')}</p>}
+      {/* A run of one is just "this week was met", so only from two. */}
+      {streak >= 2 && (
+        <p className="text-xs text-secondary mt-1">{t(`skillGoals.streak.${goal.period}`, { count: streak })}</p>
+      )}
 
       {/* Only repeating totals: whether each day or week met the target is
           what's worth seeing at a glance. Other charts stay on the skill page. */}

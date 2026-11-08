@@ -169,7 +169,6 @@ export default {
     moreWaysToProgress: 'Más formas de progresar',
     currentLearning: 'Aprendizaje actual',
     moreRecentProgress: 'Progreso reciente adicional',
-    connectionsActivity: 'Lo que están haciendo tus conexiones',
   },
   skills: {
     heading: 'Tus habilidades',
@@ -202,6 +201,7 @@ export default {
     subheading: 'Mantente en contacto con personas de confianza y organiza el aprendizaje juntos en equipos.',
     tabs: { people: 'Personas', teams: 'Equipos' },
     yourConnections: 'Tus conexiones',
+    activityHeading: 'Lo que están haciendo tus conexiones',
     emptyState: 'Aún no tienes conexiones. Invita a alguien a valorar una habilidad, o conecta con personas que sigan la misma habilidad desde su vista de detalle.',
     pendingInvites: 'Invitaciones pendientes',
   },
@@ -1517,15 +1517,6 @@ export default {
       blocked: 'Tu navegador no permite el micrófono. Permítelo en la configuración del navegador o escribe el texto.',
       failed: 'No se entendió. Inténtalo de nuevo o escribe el texto.',
     },
-    rhythm: {
-      start: 'Registra algo para empezar una racha semanal.',
-      keepGoing: 'Registra algo esta semana para mantener tu racha semanal ({count}).',
-      weekStreak: 'Racha semanal: {count}',
-      lastSeven: 'Activo {count} de los últimos 7 días',
-      dayStreak: 'Racha de días: {count}',
-      dayLogged: '{day}: actividad registrada',
-      dayEmpty: '{day}: nada registrado',
-    },
     reflect: {
       wentWell: '¿Qué salió bien?',
       nextTime: '¿Qué harías diferente la próxima vez?',
@@ -1684,6 +1675,12 @@ export default {
       week: 'Esta semana',
       month: 'Este mes',
       year: 'Este año',
+    },
+    streak: {
+      day: 'Cumplido {count} días seguidos',
+      week: 'Cumplido {count} semanas seguidas',
+      month: 'Cumplido {count} meses seguidos',
+      year: 'Cumplido {count} años seguidos',
     },
     kind: {
       count: 'Una cantidad',

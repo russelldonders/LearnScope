@@ -7,11 +7,13 @@ import GrowthRing from '../components/GrowthRing'
 import ConfirmDialog from '../components/ConfirmDialog'
 import ConnectionsTeams from '../components/ConnectionsTeams'
 import ConnectionTeamInviteControl from '../components/ConnectionTeamInviteControl'
+import ConnectionsActivityFeed from '../components/ConnectionsActivityFeed'
 import { LEVEL_LABELS } from '../lib/levels'
 import { handleTabListKeyDown } from '../lib/tabsKeyboard'
 import {
   listMyPeerRatings,
   listConnections,
+  listConnectionsActivity,
   listSentInvites,
   getProfiles,
   getSharedSkillCounts,
@@ -50,11 +52,29 @@ export default function Connections() {
   const [pendingRevoke, setPendingRevoke] = useState(null)
   const [ledTeams, setLedTeams] = useState([])
   const [sharedTeamsByConnection, setSharedTeamsByConnection] = useState({})
+  const [activity, setActivity] = useState([])
+  const [activityError, setActivityError] = useState(null)
 
   useEffect(() => {
     load()
+    loadActivity()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the listed values change; the loaders are recreated every render
   }, [])
+
+  // Loaded apart from the rest of the page: this is the one query here that
+  // reads other people's records, so a failure only shows a retry in place of
+  // the feed rather than hiding the connection list.
+  async function loadActivity() {
+    try {
+      // Fetch beyond the five visible rows so several related skill events can
+      // collapse without leaving the feed unexpectedly sparse.
+      setActivity(await listConnectionsActivity(30))
+      setActivityError(null)
+    } catch (err) {
+      setActivity([])
+      setActivityError(err.message || 'Something went wrong.')
+    }
+  }
 
   async function load() {
     setLoading(true)
@@ -239,6 +259,26 @@ export default function Connections() {
           />
         )}
         {activeSection === 'people' && <div>
+          {(activity.length > 0 || activityError) && (
+            <section aria-labelledby="connections-activity-heading" className="mb-10">
+              <h2 id="connections-activity-heading" className="font-display text-xl text-ink mb-6">{t('connections.activityHeading')}</h2>
+              {activityError ? (
+                <div className="flex items-center justify-between gap-3 bg-card border border-hairline rounded-lg px-4 py-3">
+                  <p className="text-sm text-secondary">Couldn't load your connections' activity.</p>
+                  <button
+                    type="button"
+                    onClick={loadActivity}
+                    className="shrink-0 text-sm text-moss font-medium hover:opacity-90"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : (
+                <ConnectionsActivityFeed events={activity} />
+              )}
+            </section>
+          )}
+
           <h2 className="font-display text-xl text-ink mb-6">{t('connections.yourConnections')}</h2>
 
           {loading && <p className="text-secondary">Loading…</p>}

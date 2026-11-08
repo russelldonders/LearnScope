@@ -6,7 +6,6 @@ import { useLanguage } from '../context/LanguageContext'
 import { supabase } from '../lib/supabaseClient'
 import {
   listConnections,
-  listConnectionsActivity,
   listIncomingRateInvites,
   listIncomingRecommendInvites,
   getProfiles,
@@ -22,7 +21,6 @@ import FindSkillModal from '../components/FindSkillModal'
 import AccessibleDialog from '../components/AccessibleDialog'
 import GrowthRing from '../components/GrowthRing'
 import CourseThumbnail from '../components/CourseThumbnail'
-import ConnectionsActivityFeed from '../components/ConnectionsActivityFeed'
 import GrowthArrow from '../components/GrowthArrow'
 import SkillGoalsDashboardPanel from '../components/SkillGoalsDashboardPanel'
 import QuickActivityLog from '../components/QuickActivityLog'
@@ -77,21 +75,6 @@ async function loadCurrentLearning(userId) {
   return data ?? []
 }
 
-// Failing this shouldn't take down the rest of the dashboard -- the RPC is
-// brand new and this is the one query on the page reading other people's
-// data, so it's the most likely to surface an unexpected RLS/permission
-// edge case in practice. The error is still reported back rather than
-// swallowed, though, so a real failure isn't indistinguishable on screen
-// from a connection with no activity to show.
-async function loadConnectionsActivity() {
-  try {
-    // Fetch beyond the five visible rows so several related skill events can
-    // collapse without leaving the feed unexpectedly sparse.
-    return { data: await listConnectionsActivity(30), error: null }
-  } catch (err) {
-    return { data: [], error: err.message || 'Something went wrong.' }
-  }
-}
 
 // How far ahead a due date has to be before it's worth interrupting the
 // dashboard with -- anything already overdue (next_checkin_date/target_date
@@ -304,8 +287,6 @@ export default function Dashboard() {
   const [upNext, setUpNext] = useState([])
   const [currentLearning, setCurrentLearning] = useState([])
   const [assignedByCatalogueId, setAssignedByCatalogueId] = useState(new Map())
-  const [connectionsActivity, setConnectionsActivity] = useState([])
-  const [connectionsActivityError, setConnectionsActivityError] = useState(null)
   const [upcomingSelfAssessments, setUpcomingSelfAssessments] = useState([])
   const [upcomingTargets, setUpcomingTargets] = useState([])
   const [pendingReviewTasks, setPendingReviewTasks] = useState([])
@@ -314,7 +295,6 @@ export default function Dashboard() {
   const [openGoalId, setOpenGoalId] = useState(null)
   const [fullFormOpen, setFullFormOpen] = useState(false)
   const [activityRefresh, setActivityRefresh] = useState(0)
-  const [fullFormSaves, setFullFormSaves] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -332,7 +312,6 @@ export default function Dashboard() {
       loadRecentGrowth(user.id),
       loadUpNextRecommendations(user.id),
       loadCurrentLearning(user.id),
-      loadConnectionsActivity(),
       loadUpcomingSelfAssessments(user.id),
       loadUpcomingTargets(user.id),
       loadPendingReviewTasks(user.id),
@@ -349,7 +328,6 @@ export default function Dashboard() {
       growth,
       upNextRecommendations,
       learning,
-      activityResult,
       selfAssessmentsDue,
       targetsDue,
       reviewTasks,
@@ -364,21 +342,18 @@ export default function Dashboard() {
       valueOr(4, []),
       valueOr(5, []),
       valueOr(6, []),
-      valueOr(7, { data: [], error: null }),
+      valueOr(7, []),
       valueOr(8, []),
       valueOr(9, []),
-      valueOr(10, []),
-      valueOr(11, null),
-      valueOr(12, new Map()),
-      valueOr(13, []),
+      valueOr(10, null),
+      valueOr(11, new Map()),
+      valueOr(12, []),
     ]
     setCounts({ skills, courses, experience, connections })
     setRecentGrowth(growth)
     setUpNext(upNextRecommendations)
     setCurrentLearning(learning)
     setAssignedByCatalogueId(assignedCourseEmployers)
-    setConnectionsActivity(activityResult.data)
-    setConnectionsActivityError(activityResult.error)
     setUpcomingSelfAssessments(selfAssessmentsDue)
     setUpcomingTargets(targetsDue)
     setPendingReviewTasks(reviewTasks)
@@ -411,12 +386,6 @@ export default function Dashboard() {
   // for what should feel like an inline update.
   async function refreshUpNext() {
     setUpNext(await loadUpNextRecommendations(user.id))
-  }
-
-  async function retryConnectionsActivity() {
-    const result = await loadConnectionsActivity()
-    setConnectionsActivity(result.data)
-    setConnectionsActivityError(result.error)
   }
 
   // Best-effort, same as persistProfileFields elsewhere -- if it fails, the
@@ -534,7 +503,6 @@ export default function Dashboard() {
             goalItems={goals}
             onLogged={handleQuickLogged}
             onOpenFullForm={() => setFullFormOpen(true)}
-            refreshKey={activityRefresh + fullFormSaves}
           />
         )}
 
@@ -666,35 +634,12 @@ export default function Dashboard() {
           </div>
         )}
 
-        {!loading && (connectionsActivity.length > 0 || connectionsActivityError) && (
-          <div>
-            <h2 className="font-display text-xl text-ink mb-6">{t('dashboard.connectionsActivity')}</h2>
-            {connectionsActivityError ? (
-              <div className="flex items-center justify-between gap-3 bg-card border border-hairline rounded-lg px-4 py-3">
-                <p className="text-sm text-secondary">Couldn't load your connections' activity.</p>
-                <button
-                  type="button"
-                  onClick={retryConnectionsActivity}
-                  className="shrink-0 text-sm text-moss font-medium hover:opacity-90"
-                >
-                  Retry
-                </button>
-              </div>
-            ) : (
-              <ConnectionsActivityFeed events={connectionsActivity} />
-            )}
-          </div>
-        )}
-
         {!loading && counts.skills > 0 && (
           <RecordActivitySection
             formOpen={fullFormOpen}
             onFormOpenChange={setFullFormOpen}
             refreshKey={activityRefresh}
-            onSaved={() => {
-              setFullFormSaves((value) => value + 1)
-              return refreshGoals()
-            }}
+            onSaved={refreshGoals}
           />
         )}
       </main>

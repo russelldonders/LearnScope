@@ -178,6 +178,22 @@ export const PERIOD_BAR_LIMITS = { day: 14, week: 12, month: 12, year: 6 }
 // Only the most recent periods are returned.
 export function goalPeriodBars(goal, statements, now = new Date()) {
   if (goal.aggregation !== 'total' || !goal.period) return []
+  return allPeriodBars(goal, statements, now).slice(-PERIOD_BAR_LIMITS[goal.period])
+}
+
+// How many periods in a row met the target, ending with the current period
+// when it's already met, or with the one before while the current period can
+// still be met. Zero for goals that don't repeat or have no target.
+export function goalStreak(goal, statements, now = new Date()) {
+  if (goal.aggregation !== 'total' || !goal.period || goal.target_value == null) return 0
+  const bars = allPeriodBars(goal, statements, now)
+  if (bars.at(-1)?.status === 'inProgress') bars.pop()
+  let streak = 0
+  while (bars.length > 0 && bars.pop().status === 'met') streak += 1
+  return streak
+}
+
+function allPeriodBars(goal, statements, now) {
   const startedAt = startOfDayFromString(goal.started_on)
   const target = goal.target_value == null ? null : Number(goal.target_value)
   const readings = goalReadings(goal, statements).filter((r) => r.date >= startedAt)
@@ -191,7 +207,7 @@ export function goalPeriodBars(goal, statements, now = new Date()) {
     if (target !== null) status = value >= target ? 'met' : isCurrent ? 'inProgress' : 'missed'
     bars.push({ start: new Date(start), value, status, current: isCurrent })
   }
-  return bars.slice(-PERIOD_BAR_LIMITS[goal.period])
+  return bars
 }
 
 function addDays(dateString, days) {

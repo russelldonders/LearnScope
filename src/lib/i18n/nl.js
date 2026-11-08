@@ -169,7 +169,6 @@ export default {
     moreWaysToProgress: 'Meer manieren om vooruitgang te boeken',
     currentLearning: 'Huidige leeractiviteiten',
     moreRecentProgress: 'Meer recente voortgang',
-    connectionsActivity: 'Waar je connecties mee bezig zijn',
   },
   skills: {
     heading: 'Jouw vaardigheden',
@@ -202,6 +201,7 @@ export default {
     subheading: 'Blijf in contact met mensen die je vertrouwt en organiseer samen leren in teams.',
     tabs: { people: 'Mensen', teams: 'Teams' },
     yourConnections: 'Jouw connecties',
+    activityHeading: 'Waar je connecties mee bezig zijn',
     emptyState: 'Nog geen connecties. Nodig iemand uit om een vaardigheid te beoordelen, of maak contact met mensen die dezelfde vaardigheid volgen via de detailweergave van die vaardigheid.',
     pendingInvites: 'Openstaande uitnodigingen',
   },
@@ -1516,15 +1516,6 @@ export default {
       blocked: 'Je browser staat de microfoon niet toe. Sta die toe in de browserinstellingen, of typ in plaats daarvan.',
       failed: 'Dat werd niet verstaan. Probeer het opnieuw, of typ in plaats daarvan.',
     },
-    rhythm: {
-      start: 'Log iets om een weekreeks te beginnen.',
-      keepGoing: 'Log deze week iets om je weekreeks ({count}) vast te houden.',
-      weekStreak: 'Weekreeks: {count}',
-      lastSeven: 'Actief op {count} van de laatste 7 dagen',
-      dayStreak: 'Dagreeks: {count}',
-      dayLogged: '{day}: activiteit gelogd',
-      dayEmpty: '{day}: niets gelogd',
-    },
     reflect: {
       wentWell: 'Wat ging er goed?',
       nextTime: 'Wat zou je de volgende keer anders doen?',
@@ -1683,6 +1674,12 @@ export default {
       week: 'Deze week',
       month: 'Deze maand',
       year: 'Dit jaar',
+    },
+    streak: {
+      day: '{count} dagen op rij gehaald',
+      week: '{count} weken op rij gehaald',
+      month: '{count} maanden op rij gehaald',
+      year: '{count} jaar op rij gehaald',
     },
     kind: {
       count: 'Een aantal',

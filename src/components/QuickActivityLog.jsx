@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import SkillPickerModal from './SkillPickerModal'
-import ActivityRhythm from './ActivityRhythm'
 import ActivityReflection from './ActivityReflection'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
@@ -18,7 +17,6 @@ import {
   REFLECTION_PROMPTS,
   repeatTemplates,
 } from '../lib/quickActivityLog'
-import { activeDays, RHYTHM_LOOKBACK_DAYS } from '../lib/activityRhythm'
 
 const INPUT_CLASS =
   'w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss'
@@ -41,13 +39,11 @@ function speechLanguage(language) {
 // "What did you do?" on the dashboard. A sentence becomes draft activities the
 // learner checks and edits before anything is saved; things they log often can
 // be repeated with one tap. Goal values ride along on the activity, so goals
-// update the same way as logging from a goal's own tracker. refreshKey changes
-// when activity was logged elsewhere on the page, so the streak stays current.
-export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFullForm, refreshKey = 0 }) {
+// update the same way as logging from a goal's own tracker.
+export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFullForm }) {
   const { t, language } = useLanguage()
   const [skills, setSkills] = useState([])
   const [recentRows, setRecentRows] = useState([])
-  const [days, setDays] = useState(null)
   const [listening, setListening] = useState(false)
   const recognitionRef = useRef(null)
   const SpeechRecognition = useMemo(speechRecognitionClass, [])
@@ -78,25 +74,6 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
       .limit(RECENT_ROWS)
     setRecentRows(data ?? [])
   }
-
-  // Only dates and the result extensions, newest first, so a very busy year
-  // still fits in one request.
-  async function loadRhythm() {
-    const since = new Date()
-    since.setDate(since.getDate() - RHYTHM_LOOKBACK_DAYS)
-    const { data, error } = await supabase
-      .from('xapi_statements')
-      .select('recorded_at, extensions:statement->result->extensions')
-      .eq('user_id', user.id)
-      .gte('recorded_at', since.toISOString())
-      .order('recorded_at', { ascending: false })
-    if (!error) setDays(activeDays(data ?? []))
-  }
-
-  useEffect(() => {
-    loadRhythm()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reloads when the page says activity changed; the loader is recreated every render
-  }, [user.id, refreshKey])
 
   useEffect(() => () => recognitionRef.current?.abort(), [])
 
@@ -222,7 +199,6 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
     }
     const saved = savedRows.length
     const refreshed = (await onLogged()) ?? []
-    // onLogged changes refreshKey, which reloads the streak.
     await loadRecent()
     const celebrations = refreshed
       .filter((item) => touchedGoalIds.has(item.goal.id) && before.has(item.goal.id))
@@ -244,8 +220,6 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
     <section aria-labelledby="quick-log-heading">
       <h2 id="quick-log-heading" className="font-display text-xl text-ink mb-1">{t('quickLog.title')}</h2>
       <p className="text-sm text-secondary mb-4">{t('quickLog.subtitle')}</p>
-
-      {days && <ActivityRhythm days={days} />}
 
       <form onSubmit={handleRead} className="space-y-2">
         <label htmlFor="quick-log-text" className="sr-only">{t('quickLog.title')}</label>

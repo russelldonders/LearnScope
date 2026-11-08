@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Connections from './Connections'
@@ -24,7 +24,7 @@ vi.mock('../context/LanguageContext', async () => {
 vi.mock('../components/AppHeader', () => ({ default: () => <header>Header</header> }))
 vi.mock('../components/ConnectionsTeams', () => ({ default: () => <section>Team controls</section> }))
 vi.mock('../lib/connections', () => ({
-  listMyPeerRatings: vi.fn(), listConnections: vi.fn(), listSentInvites: vi.fn(),
+  listMyPeerRatings: vi.fn(), listConnections: vi.fn(), listConnectionsActivity: vi.fn(), listSentInvites: vi.fn(),
   getProfiles: vi.fn(), getSharedSkillCounts: vi.fn(), sendInviteEmail: vi.fn(), revokeInvite: vi.fn(),
 }))
 vi.mock('../lib/managerTeams', () => ({
@@ -41,6 +41,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   connectionApi.listMyPeerRatings.mockResolvedValue([])
   connectionApi.listConnections.mockResolvedValue([])
+  connectionApi.listConnectionsActivity.mockResolvedValue([])
   connectionApi.listSentInvites.mockResolvedValue([])
   connectionApi.getProfiles.mockResolvedValue({})
   connectionApi.getSharedSkillCounts.mockResolvedValue({})
@@ -102,6 +103,35 @@ describe('Connections sections', () => {
 
     fireEvent.click(invitesTab)
     expect(await screen.findByText(/sent to friend@example.com/)).toBeInTheDocument()
+  })
+
+  it('shows what connections are up to on the People tab only', async () => {
+    connectionApi.listConnectionsActivity.mockResolvedValue([
+      { event_type: 'skill_added', actor_id: 'alex', full_name: 'Alex', skill_name: 'SQL', event_at: '2026-11-01T10:00:00Z' },
+    ])
+    renderPage()
+    expect(await screen.findByRole('heading', { name: 'What your connections are up to' })).toBeInTheDocument()
+    expect(screen.getByText('Alex')).toBeInTheDocument()
+    expect(connectionApi.listConnectionsActivity).toHaveBeenCalledWith(30)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Teams' }))
+    expect(screen.queryByRole('heading', { name: 'What your connections are up to' })).not.toBeInTheDocument()
+  })
+
+  it('leaves the activity heading out when there is nothing to show', async () => {
+    renderPage()
+    expect(await screen.findByText(/No connections yet/)).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'What your connections are up to' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the connection list when the activity feed fails, and can retry', async () => {
+    connectionApi.listConnectionsActivity.mockRejectedValueOnce(new Error('boom'))
+    renderPage()
+    expect(await screen.findByText("Couldn't load your connections' activity.")).toBeInTheDocument()
+    expect(await screen.findByText(/No connections yet/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(screen.queryByText("Couldn't load your connections' activity.")).not.toBeInTheDocument())
+    expect(connectionApi.listConnectionsActivity).toHaveBeenCalledTimes(2)
   })
 
   it('shows an empty state on the invites tab when there are none', async () => {

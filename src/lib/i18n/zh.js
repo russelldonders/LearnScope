@@ -169,7 +169,6 @@ export default {
     moreWaysToProgress: '更多提升方式',
     currentLearning: '当前学习',
     moreRecentProgress: '更多近期进展',
-    connectionsActivity: '你的连接人正在做什么',
   },
   skills: {
     heading: '你的技能',
@@ -202,6 +201,7 @@ export default {
     subheading: '与你信任的人保持联系，并一起以团队形式组织学习。',
     tabs: { people: '人员', teams: '团队' },
     yourConnections: '你的连接',
+    activityHeading: '你的连接人正在做什么',
     emptyState: '目前还没有连接。邀请他人为某项技能评分，或在该技能的详情页与关注同一技能的人建立连接。',
     pendingInvites: '待处理的邀请',
   },
@@ -1497,15 +1497,6 @@ export default {
       blocked: '浏览器不允许使用麦克风。请在浏览器设置中允许，或改为打字。',
       failed: '没有听清。请再试一次，或改为打字。',
     },
-    rhythm: {
-      start: '记录一项活动，开始每周连续记录。',
-      keepGoing: '本周记录一项活动，保持连续 {count} 周的记录。',
-      weekStreak: '连续活跃周数：{count}',
-      lastSeven: '最近 7 天中有 {count} 天有活动',
-      dayStreak: '连续天数：{count}',
-      dayLogged: '{day}：有活动记录',
-      dayEmpty: '{day}：没有记录',
-    },
     reflect: {
       wentWell: '哪些方面做得好？',
       nextTime: '下次你会有什么不同的做法？',
@@ -1664,6 +1655,12 @@ export default {
       week: '本周',
       month: '本月',
       year: '今年',
+    },
+    streak: {
+      day: '已连续 {count} 天达成',
+      week: '已连续 {count} 周达成',
+      month: '已连续 {count} 个月达成',
+      year: '已连续 {count} 年达成',
     },
     kind: {
       count: '数量',

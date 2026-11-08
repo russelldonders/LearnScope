@@ -58,7 +58,7 @@ function groupConnectionsActivity(events) {
   return groups
 }
 
-// Shared by Dashboard.jsx ("What your connections are up to", aggregated
+// Shared by Connections.jsx ("What your connections are up to", aggregated
 // across every connection) and SkillsProfile.jsx (scoped to just the one
 // person being viewed) -- same event shape either way, so one rendering.
 export default function ConnectionsActivityFeed({ events }) {

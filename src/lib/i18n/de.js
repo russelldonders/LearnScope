@@ -169,7 +169,6 @@ export default {
     moreWaysToProgress: 'Weitere Wege, um voranzukommen',
     currentLearning: 'Aktuelles Lernen',
     moreRecentProgress: 'Weitere aktuelle Fortschritte',
-    connectionsActivity: 'Was deine Verbindungen gerade tun',
   },
   skills: {
     heading: 'Deine Fähigkeiten',
@@ -202,6 +201,7 @@ export default {
     subheading: 'Bleib mit Personen verbunden, denen du vertraust, und organisiere gemeinsames Lernen in Teams.',
     tabs: { people: 'Personen', teams: 'Teams' },
     yourConnections: 'Deine Verbindungen',
+    activityHeading: 'Was deine Verbindungen gerade tun',
     emptyState: 'Noch keine Verbindungen. Lade jemanden ein, eine Fähigkeit zu bewerten, oder verbinde dich mit Personen, die dieselbe Fähigkeit über deren Detailansicht verfolgen.',
     pendingInvites: 'Ausstehende Einladungen',
   },
@@ -1518,15 +1518,6 @@ export default {
       blocked: 'Dein Browser erlaubt das Mikrofon nicht. Erlaube es in den Browsereinstellungen oder tippe stattdessen.',
       failed: 'Das wurde nicht verstanden. Versuche es noch einmal oder tippe stattdessen.',
     },
-    rhythm: {
-      start: 'Trage etwas ein, um eine Wochenserie zu starten.',
-      keepGoing: 'Trage diese Woche etwas ein, um deine Wochenserie ({count}) zu halten.',
-      weekStreak: 'Wochenserie: {count}',
-      lastSeven: 'An {count} der letzten 7 Tage aktiv',
-      dayStreak: 'Tagesserie: {count}',
-      dayLogged: '{day}: Aktivität eingetragen',
-      dayEmpty: '{day}: nichts eingetragen',
-    },
     reflect: {
       wentWell: 'Was lief gut?',
       nextTime: 'Was würdest du nächstes Mal anders machen?',
@@ -1685,6 +1676,12 @@ export default {
       week: 'Diese Woche',
       month: 'Diesen Monat',
       year: 'Dieses Jahr',
+    },
+    streak: {
+      day: '{count} Tage in Folge erreicht',
+      week: '{count} Wochen in Folge erreicht',
+      month: '{count} Monate in Folge erreicht',
+      year: '{count} Jahre in Folge erreicht',
     },
     kind: {
       count: 'Eine Anzahl',
