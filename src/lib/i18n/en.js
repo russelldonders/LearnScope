@@ -1508,6 +1508,13 @@ export default {
     },
   },
   skillGoals: {
+    periodChart: {
+      label: 'Bar chart of your last {count} periods: target met in {met}, missed in {missed}. All values are listed under your entries.',
+      labelNoTarget: 'Bar chart of your totals for the last {count} periods. All values are listed under your entries.',
+      met: 'Target met ({count})',
+      missed: 'Below target ({count})',
+      inProgress: 'In progress',
+    },
     dashboard: {
       title: 'Your goals',
       subtitle: 'Log progress straight from here. Goals due a log come first.',

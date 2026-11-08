@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import SkillGoalChart from './SkillGoalChart'
 import SkillGoalEntryForm from './SkillGoalEntryForm'
 import { useLanguage } from '../context/LanguageContext'
 import { supabase } from '../lib/supabaseClient'
@@ -183,6 +184,12 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
         </div>
       )}
       {progress.reached && <p className="text-xs font-medium text-moss mt-1">{t('skillGoals.targetReached')}</p>}
+
+      {/* Only repeating totals: whether each day or week met the target is
+          what's worth seeing at a glance. Other charts stay on the skill page. */}
+      {goal.aggregation === 'total' && goal.period && (
+        <SkillGoalChart goal={goal} statements={statements} target={progress.target} />
+      )}
 
       {open ? (
         <div id={formId} className="mt-3 pt-3 border-t border-hairline">

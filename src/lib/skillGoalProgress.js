@@ -152,6 +152,40 @@ export function goalChartPoints(goal, statements) {
     .map(([start, value]) => ({ date: new Date(start), value }))
 }
 
+function nextPeriodStart(date, period) {
+  const next = new Date(date)
+  if (period === 'day') next.setDate(next.getDate() + 1)
+  if (period === 'week') next.setDate(next.getDate() + 7)
+  if (period === 'month') next.setMonth(next.getMonth() + 1)
+  if (period === 'year') next.setFullYear(next.getFullYear() + 1)
+  return next
+}
+
+export const PERIOD_BAR_LIMITS = { day: 14, week: 12, month: 12, year: 6 }
+
+// One bar per day, week, month or year of a repeating total, from the period
+// the goal began in up to the current one, including periods with nothing
+// logged. Each says whether it met the target: "met", "missed", "inProgress"
+// for the current period while it can still be met, or "none" with no target.
+// Only the most recent periods are returned.
+export function goalPeriodBars(goal, statements, now = new Date()) {
+  if (goal.aggregation !== 'total' || !goal.period) return []
+  const startedAt = startOfDayFromString(goal.started_on)
+  const target = goal.target_value == null ? null : Number(goal.target_value)
+  const readings = goalReadings(goal, statements).filter((r) => r.date >= startedAt)
+  const current = startOfPeriod(now, goal.period).getTime()
+  const bars = []
+  for (let start = startOfPeriod(startedAt, goal.period); start.getTime() <= current; start = nextPeriodStart(start, goal.period)) {
+    const end = nextPeriodStart(start, goal.period)
+    const value = readings.filter((r) => r.date >= start && r.date < end).reduce((sum, r) => sum + r.value, 0)
+    const isCurrent = start.getTime() === current
+    let status = 'none'
+    if (target !== null) status = value >= target ? 'met' : isCurrent ? 'inProgress' : 'missed'
+    bars.push({ start: new Date(start), value, status, current: isCurrent })
+  }
+  return bars.slice(-PERIOD_BAR_LIMITS[goal.period])
+}
+
 function addDays(dateString, days) {
   const date = startOfDayFromString(dateString)
   date.setDate(date.getDate() + days)

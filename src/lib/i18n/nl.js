@@ -1509,6 +1509,13 @@ export default {
     },
   },
   skillGoals: {
+    periodChart: {
+      label: 'Staafdiagram van je laatste {count} periodes: doel gehaald in {met}, niet gehaald in {missed}. Alle waarden staan bij je registraties.',
+      labelNoTarget: 'Staafdiagram van je totalen over de laatste {count} periodes. Alle waarden staan bij je registraties.',
+      met: 'Doel gehaald ({count})',
+      missed: 'Onder het doel ({count})',
+      inProgress: 'Bezig',
+    },
     dashboard: {
       title: 'Je doelen',
       subtitle: 'Leg je voortgang hier direct vast. Doelen die aan de beurt zijn staan bovenaan.',

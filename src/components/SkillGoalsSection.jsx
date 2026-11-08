@@ -5,7 +5,7 @@ import SkillGoalEntryForm from './SkillGoalEntryForm'
 import SkillGoalModal from './SkillGoalModal'
 import { useLanguage } from '../context/LanguageContext'
 import { formatFullDate } from '../lib/dates'
-import { computeGoalProgress, formatGoalValue, goalChartPoints } from '../lib/skillGoalProgress'
+import { computeGoalProgress, formatGoalValue } from '../lib/skillGoalProgress'
 import { listSkillGoals, logGoalEntry } from '../lib/skillGoals'
 
 // A goal's measure, target and tracker on a skill's page. Values are read from
@@ -147,7 +147,6 @@ function GoalCard({ goal, skill, user, actor, statements, onActivitiesChanged, o
   const { t } = useLanguage()
   const [savedNote, setSavedNote] = useState(null)
   const progress = computeGoalProgress(goal, statements)
-  const points = goalChartPoints(goal, statements)
   const currentLabelKey = goal.aggregation === 'best'
     ? 'skillGoals.bestSoFar'
     : goal.period
@@ -222,7 +221,7 @@ function GoalCard({ goal, skill, user, actor, statements, onActivitiesChanged, o
       )}
       {progress.reached && <p className="text-xs font-medium text-moss mt-1">{t('skillGoals.targetReached')}</p>}
 
-      <SkillGoalChart goal={goal} points={points} target={progress.target} />
+      <SkillGoalChart goal={goal} statements={statements} target={progress.target} />
 
       <div className="mt-3 pt-3 border-t border-hairline">
         <p className="text-sm text-ink mb-2">{goal.tracker_question}</p>

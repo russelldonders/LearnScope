@@ -1511,6 +1511,13 @@ export default {
     },
   },
   skillGoals: {
+    periodChart: {
+      label: 'Balkendiagramm deiner letzten {count} Zeiträume: Ziel erreicht in {met}, verfehlt in {missed}. Alle Werte stehen bei deinen Einträgen.',
+      labelNoTarget: 'Balkendiagramm deiner Summen der letzten {count} Zeiträume. Alle Werte stehen bei deinen Einträgen.',
+      met: 'Ziel erreicht ({count})',
+      missed: 'Unter dem Ziel ({count})',
+      inProgress: 'Läuft noch',
+    },
     dashboard: {
       title: 'Deine Ziele',
       subtitle: 'Erfasse deinen Fortschritt direkt hier. Fällige Ziele stehen oben.',

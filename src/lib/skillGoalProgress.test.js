@@ -16,6 +16,7 @@ import {
   formatGoalValue,
   goalChartPoints,
   goalLogFeedback,
+  goalPeriodBars,
   goalReadings,
   localDateString,
   nextLogDate,
@@ -409,5 +410,56 @@ describe('logging rhythm and attention', () => {
       '2026-11-08',
     )
     expect(sorted.map((i) => i.goal.id)).toEqual(['due-first', 'due-later', 'not-due-yet', 'target-late', 'new', 'old'])
+  })
+})
+
+describe('goalPeriodBars', () => {
+  const weekly = { ...pushUpGoal, aggregation: 'total', period: 'week', target_value: 100, started_on: '2026-10-07' }
+  const now = new Date('2026-10-29T15:00:00')
+
+  it('has one bar per week since the goal began, including empty weeks', () => {
+    const bars = goalPeriodBars(weekly, [
+      entry('a', '2026-10-06', 500), // before the goal began
+      entry('b', '2026-10-08', 60),
+      entry('c', '2026-10-11', 50),
+      entry('d', '2026-10-21', 40),
+      entry('e', '2026-10-27', 30),
+    ], now)
+    expect(bars.map((b) => [localDateString(b.start), b.value, b.status])).toEqual([
+      ['2026-10-05', 110, 'met'],
+      ['2026-10-12', 0, 'missed'],
+      ['2026-10-19', 40, 'missed'],
+      ['2026-10-26', 30, 'inProgress'],
+    ])
+    expect(bars.at(-1).current).toBe(true)
+  })
+
+  it('marks the current period met once the target is reached', () => {
+    const bars = goalPeriodBars(weekly, [entry('a', '2026-10-27', 100)], now)
+    expect(bars.at(-1).status).toBe('met')
+  })
+
+  it('has no verdict without a target', () => {
+    const bars = goalPeriodBars({ ...weekly, target_value: null }, [entry('a', '2026-10-27', 10)], now)
+    expect(bars.every((b) => b.status === 'none')).toBe(true)
+  })
+
+  it('keeps only the most recent periods', () => {
+    const daily = { ...weekly, period: 'day', started_on: '2026-09-01' }
+    const bars = goalPeriodBars(daily, [], now)
+    expect(bars).toHaveLength(14)
+    expect(localDateString(bars.at(-1).start)).toBe('2026-10-29')
+  })
+
+  it('handles month and year periods', () => {
+    const monthly = { ...weekly, period: 'month', started_on: '2026-08-15' }
+    expect(goalPeriodBars(monthly, [], now).map((b) => localDateString(b.start))).toEqual(['2026-08-01', '2026-09-01', '2026-10-01'])
+    const yearly = { ...weekly, period: 'year', started_on: '2025-03-01' }
+    expect(goalPeriodBars(yearly, [], now).map((b) => localDateString(b.start))).toEqual(['2025-01-01', '2026-01-01'])
+  })
+
+  it('ignores best-value goals and totals with no period', () => {
+    expect(goalPeriodBars(pushUpGoal, [], now)).toEqual([])
+    expect(goalPeriodBars({ ...weekly, period: null }, [], now)).toEqual([])
   })
 })

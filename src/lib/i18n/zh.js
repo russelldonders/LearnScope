@@ -1490,6 +1490,13 @@ export default {
     },
   },
   skillGoals: {
+    periodChart: {
+      label: '最近 {count} 个周期的柱状图：{met} 个达到目标，{missed} 个未达到。所有数值都列在你的记录中。',
+      labelNoTarget: '最近 {count} 个周期总量的柱状图。所有数值都列在你的记录中。',
+      met: '达到目标（{count}）',
+      missed: '低于目标（{count}）',
+      inProgress: '进行中',
+    },
     dashboard: {
       title: '你的目标',
       subtitle: '直接在这里记录进展。需要记录的目标排在最前面。',

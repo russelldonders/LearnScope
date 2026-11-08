@@ -1510,6 +1510,13 @@ export default {
     },
   },
   skillGoals: {
+    periodChart: {
+      label: 'Gráfico de barras de tus últimos {count} periodos: objetivo cumplido en {met}, no cumplido en {missed}. Todos los valores aparecen en tus registros.',
+      labelNoTarget: 'Gráfico de barras de tus totales en los últimos {count} periodos. Todos los valores aparecen en tus registros.',
+      met: 'Objetivo cumplido ({count})',
+      missed: 'Por debajo del objetivo ({count})',
+      inProgress: 'En curso',
+    },
     dashboard: {
       title: 'Tus objetivos',
       subtitle: 'Registra tu progreso directamente aquí. Los objetivos pendientes aparecen primero.',
