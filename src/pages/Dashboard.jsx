@@ -314,6 +314,7 @@ export default function Dashboard() {
   const [openGoalId, setOpenGoalId] = useState(null)
   const [fullFormOpen, setFullFormOpen] = useState(false)
   const [activityRefresh, setActivityRefresh] = useState(0)
+  const [fullFormSaves, setFullFormSaves] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -533,6 +534,7 @@ export default function Dashboard() {
             goalItems={goals}
             onLogged={handleQuickLogged}
             onOpenFullForm={() => setFullFormOpen(true)}
+            refreshKey={activityRefresh + fullFormSaves}
           />
         )}
 
@@ -689,7 +691,10 @@ export default function Dashboard() {
             formOpen={fullFormOpen}
             onFormOpenChange={setFullFormOpen}
             refreshKey={activityRefresh}
-            onSaved={refreshGoals}
+            onSaved={() => {
+              setFullFormSaves((value) => value + 1)
+              return refreshGoals()
+            }}
           />
         )}
       </main>

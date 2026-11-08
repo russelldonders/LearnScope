@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('./supabaseClient', () => ({ supabase: {} }))
 
-const { buildCardStatement, cardFromTemplate, cardsFromDraft, derivedGoalsForCard, repeatTemplates } = await import('./quickActivityLog')
+const { buildCardStatement, cardFromTemplate, cardsFromDraft, derivedGoalsForCard, repeatTemplates, withReflection } = await import('./quickActivityLog')
 const { DIAGNOSTIC_EXTENSION_IRI, MEASUREMENT_EXTENSION_IRI, buildStatement, measurementsFromStatement } = await import('./xapiStatement')
 const { localDateString } = await import('./skillGoalProgress')
 
@@ -88,6 +88,24 @@ describe('buildCardStatement', () => {
     expect(buildCardStatement(card({ durationMinutes: '2.5' }), goals, actor).error).toBe('quickLog.errorDuration')
     const bad = buildCardStatement(card({ goalValues: [{ goalId: 'goal-push', value: '3.5', distance: '', time: '' }] }), goals, actor)
     expect(bad).toMatchObject({ error: 'skillGoals.errorWholeNumber', goal: pushUpGoal })
+  })
+})
+
+describe('withReflection', () => {
+  it('adds the question and answer after any existing note, leaving the rest alone', () => {
+    const { statement } = buildCardStatement(card({ note: 'Felt strong' }), goals, actor)
+    const updated = withReflection(statement, 'What went well?', '  Kept an even pace  ')
+    expect(updated.object.definition.description['en-US']).toBe('Felt strong\n\nWhat went well?\nKept an even pace')
+    expect(updated.object.definition.name).toEqual(statement.object.definition.name)
+    expect(updated.result).toEqual(statement.result)
+    expect(updated.timestamp).toBe(statement.timestamp)
+    expect(statement.object.definition.description['en-US']).toBe('Felt strong')
+  })
+
+  it('starts a note when there was none', () => {
+    const { statement } = buildCardStatement(card(), goals, actor)
+    expect(withReflection(statement, 'What did you learn or notice?', 'Hills are hard').object.definition.description['en-US'])
+      .toBe('What did you learn or notice?\nHills are hard')
   })
 })
 

@@ -205,6 +205,33 @@ function cardTimestamp(date) {
   return date === localDateString() ? new Date().toISOString() : dateToTimestamp(date)
 }
 
+// The questions offered after saving. One is picked each time so it doesn't
+// feel like a form; the answer is optional.
+export const REFLECTION_PROMPTS = ['quickLog.reflect.wentWell', 'quickLog.reflect.nextTime', 'quickLog.reflect.noticed']
+
+// The statement with a reflection added to the end of its note, question
+// first so it still reads clearly later. Everything else stays as it was.
+export function withReflection(statement, question, answer) {
+  const definition = { ...statement.object?.definition }
+  const existing = definition.description?.['en-US']?.trim()
+  const reflection = `${question}\n${answer.trim()}`
+  definition.description = { 'en-US': existing ? `${existing}\n\n${reflection}` : reflection }
+  return { ...statement, object: { ...statement.object, definition } }
+}
+
+export async function saveReflection(row, question, answer) {
+  const statement = withReflection(row.statement, question, answer)
+  const { data, error } = await supabase
+    .from('xapi_statements')
+    .update({ statement })
+    .eq('id', row.id)
+    .select('id, statement')
+  if (error) throw error
+  // RLS turns someone else's row into "0 rows changed" rather than an error.
+  if (!data?.length) throw new Error("This activity couldn't be changed from this account.")
+  return data[0]
+}
+
 // Checks a card and builds the statement to save. Returns { error } with a
 // translation key, or { statement, skillIds }.
 export function buildCardStatement(card, goals, actor) {

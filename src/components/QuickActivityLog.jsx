@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import SkillPickerModal from './SkillPickerModal'
+import ActivityRhythm from './ActivityRhythm'
+import ActivityReflection from './ActivityReflection'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import { supabase } from '../lib/supabaseClient'
@@ -13,21 +15,42 @@ import {
   cardsFromDraft,
   derivedGoalsForCard,
   draftActivitiesFromText,
+  REFLECTION_PROMPTS,
   repeatTemplates,
 } from '../lib/quickActivityLog'
+import { activeDays, RHYTHM_LOOKBACK_DAYS } from '../lib/activityRhythm'
 
 const INPUT_CLASS =
   'w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss'
 const RECENT_ROWS = 60
 
+// The browser's speech-to-text, where it has one (Chrome, Edge, Safari).
+function speechRecognitionClass() {
+  if (typeof window === 'undefined') return null
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null
+}
+
+// The browser's own regional variant when it matches the app's language
+// (so en-GB stays en-GB), otherwise the app's language.
+function speechLanguage(language) {
+  const browser = typeof navigator !== 'undefined' ? navigator.language : ''
+  if (browser?.toLowerCase().startsWith(language)) return browser
+  return language === 'zh' ? 'zh-CN' : language
+}
+
 // "What did you do?" on the dashboard. A sentence becomes draft activities the
 // learner checks and edits before anything is saved; things they log often can
 // be repeated with one tap. Goal values ride along on the activity, so goals
-// update the same way as logging from a goal's own tracker.
-export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFullForm }) {
+// update the same way as logging from a goal's own tracker. refreshKey changes
+// when activity was logged elsewhere on the page, so the streak stays current.
+export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFullForm, refreshKey = 0 }) {
   const { t, language } = useLanguage()
   const [skills, setSkills] = useState([])
   const [recentRows, setRecentRows] = useState([])
+  const [days, setDays] = useState(null)
+  const [listening, setListening] = useState(false)
+  const recognitionRef = useRef(null)
+  const SpeechRecognition = useMemo(speechRecognitionClass, [])
   const [actorName, setActorName] = useState('')
   const [text, setText] = useState('')
   const [reading, setReading] = useState(false)
@@ -54,6 +77,66 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
       .order('created_at', { ascending: false })
       .limit(RECENT_ROWS)
     setRecentRows(data ?? [])
+  }
+
+  // Only dates and the result extensions, newest first, so a very busy year
+  // still fits in one request.
+  async function loadRhythm() {
+    const since = new Date()
+    since.setDate(since.getDate() - RHYTHM_LOOKBACK_DAYS)
+    const { data, error } = await supabase
+      .from('xapi_statements')
+      .select('recorded_at, extensions:statement->result->extensions')
+      .eq('user_id', user.id)
+      .gte('recorded_at', since.toISOString())
+      .order('recorded_at', { ascending: false })
+    if (!error) setDays(activeDays(data ?? []))
+  }
+
+  useEffect(() => {
+    loadRhythm()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reloads when the page says activity changed; the loader is recreated every render
+  }, [user.id, refreshKey])
+
+  useEffect(() => () => recognitionRef.current?.abort(), [])
+
+  function toggleListening() {
+    if (listening) {
+      recognitionRef.current?.stop()
+      return
+    }
+    const recognition = new SpeechRecognition()
+    recognition.lang = speechLanguage(language)
+    recognition.interimResults = true
+    recognition.continuous = false
+    // What they say is added to anything already typed, never replacing it.
+    const typed = text.trim()
+    recognition.onresult = (event) => {
+      const spoken = Array.from(event.results)
+        .map((result) => result[0].transcript)
+        .join('')
+        .trim()
+      setText([typed, spoken].filter(Boolean).join(' '))
+    }
+    recognition.onerror = (event) => {
+      if (event.error === 'aborted' || event.error === 'no-speech') return
+      const blocked = event.error === 'not-allowed' || event.error === 'service-not-allowed'
+      setFormError(t(blocked ? 'quickLog.voice.blocked' : 'quickLog.voice.failed'))
+    }
+    recognition.onend = () => {
+      setListening(false)
+      recognitionRef.current = null
+    }
+    recognitionRef.current = recognition
+    setFormError(null)
+    setResult(null)
+    try {
+      recognition.start()
+      setListening(true)
+    } catch {
+      recognitionRef.current = null
+      setFormError(t('quickLog.voice.failed'))
+    }
   }
 
   useEffect(() => {
@@ -127,17 +210,19 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
       ]),
     )
     const before = new Map(goalItems.map((item) => [item.goal.id, item.progress]))
-    let saved = 0
+    const savedRows = []
     try {
       for (const { card, statement, skillIds } of built) {
-        await saveActivity({ userId: user.id, statement, evidence: null, skillIds })
-        saved += 1
+        const row = await saveActivity({ userId: user.id, statement, evidence: null, skillIds })
+        savedRows.push({ id: row.id, statement: row.statement })
         removeCard(card.key)
       }
     } catch (err) {
       setFormError(err.message)
     }
+    const saved = savedRows.length
     const refreshed = (await onLogged()) ?? []
+    // onLogged changes refreshKey, which reloads the streak.
     await loadRecent()
     const celebrations = refreshed
       .filter((item) => touchedGoalIds.has(item.goal.id) && before.has(item.goal.id))
@@ -148,7 +233,10 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
         return null
       })
       .filter(Boolean)
-    if (saved > 0) setResult({ saved, celebrations })
+    if (saved > 0) {
+      const prompt = REFLECTION_PROMPTS[Math.floor(Math.random() * REFLECTION_PROMPTS.length)]
+      setResult({ saved, celebrations, rows: savedRows, prompt })
+    }
     setSaving(false)
   }
 
@@ -156,6 +244,8 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
     <section aria-labelledby="quick-log-heading">
       <h2 id="quick-log-heading" className="font-display text-xl text-ink mb-1">{t('quickLog.title')}</h2>
       <p className="text-sm text-secondary mb-4">{t('quickLog.subtitle')}</p>
+
+      {days && <ActivityRhythm days={days} />}
 
       <form onSubmit={handleRead} className="space-y-2">
         <label htmlFor="quick-log-text" className="sr-only">{t('quickLog.title')}</label>
@@ -182,12 +272,32 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
           >
             {reading ? t('quickLog.reading') : t('quickLog.readButton')}
           </button>
+          {SpeechRecognition && (
+            <button
+              type="button"
+              onClick={toggleListening}
+              disabled={reading}
+              aria-pressed={listening}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium disabled:opacity-60 ${
+                listening ? 'border-moss bg-moss/10 text-moss' : 'border-hairline bg-card text-ink hover:border-moss'
+              }`}
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="3" width="6" height="11" rx="3" />
+                <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+              </svg>
+              {listening ? t('quickLog.voice.stop') : t('quickLog.voice.start')}
+            </button>
+          )}
           {onOpenFullForm && (
             <button type="button" onClick={onOpenFullForm} className="text-sm text-secondary hover:text-ink underline">
               {t('quickLog.fullForm')}
             </button>
           )}
         </div>
+        {listening && (
+          <p role="status" className="text-xs text-secondary">{t('quickLog.voice.listening')}</p>
+        )}
       </form>
 
       {question && (
@@ -248,9 +358,12 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
       )}
 
       {result && (
-        <div role="status" className="mt-3 text-sm text-moss">
-          <p>{t('quickLog.saved', { count: result.saved })}</p>
-          {result.celebrations.map((line) => <p key={line} className="font-medium">{line}</p>)}
+        <div className="mt-3">
+          <div role="status" className="text-sm text-moss">
+            <p>{t('quickLog.saved', { count: result.saved })}</p>
+            {result.celebrations.map((line) => <p key={line} className="font-medium">{line}</p>)}
+          </div>
+          <ActivityReflection key={result.rows.map((row) => row.id).join(',')} rows={result.rows} promptKey={result.prompt} />
         </div>
       )}
     </section>
