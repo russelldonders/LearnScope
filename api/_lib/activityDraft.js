@@ -134,7 +134,7 @@ ${measuredGoals.length ? measuredGoals.map(({ goal, index }) => describeGoal(goa
 
 Choose one outcome:
 - "activities": you can tell what they did. Set message to null and fill activities, one per separate thing they did (at most ${MAX_ACTIVITIES}). A run and a set of push-ups are two activities; a run described in two sentences is one.
-- "clarify": you can't tell what they did, or a number they gave could mean two different things for a goal (their best set or their total for the day?). Set activities to [] and ask one short question in message.
+- "clarify": only when you can't tell what they did at all, or a number they gave could mean two different things for a goal (their best set or their total for the day?). Set activities to [] and ask one short question in message. Never ask for details or numbers they didn't mention: log what they told you, leaving out goal values they didn't give.
 
 For each activity:
 - title: a short name for what they did, in their own words and in ${language}, such as "Morning run" or "Push-ups". Never reuse a goal's wording as the title.
