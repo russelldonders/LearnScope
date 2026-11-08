@@ -1510,6 +1510,18 @@ export default {
     },
   },
   skillGoals: {
+    dashboard: {
+      title: 'Tus objetivos',
+      subtitle: 'Registra tu progreso directamente aquí. Los objetivos pendientes aparecen primero.',
+      logButton: 'Registrar progreso',
+      timeToLog: 'Toca registrar',
+      nothingLogged: 'Aún no hay registros',
+      showAll: 'Mostrar los {count} objetivos',
+      showFewer: 'Mostrar menos',
+      newBest: '¡Nueva mejor marca! Guardado en tu registro de actividades.',
+      reachedNow: '¡Objetivo alcanzado! Guardado en tu registro de actividades.',
+      reminderTitle: 'Objetivos por registrar',
+    },
     title: 'Objetivos',
     privateNote: 'Solo tú puedes ver tus objetivos. Los valores, notas y evidencias que registras se guardan como actividades en esta habilidad. Quienes la validan y tus cuentas vinculadas pueden leerlos.',
     addButton: '+ Añadir un objetivo',

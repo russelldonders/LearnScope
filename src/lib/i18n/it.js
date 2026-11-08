@@ -1511,6 +1511,18 @@ export default {
     },
   },
   skillGoals: {
+    dashboard: {
+      title: 'I tuoi obiettivi',
+      subtitle: 'Registra i tuoi progressi direttamente qui. Gli obiettivi da aggiornare compaiono per primi.',
+      logButton: 'Registra progressi',
+      timeToLog: 'Da registrare',
+      nothingLogged: 'Ancora nessuna registrazione',
+      showAll: 'Mostra tutti i {count} obiettivi',
+      showFewer: 'Mostra meno',
+      newBest: 'Nuovo record! Salvato nel tuo registro attività.',
+      reachedNow: 'Obiettivo raggiunto! Salvato nel tuo registro attività.',
+      reminderTitle: 'Obiettivi da registrare',
+    },
     title: 'Obiettivi',
     privateNote: 'Solo tu puoi vedere i tuoi obiettivi. I valori, le note e le prove registrati vengono salvati come attività su questa competenza. Chi la convalida e i tuoi account collegati possono leggerli.',
     addButton: '+ Aggiungi un obiettivo',

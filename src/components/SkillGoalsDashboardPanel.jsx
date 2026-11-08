@@ -1,0 +1,221 @@
+import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import SkillGoalEntryForm from './SkillGoalEntryForm'
+import { useLanguage } from '../context/LanguageContext'
+import { supabase } from '../lib/supabaseClient'
+import { formatFullDate } from '../lib/dates'
+import { computeGoalProgress, formatGoalValue, goalLogFeedback, localDateString } from '../lib/skillGoalProgress'
+import { logGoalEntry } from '../lib/skillGoals'
+
+const COLLAPSED_COUNT = 4
+
+// The learner's active goals on the dashboard, so progress can be logged
+// without first finding the skill. Items arrive already sorted by what needs
+// attention; each carries its goal, skill, activities, progress and next log
+// date. Editing goals and correcting entries stay on the skill's page.
+export default function SkillGoalsDashboardPanel({ items, user, openGoalId, onOpenGoal, onChanged }) {
+  const { t } = useLanguage()
+  const [expanded, setExpanded] = useState(false)
+  const [actorName, setActorName] = useState('')
+
+  useEffect(() => {
+    let active = true
+    supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => {
+        if (active) setActorName(data?.full_name ?? '')
+      })
+    return () => {
+      active = false
+    }
+  }, [user.id])
+
+  const openIndex = items.findIndex((item) => item.goal.id === openGoalId)
+  const showAll = expanded || openIndex >= COLLAPSED_COUNT
+  const visible = showAll ? items : items.slice(0, COLLAPSED_COUNT)
+
+  return (
+    <section aria-labelledby="dashboard-goals-heading">
+      <h2 id="dashboard-goals-heading" className="font-display text-xl text-ink mb-1">
+        {t('skillGoals.dashboard.title')}
+      </h2>
+      <p className="text-sm text-secondary mb-6">{t('skillGoals.dashboard.subtitle')}</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {visible.map((item) => (
+          <GoalCard
+            key={item.goal.id}
+            item={item}
+            user={user}
+            actor={{ name: actorName, email: user.email }}
+            open={item.goal.id === openGoalId}
+            onToggle={() => onOpenGoal(item.goal.id === openGoalId ? null : item.goal.id)}
+            onChanged={onChanged}
+          />
+        ))}
+      </div>
+      {items.length > COLLAPSED_COUNT && openIndex < COLLAPSED_COUNT && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+          className="mt-3 text-sm text-moss font-medium hover:underline"
+        >
+          {expanded ? t('skillGoals.dashboard.showFewer') : t('skillGoals.dashboard.showAll', { count: items.length })}
+        </button>
+      )}
+    </section>
+  )
+}
+
+function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
+  const { t } = useLanguage()
+  const { goal, skill, statements, progress, nextLog } = item
+  const [note, setNote] = useState(null)
+  const cardRef = useRef(null)
+  const today = localDateString()
+  const due = nextLog != null && nextLog <= today
+  const formId = `dashboard-goal-form-${goal.id}`
+  const currentLabelKey = goal.aggregation === 'best'
+    ? 'skillGoals.bestSoFar'
+    : goal.period
+      ? `skillGoals.thisPeriod.${goal.period}`
+      : 'skillGoals.totalSoFar'
+
+  // Opened from a reminder: bring the card into view and move focus to it.
+  useEffect(() => {
+    if (!open || !cardRef.current) return
+    if (cardRef.current.contains(document.activeElement)) return
+    cardRef.current.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+    cardRef.current.focus({ preventScroll: true })
+  }, [open])
+
+  async function handleLog(values) {
+    setNote(null)
+    const before = progress
+    try {
+      await logGoalEntry({
+        goal,
+        skill,
+        userId: user.id,
+        actor,
+        input: values.input,
+        date: values.date,
+        note: values.note,
+        activityTitle: values.activityTitle,
+        evidence: values.evidence,
+      })
+    } catch (err) {
+      // The activity is saved before its files upload, so it may exist even
+      // though this failed. Reloading shows it, so a retry isn't a duplicate.
+      await onChanged()
+      throw err
+    }
+    const refreshed = await onChanged()
+    const updated = refreshed?.find((other) => other.goal.id === goal.id)
+    const after = updated ? computeGoalProgress(goal, updated.statements) : before
+    setNote(
+      values.date < goal.started_on
+        ? 'skillGoals.savedBeforeStart'
+        : goalLogFeedback(goal, before, after) ?? 'skillGoals.saved',
+    )
+    onToggle()
+  }
+
+  return (
+    <article
+      ref={cardRef}
+      tabIndex={-1}
+      aria-labelledby={`dashboard-goal-${goal.id}`}
+      className={`rounded-lg border bg-card p-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-moss ${
+        open ? 'border-moss md:col-span-2' : 'border-hairline'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 id={`dashboard-goal-${goal.id}`} className="text-sm font-medium text-ink break-words">
+            {goal.title}
+          </h3>
+          <Link to={`/skills/${skill.id}`} className="text-xs text-secondary hover:text-moss underline-offset-2 hover:underline break-words">
+            {skill.name}
+          </Link>
+        </div>
+        {due && (
+          <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-gold">
+            {t('skillGoals.dashboard.timeToLog')}
+          </span>
+        )}
+      </div>
+
+      <dl className="flex flex-wrap gap-x-4 gap-y-1 mt-2 font-mono text-xs text-secondary">
+        {progress.current != null && (
+          <div className="flex gap-1">
+            <dt>{t(currentLabelKey)}</dt>
+            <dd className="text-ink">{formatGoalValue(goal, progress.current)}</dd>
+          </div>
+        )}
+        {goal.target_value != null && (
+          <div className="flex gap-1">
+            <dt>{t('skillGoals.targetShort')}</dt>
+            <dd className="text-ink">{formatGoalValue(goal, goal.target_value)}</dd>
+          </div>
+        )}
+        {goal.target_date && (
+          <div className="flex gap-1">
+            <dt>{t('skillGoals.byShort')}</dt>
+            <dd className="text-ink">{formatFullDate(goal.target_date)}</dd>
+          </div>
+        )}
+      </dl>
+
+      {progress.percent != null && (
+        <div
+          role="progressbar"
+          aria-label={t('skillGoals.progressLabel')}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progress.percent)}
+          className="mt-2 h-1.5 rounded-full bg-hairline overflow-hidden"
+        >
+          <div className="h-full bg-moss" style={{ width: `${progress.percent}%` }} />
+        </div>
+      )}
+      {progress.reached && <p className="text-xs font-medium text-moss mt-1">{t('skillGoals.targetReached')}</p>}
+
+      {open ? (
+        <div id={formId} className="mt-3 pt-3 border-t border-hairline">
+          <p className="text-sm text-ink mb-2">{goal.tracker_question}</p>
+          <SkillGoalEntryForm
+            goal={goal}
+            statements={statements}
+            idPrefix={`dashboard-goal-${goal.id}`}
+            submitLabel={t('skillGoals.save')}
+            onSubmit={handleLog}
+            onCancel={onToggle}
+          />
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mt-3">
+          <span className="text-xs text-secondary">
+            {progress.lastLogged
+              ? t('skillGoals.lastLogged', { date: formatFullDate(progress.lastLogged.toISOString()) })
+              : t('skillGoals.dashboard.nothingLogged')}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setNote(null)
+              onToggle()
+            }}
+            className="rounded-md bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90"
+          >
+            {t('skillGoals.dashboard.logButton')}
+          </button>
+        </div>
+      )}
+      {note && <p role="status" className="text-xs text-moss mt-2">{t(note)}</p>}
+    </article>
+  )
+}

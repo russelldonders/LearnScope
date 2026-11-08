@@ -15,9 +15,12 @@ import {
   dateToTimestamp,
   formatGoalValue,
   goalChartPoints,
+  goalLogFeedback,
   goalReadings,
   localDateString,
+  nextLogDate,
   parseClock,
+  sortGoalsForAttention,
   resolveMetric,
   slugifyMetric,
   validateEntryInput,
@@ -351,5 +354,60 @@ describe('entries', () => {
 describe('dates', () => {
   it('keeps a picked date on that calendar day', () => {
     expect(localDateString(new Date(dateToTimestamp('2026-03-01')))).toBe('2026-03-01')
+  })
+})
+
+describe('logging rhythm and attention', () => {
+  const rhythmGoal = { ...pushUpGoal, log_every_days: 3 }
+
+  it('counts the next log from the goal start when nothing was logged since', () => {
+    expect(nextLogDate(rhythmGoal, null)).toBe('2026-10-04')
+    expect(nextLogDate(rhythmGoal, new Date('2026-09-20T12:00:00'))).toBe('2026-10-04')
+  })
+
+  it('counts the next log from the last entry', () => {
+    expect(nextLogDate(rhythmGoal, new Date('2026-10-10T12:00:00'))).toBe('2026-10-13')
+  })
+
+  it('has no next log without a rhythm', () => {
+    expect(nextLogDate({ ...pushUpGoal, log_every_days: null }, null)).toBeNull()
+  })
+
+  it('celebrates a target just reached, then a new best', () => {
+    expect(goalLogFeedback(pushUpGoal, { reached: false, current: 30 }, { reached: true, current: 41 })).toBe(
+      'skillGoals.dashboard.reachedNow',
+    )
+    expect(goalLogFeedback(pushUpGoal, { reached: false, current: 30 }, { reached: false, current: 32 })).toBe(
+      'skillGoals.dashboard.newBest',
+    )
+    expect(goalLogFeedback(paceGoal, { reached: false, current: 330 }, { reached: false, current: 320 })).toBe(
+      'skillGoals.dashboard.newBest',
+    )
+  })
+
+  it('says nothing special for a first entry, an equal value or a total', () => {
+    expect(goalLogFeedback(pushUpGoal, { reached: false, current: null }, { reached: false, current: 20 })).toBeNull()
+    expect(goalLogFeedback(pushUpGoal, { reached: false, current: 30 }, { reached: false, current: 30 })).toBeNull()
+    const totalGoal = { ...pushUpGoal, aggregation: 'total', period: 'week', target_value: 100 }
+    expect(goalLogFeedback(totalGoal, { reached: false, current: 30 }, { reached: false, current: 50 })).toBeNull()
+  })
+
+  it('puts goals due a log first, then the nearest target date, then the newest', () => {
+    const item = (id, extra = {}, nextLog = null) => ({
+      goal: { id, target_date: null, created_at: '2026-10-01T00:00:00Z', ...extra },
+      nextLog,
+    })
+    const sorted = sortGoalsForAttention(
+      [
+        item('new', { created_at: '2026-10-05T00:00:00Z' }),
+        item('target-late', { target_date: '2027-03-01' }),
+        item('due-later', {}, '2026-11-08'),
+        item('not-due-yet', { target_date: '2027-01-01' }, '2026-11-10'),
+        item('due-first', {}, '2026-11-01'),
+        item('old'),
+      ],
+      '2026-11-08',
+    )
+    expect(sorted.map((i) => i.goal.id)).toEqual(['due-first', 'due-later', 'not-due-yet', 'target-late', 'new', 'old'])
   })
 })

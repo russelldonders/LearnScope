@@ -1511,6 +1511,18 @@ export default {
     },
   },
   skillGoals: {
+    dashboard: {
+      title: 'Deine Ziele',
+      subtitle: 'Erfasse deinen Fortschritt direkt hier. Fällige Ziele stehen oben.',
+      logButton: 'Fortschritt erfassen',
+      timeToLog: 'Zeit zum Erfassen',
+      nothingLogged: 'Noch nichts erfasst',
+      showAll: 'Alle {count} Ziele anzeigen',
+      showFewer: 'Weniger anzeigen',
+      newBest: 'Neue Bestleistung! In deinem Aktivitätsprotokoll gespeichert.',
+      reachedNow: 'Ziel erreicht! In deinem Aktivitätsprotokoll gespeichert.',
+      reminderTitle: 'Ziele zum Erfassen',
+    },
     title: 'Ziele',
     privateNote: 'Nur du kannst deine Ziele sehen. Erfasste Werte, Notizen und Nachweise werden als Aktivitäten bei dieser Fähigkeit gespeichert. Personen, die sie validieren, und deine verknüpften Konten können sie lesen.',
     addButton: '+ Ziel hinzufügen',

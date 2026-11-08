@@ -152,6 +152,60 @@ export function goalChartPoints(goal, statements) {
     .map(([start, value]) => ({ date: new Date(start), value }))
 }
 
+function addDays(dateString, days) {
+  const date = startOfDayFromString(dateString)
+  date.setDate(date.getDate() + days)
+  return localDateString(date)
+}
+
+// The day a goal's logging rhythm next asks for an entry, counted from the last
+// entry, or from the day the goal began when nothing has been logged since.
+// Null when the goal has no rhythm.
+export function nextLogDate(goal, lastLogged) {
+  if (!goal.log_every_days) return null
+  const lastDay = lastLogged ? localDateString(lastLogged) : null
+  const from = lastDay && lastDay > goal.started_on ? lastDay : goal.started_on
+  return addDays(from, goal.log_every_days)
+}
+
+// What to say after a new entry: a new best or a target just reached are worth
+// celebrating. Returns a translation key, or null for an ordinary entry.
+export function goalLogFeedback(goal, before, after) {
+  if (!before.reached && after.reached) return 'skillGoals.dashboard.reachedNow'
+  if (
+    goal.aggregation === 'best' &&
+    before.current != null &&
+    after.current != null &&
+    isBetter(goal, after.current, before.current)
+  ) {
+    return 'skillGoals.dashboard.newBest'
+  }
+  return null
+}
+
+// Goals in the order they need the learner: those due a log first (most
+// overdue first), then the nearest target dates, then the newest.
+export function sortGoalsForAttention(items, today = localDateString()) {
+  const dueDate = (item) => (item.nextLog && item.nextLog <= today ? item.nextLog : null)
+  return [...items].sort((a, b) => {
+    const dueA = dueDate(a)
+    const dueB = dueDate(b)
+    if (dueA !== dueB) {
+      if (!dueA) return 1
+      if (!dueB) return -1
+      return dueA.localeCompare(dueB)
+    }
+    const targetA = a.goal.target_date
+    const targetB = b.goal.target_date
+    if (targetA !== targetB) {
+      if (!targetA) return 1
+      if (!targetB) return -1
+      return targetA.localeCompare(targetB)
+    }
+    return String(b.goal.created_at).localeCompare(String(a.goal.created_at))
+  })
+}
+
 // Accepts "25:30" or "1:05:00". Returns seconds, or null if it can't be read as
 // a time. A bare number is refused because it's ambiguous: "45" could be
 // seconds on a plank or minutes on a run.

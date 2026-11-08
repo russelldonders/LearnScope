@@ -1508,6 +1508,18 @@ export default {
     },
   },
   skillGoals: {
+    dashboard: {
+      title: 'Your goals',
+      subtitle: 'Log progress straight from here. Goals due a log come first.',
+      logButton: 'Log progress',
+      timeToLog: 'Time to log',
+      nothingLogged: 'Nothing logged yet',
+      showAll: 'Show all {count} goals',
+      showFewer: 'Show fewer',
+      newBest: 'New best! Saved to your activity log.',
+      reachedNow: 'Target reached! Saved to your activity log.',
+      reminderTitle: 'Goals to log',
+    },
     title: 'Goals',
     privateNote: 'Only you can see your goals. Values, notes and evidence you log are saved as activities on this skill, which people validating it and your linked accounts can read.',
     addButton: '+ Add a goal',

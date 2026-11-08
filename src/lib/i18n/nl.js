@@ -1509,6 +1509,18 @@ export default {
     },
   },
   skillGoals: {
+    dashboard: {
+      title: 'Je doelen',
+      subtitle: 'Leg je voortgang hier direct vast. Doelen die aan de beurt zijn staan bovenaan.',
+      logButton: 'Voortgang vastleggen',
+      timeToLog: 'Tijd om vast te leggen',
+      nothingLogged: 'Nog niets vastgelegd',
+      showAll: 'Alle {count} doelen tonen',
+      showFewer: 'Minder tonen',
+      newBest: 'Nieuw record! Opgeslagen in je activiteitenlog.',
+      reachedNow: 'Doel bereikt! Opgeslagen in je activiteitenlog.',
+      reminderTitle: 'Doelen om vast te leggen',
+    },
     title: 'Doelen',
     privateNote: 'Alleen jij kunt je doelen zien. Waarden, notities en bewijs die je vastlegt, worden opgeslagen als activiteiten bij deze vaardigheid. Mensen die deze vaardigheid valideren en je gekoppelde accounts kunnen die lezen.',
     addButton: '+ Doel toevoegen',

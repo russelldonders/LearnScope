@@ -1511,6 +1511,18 @@ export default {
     },
   },
   skillGoals: {
+    dashboard: {
+      title: 'Vos objectifs',
+      subtitle: 'Enregistrez vos progrès directement ici. Les objectifs à mettre à jour apparaissent en premier.',
+      logButton: 'Enregistrer un progrès',
+      timeToLog: 'À enregistrer',
+      nothingLogged: 'Rien d’enregistré pour l’instant',
+      showAll: 'Afficher les {count} objectifs',
+      showFewer: 'Afficher moins',
+      newBest: 'Nouveau record ! Enregistré dans votre journal d’activités.',
+      reachedNow: 'Objectif atteint ! Enregistré dans votre journal d’activités.',
+      reminderTitle: 'Objectifs à enregistrer',
+    },
     title: 'Objectifs',
     privateNote: 'Vous seul pouvez voir vos objectifs. Les valeurs, notes et preuves enregistrées sont conservées comme activités sur cette compétence. Les personnes qui la valident et vos comptes liés peuvent les lire.',
     addButton: '+ Ajouter un objectif',

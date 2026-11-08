@@ -24,6 +24,9 @@ import GrowthRing from '../components/GrowthRing'
 import CourseThumbnail from '../components/CourseThumbnail'
 import ConnectionsActivityFeed from '../components/ConnectionsActivityFeed'
 import GrowthArrow from '../components/GrowthArrow'
+import SkillGoalsDashboardPanel from '../components/SkillGoalsDashboardPanel'
+import { listActiveGoalsWithActivities } from '../lib/skillGoals'
+import { computeGoalProgress, nextLogDate, sortGoalsForAttention } from '../lib/skillGoalProgress'
 import { LEVEL_LABELS } from '../lib/levels'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
@@ -171,6 +174,18 @@ async function loadPendingReviewTasks(userId) {
   return [...rateTasks, ...recommendTasks, ...validationTasks].sort((a, b) => new Date(b.date) - new Date(a.date))
 }
 
+// Active goals with their progress and next log date worked out once, sorted
+// so the ones needing the learner come first.
+async function loadGoals(userId) {
+  const items = await listActiveGoalsWithActivities(userId)
+  return sortGoalsForAttention(
+    items.map((item) => {
+      const progress = computeGoalProgress(item.goal, item.statements)
+      return { ...item, progress, nextLog: nextLogDate(item.goal, progress.lastLogged) }
+    }),
+  )
+}
+
 const RECENT_GROWTH_WINDOW_DAYS = 28
 
 async function loadRecentGrowth(userId) {
@@ -294,6 +309,8 @@ export default function Dashboard() {
   const [upcomingTargets, setUpcomingTargets] = useState([])
   const [pendingReviewTasks, setPendingReviewTasks] = useState([])
   const [importBanner, setImportBanner] = useState(null)
+  const [goals, setGoals] = useState([])
+  const [openGoalId, setOpenGoalId] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -317,6 +334,7 @@ export default function Dashboard() {
       loadPendingReviewTasks(user.id),
       loadImportBannerState(),
       listMyAssignedCourseEmployers(user.id),
+      loadGoals(user.id),
     ])
     const valueOr = (index, fallback) => dashboardResultValue(results, index, fallback)
     const [
@@ -333,6 +351,7 @@ export default function Dashboard() {
       reviewTasks,
       importBannerState,
       assignedCourseEmployers,
+      activeGoals,
     ] = [
       valueOr(0, 0),
       valueOr(1, 0),
@@ -347,6 +366,7 @@ export default function Dashboard() {
       valueOr(10, []),
       valueOr(11, null),
       valueOr(12, new Map()),
+      valueOr(13, []),
     ]
     setCounts({ skills, courses, experience, connections })
     setRecentGrowth(growth)
@@ -359,7 +379,17 @@ export default function Dashboard() {
     setUpcomingTargets(targetsDue)
     setPendingReviewTasks(reviewTasks)
     setImportBanner(importBannerState)
+    setGoals(activeGoals)
     setLoading(false)
+  }
+
+  // After a goal entry: reloads only the goals, and returns them so the card
+  // can tell whether the entry was a new best. A logged activity can also
+  // change a skill's next step, so Up Next is refreshed alongside.
+  async function refreshGoals() {
+    const [items] = await Promise.all([loadGoals(user.id).catch(() => null), refreshUpNext().catch(() => {})])
+    if (items) setGoals(items)
+    return items
   }
 
   // A quick action taken straight from an Up Next card (logging activity,
@@ -394,6 +424,26 @@ export default function Dashboard() {
       .update({ current_role_banner_dismissed_at: new Date().toISOString() })
       .eq('id', user.id)
   }
+
+  const today = todayDateString()
+  const goalsToLog = goals.filter((item) => item.nextLog && item.nextLog <= today)
+  const goalTargetsDue = goals.filter(
+    (item) => item.goal.target_date && item.goal.target_date <= reminderCutoff() && !item.progress.reached,
+  )
+  const targetReminders = [
+    ...upcomingTargets.map((target) => ({
+      key: `target-${target.id}`,
+      label: `${target.skills?.name ?? 'Skill'} → ${LEVEL_LABELS[target.target_level]}`,
+      to: `/skills/${target.skill_id}`,
+      date: target.target_date,
+    })),
+    ...goalTargetsDue.map(({ goal, skill }) => ({
+      key: `goal-target-${goal.id}`,
+      label: `${goal.title} · ${skill.name}`,
+      to: `/skills/${skill.id}`,
+      date: goal.target_date,
+    })),
+  ].sort((a, b) => a.date.localeCompare(b.date))
 
   return (
     <div className="min-h-screen bg-paper">
@@ -466,8 +516,21 @@ export default function Dashboard() {
             </div>
           )}
 
+        {!loading && goals.length > 0 && (
+          <SkillGoalsDashboardPanel
+            items={goals}
+            user={user}
+            openGoalId={openGoalId}
+            onOpenGoal={setOpenGoalId}
+            onChanged={refreshGoals}
+          />
+        )}
+
         {!loading &&
-          (upcomingSelfAssessments.length > 0 || upcomingTargets.length > 0 || pendingReviewTasks.length > 0) && (
+          (upcomingSelfAssessments.length > 0 ||
+            targetReminders.length > 0 ||
+            goalsToLog.length > 0 ||
+            pendingReviewTasks.length > 0) && (
             <div>
               <h2 className="font-display text-xl text-ink mb-6">{t('dashboard.needsAttention')}</h2>
               <div className="space-y-6">
@@ -484,15 +547,28 @@ export default function Dashboard() {
                     ))}
                   </ReminderGroup>
                 )}
-                {upcomingTargets.length > 0 && (
-                  <ReminderGroup title="Target dates">
-                    {upcomingTargets.map((t) => (
+                {goalsToLog.length > 0 && (
+                  <ReminderGroup title={t('skillGoals.dashboard.reminderTitle')}>
+                    {goalsToLog.map(({ goal, skill, nextLog }) => (
                       <ReminderRow
-                        key={t.id}
-                        to={`/skills/${t.skill_id}`}
-                        label={`${t.skills?.name ?? 'Skill'} → ${LEVEL_LABELS[t.target_level]}`}
-                        date={t.target_date}
-                        overdue={t.target_date <= todayDateString()}
+                        key={goal.id}
+                        onClick={() => setOpenGoalId(goal.id)}
+                        label={`${goal.title} · ${skill.name}`}
+                        date={nextLog}
+                        overdue={nextLog < today}
+                      />
+                    ))}
+                  </ReminderGroup>
+                )}
+                {targetReminders.length > 0 && (
+                  <ReminderGroup title="Target dates">
+                    {targetReminders.map((row) => (
+                      <ReminderRow
+                        key={row.key}
+                        to={row.to}
+                        label={row.label}
+                        date={row.date}
+                        overdue={row.date <= today}
                       />
                     ))}
                   </ReminderGroup>
@@ -1129,12 +1205,13 @@ function ReminderGroup({ title, children }) {
   )
 }
 
-function ReminderRow({ to, label, date, overdue = false }) {
-  return (
-    <Link
-      to={to}
-      className="flex items-center justify-between gap-3 bg-card border border-hairline rounded-lg px-4 py-3 hover:border-moss transition-colors"
-    >
+// A link to where the reminder is dealt with, or a button when it can be dealt
+// with right here on the dashboard (logging a goal).
+function ReminderRow({ to, onClick, label, date, overdue = false }) {
+  const className =
+    'flex w-full items-center justify-between gap-3 bg-card border border-hairline rounded-lg px-4 py-3 text-left hover:border-moss transition-colors'
+  const content = (
+    <>
       <span className="text-sm text-ink truncate min-w-0">{label}</span>
       <span
         className={`font-mono text-xs shrink-0 ${overdue ? 'text-gold' : 'text-secondary'}`}
@@ -1142,6 +1219,18 @@ function ReminderRow({ to, label, date, overdue = false }) {
       >
         {formatRelativeDate(date)}
       </span>
+    </>
+  )
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        {content}
+      </button>
+    )
+  }
+  return (
+    <Link to={to} className={className}>
+      {content}
     </Link>
   )
 }

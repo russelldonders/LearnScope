@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient'
-import { saveActivity } from './activitySkillLinks'
+import { fetchStatementsForSkill, saveActivity } from './activitySkillLinks'
 import { buildStatement } from './xapiStatement'
 import {
   ACTIVITY_COUNT_METRIC,
@@ -24,6 +24,34 @@ export async function listSkillGoals(skillId) {
     .order('created_at', { ascending: false })
   if (error) throw error
   return data ?? []
+}
+
+// Every goal the learner is working towards, with its skill and that skill's
+// activities, for the dashboard. A skill's activities are read in full, as on
+// the skill's page, so progress and baselines come out exactly the same.
+export async function listActiveGoalsWithActivities(userId) {
+  const { data, error } = await supabase
+    .from('skill_goals')
+    .select(`${GOAL_COLUMNS}, skills!inner(id, name, user_id)`)
+    .eq('status', 'active')
+    .eq('skills.user_id', userId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  const goals = data ?? []
+  const skillIds = [...new Set(goals.map((goal) => goal.skill_id))]
+  const statementsBySkill = new Map(
+    await Promise.all(
+      skillIds.map(async (skillId) => [
+        skillId,
+        await fetchStatementsForSkill(skillId, 'id, recorded_at, statement, resource_id, evidence_paths'),
+      ]),
+    ),
+  )
+  return goals.map(({ skills, ...goal }) => ({
+    goal,
+    skill: { id: skills.id, name: skills.name },
+    statements: statementsBySkill.get(goal.skill_id) ?? [],
+  }))
 }
 
 // Asks AI to turn what the learner wrote into a draft. Returns

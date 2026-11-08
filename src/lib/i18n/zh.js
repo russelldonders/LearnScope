@@ -1490,6 +1490,18 @@ export default {
     },
   },
   skillGoals: {
+    dashboard: {
+      title: '你的目标',
+      subtitle: '直接在这里记录进展。需要记录的目标排在最前面。',
+      logButton: '记录进展',
+      timeToLog: '该记录了',
+      nothingLogged: '尚无记录',
+      showAll: '显示全部 {count} 个目标',
+      showFewer: '收起',
+      newBest: '新的最佳成绩！已保存到你的活动记录。',
+      reachedNow: '目标已达成！已保存到你的活动记录。',
+      reminderTitle: '待记录的目标',
+    },
     title: '目标',
     privateNote: '只有你能看到自己的目标。你记录的数值、备注和证明会作为此技能的活动保存,验证此技能的人和你关联的账户可以查看。',
     addButton: '+ 添加目标',
