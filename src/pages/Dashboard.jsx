@@ -25,6 +25,7 @@ import CourseThumbnail from '../components/CourseThumbnail'
 import ConnectionsActivityFeed from '../components/ConnectionsActivityFeed'
 import GrowthArrow from '../components/GrowthArrow'
 import SkillGoalsDashboardPanel from '../components/SkillGoalsDashboardPanel'
+import QuickActivityLog from '../components/QuickActivityLog'
 import { listActiveGoalsWithActivities } from '../lib/skillGoals'
 import { computeGoalProgress, nextLogDate, sortGoalsForAttention } from '../lib/skillGoalProgress'
 import { LEVEL_LABELS } from '../lib/levels'
@@ -311,6 +312,8 @@ export default function Dashboard() {
   const [importBanner, setImportBanner] = useState(null)
   const [goals, setGoals] = useState([])
   const [openGoalId, setOpenGoalId] = useState(null)
+  const [fullFormOpen, setFullFormOpen] = useState(false)
+  const [activityRefresh, setActivityRefresh] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -389,6 +392,14 @@ export default function Dashboard() {
   async function refreshGoals() {
     const [items] = await Promise.all([loadGoals(user.id).catch(() => null), refreshUpNext().catch(() => {})])
     if (items) setGoals(items)
+    return items
+  }
+
+  // After the quick log saved activities: goals and the recent activity list
+  // both change.
+  async function handleQuickLogged() {
+    const items = await refreshGoals()
+    setActivityRefresh((value) => value + 1)
     return items
   }
 
@@ -516,13 +527,22 @@ export default function Dashboard() {
             </div>
           )}
 
+        {!loading && counts.skills > 0 && (
+          <QuickActivityLog
+            user={user}
+            goalItems={goals}
+            onLogged={handleQuickLogged}
+            onOpenFullForm={() => setFullFormOpen(true)}
+          />
+        )}
+
         {!loading && goals.length > 0 && (
           <SkillGoalsDashboardPanel
             items={goals}
             user={user}
             openGoalId={openGoalId}
             onOpenGoal={setOpenGoalId}
-            onChanged={refreshGoals}
+            onChanged={handleQuickLogged}
           />
         )}
 
@@ -664,7 +684,14 @@ export default function Dashboard() {
           </div>
         )}
 
-        {!loading && counts.skills > 0 && <RecordActivitySection />}
+        {!loading && counts.skills > 0 && (
+          <RecordActivitySection
+            formOpen={fullFormOpen}
+            onFormOpenChange={setFullFormOpen}
+            refreshKey={activityRefresh}
+            onSaved={refreshGoals}
+          />
+        )}
       </main>
 
       {addSkillOpen && (

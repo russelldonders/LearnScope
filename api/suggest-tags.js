@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { verifySupabaseUser } from './_lib/auth.js'
 import { consumeQuota, sendQuotaExceeded } from './_lib/quota.js'
 import { buildGoalDraftRequest, normalizeGoalDraft } from './_lib/skillGoalDraft.js'
+import { buildActivityDraftRequest, normalizeActivityDraft } from './_lib/activityDraft.js'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -144,6 +145,8 @@ export default async function handler(req, res) {
   const body = req.body ?? {}
   const request = body.operation === 'skill-goal'
     ? buildGoalDraftRequest(body)
+    : body.operation === 'log-activity'
+    ? buildActivityDraftRequest(body)
     : body.operation === 'experience-skills'
       ? buildExperienceRecommendationRequest(body)
       : body.operation === 'activity-skills'
@@ -178,6 +181,12 @@ export default async function handler(req, res) {
     const data = JSON.parse(textBlock?.text ?? '{}')
     if (body.operation === 'skill-goal') {
       const draft = normalizeGoalDraft(data, request.today)
+      if (draft) res.status(200).json(draft)
+      else res.status(422).json({ error: request.refusalError })
+      return
+    }
+    if (body.operation === 'log-activity') {
+      const draft = normalizeActivityDraft(data, request.context)
       if (draft) res.status(200).json(draft)
       else res.status(422).json({ error: request.refusalError })
       return

@@ -5,7 +5,7 @@ import SkillGoalEntryForm from './SkillGoalEntryForm'
 import { useLanguage } from '../context/LanguageContext'
 import { supabase } from '../lib/supabaseClient'
 import { formatFullDate } from '../lib/dates'
-import { computeGoalProgress, formatGoalValue, goalLogFeedback, localDateString } from '../lib/skillGoalProgress'
+import { computeGoalProgress, formatGoalValue, goalLogFeedback, lastGoalEntry, localDateString } from '../lib/skillGoalProgress'
 import { logGoalEntry } from '../lib/skillGoals'
 
 const COLLAPSED_COUNT = 4
@@ -75,8 +75,10 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
   const { t } = useLanguage()
   const { goal, skill, statements, progress, nextLog } = item
   const [note, setNote] = useState(null)
+  const [prefill, setPrefill] = useState(false)
   const cardRef = useRef(null)
   const today = localDateString()
+  const lastEntry = lastGoalEntry(goal, statements)
   const due = nextLog != null && nextLog <= today
   const formId = `dashboard-goal-form-${goal.id}`
   const currentLabelKey = goal.aggregation === 'best'
@@ -195,8 +197,10 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
         <div id={formId} className="mt-3 pt-3 border-t border-hairline">
           <p className="text-sm text-ink mb-2">{goal.tracker_question}</p>
           <SkillGoalEntryForm
+            key={prefill ? 'prefilled' : 'empty'}
             goal={goal}
             statements={statements}
+            prefillFrom={prefill ? lastEntry : null}
             idPrefix={`dashboard-goal-${goal.id}`}
             submitLabel={t('skillGoals.save')}
             onSubmit={handleLog}
@@ -210,16 +214,32 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
               ? t('skillGoals.lastLogged', { date: formatFullDate(progress.lastLogged.toISOString()) })
               : t('skillGoals.dashboard.nothingLogged')}
           </span>
-          <button
-            type="button"
-            onClick={() => {
-              setNote(null)
-              onToggle()
-            }}
-            className="rounded-md bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90"
-          >
-            {t('skillGoals.dashboard.logButton')}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {lastEntry && (
+              <button
+                type="button"
+                onClick={() => {
+                  setNote(null)
+                  setPrefill(true)
+                  onToggle()
+                }}
+                className="rounded-md border border-hairline text-ink text-xs font-medium px-3 py-1.5 hover:border-moss"
+              >
+                {t('skillGoals.dashboard.sameAsLast')}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setNote(null)
+                setPrefill(false)
+                onToggle()
+              }}
+              className="rounded-md bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90"
+            >
+              {t('skillGoals.dashboard.logButton')}
+            </button>
+          </div>
         </div>
       )}
       {note && <p role="status" className="text-xs text-moss mt-2">{t(note)}</p>}

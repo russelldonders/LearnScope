@@ -69,6 +69,14 @@ export function goalReadings(goal, statements) {
   return readings.sort((a, b) => a.date - b.date)
 }
 
+// The latest entry that holds a value for this goal, for "same as last time".
+// Null when there isn't one, or when the goal only counts activities.
+export function lastGoalEntry(goal, statements) {
+  if (isDerivedKind(goal.measure_kind)) return null
+  const readings = goalReadings(goal, statements)
+  return readings.length ? readings[readings.length - 1].row : null
+}
+
 function startOfDayFromString(dateString) {
   return new Date(`${dateString}T00:00:00`)
 }

@@ -12,6 +12,8 @@ const SOURCES = Object.values(import.meta.glob([
   '../../components/ActivityRow.jsx',
   '../../components/SkillGoal*.jsx',
   '../skillGoalProgress.js',
+  '../../components/QuickActivityLog.jsx',
+  '../quickActivityLog.js',
   '../../components/RecordActivitySection.jsx',
   '../../components/ImportProfileDataButton.jsx',
   '../../components/ProfilePhoto.jsx',

@@ -4,7 +4,7 @@
 // it in the app.
 
 const MAX_TEXT_LENGTH = 1000
-const LANGUAGE_NAMES = {
+export const LANGUAGE_NAMES = {
   en: 'English',
   nl: 'Dutch',
   de: 'German',
@@ -55,14 +55,24 @@ export const GOAL_DRAFT_SCHEMA = {
   additionalProperties: false,
 }
 
-function clean(value, maxLength) {
+export function clean(value, maxLength) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : ''
 }
 
-function isRealDate(value) {
+export function isRealDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
   const date = new Date(`${value}T00:00:00Z`)
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+}
+
+// The client's own date when it's plausible, so "by Friday" or "yesterday"
+// resolves where the learner is. It can only differ from the server's by
+// about a day.
+export function resolveToday(clientToday, serverToday) {
+  const candidate = isRealDate(clientToday) ? clientToday : null
+  const dayMs = 24 * 60 * 60 * 1000
+  const plausible = candidate && Math.abs(new Date(candidate) - new Date(serverToday)) <= 2 * dayMs
+  return plausible ? candidate : serverToday
 }
 
 function normalizeMeasures(measures) {
@@ -85,12 +95,7 @@ export function buildGoalDraftRequest(body, serverToday = new Date().toISOString
 
   const measures = normalizeMeasures(body?.existingMeasures)
   const language = LANGUAGE_NAMES[body?.language] ?? 'English'
-  // The client's own date when it's plausible, so "by Friday" resolves where
-  // the learner is. It can only differ from the server's by about a day.
-  const clientToday = isRealDate(body?.today) ? body.today : null
-  const dayMs = 24 * 60 * 60 * 1000
-  const plausible = clientToday && Math.abs(new Date(clientToday) - new Date(serverToday)) <= 2 * dayMs
-  const today = plausible ? clientToday : serverToday
+  const today = resolveToday(body?.today, serverToday)
 
   return {
     schema: GOAL_DRAFT_SCHEMA,

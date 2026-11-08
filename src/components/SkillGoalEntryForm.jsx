@@ -13,8 +13,12 @@ import {
 const INPUT_CLASS =
   'w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss'
 
-function initialFields(goal, row, statements) {
+function initialFields(goal, row, statements, prefillFrom = null) {
   const fields = { value: '', distance: '', time: '', minutes: '', title: '', note: '' }
+  if (!row && prefillFrom) {
+    // Same values as last time; the note stays empty since it was about that day.
+    return { ...initialFields(goal, prefillFrom, statements), note: '' }
+  }
   if (row) {
     const measurement = measurementsFromStatement(row.statement).find(
       (m) => m.kind === goal.measure_kind,
@@ -45,10 +49,10 @@ function initialFields(goal, row, statements) {
 // Both the card's quick entry and correcting an existing entry. It asks only
 // for what this goal measures, and hands back parsed values; saving is up to
 // the caller. A correction leaves evidence alone, since it isn't changing that.
-export default function SkillGoalEntryForm({ goal, row = null, statements, idPrefix, submitLabel, onSubmit, onCancel }) {
+export default function SkillGoalEntryForm({ goal, row = null, prefillFrom = null, statements, idPrefix, submitLabel, onSubmit, onCancel }) {
   const { t } = useLanguage()
   const today = localDateString()
-  const [fields, setFields] = useState(() => initialFields(goal, row, statements))
+  const [fields, setFields] = useState(() => initialFields(goal, row, statements, prefillFrom))
   const [date, setDate] = useState(row ? localDateString(new Date(row.recorded_at)) : today)
   const [showMore, setShowMore] = useState(Boolean(row && fields.note))
   const [evidenceUrl, setEvidenceUrl] = useState('')

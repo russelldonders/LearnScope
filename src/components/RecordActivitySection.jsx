@@ -11,7 +11,9 @@ import { useLanguage } from '../context/LanguageContext'
 
 const RECENT_LIMIT = 6
 
-export default function RecordActivitySection() {
+// The form can be opened from outside (the dashboard's quick log offers it),
+// and refreshKey reloads the list after activities were saved elsewhere.
+export default function RecordActivitySection({ formOpen, onFormOpenChange, refreshKey = 0, onSaved }) {
   const { user } = useAuth()
   const { t } = useLanguage()
   const navigate = useNavigate()
@@ -21,7 +23,9 @@ export default function RecordActivitySection() {
   const [actorName, setActorName] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [modalOpen, setModalOpen] = useState(false)
+  const [ownModalOpen, setOwnModalOpen] = useState(false)
+  const modalOpen = formOpen ?? ownModalOpen
+  const setModalOpen = onFormOpenChange ?? setOwnModalOpen
 
   useEffect(() => {
     loadStatements()
@@ -30,6 +34,14 @@ export default function RecordActivitySection() {
     loadActorName()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the listed values change; the loaders are recreated every render
   }, [])
+
+  useEffect(() => {
+    if (refreshKey > 0) {
+      loadStatements()
+      loadSkills()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reloads only when another part of the page saved something
+  }, [refreshKey])
 
   async function loadStatements() {
     setLoading(true)
@@ -98,6 +110,7 @@ export default function RecordActivitySection() {
     }
     setModalOpen(false)
     await loadStatements()
+    await onSaved?.()
   }
 
   function goToActivity(row, relatedSkills, relatedExperience) {
