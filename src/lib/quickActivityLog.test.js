@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('./supabaseClient', () => ({ supabase: {} }))
 
-const { buildCardStatement, cardFromTemplate, cardsFromDraft, derivedGoalsForCard, repeatTemplates, withReflection } = await import('./quickActivityLog')
+const { buildCardStatement, canRepeatRow, cardFromRow, cardFromTemplate, cardsFromDraft, derivedGoalsForCard, repeatTemplates, withReflection } = await import('./quickActivityLog')
 const { DIAGNOSTIC_EXTENSION_IRI, MEASUREMENT_EXTENSION_IRI, buildStatement, measurementsFromStatement } = await import('./xapiStatement')
 const { localDateString } = await import('./skillGoalProgress')
 
@@ -142,6 +142,16 @@ describe('repeatTemplates', () => {
     expect(first.key).not.toBe(second.key)
     first.skills.push(fitness)
     expect(template.card.skills).toEqual([running])
+  })
+
+  it('turns a single activity into a card for today, or nothing when it cannot be repeated', () => {
+    const statement = logged('Evening run', [running], { minutes: 40 })
+    const card = cardFromRow(row('1', statement), skills, goals)
+    expect(card).toMatchObject({ title: 'Evening run', durationMinutes: '40', skills: [running], date: localDateString() })
+    expect(cardFromRow(row('2', statement, { resource_id: 'course' }), skills, goals)).toBeNull()
+    expect(cardFromRow(row('3', logged('Piano', [{ id: 'gone', name: 'Piano' }])), skills, goals)).toBeNull()
+    expect(canRepeatRow(row('4', statement))).toBe(true)
+    expect(canRepeatRow(row('5', { ...statement, result: { extensions: { [DIAGNOSTIC_EXTENSION_IRI]: {} } } }))).toBe(false)
   })
 
   it('ignores measurements that are not for an active goal', () => {

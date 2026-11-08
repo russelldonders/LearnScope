@@ -8,7 +8,7 @@ const INPUT_CLASS =
 
 // One optional question after saving. The answer goes into the activity's
 // own note, so it lives with the activity rather than somewhere separate.
-export default function ActivityReflection({ rows, promptKey }) {
+export default function ActivityReflection({ rows, promptKey, idPrefix = 'quick-log-reflection', onSaved, onClose }) {
   const { t } = useLanguage()
   const [rowId, setRowId] = useState(rows[0]?.id ?? '')
   const [answer, setAnswer] = useState('')
@@ -33,6 +33,7 @@ export default function ActivityReflection({ rows, promptKey }) {
       await saveReflection(row, question, answer)
       setSavedTitle(activityName(row.statement))
       setState('saved')
+      onSaved?.()
     } catch (err) {
       setError(err.message)
       setState('open')
@@ -41,15 +42,15 @@ export default function ActivityReflection({ rows, promptKey }) {
 
   return (
     <form onSubmit={handleSubmit} className="mt-3 rounded-lg border border-hairline bg-card p-3 space-y-2">
-      <label htmlFor="quick-log-reflection" className="block text-sm text-ink font-medium">
+      <label htmlFor={idPrefix} className="block text-sm text-ink font-medium">
         {question} <span className="font-normal text-secondary">{t('quickLog.reflect.optional')}</span>
       </label>
       {rows.length > 1 && (
         <div>
-          <label htmlFor="quick-log-reflection-activity" className="block text-xs text-secondary mb-1">
+          <label htmlFor={`${idPrefix}-activity`} className="block text-xs text-secondary mb-1">
             {t('quickLog.reflect.about')}
           </label>
-          <select id="quick-log-reflection-activity" value={rowId} onChange={(e) => setRowId(e.target.value)} className={INPUT_CLASS}>
+          <select id={`${idPrefix}-activity`} value={rowId} onChange={(e) => setRowId(e.target.value)} className={INPUT_CLASS}>
             {rows.map((row) => (
               <option key={row.id} value={row.id}>{activityName(row.statement)}</option>
             ))}
@@ -57,7 +58,7 @@ export default function ActivityReflection({ rows, promptKey }) {
         </div>
       )}
       <textarea
-        id="quick-log-reflection"
+        id={idPrefix}
         rows={2}
         maxLength={1000}
         value={answer}
@@ -74,7 +75,7 @@ export default function ActivityReflection({ rows, promptKey }) {
         >
           {state === 'saving' ? t('quickLog.saving') : t('quickLog.reflect.addButton')}
         </button>
-        <button type="button" onClick={() => setState('skipped')} className="text-sm text-secondary hover:text-ink">
+        <button type="button" onClick={() => { setState('skipped'); onClose?.() }} className="text-sm text-secondary hover:text-ink">
           {t('quickLog.reflect.skip')}
         </button>
       </div>

@@ -10,6 +10,7 @@ import { XAPI_VERBS } from '../lib/xapiVerbs'
 import { distanceUnitFromPace, goalLogFeedback, localDateString } from '../lib/skillGoalProgress'
 import {
   buildCardStatement,
+  cardFromRow,
   cardFromTemplate,
   cardsFromDraft,
   derivedGoalsForCard,
@@ -39,9 +40,12 @@ function speechLanguage(language) {
 // "What did you do?" on the dashboard. A sentence becomes draft activities the
 // learner checks and edits before anything is saved; things they log often can
 // be repeated with one tap. Goal values ride along on the activity, so goals
-// update the same way as logging from a goal's own tracker.
-export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFullForm }) {
+// update the same way as logging from a goal's own tracker. repeatRequest
+// ({ row, nonce }) adds a card copying an activity from elsewhere on the page,
+// to check and save like any other.
+export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFullForm, repeatRequest = null }) {
   const { t, language } = useLanguage()
+  const sectionRef = useRef(null)
   const [skills, setSkills] = useState([])
   const [recentRows, setRecentRows] = useState([])
   const [listening, setListening] = useState(false)
@@ -76,6 +80,20 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
   }
 
   useEffect(() => () => recognitionRef.current?.abort(), [])
+
+  // "Log again" from the activity list. Waits for the learner's skills, since
+  // the card only keeps skills they still have.
+  const handledRepeat = useRef(null)
+  useEffect(() => {
+    if (!repeatRequest || handledRepeat.current === repeatRequest.nonce || skills.length === 0) return
+    handledRepeat.current = repeatRequest.nonce
+    const card = cardFromRow(repeatRequest.row, skills, goals)
+    if (!card) return
+    setResult(null)
+    setCards((current) => [...current, card])
+    sectionRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+    sectionRef.current?.focus({ preventScroll: true })
+  }, [repeatRequest, skills, goals])
 
   function toggleListening() {
     if (listening) {
@@ -217,7 +235,7 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
   }
 
   return (
-    <section aria-labelledby="quick-log-heading">
+    <section ref={sectionRef} tabIndex={-1} aria-labelledby="quick-log-heading" className="focus:outline-none">
       <h2 id="quick-log-heading" className="font-display text-xl text-ink mb-1">{t('quickLog.title')}</h2>
       <p className="text-sm text-secondary mb-4">{t('quickLog.subtitle')}</p>
 

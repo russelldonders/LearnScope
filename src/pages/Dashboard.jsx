@@ -295,6 +295,7 @@ export default function Dashboard() {
   const [openGoalId, setOpenGoalId] = useState(null)
   const [fullFormOpen, setFullFormOpen] = useState(false)
   const [activityRefresh, setActivityRefresh] = useState(0)
+  const [repeatRequest, setRepeatRequest] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -503,6 +504,7 @@ export default function Dashboard() {
             goalItems={goals}
             onLogged={handleQuickLogged}
             onOpenFullForm={() => setFullFormOpen(true)}
+            repeatRequest={repeatRequest}
           />
         )}
 
@@ -640,6 +642,7 @@ export default function Dashboard() {
             onFormOpenChange={setFullFormOpen}
             refreshKey={activityRefresh}
             onSaved={refreshGoals}
+            onLogAgain={(row) => setRepeatRequest({ row, nonce: Date.now() })}
           />
         )}
       </main>

@@ -27,3 +27,10 @@ export async function getEvidenceSignedUrl(path) {
   if (error) throw error
   return data.signedUrl
 }
+
+const IMAGE_PATTERN = /\.(png|jpe?g|gif|webp|avif)$/i
+
+// Evidence files a browser can show as a picture.
+export function isImagePath(path) {
+  return IMAGE_PATTERN.test(path ?? '')
+}

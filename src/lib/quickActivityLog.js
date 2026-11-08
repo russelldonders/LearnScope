@@ -113,6 +113,57 @@ function measuredGoalFor(goals, measurement) {
   )
 }
 
+// One logged activity as a template card: its title, verb, duration, skills
+// and the values it recorded for active goals. Null for anything that can't
+// be repeated, or whose skills have all been removed.
+function templateFromRow(row, skillsById, goals) {
+  if (!isRepeatable(row)) return null
+  const statement = row.statement
+  const relatedSkills = relatedSkillsFromStatement(statement)
+    .map((skill) => skillsById.get(skill.id))
+    .filter(Boolean)
+  if (relatedSkills.length === 0) return null
+  const title = activityName(statement)
+  const measurements = measurementsFromStatement(statement)
+  const minutes = durationMinutes(statement)
+  return {
+    key: [
+      title.toLowerCase(),
+      relatedSkills.map((skill) => skill.id).sort().join(','),
+      measurements.map((m) => m.metric).sort().join(','),
+    ].join('|'),
+    label: [title, formatMeasurements(statement) || formatMinutes(minutes)].filter(Boolean).join(' · '),
+    card: {
+      title,
+      verb: XAPI_VERB_BY_IRI[statement.verb?.id]?.value ?? 'experienced',
+      durationMinutes: minutes ? String(minutes) : '',
+      skills: relatedSkills,
+      newSkill: null,
+      goalValues: measurements
+        .map((m) => {
+          const goal = measuredGoalFor(goals, m)
+          if (!goal) return null
+          const seconds = m.kind === 'pace' ? m.inputs?.durationSeconds : m.kind === 'duration' ? m.value : null
+          return { goalId: goal.id, ...goalFields(goal, { value: m.value, distance: m.inputs?.distance, seconds }) }
+        })
+        .filter(Boolean),
+      note: '',
+    },
+  }
+}
+
+// One activity ready to log again today, or null when it can't be repeated
+// (course records, imports, check-ins, ratings, or no remaining skills).
+export function cardFromRow(row, skills, goals) {
+  const template = templateFromRow(row, new Map(skills.map((skill) => [skill.id, skill])), goals)
+  return template ? cardFromTemplate(template.card) : null
+}
+
+// Whether "Log again" makes sense for this activity, before skills are known.
+export function canRepeatRow(row) {
+  return isRepeatable(row) && relatedSkillsFromStatement(row.statement).length > 0
+}
+
 // Up to `limit` things the learner logs often, most frequent first, as cards
 // ready to save again today. Built from activities they logged themselves --
 // not course records, imports, check-ins or ratings -- on skills they still
@@ -121,46 +172,14 @@ export function repeatTemplates(rows, skills, goals, limit = 4) {
   const skillsById = new Map(skills.map((skill) => [skill.id, skill]))
   const groups = new Map()
   for (const row of rows) {
-    if (!isRepeatable(row)) continue
-    const statement = row.statement
-    const relatedSkills = relatedSkillsFromStatement(statement)
-      .map((skill) => skillsById.get(skill.id))
-      .filter(Boolean)
-    if (relatedSkills.length === 0) continue
-    const title = activityName(statement)
-    const measurements = measurementsFromStatement(statement)
-    const key = [
-      title.toLowerCase(),
-      relatedSkills.map((skill) => skill.id).sort().join(','),
-      measurements.map((m) => m.metric).sort().join(','),
-    ].join('|')
-    const group = groups.get(key)
+    const template = templateFromRow(row, skillsById, goals)
+    if (!template) continue
+    const group = groups.get(template.key)
     if (group) {
       group.count += 1
       continue
     }
-    const minutes = durationMinutes(statement)
-    groups.set(key, {
-      count: 1,
-      order: groups.size,
-      label: [title, formatMeasurements(statement) || formatMinutes(minutes)].filter(Boolean).join(' · '),
-      card: {
-        title,
-        verb: XAPI_VERB_BY_IRI[statement.verb?.id]?.value ?? 'experienced',
-        durationMinutes: minutes ? String(minutes) : '',
-        skills: relatedSkills,
-        newSkill: null,
-        goalValues: measurements
-          .map((m) => {
-            const goal = measuredGoalFor(goals, m)
-            if (!goal) return null
-            const seconds = m.kind === 'pace' ? m.inputs?.durationSeconds : m.kind === 'duration' ? m.value : null
-            return { goalId: goal.id, ...goalFields(goal, { value: m.value, distance: m.inputs?.distance, seconds }) }
-          })
-          .filter(Boolean),
-        note: '',
-      },
-    })
+    groups.set(template.key, { count: 1, order: groups.size, label: template.label, card: template.card })
   }
   return [...groups.values()]
     .sort((a, b) => b.count - a.count || a.order - b.order)
