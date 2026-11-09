@@ -1615,6 +1615,8 @@ export default {
       dueSubtitle: 'Deze doelen wachten op een registratie.',
       history: 'Recente geschiedenis',
       now: 'Nu',
+      toGo: 'Nog {value} te gaan',
+      fromEntries: '{value} uit {count} invoeren ({parts})',
       met: 'gehaald',
       missed: 'gemist',
       sameAsLast: 'Zelfde als vorige keer',

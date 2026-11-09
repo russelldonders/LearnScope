@@ -92,7 +92,7 @@ describe('goal tiles', () => {
     renderPanel([item(goal, statements)])
     const tile = screen.getByRole('article', { name: 'Daily' })
     const chart = within(tile).getByRole('img', { name: /^Recent history: / })
-    const bars = chart.firstChild.querySelectorAll('span')
+    const bars = chart.firstChild.querySelectorAll(':scope > span')
     expect(bars).toHaveLength(7)
     expect(bars[4]).toHaveClass('bg-red-700/70')
     expect(bars[6]).toHaveClass('bg-moss')
@@ -103,14 +103,40 @@ describe('goal tiles', () => {
     expect(within(tile).queryByRole('progressbar')).not.toBeInTheDocument()
   })
 
+  it('stacks a day logged several times from its entries, and says so on hover', () => {
+    const today = new Date()
+    today.setHours(12, 0, 0, 0)
+    const earlier = (hours) => new Date(today.getTime() - hours * 60 * 60 * 1000)
+    const goal = { title: 'Sets', aggregation: 'total', period: 'day', target_value: 60, started_on: localDateString(daysAgo(10)) }
+    renderPanel([item(goal, [pushUps('a', 20, earlier(3)), pushUps('b', 20, earlier(2)), pushUps('c', 20, earlier(1))])])
+    const chart = within(screen.getByRole('article', { name: 'Sets' })).getByRole('img')
+    expect(chart.getAttribute('aria-label')).toMatch(/60 push-ups from 3 entries \(20 \+ 20 \+ 20\) \(met\)/)
+    const todayBar = chart.firstChild.querySelectorAll(':scope > span')[6]
+    expect(todayBar.querySelectorAll('[data-part]')).toHaveLength(3)
+    fireEvent.mouseEnter(todayBar)
+    expect(within(chart).getByText(/^Today 60 push-ups from 3 entries/)).toBeInTheDocument()
+    fireEvent.mouseLeave(chart.firstChild)
+    expect(within(chart).queryByText(/from 3 entries/)).not.toBeInTheDocument()
+  })
+
   it('shows any other goal its recent entries, the latest highlighted', () => {
     renderPanel([item({ title: 'Best', target_value: 40 }, [pushUps('a', 10, daysAgo(5)), pushUps('b', 25, daysAgo(3))])])
     const tile = screen.getByRole('article', { name: 'Best' })
-    const bars = within(tile).getByRole('img').firstChild.querySelectorAll('span')
+    const bars = within(tile).getByRole('img').firstChild.querySelectorAll(':scope > span')
     expect(bars).toHaveLength(7)
     expect(bars[5]).toHaveClass('bg-hairline/60')
     expect(bars[6]).toHaveClass('bg-moss')
     expect(within(tile).getByRole('progressbar')).toBeInTheDocument()
+  })
+
+  it('shows a total building up to one target as progress with what is left', () => {
+    const goal = { title: 'Mandarins', aggregation: 'total', period: 'year', target_value: 10, target_date: `${new Date().getFullYear()}-12-31` }
+    renderPanel([item(goal, [pushUps('a', 2, daysAgo(0))])])
+    const tile = screen.getByRole('article', { name: 'Mandarins' })
+    expect(within(tile).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '20')
+    expect(within(tile).getByText('20%')).toBeInTheDocument()
+    expect(within(tile).getByText('8 push-ups to go')).toBeInTheDocument()
+    expect(within(tile).queryByRole('img')).not.toBeInTheDocument()
   })
 
   it('can carry its own heading, for the goals due today', () => {

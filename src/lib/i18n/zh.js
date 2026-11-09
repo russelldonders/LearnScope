@@ -1596,6 +1596,8 @@ export default {
       dueSubtitle: '这些目标正等着你记录。',
       history: '近期记录',
       now: '现在',
+      toGo: '还差 {value}',
+      fromEntries: '{value}，来自 {count} 条记录（{parts}）',
       met: '已达成',
       missed: '未达成',
       sameAsLast: '与上次相同',

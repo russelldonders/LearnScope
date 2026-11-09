@@ -1617,6 +1617,8 @@ export default {
       dueSubtitle: 'Ces objectifs attendent un enregistrement.',
       history: 'Historique récent',
       now: 'Maintenant',
+      toGo: 'Encore {value}',
+      fromEntries: '{value} en {count} saisies ({parts})',
       met: 'atteint',
       missed: 'manqué',
       sameAsLast: 'Comme la dernière fois',

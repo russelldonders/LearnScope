@@ -195,13 +195,28 @@ export function goalStreak(goal, statements, now = new Date()) {
 
 export const MINI_HISTORY_LENGTH = 7
 
+// A total with a target that doesn't repeat in practice: no period, or a
+// deadline that falls before the next period starts.
+export function isBuildUpGoal(goal, now = new Date()) {
+  if (goal.aggregation !== 'total' || goal.target_value == null) return false
+  if (!goal.period) return true
+  if (!goal.target_date) return false
+  return goal.target_date < localDateString(nextPeriodStart(startOfPeriod(now, goal.period), goal.period))
+}
+
 // The small chart on a dashboard goal tile. A repeating total shows its last
 // few days, weeks, months or years, each marked met or missed; any other goal
 // shows its last few entries, the latest marked as current. Entries aren't
 // judged against the target one by one: a single plank time short of a
 // stretch target isn't a miss the way a missed week is.
+//
+// A total building up to one target -- no period, or a deadline before the
+// current period ends ("10 mandarins by the end of the year") -- has no run
+// of periods worth charting, so it gets { kind: 'progress' } and the tile
+// shows how far along it is instead.
 export function goalMiniHistory(goal, statements, now = new Date()) {
   const target = goal.target_value == null ? null : Number(goal.target_value)
+  if (isBuildUpGoal(goal, now)) return { kind: 'progress' }
   if (goal.aggregation === 'total' && goal.period) {
     return { kind: 'periods', target, bars: allPeriodBars(goal, statements, now).slice(-MINI_HISTORY_LENGTH) }
   }
@@ -250,14 +265,17 @@ function allPeriodBars(goal, statements, now) {
   const bars = []
   for (let start = startOfPeriod(startedAt, goal.period); start.getTime() <= current; start = nextPeriodStart(start, goal.period)) {
     const end = nextPeriodStart(start, goal.period)
-    const value = readings.filter((r) => r.date >= start && r.date < end).reduce((sum, r) => sum + r.value, 0)
+    // Each entry that went into the period, oldest first, so a chart can show
+    // a total of 60 as three logs of 20.
+    const parts = readings.filter((r) => r.date >= start && r.date < end).map((r) => r.value)
+    const value = parts.reduce((sum, part) => sum + part, 0)
     const isCurrent = start.getTime() === current
     const lastDay = new Date(end)
     lastDay.setDate(lastDay.getDate() - 1)
     const target = isCurrent ? (goal.target_value == null ? null : Number(goal.target_value)) : targetOn(goal, localDateString(lastDay))
     let status = 'none'
     if (target !== null) status = value >= target ? 'met' : isCurrent ? 'inProgress' : 'missed'
-    bars.push({ start: new Date(start), value, status, current: isCurrent, target })
+    bars.push({ start: new Date(start), value, parts, status, current: isCurrent, target })
   }
   return bars
 }

@@ -1617,6 +1617,8 @@ export default {
       dueSubtitle: 'Questi obiettivi aspettano una registrazione.',
       history: 'Storico recente',
       now: 'Ora',
+      toGo: 'Ancora {value}',
+      fromEntries: '{value} da {count} registrazioni ({parts})',
       met: 'raggiunto',
       missed: 'mancato',
       sameAsLast: 'Come l’ultima volta',

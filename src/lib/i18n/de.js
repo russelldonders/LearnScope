@@ -1617,6 +1617,8 @@ export default {
       dueSubtitle: 'Diese Ziele warten auf einen Eintrag.',
       history: 'Verlauf',
       now: 'Jetzt',
+      toGo: 'Noch {value}',
+      fromEntries: '{value} aus {count} Einträgen ({parts})',
       met: 'erreicht',
       missed: 'verfehlt',
       sameAsLast: 'Wie beim letzten Mal',

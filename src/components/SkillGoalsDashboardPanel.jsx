@@ -9,6 +9,7 @@ import {
   MINI_HISTORY_LENGTH,
   computeGoalProgress,
   formatGoalValue,
+  formatNumber,
   goalLogFeedback,
   goalMiniHistory,
   goalStreak,
@@ -125,29 +126,52 @@ function periodLabel(bar, period, locale, t) {
 }
 
 // Seven slots, oldest on the left. A goal begun recently, or with few
-// entries, leaves the earliest slots empty so bars keep the same width.
+// entries, leaves the earliest slots empty so bars keep the same width. A
+// period logged more than once is stacked from its entries, a thin line
+// between each, and pointing at (or tapping) a bar says what made it up.
 function MiniHistory({ goal, history }) {
   const { t, language } = useLanguage()
   const locale = displayLocale(language)
+  const [active, setActive] = useState(null)
   const isRepeating = history.kind === 'periods'
   const { bars, target } = history
   const max = Math.max(target ?? 0, ...bars.map((bar) => Math.max(bar.value, bar.target ?? 0)), 0)
   const slots = [...Array(MINI_HISTORY_LENGTH - bars.length).fill(null), ...bars]
   const heightOf = (value) => (max > 0 ? Math.max(2, (value / max) * 100) : 2)
+  const partText = (value) => (goal.measure_kind === 'duration' ? formatGoalValue(goal, value) : formatNumber(value))
   const describe = (bar) => {
     const when = isRepeating
       ? periodLabel(bar, goal.period, locale, t)
       : new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' }).format(bar.start)
     const outcome = bar.status === 'met' || bar.status === 'missed' ? ` (${t(`skillGoals.dashboard.${bar.status}`)})` : ''
-    return `${when} ${formatGoalValue(goal, bar.value)}${outcome}`
+    const amount = bar.parts?.length > 1
+      ? t('skillGoals.dashboard.fromEntries', {
+          value: formatGoalValue(goal, bar.value),
+          count: bar.parts.length,
+          parts: bar.parts.map(partText).join(' + '),
+        })
+      : formatGoalValue(goal, bar.value)
+    return `${when} ${amount}${outcome}`
   }
   const label = bars.length
     ? `${t('skillGoals.dashboard.history')}: ${bars.map(describe).join(', ')}`
     : t('skillGoals.dashboard.history')
+  const activeBar = active != null ? slots[active] : null
+  // Kept inside the tile: anchored to the edge on the bar's side, and
+  // centred only on the middle bar.
+  const middle = (MINI_HISTORY_LENGTH - 1) / 2
+  const tipPosition = active < middle
+    ? { left: 0 }
+    : active > middle
+      ? { right: 0 }
+      : { left: '50%', transform: 'translateX(-50%)' }
 
   return (
     <div role="img" aria-label={label}>
-      <div className={`relative flex items-end gap-1 ${isRepeating ? 'h-10' : 'h-8'}`}>
+      <div
+        className={`relative flex items-end gap-1 ${isRepeating ? 'h-10' : 'h-8'}`}
+        onMouseLeave={() => setActive(null)}
+      >
         {target != null && max > 0 && (
           <div
             aria-hidden="true"
@@ -158,7 +182,9 @@ function MiniHistory({ goal, history }) {
         {slots.map((bar, index) => (
           <span
             key={bar ? bar.start.getTime() : `empty-${index}`}
-            className={`flex-1 rounded-t-sm ${
+            onMouseEnter={bar ? () => setActive(index) : undefined}
+            onClick={bar ? () => setActive((value) => (value === index ? null : index)) : undefined}
+            className={`flex-1 flex flex-col-reverse overflow-hidden rounded-t-sm ${
               !bar
                 ? ''
                 : isRepeating
@@ -166,10 +192,30 @@ function MiniHistory({ goal, history }) {
                   : bar.current
                     ? 'bg-moss'
                     : 'bg-hairline/60'
-            }`}
+            } ${bar ? 'cursor-default' : ''} ${active === index ? 'opacity-80' : ''}`}
             style={{ height: bar ? `${heightOf(bar.value)}%` : 0 }}
-          />
+          >
+            {bar?.parts?.length > 1 && bar.parts.map((part, partIndex) => (
+              <span
+                key={partIndex}
+                data-part=""
+                className={`block min-h-px ${
+                  partIndex > 0 ? `border-b ${bar.status === 'inProgress' ? 'border-moss/60' : 'border-card'}` : ''
+                }`}
+                style={{ flexGrow: part, flexBasis: 0 }}
+              />
+            ))}
+          </span>
         ))}
+        {activeBar && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute bottom-full mb-1 z-10 w-max max-w-full rounded-md bg-ink px-2 py-1 text-[11px] leading-4 text-paper shadow"
+            style={tipPosition}
+          >
+            {describe(activeBar)}
+          </span>
+        )}
       </div>
       {isRepeating && (
         <div aria-hidden="true" className="mt-1 flex gap-1 text-[11px] leading-4 text-secondary">
@@ -180,6 +226,33 @@ function MiniHistory({ goal, history }) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// One bar filling towards the target, with how much is left under it.
+function BuildUpProgress({ goal, progress }) {
+  const { t, language } = useLanguage()
+  const percent = progress.percent ?? 0
+  const left = Math.max(0, Number(goal.target_value) - (progress.current ?? 0))
+  const percentText = new Intl.NumberFormat(displayLocale(language), { style: 'percent', maximumFractionDigits: 0 })
+    .format(percent / 100)
+  return (
+    <div>
+      <div
+        role="progressbar"
+        aria-label={t('skillGoals.progressLabel')}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(percent)}
+        className="h-2.5 rounded-full bg-hairline/60 overflow-hidden"
+      >
+        <div className="h-full rounded-full bg-moss" style={{ width: `${percent}%` }} />
+      </div>
+      <p className="mt-1.5 flex justify-between gap-2 text-xs text-secondary">
+        <span>{percentText}</span>
+        {left > 0 && <span className="truncate">{t('skillGoals.dashboard.toGo', { value: formatGoalValue(goal, left) })}</span>}
+      </p>
     </div>
   )
 }
@@ -298,23 +371,30 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
         )}
       </dl>
 
-      {/* A fixed height whatever the goal, so tiles stay level. A repeating
-          goal's bars already show this period against the target, so only
-          the others get a progress bar. */}
+      {/* A fixed height whatever the goal, so tiles stay level. A total
+          building up to one target shows only how far along it is; a
+          repeating goal's bars already show this period against the target,
+          so only the remaining goals get a progress bar above their chart. */}
       <div className="mt-3 h-16 flex flex-col justify-end">
-        {!isRepeating && progress.percent != null && (
-          <div
-            role="progressbar"
-            aria-label={t('skillGoals.progressLabel')}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(progress.percent)}
-            className="mb-2.5 h-1.5 shrink-0 rounded-full bg-hairline/60 overflow-hidden"
-          >
-            <div className="h-full bg-moss" style={{ width: `${progress.percent}%` }} />
-          </div>
+        {history.kind === 'progress' ? (
+          <BuildUpProgress goal={goal} progress={progress} />
+        ) : (
+          <>
+            {!isRepeating && progress.percent != null && (
+              <div
+                role="progressbar"
+                aria-label={t('skillGoals.progressLabel')}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(progress.percent)}
+                className="mb-2.5 h-1.5 shrink-0 rounded-full bg-hairline/60 overflow-hidden"
+              >
+                <div className="h-full bg-moss" style={{ width: `${progress.percent}%` }} />
+              </div>
+            )}
+            <MiniHistory goal={goal} history={history} />
+          </>
         )}
-        <MiniHistory goal={goal} history={history} />
       </div>
 
       <p role={status.role} className={`mt-2 text-xs truncate ${status.tone}`}>{status.text}</p>

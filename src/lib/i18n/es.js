@@ -1616,6 +1616,8 @@ export default {
       dueSubtitle: 'Estos objetivos esperan un registro.',
       history: 'Historial reciente',
       now: 'Ahora',
+      toGo: 'Faltan {value}',
+      fromEntries: '{value} de {count} registros ({parts})',
       met: 'cumplido',
       missed: 'no cumplido',
       sameAsLast: 'Igual que la última vez',

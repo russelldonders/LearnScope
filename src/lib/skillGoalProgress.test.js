@@ -567,8 +567,20 @@ describe('goalMiniHistory', () => {
     expect(history.bars.map((bar) => bar.current)).toEqual([false, false, false, false, false, false, true])
   })
 
-  it('leaves the target line off a running total, which single entries never reach', () => {
-    const total = { ...pushUpGoal, aggregation: 'total', target_value: 1000 }
+  it('shows progress instead for a total building up to one target', () => {
+    const total = { ...pushUpGoal, aggregation: 'total', period: null, target_value: 1000 }
+    expect(goalMiniHistory(total, [entry('a', '2026-10-20', 50)], now)).toEqual({ kind: 'progress' })
+    const byYearEnd = { ...pushUpGoal, aggregation: 'total', period: 'year', target_value: 10, target_date: '2026-12-31' }
+    expect(goalMiniHistory(byYearEnd, [], now).kind).toBe('progress')
+  })
+
+  it('keeps the chart for a repeating total whose deadline is periods away', () => {
+    const weekly = { ...pushUpGoal, aggregation: 'total', period: 'week', target_value: 100, target_date: '2026-12-31', started_on: '2026-10-01' }
+    expect(goalMiniHistory(weekly, [], now).kind).toBe('periods')
+  })
+
+  it('leaves the target line off a running total without a target, which has no progress to show', () => {
+    const total = { ...pushUpGoal, aggregation: 'total', period: null, target_value: null }
     expect(goalMiniHistory(total, [entry('a', '2026-10-20', 50)], now).target).toBeNull()
   })
 })

@@ -1614,6 +1614,8 @@ export default {
       dueSubtitle: 'These goals are waiting for a log.',
       history: 'Recent history',
       now: 'Now',
+      toGo: '{value} to go',
+      fromEntries: '{value} from {count} entries ({parts})',
       met: 'met',
       missed: 'missed',
       sameAsLast: 'Same as last time',
