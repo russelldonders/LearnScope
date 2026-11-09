@@ -1617,6 +1617,7 @@ export default {
       history: 'Historial reciente',
       now: 'Ahora',
       toGo: 'Faltan {value}',
+      toGoBy: 'Faltan {value} antes del {date}',
       fromEntries: '{value} de {count} registros ({parts})',
       met: 'cumplido',
       missed: 'no cumplido',

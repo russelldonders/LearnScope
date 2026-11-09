@@ -1618,6 +1618,7 @@ export default {
       history: 'Storico recente',
       now: 'Ora',
       toGo: 'Ancora {value}',
+      toGoBy: 'Ancora {value} entro il {date}',
       fromEntries: '{value} da {count} registrazioni ({parts})',
       met: 'raggiunto',
       missed: 'mancato',

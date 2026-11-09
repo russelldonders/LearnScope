@@ -63,11 +63,11 @@ describe('goal tiles', () => {
     expect(container.querySelector('svg')).toBeNull()
   })
 
-  it('shows the current value large with the target beside it', () => {
+  it('shows the current value large, without repeating the target the title already gives', () => {
     renderPanel([item({ title: 'Best', target_value: 40, target_date: '2027-06-30' }, [pushUps('a', 10, daysAgo(5)), pushUps('b', 25, daysAgo(3))])])
     const tile = screen.getByRole('article', { name: 'Best' })
     expect(within(tile).getByText('25 push-ups')).toHaveClass('text-2xl')
-    expect(within(tile).getByText(/^Target 40 push-ups · By /)).toBeInTheDocument()
+    expect(within(tile).queryByText(/^Target /)).not.toBeInTheDocument()
     expect(within(tile).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '50')
   })
 
@@ -135,8 +135,14 @@ describe('goal tiles', () => {
     const tile = screen.getByRole('article', { name: 'Mandarins' })
     expect(within(tile).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '20')
     expect(within(tile).getByText('20%')).toBeInTheDocument()
-    expect(within(tile).getByText('8 push-ups to go')).toBeInTheDocument()
+    // This year's deadline, so no year in the date.
+    expect(within(tile).getByText(/^8 push-ups to go by (31 Dec|Dec 31)$/)).toBeInTheDocument()
     expect(within(tile).queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it('says how much is left without a date when the goal has none', () => {
+    renderPanel([item({ title: 'Lifetime', aggregation: 'total', target_value: 1000 }, [pushUps('a', 250, daysAgo(1))])])
+    expect(within(screen.getByRole('article', { name: 'Lifetime' })).getByText('750 push-ups to go')).toBeInTheDocument()
   })
 
   it('can carry its own heading, for the goals due today', () => {

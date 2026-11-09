@@ -1615,6 +1615,7 @@ export default {
       history: 'Recent history',
       now: 'Now',
       toGo: '{value} to go',
+      toGoBy: '{value} to go by {date}',
       fromEntries: '{value} from {count} entries ({parts})',
       met: 'met',
       missed: 'missed',

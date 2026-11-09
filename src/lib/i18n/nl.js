@@ -1616,6 +1616,7 @@ export default {
       history: 'Recente geschiedenis',
       now: 'Nu',
       toGo: 'Nog {value} te gaan',
+      toGoBy: 'Nog {value} te gaan vóór {date}',
       fromEntries: '{value} uit {count} invoeren ({parts})',
       met: 'gehaald',
       missed: 'gemist',

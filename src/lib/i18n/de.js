@@ -1618,6 +1618,7 @@ export default {
       history: 'Verlauf',
       now: 'Jetzt',
       toGo: 'Noch {value}',
+      toGoBy: 'Noch {value} bis {date}',
       fromEntries: '{value} aus {count} Einträgen ({parts})',
       met: 'erreicht',
       missed: 'verfehlt',

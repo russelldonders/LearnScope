@@ -230,13 +230,29 @@ function MiniHistory({ goal, history }) {
   )
 }
 
-// One bar filling towards the target, with how much is left under it.
+// "31 Dec", with the year only when it isn't this year.
+function shortDate(dateString, locale) {
+  const [year, month, day] = dateString.split('-').map(Number)
+  const date = new Date(year, month - 1, day)
+  const options = { day: 'numeric', month: 'short' }
+  if (year !== new Date().getFullYear()) options.year = 'numeric'
+  return new Intl.DateTimeFormat(locale, options).format(date)
+}
+
+// One bar filling towards the target, with how much is left under it and by
+// when. The tile has no separate target line: the title usually says it, and
+// this line covers a title that doesn't.
 function BuildUpProgress({ goal, progress }) {
   const { t, language } = useLanguage()
+  const locale = displayLocale(language)
   const percent = progress.percent ?? 0
   const left = Math.max(0, Number(goal.target_value) - (progress.current ?? 0))
-  const percentText = new Intl.NumberFormat(displayLocale(language), { style: 'percent', maximumFractionDigits: 0 })
+  const percentText = new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 })
     .format(percent / 100)
+  const leftText = formatGoalValue(goal, left)
+  const toGo = goal.target_date
+    ? t('skillGoals.dashboard.toGoBy', { value: leftText, date: shortDate(goal.target_date, locale) })
+    : t('skillGoals.dashboard.toGo', { value: leftText })
   return (
     <div>
       <div
@@ -251,7 +267,7 @@ function BuildUpProgress({ goal, progress }) {
       </div>
       <p className="mt-1.5 flex justify-between gap-2 text-xs text-secondary">
         <span>{percentText}</span>
-        {left > 0 && <span className="truncate">{t('skillGoals.dashboard.toGo', { value: formatGoalValue(goal, left) })}</span>}
+        {left > 0 && <span className="truncate">{toGo}</span>}
       </p>
     </div>
   )
@@ -279,10 +295,6 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
       ? `skillGoals.thisPeriod.${goal.period}`
       : 'skillGoals.totalSoFar'
   const status = statusFor({ note, progress, streak, goal, t })
-  const targetText = [
-    goal.target_value != null ? `${t('skillGoals.targetShort')} ${formatGoalValue(goal, goal.target_value)}` : null,
-    goal.target_date ? `${t('skillGoals.byShort')} ${formatFullDate(goal.target_date)}` : null,
-  ].filter(Boolean).join(' · ')
 
   // Opened from a reminder: bring the card into view and move focus to it.
   useEffect(() => {
@@ -356,19 +368,11 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
         )}
       </div>
 
-      <dl className="mt-3 flex items-end justify-between gap-3">
-        <div className="min-w-0">
-          <dt className="text-xs text-secondary">{t(currentLabelKey)}</dt>
-          <dd className="font-display text-2xl leading-tight text-ink truncate">
-            {progress.current != null ? formatGoalValue(goal, progress.current) : '–'}
-          </dd>
-        </div>
-        {targetText && (
-          <div className="min-w-0 text-right">
-            <dt className="sr-only">{t('skillGoals.targetShort')}</dt>
-            <dd className="text-xs text-secondary truncate">{targetText}</dd>
-          </div>
-        )}
+      <dl className="mt-3 min-w-0">
+        <dt className="text-xs text-secondary">{t(currentLabelKey)}</dt>
+        <dd className="font-display text-2xl leading-tight text-ink truncate">
+          {progress.current != null ? formatGoalValue(goal, progress.current) : '–'}
+        </dd>
       </dl>
 
       {/* A fixed height whatever the goal, so tiles stay level. A total

@@ -1618,6 +1618,7 @@ export default {
       history: 'Historique récent',
       now: 'Maintenant',
       toGo: 'Encore {value}',
+      toGoBy: 'Encore {value} d’ici le {date}',
       fromEntries: '{value} en {count} saisies ({parts})',
       met: 'atteint',
       missed: 'manqué',
