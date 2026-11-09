@@ -11,6 +11,7 @@ import {
   localDateString,
   resolveMetric,
   slugifyMetric,
+  withTargetHistory,
 } from './skillGoalProgress'
 
 const GOAL_COLUMNS =
@@ -23,7 +24,8 @@ export async function listSkillGoals(skillId) {
     .eq('skill_id', skillId)
     .order('created_at', { ascending: false })
   if (error) throw error
-  return data ?? []
+  const goals = data ?? []
+  return goals.map((goal) => withTargetHistory(goal, goals))
 }
 
 // Every goal the learner is working towards, with its skill and that skill's
@@ -39,16 +41,24 @@ export async function listActiveGoalsWithActivities(userId) {
   if (error) throw error
   const goals = data ?? []
   const skillIds = [...new Set(goals.map((goal) => goal.skill_id))]
-  const statementsBySkill = new Map(
-    await Promise.all(
+  // The goals these replaced when a target changed, so past periods are judged
+  // by the target that applied then.
+  const replacedQuery = skillIds.length
+    ? supabase.from('skill_goals').select('id, target_value, closed_on, replaces_goal_id').in('skill_id', skillIds).eq('status', 'replaced')
+    : Promise.resolve({ data: [] })
+  const [statementsEntries, { data: replaced, error: replacedError }] = await Promise.all([
+    Promise.all(
       skillIds.map(async (skillId) => [
         skillId,
         await fetchStatementsForSkill(skillId, 'id, recorded_at, statement, resource_id, evidence_paths'),
       ]),
     ),
-  )
+    replacedQuery,
+  ])
+  if (replacedError) throw replacedError
+  const statementsBySkill = new Map(statementsEntries)
   return goals.map(({ skills, ...goal }) => ({
-    goal,
+    goal: withTargetHistory(goal, replaced ?? []),
     skill: { id: skills.id, name: skills.name },
     statements: statementsBySkill.get(goal.skill_id) ?? [],
   }))

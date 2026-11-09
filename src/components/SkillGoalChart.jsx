@@ -47,7 +47,7 @@ function PeriodBars({ goal, bars, target }) {
   // A single period has nothing to compare yet.
   if (bars.length < 2) return null
 
-  const max = Math.max(...bars.map((b) => b.value), target ?? 0) * 1.1 || 1
+  const max = Math.max(...bars.map((b) => Math.max(b.value, b.target ?? 0)), target ?? 0) * 1.1 || 1
   const slot = (WIDTH - PAD_X * 2) / bars.length
   const barWidth = Math.max(2, slot * 0.7)
   const y = (value) => HEIGHT - PAD_Y - (value / max) * (HEIGHT - PAD_Y * 2)

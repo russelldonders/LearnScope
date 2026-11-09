@@ -83,6 +83,36 @@ describe('goal tiles', () => {
     expect(within(screen.getByRole('article', { name: 'Fresh' })).getByText('–')).toBeInTheDocument()
   })
 
+  it('shows a repeating goal its last seven days, missed ones in red, with the streak', () => {
+    const today = new Date()
+    today.setHours(12, 0, 0, 0)
+    const day = (n) => new Date(today.getTime() - n * 24 * 60 * 60 * 1000)
+    const goal = { title: 'Daily', aggregation: 'total', period: 'day', target_value: 20, started_on: localDateString(day(30)) }
+    const statements = [pushUps('a', 25, day(3)), pushUps('b', 5, day(2)), pushUps('c', 22, day(1)), pushUps('d', 21, day(0))]
+    renderPanel([item(goal, statements)])
+    const tile = screen.getByRole('article', { name: 'Daily' })
+    const chart = within(tile).getByRole('img', { name: /^Recent history: / })
+    const bars = chart.firstChild.querySelectorAll('span')
+    expect(bars).toHaveLength(7)
+    expect(bars[4]).toHaveClass('bg-red-700/70')
+    expect(bars[6]).toHaveClass('bg-moss')
+    expect(chart.getAttribute('aria-label')).toMatch(/5 push-ups \(missed\)/)
+    expect(chart.lastChild.lastChild).toHaveTextContent('Today')
+    expect(within(tile).getByText('Met 2 days in a row')).toBeInTheDocument()
+    // The bars stand in for the progress bar on a repeating goal.
+    expect(within(tile).queryByRole('progressbar')).not.toBeInTheDocument()
+  })
+
+  it('shows any other goal its recent entries, the latest highlighted', () => {
+    renderPanel([item({ title: 'Best', target_value: 40 }, [pushUps('a', 10, daysAgo(5)), pushUps('b', 25, daysAgo(3))])])
+    const tile = screen.getByRole('article', { name: 'Best' })
+    const bars = within(tile).getByRole('img').firstChild.querySelectorAll('span')
+    expect(bars).toHaveLength(7)
+    expect(bars[5]).toHaveClass('bg-hairline/60')
+    expect(bars[6]).toHaveClass('bg-moss')
+    expect(within(tile).getByRole('progressbar')).toBeInTheDocument()
+  })
+
   it('can carry its own heading, for the goals due today', () => {
     renderPanel([item({ title: 'Best', target_value: 40 })], {
       headingId: 'due-heading',

@@ -4,7 +4,17 @@ import SkillGoalEntryForm from './SkillGoalEntryForm'
 import { useLanguage } from '../context/LanguageContext'
 import { supabase } from '../lib/supabaseClient'
 import { formatFullDate } from '../lib/dates'
-import { computeGoalProgress, formatGoalValue, goalLogFeedback, goalStreak, lastGoalEntry, localDateString } from '../lib/skillGoalProgress'
+import { displayLocale } from '../lib/activityTimeline'
+import {
+  MINI_HISTORY_LENGTH,
+  computeGoalProgress,
+  formatGoalValue,
+  goalLogFeedback,
+  goalMiniHistory,
+  goalStreak,
+  lastGoalEntry,
+  localDateString,
+} from '../lib/skillGoalProgress'
 import { logGoalEntry } from '../lib/skillGoals'
 
 const COLLAPSED_COUNT = 4
@@ -81,18 +91,97 @@ export default function SkillGoalsDashboardPanel({
   )
 }
 
-// The one line under the progress bar: what was just saved, else the most
-// encouraging true thing (target reached, a streak), else when it was last
-// logged.
+// The one line under the chart: what was just saved, else the most
+// encouraging true thing (a streak, the target reached), else when it was last
+// logged. A streak comes before "Target reached" because on a repeating goal
+// it already says this period's target was met.
 function statusFor({ note, progress, streak, goal, t }) {
   if (note) return { text: t(note), tone: 'text-moss', role: 'status' }
-  if (progress.reached) return { text: t('skillGoals.targetReached'), tone: 'text-moss font-medium' }
   // A run of one is just "this week was met", so only from two.
-  if (streak >= 2) return { text: t(`skillGoals.streak.${goal.period}`, { count: streak }), tone: 'text-secondary' }
+  if (streak >= 2) return { text: t(`skillGoals.streak.${goal.period}`, { count: streak }), tone: 'text-moss font-medium' }
+  if (progress.reached) return { text: t('skillGoals.targetReached'), tone: 'text-moss font-medium' }
   if (progress.lastLogged) {
     return { text: t('skillGoals.lastLogged', { date: formatFullDate(progress.lastLogged.toISOString()) }), tone: 'text-secondary' }
   }
   return { text: t('skillGoals.dashboard.nothingLogged'), tone: 'text-secondary' }
+}
+
+const BAR_TONES = {
+  met: 'bg-moss',
+  missed: 'bg-red-700/70',
+  inProgress: 'border border-dashed border-b-0 border-moss',
+  none: 'bg-hairline/60',
+}
+
+function periodLabel(bar, period, locale, t) {
+  if (bar.current) return period === 'day' ? t('skillGoals.thisPeriod.day') : t('skillGoals.dashboard.now')
+  const options = {
+    day: { weekday: 'short' },
+    week: { day: 'numeric', month: 'numeric' },
+    month: { month: 'short' },
+    year: { year: 'numeric' },
+  }[period]
+  return new Intl.DateTimeFormat(locale, options).format(bar.start)
+}
+
+// Seven slots, oldest on the left. A goal begun recently, or with few
+// entries, leaves the earliest slots empty so bars keep the same width.
+function MiniHistory({ goal, history }) {
+  const { t, language } = useLanguage()
+  const locale = displayLocale(language)
+  const isRepeating = history.kind === 'periods'
+  const { bars, target } = history
+  const max = Math.max(target ?? 0, ...bars.map((bar) => Math.max(bar.value, bar.target ?? 0)), 0)
+  const slots = [...Array(MINI_HISTORY_LENGTH - bars.length).fill(null), ...bars]
+  const heightOf = (value) => (max > 0 ? Math.max(2, (value / max) * 100) : 2)
+  const describe = (bar) => {
+    const when = isRepeating
+      ? periodLabel(bar, goal.period, locale, t)
+      : new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' }).format(bar.start)
+    const outcome = bar.status === 'met' || bar.status === 'missed' ? ` (${t(`skillGoals.dashboard.${bar.status}`)})` : ''
+    return `${when} ${formatGoalValue(goal, bar.value)}${outcome}`
+  }
+  const label = bars.length
+    ? `${t('skillGoals.dashboard.history')}: ${bars.map(describe).join(', ')}`
+    : t('skillGoals.dashboard.history')
+
+  return (
+    <div role="img" aria-label={label}>
+      <div className={`relative flex items-end gap-1 ${isRepeating ? 'h-10' : 'h-8'}`}>
+        {target != null && max > 0 && (
+          <div
+            aria-hidden="true"
+            className="absolute inset-x-0 border-t border-dashed border-secondary/60"
+            style={{ bottom: `${(target / max) * 100}%` }}
+          />
+        )}
+        {slots.map((bar, index) => (
+          <span
+            key={bar ? bar.start.getTime() : `empty-${index}`}
+            className={`flex-1 rounded-t-sm ${
+              !bar
+                ? ''
+                : isRepeating
+                  ? BAR_TONES[bar.status]
+                  : bar.current
+                    ? 'bg-moss'
+                    : 'bg-hairline/60'
+            }`}
+            style={{ height: bar ? `${heightOf(bar.value)}%` : 0 }}
+          />
+        ))}
+      </div>
+      {isRepeating && (
+        <div aria-hidden="true" className="mt-1 flex gap-1 text-[11px] leading-4 text-secondary">
+          {slots.map((bar, index) => (
+            <span key={bar ? bar.start.getTime() : `empty-${index}`} className="flex-1 text-center truncate">
+              {bar ? periodLabel(bar, goal.period, locale, t) : ''}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // Every tile has the same parts in the same places -- title, skill, current
@@ -107,6 +196,8 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
   const today = localDateString()
   const lastEntry = lastGoalEntry(goal, statements)
   const streak = goalStreak(goal, statements)
+  const history = goalMiniHistory(goal, statements)
+  const isRepeating = history.kind === 'periods'
   const due = nextLog != null && nextLog <= today
   const formId = `dashboard-goal-form-${goal.id}`
   const currentLabelKey = goal.aggregation === 'best'
@@ -207,21 +298,24 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
         )}
       </dl>
 
-      {/* The bar's space is kept even without a target, so tiles stay level. */}
-      {progress.percent != null ? (
-        <div
-          role="progressbar"
-          aria-label={t('skillGoals.progressLabel')}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(progress.percent)}
-          className="mt-2 h-1.5 rounded-full bg-hairline/60 overflow-hidden"
-        >
-          <div className="h-full bg-moss" style={{ width: `${progress.percent}%` }} />
-        </div>
-      ) : (
-        <div aria-hidden="true" className="mt-2 h-1.5" />
-      )}
+      {/* A fixed height whatever the goal, so tiles stay level. A repeating
+          goal's bars already show this period against the target, so only
+          the others get a progress bar. */}
+      <div className="mt-3 h-16 flex flex-col justify-end">
+        {!isRepeating && progress.percent != null && (
+          <div
+            role="progressbar"
+            aria-label={t('skillGoals.progressLabel')}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(progress.percent)}
+            className="mb-2.5 h-1.5 shrink-0 rounded-full bg-hairline/60 overflow-hidden"
+          >
+            <div className="h-full bg-moss" style={{ width: `${progress.percent}%` }} />
+          </div>
+        )}
+        <MiniHistory goal={goal} history={history} />
+      </div>
 
       <p role={status.role} className={`mt-2 text-xs truncate ${status.tone}`}>{status.text}</p>
 

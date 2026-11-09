@@ -16,6 +16,7 @@ import {
   formatGoalValue,
   goalChartPoints,
   goalLogFeedback,
+  goalMiniHistory,
   goalPeriodBars,
   goalReadings,
   goalStreak,
@@ -26,6 +27,7 @@ import {
   resolveMetric,
   slugifyMetric,
   validateEntryInput,
+  withTargetHistory,
 } from './skillGoalProgress'
 
 const pushUpGoal = {
@@ -495,5 +497,78 @@ describe('goalStreak', () => {
     const daily = { ...weekly, period: 'day', target_value: 1, started_on: '2026-10-01' }
     const entries = Array.from({ length: 29 }, (_, i) => entry(`d${i}`, `2026-10-${String(i + 1).padStart(2, '0')}`, 1))
     expect(goalStreak(daily, entries, now)).toBe(29)
+  })
+})
+
+describe('changed targets', () => {
+  // Daily push-ups: target 20 until it was raised to 30 on 27 October.
+  const now = new Date('2026-10-29T15:00:00')
+  const first = { ...pushUpGoal, id: 'g1', aggregation: 'total', period: 'day', target_value: 20, started_on: '2026-10-20', status: 'replaced', closed_on: '2026-10-27', replaces_goal_id: null }
+  const current = { ...first, id: 'g2', target_value: 30, status: 'active', closed_on: null, replaces_goal_id: 'g1' }
+  const goal = withTargetHistory(current, [current, first])
+  const days = ['2026-10-24', '2026-10-25', '2026-10-26', '2026-10-27', '2026-10-28']
+  const statements = days.map((day, i) => entry(`d${i}`, day, 25))
+
+  it('lists the targets a goal replaced, oldest first', () => {
+    const middle = { ...first, id: 'g1b', target_value: 25, closed_on: '2026-10-25', replaces_goal_id: 'g0' }
+    const oldest = { ...first, id: 'g0', target_value: 15, closed_on: '2026-10-22' }
+    const chained = withTargetHistory({ ...current, replaces_goal_id: 'g1b' }, [oldest, middle])
+    expect(chained.target_history).toEqual([
+      { target_value: 15, closed_on: '2026-10-22' },
+      { target_value: 25, closed_on: '2026-10-25' },
+    ])
+    expect(withTargetHistory(first, []).target_history).toEqual([])
+  })
+
+  it('judges days before the change by the old target and after it by the new one', () => {
+    const bars = goalPeriodBars(goal, statements, now).filter((bar) => localDateString(bar.start) >= '2026-10-24')
+    expect(bars.map((bar) => [localDateString(bar.start), bar.target, bar.status])).toEqual([
+      ['2026-10-24', 20, 'met'],
+      ['2026-10-25', 20, 'met'],
+      ['2026-10-26', 20, 'met'],
+      ['2026-10-27', 30, 'missed'],
+      ['2026-10-28', 30, 'missed'],
+      ['2026-10-29', 30, 'inProgress'],
+    ])
+  })
+
+  it("doesn't let a raised target break a streak already earned", () => {
+    const earned = ['2026-10-25', '2026-10-26'].map((day, i) => entry(`e${i}`, day, 25))
+    expect(goalStreak(withTargetHistory(current, []), earned, new Date('2026-10-27T09:00:00'))).toBe(0)
+    expect(goalStreak(goal, earned, new Date('2026-10-27T09:00:00'))).toBe(2)
+  })
+})
+
+describe('goalMiniHistory', () => {
+  const now = new Date('2026-10-29T15:00:00')
+
+  it('gives a repeating goal its last seven periods, each met or missed', () => {
+    const daily = { ...pushUpGoal, aggregation: 'total', period: 'day', target_value: 20, started_on: '2026-10-01' }
+    const history = goalMiniHistory(daily, [entry('a', '2026-10-27', 25), entry('b', '2026-10-28', 5), entry('c', '2026-10-29', 3)], now)
+    expect(history.kind).toBe('periods')
+    expect(history.target).toBe(20)
+    expect(history.bars).toHaveLength(7)
+    expect(history.bars.slice(-3).map((bar) => bar.status)).toEqual(['met', 'missed', 'inProgress'])
+    expect(history.bars.at(-1).current).toBe(true)
+  })
+
+  it('has fewer bars for a goal begun recently', () => {
+    const weekly = { ...pushUpGoal, aggregation: 'total', period: 'week', target_value: 100, started_on: '2026-10-19' }
+    expect(goalMiniHistory(weekly, [], now).bars).toHaveLength(2)
+  })
+
+  it('gives any other goal its last seven entries, without judging each one', () => {
+    const entries = Array.from({ length: 9 }, (_, i) => entry(`e${i}`, `2026-10-${String(i + 10)}`, 10 + i))
+    const history = goalMiniHistory(pushUpGoal, entries, now)
+    expect(history.kind).toBe('entries')
+    expect(history.target).toBe(40)
+    expect(history.bars.map((bar) => bar.value)).toEqual([12, 13, 14, 15, 16, 17, 18])
+    expect(history.bars.every((bar) => bar.status === 'none')).toBe(true)
+    expect(history.bars.map((bar) => bar.current)).toEqual([false, false, false, false, false, false, true])
+  })
+
+  it('leaves the target line off a running total, which single entries never reach', () => {
+    const total = { ...pushUpGoal, aggregation: 'total', target_value: 1000 }
+    expect(goalMiniHistory(total, [entry('a', '2026-10-20', 50)], now).target).toBeNull()
   })
 })

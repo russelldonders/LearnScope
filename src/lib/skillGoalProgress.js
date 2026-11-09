@@ -193,9 +193,58 @@ export function goalStreak(goal, statements, now = new Date()) {
   return streak
 }
 
+export const MINI_HISTORY_LENGTH = 7
+
+// The small chart on a dashboard goal tile. A repeating total shows its last
+// few days, weeks, months or years, each marked met or missed; any other goal
+// shows its last few entries, the latest marked as current. Entries aren't
+// judged against the target one by one: a single plank time short of a
+// stretch target isn't a miss the way a missed week is.
+export function goalMiniHistory(goal, statements, now = new Date()) {
+  const target = goal.target_value == null ? null : Number(goal.target_value)
+  if (goal.aggregation === 'total' && goal.period) {
+    return { kind: 'periods', target, bars: allPeriodBars(goal, statements, now).slice(-MINI_HISTORY_LENGTH) }
+  }
+  const readings = goalReadings(goal, statements).slice(-MINI_HISTORY_LENGTH)
+  return {
+    kind: 'entries',
+    target: goal.aggregation === 'total' ? null : target,
+    bars: readings.map((reading, index) => ({
+      start: reading.date,
+      value: reading.value,
+      status: 'none',
+      current: index === readings.length - 1,
+    })),
+  }
+}
+
+// The goals this one replaced when its target or date changed, oldest first,
+// as { target_value, closed_on }, so past periods can be judged by the target
+// that applied then. allGoals holds the skill's goals, replaced ones included.
+export function withTargetHistory(goal, allGoals) {
+  const byId = new Map((allGoals ?? []).map((other) => [other.id, other]))
+  const history = []
+  const seen = new Set([goal.id])
+  let previous = byId.get(goal.replaces_goal_id)
+  while (previous && !seen.has(previous.id)) {
+    seen.add(previous.id)
+    history.unshift({ target_value: previous.target_value, closed_on: previous.closed_on })
+    previous = byId.get(previous.replaces_goal_id)
+  }
+  return { ...goal, target_history: history }
+}
+
+// The target in force on a day: that of the earliest replaced goal still open
+// on it, else the goal's own. A goal replaced on a day no longer applies that
+// day, so a period ending on the day a target changed uses the new one.
+function targetOn(goal, dateString) {
+  const earlier = (goal.target_history ?? []).find((entry) => entry.closed_on && entry.closed_on > dateString)
+  const value = earlier ? earlier.target_value : goal.target_value
+  return value == null ? null : Number(value)
+}
+
 function allPeriodBars(goal, statements, now) {
   const startedAt = startOfDayFromString(goal.started_on)
-  const target = goal.target_value == null ? null : Number(goal.target_value)
   const readings = goalReadings(goal, statements).filter((r) => r.date >= startedAt)
   const current = startOfPeriod(now, goal.period).getTime()
   const bars = []
@@ -203,9 +252,12 @@ function allPeriodBars(goal, statements, now) {
     const end = nextPeriodStart(start, goal.period)
     const value = readings.filter((r) => r.date >= start && r.date < end).reduce((sum, r) => sum + r.value, 0)
     const isCurrent = start.getTime() === current
+    const lastDay = new Date(end)
+    lastDay.setDate(lastDay.getDate() - 1)
+    const target = isCurrent ? (goal.target_value == null ? null : Number(goal.target_value)) : targetOn(goal, localDateString(lastDay))
     let status = 'none'
     if (target !== null) status = value >= target ? 'met' : isCurrent ? 'inProgress' : 'missed'
-    bars.push({ start: new Date(start), value, status, current: isCurrent })
+    bars.push({ start: new Date(start), value, status, current: isCurrent, target })
   }
   return bars
 }
