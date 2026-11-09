@@ -293,6 +293,10 @@ export default function Dashboard() {
   const [importBanner, setImportBanner] = useState(null)
   const [goals, setGoals] = useState([])
   const [openGoalId, setOpenGoalId] = useState(null)
+  // Goals that have been due a log while the page is open. They sit at the top
+  // of the dashboard, and stay there once logged so the learner sees what they
+  // just saved; they rejoin the other goals on the next visit.
+  const [dueGoalIds, setDueGoalIds] = useState(() => new Set())
   const [fullFormOpen, setFullFormOpen] = useState(false)
   const [activityRefresh, setActivityRefresh] = useState(0)
   const [repeatRequest, setRepeatRequest] = useState(null)
@@ -371,8 +375,20 @@ export default function Dashboard() {
     setUpcomingTargets(targetsDue)
     setPendingReviewTasks(reviewTasks)
     setImportBanner(importBannerState)
-    setGoals(activeGoals)
+    showGoals(activeGoals)
     setLoading(false)
+  }
+
+  function showGoals(items) {
+    const today = todayDateString()
+    setGoals(items)
+    setDueGoalIds((prev) => {
+      const next = new Set(prev)
+      for (const item of items) {
+        if (item.nextLog && item.nextLog <= today) next.add(item.goal.id)
+      }
+      return next.size === prev.size ? prev : next
+    })
   }
 
   // After a goal entry: reloads only the goals, and returns them so the card
@@ -380,7 +396,7 @@ export default function Dashboard() {
   // change a skill's next step, so Up Next is refreshed alongside.
   async function refreshGoals() {
     const [items] = await Promise.all([loadGoals(user.id).catch(() => null), refreshUpNext().catch(() => {})])
-    if (items) setGoals(items)
+    if (items) showGoals(items)
     return items
   }
 
@@ -420,7 +436,8 @@ export default function Dashboard() {
   }
 
   const today = todayDateString()
-  const goalsToLog = goals.filter((item) => item.nextLog && item.nextLog <= today)
+  const dueGoals = goals.filter((item) => dueGoalIds.has(item.goal.id))
+  const otherGoals = goals.filter((item) => !dueGoalIds.has(item.goal.id))
   const goalTargetsDue = goals.filter(
     (item) => item.goal.target_date && item.goal.target_date <= reminderCutoff() && !item.progress.reached,
   )
@@ -457,6 +474,21 @@ export default function Dashboard() {
               {t('dashboard.subheading')}
             </p>
           </div>
+
+          {!loading && dueGoals.length > 0 && (
+            <div className="mb-10">
+              <SkillGoalsDashboardPanel
+                items={dueGoals}
+                user={user}
+                openGoalId={openGoalId}
+                onOpenGoal={setOpenGoalId}
+                onChanged={handleQuickLogged}
+                headingId="dashboard-due-goals-heading"
+                title={t('skillGoals.dashboard.dueTitle')}
+                subtitle={t('skillGoals.dashboard.dueSubtitle')}
+              />
+            </div>
+          )}
 
           {loading ? (
             <DashboardSkeleton />
@@ -520,9 +552,9 @@ export default function Dashboard() {
           />
         )}
 
-        {!loading && goals.length > 0 && (
+        {!loading && otherGoals.length > 0 && (
           <SkillGoalsDashboardPanel
-            items={goals}
+            items={otherGoals}
             user={user}
             openGoalId={openGoalId}
             onOpenGoal={setOpenGoalId}
@@ -533,7 +565,6 @@ export default function Dashboard() {
         {!loading &&
           (upcomingSelfAssessments.length > 0 ||
             targetReminders.length > 0 ||
-            goalsToLog.length > 0 ||
             pendingReviewTasks.length > 0) && (
             <div>
               <h2 className="font-display text-xl text-ink mb-6">{t('dashboard.needsAttention')}</h2>
@@ -547,19 +578,6 @@ export default function Dashboard() {
                         label={s.name}
                         date={s.next_checkin_date}
                         overdue={isSelfAssessmentDue(s.next_checkin_date)}
-                      />
-                    ))}
-                  </ReminderGroup>
-                )}
-                {goalsToLog.length > 0 && (
-                  <ReminderGroup title={t('skillGoals.dashboard.reminderTitle')}>
-                    {goalsToLog.map(({ goal, skill, nextLog }) => (
-                      <ReminderRow
-                        key={goal.id}
-                        onClick={() => setOpenGoalId(goal.id)}
-                        label={`${goal.title} · ${skill.name}`}
-                        date={nextLog}
-                        overdue={nextLog < today}
                       />
                     ))}
                   </ReminderGroup>

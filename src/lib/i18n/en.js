@@ -1602,7 +1602,7 @@ export default {
     },
     dashboard: {
       title: 'Your goals',
-      subtitle: 'Log progress straight from here. Goals due a log come first.',
+      subtitle: 'Log progress straight from here.',
       logButton: 'Log progress',
       timeToLog: 'Time to log',
       nothingLogged: 'Nothing logged yet',
@@ -1610,7 +1610,8 @@ export default {
       showFewer: 'Show fewer',
       newBest: 'New best! Saved to your activity log.',
       reachedNow: 'Target reached! Saved to your activity log.',
-      reminderTitle: 'Goals to log',
+      dueTitle: 'Due today',
+      dueSubtitle: 'These goals are waiting for a log.',
       sameAsLast: 'Same as last time',
     },
     title: 'Goals',

@@ -1605,7 +1605,7 @@ export default {
     },
     dashboard: {
       title: 'I tuoi obiettivi',
-      subtitle: 'Registra i tuoi progressi direttamente qui. Gli obiettivi da aggiornare compaiono per primi.',
+      subtitle: 'Registra i tuoi progressi direttamente qui.',
       logButton: 'Registra progressi',
       timeToLog: 'Da registrare',
       nothingLogged: 'Ancora nessuna registrazione',
@@ -1613,7 +1613,8 @@ export default {
       showFewer: 'Mostra meno',
       newBest: 'Nuovo record! Salvato nel tuo registro attività.',
       reachedNow: 'Obiettivo raggiunto! Salvato nel tuo registro attività.',
-      reminderTitle: 'Obiettivi da registrare',
+      dueTitle: 'Da fare oggi',
+      dueSubtitle: 'Questi obiettivi aspettano una registrazione.',
       sameAsLast: 'Come l’ultima volta',
     },
     title: 'Obiettivi',

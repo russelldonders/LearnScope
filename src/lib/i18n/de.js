@@ -1605,7 +1605,7 @@ export default {
     },
     dashboard: {
       title: 'Deine Ziele',
-      subtitle: 'Erfasse deinen Fortschritt direkt hier. Fällige Ziele stehen oben.',
+      subtitle: 'Erfasse deinen Fortschritt direkt hier.',
       logButton: 'Fortschritt erfassen',
       timeToLog: 'Zeit zum Erfassen',
       nothingLogged: 'Noch nichts erfasst',
@@ -1613,7 +1613,8 @@ export default {
       showFewer: 'Weniger anzeigen',
       newBest: 'Neue Bestleistung! In deinem Aktivitätsprotokoll gespeichert.',
       reachedNow: 'Ziel erreicht! In deinem Aktivitätsprotokoll gespeichert.',
-      reminderTitle: 'Ziele zum Erfassen',
+      dueTitle: 'Heute fällig',
+      dueSubtitle: 'Diese Ziele warten auf einen Eintrag.',
       sameAsLast: 'Wie beim letzten Mal',
     },
     title: 'Ziele',

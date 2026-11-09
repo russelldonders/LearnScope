@@ -1603,7 +1603,7 @@ export default {
     },
     dashboard: {
       title: 'Je doelen',
-      subtitle: 'Leg je voortgang hier direct vast. Doelen die aan de beurt zijn staan bovenaan.',
+      subtitle: 'Leg je voortgang hier direct vast.',
       logButton: 'Voortgang vastleggen',
       timeToLog: 'Tijd om vast te leggen',
       nothingLogged: 'Nog niets vastgelegd',
@@ -1611,7 +1611,8 @@ export default {
       showFewer: 'Minder tonen',
       newBest: 'Nieuw record! Opgeslagen in je activiteitenlog.',
       reachedNow: 'Doel bereikt! Opgeslagen in je activiteitenlog.',
-      reminderTitle: 'Doelen om vast te leggen',
+      dueTitle: 'Vandaag aan de beurt',
+      dueSubtitle: 'Deze doelen wachten op een registratie.',
       sameAsLast: 'Zelfde als vorige keer',
     },
     title: 'Doelen',

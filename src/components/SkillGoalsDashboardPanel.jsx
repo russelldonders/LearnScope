@@ -13,7 +13,16 @@ const COLLAPSED_COUNT = 4
 // without first finding the skill. Items arrive already sorted by what needs
 // attention; each carries its goal, skill, activities, progress and next log
 // date. Editing goals, charts and correcting entries stay on the skill's page.
-export default function SkillGoalsDashboardPanel({ items, user, openGoalId, onOpenGoal, onChanged }) {
+export default function SkillGoalsDashboardPanel({
+  items,
+  user,
+  openGoalId,
+  onOpenGoal,
+  onChanged,
+  headingId = 'dashboard-goals-heading',
+  title,
+  subtitle,
+}) {
   const { t } = useLanguage()
   const [expanded, setExpanded] = useState(false)
   const [actorName, setActorName] = useState('')
@@ -38,11 +47,11 @@ export default function SkillGoalsDashboardPanel({ items, user, openGoalId, onOp
   const visible = showAll ? items : items.slice(0, COLLAPSED_COUNT)
 
   return (
-    <section aria-labelledby="dashboard-goals-heading">
-      <h2 id="dashboard-goals-heading" className="font-display text-xl text-ink mb-1">
-        {t('skillGoals.dashboard.title')}
+    <section aria-labelledby={headingId}>
+      <h2 id={headingId} className="font-display text-xl text-ink mb-1">
+        {title ?? t('skillGoals.dashboard.title')}
       </h2>
-      <p className="text-sm text-secondary mb-6">{t('skillGoals.dashboard.subtitle')}</p>
+      <p className="text-sm text-secondary mb-6">{subtitle ?? t('skillGoals.dashboard.subtitle')}</p>
       {/* items-start: a tile opened for logging grows on its own, without
           stretching the tile next to it. */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">

@@ -1584,7 +1584,7 @@ export default {
     },
     dashboard: {
       title: '你的目标',
-      subtitle: '直接在这里记录进展。需要记录的目标排在最前面。',
+      subtitle: '直接在这里记录进展。',
       logButton: '记录进展',
       timeToLog: '该记录了',
       nothingLogged: '尚无记录',
@@ -1592,7 +1592,8 @@ export default {
       showFewer: '收起',
       newBest: '新的最佳成绩！已保存到你的活动记录。',
       reachedNow: '目标已达成！已保存到你的活动记录。',
-      reminderTitle: '待记录的目标',
+      dueTitle: '今天要记录',
+      dueSubtitle: '这些目标正等着你记录。',
       sameAsLast: '与上次相同',
     },
     title: '目标',

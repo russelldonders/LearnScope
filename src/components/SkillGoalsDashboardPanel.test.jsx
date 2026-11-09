@@ -83,6 +83,17 @@ describe('goal tiles', () => {
     expect(within(screen.getByRole('article', { name: 'Fresh' })).getByText('–')).toBeInTheDocument()
   })
 
+  it('can carry its own heading, for the goals due today', () => {
+    renderPanel([item({ title: 'Best', target_value: 40 })], {
+      headingId: 'due-heading',
+      title: 'Due today',
+      subtitle: 'These goals are waiting for a log.',
+    })
+    const section = screen.getByRole('region', { name: 'Due today' })
+    expect(within(section).getByText('These goals are waiting for a log.')).toBeInTheDocument()
+    expect(within(section).getByRole('article', { name: 'Best' })).toBeInTheDocument()
+  })
+
   it('opens logging from either button', () => {
     const onOpenGoal = vi.fn()
     renderPanel([item({ title: 'Best', target_value: 40 }, [pushUps('a', 20, daysAgo(3))])], { onOpenGoal })

@@ -1605,7 +1605,7 @@ export default {
     },
     dashboard: {
       title: 'Vos objectifs',
-      subtitle: 'Enregistrez vos progrès directement ici. Les objectifs à mettre à jour apparaissent en premier.',
+      subtitle: 'Enregistrez vos progrès directement ici.',
       logButton: 'Enregistrer un progrès',
       timeToLog: 'À enregistrer',
       nothingLogged: 'Rien d’enregistré pour l’instant',
@@ -1613,7 +1613,8 @@ export default {
       showFewer: 'Afficher moins',
       newBest: 'Nouveau record ! Enregistré dans votre journal d’activités.',
       reachedNow: 'Objectif atteint ! Enregistré dans votre journal d’activités.',
-      reminderTitle: 'Objectifs à enregistrer',
+      dueTitle: 'À faire aujourd’hui',
+      dueSubtitle: 'Ces objectifs attendent un enregistrement.',
       sameAsLast: 'Comme la dernière fois',
     },
     title: 'Objectifs',
