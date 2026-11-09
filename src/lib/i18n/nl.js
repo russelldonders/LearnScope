@@ -1539,6 +1539,9 @@ export default {
     },
   },
   quickLog: {
+    partOfLabel: 'Onderdeel van',
+    partOfNone: 'Geen onderdeel van een huidige rol of project',
+    errorExperienceDate: 'Deze datum valt buiten de periode van de rol of het project waar het bij hoort.',
     voice: {
       start: 'Inspreken',
       stop: 'Stop',

@@ -1520,6 +1520,9 @@ export default {
     },
   },
   quickLog: {
+    partOfLabel: '所属',
+    partOfNone: '不属于当前岗位或项目',
+    errorExperienceDate: '此日期不在其所属岗位或项目的时间范围内。',
     voice: {
       start: '语音输入',
       stop: '停止',

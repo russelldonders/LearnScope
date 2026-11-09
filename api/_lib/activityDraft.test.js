@@ -153,3 +153,42 @@ describe('normalizeActivityDraft', () => {
     expect(normalizeActivityDraft({ outcome: 'other' }, context())).toBeNull()
   })
 })
+
+describe('current roles and projects', () => {
+  const experiences = [
+    { title: 'Product Manager', organization: 'Acme', kind: 'role', start_date: '2024-01-01', end_date: null },
+    { title: 'Website relaunch', organization: '', kind: 'project', within: 'Product Manager', start_date: '2026-11-01', end_date: '2026-12-31' },
+  ]
+
+  it('lists them by number with their organisation and parent role', () => {
+    const { prompt } = buildActivityDraftRequest({ text: 'ran', skills, goals, experiences }, TODAY)
+    expect(prompt).toContain('E1: role "Product Manager" at Acme')
+    expect(prompt).toContain('E2: project "Website relaunch" (part of Product Manager)')
+  })
+
+  it('says when there are none', () => {
+    const { prompt } = buildActivityDraftRequest({ text: 'ran', skills, goals }, TODAY)
+    expect(prompt).toContain('Their current roles and projects (refer to them only by number):\n(none)')
+  })
+
+  it('maps the chosen one back to a list position', () => {
+    const draft = normalizeActivityDraft(
+      { outcome: 'activities', message: null, activities: [activity({ experience: 2 })] },
+      context({ experiences }),
+    )
+    expect(draft.activities[0].experience).toBe(1)
+  })
+
+  it('drops a choice that is out of range, missing, or outside the dates', () => {
+    const ctx = context({ experiences })
+    const read = (overrides) =>
+      normalizeActivityDraft({ outcome: 'activities', message: null, activities: [activity(overrides)] }, ctx).activities[0].experience
+    expect(read({ experience: 3 })).toBeNull()
+    expect(read({ experience: 0 })).toBeNull()
+    expect(read({ experience: null })).toBeNull()
+    expect(read({})).toBeNull()
+    // The project only starts on 2026-11-01.
+    expect(read({ experience: 2, day: 'date', date: '2026-10-30' })).toBeNull()
+    expect(read({ experience: 2, day: 'date', date: '2026-11-02' })).toBe(1)
+  })
+})

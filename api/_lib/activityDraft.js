@@ -1,13 +1,14 @@
 // Turns a learner's sentence about what they did ("ran 5k in 26:40 this
 // morning, then push-ups, best set 32") into draft activities they confirm in
-// the app. Skills and goals are sent and returned as list numbers, never ids,
-// so the model can only point at things the learner already has. Nothing is
-// saved here.
+// the app. Skills, goals and current roles/projects are sent and returned as
+// list numbers, never ids, so the model can only point at things the learner
+// already has. Nothing is saved here.
 import { LANGUAGE_NAMES, clean, isRealDate, resolveToday } from './skillGoalDraft.js'
 
 const MAX_TEXT_LENGTH = 1000
 const MAX_SKILLS = 200
 const MAX_GOALS = 30
+const MAX_EXPERIENCES = 20
 const MAX_ACTIVITIES = 5
 const VERBS = ['experienced', 'practiced', 'completed', 'attempted']
 const MEASURED_KINDS = ['count', 'number', 'duration', 'pace']
@@ -51,8 +52,9 @@ export const ACTIVITY_DRAFT_SCHEMA = {
             },
           },
           note: nullable('string'),
+          experience: nullable('integer'),
         },
-        required: ['title', 'day', 'date', 'duration_minutes', 'verb', 'skills', 'new_skill', 'goal_values', 'note'],
+        required: ['title', 'day', 'date', 'duration_minutes', 'verb', 'skills', 'new_skill', 'goal_values', 'note', 'experience'],
         additionalProperties: false,
       },
     },
@@ -80,6 +82,29 @@ function normalizeGoals(goals, skillCount) {
     }))
 }
 
+// The learner's current roles and projects -- the only things an activity
+// can be said to be part of.
+function normalizeExperiences(experiences) {
+  if (!Array.isArray(experiences)) return []
+  return experiences
+    .slice(0, MAX_EXPERIENCES)
+    .map((experience) => ({
+      title: clean(experience?.title, 200),
+      organization: clean(experience?.organization, 200),
+      kind: experience?.kind === 'project' ? 'project' : 'role',
+      within: clean(experience?.within, 200),
+      start_date: isRealDate(experience?.start_date) ? experience.start_date : null,
+      end_date: isRealDate(experience?.end_date) ? experience.end_date : null,
+    }))
+    .filter((experience) => experience.title)
+}
+
+function describeExperience(experience, index) {
+  const at = experience.organization ? ` at ${experience.organization}` : ''
+  const within = experience.within ? ` (part of ${experience.within})` : ''
+  return `E${index + 1}: ${experience.kind} "${experience.title}"${at}${within}`
+}
+
 function describeGoal(goal, index, skillNames) {
   const on = goal.skill != null ? ` on ${skillNames[goal.skill]}` : ''
   const counting = goal.aggregation === 'total' ? 'adds up each entry' : 'keeps the best entry'
@@ -104,6 +129,7 @@ export function buildActivityDraftRequest(body, serverToday = new Date().toISOSt
   const skillNames = normalizeSkills(body?.skills)
   if (skillNames.length === 0) return { error: 'Add a skill before logging activities' }
   const goals = normalizeGoals(body?.goals, skillNames.length)
+  const experiences = normalizeExperiences(body?.experiences)
   const language = LANGUAGE_NAMES[body?.language] ?? 'English'
   const today = resolveToday(body?.today, serverToday)
   const measuredGoals = goals.map((goal, index) => ({ goal, index })).filter(({ goal }) => MEASURED_KINDS.includes(goal.measure_kind))
@@ -112,7 +138,7 @@ export function buildActivityDraftRequest(body, serverToday = new Date().toISOSt
     schema: ACTIVITY_DRAFT_SCHEMA,
     maxTokens: 1200,
     today,
-    context: { today, skillNames, goals },
+    context: { today, skillNames, goals, experiences },
     refusalError: "Couldn't read this as an activity. Try rewording it, or use the full form.",
     failureError: 'Failed to read this. Try again, or use the full form.',
     logLabel: 'draft-activity',
@@ -132,6 +158,9 @@ ${skillNames.map((name, index) => `S${index + 1}: ${name}`).join('\n')}
 Their goals that take a measured value (refer to them only by number):
 ${measuredGoals.length ? measuredGoals.map(({ goal, index }) => describeGoal(goal, index, skillNames)).join('\n') : '(none)'}
 
+Their current roles and projects (refer to them only by number):
+${experiences.length ? experiences.map(describeExperience).join('\n') : '(none)'}
+
 Choose one outcome:
 - "activities": you can tell what they did. Set message to null and fill activities, one per separate thing they did (at most ${MAX_ACTIVITIES}). A run and a set of push-ups are two activities; a run described in two sentences is one.
 - "clarify": set activities to [] and ask one short question in message, but only in these two cases:
@@ -149,6 +178,7 @@ For each activity:
 - new_skill: only when skills is [], a short, reusable skill name it would belong to, in ${language}; otherwise null.
 - goal_values: a value for each goal above that this activity clearly gives a number for (goal as an integer, without the G), else []. Use value for counts and numbers in the goal's unit; seconds for a duration; distance in the goal's distance unit plus seconds for the time taken for a pace (never the pace itself). Set the fields a goal doesn't use to null. Only use numbers they actually gave; never guess one.
 - note: anything else worth keeping that they wrote, briefly, or null.
+- experience: the number of the current role or project above that this activity was done as part of (as an integer, without the E), or null. Choose one only when what they wrote clearly ties it to that role or project: they name it, its organisation or its people, or describe work that plainly belongs to it. Never choose one just because it is their only role, because the dates overlap, or for personal things like exercise or hobbies; use null when unsure.
 
 Write message, titles and notes in ${language}.`,
   }
@@ -195,7 +225,18 @@ function normalizeGoalValue(entry, goals) {
   }
 }
 
-function normalizeActivity(activity, { today, skillNames, goals }) {
+// The chosen role/project as a position in the list sent, or null when the
+// number is out of range or the activity's day falls outside its dates.
+function normalizeExperience(number, date, experiences) {
+  const index = wholeNumber(number, 1, experiences.length)
+  if (index == null) return null
+  const experience = experiences[index - 1]
+  if (experience.start_date && date < experience.start_date) return null
+  if (experience.end_date && date > experience.end_date) return null
+  return index - 1
+}
+
+function normalizeActivity(activity, { today, skillNames, goals, experiences = [] }) {
   const goalTitles = new Set(goals.map((goal) => goal.title.toLowerCase()).filter(Boolean))
   const skills = []
   for (const number of Array.isArray(activity?.skills) ? activity.skills : []) {
@@ -231,15 +272,17 @@ function normalizeActivity(activity, { today, skillNames, goals }) {
   const timed = goalValues.find((entry) => entry.seconds != null)
   if (durationMinutes == null && timed) durationMinutes = Math.max(1, Math.round(timed.seconds / 60))
 
+  const date = resolveDay(activity?.day, activity?.date, today)
   return {
     title,
-    date: resolveDay(activity?.day, activity?.date, today),
+    date,
     duration_minutes: durationMinutes,
     verb: VERBS.includes(activity?.verb) ? activity.verb : 'experienced',
     skills: skills.slice(0, 5),
     new_skill: newSkill,
     goal_values: goalValues,
     note: clean(activity?.note, 500) || null,
+    experience: normalizeExperience(activity?.experience, date, experiences),
   }
 }
 

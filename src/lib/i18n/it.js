@@ -1541,6 +1541,9 @@ export default {
     },
   },
   quickLog: {
+    partOfLabel: 'Parte di',
+    partOfNone: 'Non fa parte di un ruolo o progetto attuale',
+    errorExperienceDate: 'Questa data è fuori dalle date del ruolo o progetto di cui fa parte.',
     voice: {
       start: 'Detta',
       stop: 'Ferma',

@@ -1540,6 +1540,9 @@ export default {
     },
   },
   quickLog: {
+    partOfLabel: 'Parte de',
+    partOfNone: 'No forma parte de un puesto o proyecto actual',
+    errorExperienceDate: 'Esta fecha está fuera de las fechas del puesto o proyecto del que forma parte.',
     voice: {
       start: 'Dictar',
       stop: 'Detener',

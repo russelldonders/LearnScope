@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import { supabase } from '../lib/supabaseClient'
 import { saveActivity } from '../lib/activitySkillLinks'
+import { linkSkillToExperiences } from '../lib/currentRole'
+import { experienceTrail } from '../lib/xapiStatement'
 import { findOrCreatePersonalSkill } from '../lib/skillLibrary'
 import { XAPI_VERBS } from '../lib/xapiVerbs'
 import { distanceUnitFromPace, goalLogFeedback, localDateString } from '../lib/skillGoalProgress'
@@ -13,6 +15,7 @@ import {
   cardFromRow,
   cardFromTemplate,
   cardsFromDraft,
+  currentExperiences,
   derivedGoalsForCard,
   draftActivitiesFromText,
   REFLECTION_PROMPTS,
@@ -47,6 +50,7 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
   const { t, language } = useLanguage()
   const sectionRef = useRef(null)
   const [skills, setSkills] = useState([])
+  const [experiences, setExperiences] = useState([])
   const [recentRows, setRecentRows] = useState([])
   const [listening, setListening] = useState(false)
   const recognitionRef = useRef(null)
@@ -67,6 +71,16 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
   async function loadSkills() {
     const { data } = await supabase.from('skills').select('id, name').eq('user_id', user.id).order('name')
     setSkills(data ?? [])
+  }
+
+  // Current roles and projects an activity can be part of; read from the whole
+  // Experience list so a project's parent job is available for its trail.
+  async function loadExperiences() {
+    const { data } = await supabase
+      .from('experience')
+      .select('id, title, organization, type, start_date, end_date, parent_experience_id')
+      .eq('user_id', user.id)
+    setExperiences(currentExperiences(data ?? []))
   }
 
   async function loadRecent() {
@@ -136,6 +150,7 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
 
   useEffect(() => {
     loadSkills()
+    loadExperiences()
     loadRecent()
     supabase
       .from('profiles')
@@ -155,11 +170,11 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
     setResult(null)
     setReading(true)
     try {
-      const draft = await draftActivitiesFromText({ text: sentence, skills, goals, language })
+      const draft = await draftActivitiesFromText({ text: sentence, skills, goals, experiences, language })
       if (draft.outcome === 'clarify') {
         setQuestion(draft.message)
       } else {
-        setCards((current) => [...current, ...cardsFromDraft(draft, skills, goals)])
+        setCards((current) => [...current, ...cardsFromDraft(draft, skills, goals, experiences)])
         setText('')
       }
     } catch (err) {
@@ -185,7 +200,7 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
 
   async function handleSave() {
     const actor = { name: actorName, email: user.email }
-    const built = cards.map((card) => ({ card, ...buildCardStatement(card, goals, actor) }))
+    const built = cards.map((card) => ({ card, ...buildCardStatement(card, goals, actor, experiences) }))
     const problems = Object.fromEntries(
       built
         .filter((b) => b.error)
@@ -207,8 +222,13 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
     const before = new Map(goalItems.map((item) => [item.goal.id, item.progress]))
     const savedRows = []
     try {
-      for (const { card, statement, skillIds } of built) {
-        const row = await saveActivity({ userId: user.id, statement, evidence: null, skillIds })
+      for (const { card, statement, skillIds, experienceId } of built) {
+        const row = await saveActivity({ userId: user.id, statement, evidence: null, skillIds, experienceId })
+        // Same as logging from the full form: an activity done as part of a
+        // role or project also links its skills to that role or project.
+        if (experienceId) {
+          for (const skillId of skillIds) await linkSkillToExperiences(user.id, skillId, [experienceId])
+        }
         savedRows.push({ id: row.id, statement: row.statement })
         removeCard(card.key)
       }
@@ -327,6 +347,7 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
               card={card}
               skills={skills}
               goals={goals}
+              experiences={experiences}
               error={errors[card.key]}
               onChange={(changes) => updateCard(card.key, changes)}
               onRemove={() => removeCard(card.key)}
@@ -362,7 +383,7 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
   )
 }
 
-function DraftCard({ card, skills, goals, error, onChange, onRemove, onSkillCreated }) {
+function DraftCard({ card, skills, goals, experiences, error, onChange, onRemove, onSkillCreated }) {
   const { t } = useLanguage()
   const { user } = useAuth()
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -492,6 +513,23 @@ function DraftCard({ card, skills, goals, error, onChange, onRemove, onSkillCrea
         <p className="mt-2 text-xs text-secondary">
           {t('quickLog.alsoCounts', { goals: derived.map((goal) => goal.title).join(', ') })}
         </p>
+      )}
+
+      {experiences.length > 0 && (
+        <div className="mt-3">
+          <label htmlFor={id('experience')} className="block text-xs text-secondary mb-1">{t('quickLog.partOfLabel')}</label>
+          <select
+            id={id('experience')}
+            value={card.experienceId ?? ''}
+            onChange={(e) => onChange({ experienceId: e.target.value || null })}
+            className={INPUT_CLASS}
+          >
+            <option value="">{t('quickLog.partOfNone')}</option>
+            {experiences.map((experience) => (
+              <option key={experience.id} value={experience.id}>{experienceTrail(experience)}</option>
+            ))}
+          </select>
+        </div>
       )}
 
       <div className="mt-3">

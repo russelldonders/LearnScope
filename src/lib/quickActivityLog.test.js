@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('./supabaseClient', () => ({ supabase: {} }))
 
-const { buildCardStatement, canRepeatRow, cardFromRow, cardFromTemplate, cardsFromDraft, derivedGoalsForCard, repeatTemplates, withReflection } = await import('./quickActivityLog')
+const { buildCardStatement, canRepeatRow, currentExperiences, cardFromRow, cardFromTemplate, cardsFromDraft, derivedGoalsForCard, repeatTemplates, withReflection } = await import('./quickActivityLog')
 const { DIAGNOSTIC_EXTENSION_IRI, MEASUREMENT_EXTENSION_IRI, buildStatement, measurementsFromStatement } = await import('./xapiStatement')
 const { localDateString } = await import('./skillGoalProgress')
 
@@ -159,5 +159,45 @@ describe('repeatTemplates', () => {
     expect(statement.result.extensions[MEASUREMENT_EXTENSION_IRI]).toHaveLength(1)
     const [template] = repeatTemplates([row('1', statement)], skills, goals)
     expect(template.card.goalValues).toEqual([])
+  })
+})
+
+describe('current roles and projects', () => {
+  const job = { id: 'job', type: 'employment', title: 'Product Manager', organization: 'Acme', start_date: '2024-01-01', end_date: null, parent_experience_id: null }
+  const pastJob = { id: 'old', type: 'employment', title: 'Analyst', start_date: '2020-01-01', end_date: '2023-12-31', parent_experience_id: null }
+  const project = { id: 'proj', type: 'project', title: 'Website relaunch', start_date: '2024-02-01', end_date: null, parent_experience_id: 'job' }
+  const degree = { id: 'deg', type: 'education', title: 'BSc', start_date: '2015-09-01', end_date: null, parent_experience_id: null }
+
+  it('keeps ongoing jobs, volunteer roles and projects, with their parent', () => {
+    const result = currentExperiences([job, pastJob, project, degree], '2026-11-09')
+    expect(result.map((e) => e.id)).toEqual(['job', 'proj'])
+    expect(result[1].parent).toEqual({ id: 'job', title: 'Product Manager', type: 'employment' })
+  })
+
+  it('maps the AI choice onto a card, and leaves it empty when none was chosen', () => {
+    const experiences = currentExperiences([job, project], '2026-11-09')
+    const draft = {
+      activities: [
+        { title: 'Roadmap review', date: localDateString(), duration_minutes: null, verb: 'experienced', skills: [0], new_skill: null, goal_values: [], note: null, experience: 1 },
+        { title: 'Run', date: localDateString(), duration_minutes: null, verb: 'practiced', skills: [1], new_skill: null, goal_values: [], note: null, experience: null },
+      ],
+    }
+    const [first, second] = cardsFromDraft(draft, skills, goals, experiences)
+    expect(first.experienceId).toBe('proj')
+    expect(second.experienceId).toBeNull()
+  })
+
+  it('records the chosen role or project on the statement, with its trail', () => {
+    const experiences = currentExperiences([job, project], '2026-11-09')
+    const built = buildCardStatement(card({ skills: [fitness], experienceId: 'proj' }), goals, actor, experiences)
+    expect(built.experienceId).toBe('proj')
+    const context = Object.values(built.statement.context.extensions).find((value) => value?.id === 'proj')
+    expect(context).toMatchObject({ title: 'Website relaunch', type: 'project', parent: { id: 'job', title: 'Product Manager' } })
+  })
+
+  it('refuses a date outside the role or project', () => {
+    const later = { ...project, start_date: '2999-01-01' }
+    const built = buildCardStatement(card({ skills: [fitness], experienceId: 'proj' }), goals, actor, [later])
+    expect(built.error).toBe('quickLog.errorExperienceDate')
   })
 })

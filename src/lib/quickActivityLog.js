@@ -30,9 +30,26 @@ import {
 let nextKey = 0
 const newKey = () => `draft-${(nextKey += 1)}`
 
-// Asks AI to read the sentence. Skills and goals are sent as plain lists and
-// come back as positions in them, so it can only point at what the learner has.
-export async function draftActivitiesFromText({ text, skills, goals, language }) {
+const PART_OF_TYPES = ['employment', 'volunteer', 'project']
+
+// The learner's current roles and projects -- the jobs, volunteer roles and
+// projects still going on (no end date, or one not yet passed) -- each with
+// its parent (the job a project sits under) for the experience trail, from
+// their whole Experience list.
+export function currentExperiences(rows, today = localDateString()) {
+  const byId = new Map(rows.map((row) => [row.id, row]))
+  return rows
+    .filter((row) => PART_OF_TYPES.includes(row.type) && (!row.end_date || row.end_date >= today))
+    .map((row) => {
+      const parent = row.parent_experience_id ? byId.get(row.parent_experience_id) : null
+      return { ...row, parent: parent ? { id: parent.id, title: parent.title, type: parent.type } : null }
+    })
+}
+
+// Asks AI to read the sentence. Skills, goals and current roles/projects are
+// sent as plain lists and come back as positions in them, so it can only
+// point at what the learner has.
+export async function draftActivitiesFromText({ text, skills, goals, experiences = [], language }) {
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -56,6 +73,14 @@ export async function draftActivitiesFromText({ text, skills, goals, language })
         aggregation: goal.aggregation,
         tracker_question: goal.tracker_question,
       })),
+      experiences: experiences.map((experience) => ({
+        title: experience.title,
+        organization: experience.organization,
+        kind: experience.type === 'project' ? 'project' : 'role',
+        within: experience.parent?.title ?? null,
+        start_date: experience.start_date,
+        end_date: experience.end_date,
+      })),
     }),
   })
   const body = await res.json().catch(() => ({}))
@@ -72,9 +97,9 @@ function goalFields(goal, { value = null, distance = null, seconds = null }) {
   }
 }
 
-// Turns the AI's answer into cards, matching positions back to real skills
-// and goals.
-export function cardsFromDraft(draft, skills, goals) {
+// Turns the AI's answer into cards, matching positions back to real skills,
+// goals and current roles/projects.
+export function cardsFromDraft(draft, skills, goals, experiences = []) {
   return (draft.activities ?? []).map((activity) => ({
     key: newKey(),
     title: activity.title,
@@ -90,6 +115,7 @@ export function cardsFromDraft(draft, skills, goals) {
       })
       .filter(Boolean),
     note: activity.note ?? '',
+    experienceId: experiences[activity.experience]?.id ?? null,
   }))
 }
 
@@ -252,14 +278,18 @@ export async function saveReflection(row, question, answer) {
 }
 
 // Checks a card and builds the statement to save. Returns { error } with a
-// translation key, or { statement, skillIds }.
-export function buildCardStatement(card, goals, actor) {
+// translation key, or { statement, skillIds, experienceId }.
+export function buildCardStatement(card, goals, actor, experiences = []) {
   const title = card.title.trim()
   if (!title) return { error: 'quickLog.errorTitle' }
   if (!card.date || card.date > localDateString()) return { error: 'quickLog.errorDate' }
   if (card.skills.length === 0) return { error: 'quickLog.errorSkill' }
   const minutes = card.durationMinutes.trim() === '' ? 0 : Number(card.durationMinutes)
   if (!Number.isInteger(minutes) || minutes < 0) return { error: 'quickLog.errorDuration' }
+  const experience = card.experienceId ? experiences.find((other) => other.id === card.experienceId) ?? null : null
+  if (experience && ((experience.start_date && card.date < experience.start_date) || (experience.end_date && card.date > experience.end_date))) {
+    return { error: 'quickLog.errorExperienceDate' }
+  }
 
   const measurements = []
   for (const entry of card.goalValues) {
@@ -278,9 +308,10 @@ export function buildCardStatement(card, goals, actor) {
     description: card.note.trim() || null,
     timestamp: cardTimestamp(card.date),
     relatedSkills: card.skills.map((skill) => ({ id: skill.id, name: skill.name })),
+    relatedExperience: experience,
     durationHours: Math.floor(minutes / 60),
     durationMinutes: minutes % 60,
     measurements,
   })
-  return { statement, skillIds: card.skills.map((skill) => skill.id) }
+  return { statement, skillIds: card.skills.map((skill) => skill.id), experienceId: experience?.id ?? null }
 }

@@ -1541,6 +1541,9 @@ export default {
     },
   },
   quickLog: {
+    partOfLabel: 'Dans le cadre de',
+    partOfNone: "Ne fait pas partie d'un poste ou projet actuel",
+    errorExperienceDate: 'Cette date est en dehors des dates du poste ou du projet dont elle fait partie.',
     voice: {
       start: 'Dicter',
       stop: 'Arrêter',
