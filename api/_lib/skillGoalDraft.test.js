@@ -83,6 +83,13 @@ describe('normalizeGoalDraft', () => {
     expect(normalizeGoalDraft({ outcome: 'goal', goal: { ...pushUps, period: 'week' } }, TODAY).goal.period).toBeNull()
   })
 
+  it('makes a "count" of kilograms, kilometres or litres a decimal number', () => {
+    for (const unit of ['Kg', 'km', 'litres', 'lbs']) {
+      expect(normalizeGoalDraft({ outcome: 'goal', goal: { ...pushUps, unit } }, TODAY).goal.measure_kind).toBe('number')
+    }
+    expect(normalizeGoalDraft({ outcome: 'goal', goal: pushUps }, TODAY).goal.measure_kind).toBe('count')
+  })
+
   it('cleans metric names and drops values the table would reject', () => {
     const { goal } = normalizeGoalDraft({
       outcome: 'goal',

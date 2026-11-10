@@ -141,6 +141,19 @@ describe('goal tiles', () => {
     expect(within(tile).getByRole('progressbar')).toBeInTheDocument()
   })
 
+  it('scales single readings around the target, so a weight to lose sits above its line', () => {
+    const goal = { title: 'Weight', direction: 'lower', target_value: 96 }
+    renderPanel([item(goal, [pushUps('a', 102, daysAgo(5)), pushUps('b', 101, daysAgo(3))])])
+    const chart = within(screen.getByRole('article', { name: 'Weight' })).getByRole('img')
+    const line = chart.firstChild.querySelector('.border-dashed')
+    const bars = chart.firstChild.querySelectorAll(':scope > span')
+    const lineAt = parseFloat(line.style.bottom)
+    expect(lineAt).toBeGreaterThan(10)
+    expect(lineAt).toBeLessThan(40)
+    expect(parseFloat(bars[6].style.height)).toBeGreaterThan(80)
+    expect(parseFloat(bars[6].style.height)).toBeLessThan(parseFloat(bars[5].style.height))
+  })
+
   it('shows a total building up to one target as progress with what is left', () => {
     const goal = { title: 'Mandarins', aggregation: 'total', period: 'year', target_value: 10, target_date: `${new Date().getFullYear()}-12-31` }
     renderPanel([item(goal, [pushUps('a', 2, daysAgo(0))])])

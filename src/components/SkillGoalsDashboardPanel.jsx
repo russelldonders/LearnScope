@@ -141,9 +141,18 @@ function MiniHistory({ goal, history }) {
   const isRepeating = history.kind === 'periods'
   const { bars, target } = history
   const max = Math.max(target ?? 0, ...bars.map((bar) => Math.max(bar.value, bar.target ?? 0)), 0)
+  // Period totals build up from nothing, so their bars start at zero. Single
+  // readings (a weight, a best time) don't: 101 kg against a 96 kg target
+  // would be two near-full bars with the line on top of them. Their scale
+  // starts a little below the lowest of the readings and the target instead.
+  const values = [...bars.map((bar) => bar.value), ...(target != null ? [target] : [])]
+  const low = values.length ? Math.min(...values) : 0
+  const span = max - low
+  const floor = isRepeating ? 0 : Math.max(0, span > 0 ? low - span * 0.35 : low * 0.9)
+  const scale = (value) => (max > floor ? ((value - floor) / (max - floor)) * 100 : 0)
   const slots = [...Array(MINI_HISTORY_LENGTH - bars.length).fill(null), ...bars]
   const heightOf = (bar) => {
-    const height = max > 0 ? Math.max(2, (bar.value / max) * 100) : 2
+    const height = Math.max(2, scale(bar.value))
     return bar.status === 'missed' ? Math.max(MISSED_MIN_HEIGHT, height) : height
   }
   const toneOf = (bar) => (bar.status === 'met' && bar.exceeded ? 'exceeded' : bar.status)
@@ -186,7 +195,7 @@ function MiniHistory({ goal, history }) {
           <div
             aria-hidden="true"
             className="absolute inset-x-0 border-t border-dashed border-secondary/60"
-            style={{ bottom: `${(target / max) * 100}%` }}
+            style={{ bottom: `${scale(target)}%` }}
           />
         )}
         {slots.map((bar, index) => (

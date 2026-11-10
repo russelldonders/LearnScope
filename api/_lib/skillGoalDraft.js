@@ -14,6 +14,8 @@ export const LANGUAGE_NAMES = {
   zh: 'Chinese',
 }
 const KINDS = ['count', 'number', 'duration', 'pace', 'activities', 'practice_time']
+// Units of measurement rather than things counted one by one.
+const MEASURED_UNIT = /^(kg|kgs|kilo(gram)?s?|g|grams?|lbs?|pounds?|st|stones?|km|kilomet(er|re)s?|m|met(er|re)s?|cm|mm|mi|miles?|ft|feet|in|inch(es)?|l|litres?|liters?|ml|%|percent|bpm|kcal|cal(orie)?s?)$/i
 const PERIODS = ['day', 'week', 'month', 'year']
 
 const nullable = (type) => ({ type: [type, 'null'] })
@@ -145,8 +147,11 @@ Write message and options in ${language}.`,
 function normalizeDraftGoal(goal, today) {
   const title = clean(goal?.title, 200)
   const question = clean(goal?.tracker_question, 300)
-  const kind = goal?.measure_kind
+  let kind = goal?.measure_kind
   if (!title || !question || !KINDS.includes(kind)) return null
+  // Weights, distances and volumes aren't whole numbers, whatever the model
+  // said: "101.4 kg" has to be enterable.
+  if (kind === 'count' && MEASURED_UNIT.test(clean(goal?.unit, 40))) kind = 'number'
 
   let metric = clean(goal?.metric, 60).toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '')
   let unit = clean(goal?.unit, 40)

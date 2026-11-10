@@ -584,3 +584,16 @@ describe('goalMiniHistory', () => {
     expect(goalMiniHistory(total, [entry('a', '2026-10-20', 50)], now).target).toBeNull()
   })
 })
+
+describe('a goal corrected between whole and decimal numbers', () => {
+  it('keeps entries saved as a count once the goal takes decimals, but not ones in other units', () => {
+    const weight = { ...pushUpGoal, metric: 'weight', measure_kind: 'number', unit: 'kg', direction: 'lower', target_value: 96 }
+    const saved = (id, kind, unit, value) => ({
+      id,
+      recorded_at: '2026-11-05T12:00:00',
+      statement: { result: { extensions: { [MEASUREMENT_EXTENSION_IRI]: [{ metric: 'weight', kind, unit, value }] } } },
+    })
+    const readings = goalReadings(weight, [saved('a', 'count', 'kg', 102), saved('b', 'number', 'kg', 101.4), saved('c', 'count', 'lb', 220)])
+    expect(readings.map((r) => r.value)).toEqual([102, 101.4])
+  })
+})
