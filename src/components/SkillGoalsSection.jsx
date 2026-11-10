@@ -11,7 +11,19 @@ import { listSkillGoals, logGoalEntry } from '../lib/skillGoals'
 // A goal's measure, target and tracker on a skill's page. Values are read from
 // the statements the page has already loaded, and saved as ordinary activities,
 // so the rest of the page updates through its usual reload.
-export default function SkillGoalsSection({ skill, user, actor, statements, onActivitiesChanged, onSetLevelTarget }) {
+// editGoalId opens that goal's edit form once it has loaded, e.g. from the
+// dashboard's "Add a target"; onEditGoalOpened lets the page forget the
+// request so going back or reloading doesn't open it again.
+export default function SkillGoalsSection({
+  skill,
+  user,
+  actor,
+  statements,
+  onActivitiesChanged,
+  onSetLevelTarget,
+  editGoalId = null,
+  onEditGoalOpened,
+}) {
   const { t } = useLanguage()
   const [goals, setGoals] = useState([])
   const [loading, setLoading] = useState(true)
@@ -36,6 +48,14 @@ export default function SkillGoalsSection({ skill, user, actor, statements, onAc
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reloads when the skill changes; load is recreated every render
   }, [skill.id])
+
+  useEffect(() => {
+    if (!editGoalId || loading) return
+    const requested = goals.find((goal) => goal.id === editGoalId && goal.status === 'active')
+    if (requested) setEditingGoal(requested)
+    onEditGoalOpened?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once the goals arrive for a requested id
+  }, [editGoalId, loading])
 
   const activeGoals = goals.filter((goal) => goal.status === 'active')
   const pastGoals = goals.filter((goal) => goal.status !== 'active')

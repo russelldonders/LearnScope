@@ -1626,6 +1626,8 @@ export default {
       met: 'raggiunto',
       missed: 'mancato',
       exceeded: 'obiettivo superato',
+      noTarget: 'Nessun obiettivo',
+      addTarget: 'Aggiungine uno',
       sameAsLast: 'Come l’ultima volta',
     },
     title: 'Obiettivi',

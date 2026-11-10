@@ -866,6 +866,12 @@ export default function SkillDetail({ skillId, embedded = false }) {
                 statements={statements}
                 onActivitiesChanged={loadHistory}
                 onSetLevelTarget={() => setTargetOpen(true)}
+                editGoalId={location.state?.editGoalId}
+                onEditGoalOpened={() =>
+                  navigate(`${location.pathname}${location.search}`, {
+                    replace: true,
+                    state: { ...location.state, editGoalId: undefined },
+                  })}
               />
             )}
 

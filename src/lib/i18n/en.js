@@ -1623,6 +1623,8 @@ export default {
       met: 'met',
       missed: 'missed',
       exceeded: 'beat the target',
+      noTarget: 'No target',
+      addTarget: 'Add one',
       sameAsLast: 'Same as last time',
     },
     title: 'Goals',

@@ -1605,6 +1605,8 @@ export default {
       met: '已达成',
       missed: '未达成',
       exceeded: '超额完成',
+      noTarget: '未设目标',
+      addTarget: '添加目标',
       sameAsLast: '与上次相同',
     },
     title: '目标',

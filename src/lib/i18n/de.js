@@ -1626,6 +1626,8 @@ export default {
       met: 'erreicht',
       missed: 'verfehlt',
       exceeded: 'Ziel übertroffen',
+      noTarget: 'Kein Ziel',
+      addTarget: 'Hinzufügen',
       sameAsLast: 'Wie beim letzten Mal',
     },
     title: 'Ziele',

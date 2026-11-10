@@ -1624,6 +1624,8 @@ export default {
       met: 'gehaald',
       missed: 'gemist',
       exceeded: 'doel overtroffen',
+      noTarget: 'Geen doel',
+      addTarget: 'Voeg er een toe',
       sameAsLast: 'Zelfde als vorige keer',
     },
     title: 'Doelen',

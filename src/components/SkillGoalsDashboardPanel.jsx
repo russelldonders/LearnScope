@@ -390,7 +390,23 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
             {progress.current != null ? formatGoalValue(goal, progress.current) : '–'}
           </dd>
         </div>
-        {targetText && (
+        {goal.target_value == null ? (
+          // Without a target nothing can be met or missed, so the bars stay
+          // grey. Say so, and offer the way to add one.
+          <div className="min-w-0 text-right">
+            <dt className="sr-only">{t('skillGoals.targetShort')}</dt>
+            <dd className="text-xs text-secondary truncate">
+              {t('skillGoals.dashboard.noTarget')}{' · '}
+              <Link
+                to={`/skills/${skill.id}`}
+                state={{ editGoalId: goal.id }}
+                className="text-moss font-medium hover:underline underline-offset-2"
+              >
+                {t('skillGoals.dashboard.addTarget')}
+              </Link>
+            </dd>
+          </div>
+        ) : (
           <div className="min-w-0 text-right">
             <dt className="sr-only">{t('skillGoals.targetShort')}</dt>
             <dd className="text-xs text-secondary truncate" title={targetText}>{targetText}</dd>

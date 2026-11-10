@@ -71,6 +71,13 @@ describe('goal tiles', () => {
     expect(within(tile).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '50')
   })
 
+  it('says when a goal has no target, with a link to add one', () => {
+    renderPanel([item({ title: 'Daily', aggregation: 'total', period: 'day' }, [pushUps('a', 20, daysAgo(0))])])
+    const tile = screen.getByRole('article', { name: 'Daily' })
+    expect(within(tile).getByText(/^No target/)).toBeInTheDocument()
+    expect(within(tile).getByRole('link', { name: 'Add one' })).toHaveAttribute('href', '/skills/skill-1')
+  })
+
   it('uses one status line: reached first, then last logged, then nothing yet', () => {
     renderPanel([
       item({ title: 'Reached', target_value: 10 }, [pushUps('a', 12, daysAgo(1))]),
