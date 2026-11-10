@@ -553,7 +553,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
                 />
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="font-display text-2xl text-ink">{skill.name}</h2>
+                    <h1 className="font-display text-2xl text-ink">{skill.name}</h1>
                     {skill.source === 'role_profile' && (
                       <span
                         title={t('skillDetail.roleProfileBadgeTitle')}

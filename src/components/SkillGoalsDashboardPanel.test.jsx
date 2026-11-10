@@ -88,6 +88,15 @@ describe('goal tiles', () => {
     expect(chart.lastChild.lastChild).toHaveTextContent('Today')
   })
 
+  it('opens the skill from the title, as one link with the skill named', () => {
+    renderPanel([item({ title: 'Best', target_value: 40 })])
+    const tile = screen.getByRole('article', { name: 'Best' })
+    const links = within(tile).getAllByRole('link')
+    expect(links).toHaveLength(1)
+    expect(links[0]).toHaveAccessibleName('Best Fitness')
+    expect(links[0]).toHaveAttribute('href', '/skills/skill-1')
+  })
+
   it('says when a goal has no target, with a link to add one', () => {
     renderPanel([item({ title: 'Daily', aggregation: 'total', period: 'day' }, [pushUps('a', 20, daysAgo(0))])])
     const tile = screen.getByRole('article', { name: 'Daily' })

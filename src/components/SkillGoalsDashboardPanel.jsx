@@ -383,15 +383,19 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
       }`}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
+        {/* The title and skill together open the skill's page: one bigger tap
+            target, and one link for screen readers rather than two. */}
+        <Link to={`/skills/${skill.id}`} className="group block min-w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moss">
           {/* Always two lines tall, so long and short titles line up. */}
-          <h3 id={`dashboard-goal-${goal.id}`} className="text-sm font-medium text-ink line-clamp-2 min-h-[2.5rem]" title={goal.title}>
+          <h3
+            id={`dashboard-goal-${goal.id}`}
+            className="text-sm font-medium text-ink line-clamp-2 min-h-[2.5rem] group-hover:text-moss group-hover:underline underline-offset-2"
+            title={goal.title}
+          >
             {goal.title}
           </h3>
-          <Link to={`/skills/${skill.id}`} className="block text-xs text-secondary hover:text-moss underline-offset-2 hover:underline truncate">
-            {skill.name}
-          </Link>
-        </div>
+          <span className="block text-xs text-secondary group-hover:text-moss truncate">{skill.name}</span>
+        </Link>
         {due && (
           <span className="shrink-0 rounded-full bg-gold/15 text-gold text-[11px] font-medium px-2 py-0.5">
             {t('skillGoals.dashboard.timeToLog')}
