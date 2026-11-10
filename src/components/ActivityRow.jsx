@@ -3,6 +3,7 @@ import EvidenceAttachmentLink from './EvidenceAttachmentLink'
 import EvidenceThumbnail from './EvidenceThumbnail'
 import { isImagePath } from '../lib/skillEvidence'
 import GrowthRing from './GrowthRing'
+import StravaIcon from './StravaIcon'
 import {
   activityName,
   verbLabel,
@@ -17,6 +18,12 @@ import { activitySource, checkInLevel, isCheckIn, isJustAdded } from '../lib/act
 import { gradientPairFor } from '../lib/placeholderGradient'
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
 import { useLanguage } from '../context/LanguageContext'
+
+// Sources shown by their logo rather than their name, keyed by the display
+// name activitySource gives (see PROVENANCE_SOURCE_LABELS).
+const SOURCE_ICONS = {
+  Strava: <StravaIcon size={14} />,
+}
 
 // The verb in plain words ("Practised"), falling back to what's stored for
 // verbs from elsewhere (e.g. course packages).
@@ -146,11 +153,17 @@ export default function ActivityRow({ row, onClick, framed = true, now = Date.no
           {relatedExperience && (
             <span className="rounded-full border border-hairline/70 px-2 py-0.5 text-xs text-secondary">{experienceTrail(relatedExperience)}</span>
           )}
-          {source && (
+          {source && (SOURCE_ICONS[source] ? (
+            // A source with a logo shows just the logo; its name stays for
+            // screen readers and as a tooltip.
+            <span role="img" aria-label={t('activity.timeline.via', { source })} title={t('activity.timeline.via', { source })} className="inline-flex items-center">
+              {SOURCE_ICONS[source]}
+            </span>
+          ) : (
             <span className="rounded-full bg-paper border border-hairline/70 px-2 py-0.5 text-xs text-secondary">
               {t('activity.timeline.via', { source })}
             </span>
-          )}
+          ))}
         </div>
       )}
 

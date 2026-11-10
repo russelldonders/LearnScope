@@ -70,12 +70,14 @@ describe('ActivityTimeline', () => {
     expect(screen.queryByText('Run 3')).not.toBeInTheDocument()
   })
 
-  it('shows the source as a badge and the synced distance as a figure', () => {
+  it('shows the source by its logo and the synced distance as a figure', () => {
     renderTimeline([activity('Morning ride', 8, {
       description: 'Synced from Strava · 12.4 km',
       context: { [PROVENANCE_EXTENSION_IRI]: { source: 'strava', externalId: '9' } },
     })])
-    expect(screen.getByText('via Strava')).toBeInTheDocument()
+    const logo = screen.getByRole('img', { name: 'via Strava' })
+    expect(logo.querySelector('svg')).not.toBeNull()
+    expect(screen.queryByText('via Strava')).not.toBeInTheDocument()
     expect(screen.getByText('12.4 km')).toBeInTheDocument()
     expect(screen.queryByText(/Synced from/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Log again' })).not.toBeInTheDocument()
