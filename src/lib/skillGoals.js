@@ -6,16 +6,32 @@ import {
   PRACTICE_MINUTES_METRIC,
   applyEntryCorrection,
   buildGoalMeasurement,
+  computeGoalProgress,
   dateToTimestamp,
   entryDurationMinutes,
   localDateString,
+  nextLogDate,
   resolveMetric,
   slugifyMetric,
+  sortGoalsForAttention,
   withTargetHistory,
 } from './skillGoalProgress'
 
 const GOAL_COLUMNS =
   'id, skill_id, original_text, title, metric, measure_kind, unit, direction, aggregation, period, target_value, target_date, started_on, tracker_question, log_every_days, status, closed_on, replaces_goal_id, created_at'
+
+// Active goals with their progress and next log date worked out once, sorted
+// so the ones needing the learner come first. Used by Home (goal tiles) and
+// the Skills page (goal target dates under "Needs your attention").
+export async function listActiveGoalsForAttention(userId) {
+  const items = await listActiveGoalsWithActivities(userId)
+  return sortGoalsForAttention(
+    items.map((item) => {
+      const progress = computeGoalProgress(item.goal, item.statements)
+      return { ...item, progress, nextLog: nextLogDate(item.goal, progress.lastLogged) }
+    }),
+  )
+}
 
 export async function listSkillGoals(skillId) {
   const { data, error } = await supabase

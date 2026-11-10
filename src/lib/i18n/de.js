@@ -167,7 +167,6 @@ export default {
     },
     needsAttention: 'Braucht deine Aufmerksamkeit',
     moreWaysToProgress: 'Weitere Wege, um voranzukommen',
-    currentLearning: 'Aktuelles Lernen',
     moreRecentProgress: 'Weitere aktuelle Fortschritte',
   },
   skills: {

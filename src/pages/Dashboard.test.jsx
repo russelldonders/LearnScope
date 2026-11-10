@@ -12,7 +12,8 @@ vi.mock('../context/LanguageContext', async () => {
   return { useLanguage: () => ({ language: 'en', setLanguage: vi.fn(), t }) }
 })
 
-import { dashboardResultValue, FocusPanel, OverviewStrip } from './Dashboard'
+import { dashboardResultValue, OverviewStrip } from './Dashboard'
+import { FocusPanel } from '../components/SkillsMomentum'
 
 function renderWithRouter(ui) {
   return render(<MemoryRouter>{ui}</MemoryRouter>)

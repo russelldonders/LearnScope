@@ -167,7 +167,6 @@ export default {
     },
     needsAttention: '需要你关注',
     moreWaysToProgress: '更多提升方式',
-    currentLearning: '当前学习',
     moreRecentProgress: '更多近期进展',
   },
   skills: {

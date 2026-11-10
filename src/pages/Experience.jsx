@@ -1,5 +1,6 @@
 import AppHeader from '../components/AppHeader'
 import ExperienceSection from '../components/ExperienceSection'
+import ImportCvBanner from '../components/ImportCvBanner'
 
 // Role profile assignments (pending and accepted) are integrated directly
 // into ExperienceSection's own timeline now -- a pending one as a grayed
@@ -12,6 +13,9 @@ export default function Experience() {
         <AppHeader />
       </div>
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
+        <div className="print:hidden">
+          <ImportCvBanner />
+        </div>
         <ExperienceSection />
       </main>
     </div>

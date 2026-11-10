@@ -24,7 +24,9 @@ const SKILL_VIEWS = [
   { value: 'review', labelKey: 'skills.views.review' },
 ]
 
-export default function SkillsSection() {
+// intro: shown between the page heading and the skills themselves (the Skills
+// page puts its next steps and reminders there).
+export default function SkillsSection({ intro = null }) {
   const { user } = useAuth()
   const { t } = useLanguage()
   const navigate = useNavigate()
@@ -374,6 +376,8 @@ export default function SkillsSection() {
           {t('skills.addSkill')}
         </button>
       </div>
+
+      {intro}
 
       {!targetsLoading && (
         <SkillDevelopmentTargets

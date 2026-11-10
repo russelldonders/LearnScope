@@ -167,7 +167,6 @@ export default {
     },
     needsAttention: 'Vraagt jouw aandacht',
     moreWaysToProgress: 'Meer manieren om vooruitgang te boeken',
-    currentLearning: 'Huidige leeractiviteiten',
     moreRecentProgress: 'Meer recente voortgang',
   },
   skills: {
