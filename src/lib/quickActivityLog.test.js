@@ -259,3 +259,18 @@ describe('the verb of a quick-log card', () => {
     expect(draftWith([], 'completed')).toBe('completed')
   })
 })
+
+describe('logging again', () => {
+  it('uses the goal\'s verb for a value towards a goal, whatever the original was saved with', () => {
+    const daily = { id: 'goal-daily', skill_id: fitness.id, title: 'Push-ups per day', metric: 'push_ups', measure_kind: 'count', unit: 'push-ups', aggregation: 'total' }
+    const statement = logged('Push-ups', [fitness], { measurements: [{ metric: 'push_ups', kind: 'count', unit: 'push-ups', value: 20 }] })
+    expect(statement.verb.id).toBe('https://learnscope.app/xapi/verbs/practiced')
+    const card = cardFromRow(row('1', statement), skills, [daily])
+    expect(card.verb).toBe('experienced')
+    expect(card.goalValues).toEqual([expect.objectContaining({ goalId: 'goal-daily', value: '20' })])
+  })
+
+  it('keeps the original verb when no goal is involved', () => {
+    expect(cardFromRow(row('2', logged('Morning run', [running])), skills, goals).verb).toBe('practiced')
+  })
+})

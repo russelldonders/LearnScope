@@ -158,6 +158,15 @@ function templateFromRow(row, skillsById, goals) {
   const title = activityName(statement)
   const measurements = measurementsFromStatement(statement)
   const minutes = durationMinutes(statement)
+  const goalValues = measurements
+    .map((m) => {
+      const goal = measuredGoalFor(goals, m)
+      if (!goal) return null
+      const seconds = m.kind === 'pace' ? m.inputs?.durationSeconds : m.kind === 'duration' ? m.value : null
+      return { goalId: goal.id, ...goalFields(goal, { value: m.value, distance: m.inputs?.distance, seconds }) }
+    })
+    .filter(Boolean)
+  const firstGoal = goalValues.length ? goals.find((goal) => goal.id === goalValues[0].goalId) : null
   return {
     key: [
       title.toLowerCase(),
@@ -167,18 +176,13 @@ function templateFromRow(row, skillsById, goals) {
     label: [title, formatMeasurements(statement) || formatMinutes(minutes)].filter(Boolean).join(' · '),
     card: {
       title,
-      verb: XAPI_VERB_BY_IRI[statement.verb?.id]?.value ?? 'experienced',
+      // Repeating a value for a goal reads the same as logging it from the
+      // goal, even when the original was saved with another verb.
+      verb: firstGoal ? goalEntryVerb(firstGoal) : XAPI_VERB_BY_IRI[statement.verb?.id]?.value ?? 'experienced',
       durationMinutes: minutes ? String(minutes) : '',
       skills: relatedSkills,
       newSkill: null,
-      goalValues: measurements
-        .map((m) => {
-          const goal = measuredGoalFor(goals, m)
-          if (!goal) return null
-          const seconds = m.kind === 'pace' ? m.inputs?.durationSeconds : m.kind === 'duration' ? m.value : null
-          return { goalId: goal.id, ...goalFields(goal, { value: m.value, distance: m.inputs?.distance, seconds }) }
-        })
-        .filter(Boolean),
+      goalValues,
       note: '',
     },
   }
