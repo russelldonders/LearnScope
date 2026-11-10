@@ -119,8 +119,14 @@ export default function SkillGoalEntryForm({ goal, row = null, prefillFrom = nul
               step={kind === 'count' ? '1' : 'any'}
               value={fields.value}
               onChange={set('value')}
+              aria-describedby={goal.aggregation === 'total' ? field('each-entry-hint') : undefined}
               className={INPUT_CLASS}
             />
+            {/* A total is built from entries, so one set is one entry, not the
+                day's total across sets. */}
+            {goal.aggregation === 'total' && (
+              <p id={field('each-entry-hint')} className="text-xs text-secondary mt-1">{t('skillGoals.eachEntryAdds')}</p>
+            )}
           </div>
         )}
         {kind === 'pace' && (

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import ActivityRow from './ActivityRow'
 import ActivityReflection from './ActivityReflection'
-import { dayGroups, dayLabel, displayLocale, foldCheckIns } from '../lib/activityTimeline'
+import { combinedSetRow, dayGroups, dayLabel, displayLocale, foldTimeline } from '../lib/activityTimeline'
 import { formatMinutes } from '../lib/xapiStatement'
 import { REFLECTION_PROMPTS, canRepeatRow } from '../lib/quickActivityLog'
 import { useLanguage } from '../context/LanguageContext'
@@ -17,14 +17,14 @@ function Dot({ muted = false }) {
   )
 }
 
-function ActivityItem({ row, now, onOpen, onLogAgain, onReflected }) {
+function ActivityItem({ row, now, onOpen, onLogAgain, onReflected, dot = true }) {
   const { t } = useLanguage()
   const [prompt, setPrompt] = useState(null)
   const repeatable = onLogAgain && canRepeatRow(row)
 
   return (
     <li className="relative group">
-      <Dot />
+      {dot && <Dot />}
       <ActivityRow
         row={row}
         framed={false}
@@ -62,6 +62,41 @@ function ActivityItem({ row, now, onOpen, onLogAgain, onReflected }) {
             onSaved={onReflected}
             onClose={() => setPrompt(null)}
           />
+        )}
+      </ActivityRow>
+    </li>
+  )
+}
+
+// Sets of the same thing on one day (three sets of push-ups) as one line with
+// their total and how it was made up, opening to show each set with its own
+// actions. The sets stay separate activities; only the timeline joins them.
+function SetsItem({ rows, now, onOpen, onLogAgain, onReflected }) {
+  const { t } = useLanguage()
+  const [open, setOpen] = useState(false)
+  const { row, parts, ordered } = combinedSetRow(rows)
+  // Sets are counted, so each part is a plain number.
+  const partText = parts.map((part) => String(Math.round(part * 100) / 100)).join(' + ')
+  return (
+    <li className="relative">
+      <Dot />
+      <ActivityRow
+        row={row}
+        framed={false}
+        now={now}
+        actions={(
+          <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className={ACTION_CLASS}>
+            {t('activity.timeline.sets', { count: rows.length })} {open ? '▴' : '▾'}
+          </button>
+        )}
+      >
+        <p className="text-xs text-secondary mt-1">{partText}</p>
+        {open && (
+          <ol className="mt-3 ml-1 pl-4 border-l border-hairline/50 space-y-3">
+            {[...ordered].reverse().map((set) => (
+              <ActivityItem key={set.id} row={set} now={now} onOpen={onOpen} onLogAgain={onLogAgain} onReflected={onReflected} dot={false} />
+            ))}
+          </ol>
         )}
       </ActivityRow>
     </li>
@@ -116,7 +151,19 @@ export default function ActivityTimeline({ rows, allRows = rows, now = Date.now(
               {total && <>{' · '}<span className="normal-case tracking-normal font-normal">{total}</span></>}
             </h3>
             <ol className="relative ml-1.5 pl-5 border-l border-hairline/50 space-y-4">
-              {foldCheckIns(group.rows).map((item) => {
+              {foldTimeline(group.rows).map((item) => {
+                if (item.type === 'sets') {
+                  return (
+                    <SetsItem
+                      key={`sets-${item.rows[0].id}`}
+                      rows={item.rows}
+                      now={now}
+                      onOpen={onOpen}
+                      onLogAgain={onLogAgain}
+                      onReflected={onReflected}
+                    />
+                  )
+                }
                 if (item.type === 'checkIns') return <CheckInsItem key={item.rows[0].id} rows={item.rows} />
                 if (item.type === 'checkIn') {
                   return (

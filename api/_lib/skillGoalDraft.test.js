@@ -120,3 +120,11 @@ describe('normalizeGoalDraft', () => {
     expect(normalizeGoalDraft({ outcome: 'level_target', message: 'Use a level' }, TODAY)).toEqual({ outcome: 'level_target', message: 'Use a level' })
   })
 })
+
+describe('measured units', () => {
+  it('uses the same list as the app', async () => {
+    const { MEASURED_UNIT } = await import('./skillGoalDraft.js')
+    const { MEASURED_UNIT: CLIENT_MEASURED_UNIT } = await import('../../src/lib/skillGoalProgress')
+    expect(MEASURED_UNIT.source).toBe(CLIENT_MEASURED_UNIT.source)
+  })
+})

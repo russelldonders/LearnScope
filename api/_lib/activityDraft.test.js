@@ -192,3 +192,25 @@ describe('current roles and projects', () => {
     expect(read({ experience: 2, day: 'date', date: '2026-11-02' })).toBe(1)
   })
 })
+
+describe('sets', () => {
+  const withDaily = [...goals, { title: 'Push-ups per day', skill: 1, measure_kind: 'count', unit: 'push-ups', aggregation: 'total', tracker_question: 'How many?' }]
+  const draftWith = (goalValues) => normalizeActivityDraft(
+    { outcome: 'activities', activities: [activity({ title: 'Push-ups', goal_values: goalValues })] },
+    context({ goals: withDaily }),
+  ).activities[0].goal_values
+
+  it('keeps several sets for a goal that adds up, with the first as its value', () => {
+    expect(draftWith([{ goal: 5, value: 20, distance: null, seconds: null, sets: [20, 25, 18] }]))
+      .toEqual([{ goal: 4, value: 20, sets: [20, 25, 18] }])
+  })
+
+  it('drops sets for a goal that keeps the best, or when any set is unusable', () => {
+    expect(draftWith([{ goal: 2, value: 32, distance: null, seconds: null, sets: [32, 30] }])).toEqual([{ goal: 1, value: 32 }])
+    expect(draftWith([{ goal: 5, value: 20, distance: null, seconds: null, sets: [20, 2.5] }])).toEqual([{ goal: 4, value: 20 }])
+  })
+
+  it('tells the model to list sets rather than add them up', () => {
+    expect(buildActivityDraftRequest({ text: '3 sets of 20 push-ups', skills, goals: withDaily }, TODAY).prompt).toContain('never add the sets up into one value')
+  })
+})

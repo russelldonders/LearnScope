@@ -12,6 +12,7 @@ const MAX_EXPERIENCES = 20
 const MAX_ACTIVITIES = 5
 const VERBS = ['experienced', 'practiced', 'completed', 'attempted']
 const MEASURED_KINDS = ['count', 'number', 'duration', 'pace']
+const MAX_SETS = 20
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 // Which day the learner meant, as they said it. The date is worked out here,
@@ -46,8 +47,9 @@ export const ACTIVITY_DRAFT_SCHEMA = {
                 value: nullable('number'),
                 distance: nullable('number'),
                 seconds: nullable('integer'),
+                sets: { type: 'array', items: { type: 'number' } },
               },
-              required: ['goal', 'value', 'distance', 'seconds'],
+              required: ['goal', 'value', 'distance', 'seconds', 'sets'],
               additionalProperties: false,
             },
           },
@@ -177,6 +179,7 @@ For each activity:
 - skills: the numbers of the skills it clearly relates to (as integers, without the S), best match first. [] if none fits.
 - new_skill: only when skills is [], a short, reusable skill name it would belong to, in ${language}; otherwise null.
 - goal_values: a value for each goal above that this activity clearly gives a number for (goal as an integer, without the G), else []. Use value for counts and numbers in the goal's unit; seconds for a duration; distance in the goal's distance unit plus seconds for the time taken for a pace (never the pace itself). Set the fields a goal doesn't use to null. Only use numbers they actually gave; never guess one.
+  - sets: only for a count goal that adds up each entry, when they did it in several sets ("3 sets of 20 push-ups", "push-ups 20, 25 and 18"): every set's value in order, such as [20, 20, 20], with value set to the first. Each set is logged on its own, so never add the sets up into one value, even when the goal's question asks for a total. Otherwise [].
 - note: anything else worth keeping that they wrote, briefly, or null.
 - experience: the number of the current role or project above that this activity was done as part of (as an integer, without the E), or null. Choose one only when what they wrote clearly ties it to that role or project: they name it, its organisation or its people, or describe work that plainly belongs to it. Never choose one just because it is their only role, because the dates overlap, or for personal things like exercise or hobbies; use null when unsure.
 
@@ -213,9 +216,17 @@ function normalizeGoalValue(entry, goals) {
   const seconds = wholeNumber(entry.seconds, 1, 7 * 24 * 60 * 60)
   switch (goal.measure_kind) {
     case 'count':
-      return Number.isInteger(value) ? { goal: index - 1, value } : null
-    case 'number':
-      return value != null ? { goal: index - 1, value } : null
+    case 'number': {
+      const valid = (v) => typeof v === 'number' && v >= 0 && (goal.measure_kind === 'count' ? Number.isInteger(v) : Number.isFinite(v))
+      // Several sets of something that adds up: one entry per set. Only kept
+      // when every set is a usable value; otherwise the single value stands.
+      const sets = goal.measure_kind === 'count' && goal.aggregation === 'total' && Array.isArray(entry.sets) && entry.sets.length >= 2
+        && entry.sets.length <= MAX_SETS && entry.sets.every(valid)
+        ? entry.sets
+        : null
+      if (sets) return { goal: index - 1, value: sets[0], sets }
+      return valid(value) ? { goal: index - 1, value } : null
+    }
     case 'duration':
       return seconds != null ? { goal: index - 1, seconds } : null
     case 'pace':

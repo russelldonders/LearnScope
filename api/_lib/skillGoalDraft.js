@@ -14,8 +14,9 @@ export const LANGUAGE_NAMES = {
   zh: 'Chinese',
 }
 const KINDS = ['count', 'number', 'duration', 'pace', 'activities', 'practice_time']
-// Units of measurement rather than things counted one by one.
-const MEASURED_UNIT = /^(kg|kgs|kilo(gram)?s?|g|grams?|lbs?|pounds?|st|stones?|km|kilomet(er|re)s?|m|met(er|re)s?|cm|mm|mi|miles?|ft|feet|in|inch(es)?|l|litres?|liters?|ml|%|percent|bpm|kcal|cal(orie)?s?)$/i
+// Units of measurement rather than things counted one by one. Kept the same
+// as isMeasuredUnit in src/lib/skillGoalProgress.js (a test checks).
+export const MEASURED_UNIT = /^(kg|kgs|kilo(gram)?s?|g|grams?|lbs?|pounds?|st|stones?|km|kilomet(er|re)s?|m|met(er|re)s?|cm|mm|mi|miles?|ft|feet|in|inch(es)?|l|litres?|liters?|ml|%|percent|bpm|kcal|cal(orie)?s?)$/i
 const PERIODS = ['day', 'week', 'month', 'year']
 
 const nullable = (type) => ({ type: [type, 'null'] })
@@ -137,6 +138,7 @@ For a goal:
 - tracker_question: the one question to ask each time they log progress, specific to this goal, in ${language}, such as "How many push-ups did you do in your best set?". The form beside it asks for the number, so the question must match it:
   - For pace, the form asks for distance and time, so ask how far they went and how long it took, never for the pace itself.
   - For a total, each entry is added to the others, so ask about one session or what was new since they last logged ("How many books did you finish since you last logged?"), never for a running total ("How many books have you read?").
+  - For a total of reps done in sets (push-ups, sit-ups, squats), ask about one set ("How many push-ups did you do in this set?"), never for the day's or week's total across sets: each set is logged on its own and they are added up.
   - For activities, each entry counts as one time they did it, so ask what they did.
 - log_every_days: a sensible rhythm in days for logging (1, 2, 3, 7, 14 or 30), or null if there's no natural rhythm.
 

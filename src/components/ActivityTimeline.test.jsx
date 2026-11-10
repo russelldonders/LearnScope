@@ -123,3 +123,29 @@ describe('ActivityTimeline', () => {
     expect(screen.getByRole('button', { name: 'Attachment 2' })).toBeInTheDocument()
   })
 })
+
+describe('sets of the same thing', () => {
+  const fitness = { id: 'skill-fit', name: 'Fitness' }
+  const set = (id, hour, value) => {
+    const row = activity('Push ups', 8, {
+      verb: 'http://adlnet.gov/expapi/verbs/experienced',
+      skills: [fitness],
+      extensions: { [MEASUREMENT_EXTENSION_IRI]: [{ metric: 'push_ups', kind: 'count', unit: 'push-ups', value }] },
+    })
+    return { ...row, id, recorded_at: new Date(2026, 10, 8, hour).toISOString() }
+  }
+
+  it('shows one line with the total and how it was made up, opening to each set', () => {
+    renderTimeline([set('c', 11, 20), set('b', 10, 25), set('a', 9, 15)], { onLogAgain: vi.fn() })
+    expect(screen.getByRole('heading', { name: 'Today · 3 activities' })).toBeInTheDocument()
+    expect(screen.getAllByText('Push ups')).toHaveLength(1)
+    expect(screen.getByText('60 push-ups')).toBeInTheDocument()
+    expect(screen.getByText('15 + 25 + 20')).toBeInTheDocument()
+    const toggle = screen.getByRole('button', { name: /3 sets/ })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(toggle)
+    expect(screen.getAllByText('Push ups')).toHaveLength(4)
+    expect(screen.getByText('25 push-ups')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Log again' })).toHaveLength(3)
+  })
+})

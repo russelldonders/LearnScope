@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { activitySource, checkInLevel, dayGroups, dayLabel, foldCheckIns, isCheckIn, isJustAdded, timelineRows } from './activityTimeline'
-import { DIAGNOSTIC_EXTENSION_IRI, PEER_RATING_EXTENSION_IRI, PROVENANCE_EXTENSION_IRI } from './xapiStatement'
+import { activitySource, checkInLevel, combinedSetRow, dayGroups, dayLabel, foldTimeline, isCheckIn, isJustAdded, timelineRows } from './activityTimeline'
+import { DIAGNOSTIC_EXTENSION_IRI, MEASUREMENT_EXTENSION_IRI, PEER_RATING_EXTENSION_IRI, PROVENANCE_EXTENSION_IRI, SKILL_EXTENSION_IRI, measurementsFromStatement } from './xapiStatement'
 
 // Sunday 8 November 2026, midday local time.
 const NOW = new Date(2026, 10, 8, 12).getTime()
@@ -64,9 +64,9 @@ describe('dayGroups', () => {
   })
 })
 
-describe('foldCheckIns', () => {
+describe('foldTimeline', () => {
   it('folds two or more check-ins in a row and leaves single ones', () => {
-    const items = foldCheckIns([row('a', 8), checkIn('b', 8), checkIn('c', 8), row('d', 8), checkIn('e', 8)])
+    const items = foldTimeline([row('a', 8), checkIn('b', 8), checkIn('c', 8), row('d', 8), checkIn('e', 8)])
     expect(items.map((item) => item.type)).toEqual(['activity', 'checkIns', 'activity', 'checkIn'])
     expect(items[1].rows.map((r) => r.id)).toEqual(['b', 'c'])
   })
@@ -109,5 +109,47 @@ describe('dayLabel', () => {
     expect(dayLabel('2026-11-04', { now: NOW, language: 'en-GB', t })).toBe('Wednesday')
     expect(dayLabel('2026-10-20', { now: NOW, language: 'en-GB', t })).toBe('20 Oct')
     expect(dayLabel('2025-10-20', { now: NOW, language: 'en-GB', t })).toBe('20 Oct 2025')
+  })
+})
+
+describe('sets on the timeline', () => {
+  const VERB = 'https://learnscope.app/xapi/verbs/experienced'
+  const set = (id, hour, value, { name = 'Push ups', kind = 'count', unit = 'push-ups', metric = 'push_ups' } = {}) => ({
+    id,
+    recorded_at: at(8, hour),
+    created_at: at(8, hour),
+    statement: {
+      verb: { id: VERB },
+      object: { definition: { name: { 'en-US': name }, description: { 'en-US': `note ${id}` } } },
+      result: { duration: 'PT5M', extensions: { [MEASUREMENT_EXTENSION_IRI]: [{ metric, kind, unit, value }] } },
+      context: { extensions: { [SKILL_EXTENSION_IRI]: [{ id: 'fit', name: 'Fitness' }] } },
+    },
+  })
+
+  it('folds the same counted thing on one day into one item where the newest was', () => {
+    const items = foldTimeline([set('c', 18, 18), row('run', 8), set('b', 12, 25), set('a', 8, 20)])
+    expect(items.map((item) => item.type)).toEqual(['sets', 'activity'])
+    expect(items[0].rows.map((r) => r.id)).toEqual(['c', 'b', 'a'])
+  })
+
+  it('leaves a single set, weigh-ins and differently named things alone', () => {
+    const weigh = (id, hour) => set(id, hour, 101, { name: 'Weight', kind: 'number', unit: 'kg', metric: 'weight' })
+    const items = foldTimeline([set('a', 9, 20), weigh('w1', 8), weigh('w2', 7), set('s', 6, 50, { name: 'Sit-ups', unit: 'sit-ups', metric: 'sit_ups' })])
+    expect(items.map((item) => item.type)).toEqual(['activity', 'activity', 'activity', 'activity'])
+  })
+
+  it('never adds up weigh-ins, even ones saved as a whole-number count', () => {
+    const weigh = (id, hour) => set(id, hour, 101, { name: 'Weight Loss', unit: 'Kg', metric: 'weight' })
+    expect(foldTimeline([weigh('w1', 9), weigh('w2', 8)]).map((item) => item.type)).toEqual(['activity', 'activity'])
+  })
+
+  it('shows the sets as one row with their total, made up oldest first, and nothing of their own', () => {
+    const { row: combined, parts, ordered } = combinedSetRow([set('c', 18, 18), set('b', 12, 25), set('a', 8, 20)])
+    expect(parts).toEqual([20, 25, 18])
+    expect(ordered.map((r) => r.id)).toEqual(['a', 'b', 'c'])
+    expect(measurementsFromStatement(combined.statement)[0]).toMatchObject({ value: 63, unit: 'push-ups' })
+    expect(combined.statement.result.duration).toBeUndefined()
+    expect(combined.statement.object.definition.description).toBeUndefined()
+    expect(combined.id).toBe('sets-c')
   })
 })

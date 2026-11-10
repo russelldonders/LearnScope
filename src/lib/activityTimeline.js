@@ -2,14 +2,18 @@
 // day-by-day activity timeline and its rows.
 import {
   DIAGNOSTIC_EXTENSION_IRI,
+  MEASUREMENT_EXTENSION_IRI,
   PEER_RATING_EXTENSION_IRI,
   PROVENANCE_SOURCE_LABELS,
+  activityName,
   durationMinutes,
   isDiagnosticStatement,
   isPeerRatingStatement,
+  measurementsFromStatement,
   provenanceFromStatement,
+  relatedSkillsFromStatement,
 } from './xapiStatement'
-import { localDateString } from './skillGoalProgress'
+import { isMeasuredUnit, localDateString } from './skillGoalProgress'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const JUST_ADDED_MS = 2 * DAY_MS
@@ -111,16 +115,65 @@ export function dayGroups(rows, field = 'recorded_at', allRows = rows) {
   return groups
 }
 
-// Two or more check-ins in a row fold into one line that opens to show them.
-export function foldCheckIns(rows) {
-  const items = []
+// What makes entries sets of the same thing: one counted value (reps, not a
+// weight, a distance or a time), under the same name, verb and
+// skills. Null for anything else.
+export function setKey(row) {
+  if (isCheckIn(row)) return null
+  const measurements = measurementsFromStatement(row.statement)
+  if (measurements.length !== 1 || measurements[0].kind !== 'count') return null
+  const [measurement] = measurements
+  // Weigh-ins saved as a whole-number count (kg) still mustn't be added up.
+  if (isMeasuredUnit(measurement.unit)) return null
+  const skills = relatedSkillsFromStatement(row.statement).map((skill) => skill.id).sort().join(',')
+  return [activityName(row.statement).trim().toLowerCase(), row.statement.verb?.id, measurement.metric, measurement.unit, skills].join('|')
+}
+
+// One day's rows for the timeline, newest first. Two or more sets of the same
+// thing that day fold into one item where the newest of them was, wherever
+// the others fell; two or more check-ins in a row fold into one line.
+export function foldTimeline(rows) {
+  const sets = new Map()
   for (const row of rows) {
+    const key = setKey(row)
+    if (key) sets.set(key, [...(sets.get(key) ?? []), row])
+  }
+  const items = []
+  const placed = new Set()
+  for (const row of rows) {
+    const key = setKey(row)
+    if (key && sets.get(key).length > 1) {
+      if (!placed.has(key)) items.push({ type: 'sets', rows: sets.get(key) })
+      placed.add(key)
+      continue
+    }
     const last = items.at(-1)
     if (isCheckIn(row) && last?.type === 'checkIns') last.rows.push(row)
     else if (isCheckIn(row)) items.push({ type: 'checkIns', rows: [row] })
     else items.push({ type: 'activity', row })
   }
   return items.map((item) => (item.type === 'checkIns' && item.rows.length === 1 ? { type: 'checkIn', row: item.rows[0] } : item))
+}
+
+// The sets, oldest first, as one row to show: the newest set's skills and
+// verb, with the sets' total as its value and no note, time or evidence of its
+// own (those stay on each set). parts: each set's value, oldest first.
+export function combinedSetRow(rows) {
+  const ordered = [...rows].sort((a, b) => new Date(a.recorded_at) - new Date(b.recorded_at))
+  const parts = ordered.map((row) => Number(measurementsFromStatement(row.statement)[0].value))
+  const newest = ordered.at(-1)
+  const [measurement] = measurementsFromStatement(newest.statement)
+  const { duration: _duration, ...result } = newest.statement.result ?? {}
+  const definition = { ...newest.statement.object?.definition, description: undefined }
+  const statement = {
+    ...newest.statement,
+    object: { ...newest.statement.object, definition },
+    result: {
+      ...result,
+      extensions: { ...result.extensions, [MEASUREMENT_EXTENSION_IRI]: [{ ...measurement, value: parts.reduce((sum, part) => sum + part, 0) }] },
+    },
+  }
+  return { row: { ...newest, id: `sets-${newest.id}`, evidence_paths: [], evidence_url: null, statement }, parts, ordered }
 }
 
 // "today", "yesterday", the weekday within the last week, otherwise the date.

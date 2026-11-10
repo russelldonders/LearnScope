@@ -15,6 +15,7 @@ import {
 } from './xapiStatement'
 import {
   buildGoalMeasurement,
+  isMeasuredUnit,
   dateToTimestamp,
   isDerivedKind,
   localDateString,
@@ -111,7 +112,9 @@ export function cardsFromDraft(draft, skills, goals, experiences = []) {
     goalValues: activity.goal_values
       .map((entry) => {
         const goal = goals[entry.goal]
-        return goal ? { goalId: goal.id, ...goalFields(goal, entry) } : null
+        // A second and later set ("3 sets of 20") becomes its own activity on
+        // save; the first set is the card's own value.
+        return goal ? { goalId: goal.id, ...goalFields(goal, entry), extraSets: (entry.sets ?? []).slice(1).map(String) } : null
       })
       .filter(Boolean),
     note: activity.note ?? '',
@@ -277,8 +280,17 @@ export async function saveReflection(row, question, answer) {
   return data[0]
 }
 
-// Checks a card and builds the statement to save. Returns { error } with a
-// translation key, or { statement, skillIds, experienceId }.
+// Whether a card's value for this goal can be split into sets: reps or other
+// things counted one by one that add up each entry -- not distances or weights.
+export function goalTakesSets(goal) {
+  return goal.aggregation === 'total' && goal.measure_kind === 'count' && !isMeasuredUnit(goal.unit)
+}
+
+// Checks a card and builds what to save. Returns { error } with a translation
+// key, or { statements, skillIds, experienceId }. Usually one statement; a
+// card with several sets for a goal gives one more per extra set, each with
+// that set's value only (its duration and note stay on the first), so every
+// set is its own activity, as when logged one by one.
 export function buildCardStatement(card, goals, actor, experiences = []) {
   const title = card.title.trim()
   if (!title) return { error: 'quickLog.errorTitle' }
@@ -292,6 +304,7 @@ export function buildCardStatement(card, goals, actor, experiences = []) {
   }
 
   const measurements = []
+  const extraSets = []
   for (const entry of card.goalValues) {
     const goal = goals.find((other) => other.id === entry.goalId)
     if (!goal) continue
@@ -299,19 +312,33 @@ export function buildCardStatement(card, goals, actor, experiences = []) {
     const problem = validateEntryInput(goal, input)
     if (problem) return { error: problem, goal }
     measurements.push(buildGoalMeasurement(goal, input))
+    if (!goalTakesSets(goal)) continue
+    for (const set of entry.extraSets ?? []) {
+      const setInput = { ...input, value: set.trim() }
+      const setProblem = validateEntryInput(goal, setInput)
+      if (setProblem) return { error: setProblem, goal }
+      extraSets.push(buildGoalMeasurement(goal, setInput))
+    }
   }
 
-  const statement = buildStatement({
+  const timestamp = cardTimestamp(card.date)
+  const shared = {
     actor,
     verbValue: card.verb,
     activityName: title,
-    description: card.note.trim() || null,
-    timestamp: cardTimestamp(card.date),
+    timestamp,
     relatedSkills: card.skills.map((skill) => ({ id: skill.id, name: skill.name })),
     relatedExperience: experience,
-    durationHours: Math.floor(minutes / 60),
-    durationMinutes: minutes % 60,
-    measurements,
-  })
-  return { statement, skillIds: card.skills.map((skill) => skill.id), experienceId: experience?.id ?? null }
+  }
+  const statements = [
+    buildStatement({
+      ...shared,
+      description: card.note.trim() || null,
+      durationHours: Math.floor(minutes / 60),
+      durationMinutes: minutes % 60,
+      measurements,
+    }),
+    ...extraSets.map((measurement) => buildStatement({ ...shared, description: null, measurements: [measurement] })),
+  ]
+  return { statements, skillIds: card.skills.map((skill) => skill.id), experienceId: experience?.id ?? null }
 }

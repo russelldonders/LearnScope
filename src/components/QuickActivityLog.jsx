@@ -18,6 +18,7 @@ import {
   currentExperiences,
   derivedGoalsForCard,
   draftActivitiesFromText,
+  goalTakesSets,
   REFLECTION_PROMPTS,
   repeatTemplates,
 } from '../lib/quickActivityLog'
@@ -222,14 +223,17 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
     const before = new Map(goalItems.map((item) => [item.goal.id, item.progress]))
     const savedRows = []
     try {
-      for (const { card, statement, skillIds, experienceId } of built) {
-        const row = await saveActivity({ userId: user.id, statement, evidence: null, skillIds, experienceId })
+      for (const { card, statements, skillIds, experienceId } of built) {
+        // Several sets of one thing are saved as one activity each.
+        for (const statement of statements) {
+          const row = await saveActivity({ userId: user.id, statement, evidence: null, skillIds, experienceId })
+          savedRows.push({ id: row.id, statement: row.statement })
+        }
         // Same as logging from the full form: an activity done as part of a
         // role or project also links its skills to that role or project.
         if (experienceId) {
           for (const skillId of skillIds) await linkSkillToExperiences(user.id, skillId, [experienceId])
         }
-        savedRows.push({ id: row.id, statement: row.statement })
         removeCard(card.key)
       }
     } catch (err) {
@@ -495,7 +499,34 @@ function DraftCard({ card, skills, goals, experiences, error, onChange, onRemove
               <fieldset key={entry.goalId} className="rounded-md border border-hairline bg-paper p-2">
                 <legend className="px-1 text-xs text-secondary">{t('quickLog.countsTowards', { goal: goal.title })}</legend>
                 <div className="flex flex-wrap items-end gap-2">
-                  <GoalValueFields goal={goal} entry={entry} idPrefix={id(`goal-${goal.id}`)} onField={(field, value) => setGoalField(goal.id, field, value)} />
+                  <GoalValueFields
+                    goal={goal}
+                    entry={entry}
+                    idPrefix={id(`goal-${goal.id}`)}
+                    onField={(field, value) => setGoalField(goal.id, field, value)}
+                    valueLabel={entry.extraSets?.length ? t('quickLog.setLabel', { number: 1 }) : undefined}
+                  />
+                  {/* Each further set is saved as its own activity. */}
+                  {(entry.extraSets ?? []).map((set, index) => (
+                    <SetField
+                      key={index}
+                      id={id(`goal-${goal.id}-set-${index + 2}`)}
+                      goal={goal}
+                      number={index + 2}
+                      value={set}
+                      onChange={(value) => setGoalField(goal.id, 'extraSets', entry.extraSets.map((other, i) => (i === index ? value : other)))}
+                      onRemove={() => setGoalField(goal.id, 'extraSets', entry.extraSets.filter((_, i) => i !== index))}
+                    />
+                  ))}
+                  {goalTakesSets(goal) && (
+                    <button
+                      type="button"
+                      onClick={() => setGoalField(goal.id, 'extraSets', [...(entry.extraSets ?? []), ''])}
+                      className="text-xs font-medium text-moss hover:underline py-2"
+                    >
+                      {t('quickLog.addSet')}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => onChange({ goalValues: card.goalValues.filter((other) => other.goalId !== goal.id) })}
@@ -560,7 +591,37 @@ function DraftCard({ card, skills, goals, experiences, error, onChange, onRemove
   )
 }
 
-function GoalValueFields({ goal, entry, idPrefix, onField }) {
+function SetField({ id, goal, number, value, onChange, onRemove }) {
+  const { t } = useLanguage()
+  const isCount = goal.measure_kind === 'count'
+  return (
+    <div className="min-w-[7rem] flex-1">
+      <div className="flex items-baseline justify-between gap-1 mb-1">
+        <label htmlFor={id} className="text-xs text-secondary">{t('quickLog.setLabel', { number })}</label>
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={t('quickLog.removeSet', { number })}
+          className="text-xs text-secondary hover:text-ink leading-none"
+        >
+          ×
+        </button>
+      </div>
+      <input
+        id={id}
+        type="number"
+        inputMode={isCount ? 'numeric' : 'decimal'}
+        min="0"
+        step={isCount ? '1' : 'any'}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={INPUT_CLASS}
+      />
+    </div>
+  )
+}
+
+function GoalValueFields({ goal, entry, idPrefix, onField, valueLabel }) {
   const { t } = useLanguage()
   const kind = goal.measure_kind
   const field = (name, label, props = {}) => (
@@ -576,7 +637,7 @@ function GoalValueFields({ goal, entry, idPrefix, onField }) {
     </div>
   )
   if (kind === 'count' || kind === 'number') {
-    return field('value', goal.unit, { type: 'number', inputMode: kind === 'count' ? 'numeric' : 'decimal', min: '0', step: kind === 'count' ? '1' : 'any' })
+    return field('value', valueLabel ?? goal.unit, { type: 'number', inputMode: kind === 'count' ? 'numeric' : 'decimal', min: '0', step: kind === 'count' ? '1' : 'any' })
   }
   if (kind === 'duration') return field('time', t('skillGoals.timeLabel'), { inputMode: 'numeric', placeholder: '25:30' })
   if (kind === 'pace') {

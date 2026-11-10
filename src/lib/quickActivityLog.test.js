@@ -68,7 +68,7 @@ describe('cardsFromDraft', () => {
 
 describe('buildCardStatement', () => {
   it('saves goal values as measurements on the activity', () => {
-    const { statement, skillIds } = buildCardStatement(
+    const { statements: [statement], skillIds } = buildCardStatement(
       card({ durationMinutes: '28', goalValues: [{ goalId: 'goal-pace', value: '', distance: '5', time: '27:30' }] }),
       goals,
       actor,
@@ -93,7 +93,7 @@ describe('buildCardStatement', () => {
 
 describe('withReflection', () => {
   it('adds the question and answer after any existing note, leaving the rest alone', () => {
-    const { statement } = buildCardStatement(card({ note: 'Felt strong' }), goals, actor)
+    const { statements: [statement] } = buildCardStatement(card({ note: 'Felt strong' }), goals, actor)
     const updated = withReflection(statement, 'What went well?', '  Kept an even pace  ')
     expect(updated.object.definition.description['en-US']).toBe('Felt strong\n\nWhat went well?\nKept an even pace')
     expect(updated.object.definition.name).toEqual(statement.object.definition.name)
@@ -103,7 +103,7 @@ describe('withReflection', () => {
   })
 
   it('starts a note when there was none', () => {
-    const { statement } = buildCardStatement(card(), goals, actor)
+    const { statements: [statement] } = buildCardStatement(card(), goals, actor)
     expect(withReflection(statement, 'What did you learn or notice?', 'Hills are hard').object.definition.description['en-US'])
       .toBe('What did you learn or notice?\nHills are hard')
   })
@@ -191,7 +191,7 @@ describe('current roles and projects', () => {
     const experiences = currentExperiences([job, project], '2026-11-09')
     const built = buildCardStatement(card({ skills: [fitness], experienceId: 'proj' }), goals, actor, experiences)
     expect(built.experienceId).toBe('proj')
-    const context = Object.values(built.statement.context.extensions).find((value) => value?.id === 'proj')
+    const context = Object.values(built.statements[0].context.extensions).find((value) => value?.id === 'proj')
     expect(context).toMatchObject({ title: 'Website relaunch', type: 'project', parent: { id: 'job', title: 'Product Manager' } })
   })
 
@@ -199,5 +199,48 @@ describe('current roles and projects', () => {
     const later = { ...project, start_date: '2999-01-01' }
     const built = buildCardStatement(card({ skills: [fitness], experienceId: 'proj' }), goals, actor, [later])
     expect(built.error).toBe('quickLog.errorExperienceDate')
+  })
+})
+
+describe('several sets in one card', () => {
+  const dailyPushUps = { id: 'goal-daily', skill_id: fitness.id, title: 'Push-ups per day', metric: 'push_ups_day', measure_kind: 'count', unit: 'push-ups', aggregation: 'total' }
+  const withDaily = [...goals, dailyPushUps]
+
+  it('keeps the drafted sets after the first as extra sets on the card', () => {
+    const [first] = cardsFromDraft({
+      activities: [{ title: 'Push-ups', date: localDateString(), duration_minutes: null, verb: 'experienced', skills: [0], new_skill: null, goal_values: [{ goal: 4, value: 20, sets: [20, 25, 18] }], note: null }],
+    }, skills, withDaily)
+    expect(first.goalValues).toEqual([expect.objectContaining({ goalId: 'goal-daily', value: '20', extraSets: ['25', '18'] })])
+  })
+
+  it('saves one activity per set, each with only its own value, the note and time on the first', () => {
+    const built = buildCardStatement(card({
+      title: 'Push-ups', skills: [fitness], durationMinutes: '10', note: 'Felt strong',
+      goalValues: [{ goalId: 'goal-daily', value: '20', distance: '', time: '', extraSets: ['25', '18'] }],
+    }), withDaily, actor)
+    expect(built.statements).toHaveLength(3)
+    expect(built.statements.map((s) => measurementsFromStatement(s)[0].value)).toEqual([20, 25, 18])
+    expect(built.statements[0].result.duration).toBe('PT10M')
+    expect(built.statements[0].object.definition.description['en-US']).toBe('Felt strong')
+    expect(built.statements[1].result.duration).toBeUndefined()
+    expect(built.statements[1].object.definition.description).toBeUndefined()
+    expect(built.statements[2].object.definition.name['en-US']).toBe('Push-ups')
+  })
+
+  it('checks every set, and ignores extra sets on a goal that keeps the best', () => {
+    const bad = buildCardStatement(card({ skills: [fitness], goalValues: [{ goalId: 'goal-daily', value: '20', distance: '', time: '', extraSets: ['2.5'] }] }), withDaily, actor)
+    expect(bad.error).toBe('skillGoals.errorWholeNumber')
+    const best = buildCardStatement(card({ skills: [fitness], goalValues: [{ goalId: 'goal-push', value: '20', distance: '', time: '', extraSets: ['25'] }] }), withDaily, actor)
+    expect(best.statements).toHaveLength(1)
+  })
+})
+
+describe('which goals take sets', () => {
+  it('is reps and other counted totals, not distances, weights or best results', async () => {
+    const { goalTakesSets } = await import('./quickActivityLog')
+    expect(goalTakesSets({ aggregation: 'total', measure_kind: 'count', unit: 'push-ups' })).toBe(true)
+    expect(goalTakesSets({ aggregation: 'total', measure_kind: 'number', unit: 'km' })).toBe(false)
+    expect(goalTakesSets({ aggregation: 'total', measure_kind: 'count', unit: 'Kg' })).toBe(false)
+    expect(goalTakesSets({ aggregation: 'best', measure_kind: 'count', unit: 'push-ups' })).toBe(false)
   })
 })
