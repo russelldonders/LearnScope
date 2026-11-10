@@ -1625,6 +1625,7 @@ export default {
       fromEntries: '{value} aus {count} Einträgen ({parts})',
       met: 'erreicht',
       missed: 'verfehlt',
+      exceeded: 'Ziel übertroffen',
       sameAsLast: 'Wie beim letzten Mal',
     },
     title: 'Ziele',

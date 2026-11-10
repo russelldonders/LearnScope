@@ -275,7 +275,10 @@ function allPeriodBars(goal, statements, now) {
     const target = isCurrent ? (goal.target_value == null ? null : Number(goal.target_value)) : targetOn(goal, localDateString(lastDay))
     let status = 'none'
     if (target !== null) status = value >= target ? 'met' : isCurrent ? 'inProgress' : 'missed'
-    bars.push({ start: new Date(start), value, parts, status, current: isCurrent, target })
+    // A met period that went past the target, so a chart can tell it apart
+    // from one that only just made it. It still counts as met everywhere.
+    const exceeded = target !== null && value > target
+    bars.push({ start: new Date(start), value, parts, status, exceeded, current: isCurrent, target })
   }
   return bars
 }

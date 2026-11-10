@@ -1604,6 +1604,7 @@ export default {
       fromEntries: '{value}，来自 {count} 条记录（{parts}）',
       met: '已达成',
       missed: '未达成',
+      exceeded: '超额完成',
       sameAsLast: '与上次相同',
     },
     title: '目标',

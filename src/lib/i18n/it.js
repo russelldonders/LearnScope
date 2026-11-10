@@ -1625,6 +1625,7 @@ export default {
       fromEntries: '{value} da {count} registrazioni ({parts})',
       met: 'raggiunto',
       missed: 'mancato',
+      exceeded: 'obiettivo superato',
       sameAsLast: 'Come l’ultima volta',
     },
     title: 'Obiettivi',

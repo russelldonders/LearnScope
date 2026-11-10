@@ -1623,6 +1623,7 @@ export default {
       fromEntries: '{value} uit {count} invoeren ({parts})',
       met: 'gehaald',
       missed: 'gemist',
+      exceeded: 'doel overtroffen',
       sameAsLast: 'Zelfde als vorige keer',
     },
     title: 'Doelen',

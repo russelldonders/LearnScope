@@ -1625,6 +1625,7 @@ export default {
       fromEntries: '{value} en {count} saisies ({parts})',
       met: 'atteint',
       missed: 'manqué',
+      exceeded: 'objectif dépassé',
       sameAsLast: 'Comme la dernière fois',
     },
     title: 'Objectifs',

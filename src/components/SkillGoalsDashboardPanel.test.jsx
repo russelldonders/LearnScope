@@ -63,11 +63,11 @@ describe('goal tiles', () => {
     expect(container.querySelector('svg')).toBeNull()
   })
 
-  it('shows the current value large, without repeating the target the title already gives', () => {
+  it('shows the current value large, with the target and date beside it', () => {
     renderPanel([item({ title: 'Best', target_value: 40, target_date: '2027-06-30' }, [pushUps('a', 10, daysAgo(5)), pushUps('b', 25, daysAgo(3))])])
     const tile = screen.getByRole('article', { name: 'Best' })
     expect(within(tile).getByText('25 push-ups')).toHaveClass('text-2xl')
-    expect(within(tile).queryByText(/^Target /)).not.toBeInTheDocument()
+    expect(within(tile).getByText(/^Target 40 push-ups · By .*2027$/)).toBeInTheDocument()
     expect(within(tile).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '50')
   })
 
@@ -83,20 +83,25 @@ describe('goal tiles', () => {
     expect(within(screen.getByRole('article', { name: 'Fresh' })).getByText('–')).toBeInTheDocument()
   })
 
-  it('shows a repeating goal its last seven days, missed ones in red, with the streak', () => {
+  it('shows a repeating goal its last seven days, missed in red, beaten in a brighter green, with the streak', () => {
     const today = new Date()
     today.setHours(12, 0, 0, 0)
     const day = (n) => new Date(today.getTime() - n * 24 * 60 * 60 * 1000)
     const goal = { title: 'Daily', aggregation: 'total', period: 'day', target_value: 20, started_on: localDateString(day(30)) }
-    const statements = [pushUps('a', 25, day(3)), pushUps('b', 5, day(2)), pushUps('c', 22, day(1)), pushUps('d', 21, day(0))]
+    const statements = [pushUps('a', 25, day(3)), pushUps('b', 5, day(2)), pushUps('c', 20, day(1)), pushUps('d', 21, day(0))]
     renderPanel([item(goal, statements)])
     const tile = screen.getByRole('article', { name: 'Daily' })
     const chart = within(tile).getByRole('img', { name: /^Recent history: / })
     const bars = chart.firstChild.querySelectorAll(':scope > span')
     expect(bars).toHaveLength(7)
+    // A day with nothing logged is still a visible red bar, not a sliver.
+    expect(bars[0]).toHaveClass('bg-red-700/70')
+    expect(bars[0].style.height).toBe('15%')
     expect(bars[4]).toHaveClass('bg-red-700/70')
-    expect(bars[6]).toHaveClass('bg-moss')
+    expect(bars[5]).toHaveClass('bg-moss')
+    expect(bars[6]).toHaveClass('bg-emerald-500')
     expect(chart.getAttribute('aria-label')).toMatch(/5 push-ups \(missed\)/)
+    expect(chart.getAttribute('aria-label')).toMatch(/21 push-ups \(beat the target\)/)
     expect(chart.lastChild.lastChild).toHaveTextContent('Today')
     expect(within(tile).getByText('Met 2 days in a row')).toBeInTheDocument()
     // The bars stand in for the progress bar on a repeating goal.

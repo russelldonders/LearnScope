@@ -107,8 +107,13 @@ function statusFor({ note, progress, streak, goal, t }) {
   return { text: t('skillGoals.dashboard.nothingLogged'), tone: 'text-secondary' }
 }
 
+// A missed period with little or nothing logged would be a sliver too thin to
+// see, so its red bar is never shorter than this.
+const MISSED_MIN_HEIGHT = 15
+
 const BAR_TONES = {
   met: 'bg-moss',
+  exceeded: 'bg-emerald-500',
   missed: 'bg-red-700/70',
   inProgress: 'border border-dashed border-b-0 border-moss',
   none: 'bg-hairline/60',
@@ -137,13 +142,18 @@ function MiniHistory({ goal, history }) {
   const { bars, target } = history
   const max = Math.max(target ?? 0, ...bars.map((bar) => Math.max(bar.value, bar.target ?? 0)), 0)
   const slots = [...Array(MINI_HISTORY_LENGTH - bars.length).fill(null), ...bars]
-  const heightOf = (value) => (max > 0 ? Math.max(2, (value / max) * 100) : 2)
+  const heightOf = (bar) => {
+    const height = max > 0 ? Math.max(2, (bar.value / max) * 100) : 2
+    return bar.status === 'missed' ? Math.max(MISSED_MIN_HEIGHT, height) : height
+  }
+  const toneOf = (bar) => (bar.status === 'met' && bar.exceeded ? 'exceeded' : bar.status)
   const partText = (value) => (goal.measure_kind === 'duration' ? formatGoalValue(goal, value) : formatNumber(value))
   const describe = (bar) => {
     const when = isRepeating
       ? periodLabel(bar, goal.period, locale, t)
       : new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' }).format(bar.start)
-    const outcome = bar.status === 'met' || bar.status === 'missed' ? ` (${t(`skillGoals.dashboard.${bar.status}`)})` : ''
+    const outcomeKey = bar.status === 'met' || bar.status === 'missed' ? toneOf(bar) : null
+    const outcome = outcomeKey ? ` (${t(`skillGoals.dashboard.${outcomeKey}`)})` : ''
     const amount = bar.parts?.length > 1
       ? t('skillGoals.dashboard.fromEntries', {
           value: formatGoalValue(goal, bar.value),
@@ -188,12 +198,12 @@ function MiniHistory({ goal, history }) {
               !bar
                 ? ''
                 : isRepeating
-                  ? BAR_TONES[bar.status]
+                  ? BAR_TONES[toneOf(bar)]
                   : bar.current
                     ? 'bg-moss'
                     : 'bg-hairline/60'
             } ${bar ? 'cursor-default' : ''} ${active === index ? 'opacity-80' : ''}`}
-            style={{ height: bar ? `${heightOf(bar.value)}%` : 0 }}
+            style={{ height: bar ? `${heightOf(bar)}%` : 0 }}
           >
             {bar?.parts?.length > 1 && bar.parts.map((part, partIndex) => (
               <span
@@ -240,8 +250,7 @@ function shortDate(dateString, locale) {
 }
 
 // One bar filling towards the target, with how much is left under it and by
-// when. The tile has no separate target line: the title usually says it, and
-// this line covers a title that doesn't.
+// when.
 function BuildUpProgress({ goal, progress }) {
   const { t, language } = useLanguage()
   const locale = displayLocale(language)
@@ -277,7 +286,7 @@ function BuildUpProgress({ goal, progress }) {
 // value against the target, progress bar, one status line, buttons -- so the
 // grid reads evenly whatever kind of goal each one is.
 function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const { goal, skill, statements, progress, nextLog } = item
   const [note, setNote] = useState(null)
   const [prefill, setPrefill] = useState(false)
@@ -295,6 +304,10 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
       ? `skillGoals.thisPeriod.${goal.period}`
       : 'skillGoals.totalSoFar'
   const status = statusFor({ note, progress, streak, goal, t })
+  const targetText = [
+    goal.target_value != null ? `${t('skillGoals.targetShort')} ${formatGoalValue(goal, goal.target_value)}` : null,
+    goal.target_date ? `${t('skillGoals.byShort')} ${shortDate(goal.target_date, displayLocale(language))}` : null,
+  ].filter(Boolean).join(' · ')
 
   // Opened from a reminder: bring the card into view and move focus to it.
   useEffect(() => {
@@ -368,11 +381,21 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
         )}
       </div>
 
-      <dl className="mt-3 min-w-0">
-        <dt className="text-xs text-secondary">{t(currentLabelKey)}</dt>
-        <dd className="font-display text-2xl leading-tight text-ink truncate">
-          {progress.current != null ? formatGoalValue(goal, progress.current) : '–'}
-        </dd>
+      {/* The value keeps its full width; on a narrow tile it's the target
+          beside it that gets cut short, never the value itself. */}
+      <dl className="mt-3 flex items-end justify-between gap-3">
+        <div className="max-w-full">
+          <dt className="text-xs text-secondary">{t(currentLabelKey)}</dt>
+          <dd className="font-display text-2xl leading-tight text-ink truncate">
+            {progress.current != null ? formatGoalValue(goal, progress.current) : '–'}
+          </dd>
+        </div>
+        {targetText && (
+          <div className="min-w-0 text-right">
+            <dt className="sr-only">{t('skillGoals.targetShort')}</dt>
+            <dd className="text-xs text-secondary truncate" title={targetText}>{targetText}</dd>
+          </div>
+        )}
       </dl>
 
       {/* A fixed height whatever the goal, so tiles stay level. A total

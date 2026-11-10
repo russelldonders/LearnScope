@@ -1622,6 +1622,7 @@ export default {
       fromEntries: '{value} from {count} entries ({parts})',
       met: 'met',
       missed: 'missed',
+      exceeded: 'beat the target',
       sameAsLast: 'Same as last time',
     },
     title: 'Goals',
