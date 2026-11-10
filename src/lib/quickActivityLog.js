@@ -15,6 +15,7 @@ import {
 } from './xapiStatement'
 import {
   buildGoalMeasurement,
+  goalEntryVerb,
   isMeasuredUnit,
   dateToTimestamp,
   isDerivedKind,
@@ -106,7 +107,9 @@ export function cardsFromDraft(draft, skills, goals, experiences = []) {
     title: activity.title,
     date: activity.date,
     durationMinutes: activity.duration_minutes != null ? String(activity.duration_minutes) : '',
-    verb: activity.verb,
+    // A value for a goal reads the same as logging it from the goal: sit-ups
+    // were done, a weigh-in recorded. The learner can still change it.
+    verb: goals[activity.goal_values?.[0]?.goal] ? goalEntryVerb(goals[activity.goal_values[0].goal]) : activity.verb,
     skills: activity.skills.map((index) => skills[index]).filter(Boolean),
     newSkill: activity.new_skill,
     goalValues: activity.goal_values

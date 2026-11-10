@@ -116,8 +116,7 @@ export function dayGroups(rows, field = 'recorded_at', allRows = rows) {
 }
 
 // What makes entries sets of the same thing: one counted value (reps, not a
-// weight, a distance or a time), under the same name, verb and
-// skills. Null for anything else.
+// weight, a distance or a time), under the same name and skills. Null for anything else.
 export function setKey(row) {
   if (isCheckIn(row)) return null
   const measurements = measurementsFromStatement(row.statement)
@@ -126,7 +125,9 @@ export function setKey(row) {
   // Weigh-ins saved as a whole-number count (kg) still mustn't be added up.
   if (isMeasuredUnit(measurement.unit)) return null
   const skills = relatedSkillsFromStatement(row.statement).map((skill) => skill.id).sort().join(',')
-  return [activityName(row.statement).trim().toLowerCase(), row.statement.verb?.id, measurement.metric, measurement.unit, skills].join('|')
+  // Not the verb: a set logged from the goal ("Did") and one from the quick
+  // log ("Practised") are still sets of the same thing.
+  return [activityName(row.statement).trim().toLowerCase(), measurement.metric, measurement.unit, skills].join('|')
 }
 
 // One day's rows for the timeline, newest first. Two or more sets of the same

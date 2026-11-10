@@ -244,3 +244,18 @@ describe('which goals take sets', () => {
     expect(goalTakesSets({ aggregation: 'best', measure_kind: 'count', unit: 'push-ups' })).toBe(false)
   })
 })
+
+describe('the verb of a quick-log card', () => {
+  const draftWith = (goalValues, verb = 'practiced') => cardsFromDraft({
+    activities: [{ title: 'Sit-ups', date: localDateString(), duration_minutes: null, verb, skills: [0], new_skill: null, goal_values: goalValues, note: null }],
+  }, skills, [...goals, { id: 'goal-weight', skill_id: fitness.id, title: 'Weight', metric: 'weight', measure_kind: 'number', unit: 'kg', aggregation: 'best' }])[0].verb
+
+  it('follows the goal it gives a value for, as when logging from the goal', () => {
+    expect(draftWith([{ goal: 1, value: 20 }])).toBe('experienced')
+    expect(draftWith([{ goal: 4, value: 101.5 }])).toBe('recorded')
+  })
+
+  it('keeps the drafted verb when no goal is involved', () => {
+    expect(draftWith([], 'completed')).toBe('completed')
+  })
+})

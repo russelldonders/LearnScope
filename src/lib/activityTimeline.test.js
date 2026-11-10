@@ -138,6 +138,13 @@ describe('sets on the timeline', () => {
     expect(items.map((item) => item.type)).toEqual(['activity', 'activity', 'activity', 'activity'])
   })
 
+  it('groups sets logged with different verbs, from the goal and from the quick log', () => {
+    const practised = set('p', 9, 100)
+    practised.statement = { ...practised.statement, verb: { id: 'https://learnscope.app/xapi/verbs/practiced' } }
+    const items = foldTimeline([set('d', 10, 100), practised])
+    expect(items.map((item) => item.type)).toEqual(['sets'])
+  })
+
   it('never adds up weigh-ins, even ones saved as a whole-number count', () => {
     const weigh = (id, hour) => set(id, hour, 101, { name: 'Weight Loss', unit: 'Kg', metric: 'weight' })
     expect(foldTimeline([weigh('w1', 9), weigh('w2', 8)]).map((item) => item.type)).toEqual(['activity', 'activity'])
