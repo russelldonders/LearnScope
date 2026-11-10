@@ -9,6 +9,7 @@ import {
   computeGoalProgress,
   dateToTimestamp,
   entryDurationMinutes,
+  goalEntryVerb,
   localDateString,
   nextLogDate,
   resolveMetric,
@@ -210,7 +211,7 @@ export async function logGoalEntry({ goal, skill, userId, actor, input, date, no
   const minutes = entryDurationMinutes(goal, input)
   const statement = buildStatement({
     actor,
-    verbValue: 'practiced',
+    verbValue: goalEntryVerb(goal),
     activityName: activityTitle || skill.name,
     description: note || null,
     timestamp: entryTimestamp(date),

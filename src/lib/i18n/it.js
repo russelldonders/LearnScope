@@ -513,6 +513,7 @@ export default {
       experienced: 'Fatto',
       attempted: 'Provato',
       practiced: 'Esercitato',
+      recorded: 'Registrato',
       completed: 'Completato',
       demonstrated: 'Dimostrato',
       mastered: 'Riuscito alla grande',

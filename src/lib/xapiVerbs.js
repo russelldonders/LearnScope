@@ -9,6 +9,8 @@ export const XAPI_VERBS = [
   { value: 'experienced', label: 'Did it', iri: 'http://adlnet.gov/expapi/verbs/experienced' },
   { value: 'attempted', label: 'Tried it', iri: 'http://adlnet.gov/expapi/verbs/attempted' },
   { value: 'practiced', label: 'Practiced it', iri: 'https://learnscope.app/xapi/verbs/practiced' },
+  // A reading taken rather than something done: a weigh-in, a resting heart rate.
+  { value: 'recorded', label: 'Recorded it', iri: 'https://learnscope.app/xapi/verbs/recorded' },
   { value: 'completed', label: 'Finished it', iri: 'http://adlnet.gov/expapi/verbs/completed' },
   { value: 'demonstrated', label: 'Showed I could do it', iri: 'https://learnscope.app/xapi/verbs/demonstrated' },
   { value: 'mastered', label: 'Nailed it', iri: 'http://adlnet.gov/expapi/verbs/mastered' },

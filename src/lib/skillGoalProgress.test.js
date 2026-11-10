@@ -15,6 +15,7 @@ import {
   dateToTimestamp,
   formatGoalValue,
   goalChartPoints,
+  goalEntryVerb,
   goalLogFeedback,
   goalMiniHistory,
   goalPeriodBars,
@@ -595,5 +596,16 @@ describe('a goal corrected between whole and decimal numbers', () => {
     })
     const readings = goalReadings(weight, [saved('a', 'count', 'kg', 102), saved('b', 'number', 'kg', 101.4), saved('c', 'count', 'lb', 220)])
     expect(readings.map((r) => r.value)).toEqual([102, 101.4])
+  })
+})
+
+describe('the verb a goal entry is logged with', () => {
+  it('says practice was practised, a reading was recorded, and anything else was done', () => {
+    expect(goalEntryVerb({ measure_kind: 'practice_time', aggregation: 'total' })).toBe('practiced')
+    expect(goalEntryVerb({ measure_kind: 'number', aggregation: 'best', unit: 'kg' })).toBe('recorded')
+    expect(goalEntryVerb({ measure_kind: 'number', aggregation: 'total', unit: 'km' })).toBe('experienced')
+    for (const measure_kind of ['count', 'duration', 'pace', 'activities']) {
+      expect(goalEntryVerb({ measure_kind, aggregation: 'best' })).toBe('experienced')
+    }
   })
 })

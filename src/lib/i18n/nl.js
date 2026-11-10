@@ -513,6 +513,7 @@ export default {
       experienced: 'Gedaan',
       attempted: 'Geprobeerd',
       practiced: 'Geoefend',
+      recorded: 'Vastgelegd',
       completed: 'Afgerond',
       demonstrated: 'Laten zien',
       mastered: 'Helemaal goed',

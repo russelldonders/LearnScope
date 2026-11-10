@@ -513,6 +513,7 @@ export default {
       experienced: 'Hecho',
       attempted: 'Intentado',
       practiced: 'Practicado',
+      recorded: 'Registrado',
       completed: 'Terminado',
       demonstrated: 'Demostrado',
       mastered: 'Bordado',

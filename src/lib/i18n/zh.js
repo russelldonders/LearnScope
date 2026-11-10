@@ -513,6 +513,7 @@ export default {
       experienced: '做了',
       attempted: '尝试了',
       practiced: '练习了',
+      recorded: '记录了',
       completed: '完成了',
       demonstrated: '展示了',
       mastered: '做得很棒',

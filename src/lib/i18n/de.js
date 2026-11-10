@@ -513,6 +513,7 @@ export default {
       experienced: 'Gemacht',
       attempted: 'Versucht',
       practiced: 'Geübt',
+      recorded: 'Erfasst',
       completed: 'Abgeschlossen',
       demonstrated: 'Gezeigt',
       mastered: 'Gemeistert',
