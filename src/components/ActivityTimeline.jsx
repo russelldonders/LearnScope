@@ -4,6 +4,7 @@ import ActivityReflection from './ActivityReflection'
 import { combinedSetRow, dayGroups, dayLabel, displayLocale, foldTimeline } from '../lib/activityTimeline'
 import { formatMinutes } from '../lib/xapiStatement'
 import { REFLECTION_PROMPTS, canRepeatRow } from '../lib/quickActivityLog'
+import { canEditActivity } from '../lib/activityEdits'
 import { useLanguage } from '../context/LanguageContext'
 
 const ACTION_CLASS = 'text-xs font-medium text-moss hover:underline'
@@ -17,7 +18,7 @@ function Dot({ muted = false }) {
   )
 }
 
-function ActivityItem({ row, now, onOpen, onLogAgain, onReflected, dot = true }) {
+function ActivityItem({ row, now, onOpen, onLogAgain, onReflected, onEdit, dot = true }) {
   const { t } = useLanguage()
   const [prompt, setPrompt] = useState(null)
   const repeatable = onLogAgain && canRepeatRow(row)
@@ -41,6 +42,11 @@ function ActivityItem({ row, now, onOpen, onLogAgain, onReflected, dot = true })
             {repeatable && (
               <button type="button" onClick={() => onLogAgain(row)} className={ACTION_CLASS}>
                 {t('activity.timeline.logAgain')}
+              </button>
+            )}
+            {onEdit && canEditActivity(row) && (
+              <button type="button" onClick={() => onEdit(row)} className={ACTION_CLASS}>
+                {t('activity.timeline.edit')}
               </button>
             )}
             <button
@@ -71,7 +77,7 @@ function ActivityItem({ row, now, onOpen, onLogAgain, onReflected, dot = true })
 // Sets of the same thing on one day (three sets of push-ups) as one line with
 // their total and how it was made up, opening to show each set with its own
 // actions. The sets stay separate activities; only the timeline joins them.
-function SetsItem({ rows, now, onOpen, onLogAgain, onReflected }) {
+function SetsItem({ rows, now, onOpen, onLogAgain, onReflected, onEdit }) {
   const { t } = useLanguage()
   const [open, setOpen] = useState(false)
   const { row, parts, ordered } = combinedSetRow(rows)
@@ -94,7 +100,7 @@ function SetsItem({ rows, now, onOpen, onLogAgain, onReflected }) {
         {open && (
           <ol className="mt-3 ml-1 pl-4 border-l border-hairline/50 space-y-3">
             {[...ordered].reverse().map((set) => (
-              <ActivityItem key={set.id} row={set} now={now} onOpen={onOpen} onLogAgain={onLogAgain} onReflected={onReflected} dot={false} />
+              <ActivityItem key={set.id} row={set} now={now} onOpen={onOpen} onLogAgain={onLogAgain} onReflected={onReflected} onEdit={onEdit} dot={false} />
             ))}
           </ol>
         )}
@@ -131,7 +137,8 @@ function CheckInsItem({ rows }) {
 // recorded stay compact so what the learner actually did leads.
 // allRows: everything the shown rows were picked from, so each day's total
 // counts the whole day rather than only what's on screen.
-export default function ActivityTimeline({ rows, allRows = rows, now = Date.now(), groupBy = 'recorded_at', onOpen, onLogAgain, onReflected }) {
+// onEdit(row): change or delete an activity the learner logged themselves.
+export default function ActivityTimeline({ rows, allRows = rows, now = Date.now(), groupBy = 'recorded_at', onOpen, onLogAgain, onReflected, onEdit }) {
   const { t, language } = useLanguage()
 
   return (
@@ -161,6 +168,7 @@ export default function ActivityTimeline({ rows, allRows = rows, now = Date.now(
                       onOpen={onOpen}
                       onLogAgain={onLogAgain}
                       onReflected={onReflected}
+                      onEdit={onEdit}
                     />
                   )
                 }
@@ -181,6 +189,7 @@ export default function ActivityTimeline({ rows, allRows = rows, now = Date.now(
                     onOpen={onOpen}
                     onLogAgain={onLogAgain}
                     onReflected={onReflected}
+                    onEdit={onEdit}
                   />
                 )
               })}

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import AppHeader from '../components/AppHeader'
 import ActivityTimeline from '../components/ActivityTimeline'
+import EditActivityModal from '../components/EditActivityModal'
 import { relatedSkillsFromStatement, relatedExperienceFromStatement } from '../lib/xapiStatement'
 import { XAPI_VERBS, XAPI_VERB_BY_IRI } from '../lib/xapiVerbs'
 
@@ -29,6 +30,7 @@ export default function Activity() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [sortBy, setSortBy] = useState('happened_desc')
+  const [editingRow, setEditingRow] = useState(null)
   // Back to the first page whenever the filters or sort change.
   const listKey = JSON.stringify([skillFilter, typeFilter, dateFrom, dateTo, sortBy])
   const [paging, setPaging] = useState({ key: listKey, count: PAGE_SIZE })
@@ -221,6 +223,7 @@ export default function Activity() {
                 // activity is carried there to check and save.
                 onLogAgain={(row) => navigate('/dashboard', { state: { logAgainRow: row } })}
                 onReflected={loadStatements}
+                onEdit={setEditingRow}
               />
             )}
 
@@ -241,6 +244,16 @@ export default function Activity() {
             )}
           </>
         )}
+      {editingRow && (
+        <EditActivityModal
+          row={editingRow}
+          onClose={() => setEditingRow(null)}
+          onDone={async () => {
+            setEditingRow(null)
+            await loadStatements()
+          }}
+        />
+      )}
       </main>
     </div>
   )

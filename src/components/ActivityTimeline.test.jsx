@@ -149,3 +149,15 @@ describe('sets of the same thing', () => {
     expect(screen.getAllByRole('button', { name: 'Log again' })).toHaveLength(3)
   })
 })
+
+describe('editing from the timeline', () => {
+  it('offers Edit on activities the learner logged, not on imports', () => {
+    const onEdit = vi.fn()
+    const imported = activity('Strava run', 8, { context: { [PROVENANCE_EXTENSION_IRI]: { source: 'strava' } } })
+    renderTimeline([activity('Stretching', 8), imported], { onEdit })
+    const buttons = screen.getAllByRole('button', { name: 'Edit' })
+    expect(buttons).toHaveLength(1)
+    fireEvent.click(buttons[0])
+    expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: 'Stretching' }))
+  })
+})

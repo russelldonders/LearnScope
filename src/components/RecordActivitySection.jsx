@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import RecordActivityModal from './RecordActivityModal'
+import EditActivityModal from './EditActivityModal'
 import ActivityTimeline from './ActivityTimeline'
 import { timelineRows } from '../lib/activityTimeline'
 import { relatedSkillsFromStatement, relatedExperienceFromStatement } from '../lib/xapiStatement'
@@ -26,6 +27,7 @@ export default function RecordActivitySection({ formOpen, onFormOpenChange, refr
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [ownModalOpen, setOwnModalOpen] = useState(false)
+  const [editingRow, setEditingRow] = useState(null)
   const modalOpen = formOpen ?? ownModalOpen
   const setModalOpen = onFormOpenChange ?? setOwnModalOpen
 
@@ -159,6 +161,7 @@ export default function RecordActivitySection({ formOpen, onFormOpenChange, refr
           }}
           onLogAgain={onLogAgain}
           onReflected={loadStatements}
+          onEdit={setEditingRow}
         />
       )}
 
@@ -166,6 +169,19 @@ export default function RecordActivitySection({ formOpen, onFormOpenChange, refr
         <Link to="/activity" className="inline-block text-sm text-moss font-medium mt-4 hover:underline">
           {t('activity.timeline.seeAll', { total: statements.length })}
         </Link>
+      )}
+
+      {editingRow && (
+        <EditActivityModal
+          row={editingRow}
+          onClose={() => setEditingRow(null)}
+          onDone={async () => {
+            setEditingRow(null)
+            await loadStatements()
+            // A changed or removed value changes the goals it counted towards.
+            await onSaved?.()
+          }}
+        />
       )}
 
       {modalOpen && (
