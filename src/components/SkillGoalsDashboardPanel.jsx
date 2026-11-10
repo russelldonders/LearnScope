@@ -424,7 +424,7 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
               </Link>
             </dd>
           </div>
-        ) : (
+        ) : shapeText ? null : (
           <div className="min-w-0 text-right">
             <dt className="sr-only">{t('skillGoals.targetShort')}</dt>
             <dd className="text-xs text-secondary truncate" title={targetText}>{targetText}</dd>
@@ -432,7 +432,14 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
         )}
       </dl>
 
-      {shapeText && <p className="mt-1 text-xs text-secondary truncate">{shapeText.today}</p>}
+      {/* The shape is the point of a goal done in sets, so it gets a whole
+          line rather than being cut short beside the value. */}
+      {shapeText && (
+        <div className="mt-1 text-xs text-secondary">
+          <p>{targetText}</p>
+          <p className="truncate">{shapeText.today}</p>
+        </div>
+      )}
 
       {/* A fixed height whatever the goal, so tiles stay level. A total
           building up to one target shows only how far along it is; a
