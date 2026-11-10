@@ -3,7 +3,9 @@ import EvidenceFields from './EvidenceFields'
 import { useLanguage } from '../context/LanguageContext'
 import { activityName, formatClock, measurementsFromStatement } from '../lib/xapiStatement'
 import {
+  computeGoalProgress,
   distanceUnitFromPace,
+  formatNumber,
   goalReadings,
   localDateString,
   parseClock,
@@ -62,6 +64,11 @@ export default function SkillGoalEntryForm({ goal, row = null, prefillFrom = nul
 
   const set = (key) => (e) => setFields((current) => ({ ...current, [key]: e.target.value }))
   const kind = goal.measure_kind
+  // Which set this is today, for a goal done in sets ("Set 2 of 3 today").
+  const sessions = goal.aggregation === 'total' && !row ? computeGoalProgress(goal, statements).sessions : null
+  const entryHint = sessions
+    ? t('skillGoals.shape.entryHint', { next: sessions.todaySets + 1, sets: sessions.setsPerSession, perSet: formatNumber(sessions.perSet), unit: goal.unit })
+    : t('skillGoals.eachEntryAdds')
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -125,7 +132,7 @@ export default function SkillGoalEntryForm({ goal, row = null, prefillFrom = nul
             {/* A total is built from entries, so one set is one entry, not the
                 day's total across sets. */}
             {goal.aggregation === 'total' && (
-              <p id={field('each-entry-hint')} className="text-xs text-secondary mt-1">{t('skillGoals.eachEntryAdds')}</p>
+              <p id={field('each-entry-hint')} className="text-xs text-secondary mt-1">{entryHint}</p>
             )}
           </div>
         )}

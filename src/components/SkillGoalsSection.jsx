@@ -5,7 +5,7 @@ import SkillGoalEntryForm from './SkillGoalEntryForm'
 import SkillGoalModal from './SkillGoalModal'
 import { useLanguage } from '../context/LanguageContext'
 import { formatFullDate } from '../lib/dates'
-import { computeGoalProgress, formatGoalValue } from '../lib/skillGoalProgress'
+import { computeGoalProgress, formatGoalValue, goalShapeText } from '../lib/skillGoalProgress'
 import { listSkillGoals, logGoalEntry } from '../lib/skillGoals'
 
 // A goal's measure, target and tracker on a skill's page. Values are read from
@@ -173,6 +173,9 @@ function GoalCard({ goal, skill, user, actor, statements, onActivitiesChanged, o
       ? `skillGoals.thisPeriod.${goal.period}`
       : 'skillGoals.totalSoFar'
 
+  const shapeText = progress.sessions ? goalShapeText(goal, progress.sessions, t) : null
+  const showSessions = shapeText && goal.period !== 'day'
+
   async function handleLog(values) {
     setSavedNote(null)
     try {
@@ -210,13 +213,13 @@ function GoalCard({ goal, skill, user, actor, statements, onActivitiesChanged, o
         {progress.current != null && (
           <div className="flex gap-1">
             <dt>{t(currentLabelKey)}</dt>
-            <dd className="text-ink">{formatGoalValue(goal, progress.current)}</dd>
+            <dd className="text-ink">{showSessions ? shapeText.done : formatGoalValue(goal, progress.current)}</dd>
           </div>
         )}
         {goal.target_value != null && (
           <div className="flex gap-1">
             <dt>{t('skillGoals.targetShort')}</dt>
-            <dd className="text-ink">{formatGoalValue(goal, goal.target_value)}</dd>
+            <dd className="text-ink">{shapeText ? shapeText.target : formatGoalValue(goal, goal.target_value)}</dd>
           </div>
         )}
         {goal.target_date && (
@@ -239,6 +242,7 @@ function GoalCard({ goal, skill, user, actor, statements, onActivitiesChanged, o
           <div className="h-full bg-moss" style={{ width: `${progress.percent}%` }} />
         </div>
       )}
+      {shapeText && <p className="text-xs text-secondary mt-1">{shapeText.today}</p>}
       {progress.reached && <p className="text-xs font-medium text-moss mt-1">{t('skillGoals.targetReached')}</p>}
 
       <SkillGoalChart goal={goal} statements={statements} target={progress.target} />

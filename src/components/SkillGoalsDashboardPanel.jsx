@@ -12,6 +12,7 @@ import {
   formatNumber,
   goalLogFeedback,
   goalMiniHistory,
+  goalShapeText,
   goalStreak,
   lastGoalEntry,
   localDateString,
@@ -140,6 +141,8 @@ function MiniHistory({ goal, history }) {
   const [active, setActive] = useState(null)
   const isRepeating = history.kind === 'periods'
   const { bars, target } = history
+  // A goal with sets charts its last few days even when it repeats weekly.
+  const barPeriod = history.period ?? goal.period
   const max = Math.max(target ?? 0, ...bars.map((bar) => Math.max(bar.value, bar.target ?? 0)), 0)
   // Period totals build up from nothing, so their bars start at zero. Single
   // readings (a weight, a best time) don't: 101 kg against a 96 kg target
@@ -159,7 +162,7 @@ function MiniHistory({ goal, history }) {
   const partText = (value) => (goal.measure_kind === 'duration' ? formatGoalValue(goal, value) : formatNumber(value))
   const describe = (bar) => {
     const when = isRepeating
-      ? periodLabel(bar, goal.period, locale, t)
+      ? periodLabel(bar, barPeriod, locale, t)
       : new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' }).format(bar.start)
     const outcomeKey = bar.status === 'met' || bar.status === 'missed' ? toneOf(bar) : null
     const outcome = outcomeKey ? ` (${t(`skillGoals.dashboard.${outcomeKey}`)})` : ''
@@ -240,7 +243,7 @@ function MiniHistory({ goal, history }) {
         <div aria-hidden="true" className="mt-1 flex gap-1 text-[11px] leading-4 text-secondary">
           {slots.map((bar, index) => (
             <span key={bar ? bar.start.getTime() : `empty-${index}`} className="flex-1 text-center truncate">
-              {bar ? periodLabel(bar, goal.period, locale, t) : ''}
+              {bar ? periodLabel(bar, barPeriod, locale, t) : ''}
             </span>
           ))}
         </div>
@@ -313,8 +316,14 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
       ? `skillGoals.thisPeriod.${goal.period}`
       : 'skillGoals.totalSoFar'
   const status = statusFor({ note, progress, streak, goal, t })
+  const shapeText = progress.sessions ? goalShapeText(goal, progress.sessions, t) : null
+  // Sessions lead for a goal done in sets across a week or month; a daily one
+  // has a single session, so today's total says more.
+  const showSessions = shapeText && goal.period !== 'day'
   const targetText = [
-    goal.target_value != null ? `${t('skillGoals.targetShort')} ${formatGoalValue(goal, goal.target_value)}` : null,
+    shapeText
+      ? `${t('skillGoals.targetShort')} ${shapeText.target}`
+      : goal.target_value != null ? `${t('skillGoals.targetShort')} ${formatGoalValue(goal, goal.target_value)}` : null,
     goal.target_date ? `${t('skillGoals.byShort')} ${shortDate(goal.target_date, displayLocale(language))}` : null,
   ].filter(Boolean).join(' · ')
 
@@ -396,7 +405,7 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
         <div className="max-w-full">
           <dt className="text-xs text-secondary">{t(currentLabelKey)}</dt>
           <dd className="font-display text-2xl leading-tight text-ink truncate">
-            {progress.current != null ? formatGoalValue(goal, progress.current) : '–'}
+            {showSessions ? shapeText.done : progress.current != null ? formatGoalValue(goal, progress.current) : '–'}
           </dd>
         </div>
         {goal.target_value == null ? (
@@ -422,6 +431,8 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
           </div>
         )}
       </dl>
+
+      {shapeText && <p className="mt-1 text-xs text-secondary truncate">{shapeText.today}</p>}
 
       {/* A fixed height whatever the goal, so tiles stay level. A total
           building up to one target shows only how far along it is; a

@@ -15,6 +15,9 @@ const pushUps = {
   target_date: '2027-03-31',
   tracker_question: 'How many push-ups did you do in your best set?',
   log_every_days: 2,
+  per_set: null,
+  sets_per_session: null,
+  sessions_per_period: null,
 }
 
 describe('buildGoalDraftRequest', () => {
@@ -126,5 +129,25 @@ describe('measured units', () => {
     const { MEASURED_UNIT } = await import('./skillGoalDraft.js')
     const { MEASURED_UNIT: CLIENT_MEASURED_UNIT } = await import('../../src/lib/skillGoalProgress')
     expect(MEASURED_UNIT.source).toBe(CLIENT_MEASURED_UNIT.source)
+  })
+})
+
+describe('goals done in sets', () => {
+  const situps = { ...pushUps, title: '3 sets of 100 sit-ups, 4 times a week', unit: 'sit-ups', aggregation: 'total', period: 'week', target_value: 300 }
+
+  it('keeps the shape and works the target out from it', () => {
+    const { goal } = normalizeGoalDraft({ outcome: 'goal', goal: { ...situps, per_set: 100, sets_per_session: 3, sessions_per_period: 4 } }, TODAY)
+    expect(goal).toMatchObject({ per_set: 100, sets_per_session: 3, sessions_per_period: 4, target_value: 1200 })
+  })
+
+  it('drops a shape that does not fit: more sessions than days, a best result, or parts missing', () => {
+    const shaped = { per_set: 100, sets_per_session: 3, sessions_per_period: 4 }
+    for (const goal of [
+      { ...situps, ...shaped, sessions_per_period: 8 },
+      { ...situps, ...shaped, aggregation: 'best', period: null },
+      { ...situps, ...shaped, sets_per_session: null },
+    ]) {
+      expect(normalizeGoalDraft({ outcome: 'goal', goal }, TODAY).goal).toMatchObject({ per_set: null, sets_per_session: null, sessions_per_period: null })
+    }
   })
 })

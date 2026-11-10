@@ -28,6 +28,9 @@ function emptyForm(today) {
     started_on: today,
     tracker_question: '',
     log_every_days: '',
+    per_set: '',
+    sets_per_session: '',
+    sessions_per_period: '',
   }
 }
 
@@ -41,7 +44,31 @@ function formFromGoal(goal, today) {
     target_date: goal.target_date ?? '',
     started_on: goal.started_on ?? today,
     log_every_days: goal.log_every_days == null ? '' : String(goal.log_every_days),
+    per_set: goal.per_set == null ? '' : String(goal.per_set),
+    sets_per_session: goal.sets_per_session == null ? '' : String(goal.sets_per_session),
+    sessions_per_period: goal.sessions_per_period == null ? '' : String(goal.sessions_per_period),
   }
+}
+
+const DAYS_IN_PERIOD = { day: 1, week: 7, month: 31, year: 366 }
+
+// Whether the goal can be done in sets: a counted total that repeats.
+function takesShape(form) {
+  return form.measure_kind === 'count' && form.aggregation === 'total' && Boolean(form.period)
+}
+
+// "3 sets of 100, 4 times a week", as typed. Returns { shape: null } when it
+// isn't used, { shape } with the numbers, or { errorKey }.
+function parseShape(form) {
+  if (!takesShape(form)) return { shape: null }
+  const fields = [form.per_set, form.sets_per_session, form.sessions_per_period].map((value) => String(value).trim())
+  if (fields.every((value) => value === '')) return { shape: null }
+  const [perSet, sets, sessions] = fields.map(Number)
+  const whole = (value, max) => Number.isInteger(value) && value >= 1 && value <= max
+  if (!whole(perSet, 100000) || !whole(sets, 50) || !whole(sessions, DAYS_IN_PERIOD[form.period])) {
+    return { errorKey: 'skillGoals.errorShape' }
+  }
+  return { shape: { per_set: perSet, sets_per_session: sets, sessions_per_period: sessions } }
 }
 
 // Keeps the form inside the rules the table enforces as the measure changes.
@@ -118,6 +145,13 @@ export default function SkillGoalModal({ skill, goal = null, goals = [], onSaved
     )
   const kind = form.measure_kind
   const clockKind = isClockKind(kind)
+  const typedShape = parseShape(form).shape
+  const shapePreview = typedShape
+    ? t('skillGoals.shape.total', {
+        total: typedShape.per_set * typedShape.sets_per_session * typedShape.sessions_per_period,
+        unit: form.unit,
+      })
+    : null
 
   async function draft(goalText) {
     setError(null)
@@ -176,14 +210,20 @@ export default function SkillGoalModal({ skill, goal = null, goals = [], onSaved
     if (!question) return setError(t('skillGoals.errorQuestion'))
     const target = parseTarget(form)
     if (target.errorKey) return setError(t(target.errorKey))
+    const { shape, errorKey: shapeError } = parseShape(form)
+    if (shapeError) return setError(t(shapeError, { max: DAYS_IN_PERIOD[form.period] }))
     if (!isEdit && (!form.started_on || form.started_on > today)) return setError(t('skillGoals.errorDate'))
 
     const shared = {
       title,
       tracker_question: question,
-      target_value: target.value,
+      // With sets, the period's total follows from them: 3 x 100 x 4 = 1200.
+      target_value: shape ? shape.per_set * shape.sets_per_session * shape.sessions_per_period : target.value,
       target_date: form.target_date || null,
       log_every_days: form.log_every_days ? Number(form.log_every_days) : null,
+      per_set: shape?.per_set ?? null,
+      sets_per_session: shape?.sets_per_session ?? null,
+      sessions_per_period: shape?.sessions_per_period ?? null,
     }
     setSaving(true)
     try {
@@ -369,20 +409,54 @@ export default function SkillGoalModal({ skill, goal = null, goals = [], onSaved
             </>
           )}
 
+          {takesShape(form) && (
+            <fieldset className="rounded-md border border-hairline p-3">
+              <legend className="px-1 text-sm text-secondary">{t('skillGoals.shape.legend')}</legend>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  ['per_set', t('skillGoals.shape.perSet', { unit: form.unit || '' })],
+                  ['sets_per_session', t('skillGoals.shape.sets')],
+                  ['sessions_per_period', t(`skillGoals.shape.sessions.${form.period}`)],
+                ].map(([key, label]) => (
+                  <div key={key}>
+                    <label htmlFor={`skill-goal-${key}`} className="block text-xs text-secondary mb-1">{label}</label>
+                    <input
+                      id={`skill-goal-${key}`}
+                      type="number"
+                      inputMode="numeric"
+                      min="1"
+                      step="1"
+                      value={form[key]}
+                      onChange={update(key)}
+                      className={INPUT_CLASS}
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-secondary mt-2">{t('skillGoals.shape.hint')}</p>
+            </fieldset>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label htmlFor="skill-goal-target" className="block text-sm text-secondary mb-1">
                 {clockKind ? t('skillGoals.targetTimeLabel') : t('skillGoals.targetLabel', { unit: form.unit || '' })}
               </label>
-              <input
-                id="skill-goal-target"
-                inputMode={clockKind ? 'numeric' : 'decimal'}
-                placeholder={clockKind ? '5:00' : ''}
-                value={form.target}
-                onChange={update('target')}
-                className={INPUT_CLASS}
-              />
-              <p className="text-xs text-secondary mt-1">{t('skillGoals.targetHint')}</p>
+              {shapePreview ? (
+                <p id="skill-goal-target" className="py-2 text-sm text-ink">{shapePreview}</p>
+              ) : (
+                <>
+                  <input
+                    id="skill-goal-target"
+                    inputMode={clockKind ? 'numeric' : 'decimal'}
+                    placeholder={clockKind ? '5:00' : ''}
+                    value={form.target}
+                    onChange={update('target')}
+                    className={INPUT_CLASS}
+                  />
+                  <p className="text-xs text-secondary mt-1">{t('skillGoals.targetHint')}</p>
+                </>
+              )}
             </div>
             <div>
               <label htmlFor="skill-goal-date" className="block text-sm text-secondary mb-1">{t('skillGoals.targetDateLabel')}</label>

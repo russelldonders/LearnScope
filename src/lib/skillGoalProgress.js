@@ -115,6 +115,55 @@ export function isTargetReached(goal, current) {
   return goal.direction === 'lower' ? current <= target : current >= target
 }
 
+// A goal with a shape -- "3 sets of 100, 4 times a week" -- or null. A
+// session is a day whose total reaches perSession (here 300); the period is
+// met with `sessions` such days.
+export function goalSessionShape(goal) {
+  if (goal.per_set == null || goal.sets_per_session == null || goal.sessions_per_period == null) return null
+  const perSet = Number(goal.per_set)
+  const setsPerSession = Number(goal.sets_per_session)
+  return { perSet, setsPerSession, perSession: perSet * setsPerSession, sessions: Number(goal.sessions_per_period) }
+}
+
+// The words for a goal with a shape, from computeGoalProgress().sessions:
+// target ("3 × 100 sit-ups · 4 days a week"), done ("1 of 4 sessions") and
+// today ("Today 150 of 300 sit-ups · 2 of 3 sets").
+export function goalShapeText(goal, sessions, t) {
+  return {
+    target: t(`skillGoals.shape.targetLine.${goal.period}`, {
+      sets: sessions.setsPerSession,
+      perSet: formatNumber(sessions.perSet),
+      unit: goal.unit,
+      sessions: sessions.sessions,
+    }),
+    done: t('skillGoals.shape.sessionsDone', { done: sessions.done, needed: sessions.sessions }),
+    today: t('skillGoals.shape.today', {
+      total: formatNumber(sessions.todayTotal),
+      perSession: formatNumber(sessions.perSession),
+      unit: goal.unit,
+      count: sessions.todaySets,
+      sets: sessions.setsPerSession,
+    }),
+  }
+}
+
+// Each day's total from `from` up to (not including) `to`, by local date.
+function dayTotalsBetween(readings, from, to) {
+  const totals = new Map()
+  for (const reading of readings) {
+    if (reading.date < from || reading.date >= to) continue
+    const day = localDateString(reading.date)
+    totals.set(day, (totals.get(day) ?? 0) + reading.value)
+  }
+  return totals
+}
+
+function countSessions(totals, perSession) {
+  let count = 0
+  for (const total of totals.values()) if (total >= perSession) count += 1
+  return count
+}
+
 // current is the number the goal is judged on: the best value since the goal
 // began, or the running total for the current period (or since it began, when
 // it has no period). Values from before the goal began stay on the chart but
@@ -140,6 +189,35 @@ export function computeGoalProgress(goal, statements, now = new Date()) {
       if (current === null || isBetter(goal, reading.value, current)) current = reading.value
     }
     baseline = earlier.length > 0 ? earlier[earlier.length - 1].value : sinceStart[0]?.value ?? null
+  }
+
+  // A goal with a shape is judged on sessions (days that reached a session's
+  // total) this period, not on the period's total.
+  const shape = goal.period ? goalSessionShape(goal) : null
+  if (shape) {
+    const periodStart = startOfPeriod(now, goal.period)
+    const from = periodStart > startedAt ? periodStart : startedAt
+    const totals = dayTotalsBetween(readings, from, nextPeriodStart(periodStart, goal.period))
+    const todayStart = startOfPeriod(now, 'day')
+    const today = readings.filter((r) => r.date >= todayStart && r.date >= startedAt && r.date < nextPeriodStart(todayStart, 'day'))
+    const done = countSessions(totals, shape.perSession)
+    const sessions = {
+      ...shape,
+      done,
+      todayTotal: today.reduce((sum, r) => sum + r.value, 0),
+      todaySets: today.length,
+    }
+    return {
+      readings,
+      current,
+      baseline,
+      target: goal.target_value == null ? null : Number(goal.target_value),
+      reached: done >= shape.sessions,
+      percent: Math.min(100, (done / shape.sessions) * 100),
+      lastLogged,
+      entryCount: readings.length,
+      sessions,
+    }
   }
 
   const target = goal.target_value == null ? null : Number(goal.target_value)
@@ -241,6 +319,8 @@ export function isBuildUpGoal(goal, now = new Date()) {
 export function goalMiniHistory(goal, statements, now = new Date()) {
   const target = goal.target_value == null ? null : Number(goal.target_value)
   if (isBuildUpGoal(goal, now)) return { kind: 'progress' }
+  const shape = goal.period && goal.period !== 'day' ? goalSessionShape(goal) : null
+  if (shape) return { kind: 'periods', period: 'day', target: shape.perSession, bars: sessionDayBars(goal, statements, shape, now) }
   if (goal.aggregation === 'total' && goal.period) {
     return { kind: 'periods', target, bars: allPeriodBars(goal, statements, now).slice(-MINI_HISTORY_LENGTH) }
   }
@@ -257,9 +337,32 @@ export function goalMiniHistory(goal, statements, now = new Date()) {
   }
 }
 
+// The last week of days for a goal with a shape, each against a session's
+// total (300 for 3 x 100). A day short of it before today isn't a miss: rest
+// days are part of "4 times a week", so it's simply not a session.
+function sessionDayBars(goal, statements, shape, now) {
+  const startedAt = startOfDayFromString(goal.started_on)
+  const readings = goalReadings(goal, statements).filter((r) => r.date >= startedAt)
+  const today = startOfPeriod(now, 'day')
+  const bars = []
+  for (let back = MINI_HISTORY_LENGTH - 1; back >= 0; back -= 1) {
+    const start = new Date(today)
+    start.setDate(start.getDate() - back)
+    if (start < startOfPeriod(startedAt, 'day')) continue
+    const end = nextPeriodStart(start, 'day')
+    const parts = readings.filter((r) => r.date >= start && r.date < end).map((r) => r.value)
+    const value = parts.reduce((sum, part) => sum + part, 0)
+    const isToday = back === 0
+    const status = value >= shape.perSession ? 'met' : isToday ? 'inProgress' : 'none'
+    bars.push({ start, value, parts, status, exceeded: value > shape.perSession, current: isToday, target: shape.perSession })
+  }
+  return bars
+}
+
 // The goals this one replaced when its target or date changed, oldest first,
-// as { target_value, closed_on }, so past periods can be judged by the target
-// that applied then. allGoals holds the skill's goals, replaced ones included.
+// as { target_value, closed_on } plus any shape (per_set, sets_per_session,
+// sessions_per_period), so past periods can be judged by the target that
+// applied then. allGoals holds the skill's goals, replaced ones included.
 export function withTargetHistory(goal, allGoals) {
   const byId = new Map((allGoals ?? []).map((other) => [other.id, other]))
   const history = []
@@ -267,7 +370,13 @@ export function withTargetHistory(goal, allGoals) {
   let previous = byId.get(goal.replaces_goal_id)
   while (previous && !seen.has(previous.id)) {
     seen.add(previous.id)
-    history.unshift({ target_value: previous.target_value, closed_on: previous.closed_on })
+    history.unshift({
+      target_value: previous.target_value,
+      closed_on: previous.closed_on,
+      per_set: previous.per_set ?? null,
+      sets_per_session: previous.sets_per_session ?? null,
+      sessions_per_period: previous.sessions_per_period ?? null,
+    })
     previous = byId.get(previous.replaces_goal_id)
   }
   return { ...goal, target_history: history }
@@ -276,9 +385,12 @@ export function withTargetHistory(goal, allGoals) {
 // The target in force on a day: that of the earliest replaced goal still open
 // on it, else the goal's own. A goal replaced on a day no longer applies that
 // day, so a period ending on the day a target changed uses the new one.
+function goalOn(goal, dateString) {
+  return (goal.target_history ?? []).find((entry) => entry.closed_on && entry.closed_on > dateString) ?? goal
+}
+
 function targetOn(goal, dateString) {
-  const earlier = (goal.target_history ?? []).find((entry) => entry.closed_on && entry.closed_on > dateString)
-  const value = earlier ? earlier.target_value : goal.target_value
+  const value = goalOn(goal, dateString).target_value
   return value == null ? null : Number(value)
 }
 
@@ -297,6 +409,14 @@ function allPeriodBars(goal, statements, now) {
     const lastDay = new Date(end)
     lastDay.setDate(lastDay.getDate() - 1)
     const target = isCurrent ? (goal.target_value == null ? null : Number(goal.target_value)) : targetOn(goal, localDateString(lastDay))
+    // A goal with a shape then is judged on sessions, not on the total.
+    const shape = goalSessionShape(isCurrent ? goal : goalOn(goal, localDateString(lastDay)))
+    if (shape) {
+      const sessions = countSessions(dayTotalsBetween(readings, start, end), shape.perSession)
+      const status = sessions >= shape.sessions ? 'met' : isCurrent ? 'inProgress' : 'missed'
+      bars.push({ start: new Date(start), value, parts, status, exceeded: sessions > shape.sessions, current: isCurrent, target, sessions })
+      continue
+    }
     let status = 'none'
     if (target !== null) status = value >= target ? 'met' : isCurrent ? 'inProgress' : 'missed'
     // A met period that went past the target, so a chart can tell it apart

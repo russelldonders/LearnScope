@@ -71,6 +71,23 @@ describe('goal tiles', () => {
     expect(within(tile).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '50')
   })
 
+  it('shows a goal done in sets as sessions this week, with today and the shape as its target', () => {
+    const goal = {
+      title: 'Sit-ups', aggregation: 'total', period: 'week', target_value: 1200,
+      per_set: 100, sets_per_session: 3, sessions_per_period: 4, started_on: localDateString(daysAgo(30)),
+    }
+    const now = new Date()
+    now.setHours(12, 0, 0, 0)
+    const earlier = (hours) => new Date(now.getTime() - hours * 60 * 60 * 1000)
+    renderPanel([item(goal, [pushUps('a', 100, earlier(2)), pushUps('b', 50, earlier(1))])])
+    const tile = screen.getByRole('article', { name: 'Sit-ups' })
+    expect(within(tile).getByText('0 of 4 sessions')).toHaveClass('text-2xl')
+    expect(within(tile).getByText('Target 3 × 100 push-ups · 4 days a week')).toBeInTheDocument()
+    expect(within(tile).getByText('Today 150 of 300 push-ups · 2 of 3 sets')).toBeInTheDocument()
+    const chart = within(tile).getByRole('img')
+    expect(chart.lastChild.lastChild).toHaveTextContent('Today')
+  })
+
   it('says when a goal has no target, with a link to add one', () => {
     renderPanel([item({ title: 'Daily', aggregation: 'total', period: 'day' }, [pushUps('a', 20, daysAgo(0))])])
     const tile = screen.getByRole('article', { name: 'Daily' })

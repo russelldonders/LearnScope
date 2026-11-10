@@ -44,10 +44,14 @@ export const GOAL_DRAFT_SCHEMA = {
             target_date: nullable('string'),
             tracker_question: { type: 'string' },
             log_every_days: nullable('integer'),
+            per_set: nullable('integer'),
+            sets_per_session: nullable('integer'),
+            sessions_per_period: nullable('integer'),
           },
           required: [
             'title', 'metric', 'measure_kind', 'unit', 'direction', 'aggregation', 'period',
             'target_value', 'target_date', 'tracker_question', 'log_every_days',
+            'per_set', 'sets_per_session', 'sessions_per_period',
           ],
           additionalProperties: false,
         },
@@ -140,6 +144,7 @@ For a goal:
   - For a total, each entry is added to the others, so ask about one session or what was new since they last logged ("How many books did you finish since you last logged?"), never for a running total ("How many books have you read?").
   - For a total of reps done in sets (push-ups, sit-ups, squats), ask about one set ("How many push-ups did you do in this set?"), never for the day's or week's total across sets: each set is logged on its own and they are added up.
   - For activities, each entry counts as one time they did it, so ask what they did.
+- per_set, sets_per_session, sessions_per_period: only for a count done in sets a number of times each period, such as "3 sets of 100 sit-ups, 4 times a week" (per_set 100, sets_per_session 3, sessions_per_period 4, aggregation "total", period "week", target_value 1200, the three multiplied). Each time they do it is one session, on its own day. Use null for all three otherwise, including "100 push-ups a day" with no sets.
 - log_every_days: a sensible rhythm in days for logging (1, 2, 3, 7, 14 or 30), or null if there's no natural rhythm.
 
 Write message and options in ${language}.`,
@@ -181,7 +186,17 @@ function normalizeDraftGoal(goal, today) {
   if (aggregation === 'best') period = null
   if (!metric || !unit) return null
 
-  const target = goal?.target_value
+  // "3 sets of 100, 4 times a week": all three, on a counted total that
+  // repeats, no more sessions than the period has days. The period's target
+  // then follows from them.
+  const days = { day: 1, week: 7, month: 31, year: 366 }
+  const whole = (value, max) => Number.isInteger(value) && value >= 1 && value <= max
+  const shape = kind === 'count' && aggregation === 'total' && period
+    && whole(goal?.per_set, 100000) && whole(goal?.sets_per_session, 50) && whole(goal?.sessions_per_period, days[period])
+    ? { per_set: goal.per_set, sets_per_session: goal.sets_per_session, sessions_per_period: goal.sessions_per_period }
+    : null
+
+  const target = shape ? shape.per_set * shape.sets_per_session * shape.sessions_per_period : goal?.target_value
   const targetDate = isRealDate(goal?.target_date) && goal.target_date >= today ? goal.target_date : null
   const logEvery = Number.isInteger(goal?.log_every_days) && goal.log_every_days >= 1 && goal.log_every_days <= 365
     ? goal.log_every_days
@@ -199,6 +214,9 @@ function normalizeDraftGoal(goal, today) {
     target_date: targetDate,
     tracker_question: question,
     log_every_days: logEvery,
+    per_set: shape?.per_set ?? null,
+    sets_per_session: shape?.sets_per_session ?? null,
+    sessions_per_period: shape?.sessions_per_period ?? null,
   }
 }
 

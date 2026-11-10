@@ -18,6 +18,7 @@ import {
   goalEntryVerb,
   goalLogFeedback,
   goalMiniHistory,
+  goalSessionShape,
   goalPeriodBars,
   goalReadings,
   goalStreak,
@@ -515,8 +516,8 @@ describe('changed targets', () => {
     const oldest = { ...first, id: 'g0', target_value: 15, closed_on: '2026-10-22' }
     const chained = withTargetHistory({ ...current, replaces_goal_id: 'g1b' }, [oldest, middle])
     expect(chained.target_history).toEqual([
-      { target_value: 15, closed_on: '2026-10-22' },
-      { target_value: 25, closed_on: '2026-10-25' },
+      { target_value: 15, closed_on: '2026-10-22', per_set: null, sets_per_session: null, sessions_per_period: null },
+      { target_value: 25, closed_on: '2026-10-25', per_set: null, sets_per_session: null, sessions_per_period: null },
     ])
     expect(withTargetHistory(first, []).target_history).toEqual([])
   })
@@ -607,5 +608,51 @@ describe('the verb a goal entry is logged with', () => {
     for (const measure_kind of ['count', 'duration', 'pace', 'activities']) {
       expect(goalEntryVerb({ measure_kind, aggregation: 'best' })).toBe('experienced')
     }
+  })
+})
+
+describe('a goal done in sets: 3 x 100, 4 times a week', () => {
+  // Wednesday 11 November 2026, evening. The week began on Monday the 9th.
+  const now = new Date(2026, 10, 11, 20)
+  const situps = {
+    ...pushUpGoal, aggregation: 'total', period: 'week', target_value: 1200, started_on: '2026-10-01',
+    per_set: 100, sets_per_session: 3, sessions_per_period: 4,
+  }
+  const sets = (date, ...values) => values.map((value, i) => entry(`${date}-${i}`, date, value))
+
+  it('reads the shape, and nothing without all three parts', () => {
+    expect(goalSessionShape(situps)).toEqual({ perSet: 100, setsPerSession: 3, perSession: 300, sessions: 4 })
+    expect(goalSessionShape({ ...situps, sessions_per_period: null })).toBeNull()
+  })
+
+  it('counts a day as a session once its sets add up to 300, however they were split', () => {
+    const statements = [...sets('2026-11-09', 100, 100, 100), ...sets('2026-11-10', 150, 150), ...sets('2026-11-11', 100, 50)]
+    const progress = computeGoalProgress(situps, statements, now)
+    expect(progress.sessions).toMatchObject({ done: 2, sessions: 4, todayTotal: 150, todaySets: 2, perSession: 300 })
+    expect(progress.reached).toBe(false)
+    expect(progress.percent).toBe(50)
+  })
+
+  it('is not met by doing the whole week in one day', () => {
+    const progress = computeGoalProgress(situps, sets('2026-11-09', 400, 400, 400), now)
+    expect(progress.current).toBe(1200)
+    expect(progress.sessions.done).toBe(1)
+    expect(progress.reached).toBe(false)
+  })
+
+  it('judges each week by its sessions, so streaks follow them', () => {
+    const lastWeek = ['2026-11-02', '2026-11-03', '2026-11-05', '2026-11-07'].flatMap((day) => sets(day, 100, 100, 100))
+    const weekBefore = sets('2026-10-26', 900, 900)
+    const bars = goalPeriodBars(situps, [...weekBefore, ...lastWeek], now).slice(-3)
+    expect(bars.map((bar) => [bar.status, bar.sessions])).toEqual([['missed', 1], ['met', 4], ['inProgress', 0]])
+    expect(goalStreak(situps, [...weekBefore, ...lastWeek], now)).toBe(1)
+  })
+
+  it('charts the last seven days against a session, rest days not marked as missed', () => {
+    const history = goalMiniHistory(situps, [...sets('2026-11-09', 100, 100, 100), ...sets('2026-11-10', 100), ...sets('2026-11-11', 50)], now)
+    expect(history).toMatchObject({ kind: 'periods', period: 'day', target: 300 })
+    expect(history.bars).toHaveLength(7)
+    expect(history.bars.slice(-3).map((bar) => bar.status)).toEqual(['met', 'none', 'inProgress'])
+    expect(history.bars.at(-3).parts).toEqual([100, 100, 100])
   })
 })

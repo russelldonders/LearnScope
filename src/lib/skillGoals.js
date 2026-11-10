@@ -19,7 +19,7 @@ import {
 } from './skillGoalProgress'
 
 const GOAL_COLUMNS =
-  'id, skill_id, original_text, title, metric, measure_kind, unit, direction, aggregation, period, target_value, target_date, started_on, tracker_question, log_every_days, status, closed_on, replaces_goal_id, created_at'
+  'id, skill_id, original_text, title, metric, measure_kind, unit, direction, aggregation, period, target_value, target_date, per_set, sets_per_session, sessions_per_period, started_on, tracker_question, log_every_days, status, closed_on, replaces_goal_id, created_at'
 
 // Active goals with their progress and next log date worked out once, sorted
 // so the ones needing the learner come first. Used by Home (goal tiles) and
@@ -61,7 +61,7 @@ export async function listActiveGoalsWithActivities(userId) {
   // The goals these replaced when a target changed, so past periods are judged
   // by the target that applied then.
   const replacedQuery = skillIds.length
-    ? supabase.from('skill_goals').select('id, target_value, closed_on, replaces_goal_id').in('skill_id', skillIds).eq('status', 'replaced')
+    ? supabase.from('skill_goals').select('id, target_value, closed_on, replaces_goal_id, per_set, sets_per_session, sessions_per_period').in('skill_id', skillIds).eq('status', 'replaced')
     : Promise.resolve({ data: [] })
   const [statementsEntries, { data: replaced, error: replacedError }] = await Promise.all([
     Promise.all(
@@ -142,8 +142,11 @@ export async function updateSkillGoal(goal, changes) {
   const targetChanged = Number(goal.target_value ?? NaN) !== Number(changes.target_value ?? NaN)
     && !(goal.target_value == null && changes.target_value == null)
   const dateChanged = (goal.target_date ?? null) !== (changes.target_date ?? null)
+  // "3 x 100, 4 times a week" becoming "3 x 120" is a new target too.
+  const shapeChanged = ['per_set', 'sets_per_session', 'sessions_per_period']
+    .some((key) => Number(goal[key] ?? NaN) !== Number(changes[key] ?? NaN) && !(goal[key] == null && changes[key] == null))
 
-  if (!targetChanged && !dateChanged) {
+  if (!targetChanged && !dateChanged && !shapeChanged) {
     const { error } = await supabase
       .from('skill_goals')
       .update({
@@ -169,6 +172,9 @@ export async function updateSkillGoal(goal, changes) {
     period: goal.period,
     target_value: changes.target_value,
     target_date: changes.target_date,
+    per_set: changes.per_set ?? null,
+    sets_per_session: changes.sets_per_session ?? null,
+    sessions_per_period: changes.sessions_per_period ?? null,
     started_on: goal.started_on,
     tracker_question: changes.tracker_question,
     log_every_days: changes.log_every_days,
