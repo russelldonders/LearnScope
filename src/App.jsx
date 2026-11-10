@@ -15,6 +15,7 @@ import ManagerRoute from './components/ManagerRoute'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import RouteTitle from './components/RouteTitle'
+import PreloadPages from './components/PreloadPages'
 import ErrorBoundary from './components/ErrorBoundary'
 
 // Each page is its own chunk, so a visitor only downloads the screens they
@@ -69,6 +70,10 @@ const ProviderCatalogueDetail = lazyRoute(() => import('./pages/provider/Provide
 const ProviderSkillDetail = lazyRoute(() => import('./pages/provider/ProviderSkillDetail'))
 const OrganisationWorkspace = lazyRoute(() => import('./pages/organisation/OrganisationWorkspace'))
 
+// The learner pages people move between most, fetched in the background once
+// they're signed in so the first tap to each opens straight away.
+const PRELOADED_PAGES = [Dashboard, Skills, SkillDetail, Experience, Learning, Activity]
+
 function App() {
   return (
     <BrowserRouter>
@@ -77,6 +82,7 @@ function App() {
         <ThemeProvider>
         <LanguageProvider>
         <RouteTitle />
+        <PreloadPages pages={PRELOADED_PAGES} />
         <PendingActionsProvider>
         <NavVisibilityProvider>
         <Suspense fallback={<RouteLoading />}>

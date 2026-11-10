@@ -51,4 +51,27 @@ describe('lazyRoute', () => {
     expect(await screen.findByText('Something went wrong.')).toBeInTheDocument()
     expect(reload).not.toHaveBeenCalled()
   })
+
+  it('preloads the page once, so opening it later uses the same download', async () => {
+    const load = vi.fn(async () => ({ default: () => <p>page ready</p> }))
+    const Page = lazyRoute(load, memoryStorage(), vi.fn())
+    await Page.preload()
+    await Page.preload()
+    renderLazy(Page)
+    expect(await screen.findByText('page ready')).toBeInTheDocument()
+    expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('forgets a failed preload without reloading, and tries again when the page is opened', async () => {
+    const reload = vi.fn()
+    const load = vi.fn()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValue({ default: () => <p>page ready</p> })
+    const Page = lazyRoute(load, memoryStorage(), reload)
+    await expect(Page.preload()).resolves.toBeUndefined()
+    renderLazy(Page)
+    expect(await screen.findByText('page ready')).toBeInTheDocument()
+    expect(load).toHaveBeenCalledTimes(2)
+    expect(reload).not.toHaveBeenCalled()
+  })
 })
