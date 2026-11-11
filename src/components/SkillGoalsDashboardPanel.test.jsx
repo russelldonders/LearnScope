@@ -47,17 +47,25 @@ function renderPanel(items, props = {}) {
 }
 
 describe('goal tiles', () => {
-  it('give every kind of goal the same parts in the same order', () => {
+  it('give every kind of goal the same parts in the same order, at the same heights', () => {
     const { container } = renderPanel([
       item({ title: 'Best', target_value: 40 }, [pushUps('a', 20, daysAgo(3))]),
       item({ title: 'Weekly total', aggregation: 'total', period: 'week', target_value: 100, target_date: '2027-06-30' }, [pushUps('b', 30, daysAgo(0))]),
       item({ title: 'No target' }),
+      item({
+        title: 'In sets', aggregation: 'total', period: 'week', target_value: 1200,
+        per_set: 100, sets_per_session: 3, sessions_per_period: 4,
+      }, [pushUps('c', 100, daysAgo(0))]),
     ])
     const tiles = container.querySelectorAll('article')
-    expect(tiles).toHaveLength(3)
+    expect(tiles).toHaveLength(4)
     for (const tile of tiles) {
       const parts = [...tile.children].map((child) => child.tagName)
-      expect(parts).toEqual(['DIV', 'DL', 'DIV', 'P', 'DIV'])
+      expect(parts).toEqual(['DIV', 'DL', 'DIV', 'DIV', 'P', 'DIV'])
+      // The lines under the value and the chart keep a fixed height, so tiles
+      // side by side are the same size whatever they show.
+      expect(tile.children[2]).toHaveClass('h-8')
+      expect(tile.children[3]).toHaveClass('h-16')
     }
     // No per-period chart on the dashboard any more.
     expect(container.querySelector('svg')).toBeNull()

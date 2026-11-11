@@ -403,47 +403,35 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
         )}
       </div>
 
-      {/* The value keeps its full width; on a narrow tile it's the target
-          beside it that gets cut short, never the value itself. */}
-      <dl className="mt-3 flex items-end justify-between gap-3">
-        <div className="max-w-full">
-          <dt className="text-xs text-secondary">{t(currentLabelKey)}</dt>
-          <dd className="font-display text-2xl leading-tight text-ink truncate">
-            {showSessions ? shapeText.done : progress.current != null ? formatGoalValue(goal, progress.current) : '–'}
-          </dd>
-        </div>
+      <dl className="mt-3 min-w-0">
+        <dt className="text-xs text-secondary">{t(currentLabelKey)}</dt>
+        <dd className="font-display text-2xl leading-tight text-ink truncate">
+          {showSessions ? shapeText.done : progress.current != null ? formatGoalValue(goal, progress.current) : '–'}
+        </dd>
+      </dl>
+
+      {/* Two lines under the value on every tile, used or not, so tiles are
+          the same height side by side and their charts line up: the target
+          (or a way to add one), then today's sets for a goal done in sets. */}
+      <div className="mt-1 h-8 text-xs leading-4 text-secondary">
         {goal.target_value == null ? (
           // Without a target nothing can be met or missed, so the bars stay
           // grey. Say so, and offer the way to add one.
-          <div className="min-w-0 text-right">
-            <dt className="sr-only">{t('skillGoals.targetShort')}</dt>
-            <dd className="text-xs text-secondary truncate">
-              {t('skillGoals.dashboard.noTarget')}{' · '}
-              <Link
-                to={`/skills/${skill.id}`}
-                state={{ editGoalId: goal.id }}
-                className="text-moss font-medium hover:underline underline-offset-2"
-              >
-                {t('skillGoals.dashboard.addTarget')}
-              </Link>
-            </dd>
-          </div>
-        ) : shapeText ? null : (
-          <div className="min-w-0 text-right">
-            <dt className="sr-only">{t('skillGoals.targetShort')}</dt>
-            <dd className="text-xs text-secondary truncate" title={targetText}>{targetText}</dd>
-          </div>
+          <p className="truncate">
+            {t('skillGoals.dashboard.noTarget')}{' · '}
+            <Link
+              to={`/skills/${skill.id}`}
+              state={{ editGoalId: goal.id }}
+              className="text-moss font-medium hover:underline underline-offset-2"
+            >
+              {t('skillGoals.dashboard.addTarget')}
+            </Link>
+          </p>
+        ) : (
+          <p className="truncate" title={targetText}>{targetText}</p>
         )}
-      </dl>
-
-      {/* The shape is the point of a goal done in sets, so it gets a whole
-          line rather than being cut short beside the value. */}
-      {shapeText && (
-        <div className="mt-1 text-xs text-secondary">
-          <p>{targetText}</p>
-          <p className="truncate">{shapeText.today}</p>
-        </div>
-      )}
+        {shapeText && <p className="truncate" title={shapeText.today}>{shapeText.today}</p>}
+      </div>
 
       {/* A fixed height whatever the goal, so tiles stay level. A total
           building up to one target shows only how far along it is; a
@@ -492,7 +480,9 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
           <button
             type="button"
             onClick={() => startLogging(false)}
-            className="rounded-md bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90"
+            // The same border as "Same as last time", invisible, so a tile with
+            // only this button is as tall as one with both.
+            className="rounded-md border border-transparent bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90"
           >
             {t('skillGoals.dashboard.logButton')}
           </button>
