@@ -1,5 +1,5 @@
 import { formatFullDate } from '../lib/dates'
-import { formatGoalValue, goalChartPoints, goalPeriodBars } from '../lib/skillGoalProgress'
+import { OVER_TARGET_COLOR, formatGoalValue, goalChartPoints, goalPeriodBars } from '../lib/skillGoalProgress'
 import { useLanguage } from '../context/LanguageContext'
 
 const WIDTH = 320
@@ -37,7 +37,7 @@ function TargetLine({ y }) {
 
 const BAR_CLASS = {
   met: 'fill-moss',
-  missed: 'fill-gold',
+  missed: 'fill-red-700/70',
   inProgress: 'fill-moss opacity-40',
   none: 'fill-moss',
 }
@@ -73,18 +73,17 @@ function PeriodBars({ goal, bars, target }) {
         {bars.map((bar, index) => {
           // A period with nothing logged still shows, as a sliver on the axis.
           const top = Math.min(y(bar.value), HEIGHT - PAD_Y - 1.5)
+          const barX = PAD_X + index * slot + (slot - barWidth) / 2
+          // Past the target, the part above it is a lighter green.
+          const overFrom = bar.status === 'met' && bar.exceeded && bar.target != null ? y(bar.target) : null
           return (
-            <rect
-              key={bar.start.getTime()}
-              x={PAD_X + index * slot + (slot - barWidth) / 2}
-              y={top}
-              width={barWidth}
-              height={HEIGHT - PAD_Y - top}
-              rx="1"
-              className={BAR_CLASS[bar.status]}
-            >
+            <g key={bar.start.getTime()}>
               <title>{`${formatFullDate(bar.start.toISOString())} · ${formatGoalValue(goal, bar.value)}`}</title>
-            </rect>
+              <rect x={barX} y={top} width={barWidth} height={HEIGHT - PAD_Y - top} rx="1" className={BAR_CLASS[bar.status]} />
+              {overFrom != null && overFrom > top && (
+                <rect data-over="" x={barX} y={top} width={barWidth} height={overFrom - top} rx="1" style={{ fill: OVER_TARGET_COLOR }} />
+              )}
+            </g>
           )
         })}
         {target != null && <TargetLine y={y(target)} />}
@@ -97,7 +96,7 @@ function PeriodBars({ goal, bars, target }) {
         {target != null && (
           <ul className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
             <LegendItem swatch="bg-moss" label={t('skillGoals.periodChart.met', { count: met })} />
-            <LegendItem swatch="bg-gold" label={t('skillGoals.periodChart.missed', { count: missed })} />
+            <LegendItem swatch="bg-red-700/70" label={t('skillGoals.periodChart.missed', { count: missed })} />
             {inProgress && <LegendItem swatch="bg-moss opacity-40" label={t('skillGoals.periodChart.inProgress')} />}
           </ul>
         )}

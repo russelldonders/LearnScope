@@ -35,6 +35,9 @@ export function dashboardResultValue(results, index, fallback) {
 // Home: logging what you did and your goals. Where to take each skill next
 // (the focus card, reminders, more ways to progress) is on the Skills page;
 // the CV import prompt is on Experience; courses in progress are on Learning.
+// With no goal due, how many of the rest show before "Show all".
+const NEXT_GOALS_COUNT = 3
+
 export default function Dashboard() {
   const { user } = useAuth()
   const { refreshNavVisibility } = useNavVisibility()
@@ -124,8 +127,11 @@ export default function Dashboard() {
       .eq('id', user.id)
   }
 
+  // One goals section: those due first and shown by default; with none due,
+  // the next few. "Show all" opens the rest either way.
   const dueGoals = goals.filter((item) => dueGoalIds.has(item.goal.id))
   const otherGoals = goals.filter((item) => !dueGoalIds.has(item.goal.id))
+  const orderedGoals = [...dueGoals, ...otherGoals]
   const isEmpty = !loading && counts.skills + counts.experience + counts.courses + counts.connections === 0
 
   return (
@@ -135,16 +141,15 @@ export default function Dashboard() {
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8 space-y-12">
         <h1 className="sr-only">{t('nav.home')}</h1>
 
-        {!loading && dueGoals.length > 0 && (
+        {!loading && orderedGoals.length > 0 && (
           <SkillGoalsDashboardPanel
-            items={dueGoals}
+            items={orderedGoals}
+            collapsedCount={dueGoals.length > 0 ? dueGoals.length : NEXT_GOALS_COUNT}
             user={user}
             openGoalId={openGoalId}
             onOpenGoal={setOpenGoalId}
             onChanged={handleQuickLogged}
-            headingId="dashboard-due-goals-heading"
-            title={t('skillGoals.dashboard.dueTitle')}
-            subtitle={t('skillGoals.dashboard.dueSubtitle')}
+            subtitle={dueGoals.length > 0 ? t('skillGoals.dashboard.dueSubtitle') : undefined}
           />
         )}
 
@@ -203,16 +208,6 @@ export default function Dashboard() {
             onLogged={handleQuickLogged}
             onOpenFullForm={() => setFullFormOpen(true)}
             repeatRequest={repeatRequest}
-          />
-        )}
-
-        {!loading && otherGoals.length > 0 && (
-          <SkillGoalsDashboardPanel
-            items={otherGoals}
-            user={user}
-            openGoalId={openGoalId}
-            onOpenGoal={setOpenGoalId}
-            onChanged={handleQuickLogged}
           />
         )}
 

@@ -297,6 +297,10 @@ export function goalStreak(goal, statements, now = new Date()) {
 
 export const MINI_HISTORY_LENGTH = 7
 
+// On goal charts, the part of a bar past its target: a lighter green than the
+// part up to it, in both themes.
+export const OVER_TARGET_COLOR = 'color-mix(in srgb, var(--color-moss) 55%, white)'
+
 // A total with a target that doesn't repeat in practice: no period, or a
 // deadline that falls before the next period starts.
 export function isBuildUpGoal(goal, now = new Date()) {
@@ -318,7 +322,7 @@ export function isBuildUpGoal(goal, now = new Date()) {
 // shows how far along it is instead.
 export function goalMiniHistory(goal, statements, now = new Date()) {
   const target = goal.target_value == null ? null : Number(goal.target_value)
-  if (isBuildUpGoal(goal, now)) return { kind: 'progress' }
+  if (isBuildUpGoal(goal, now)) return { kind: 'progress', target, points: buildUpPoints(goal, statements, now) }
   const shape = goal.period && goal.period !== 'day' ? goalSessionShape(goal) : null
   if (shape) return { kind: 'periods', period: 'day', target: shape.perSession, bars: sessionDayBars(goal, statements, shape, now) }
   if (goal.aggregation === 'total' && goal.period) {
@@ -335,6 +339,23 @@ export function goalMiniHistory(goal, statements, now = new Date()) {
       current: index === readings.length - 1,
     })),
   }
+}
+
+// The running total of a goal building up to one target, a point per entry,
+// counted from when it began (or from the start of the period it's judged
+// on, as computeGoalProgress does), so its trend towards the target can be
+// drawn.
+function buildUpPoints(goal, statements, now) {
+  const startedAt = startOfDayFromString(goal.started_on)
+  const periodStart = goal.period ? startOfPeriod(now, goal.period) : startedAt
+  const from = periodStart > startedAt ? periodStart : startedAt
+  let total = 0
+  return goalReadings(goal, statements)
+    .filter((r) => r.date >= from)
+    .map((r) => {
+      total += r.value
+      return { date: r.date, value: total }
+    })
 }
 
 // The last week of days for a goal with a shape, each against a session's
@@ -441,6 +462,57 @@ export function nextLogDate(goal, lastLogged) {
   const lastDay = lastLogged ? localDateString(lastLogged) : null
   const from = lastDay && lastDay > goal.started_on ? lastDay : goal.started_on
   return addDays(from, goal.log_every_days)
+}
+
+// Whole days from one local midnight to another (safe across clock changes).
+function daysBetween(from, to) {
+  return Math.round((startOfPeriod(to, 'day') - startOfPeriod(from, 'day')) / 86400000)
+}
+
+// A repeating goal with something to reach each period: a total with a target
+// ("100 push-ups a week") or a shape ("3 x 100 sit-ups, 4 days a week").
+function isPeriodTargetGoal(goal, now) {
+  if (!goal.period || goal.direction === 'lower') return false
+  if (goalSessionShape(goal)) return true
+  return goal.aggregation === 'total' && goal.target_value != null && !isBuildUpGoal(goal, now)
+}
+
+// Whether a repeating goal needs the learner today. It isn't due from the
+// start of a week or month, only once the period is getting tight:
+// - with a shape, once the sessions still needed take up all the days left
+//   but one, and from the moment today's session is begun until it's
+//   finished -- one set of three doesn't make it done;
+// - for a plain total, once over half the period has gone by (counting
+//   today) and the total is behind that share of the target.
+// A daily goal is due all day until its target is met.
+function isPeriodGoalDue(goal, progress, now) {
+  if (progress.reached) return false
+  const periodStart = startOfPeriod(now, goal.period)
+  const startedAt = startOfDayFromString(goal.started_on)
+  const from = periodStart > startedAt ? periodStart : startedAt
+  const end = nextPeriodStart(periodStart, goal.period)
+  const daysLeft = daysBetween(now, end)
+  const sessions = progress.sessions
+  if (sessions) {
+    if (sessions.todayTotal >= sessions.perSession) return false
+    if (sessions.todaySets > 0) return true
+    return sessions.sessions - sessions.done >= daysLeft - 1
+  }
+  const totalDays = Math.max(1, daysBetween(from, end))
+  const elapsed = Math.min(1, (totalDays - daysLeft + 1) / totalDays)
+  const done = (progress.current ?? 0) / Number(goal.target_value)
+  return elapsed > 0.5 && done < elapsed
+}
+
+// The day a goal became due, or next will be, as YYYY-MM-DD; it's due once
+// that's today or earlier. A repeating goal with a target follows its period
+// (today while it's due, else null), not the logging rhythm, so a weekly goal
+// isn't asked for every day; any other goal follows its rhythm.
+export function goalDueOn(goal, progress, now = new Date()) {
+  const today = localDateString(now)
+  if (goal.started_on > today) return null
+  if (isPeriodTargetGoal(goal, now)) return isPeriodGoalDue(goal, progress, now) ? today : null
+  return nextLogDate(goal, progress.lastLogged)
 }
 
 // What to say after a new entry: a new best or a target just reached are worth

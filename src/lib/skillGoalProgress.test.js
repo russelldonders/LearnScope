@@ -15,6 +15,7 @@ import {
   dateToTimestamp,
   formatGoalValue,
   goalChartPoints,
+  goalDueOn,
   goalEntryVerb,
   goalLogFeedback,
   goalMiniHistory,
@@ -375,6 +376,67 @@ describe('logging rhythm and attention', () => {
     expect(nextLogDate(rhythmGoal, new Date('2026-10-10T12:00:00'))).toBe('2026-10-13')
   })
 
+  describe('when a goal is due', () => {
+    // The week of Monday 9 to Sunday 15 November 2026.
+    const at = (date, time = '15:00') => new Date(`${date}T${time}:00`)
+    const dueOn = (goal, statements, now) => goalDueOn(goal, computeGoalProgress(goal, statements, now), now)
+    const sets = (date, ...values) => values.map((value, i) => entry(`${date}-${i}`, date, value))
+    const situps = {
+      ...pushUpGoal, aggregation: 'total', period: 'week', target_value: 900,
+      per_set: 100, sets_per_session: 3, sessions_per_period: 3, log_every_days: 1,
+    }
+
+    it('leaves a goal in sets alone early in the week, whatever its rhythm', () => {
+      expect(dueOn(situps, [], at('2026-11-09', '09:00'))).toBeNull()
+      expect(dueOn(situps, sets('2026-11-09', 100, 100, 100), at('2026-11-12'))).toBeNull()
+    })
+
+    it('makes a goal in sets due once the sessions left fill the days left but one', () => {
+      expect(dueOn(situps, sets('2026-11-09', 100, 100, 100), at('2026-11-13'))).toBe('2026-11-13')
+      expect(dueOn(situps, [], at('2026-11-11'))).toBeNull()
+      expect(dueOn(situps, [], at('2026-11-12'))).toBe('2026-11-12')
+    })
+
+    it('keeps a begun session due until all its sets are done', () => {
+      expect(dueOn(situps, sets('2026-11-10', 100), at('2026-11-10'))).toBe('2026-11-10')
+      expect(dueOn(situps, sets('2026-11-10', 100, 100), at('2026-11-10'))).toBe('2026-11-10')
+      expect(dueOn(situps, sets('2026-11-10', 100, 100, 100), at('2026-11-10'))).toBeNull()
+    })
+
+    it('stops asking once the week is met', () => {
+      const met = [...sets('2026-11-09', 100, 100, 100), ...sets('2026-11-10', 100, 100, 100), ...sets('2026-11-11', 100, 100, 100)]
+      expect(dueOn(situps, [...met, ...sets('2026-11-14', 100)], at('2026-11-14'))).toBeNull()
+    })
+
+    it('makes a weekly total due only past half the week and behind', () => {
+      const weekly = { ...pushUpGoal, aggregation: 'total', period: 'week', target_value: 100, log_every_days: 1 }
+      expect(dueOn(weekly, [], at('2026-11-10'))).toBeNull()
+      expect(dueOn(weekly, [entry('a', '2026-11-09', 40)], at('2026-11-12'))).toBe('2026-11-12')
+      expect(dueOn(weekly, [entry('a', '2026-11-09', 60)], at('2026-11-12'))).toBeNull()
+      expect(dueOn(weekly, [entry('a', '2026-11-09', 90)], at('2026-11-15'))).toBe('2026-11-15')
+      expect(dueOn(weekly, [entry('a', '2026-11-09', 100)], at('2026-11-15'))).toBeNull()
+    })
+
+    it('counts the week from the day a goal begun mid-week started', () => {
+      const weekly = { ...pushUpGoal, aggregation: 'total', period: 'week', target_value: 100, started_on: '2026-11-12' }
+      expect(dueOn(weekly, [], at('2026-11-12'))).toBeNull()
+      expect(dueOn(weekly, [], at('2026-11-15'))).toBe('2026-11-15')
+      expect(dueOn(weekly, [], at('2026-11-11'))).toBeNull()
+    })
+
+    it('keeps a daily total due until its target is met', () => {
+      const daily = { ...pushUpGoal, aggregation: 'total', period: 'day', target_value: 20 }
+      expect(dueOn(daily, [entry('a', '2026-11-09', 10)], at('2026-11-09'))).toBe('2026-11-09')
+      expect(dueOn(daily, [entry('a', '2026-11-09', 20)], at('2026-11-09'))).toBeNull()
+    })
+
+    it('follows the rhythm for any other goal', () => {
+      const best = { ...pushUpGoal, log_every_days: 3 }
+      expect(dueOn(best, [entry('a', '2026-11-08', 30)], at('2026-11-12'))).toBe('2026-11-11')
+      expect(dueOn({ ...best, log_every_days: null }, [], at('2026-11-12'))).toBeNull()
+    })
+  })
+
   it('has no next log without a rhythm', () => {
     expect(nextLogDate({ ...pushUpGoal, log_every_days: null }, null)).toBeNull()
   })
@@ -571,7 +633,10 @@ describe('goalMiniHistory', () => {
 
   it('shows progress instead for a total building up to one target', () => {
     const total = { ...pushUpGoal, aggregation: 'total', period: null, target_value: 1000 }
-    expect(goalMiniHistory(total, [entry('a', '2026-10-20', 50)], now)).toEqual({ kind: 'progress' })
+    const progress = goalMiniHistory(total, [entry('a', '2026-10-20', 50), entry('b', '2026-10-22', 30)], now)
+    expect(progress.kind).toBe('progress')
+    expect(progress.target).toBe(1000)
+    expect(progress.points.map((point) => point.value)).toEqual([50, 80])
     const byYearEnd = { ...pushUpGoal, aggregation: 'total', period: 'year', target_value: 10, target_date: '2026-12-31' }
     expect(goalMiniHistory(byYearEnd, [], now).kind).toBe('progress')
   })

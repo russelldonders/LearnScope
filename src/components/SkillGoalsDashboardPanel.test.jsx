@@ -67,8 +67,9 @@ describe('goal tiles', () => {
       expect(tile.children[2]).toHaveClass('h-8')
       expect(tile.children[3]).toHaveClass('h-16')
     }
-    // No per-period chart on the dashboard any more.
-    expect(container.querySelector('svg')).toBeNull()
+    // Repeating goals get bars; the one heading for a single target, a line.
+    expect(container.querySelectorAll('svg')).toHaveLength(1)
+    expect(within(tiles[0]).getByRole('img').querySelector('svg')).not.toBeNull()
   })
 
   it('shows the current value large, with the target and date beside it', () => {
@@ -124,7 +125,7 @@ describe('goal tiles', () => {
     expect(within(screen.getByRole('article', { name: 'Fresh' })).getByText('–')).toBeInTheDocument()
   })
 
-  it('shows a repeating goal its last seven days, missed in red, beaten in a brighter green, with the streak', () => {
+  it('shows a repeating goal its last seven days, missed in red, the part over the target lighter, with the streak', () => {
     const today = new Date()
     today.setHours(12, 0, 0, 0)
     const day = (n) => new Date(today.getTime() - n * 24 * 60 * 60 * 1000)
@@ -140,7 +141,11 @@ describe('goal tiles', () => {
     expect(bars[0].style.height).toBe('15%')
     expect(bars[4]).toHaveClass('bg-red-700/70')
     expect(bars[5]).toHaveClass('bg-moss')
-    expect(bars[6]).toHaveClass('bg-emerald-500')
+    expect(bars[5].style.background).toBe('')
+    // 21 against 20: green up to the target, the last 1 lighter.
+    expect(bars[6]).toHaveClass('bg-moss')
+    expect(bars[6].style.background).toMatch(/linear-gradient/)
+    expect(bars[6].style.background).toMatch(/95\.2\d*%/)
     expect(chart.getAttribute('aria-label')).toMatch(/5 push-ups \(missed\)/)
     expect(chart.getAttribute('aria-label')).toMatch(/21 push-ups \(beat the target\)/)
     expect(chart.lastChild.lastChild).toHaveTextContent('Today')
@@ -165,13 +170,15 @@ describe('goal tiles', () => {
     expect(within(chart).queryByText(/from 3 entries/)).not.toBeInTheDocument()
   })
 
-  it('shows any other goal its recent entries, the latest highlighted', () => {
+  it('shows any other goal its recent entries as a line with a dot on each, latest on the right', () => {
     renderPanel([item({ title: 'Best', target_value: 40 }, [pushUps('a', 10, daysAgo(5)), pushUps('b', 25, daysAgo(3))])])
     const tile = screen.getByRole('article', { name: 'Best' })
-    const bars = within(tile).getByRole('img').firstChild.querySelectorAll(':scope > span')
-    expect(bars).toHaveLength(7)
-    expect(bars[5]).toHaveClass('bg-hairline/60')
-    expect(bars[6]).toHaveClass('bg-moss')
+    const chart = within(tile).getByRole('img')
+    const dots = chart.querySelectorAll('[data-dot]')
+    expect(dots).toHaveLength(2)
+    expect(parseFloat(dots[1].style.left)).toBeGreaterThan(parseFloat(dots[0].style.left))
+    expect(chart.querySelector('polyline').getAttribute('points').split(' ')).toHaveLength(2)
+    expect(chart.getAttribute('aria-label')).toMatch(/25 push-ups/)
     expect(within(tile).getByRole('progressbar')).toBeInTheDocument()
   })
 
@@ -179,13 +186,13 @@ describe('goal tiles', () => {
     const goal = { title: 'Weight', direction: 'lower', target_value: 96 }
     renderPanel([item(goal, [pushUps('a', 102, daysAgo(5)), pushUps('b', 101, daysAgo(3))])])
     const chart = within(screen.getByRole('article', { name: 'Weight' })).getByRole('img')
-    const line = chart.firstChild.querySelector('.border-dashed')
-    const bars = chart.firstChild.querySelectorAll(':scope > span')
+    const line = chart.querySelector('.border-dashed')
+    const dots = chart.querySelectorAll('[data-dot]')
     const lineAt = parseFloat(line.style.bottom)
     expect(lineAt).toBeGreaterThan(10)
     expect(lineAt).toBeLessThan(40)
-    expect(parseFloat(bars[6].style.height)).toBeGreaterThan(80)
-    expect(parseFloat(bars[6].style.height)).toBeLessThan(parseFloat(bars[5].style.height))
+    expect(parseFloat(dots[1].style.bottom)).toBeGreaterThan(80)
+    expect(parseFloat(dots[1].style.bottom)).toBeLessThan(parseFloat(dots[0].style.bottom))
   })
 
   it('shows a total building up to one target as progress with what is left', () => {
@@ -196,7 +203,20 @@ describe('goal tiles', () => {
     expect(within(tile).getByText('20%')).toBeInTheDocument()
     // This year's deadline, so no year in the date.
     expect(within(tile).getByText(/^8 push-ups to go by (31 Dec|Dec 31)$/)).toBeInTheDocument()
-    expect(within(tile).queryByRole('img')).not.toBeInTheDocument()
+    // And its running total as a trend line towards the target.
+    const trend = within(tile).getByRole('img')
+    expect(trend.querySelectorAll('[data-dot]')).toHaveLength(1)
+    expect(trend.querySelector('.border-dashed')).not.toBeNull()
+  })
+
+  it('draws a build-up total as its running total, one dot per entry', () => {
+    renderPanel([item({ title: 'Lifetime', aggregation: 'total', target_value: 1000 }, [
+      pushUps('a', 250, daysAgo(4)),
+      pushUps('b', 250, daysAgo(2)),
+    ])])
+    const trend = within(screen.getByRole('article', { name: 'Lifetime' })).getByRole('img')
+    expect(trend.querySelectorAll('[data-dot]')).toHaveLength(2)
+    expect(trend.getAttribute('aria-label')).toMatch(/250 push-ups, .*500 push-ups/)
   })
 
   it('says how much is left without a date when the goal has none', () => {
