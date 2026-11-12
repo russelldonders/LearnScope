@@ -1647,6 +1647,7 @@ export default {
       now: 'Maintenant',
       toGo: 'Encore {value}',
       toGoBy: 'Encore {value} d’ici le {date}',
+      targetBy: '{value} d’ici le {date}',
       fromEntries: '{value} en {count} saisies ({parts})',
       met: 'atteint',
       missed: 'manqué',

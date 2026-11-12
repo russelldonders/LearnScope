@@ -1644,6 +1644,7 @@ export default {
       now: 'Now',
       toGo: '{value} to go',
       toGoBy: '{value} to go by {date}',
+      targetBy: '{value} by {date}',
       fromEntries: '{value} from {count} entries ({parts})',
       met: 'met',
       missed: 'missed',

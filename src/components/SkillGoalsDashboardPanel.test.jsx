@@ -183,6 +183,19 @@ describe('goal tiles', () => {
     expect(within(tile).queryByRole('progressbar')).not.toBeInTheDocument()
   })
 
+  it('labels the target line with the target and its date', () => {
+    const goal = { title: 'Weight', direction: 'lower', target_value: 96, target_date: '2027-02-02' }
+    renderPanel([
+      item(goal, [pushUps('a', 102, daysAgo(5)), pushUps('b', 101, daysAgo(3))]),
+      item({ ...goal, title: 'Undated', target_date: null }, [pushUps('c', 102, daysAgo(5))]),
+    ])
+    const chart = within(screen.getByRole('article', { name: 'Weight' })).getByRole('img')
+    expect(chart.querySelector('[data-target-label]')).toHaveTextContent('96 push-ups by 02/02/27')
+    expect(chart.getAttribute('aria-label')).toContain('Target 96 push-ups by 02/02/27')
+    const undated = within(screen.getByRole('article', { name: 'Undated' })).getByRole('img')
+    expect(undated.querySelector('[data-target-label]')).toHaveTextContent(/^96 push-ups$/)
+  })
+
   it('scales single readings around the target, so a weight to lose sits above its line', () => {
     const goal = { title: 'Weight', direction: 'lower', target_value: 96 }
     renderPanel([item(goal, [pushUps('a', 102, daysAgo(5)), pushUps('b', 101, daysAgo(3))])])

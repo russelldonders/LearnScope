@@ -282,14 +282,42 @@ function MiniTrend({ goal, points, target }) {
   const coords = points.map((point, index) => ({ point, left: x(point, index), bottom: y(point.value) }))
   const describe = (point) =>
     `${new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' }).format(point.date)} ${formatGoalValue(goal, point.value)}`
+  // The target line says what it is: "96 kg by 02/02/27", or just "96 kg".
+  const targetText = target == null
+    ? null
+    : goal.target_date
+      ? t('skillGoals.dashboard.targetBy', {
+          value: formatGoalValue(goal, target),
+          date: new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: '2-digit' })
+            .format(new Date(`${goal.target_date}T00:00:00`)),
+        })
+      : formatGoalValue(goal, target)
+  const targetAt = target != null ? y(target) : null
+  const label = [
+    `${t('skillGoals.dashboard.history')}: ${points.map(describe).join(', ')}`,
+    targetText ? `${t('skillGoals.targetShort')} ${targetText}` : null,
+  ].filter(Boolean).join('. ')
   return (
-    <div role="img" aria-label={`${t('skillGoals.dashboard.history')}: ${points.map(describe).join(', ')}`} className="relative h-14">
+    <div role="img" aria-label={label} className="relative h-14">
       {target != null && (
-        <div
-          aria-hidden="true"
-          className="absolute inset-x-0 border-t border-dashed border-secondary/60"
-          style={{ bottom: `${y(target)}%` }}
-        />
+        <>
+          <div
+            aria-hidden="true"
+            className="absolute inset-x-0 border-t border-dashed border-secondary/60"
+            style={{ bottom: `${targetAt}%` }}
+          />
+          {/* Above the line, or below it when the line is near the top. */}
+          <span
+            aria-hidden="true"
+            data-target-label=""
+            className={`absolute z-10 left-0 max-w-full truncate bg-card pr-1 text-[10px] leading-3 text-secondary ${
+              targetAt > 70 ? 'pt-0.5' : 'pb-0.5'
+            }`}
+            style={targetAt > 70 ? { top: `${100 - targetAt}%` } : { bottom: `${targetAt}%` }}
+          >
+            {targetText}
+          </span>
+        </>
       )}
       <svg aria-hidden="true" viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full overflow-visible text-moss">
         <polyline

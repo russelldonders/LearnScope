@@ -137,7 +137,7 @@ For a goal:
 - aggregation: "best" when the goal is a single best result (40 push-ups in one set); "total" when values add up (100 push-ups a week, 12 books this year). Totals are always direction "higher".
 - period: "day", "week", "month" or "year" for a repeating or calendar total; null for a best result or a one-off total.
 - target_value: the number only, in the goal's unit. Use seconds for duration and seconds per km or mile for pace (5:00 per km is 300). Use minutes for practice_time. Null if they only want to keep track. Never invent a target they did not state.
-- target_date: YYYY-MM-DD if they gave a date or deadline, otherwise null. Never invent one.
+- target_date: YYYY-MM-DD if they gave a date or deadline, otherwise null. Never invent one. Work out a relative deadline from today: "in 12 weeks" is today plus 84 days, "by the end of the month" is the last day of this month, "this year" is 31 December.
 - title: a short restatement of the goal, in ${language}.
 - tracker_question: the one question to ask each time they log progress, specific to this goal, in ${language}, such as "How many push-ups did you do in your best set?". The form beside it asks for the number, so the question must match it:
   - For pace, the form asks for distance and time, so ask how far they went and how long it took, never for the pace itself.

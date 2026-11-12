@@ -1646,6 +1646,7 @@ export default {
       now: 'Ahora',
       toGo: 'Faltan {value}',
       toGoBy: 'Faltan {value} antes del {date}',
+      targetBy: '{value} para el {date}',
       fromEntries: '{value} de {count} registros ({parts})',
       met: 'cumplido',
       missed: 'no cumplido',

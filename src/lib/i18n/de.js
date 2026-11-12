@@ -1647,6 +1647,7 @@ export default {
       now: 'Jetzt',
       toGo: 'Noch {value}',
       toGoBy: 'Noch {value} bis {date}',
+      targetBy: '{value} bis {date}',
       fromEntries: '{value} aus {count} Einträgen ({parts})',
       met: 'erreicht',
       missed: 'verfehlt',

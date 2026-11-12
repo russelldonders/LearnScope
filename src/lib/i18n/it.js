@@ -1647,6 +1647,7 @@ export default {
       now: 'Ora',
       toGo: 'Ancora {value}',
       toGoBy: 'Ancora {value} entro il {date}',
+      targetBy: '{value} entro il {date}',
       fromEntries: '{value} da {count} registrazioni ({parts})',
       met: 'raggiunto',
       missed: 'mancato',

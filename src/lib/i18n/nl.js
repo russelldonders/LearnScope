@@ -1645,6 +1645,7 @@ export default {
       now: 'Nu',
       toGo: 'Nog {value} te gaan',
       toGoBy: 'Nog {value} te gaan vóór {date}',
+      targetBy: '{value} vóór {date}',
       fromEntries: '{value} uit {count} invoeren ({parts})',
       met: 'gehaald',
       missed: 'gemist',
