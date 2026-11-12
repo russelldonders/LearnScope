@@ -46,6 +46,23 @@ function renderPanel(items, props = {}) {
   )
 }
 
+describe('adding a goal', () => {
+  it('offers "Add goal" at the top of the section, even before there are goals', () => {
+    const onAddGoal = vi.fn()
+    renderPanel([], { onAddGoal })
+    fireEvent.click(screen.getByRole('button', { name: 'Add goal' }))
+    expect(onAddGoal).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows only the goals asked for until "Show all" is used', () => {
+    const goals = ['A', 'B', 'C', 'D', 'E'].map((title) => item({ title, target_value: 40 }))
+    renderPanel(goals, { collapsedCount: 3 })
+    expect(screen.getAllByRole('article')).toHaveLength(3)
+    fireEvent.click(screen.getByRole('button', { name: 'Show all 5 goals' }))
+    expect(screen.getAllByRole('article')).toHaveLength(5)
+  })
+})
+
 describe('goal tiles', () => {
   it('give every kind of goal the same parts in the same order, at the same heights', () => {
     const { container } = renderPanel([

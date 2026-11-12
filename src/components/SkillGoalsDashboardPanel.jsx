@@ -36,6 +36,7 @@ export default function SkillGoalsDashboardPanel({
   headingId = 'dashboard-goals-heading',
   title,
   subtitle,
+  onAddGoal = null,
 }) {
   const { t } = useLanguage()
   const [expanded, setExpanded] = useState(false)
@@ -62,9 +63,20 @@ export default function SkillGoalsDashboardPanel({
 
   return (
     <section aria-labelledby={headingId}>
-      <h2 id={headingId} className="font-display text-xl text-ink mb-1">
-        {title ?? t('skillGoals.dashboard.title')}
-      </h2>
+      <div className="flex items-start justify-between gap-3 mb-1">
+        <h2 id={headingId} className="font-display text-xl text-ink">
+          {title ?? t('skillGoals.dashboard.title')}
+        </h2>
+        {onAddGoal && (
+          <button
+            type="button"
+            onClick={onAddGoal}
+            className="shrink-0 rounded-md border border-hairline bg-card text-ink text-sm font-medium px-3 py-1.5 hover:border-moss"
+          >
+            {t('skillGoals.dashboard.addGoal')}
+          </button>
+        )}
+      </div>
       <p className="text-sm text-secondary mb-6">{subtitle ?? t('skillGoals.dashboard.subtitle')}</p>
       {/* items-start: a tile opened for logging grows on its own, without
           stretching the tile next to it. */}

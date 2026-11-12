@@ -151,3 +151,32 @@ describe('goals done in sets', () => {
     }
   })
 })
+
+describe('drafting a goal before its skill is chosen', () => {
+  const body = { text: 'Get down to 96 kg in 12 weeks', skills: ['Running', 'Cooking'] }
+
+  it('lists the learner skills and asks for the skill the goal develops', () => {
+    const request = buildGoalDraftRequest(body, TODAY)
+    expect(request.error).toBeUndefined()
+    expect(request.skillNames).toEqual(['Running', 'Cooking'])
+    expect(request.prompt).toContain('- Running\n- Cooking')
+    expect(request.prompt).toContain('skill_name:')
+    expect(request.schema.properties.goal.anyOf[1].required).toContain('skill_name')
+    expect(buildGoalDraftRequest({ ...body, skills: [] }, TODAY).prompt).toContain('(none yet)')
+  })
+
+  it('leaves skill_name out when the skill is already known', () => {
+    const request = buildGoalDraftRequest({ text: 'Run more', skillName: 'Running' }, TODAY)
+    expect(request.skillNames).toBeNull()
+    expect(request.prompt).not.toContain('skill_name:')
+    expect(request.schema.properties.goal.anyOf[1].required).not.toContain('skill_name')
+  })
+
+  it('uses an existing skill spelled as the learner has it, else marks the skill new', () => {
+    const existing = normalizeGoalDraft({ outcome: 'goal', goal: { ...pushUps, skill_name: 'running' } }, TODAY, ['Running'])
+    expect(existing.goal).toMatchObject({ skill_name: 'Running', skill_is_new: false })
+    const fresh = normalizeGoalDraft({ outcome: 'goal', goal: { ...pushUps, skill_name: 'Weight management' } }, TODAY, ['Running'])
+    expect(fresh.goal).toMatchObject({ skill_name: 'Weight management', skill_is_new: true })
+    expect(normalizeGoalDraft({ outcome: 'goal', goal: { ...pushUps, skill_name: ' ' } }, TODAY, ['Running'])).toBeNull()
+  })
+})

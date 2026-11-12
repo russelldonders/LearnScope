@@ -81,10 +81,12 @@ export async function listActiveGoalsWithActivities(userId) {
   }))
 }
 
-// Asks AI to turn what the learner wrote into a draft. Returns
+// Asks AI to turn what the learner wrote into a draft. Without a skillName,
+// skills (the learner's skill names) let it place the goal on one of them or
+// name a new one, returned as goal.skill_name and goal.skill_is_new. Returns
 // { outcome: 'goal', goal } or { outcome: 'clarify' | 'level_target' | 'unsafe',
 // message, options }. Nothing is saved here.
-export async function draftSkillGoal({ text, skillName, existingGoals, language }) {
+export async function draftSkillGoal({ text, skillName, skills = null, existingGoals, language }) {
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -100,6 +102,7 @@ export async function draftSkillGoal({ text, skillName, existingGoals, language 
       operation: 'skill-goal',
       text,
       skillName,
+      ...(skillName ? {} : { skills: skills ?? [] }),
       language,
       today: localDateString(),
       existingMeasures: (existingGoals ?? []).map((goal) => ({

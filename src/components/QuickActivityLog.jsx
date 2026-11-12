@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import SkillPickerModal from './SkillPickerModal'
 import ActivityReflection from './ActivityReflection'
+import VoiceInputButton from './VoiceInputButton'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import { supabase } from '../lib/supabaseClient'
@@ -27,20 +28,6 @@ const INPUT_CLASS =
   'w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss'
 const RECENT_ROWS = 60
 
-// The browser's speech-to-text, where it has one (Chrome, Edge, Safari).
-function speechRecognitionClass() {
-  if (typeof window === 'undefined') return null
-  return window.SpeechRecognition || window.webkitSpeechRecognition || null
-}
-
-// The browser's own regional variant when it matches the app's language
-// (so en-GB stays en-GB), otherwise the app's language.
-function speechLanguage(language) {
-  const browser = typeof navigator !== 'undefined' ? navigator.language : ''
-  if (browser?.toLowerCase().startsWith(language)) return browser
-  return language === 'zh' ? 'zh-CN' : language
-}
-
 // "What did you do?" on the dashboard. A sentence becomes draft activities the
 // learner checks and edits before anything is saved; things they log often can
 // be repeated with one tap. Goal values ride along on the activity, so goals
@@ -54,8 +41,6 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
   const [experiences, setExperiences] = useState([])
   const [recentRows, setRecentRows] = useState([])
   const [listening, setListening] = useState(false)
-  const recognitionRef = useRef(null)
-  const SpeechRecognition = useMemo(speechRecognitionClass, [])
   const [actorName, setActorName] = useState('')
   const [text, setText] = useState('')
   const [reading, setReading] = useState(false)
@@ -94,8 +79,6 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
     setRecentRows(data ?? [])
   }
 
-  useEffect(() => () => recognitionRef.current?.abort(), [])
-
   // "Log again" from the activity list. Waits for the learner's skills, since
   // the card only keeps skills they still have.
   const handledRepeat = useRef(null)
@@ -109,45 +92,6 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
     sectionRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
     sectionRef.current?.focus({ preventScroll: true })
   }, [repeatRequest, skills, goals])
-
-  function toggleListening() {
-    if (listening) {
-      recognitionRef.current?.stop()
-      return
-    }
-    const recognition = new SpeechRecognition()
-    recognition.lang = speechLanguage(language)
-    recognition.interimResults = true
-    recognition.continuous = false
-    // What they say is added to anything already typed, never replacing it.
-    const typed = text.trim()
-    recognition.onresult = (event) => {
-      const spoken = Array.from(event.results)
-        .map((result) => result[0].transcript)
-        .join('')
-        .trim()
-      setText([typed, spoken].filter(Boolean).join(' '))
-    }
-    recognition.onerror = (event) => {
-      if (event.error === 'aborted' || event.error === 'no-speech') return
-      const blocked = event.error === 'not-allowed' || event.error === 'service-not-allowed'
-      setFormError(t(blocked ? 'quickLog.voice.blocked' : 'quickLog.voice.failed'))
-    }
-    recognition.onend = () => {
-      setListening(false)
-      recognitionRef.current = null
-    }
-    recognitionRef.current = recognition
-    setFormError(null)
-    setResult(null)
-    try {
-      recognition.start()
-      setListening(true)
-    } catch {
-      recognitionRef.current = null
-      setFormError(t('quickLog.voice.failed'))
-    }
-  }
 
   useEffect(() => {
     loadSkills()
@@ -288,23 +232,16 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
           >
             {reading ? t('quickLog.reading') : t('quickLog.readButton')}
           </button>
-          {SpeechRecognition && (
-            <button
-              type="button"
-              onClick={toggleListening}
-              disabled={reading}
-              aria-pressed={listening}
-              className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium disabled:opacity-60 ${
-                listening ? 'border-moss bg-moss/10 text-moss' : 'border-hairline bg-card text-ink hover:border-moss'
-              }`}
-            >
-              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="9" y="3" width="6" height="11" rx="3" />
-                <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
-              </svg>
-              {listening ? t('quickLog.voice.stop') : t('quickLog.voice.start')}
-            </button>
-          )}
+          <VoiceInputButton
+            text={text}
+            onText={setText}
+            onError={(message) => {
+              setFormError(message)
+              if (!message) setResult(null)
+            }}
+            onListeningChange={setListening}
+            disabled={reading}
+          />
           {onOpenFullForm && (
             <button type="button" onClick={onOpenFullForm} className="text-sm text-secondary hover:text-ink underline">
               {t('quickLog.fullForm')}

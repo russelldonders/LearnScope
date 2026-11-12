@@ -9,6 +9,7 @@ import AppHeader from '../components/AppHeader'
 import RecordActivitySection from '../components/RecordActivitySection'
 import FindSkillModal from '../components/FindSkillModal'
 import SkillGoalsDashboardPanel from '../components/SkillGoalsDashboardPanel'
+import SkillGoalModal from '../components/SkillGoalModal'
 import QuickActivityLog from '../components/QuickActivityLog'
 import { listActiveGoalsForAttention } from '../lib/skillGoals'
 import { todayDateString } from '../lib/checkin'
@@ -44,6 +45,10 @@ export default function Dashboard() {
   const { t } = useLanguage()
   const navigate = useNavigate()
   const [addSkillOpen, setAddSkillOpen] = useState(false)
+  const [addGoalOpen, setAddGoalOpen] = useState(false)
+  // Goals added here while the page is open, shown first so the learner sees
+  // what they just set up.
+  const [addedGoalIds, setAddedGoalIds] = useState([])
   const [counts, setCounts] = useState(null)
   const [bannerState, setBannerState] = useState(null)
   const [goals, setGoals] = useState([])
@@ -129,9 +134,20 @@ export default function Dashboard() {
 
   // One goals section: those due first and shown by default; with none due,
   // the next few. "Show all" opens the rest either way.
-  const dueGoals = goals.filter((item) => dueGoalIds.has(item.goal.id))
-  const otherGoals = goals.filter((item) => !dueGoalIds.has(item.goal.id))
-  const orderedGoals = [...dueGoals, ...otherGoals]
+  const addedGoals = addedGoalIds.map((id) => goals.find((item) => item.goal.id === id)).filter(Boolean)
+  const isAdded = (item) => addedGoalIds.includes(item.goal.id)
+  const dueGoals = goals.filter((item) => dueGoalIds.has(item.goal.id) && !isAdded(item))
+  const otherGoals = goals.filter((item) => !dueGoalIds.has(item.goal.id) && !isAdded(item))
+  const orderedGoals = [...addedGoals, ...dueGoals, ...otherGoals]
+  const pinnedCount = addedGoals.length + dueGoals.length
+
+  // A goal added from Home: its skill may be new, so the nav and goals reload.
+  async function handleGoalAdded(created) {
+    setAddGoalOpen(false)
+    if (created) setAddedGoalIds((ids) => [created.id, ...ids.filter((id) => id !== created.id)])
+    refreshNavVisibility()
+    await refreshGoals()
+  }
   const isEmpty = !loading && counts.skills + counts.experience + counts.courses + counts.connections === 0
 
   return (
@@ -141,15 +157,20 @@ export default function Dashboard() {
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8 space-y-12">
         <h1 className="sr-only">{t('nav.home')}</h1>
 
-        {!loading && orderedGoals.length > 0 && (
+        {!loading && (
           <SkillGoalsDashboardPanel
             items={orderedGoals}
-            collapsedCount={dueGoals.length > 0 ? dueGoals.length : NEXT_GOALS_COUNT}
+            collapsedCount={pinnedCount > 0 ? pinnedCount : NEXT_GOALS_COUNT}
+            onAddGoal={() => setAddGoalOpen(true)}
             user={user}
             openGoalId={openGoalId}
             onOpenGoal={setOpenGoalId}
             onChanged={handleQuickLogged}
-            subtitle={dueGoals.length > 0 ? t('skillGoals.dashboard.dueSubtitle') : undefined}
+            subtitle={
+              orderedGoals.length === 0
+                ? t('skillGoals.dashboard.emptySubtitle')
+                : dueGoals.length > 0 ? t('skillGoals.dashboard.dueSubtitle') : undefined
+            }
           />
         )}
 
@@ -221,6 +242,10 @@ export default function Dashboard() {
           />
         )}
       </main>
+
+      {addGoalOpen && (
+        <SkillGoalModal userId={user.id} onSaved={handleGoalAdded} onClose={() => setAddGoalOpen(false)} />
+      )}
 
       {addSkillOpen && (
         <FindSkillModal

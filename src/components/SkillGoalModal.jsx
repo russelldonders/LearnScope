@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import AccessibleDialog from './AccessibleDialog'
+import VoiceInputButton from './VoiceInputButton'
 import { useLanguage } from '../context/LanguageContext'
 import { formatClock } from '../lib/xapiStatement'
 import { MEASURE_KINDS, isDerivedKind, localDateString, parseClock } from '../lib/skillGoalProgress'
-import { createSkillGoal, deleteSkillGoal, draftSkillGoal, stopSkillGoal, updateSkillGoal } from '../lib/skillGoals'
+import { createSkillGoal, deleteSkillGoal, draftSkillGoal, listSkillGoals, stopSkillGoal, updateSkillGoal } from '../lib/skillGoals'
+import { supabase } from '../lib/supabaseClient'
+import { findOrCreatePersonalSkill } from '../lib/skillLibrary'
 
 const INPUT_CLASS =
   'w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss'
@@ -125,7 +128,12 @@ function parseTarget(form) {
 // Adding a goal has two steps: the learner describes it in their own words and
 // AI drafts it, or they skip straight to the fields. Either way they see every
 // field and nothing is saved until they confirm. With `goal` set this edits it.
-export default function SkillGoalModal({ skill, goal = null, goals = [], onSaved, onSetLevelTarget, onClose }) {
+//
+// Without `skill` (adding from Home) the goal's skill is part of the draft:
+// AI picks one of the learner's skills (userId's) or names a new one, shown
+// as a field they can change. A new skill is created only when they save.
+// onSaved then gets the new goal.
+export default function SkillGoalModal({ skill = null, userId = null, goal = null, goals = [], onSaved, onSetLevelTarget, onClose }) {
   const { t, language } = useLanguage()
   const today = localDateString()
   const isEdit = Boolean(goal)
@@ -138,6 +146,28 @@ export default function SkillGoalModal({ skill, goal = null, goals = [], onSaved
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const picksSkill = !skill && !isEdit
+  const [mySkills, setMySkills] = useState([])
+  const [skillName, setSkillName] = useState('')
+  const [listening, setListening] = useState(false)
+
+  useEffect(() => {
+    if (!picksSkill || !userId) return
+    let active = true
+    supabase
+      .from('skills')
+      .select('id, name')
+      .eq('user_id', userId)
+      .order('name')
+      .then(({ data }) => {
+        if (active) setMySkills(data ?? [])
+      })
+    return () => {
+      active = false
+    }
+  }, [picksSkill, userId])
+
+  const matchingSkill = mySkills.find((other) => other.name.toLowerCase() === skillName.trim().toLowerCase()) ?? null
 
   const update = (key) => (e) =>
     setForm((current) =>
@@ -160,11 +190,13 @@ export default function SkillGoalModal({ skill, goal = null, goals = [], onSaved
     try {
       const result = await draftSkillGoal({
         text: goalText,
-        skillName: skill.name,
+        skillName: skill?.name ?? null,
+        skills: picksSkill ? mySkills.map((other) => other.name) : null,
         existingGoals: goals,
         language,
       })
       if (result.outcome === 'goal') {
+        if (picksSkill) setSkillName(result.goal.skill_name ?? '')
         setForm(applyKindRules({
           ...formFromGoal(result.goal, today),
           started_on: today,
@@ -213,6 +245,7 @@ export default function SkillGoalModal({ skill, goal = null, goals = [], onSaved
     const { shape, errorKey: shapeError } = parseShape(form)
     if (shapeError) return setError(t(shapeError, { max: DAYS_IN_PERIOD[form.period] }))
     if (!isEdit && (!form.started_on || form.started_on > today)) return setError(t('skillGoals.errorDate'))
+    if (picksSkill && !skillName.trim()) return setError(t('skillGoals.errorSkill'))
 
     const shared = {
       title,
@@ -230,7 +263,15 @@ export default function SkillGoalModal({ skill, goal = null, goals = [], onSaved
       if (isEdit) {
         await updateSkillGoal(goal, shared)
       } else {
-        await createSkillGoal(skill.id, {
+        // From Home: the skill they chose, or a new one made for this goal.
+        // Its goals are read so the new goal's measure lines up with theirs.
+        let goalSkill = skill
+        let skillGoals = goals
+        if (picksSkill) {
+          goalSkill = matchingSkill ?? (await findOrCreatePersonalSkill(userId, skillName.trim())).skill
+          skillGoals = await listSkillGoals(goalSkill.id)
+        }
+        const created = await createSkillGoal(goalSkill.id, {
           ...shared,
           original_text: fromAi ? text.trim().slice(0, 1000) : null,
           metric: form.metric,
@@ -240,7 +281,9 @@ export default function SkillGoalModal({ skill, goal = null, goals = [], onSaved
           aggregation: form.aggregation,
           period: form.aggregation === 'total' ? form.period || null : null,
           started_on: form.started_on,
-        }, goals)
+        }, skillGoals)
+        await onSaved(created)
+        return
       }
       await onSaved()
     } catch (err) {
@@ -270,7 +313,11 @@ export default function SkillGoalModal({ skill, goal = null, goals = [], onSaved
       panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
       <h2 id="skill-goal-dialog-title" className="font-display text-2xl text-ink mb-1">{heading}</h2>
-      <p className="text-sm text-secondary mb-4 break-words">{skill.name}</p>
+      {skill ? (
+        <p className="text-sm text-secondary mb-4 break-words">{skill.name}</p>
+      ) : (
+        <div className="mb-4" />
+      )}
 
       {step === 'describe' && (
         <form onSubmit={handleDraft} className="space-y-3">
@@ -286,6 +333,7 @@ export default function SkillGoalModal({ skill, goal = null, goals = [], onSaved
               className={INPUT_CLASS}
             />
             <p className="text-xs text-secondary mt-1">{t('skillGoals.describeHint')}</p>
+            {listening && <p role="status" className="text-xs text-secondary mt-1">{t('quickLog.voice.listening')}</p>}
           </div>
 
           {response && (
@@ -306,7 +354,7 @@ export default function SkillGoalModal({ skill, goal = null, goals = [], onSaved
                   ))}
                 </div>
               )}
-              {response.outcome === 'level_target' && (
+              {response.outcome === 'level_target' && onSetLevelTarget && (
                 <button
                   type="button"
                   onClick={onSetLevelTarget}
@@ -328,6 +376,7 @@ export default function SkillGoalModal({ skill, goal = null, goals = [], onSaved
             >
               {drafting ? t('skillGoals.drafting') : t('skillGoals.draftButton')}
             </button>
+            <VoiceInputButton text={text} onText={setText} onError={setError} onListeningChange={setListening} disabled={drafting} />
             <button type="button" onClick={setUpManually} disabled={drafting} className="text-sm text-moss font-medium px-2 py-2 hover:underline">
               {t('skillGoals.setUpManually')}
             </button>
@@ -346,6 +395,29 @@ export default function SkillGoalModal({ skill, goal = null, goals = [], onSaved
             <label htmlFor="skill-goal-title" className="block text-sm text-secondary mb-1">{t('skillGoals.titleLabel')}</label>
             <input id="skill-goal-title" maxLength={200} value={form.title} onChange={update('title')} className={INPUT_CLASS} />
           </div>
+
+          {picksSkill && (
+            <div>
+              <label htmlFor="skill-goal-skill" className="block text-sm text-secondary mb-1">{t('skillGoals.skillLabel')}</label>
+              <input
+                id="skill-goal-skill"
+                list="skill-goal-skill-options"
+                maxLength={120}
+                value={skillName}
+                onChange={(e) => setSkillName(e.target.value)}
+                aria-describedby="skill-goal-skill-hint"
+                className={INPUT_CLASS}
+              />
+              <datalist id="skill-goal-skill-options">
+                {mySkills.map((other) => <option key={other.id} value={other.name} />)}
+              </datalist>
+              <p id="skill-goal-skill-hint" className="text-xs text-secondary mt-1">
+                {skillName.trim() && !matchingSkill
+                  ? t('skillGoals.newSkillNote', { name: skillName.trim() })
+                  : t('skillGoals.skillHint')}
+              </p>
+            </div>
+          )}
 
           {!isEdit && (
             <>

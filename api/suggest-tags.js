@@ -180,7 +180,7 @@ export default async function handler(req, res) {
     const textBlock = response.content.find((block) => block.type === 'text')
     const data = JSON.parse(textBlock?.text ?? '{}')
     if (body.operation === 'skill-goal') {
-      const draft = normalizeGoalDraft(data, request.today)
+      const draft = normalizeGoalDraft(data, request.today, request.skillNames)
       if (draft) res.status(200).json(draft)
       else res.status(422).json({ error: request.refusalError })
       return
