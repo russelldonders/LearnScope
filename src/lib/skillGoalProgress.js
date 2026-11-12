@@ -322,7 +322,7 @@ export function isBuildUpGoal(goal, now = new Date()) {
 // shows how far along it is instead.
 export function goalMiniHistory(goal, statements, now = new Date()) {
   const target = goal.target_value == null ? null : Number(goal.target_value)
-  if (isBuildUpGoal(goal, now)) return { kind: 'progress', target, points: buildUpPoints(goal, statements, now) }
+  if (isBuildUpGoal(goal, now)) return { kind: 'progress' }
   const shape = goal.period && goal.period !== 'day' ? goalSessionShape(goal) : null
   if (shape) return { kind: 'periods', period: 'day', target: shape.perSession, bars: sessionDayBars(goal, statements, shape, now) }
   if (goal.aggregation === 'total' && goal.period) {
@@ -339,23 +339,6 @@ export function goalMiniHistory(goal, statements, now = new Date()) {
       current: index === readings.length - 1,
     })),
   }
-}
-
-// The running total of a goal building up to one target, a point per entry,
-// counted from when it began (or from the start of the period it's judged
-// on, as computeGoalProgress does), so its trend towards the target can be
-// drawn.
-function buildUpPoints(goal, statements, now) {
-  const startedAt = startOfDayFromString(goal.started_on)
-  const periodStart = goal.period ? startOfPeriod(now, goal.period) : startedAt
-  const from = periodStart > startedAt ? periodStart : startedAt
-  let total = 0
-  return goalReadings(goal, statements)
-    .filter((r) => r.date >= from)
-    .map((r) => {
-      total += r.value
-      return { date: r.date, value: total }
-    })
 }
 
 // The last week of days for a goal with a shape, each against a session's

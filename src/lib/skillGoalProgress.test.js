@@ -633,10 +633,7 @@ describe('goalMiniHistory', () => {
 
   it('shows progress instead for a total building up to one target', () => {
     const total = { ...pushUpGoal, aggregation: 'total', period: null, target_value: 1000 }
-    const progress = goalMiniHistory(total, [entry('a', '2026-10-20', 50), entry('b', '2026-10-22', 30)], now)
-    expect(progress.kind).toBe('progress')
-    expect(progress.target).toBe(1000)
-    expect(progress.points.map((point) => point.value)).toEqual([50, 80])
+    expect(goalMiniHistory(total, [entry('a', '2026-10-20', 50)], now)).toEqual({ kind: 'progress' })
     const byYearEnd = { ...pushUpGoal, aggregation: 'total', period: 'year', target_value: 10, target_date: '2026-12-31' }
     expect(goalMiniHistory(byYearEnd, [], now).kind).toBe('progress')
   })

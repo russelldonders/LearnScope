@@ -261,12 +261,11 @@ function MiniHistory({ goal, history }) {
   )
 }
 
-// A goal heading for one target -- a best value, or a total building up --
-// as a line through its values, a dot on each, with the target dashed.
-// Entries are spaced evenly, latest on the right; a running total is spaced
-// by date, out to its target date when it has one, so the line shows whether
-// it's on course to get there.
-function MiniTrend({ goal, points, target, byDate = false, startsAtZero = false, className = 'h-8' }) {
+// A goal heading for one value -- a weight, a best time -- as a line through
+// its recent entries, a dot on each, with the target dashed. The line says
+// how it's trending, so it takes the place of a progress bar. Entries sit in
+// the same seven slots as the bars, latest on the right.
+function MiniTrend({ goal, points, target }) {
   const { t, language } = useLanguage()
   const locale = displayLocale(language)
   if (points.length === 0) return null
@@ -274,26 +273,17 @@ function MiniTrend({ goal, points, target, byDate = false, startsAtZero = false,
   const max = Math.max(...values)
   const low = Math.min(...values)
   const span = max - low
-  const floor = startsAtZero ? 0 : Math.max(0, span > 0 ? low - span * 0.35 : low * 0.9)
+  const floor = Math.max(0, span > 0 ? low - span * 0.35 : low * 0.9)
   const ceiling = max > floor ? max : floor + 1
   const y = (value) => ((value - floor) / (ceiling - floor)) * 100
-  let x
-  if (byDate) {
-    const first = points[0].date.getTime()
-    const deadline = goal.target_date ? new Date(`${goal.target_date}T23:59:59`).getTime() : 0
-    const last = Math.max(points.at(-1).date.getTime(), deadline, Date.now())
-    x = (point) => (last > first ? 4 + ((point.date.getTime() - first) / (last - first)) * 92 : 50)
-  } else {
-    // The same seven slots as the bars, so a few entries sit on the right.
-    const slot = 100 / MINI_HISTORY_LENGTH
-    const offset = MINI_HISTORY_LENGTH - points.length
-    x = (point, index) => (offset + index + 0.5) * slot
-  }
+  const slot = 100 / MINI_HISTORY_LENGTH
+  const offset = MINI_HISTORY_LENGTH - points.length
+  const x = (point, index) => (offset + index + 0.5) * slot
   const coords = points.map((point, index) => ({ point, left: x(point, index), bottom: y(point.value) }))
   const describe = (point) =>
     `${new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' }).format(point.date)} ${formatGoalValue(goal, point.value)}`
   return (
-    <div role="img" aria-label={`${t('skillGoals.dashboard.history')}: ${points.map(describe).join(', ')}`} className={`relative ${className}`}>
+    <div role="img" aria-label={`${t('skillGoals.dashboard.history')}: ${points.map(describe).join(', ')}`} className="relative h-14">
       {target != null && (
         <div
           aria-hidden="true"
@@ -379,7 +369,6 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
   const lastEntry = lastGoalEntry(goal, statements)
   const streak = goalStreak(goal, statements)
   const history = goalMiniHistory(goal, statements)
-  const isRepeating = history.kind === 'periods'
   const due = nextLog != null && nextLog <= today
   const formId = `dashboard-goal-form-${goal.id}`
   const currentLabelKey = goal.aggregation === 'best'
@@ -506,41 +495,20 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
       </div>
 
       {/* A fixed height whatever the goal, so tiles stay level. A total
-          building up to one target shows only how far along it is; a
-          repeating goal's bars already show this period against the target,
-          so only the remaining goals get a progress bar above their chart. */}
+          filling up to one target shows how full it is as a progress bar;
+          a goal heading for one value shows its trend; a repeating goal,
+          its recent periods as bars. */}
       <div className="mt-3 h-16 flex flex-col justify-end">
         {history.kind === 'progress' ? (
-          <>
-            {history.points.length > 0 && (
-              <MiniTrend goal={goal} points={history.points} target={history.target} byDate startsAtZero className="h-6 mb-2" />
-            )}
-            <BuildUpProgress goal={goal} progress={progress} />
-          </>
+          <BuildUpProgress goal={goal} progress={progress} />
+        ) : history.kind === 'entries' ? (
+          <MiniTrend
+            goal={goal}
+            points={history.bars.map((bar) => ({ date: bar.start, value: bar.value }))}
+            target={history.target}
+          />
         ) : (
-          <>
-            {!isRepeating && progress.percent != null && (
-              <div
-                role="progressbar"
-                aria-label={t('skillGoals.progressLabel')}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={Math.round(progress.percent)}
-                className="mb-2.5 h-1.5 shrink-0 rounded-full bg-hairline/60 overflow-hidden"
-              >
-                <div className="h-full bg-moss" style={{ width: `${progress.percent}%` }} />
-              </div>
-            )}
-            {history.kind === 'entries' ? (
-              <MiniTrend
-                goal={goal}
-                points={history.bars.map((bar) => ({ date: bar.start, value: bar.value }))}
-                target={history.target}
-              />
-            ) : (
-              <MiniHistory goal={goal} history={history} />
-            )}
-          </>
+          <MiniHistory goal={goal} history={history} />
         )}
       </div>
 

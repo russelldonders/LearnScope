@@ -77,7 +77,7 @@ describe('goal tiles', () => {
     const tile = screen.getByRole('article', { name: 'Best' })
     expect(within(tile).getByText('25 push-ups')).toHaveClass('text-2xl')
     expect(within(tile).getByText(/^Target 40 push-ups · By .*2027$/)).toBeInTheDocument()
-    expect(within(tile).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '50')
+    expect(within(tile).queryByRole('progressbar')).not.toBeInTheDocument()
   })
 
   it('shows a goal done in sets as sessions this week, with today and the shape as its target', () => {
@@ -179,7 +179,8 @@ describe('goal tiles', () => {
     expect(parseFloat(dots[1].style.left)).toBeGreaterThan(parseFloat(dots[0].style.left))
     expect(chart.querySelector('polyline').getAttribute('points').split(' ')).toHaveLength(2)
     expect(chart.getAttribute('aria-label')).toMatch(/25 push-ups/)
-    expect(within(tile).getByRole('progressbar')).toBeInTheDocument()
+    // The trend says how it's going, so there's no progress bar as well.
+    expect(within(tile).queryByRole('progressbar')).not.toBeInTheDocument()
   })
 
   it('scales single readings around the target, so a weight to lose sits above its line', () => {
@@ -203,20 +204,8 @@ describe('goal tiles', () => {
     expect(within(tile).getByText('20%')).toBeInTheDocument()
     // This year's deadline, so no year in the date.
     expect(within(tile).getByText(/^8 push-ups to go by (31 Dec|Dec 31)$/)).toBeInTheDocument()
-    // And its running total as a trend line towards the target.
-    const trend = within(tile).getByRole('img')
-    expect(trend.querySelectorAll('[data-dot]')).toHaveLength(1)
-    expect(trend.querySelector('.border-dashed')).not.toBeNull()
-  })
-
-  it('draws a build-up total as its running total, one dot per entry', () => {
-    renderPanel([item({ title: 'Lifetime', aggregation: 'total', target_value: 1000 }, [
-      pushUps('a', 250, daysAgo(4)),
-      pushUps('b', 250, daysAgo(2)),
-    ])])
-    const trend = within(screen.getByRole('article', { name: 'Lifetime' })).getByRole('img')
-    expect(trend.querySelectorAll('[data-dot]')).toHaveLength(2)
-    expect(trend.getAttribute('aria-label')).toMatch(/250 push-ups, .*500 push-ups/)
+    // Filling a bucket: the bar says it all, no trend line.
+    expect(within(tile).queryByRole('img')).not.toBeInTheDocument()
   })
 
   it('says how much is left without a date when the goal has none', () => {
