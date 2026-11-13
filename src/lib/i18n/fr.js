@@ -231,6 +231,13 @@ export default {
     },
     accountLinkingHeading: 'Vos identifiants LearnScope',
     accountLinkingDescription: "Vérifiez les identifiants personnels et professionnels qui vous appartiennent tout en gardant leurs profils et permissions séparés.",
+    contributions: {
+      heading: 'Compétences auxquelles cette application contribue',
+      description: 'Activités synchronisées depuis cette application, regroupées par la compétence à laquelle elles se rapportent.',
+      activitySingular: '{count} activité',
+      activityPlural: '{count} activités',
+      viewSkill: 'Voir {skill}',
+    },
     ltiAccounts: {
       heading: 'Comptes LMS',
       description: 'Gérez les identités LMS liées à votre compte. La déconnexion arrête le partage futur du niveau de compétence pour cette identité.',

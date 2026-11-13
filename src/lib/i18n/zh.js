@@ -231,6 +231,13 @@ export default {
     },
     accountLinkingHeading: '你的 LearnScope 登录账号',
     accountLinkingDescription: '验证属于你的个人和工作登录账号，同时保持它们的个人资料和权限相互独立。',
+    contributions: {
+      heading: '此应用贡献的技能',
+      description: '从此应用同步的活动，按其计入的技能分组。',
+      activitySingular: '{count} 项活动',
+      activityPlural: '{count} 项活动',
+      viewSkill: '查看{skill}',
+    },
     ltiAccounts: {
       heading: 'LMS 账号',
       description: '管理关联到你账号的 LMS 身份。断开后，将停止为该身份共享今后的技能水平。',

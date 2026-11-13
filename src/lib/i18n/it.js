@@ -231,6 +231,13 @@ export default {
     },
     accountLinkingHeading: 'I tuoi accessi LearnScope',
     accountLinkingDescription: 'Verifica gli accessi personali e di lavoro che ti appartengono, mantenendo separati i loro profili e permessi.',
+    contributions: {
+      heading: 'Competenze a cui contribuisce questa app',
+      description: 'Attività sincronizzate da questa app, raggruppate per la competenza per cui contano.',
+      activitySingular: '{count} attività',
+      activityPlural: '{count} attività',
+      viewSkill: 'Vedi {skill}',
+    },
     ltiAccounts: {
       heading: 'Account LMS',
       description: "Gestisci le identità LMS collegate al tuo account. Scollegarne una interrompe la condivisione futura dei livelli di competenza per quell'identità.",

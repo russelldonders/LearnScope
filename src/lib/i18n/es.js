@@ -231,6 +231,13 @@ export default {
     },
     accountLinkingHeading: 'Tus inicios de sesión de LearnScope',
     accountLinkingDescription: 'Verifica los inicios de sesión personales y de trabajo que te pertenecen, manteniendo sus perfiles y permisos separados.',
+    contributions: {
+      heading: 'Habilidades a las que contribuye esta aplicación',
+      description: 'Actividades sincronizadas desde esta aplicación, agrupadas por la habilidad a la que cuentan.',
+      activitySingular: '{count} actividad',
+      activityPlural: '{count} actividades',
+      viewSkill: 'Ver {skill}',
+    },
     ltiAccounts: {
       heading: 'Cuentas LMS',
       description: 'Gestiona las identidades LMS vinculadas a tu cuenta. Desconectar detiene el envío futuro de niveles de competencia para esa identidad.',

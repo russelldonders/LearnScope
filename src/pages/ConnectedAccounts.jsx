@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import StravaConnectButton from '../components/StravaConnectButton'
 import StravaIcon from '../components/StravaIcon'
 import StravaActivityReviewModal from '../components/StravaActivityReviewModal'
+import ConnectorContributions from '../components/ConnectorContributions'
 import { buildStravaAuthorizeUrl, connectStrava, disconnectStrava, getMyExternalConnections, syncStrava } from '../lib/strava'
 import { formatRelativeDate } from '../lib/dates'
 import AccountLinkingSection from './account-linking/AccountLinkingSection'
@@ -71,6 +72,7 @@ export default function ConnectedAccounts() {
   const [disconnecting, setDisconnecting] = useState(false)
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false)
   const [reviewActivities, setReviewActivities] = useState(null)
+  const [contributionsRefreshKey, setContributionsRefreshKey] = useState(0)
   const [error, setError] = useState(null)
   const [successMessage, setSuccessMessage] = useState(null)
   const [accountLinks, setAccountLinks] = useState([])
@@ -638,6 +640,7 @@ export default function ConnectedAccounts() {
               <StravaConnectButton onClick={handleConnectClick} />
             </div>
           )}
+          <ConnectorContributions source="strava" refreshKey={contributionsRefreshKey} />
         </div>
 
         {confirmingDisconnect && (
@@ -656,6 +659,7 @@ export default function ConnectedAccounts() {
             onClose={() => setReviewActivities(null)}
             onImported={(count) => {
               setReviewActivities(null)
+              setContributionsRefreshKey((key) => key + 1)
               setSuccessMessage(t(count === 1 ? 'connectedAccounts.strava.importedActivitiesSingular' : 'connectedAccounts.strava.importedActivitiesPlural', { count }))
             }}
           />

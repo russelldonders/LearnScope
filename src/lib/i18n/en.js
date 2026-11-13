@@ -231,6 +231,13 @@ export default {
     },
     accountLinkingHeading: 'Your LearnScope logins',
     accountLinkingDescription: 'Verify personal and work logins that belong to you while keeping their profiles and permissions separate.',
+    contributions: {
+      heading: 'Skills this app contributes to',
+      description: 'Activities synced from this app, grouped by the skill they count toward.',
+      activitySingular: '{count} activity',
+      activityPlural: '{count} activities',
+      viewSkill: 'View {skill}',
+    },
     ltiAccounts: {
       heading: 'LMS accounts',
       description: 'Manage LMS identities linked to your account. Disconnecting stops future proficiency sharing for that identity.',

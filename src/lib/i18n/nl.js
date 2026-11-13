@@ -231,6 +231,13 @@ export default {
     },
     accountLinkingHeading: 'Je LearnScope-logins',
     accountLinkingDescription: 'Verifieer persoonlijke en werklogins die van jou zijn, terwijl hun profielen en rechten gescheiden blijven.',
+    contributions: {
+      heading: 'Vaardigheden waaraan deze app bijdraagt',
+      description: 'Activiteiten die uit deze app zijn gesynchroniseerd, gegroepeerd per vaardigheid waarvoor ze tellen.',
+      activitySingular: '{count} activiteit',
+      activityPlural: '{count} activiteiten',
+      viewSkill: '{skill} bekijken',
+    },
     ltiAccounts: {
       heading: 'LMS-accounts',
       description: 'Beheer de LMS-identiteiten die aan je account zijn gekoppeld. Ontkoppelen stopt het toekomstig delen van vaardigheidsniveaus voor die identiteit.',

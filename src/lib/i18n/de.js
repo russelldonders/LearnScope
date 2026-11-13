@@ -231,6 +231,13 @@ export default {
     },
     accountLinkingHeading: 'Deine LearnScope-Logins',
     accountLinkingDescription: 'Bestätige persönliche und geschäftliche Logins, die dir gehören, während ihre Profile und Berechtigungen getrennt bleiben.',
+    contributions: {
+      heading: 'Fähigkeiten, zu denen diese App beiträgt',
+      description: 'Aus dieser App synchronisierte Aktivitäten, gruppiert nach der Fähigkeit, für die sie zählen.',
+      activitySingular: '{count} Aktivität',
+      activityPlural: '{count} Aktivitäten',
+      viewSkill: '{skill} ansehen',
+    },
     ltiAccounts: {
       heading: 'LMS-Konten',
       description: 'Verwalte die mit deinem Konto verknüpften LMS-Identitäten. Das Trennen beendet das zukünftige Teilen des Kompetenzniveaus für diese Identität.',

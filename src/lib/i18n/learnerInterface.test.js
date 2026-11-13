@@ -24,6 +24,7 @@ const SOURCES = Object.values(import.meta.glob([
   '../../components/onboarding/SkillsToLearnStep.jsx',
   '../../pages/ProfilePrivacy.jsx',
   '../../pages/ConnectedAccounts.jsx',
+  '../../components/ConnectorContributions.jsx',
   '../../pages/account-linking/**/*.jsx',
   '!../../pages/account-linking/**/*.test.jsx',
   '../profileTransferPlans.js',
