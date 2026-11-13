@@ -1706,6 +1706,7 @@ export default {
       total: '{total} {unit}, from the sets',
       targetLine: {
         day: '{sets} × {perSet} {unit} a day',
+        dayTimes: '{sets} × {perSet} {unit} · {sessions} times a day',
         week: '{sets} × {perSet} {unit} · {sessions} days a week',
         month: '{sets} × {perSet} {unit} · {sessions} days a month',
         year: '{sets} × {perSet} {unit} · {sessions} days a year',
