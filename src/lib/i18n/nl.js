@@ -1707,7 +1707,6 @@ export default {
       total: '{total} {unit}, uit de sets',
       targetLine: {
         day: '{sets} × {perSet} {unit} per dag',
-        dayTimes: '{sets} × {perSet} {unit} · {sessions} keer per dag',
         week: '{sets} × {perSet} {unit} · {sessions} dagen per week',
         month: '{sets} × {perSet} {unit} · {sessions} dagen per maand',
         year: '{sets} × {perSet} {unit} · {sessions} dagen per jaar',

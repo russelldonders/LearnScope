@@ -8,7 +8,6 @@ import {
   measurementsFromStatement,
 } from './xapiStatement'
 import {
-  goalShapeText,
   applyEntryCorrection,
   buildGoalMeasurement,
   computeGoalProgress,
@@ -727,27 +726,5 @@ describe('a goal done in sets: 3 x 100, 4 times a week', () => {
       ['met', true],
       ['inProgress', false],
     ])
-  })
-
-  it('fits several sessions into one day for a daily goal: 3 x 20, twice a day', () => {
-    const twiceDaily = { ...situps, period: 'day', target_value: 120, per_set: 20, sets_per_session: 3, sessions_per_period: 2 }
-    const t = (key, values) => `${key} ${JSON.stringify(values)}`
-
-    const halfway = computeGoalProgress(twiceDaily, sets('2026-11-11', 20, 20, 20, 20), now)
-    expect(halfway.sessions).toMatchObject({ done: 1, todayTarget: 120, todaySetsTarget: 6 })
-    expect(halfway.reached).toBe(false)
-    expect(goalShapeText(twiceDaily, halfway.sessions, t).target).toContain('targetLine.dayTimes')
-
-    const done = computeGoalProgress(twiceDaily, sets('2026-11-11', 20, 20, 20, 20, 20, 20), now)
-    expect(done.sessions.done).toBe(2)
-    expect(done.reached).toBe(true)
-
-    const bars = goalPeriodBars(twiceDaily, [...sets('2026-11-09', 20, 20, 20), ...sets('2026-11-10', 20, 20, 20, 20, 20, 20)], now).slice(-3)
-    expect(bars.map((bar) => [bar.status, bar.sessions])).toEqual([['missed', 1], ['met', 2], ['inProgress', 0]])
-  })
-
-  it('still counts a weekly goal by days, so one big day is one session', () => {
-    const bars = goalPeriodBars(situps, sets('2026-11-02', 300, 300, 300), now).slice(-2)
-    expect(bars[0].sessions).toBe(1)
   })
 })

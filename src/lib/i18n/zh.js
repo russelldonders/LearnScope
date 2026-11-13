@@ -1688,7 +1688,6 @@ export default {
       total: '{total} {unit}（按分组计算）',
       targetLine: {
         day: '每天 {sets} × {perSet} {unit}',
-        dayTimes: '每天 {sessions} 次，每次 {sets} × {perSet} {unit}',
         week: '{sets} × {perSet} {unit} · 每周 {sessions} 天',
         month: '{sets} × {perSet} {unit} · 每月 {sessions} 天',
         year: '{sets} × {perSet} {unit} · 每年 {sessions} 天',

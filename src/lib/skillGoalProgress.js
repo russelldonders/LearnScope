@@ -115,11 +115,9 @@ export function isTargetReached(goal, current) {
   return goal.direction === 'lower' ? current <= target : current >= target
 }
 
-// A goal with a shape -- "3 sets of 100, 4 times a week" -- or null. For a
-// weekly, monthly or yearly goal a session is a day whose total reaches
-// perSession (here 300), and the period is met with `sessions` such days. A
-// daily goal ("3 x 20, twice a day") fits all its sessions into the one day,
-// so every full perSession in the day counts.
+// A goal with a shape -- "3 sets of 100, 4 times a week" -- or null. A
+// session is a day whose total reaches perSession (here 300); the period is
+// met with `sessions` such days.
 export function goalSessionShape(goal) {
   if (goal.per_set == null || goal.sets_per_session == null || goal.sessions_per_period == null) return null
   const perSet = Number(goal.per_set)
@@ -132,7 +130,7 @@ export function goalSessionShape(goal) {
 // today ("Today 150 of 300 sit-ups · 2 of 3 sets").
 export function goalShapeText(goal, sessions, t) {
   return {
-    target: t(`skillGoals.shape.targetLine.${goal.period === 'day' && sessions.sessions > 1 ? 'dayTimes' : goal.period}`, {
+    target: t(`skillGoals.shape.targetLine.${goal.period}`, {
       sets: sessions.setsPerSession,
       perSet: formatNumber(sessions.perSet),
       unit: goal.unit,
@@ -141,10 +139,10 @@ export function goalShapeText(goal, sessions, t) {
     done: t('skillGoals.shape.sessionsDone', { done: sessions.done, needed: sessions.sessions }),
     today: t('skillGoals.shape.today', {
       total: formatNumber(sessions.todayTotal),
-      perSession: formatNumber(sessions.todayTarget),
+      perSession: formatNumber(sessions.perSession),
       unit: goal.unit,
       count: sessions.todaySets,
-      sets: sessions.todaySetsTarget,
+      sets: sessions.setsPerSession,
     }),
   }
 }
@@ -160,12 +158,9 @@ function dayTotalsBetween(readings, from, to) {
   return totals
 }
 
-function countSessions(totals, perSession, period) {
+function countSessions(totals, perSession) {
   let count = 0
-  for (const total of totals.values()) {
-    if (period === 'day') count += Math.floor(total / perSession)
-    else if (total >= perSession) count += 1
-  }
+  for (const total of totals.values()) if (total >= perSession) count += 1
   return count
 }
 
@@ -205,14 +200,10 @@ export function computeGoalProgress(goal, statements, now = new Date()) {
     const totals = dayTotalsBetween(readings, from, nextPeriodStart(periodStart, goal.period))
     const todayStart = startOfPeriod(now, 'day')
     const today = readings.filter((r) => r.date >= todayStart && r.date >= startedAt && r.date < nextPeriodStart(todayStart, 'day'))
-    const done = countSessions(totals, shape.perSession, goal.period)
-    // What today asks for: one session, or all of them for a daily goal.
-    const todaySessions = goal.period === 'day' ? shape.sessions : 1
+    const done = countSessions(totals, shape.perSession)
     const sessions = {
       ...shape,
       done,
-      todayTarget: shape.perSession * todaySessions,
-      todaySetsTarget: shape.setsPerSession * todaySessions,
       todayTotal: today.reduce((sum, r) => sum + r.value, 0),
       todaySets: today.length,
     }
@@ -425,11 +416,11 @@ function allPeriodBars(goal, statements, now) {
     // A goal with a shape then is judged on sessions, not on the total.
     const shape = goalSessionShape(isCurrent ? goal : goalOn(goal, localDateString(lastDay)))
     if (shape) {
-      const sessions = countSessions(dayTotalsBetween(readings, start, end), shape.perSession, goal.period)
+      const sessions = countSessions(dayTotalsBetween(readings, start, end), shape.perSession)
       const status = sessions >= shape.sessions ? 'met' : isCurrent ? 'inProgress' : 'missed'
-      // More sessions than needed, or more done in them than the period asks
-      // for. A daily goal never has more than one session in a day, so 80
-      // push-ups against "3 x 20 a day" only shows up as the total.
+      // More sessions than needed, or more done than the period's total. A
+      // daily goal never has more than one session in a day, so 80 push-ups
+      // against "3 x 20 a day" only shows up as the total.
       const exceeded = sessions > shape.sessions || (status === 'met' && value > shape.perSession * shape.sessions)
       bars.push({ start: new Date(start), value, parts, status, exceeded, current: isCurrent, target, sessions })
       continue
@@ -490,7 +481,7 @@ function isPeriodGoalDue(goal, progress, now) {
   const daysLeft = daysBetween(now, end)
   const sessions = progress.sessions
   if (sessions) {
-    if (sessions.todayTotal >= sessions.todayTarget) return false
+    if (sessions.todayTotal >= sessions.perSession) return false
     if (sessions.todaySets > 0) return true
     return sessions.sessions - sessions.done >= daysLeft - 1
   }

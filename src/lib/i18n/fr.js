@@ -1709,7 +1709,6 @@ export default {
       total: '{total} {unit}, d’après les séries',
       targetLine: {
         day: '{sets} × {perSet} {unit} par jour',
-        dayTimes: '{sets} × {perSet} {unit} · {sessions} fois par jour',
         week: '{sets} × {perSet} {unit} · {sessions} jours par semaine',
         month: '{sets} × {perSet} {unit} · {sessions} jours par mois',
         year: '{sets} × {perSet} {unit} · {sessions} jours par an',
