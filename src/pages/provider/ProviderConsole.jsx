@@ -11,6 +11,7 @@ import {
 } from '../../lib/catalogues'
 import BulkAssignToCatalogueDialog from '../../components/BulkAssignToCatalogueDialog'
 import BulkPublishCourseDialog from '../../components/BulkPublishCourseDialog'
+import CourseGeneratorDialog from '../../components/CourseGeneratorDialog'
 // listProviderCatalogues attaches courseCount (course_catalogue_publications
 // count) to each row, which the bulk-delete confirmation below needs to warn
 // accurately about live courses.
@@ -485,6 +486,7 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showForm, setShowForm] = useState(false)
+  const [showGenerator, setShowGenerator] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [creating, setCreating] = useState(false)
   const [actioningId, setActioningId] = useState(null)
@@ -657,9 +659,9 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-3 mb-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <h3 className="font-display text-lg text-ink">Training</h3>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {isPlatformAdmin && (
             <ColumnCustomizer
               idPrefix="provider-training"
@@ -670,13 +672,22 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
             />
           )}
           {!readOnly && (
-            <button
-              type="button"
-              onClick={() => setShowForm((v) => !v)}
-              className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90"
-            >
-              {showForm ? 'Cancel' : '+ Create training'}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => { setShowGenerator(true); setShowForm(false) }}
+                className="rounded-md border border-hairline px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper active:translate-y-px"
+              >
+                Build with AI
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowForm((v) => !v)}
+                className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 active:translate-y-px"
+              >
+                {showForm ? 'Cancel' : '+ Create training'}
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -760,6 +771,17 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
             {creating ? 'Creating…' : 'Create'}
           </button>
         </form>
+      )}
+
+      {showGenerator && (
+        <CourseGeneratorDialog
+          organisationId={organisation.id}
+          onClose={() => setShowGenerator(false)}
+          onCreated={(courseId) => {
+            setShowGenerator(false)
+            navigate(`/organisation/training/${courseId}${detailContext ? `?${detailContext.slice(1)}` : ''}`)
+          }}
+        />
       )}
 
       <div className="flex flex-wrap items-center gap-2 mb-4" role="search">

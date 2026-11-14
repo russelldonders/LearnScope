@@ -1,6 +1,7 @@
 {
   "functions": {
     "api/parse-cv.js": { "maxDuration": 60 },
+    "api/generate-course-draft.js": { "maxDuration": 60 },
     "api/admin/actions.js": { "includeFiles": "dist/index.html", "maxDuration": 60 }
   },
   "routes": [
