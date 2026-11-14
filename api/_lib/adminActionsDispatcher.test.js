@@ -4,11 +4,11 @@ const { generateCourseDraftHandler } = vi.hoisted(() => ({
   generateCourseDraftHandler: vi.fn(),
 }))
 
-vi.mock('../_lib/generateCourseDraftHandler.js', () => ({
+vi.mock('./generateCourseDraftHandler.js', () => ({
   default: generateCourseDraftHandler,
 }))
 
-import handler from './actions.js'
+import handler from '../admin/actions.js'
 
 describe('admin action dispatcher', () => {
   beforeEach(() => generateCourseDraftHandler.mockReset())

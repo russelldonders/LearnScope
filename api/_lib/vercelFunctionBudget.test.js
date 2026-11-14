@@ -6,7 +6,7 @@ function listApiFunctions(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = resolve(directory, entry.name)
     if (entry.isDirectory()) return entry.name === '_lib' ? [] : listApiFunctions(path)
-    return entry.name.endsWith('.js') && !entry.name.endsWith('.test.js') ? [path] : []
+    return entry.name.endsWith('.js') ? [path] : []
   })
 }
 
