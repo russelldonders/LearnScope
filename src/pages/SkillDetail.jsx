@@ -1336,8 +1336,10 @@ function ActionGroup({ title, actions, headerExtra }) {
   return (
     <div>
       {title && <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">{title}</h3>}
-      {headerExtra}
-      <div className="flex flex-wrap gap-2">
+      {/* The box's actions come straight under its heading, before what it
+          shows (a timeline can be long). */}
+      {actions.length > 0 && (
+      <div className={`flex flex-wrap gap-2 ${headerExtra ? 'mb-3' : ''}`}>
         {actions.map((action) => (
           <button
             key={action.label}
@@ -1351,6 +1353,8 @@ function ActionGroup({ title, actions, headerExtra }) {
           </button>
         ))}
       </div>
+      )}
+      {headerExtra}
     </div>
   )
 }
@@ -1385,7 +1389,7 @@ function NestedSkillPanel({ title, accent, status, actions }) {
       <ActionGroup
         title={title}
         accent={accent}
-        headerExtra={status && <div className="mb-2">{status}</div>}
+        headerExtra={status && <div>{status}</div>}
         actions={actions}
       />
     </div>
