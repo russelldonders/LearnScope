@@ -18,7 +18,7 @@ vi.mock('../lib/supabaseClient', () => {
   }
   const query = (table) => {
     const result = Promise.resolve({ data: rows[table] ?? [], error: null })
-    const chain = { select: () => chain, eq: () => chain, or: () => chain, order: () => result }
+    const chain = { select: () => chain, eq: () => chain, is: () => chain, or: () => chain, order: () => result }
     chain.then = result.then.bind(result)
     return chain
   }

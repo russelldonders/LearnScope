@@ -54,7 +54,7 @@ export function useMyRoleAssignments(employerId) {
         listCurrentRoleExperiences(user.id),
         listMyEmployerRoleAssignments(user.id),
         supabase.from('skills').select('id, name, level, library_skill_id').eq('user_id', user.id),
-        supabase.from('courses').select('id, catalogue_course_id, completed_date').eq('user_id', user.id),
+        supabase.from('courses').select('id, catalogue_course_id, completed_date').eq('user_id', user.id).is('status', null),
         employerId
           ? supabase.from('employer_data_access_requests').select('approved_data')
             .eq('employer_id', employerId).eq('learner_id', user.id).eq('status', 'approved').maybeSingle()

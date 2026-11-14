@@ -81,6 +81,7 @@ export default function EmployerAssignedTrainingPanel({
         const { data, error: coursesError } = await supabase
           .from('courses')
           .select('id, catalogue_course_id, completed_date')
+          .is('status', null)
           .eq('user_id', user.id)
           .in('catalogue_course_id', catalogueIds)
         if (coursesError) throw coursesError

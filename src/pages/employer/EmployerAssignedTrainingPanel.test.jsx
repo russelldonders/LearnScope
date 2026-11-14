@@ -21,6 +21,7 @@ vi.mock('../../lib/supabaseClient', () => ({
     from: () => ({
       select() { return this },
       eq() { return this },
+      is() { return this },
       in: () => Promise.resolve({ data: courseRowsMock.rows, error: null }),
     }),
   },

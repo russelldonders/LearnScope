@@ -9,10 +9,18 @@ import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import SkillNetworkSection, { RatingsFromOthers } from '../components/SkillNetworkSection'
 import SkillLearningSection from '../components/SkillLearningSection'
+import ConfirmDialog from '../components/ConfirmDialog'
 import QuickActivityLog from '../components/QuickActivityLog'
 import { listSkillGoals } from '../lib/skillGoals'
 import { computeGoalProgress } from '../lib/skillGoalProgress'
-import { listCatalogueCourses, listEnrolledCatalogueIds, startedCatalogueCourseIds } from '../lib/courseCatalogue'
+import {
+  cancelCourse,
+  listCatalogueCourses,
+  listMyCatalogueCourseIds,
+  planCatalogueCourse,
+  removePlannedCourse,
+  startedCatalogueCourseIds,
+} from '../lib/courseCatalogue'
 import PeopleWithSkillModal from '../components/PeopleWithSkillModal'
 import KnowledgeLevelBar from '../components/KnowledgeLevelBar'
 import SelfAssessSection from '../components/SelfAssessSection'
@@ -145,6 +153,11 @@ export default function SkillDetail({ skillId, embedded = false }) {
   const [knownPeople, setKnownPeople] = useState({})
   const [availableCourses, setAvailableCourses] = useState(null)
   const [startedCatalogueIds, setStartedCatalogueIds] = useState(new Set())
+  // Bumped after planning, removing or cancelling a course, so Recommended
+  // reloads along with the page's course links.
+  const [learningVersion, setLearningVersion] = useState(0)
+  const [cancellingCourse, setCancellingCourse] = useState(null)
+  const [learningError, setLearningError] = useState(null)
   const [quickLogOpen, setQuickLogOpen] = useState(false)
   const [quickLogGoals, setQuickLogGoals] = useState([])
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -224,21 +237,22 @@ export default function SkillDetail({ skillId, embedded = false }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- when the set of underway courses changes
   }, [underwayCatalogueKey, skill?.user_id])
 
-  // Catalogue courses that teach this skill and the learner hasn't started,
-  // for the Learning section. Only on their own skill, and only when it's a
-  // library skill a course can be tagged with.
+  // Catalogue courses that teach this skill and the learner has no record of
+  // (not planned, taken or cancelled), for the Learning section's
+  // Recommended. Only on their own skill, and only when it's a library skill
+  // a course can be tagged with.
   useEffect(() => {
     if (!skill || skill.user_id !== user.id || !skill.library_skill_id) {
       setAvailableCourses(null)
       return
     }
     let live = true
-    Promise.all([listCatalogueCourses(), listEnrolledCatalogueIds(user.id)])
-      .then(([catalogue, enrolled]) => {
+    Promise.all([listCatalogueCourses(), listMyCatalogueCourseIds(user.id)])
+      .then(([catalogue, mine]) => {
         if (!live) return
         setAvailableCourses(
           catalogue
-            .filter((course) => !enrolled.has(course.id))
+            .filter((course) => !mine.has(course.id))
             .map((course) => ({ course, level: course.skillEntries.find((e) => e.skillId === skill.library_skill_id)?.level ?? null }))
             .filter((entry) => entry.course.skillEntries.some((e) => e.skillId === skill.library_skill_id))
             .sort((a, b) => (a.level ?? 0) - (b.level ?? 0)),
@@ -251,7 +265,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
       live = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per skill
-  }, [skill?.id, skill?.library_skill_id])
+  }, [skill?.id, skill?.library_skill_id, learningVersion])
 
   // Names for the people invites were sent to: an invite only keeps the
   // email address, so match it to a connection's. Anyone else stays an
@@ -444,7 +458,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
         supabase
           .from('skill_course_links')
           .select(
-            'id, relationship, created_at, courses(id, name, provider, course_type, duration, completed_date, catalogue_course_id)'
+            'id, relationship, created_at, courses(id, name, provider, course_type, duration, completed_date, catalogue_course_id, status, cancelled_at)'
           )
           .eq('skill_id', skill.id),
         listOutgoingValidationRequests(skill.id),
@@ -490,6 +504,19 @@ export default function SkillDetail({ skillId, embedded = false }) {
     // The fresh activities, for a caller that compares before and after (a
     // goal's "3 more than last time" feedback).
     return st ?? []
+  }
+
+  // Planning, removing or cancelling a course, then reloading what the
+  // Learning section shows.
+  async function runLearningAction(action) {
+    setLearningError(null)
+    try {
+      await action()
+    } catch (err) {
+      setLearningError(err.message)
+    }
+    await loadHistory()
+    setLearningVersion((v) => v + 1)
   }
 
   async function handleAddTag(tagName) {
@@ -872,10 +899,15 @@ export default function SkillDetail({ skillId, embedded = false }) {
               />
             </div>
 
+            {learningError && <p role="alert" className="text-sm text-red-700 mt-3">{learningError}</p>}
             <SkillLearningSection
               courseLinks={courseLinks}
               availableCourses={availableCourses}
               startedCatalogueIds={startedCatalogueIds}
+              onPlan={skill.user_id === user.id ? (course) => runLearningAction(() => planCatalogueCourse(user.id, course, skill.id)) : null}
+              onRemovePlanned={skill.user_id === user.id ? (course) => runLearningAction(() => removePlannedCourse(course.id)) : null}
+              onEnrolPlanned={skill.user_id === user.id ? () => navigate('/training', { state: trainingScopeState }) : null}
+              onCancel={skill.user_id === user.id ? (course) => setCancellingCourse(course) : null}
               onFindCourse={skill.user_id === user.id ? () => navigate('/training', { state: trainingScopeState }) : null}
               onOpenAvailable={() => navigate('/training', { state: trainingScopeState })}
             />
@@ -1050,6 +1082,18 @@ export default function SkillDetail({ skillId, embedded = false }) {
             </div>
             )}
             </div>
+
+            {cancellingCourse && (
+              <ConfirmDialog
+                message={t('skillDetail.learning.cancelConfirm', { course: cancellingCourse.name })}
+                confirmLabel={t('skillDetail.learning.cancelConfirmLabel')}
+                onConfirm={async () => {
+                  await runLearningAction(() => cancelCourse(cancellingCourse.id))
+                  setCancellingCourse(null)
+                }}
+                onCancel={() => setCancellingCourse(null)}
+              />
+            )}
 
             {inviteOpen && (
               <InviteRaterModal

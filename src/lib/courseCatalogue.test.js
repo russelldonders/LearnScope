@@ -49,7 +49,19 @@ describe('respondToCourseAssignment', () => {
     const learnerCourse = { id: 'learner-course-1', catalogue_course_id: 'catalogue-1' }
     supabaseMock.from.mockImplementation((table) => {
       if (table === 'courses') {
+        // Enrolling first looks for a planned or cancelled record of the
+        // course to reuse -- none here, so it inserts a new one.
+        const lookup = {
+          select() { return this },
+          eq() { return this },
+          in() { return this },
+          is() { return this },
+          order() { return this },
+          limit() { return this },
+          maybeSingle: () => Promise.resolve({ data: null, error: null }),
+        }
         return {
+          ...lookup,
           insert: () => ({
             select() { return this },
             single: () => Promise.resolve({ data: learnerCourse, error: null }),

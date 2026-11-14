@@ -54,6 +54,54 @@ describe('SkillLearningSection', () => {
     expect(onOpenAvailable).toHaveBeenCalledWith(available)
   })
 
+  it('adds planned learning and cancelled courses in their places, with their actions', () => {
+    const onPlan = vi.fn()
+    const onEnrolPlanned = vi.fn()
+    const onRemovePlanned = vi.fn()
+    const onCancel = vi.fn()
+    const recommended = { id: 'cat-9', name: 'Advanced Golf', provider: null }
+    const planned = { id: 'c4', name: 'Short Game', provider: null, completed_date: null, status: 'planned' }
+    const enrolled = { id: 'c3', name: 'Driving Range', provider: null, completed_date: null, catalogue_course_id: 'cat-3' }
+    renderSection({
+      courseLinks: [
+        { id: 'l1', courses: { id: 'c1', name: 'Golf Basics', provider: null, completed_date: '2026-10-01' } },
+        { id: 'l3', courses: enrolled },
+        { id: 'l4', courses: planned },
+        { id: 'l5', courses: { id: 'c5', name: 'Bunker Play', provider: null, completed_date: null, status: 'cancelled', cancelled_at: '2026-11-02T10:00:00Z' } },
+      ],
+      availableCourses: [{ course: recommended, level: 3 }],
+      onPlan,
+      onEnrolPlanned,
+      onRemovePlanned,
+      onCancel,
+    })
+    expect(headings()).toEqual([l.available, l.planned, l.enrolled, l.completed, l.cancelled])
+
+    fireEvent.click(within(group(l.available)).getByRole('button', { name: l.addToPlan }))
+    expect(onPlan).toHaveBeenCalledWith(recommended)
+    fireEvent.click(within(group(l.planned)).getByRole('button', { name: l.enrol }))
+    expect(onEnrolPlanned).toHaveBeenCalledWith(planned)
+    fireEvent.click(within(group(l.planned)).getByRole('button', { name: l.removeFromPlan }))
+    expect(onRemovePlanned).toHaveBeenCalledWith(planned)
+    fireEvent.click(within(group(l.enrolled)).getByRole('button', { name: l.cancel }))
+    expect(onCancel).toHaveBeenCalledWith(enrolled)
+
+    // A cancelled course is listed with when, and nothing more can be done to it.
+    expect(within(group(l.cancelled)).getByText(/Bunker Play/)).toBeInTheDocument()
+    expect(within(group(l.cancelled)).queryByRole('button')).not.toBeInTheDocument()
+    // Completed courses can't be cancelled.
+    expect(within(group(l.completed)).queryByRole('button', { name: l.cancel })).not.toBeInTheDocument()
+  })
+
+  it('offers no actions on someone else’s skill', () => {
+    renderSection({
+      courseLinks: [{ id: 'l3', courses: { id: 'c3', name: 'Driving Range', provider: null, completed_date: null } }],
+      availableCourses: [{ course: { id: 'cat-9', name: 'Advanced Golf', provider: null }, level: 3 }],
+    })
+    expect(screen.queryByRole('button', { name: l.addToPlan })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: l.cancel })).not.toBeInTheDocument()
+  })
+
   it('leaves out every group with nothing in it', () => {
     renderSection({
       courseLinks: [{ id: 'l1', courses: { id: 'c1', name: 'Golf Basics', provider: null, completed_date: '2026-10-01' } }],

@@ -21,11 +21,13 @@ async function loadCurrentRoleBannerState() {
   return data ?? { current_role_banner_dismissed_at: null }
 }
 
-async function countRows(table, userId) {
-  const { count } = await supabase
-    .from(table)
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId)
+async function countRows(table, userId, narrow = (query) => query) {
+  const { count } = await narrow(
+    supabase
+      .from(table)
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId),
+  )
   return count ?? 0
 }
 
@@ -83,7 +85,8 @@ export default function Dashboard() {
     setLoading(true)
     const results = await Promise.allSettled([
       countRows('skills', user.id),
-      countRows('courses', user.id),
+      // A planned or cancelled course isn't one taken.
+      countRows('courses', user.id, (query) => query.is('status', null)),
       countRows('experience', user.id),
       listConnections(user.id).then((c) => c.length),
       loadCurrentRoleBannerState(),

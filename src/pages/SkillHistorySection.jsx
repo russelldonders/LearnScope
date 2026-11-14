@@ -85,7 +85,8 @@ export function HistorySection({
         // haven't happened. Rather than fake a date (which risked sorting
         // them below "today", as if already done), they render as pending
         // items above "today", the same way an unmet target does.
-        const pendingCourseLinks = courseLinks.filter((link) => link.courses && !link.courses.completed_date)
+        // Planned and cancelled courses (courses.status) aren't under way.
+        const pendingCourseLinks = courseLinks.filter((link) => link.courses && !link.courses.completed_date && !link.courses.status)
         // An externally-imported skill's own row only says "external_import"
         // (generic across providers, see the skills_source_check migration)
         // -- the actual provider (e.g. Strava) lives on the synced xAPI

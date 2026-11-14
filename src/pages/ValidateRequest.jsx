@@ -75,14 +75,15 @@ export default function ValidateRequest() {
         supabase.from('skill_peer_ratings').select('*').eq('skill_id', req.skill_id).order('rated_at', { ascending: false }),
         supabase
           .from('skill_course_links')
-          .select('id, courses(name, completed_date)')
+          .select('id, courses(name, completed_date, status)')
           .eq('skill_id', req.skill_id),
         fetchStatementsForSkill(req.skill_id),
       ])
       setSkill(sk ?? null)
       setAssessments(ass ?? [])
       setPeerRatings(ratings ?? [])
-      setCourseLinks(courses ?? [])
+      // A planned or cancelled course isn't training the learner did.
+      setCourseLinks((courses ?? []).filter((link) => !link.courses?.status))
       setStatements(st)
 
       const raterIds = [...new Set((ratings ?? []).map((r) => r.rater_id).filter(Boolean))]

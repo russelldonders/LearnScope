@@ -133,6 +133,7 @@ export async function listCourseParticipants(courseId) {
     supabase
       .from('courses')
       .select('id, user_id, catalogue_course_id, created_at, completed_date')
+      .is('status', null)
       .in('catalogue_course_id', versionIds)
       .order('created_at'),
     supabase.from('course_content_links').select('course_id, resource_id').in('course_id', versionIds),

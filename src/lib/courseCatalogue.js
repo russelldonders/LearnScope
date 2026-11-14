@@ -126,47 +126,126 @@ export async function startedCatalogueCourseIds(userId, catalogueIds) {
 
 // Maps catalogue_course_id -> { id, completed_date } for the learner's own
 // courses row, so an already-enrolled catalogue card can link straight to
-// that personal record and show whether it's actually been completed.
+// that personal record and show whether it's actually been completed. Only
+// real enrolments (status null): a planned or cancelled course can be
+// enrolled in from the catalogue.
 export async function listEnrolledCatalogueIds(userId) {
   const { data, error } = await supabase
     .from('courses')
     .select('id, catalogue_course_id, completed_date')
     .eq('user_id', userId)
     .not('catalogue_course_id', 'is', null)
+    .is('status', null)
   if (error) throw error
   return new Map((data ?? []).map((c) => [c.catalogue_course_id, { id: c.id, completedDate: c.completed_date }]))
+}
+
+// Every catalogue course the learner has any record of -- planned, enrolled,
+// completed or cancelled -- so it isn't recommended to them again.
+export async function listMyCatalogueCourseIds(userId) {
+  const { data, error } = await supabase
+    .from('courses')
+    .select('catalogue_course_id')
+    .eq('user_id', userId)
+    .not('catalogue_course_id', 'is', null)
+  if (error) throw error
+  return new Set((data ?? []).map((c) => c.catalogue_course_id))
+}
+
+// The learner's planned or cancelled record of a catalogue course, if any --
+// enrolling reuses it rather than adding a second record. Not one tied to a
+// cohort: re-taking a cohort seat goes through enrol_in_course_cohort, which
+// checks capacity (the database refuses it otherwise).
+async function inactiveRecordFor(userId, catalogueCourseId) {
+  const { data, error } = await supabase
+    .from('courses')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('catalogue_course_id', catalogueCourseId)
+    .in('status', ['planned', 'cancelled'])
+    .is('cohort_id', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
+async function linkCourseToSkill(userId, courseId, skillId) {
+  if (!skillId) return
+  const { data: existing, error: readError } = await supabase
+    .from('skill_course_links')
+    .select('id')
+    .eq('course_id', courseId)
+    .eq('skill_id', skillId)
+    .maybeSingle()
+  if (readError) throw readError
+  if (existing) return
+  const { error } = await supabase.from('skill_course_links').insert({
+    user_id: userId,
+    skill_id: skillId,
+    course_id: courseId,
+    relationship: 'developed',
+  })
+  if (error) throw error
+}
+
+function newCourseRecord(userId, course, extra = {}) {
+  return {
+    user_id: userId,
+    name: course.name,
+    provider: course.provider,
+    course_type: course.course_type,
+    duration: course.duration,
+    catalogue_course_id: course.id,
+    ...extra,
+  }
 }
 
 // skillId (optional) links the new course straight to the skill the learner
 // enrolled from, via skill_course_links -- without this, enrolling scoped to
 // a skill would insert a personal course record but never surface it back
-// on that skill's page.
+// on that skill's page. A course already planned (or cancelled) becomes the
+// enrolment: same record, so its links and history carry on.
 export async function enrolInCatalogueCourse(userId, course, skillId = null) {
+  const existing = await inactiveRecordFor(userId, course.id)
+  const { data, error } = existing
+    ? await supabase.from('courses').update({ status: null, cancelled_at: null }).eq('id', existing.id).select().single()
+    : await supabase.from('courses').insert(newCourseRecord(userId, course)).select().single()
+  if (error) throw error
+  await linkCourseToSkill(userId, data.id, skillId)
+  return data
+}
+
+// Adds a catalogue course to the learner's learning plan, without enrolling.
+export async function planCatalogueCourse(userId, course, skillId = null) {
   const { data, error } = await supabase
     .from('courses')
-    .insert({
-      user_id: userId,
-      name: course.name,
-      provider: course.provider,
-      course_type: course.course_type,
-      duration: course.duration,
-      catalogue_course_id: course.id,
-    })
+    .insert(newCourseRecord(userId, course, { status: 'planned' }))
     .select()
     .single()
   if (error) throw error
-
-  if (skillId) {
-    const { error: linkError } = await supabase.from('skill_course_links').insert({
-      user_id: userId,
-      skill_id: skillId,
-      course_id: data.id,
-      relationship: 'developed',
-    })
-    if (linkError) throw linkError
-  }
-
+  await linkCourseToSkill(userId, data.id, skillId)
   return data
+}
+
+// Takes a course off the plan. Only a planned course: an enrolment is
+// cancelled instead, so the record of having been enrolled is kept.
+export async function removePlannedCourse(courseId) {
+  const { error } = await supabase.from('courses').delete().eq('id', courseId).eq('status', 'planned')
+  if (error) throw error
+}
+
+// Withdraws from a course the learner is enrolled on. The record stays, as
+// cancelled and dated, rather than being deleted.
+export async function cancelCourse(courseId) {
+  const { error } = await supabase
+    .from('courses')
+    .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+    .eq('id', courseId)
+    .is('status', null)
+    .is('completed_date', null)
+  if (error) throw error
 }
 
 // Same same-browser-only/cross-device pattern as connections.js's

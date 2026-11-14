@@ -31,6 +31,8 @@ export default function Learning() {
       .from('courses')
       .select('*, course_catalogue(image_url, organisations(logo_url))')
       .eq('user_id', user.id)
+      // Real enrolments only: a planned or cancelled course isn't one.
+      .is('status', null)
       .order('created_at', { ascending: false })
     if (error) {
       setError(error.message)

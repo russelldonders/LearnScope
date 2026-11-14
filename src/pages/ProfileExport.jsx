@@ -41,7 +41,8 @@ export default function ProfileExport() {
       ] = await Promise.all([
         supabase.rpc('get_my_profile').select('*').single(),
         supabase.from('experience').select('*').eq('user_id', user.id).order('start_date', { ascending: false }),
-        supabase.from('courses').select('*').eq('user_id', user.id).order('completed_date', { ascending: false }),
+        // Learning actually done or under way: a plan or a cancelled course isn't.
+        supabase.from('courses').select('*').eq('user_id', user.id).is('status', null).order('completed_date', { ascending: false }),
         supabase.from('skills').select('*').eq('user_id', user.id).order('name', { ascending: true }),
         supabase
           .from('skill_assessments')

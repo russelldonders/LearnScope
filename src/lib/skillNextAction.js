@@ -103,7 +103,8 @@ export function computeUpNextItems({
     // least one course has ever been completed for this skill, moving on to
     // demonstrating it becomes an option too (in addition to, not instead
     // of, finding further training).
-    const hasPendingCourse = pendingCourseFlag ?? (courseLinks ?? []).some((link) => link.courses && !link.courses.completed_date)
+    // Real enrolments only: a planned or cancelled course (courses.status) isn't one.
+    const hasPendingCourse = pendingCourseFlag ?? (courseLinks ?? []).some((link) => link.courses && !link.courses.completed_date && !link.courses.status)
     const hasCompletedCourse = completedCourseFlag ?? (courseLinks ?? []).some((link) => link.courses?.completed_date)
     const items = []
     if (!hasPendingCourse) {
