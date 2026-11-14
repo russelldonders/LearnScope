@@ -17,7 +17,7 @@ import { computeUpNextItems } from '../lib/skillNextAction'
 import { SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
 import { saveActivity } from '../lib/activitySkillLinks'
 import { isSelfAssessmentDue, todayDateString } from '../lib/checkin'
-import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates'
+import { formatRelativeDate, formatAbsoluteDate, formatFullDate } from '../lib/dates'
 
 // How far ahead a due date has to be before it's worth interrupting the
 // dashboard with -- anything already overdue (next_checkin_date/target_date
@@ -787,6 +787,8 @@ export function NeedsYourAttention() {
           to: `/skills/${skill.id}`,
           skill: { name: skill.name, level: skill.level },
           task: t('dashboard.attention.selfAssess'),
+          detail: t('dashboard.attention.selfAssessDetail'),
+          action: t('dashboard.attention.selfAssessAction'),
           date: skill.next_checkin_date,
           overdue: isSelfAssessmentDue(skill.next_checkin_date),
         })),
@@ -794,7 +796,9 @@ export function NeedsYourAttention() {
           key: `target-${target.id}`,
           to: `/skills/${target.skill_id}`,
           skill: { name: target.skills?.name ?? '', level: target.skills?.level ?? null },
-          task: t('dashboard.attention.reachLevel', { level: LEVEL_LABELS[target.target_level] }),
+          task: t('dashboard.attention.targetTask', { level: LEVEL_LABELS[target.target_level], date: formatFullDate(target.target_date) }),
+          detail: t(target.target_date < today ? 'dashboard.attention.targetDetailOverdue' : 'dashboard.attention.targetDetailDue'),
+          action: t('dashboard.attention.targetAction'),
           date: target.target_date,
           overdue: target.target_date < today,
         })),
@@ -804,7 +808,11 @@ export function NeedsYourAttention() {
             key: `goal-${goal.id}`,
             to: `/skills/${skill.id}`,
             skill,
-            task: t('dashboard.attention.reachGoal', { goal: goal.title }),
+            task: t('dashboard.attention.goalTask', { goal: goal.title }),
+            detail: t(goal.target_date < today ? 'dashboard.attention.goalDetailOverdue' : 'dashboard.attention.goalDetailDue', {
+              date: formatFullDate(goal.target_date),
+            }),
+            action: t('dashboard.attention.goalAction'),
             date: goal.target_date,
             overdue: goal.target_date < today,
           })),
@@ -867,10 +875,15 @@ function AttentionTile({ item }) {
           {item.review ? t('dashboard.attention.reviewTitle') : item.skill.name}
         </h3>
       </div>
+      {/* What it is, why it's here, and what tapping the tile will do. */}
       <p className="text-sm text-ink font-medium">{item.review ? item.label : item.task}</p>
-      <p className="mt-auto pt-3">
+      {item.detail && <p className="text-xs text-secondary mt-1">{item.detail}</p>}
+      <p className="mt-auto pt-3 flex flex-wrap items-center justify-between gap-2">
         <span className={`inline-block rounded-full border px-2 py-0.5 text-xs font-medium ${status.className}`} title={formatAbsoluteDate(item.date)}>
           {status.text}
+        </span>
+        <span className="text-xs font-medium text-moss">
+          {item.review ? t('dashboard.attention.reviewAction') : item.action} <span aria-hidden="true">→</span>
         </span>
       </p>
     </Link>

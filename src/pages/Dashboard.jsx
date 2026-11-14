@@ -161,6 +161,10 @@ export default function Dashboard() {
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8 space-y-12">
         <h1 className="sr-only">{t('nav.home')}</h1>
 
+        {/* First on the page, and only when something's due, overdue or
+            waiting on the learner. */}
+        {!loading && <NeedsYourAttention />}
+
         {!loading && (
           <SkillGoalsDashboardPanel
             items={orderedGoals}
@@ -177,9 +181,6 @@ export default function Dashboard() {
             }
           />
         )}
-
-        {/* Only when something's due, overdue or waiting on the learner. */}
-        {!loading && <NeedsYourAttention />}
 
         {loading ? (
           <DashboardSkeleton />
