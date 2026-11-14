@@ -668,6 +668,7 @@ export default {
     peoplePlural: 'personen',
     inTotalHaveThisSkillSuffix: 'hebben deze vaardigheid in totaal',
     recommendThisSkill: 'Beveel deze vaardigheid aan',
+    findAnExpert: 'Zoek een expert',
     upcoming: 'Binnenkort',
     targetSetByPrefix: 'Doel van {name}',
     met: 'Behaald',
@@ -779,6 +780,9 @@ export default {
   modals: {
     peopleWithSkill: {
       title: 'Mensen met {skillName}',
+      levelFilterLabel: 'Vaardigheidsniveau',
+      levelAny: 'Elk niveau',
+      levelAtLeast: '{level} of hoger',
       close: 'Sluiten',
       subtitle: 'Toont alleen mensen die ervoor hebben gekozen zichtbaar te zijn in vaardighedenzoekopdrachten.',
       searchPlaceholder: 'Zoek op naam…',

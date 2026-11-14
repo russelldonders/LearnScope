@@ -668,6 +668,7 @@ export default {
     peoplePlural: 'Personen',
     inTotalHaveThisSkillSuffix: 'haben diese Fähigkeit insgesamt',
     recommendThisSkill: 'Diese Fähigkeit empfehlen',
+    findAnExpert: 'Expert:in finden',
     upcoming: 'Bevorstehend',
     targetSetByPrefix: 'Ziel von {name}',
     met: 'Erreicht',
@@ -779,6 +780,9 @@ export default {
   modals: {
     peopleWithSkill: {
       title: 'Personen mit {skillName}',
+      levelFilterLabel: 'Fähigkeitsniveau',
+      levelAny: 'Jedes Niveau',
+      levelAtLeast: '{level} oder höher',
       close: 'Schließen',
       subtitle: 'Zeigt nur Personen, die sich entschieden haben, in Skill-Suchen zu erscheinen.',
       searchPlaceholder: 'Nach Namen suchen…',

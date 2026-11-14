@@ -668,6 +668,7 @@ export default {
     peoplePlural: '人',
     inTotalHaveThisSkillSuffix: '人共同具备此技能',
     recommendThisSkill: '推荐此技能',
+    findAnExpert: '寻找专家',
     upcoming: '即将到来',
     targetSetByPrefix: '{name} 设定的目标',
     met: '已达成',
@@ -779,6 +780,9 @@ export default {
   modals: {
     peopleWithSkill: {
       title: '拥有 {skillName} 的人',
+      levelFilterLabel: '技能水平',
+      levelAny: '任何水平',
+      levelAtLeast: '{level}及以上',
       close: '关闭',
       subtitle: '仅显示已选择在技能搜索中显示的用户。',
       searchPlaceholder: '按姓名搜索…',

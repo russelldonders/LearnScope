@@ -8,6 +8,7 @@ import { isSelfAssessmentDue } from '../lib/checkin'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import SkillNetworkSection from '../components/SkillNetworkSection'
+import PeopleWithSkillModal from '../components/PeopleWithSkillModal'
 import KnowledgeLevelBar from '../components/KnowledgeLevelBar'
 import SelfAssessSection from '../components/SelfAssessSection'
 import { LEVEL_LABELS, LEVEL_DESCRIPTIONS, KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
@@ -116,6 +117,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
   const [validatorNames, setValidatorNames] = useState({})
   const [connectionsWithSkill, setConnectionsWithSkill] = useState([])
   const [totalTrackersCount, setTotalTrackersCount] = useState(0)
+  const [findExpertOpen, setFindExpertOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [levelDetailAxis, setLevelDetailAxis] = useState(null)
   const [composite, setComposite] = useState(null)
@@ -881,8 +883,18 @@ export default function SkillDetail({ skillId, embedded = false }) {
               connections={connectionsWithSkill}
               totalTrackersCount={totalTrackersCount}
               onInviteToRate={skill.user_id === user.id ? () => setInviteOpen(true) : null}
+              onFindExpert={() => setFindExpertOpen(true)}
               onRecommend={() => setRecommendOpen(true)}
             />
+
+            {findExpertOpen && (
+              <PeopleWithSkillModal
+                librarySkillId={skill.library_skill_id}
+                skillName={skill.name}
+                skillId={skill.id}
+                onClose={() => setFindExpertOpen(false)}
+              />
+            )}
 
             <CompositeSkillProgress
               composite={composite}

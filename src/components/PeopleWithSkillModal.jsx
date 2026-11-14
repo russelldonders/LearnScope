@@ -15,6 +15,7 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
+  const [minLevel, setMinLevel] = useState(0)
   const [openRequestFor, setOpenRequestFor] = useState(null)
 
   useEffect(() => {
@@ -26,10 +27,14 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
       .finally(() => setLoading(false))
   }, [librarySkillId])
 
+  // "Skilled or above" rather than exactly one level: someone looking for an
+  // expert is happy with anyone at least that good. No level means not known
+  // to be that good, so they drop out once a level is chosen.
+  const byLevel = minLevel ? matches.filter((m) => m.level != null && m.level >= minLevel) : matches
   const visible =
     search.trim() && matches.length > SEARCH_THRESHOLD
-      ? matches.filter((m) => (m.full_name || '').toLowerCase().includes(search.trim().toLowerCase()))
-      : matches
+      ? byLevel.filter((m) => (m.full_name || '').toLowerCase().includes(search.trim().toLowerCase()))
+      : byLevel
 
   function handleRequested(userId) {
     setMatches((prev) => prev.map((m) => (m.user_id === userId ? { ...m, has_pending_request: true } : m)))
@@ -51,6 +56,23 @@ export default function PeopleWithSkillModal({ librarySkillId, skillName, skillI
         <p className="text-xs text-secondary mb-4">
           {t('modals.peopleWithSkill.subtitle')}
         </p>
+
+        <label htmlFor="people-with-skill-level" className="block text-xs text-secondary mb-1">
+          {t('modals.peopleWithSkill.levelFilterLabel')}
+        </label>
+        <select
+          id="people-with-skill-level"
+          value={minLevel}
+          onChange={(e) => setMinLevel(Number(e.target.value))}
+          className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-moss"
+        >
+          <option value={0}>{t('modals.peopleWithSkill.levelAny')}</option>
+          {[5, 4, 3, 2].map((level) => (
+            <option key={level} value={level}>
+              {level === 5 ? LEVEL_LABELS[5] : t('modals.peopleWithSkill.levelAtLeast', { level: LEVEL_LABELS[level] })}
+            </option>
+          ))}
+        </select>
 
         {matches.length > SEARCH_THRESHOLD && (
           <input

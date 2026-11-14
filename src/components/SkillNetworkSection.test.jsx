@@ -40,13 +40,16 @@ describe('SkillNetworkSection', () => {
     expect(count.closest('a, button')).toBeNull()
   })
 
-  it('offers inviting others to rate, and recommending the skill', () => {
+  it('offers inviting others to rate, finding an expert, and recommending the skill', () => {
     const onInviteToRate = vi.fn()
+    const onFindExpert = vi.fn()
     const onRecommend = vi.fn()
-    renderSection({ onInviteToRate, onRecommend })
+    renderSection({ onInviteToRate, onFindExpert, onRecommend })
     fireEvent.click(screen.getByRole('button', { name: english.skillDetail.inviteOthersToAssess }))
+    fireEvent.click(screen.getByRole('button', { name: english.skillDetail.findAnExpert }))
     fireEvent.click(screen.getByRole('button', { name: english.skillDetail.recommendThisSkill }))
     expect(onInviteToRate).toHaveBeenCalledOnce()
+    expect(onFindExpert).toHaveBeenCalledOnce()
     expect(onRecommend).toHaveBeenCalledOnce()
   })
 

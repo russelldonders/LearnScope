@@ -4,7 +4,8 @@ import { useLanguage } from '../context/LanguageContext'
 
 // Who else is working on a skill, beside the goals and styled the same way.
 // Connections are listed by name since they're people the learner knows; the
-// wider count is information only -- no list of strangers' names behind it.
+// wider count is information only. Finding someone outside them is its own
+// action ("Find an expert"), which lists only people who chose to be found.
 // librarySkillId: without one the skill can't be matched to anyone else's, so
 // only the actions show.
 export default function SkillNetworkSection({
@@ -12,6 +13,7 @@ export default function SkillNetworkSection({
   connections,
   totalTrackersCount,
   onInviteToRate = null,
+  onFindExpert = null,
   onRecommend,
 }) {
   const { t } = useLanguage()
@@ -28,6 +30,15 @@ export default function SkillNetworkSection({
               className="rounded-md bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90"
             >
               {t('skillDetail.inviteOthersToAssess')}
+            </button>
+          )}
+          {librarySkillId && onFindExpert && (
+            <button
+              type="button"
+              onClick={onFindExpert}
+              className="rounded-md border border-hairline bg-card text-ink text-xs font-medium px-3 py-1.5 hover:border-moss"
+            >
+              {t('skillDetail.findAnExpert')}
             </button>
           )}
           {librarySkillId && (
