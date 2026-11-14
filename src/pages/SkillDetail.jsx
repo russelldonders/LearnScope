@@ -34,6 +34,7 @@ import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
 import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
 import { computeTrustStatus, isPersonValidated, TRUST_STATUS, TRUST_STATUS_COLORS } from '../lib/skillProficiencyModel'
 import { countSkillTrackers, listConnectionsWithSkill } from '../lib/skillStats'
+import { getProfiles } from '../lib/connections'
 import { getLearnerCompositeProgress, getParentCompositesForSkill } from '../lib/skillComposites'
 import { listTargetsSetByOthers, listLatestManagerRatings, pickTargetSetByOthers } from '../lib/managerSkillActions'
 import { computeVisibleTarget } from '../lib/skillTargetPrecedence'
@@ -118,6 +119,8 @@ export default function SkillDetail({ skillId, embedded = false }) {
   const [connectionsWithSkill, setConnectionsWithSkill] = useState([])
   const [totalTrackersCount, setTotalTrackersCount] = useState(0)
   const [findExpertOpen, setFindExpertOpen] = useState(false)
+  const [recommendInvites, setRecommendInvites] = useState([])
+  const [recommendAcceptors, setRecommendAcceptors] = useState({})
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [levelDetailAxis, setLevelDetailAxis] = useState(null)
   const [composite, setComposite] = useState(null)
@@ -297,7 +300,14 @@ export default function SkillDetail({ skillId, embedded = false }) {
         // RecommendSkillModal) tracks a different action entirely and
         // shouldn't count toward the "Invite others to assess" milestone
         // below (invitesSentCount).
-        supabase.from('connection_invites').select('id, status').eq('skill_id', skill.id).eq('invite_type', 'rate'),
+        // Recommendations too, for the Skill network section's lists -- split
+        // apart below so `invites` stays rate-only as before.
+        supabase
+          .from('connection_invites')
+          .select('id, status, invite_type, invitee_email, created_at, accepted_by, accepted_at')
+          .eq('skill_id', skill.id)
+          .in('invite_type', ['rate', 'recommend'])
+          .order('created_at', { ascending: false }),
         supabase
           .from('skill_experience_links')
           .select('id, created_at, experience(id, title, organization, type, start_date, end_date)')
@@ -321,7 +331,13 @@ export default function SkillDetail({ skillId, embedded = false }) {
       ])
     setHistory(assessments ?? [])
     setPeerRatings(ratings ?? [])
-    setInvites(sentInvites ?? [])
+    setInvites((sentInvites ?? []).filter((invite) => invite.invite_type === 'rate'))
+    const recommendations = (sentInvites ?? []).filter((invite) => invite.invite_type === 'recommend')
+    setRecommendInvites(recommendations)
+    // Who accepted a recommendation, by name, for that list.
+    getProfiles(recommendations.map((invite) => invite.accepted_by))
+      .then(setRecommendAcceptors)
+      .catch(() => setRecommendAcceptors({}))
     setRelationshipLinks(links ?? [])
     setStatements(st ?? [])
     setTargets(skillTargets ?? [])
@@ -879,7 +895,14 @@ export default function SkillDetail({ skillId, embedded = false }) {
             )}
 
             <SkillNetworkSection
+              skillName={skill.name}
               librarySkillId={skill.library_skill_id}
+              isOwner={skill.user_id === user.id}
+              ratings={peerRatings}
+              raterAvatars={raterAvatars}
+              rateInvites={invites}
+              recommendInvites={recommendInvites}
+              recommendAcceptors={recommendAcceptors}
               connections={connectionsWithSkill}
               totalTrackersCount={totalTrackersCount}
               onInviteToRate={skill.user_id === user.id ? () => setInviteOpen(true) : null}
