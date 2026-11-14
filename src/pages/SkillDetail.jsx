@@ -60,7 +60,8 @@ const SKILL_DETAIL_TABS = [
   { key: 'knowledge' },
   { key: 'application' },
   { key: 'network', needsLibrarySkill: true },
-  { key: 'history' },
+  // Opened from the timeline icon beside settings, not the tab row.
+  { key: 'history', inTabRow: false },
 ]
 
 export default function SkillDetail({ skillId, embedded = false }) {
@@ -99,6 +100,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
   // Opening a goal for editing (e.g. Home's "Add a target") lands where goals
   // are. An old ?tab=overview link falls through to the first tab.
   const visibleTabs = SKILL_DETAIL_TABS.filter((d) => !d.needsLibrarySkill || skill?.library_skill_id)
+  const tabRowTabs = visibleTabs.filter((d) => d.inTabRow !== false)
   const tab = visibleTabs.some((d) => d.key === requestedTab)
     ? requestedTab
     : location.state?.highlightActivityId
@@ -730,6 +732,25 @@ export default function SkillDetail({ skillId, embedded = false }) {
                 </button>
                 <button
                   type="button"
+                  id="skill-detail-history-button"
+                  onClick={() => setSearchParams(buildTabParams({ tab: 'history' }))}
+                  aria-pressed={tab === 'history'}
+                  aria-controls="skill-detail-panel-history"
+                  aria-label={t('skillDetail.tabs.history')}
+                  title={t('skillDetail.tabs.history')}
+                  className={`p-1.5 rounded-md transition-colors ${
+                    tab === 'history' ? 'bg-moss/15 text-moss' : 'text-moss hover:opacity-75'
+                  }`}
+                >
+                  {/* A clock with an arrow turning back: the skill's timeline. */}
+                  <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+                    <path d="M3 3v5h5" />
+                    <path d="M12 7v5l3 2" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
                   onClick={() => setSettingsOpen(true)}
                   aria-label={t('skillDetail.skillSettings')}
                   title={t('skillDetail.skillSettings')}
@@ -765,7 +786,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
               aria-label={t('skillDetail.tabsAriaLabel')}
               className="flex items-center flex-wrap gap-1 mt-4 border-b border-hairline"
             >
-              {visibleTabs.map((tabDef) => (
+              {tabRowTabs.map((tabDef, tabIndex) => (
                 <button
                   key={tabDef.key}
                   type="button"
@@ -774,11 +795,13 @@ export default function SkillDetail({ skillId, embedded = false }) {
                   role="tab"
                   aria-selected={tab === tabDef.key}
                   aria-controls={`skill-detail-panel-${tabDef.key}`}
-                  tabIndex={tab === tabDef.key ? 0 : -1}
+                  // On History none of these is selected; the first stays
+                  // reachable from the keyboard.
+                  tabIndex={tab === tabDef.key || (tab === 'history' && tabIndex === 0) ? 0 : -1}
                   onClick={() => setSearchParams(buildTabParams({ tab: tabDef.key }))}
                   onKeyDown={(event) =>
                     handleTabListKeyDown(event, {
-                      keys: visibleTabs.map((d) => d.key),
+                      keys: tabRowTabs.map((d) => d.key),
                       activeKey: tab,
                       refs: tabRefs,
                       onChange: (key) => setSearchParams(buildTabParams({ tab: key })),
@@ -1298,7 +1321,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
             )}
 
             {tab === 'history' && (
-            <div id="skill-detail-panel-history" role="tabpanel" aria-labelledby="skill-detail-tab-history">
+            <div id="skill-detail-panel-history" role="region" aria-labelledby="skill-detail-history-button">
             <HistorySection
               skill={skill}
               assessorName={assessorName}
