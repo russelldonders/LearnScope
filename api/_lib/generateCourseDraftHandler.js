@@ -1,11 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { verifySupabaseUser } from './_lib/auth.js'
-import { consumeQuota, sendQuotaExceeded } from './_lib/quota.js'
-import { COURSE_DRAFT_SCHEMA, buildCourseDraftRequest, normalizeGeneratedCourseDraft } from './_lib/courseDraft.js'
+import { verifySupabaseUser } from './auth.js'
+import { consumeQuota, sendQuotaExceeded } from './quota.js'
+import { COURSE_DRAFT_SCHEMA, buildCourseDraftRequest, normalizeGeneratedCourseDraft } from './courseDraft.js'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-export default async function handler(req, res) {
+export default async function generateCourseDraftHandler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
     return

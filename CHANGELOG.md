@@ -4,3 +4,4 @@
 
 - Added an AI-assisted provider workflow that generates complete draft courses as native, editable Page Builder content.
 - Added transactional course creation with organisation-scoped access controls and database integration tests.
+- Routed course generation through the existing serverless dispatcher to stay within Vercel Hobby's 12-function deployment limit.

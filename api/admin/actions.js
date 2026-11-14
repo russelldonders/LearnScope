@@ -1,4 +1,5 @@
 import ltiHandler from '../_lib/lti/handler.js'
+import generateCourseDraftHandler from '../_lib/generateCourseDraftHandler.js'
 import { verifySupabaseUser } from '../_lib/auth.js'
 import { supabaseAdmin } from '../_lib/supabaseAdmin.js'
 import { escapeHtml } from '../_lib/html.js'
@@ -36,6 +37,7 @@ function inviteRedirectTo() {
 
 export default async function handler(req, res) {
   if (req.query?.lti) return ltiHandler(req, res)
+  if (req.query?.ai === 'generate-course-draft') return generateCourseDraftHandler(req, res)
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
     return
