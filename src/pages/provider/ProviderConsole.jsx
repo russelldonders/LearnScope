@@ -1243,7 +1243,7 @@ function CourseVersionHistoryDialog({ course, onClose }) {
   )
 }
 
-const PARTICIPANT_STATUS_LABELS = { enrolled: 'Enrolled', started: 'Started', complete: 'Complete' }
+const PARTICIPANT_STATUS_LABELS = { enrolled: 'Enrolled', started: 'Started', complete: 'Complete', cancelled: 'Cancelled' }
 
 function formatParticipantDate(value) {
   if (!value) return '—'
@@ -1302,7 +1302,11 @@ function CourseParticipantsDialog({ course, onClose }) {
                       {PARTICIPANT_STATUS_LABELS[participant.status]}
                     </span>
                   </div>
-                  {participant.status !== 'enrolled' ? (
+                  {participant.status === 'cancelled' ? (
+                    <p className="mt-1 text-xs text-secondary tabular-nums">
+                      Enrolled {formatParticipantDate(participant.enrolled_at ?? participant.created_at)} · Cancelled {formatParticipantDate(participant.cancelled_at)}
+                    </p>
+                  ) : participant.status !== 'enrolled' ? (
                     <div className="mt-3">
                       <div className="mb-1 flex items-center justify-between text-xs text-secondary">
                         <span>{participant.percent}% complete</span>

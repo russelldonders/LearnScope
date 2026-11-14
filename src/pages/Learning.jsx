@@ -31,8 +31,6 @@ export default function Learning() {
       .from('courses')
       .select('*, course_catalogue(image_url, organisations(logo_url))')
       .eq('user_id', user.id)
-      // Real enrolments only: a planned or cancelled course isn't one.
-      .is('status', null)
       .order('created_at', { ascending: false })
     if (error) {
       setError(error.message)
@@ -64,8 +62,13 @@ export default function Learning() {
     setLoading(false)
   }
 
-  const inProgress = courses.filter((c) => !c.completed_date)
-  const completed = courses.filter((c) => c.completed_date)
+  // Planned (on the learning plan), in progress, completed and cancelled
+  // (courses.status), each shown only when it has something in it.
+  const planned = courses.filter((c) => c.status === 'planned')
+  const cancelled = courses.filter((c) => c.status === 'cancelled')
+  const inProgress = courses.filter((c) => !c.status && !c.completed_date)
+  const completed = courses.filter((c) => !c.status && c.completed_date)
+  const gridProps = { skillsByCourse, progressByCatalogueId, assignedByCatalogueId }
 
   return (
     <div className="min-h-screen bg-paper">
@@ -95,29 +98,19 @@ export default function Learning() {
           </div>
         )}
 
-        {inProgress.length > 0 && (
-          <div className="mb-8">
-            <h3 className="font-display text-base text-ink mb-4">{t('learning.inProgress')}</h3>
-            <CourseGrid
-              courses={inProgress}
-              skillsByCourse={skillsByCourse}
-              progressByCatalogueId={progressByCatalogueId}
-              assignedByCatalogueId={assignedByCatalogueId}
-            />
-          </div>
-        )}
-
-        {completed.length > 0 && (
-          <div>
-            <h3 className="font-display text-base text-ink mb-4">{t('learning.completed')}</h3>
-            <CourseGrid
-              courses={completed}
-              skillsByCourse={skillsByCourse}
-              progressByCatalogueId={progressByCatalogueId}
-              assignedByCatalogueId={assignedByCatalogueId}
-            />
-          </div>
-        )}
+        {[
+          ['planned', planned],
+          ['inProgress', inProgress],
+          ['completed', completed],
+          ['cancelled', cancelled],
+        ]
+          .filter(([, list]) => list.length > 0)
+          .map(([key, list]) => (
+            <div key={key} className="mb-8">
+              <h3 className="font-display text-base text-ink mb-4">{t(`learning.${key}`)}</h3>
+              <CourseGrid courses={list} {...gridProps} />
+            </div>
+          ))}
       </main>
     </div>
   )
@@ -135,7 +128,9 @@ function CourseGrid({ courses, skillsByCourse, progressByCatalogueId, assignedBy
         return (
           <Link
             key={course.id}
-            to={`/courses/${course.id}/learn`}
+            // A planned course is enrolled on from the catalogue; a cancelled
+            // one opens its record.
+            to={course.status === 'planned' ? '/training' : course.status === 'cancelled' ? `/courses/${course.id}` : `/courses/${course.id}/learn`}
             state={{ backTo: '/learning', backLabel: 'Learning' }}
             className="bg-card border border-hairline rounded-lg overflow-hidden flex flex-col hover:border-moss transition-colors"
           >
@@ -161,7 +156,11 @@ function CourseGrid({ courses, skillsByCourse, progressByCatalogueId, assignedBy
                 {[course.provider, course.course_type, course.duration].filter(Boolean).join(' · ')}
               </p>
               <p className="font-mono text-xs mt-2">
-                {course.completed_date ? (
+                {course.status === 'planned' ? (
+                  <span className="text-secondary">{t('learning.planned')}</span>
+                ) : course.status === 'cancelled' ? (
+                  <span className="text-secondary">{t('learning.cancelledOn', { date: formatFullDate(course.cancelled_at) })}</span>
+                ) : course.completed_date ? (
                   <span className="text-moss">
                     {t('learning.completed')} {formatFullDate(course.completed_date)}
                   </span>

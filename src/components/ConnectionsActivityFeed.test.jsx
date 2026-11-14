@@ -57,6 +57,15 @@ describe('connections activity feed', () => {
     expect(screen.queryByRole('region', { name: 'This month' })).not.toBeInTheDocument()
   })
 
+  it('shows each change in a course on its own: planned, started, completed, cancelled', () => {
+    const course = (type, at) => event(sam, { event_type: type, skill_name: null, detail: 'Design Basics · OpenLearn', event_at: daysAgo(at) })
+    renderFeed([course('course_cancelled', 1), course('course_completed', 2), course('course_started', 3), course('course_planned', 4)])
+    expect(screen.getByText('Cancelled a course · OpenLearn')).toBeInTheDocument()
+    expect(screen.getByText('Completed a course · OpenLearn')).toBeInTheDocument()
+    expect(screen.getByText('Started a course · OpenLearn')).toBeInTheDocument()
+    expect(screen.getByText('Planning a course · OpenLearn')).toBeInTheDocument()
+  })
+
   it('leads with the skill and level, and labels how it was backed up', () => {
     renderFeed([
       event(alex, { event_type: 'skill_validated', level: 3, skill_name: 'SQL', detail: 'Validated by a connection' }),

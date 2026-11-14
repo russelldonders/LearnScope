@@ -33,8 +33,14 @@ export function describeActivityEvent(event, t) {
       return t('connectionsActivity.skillAdded', { skill })
     case 'experience_added':
       return t('connectionsActivity.experienceAdded', { detail: event.detail })
+    case 'course_planned':
+      return t('connectionsActivity.coursePlanned', { detail: event.detail })
     case 'course_started':
       return t('connectionsActivity.courseStarted', { detail: event.detail })
+    case 'course_completed':
+      return t('connectionsActivity.courseCompleted', { detail: event.detail })
+    case 'course_cancelled':
+      return t('connectionsActivity.courseCancelled', { detail: event.detail })
     case 'target_set':
       return t('connectionsActivity.targetSet', { level: level ?? t('connectionsActivity.aNewLevel'), skill })
     default:
@@ -80,7 +86,10 @@ function EventVisual({ event }) {
       return <GrowthRing level={event.level} size={36} color={event.event_type === 'skill_validated' ? 'var(--color-slate)' : undefined} />
     case 'target_set':
       return <GrowthRing level={0} targetLevel={event.level} size={36} />
-    case 'course_started': {
+    case 'course_planned':
+    case 'course_started':
+    case 'course_completed':
+    case 'course_cancelled': {
       const { name, provider } = parseCourse(event.detail)
       const [from, to] = gradientPairFor(`${name ?? ''}|${provider ?? ''}`)
       return (
@@ -135,13 +144,21 @@ function EventLines({ event }) {
   const level = event.level ? LEVEL_LABELS[event.level] : null
   const evidence = EVIDENCE[event.detail]
 
-  if (event.event_type === 'course_started') {
+  // A course's status changes, each its own event (planned, started,
+  // completed, cancelled -- see 20261114110000).
+  const courseAction = {
+    course_planned: 'coursePlanned',
+    course_started: 'courseStarted',
+    course_completed: 'courseCompleted',
+    course_cancelled: 'courseCancelled',
+  }[event.event_type]
+  if (courseAction) {
     const { name, provider } = parseCourse(event.detail)
     return (
       <>
         <p className="text-sm text-ink font-medium break-words">{name}</p>
         <p className="text-xs text-secondary">
-          {t('connectionsActivity.action.courseStarted')}{provider ? ` · ${provider}` : ''}
+          {t(`connectionsActivity.action.${courseAction}`)}{provider ? ` · ${provider}` : ''}
         </p>
       </>
     )

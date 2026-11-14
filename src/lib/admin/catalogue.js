@@ -132,8 +132,9 @@ export async function listCourseParticipants(courseId) {
   const [{ data: enrolments, error: enrolmentError }, { data: items, error: itemError }] = await Promise.all([
     supabase
       .from('courses')
-      .select('id, user_id, catalogue_course_id, created_at, completed_date')
-      .is('status', null)
+      .select('id, user_id, catalogue_course_id, created_at, completed_date, status, cancelled_at, enrolled_at')
+      // Enrolments and cancellations; a plan isn't the provider's to see.
+      .or('status.is.null,status.eq.cancelled')
       .in('catalogue_course_id', versionIds)
       .order('created_at'),
     supabase.from('course_content_links').select('course_id, resource_id').in('course_id', versionIds),
@@ -181,7 +182,7 @@ export async function listCourseParticipants(courseId) {
         (row) => row.user_id === enrolment.user_id && row.content_item_id === id && ['completed', 'passed'].includes(row.status)
       )
     ).length
-    const status = enrolment.completed_date ? 'complete' : progress ? 'started' : 'enrolled'
+    const status = enrolment.status === 'cancelled' ? 'cancelled' : enrolment.completed_date ? 'complete' : progress ? 'started' : 'enrolled'
     return {
       ...enrolment,
       profile: profileById.get(enrolment.user_id) ?? null,
