@@ -7,7 +7,7 @@ import { useLanguage } from '../context/LanguageContext'
 import { supabase } from '../lib/supabaseClient'
 import { saveActivity } from '../lib/activitySkillLinks'
 import { linkSkillToExperiences } from '../lib/currentRole'
-import { experienceTrail } from '../lib/xapiStatement'
+import { experienceTrail, relatedSkillsFromStatement } from '../lib/xapiStatement'
 import { findOrCreatePersonalSkill } from '../lib/skillLibrary'
 import { XAPI_VERBS } from '../lib/xapiVerbs'
 import { distanceUnitFromPace, goalLogFeedback, localDateString } from '../lib/skillGoalProgress'
@@ -23,6 +23,7 @@ import {
   goalTakesSets,
   REFLECTION_PROMPTS,
   repeatTemplates,
+  withFocusSkill,
 } from '../lib/quickActivityLog'
 
 const INPUT_CLASS =
@@ -34,8 +35,10 @@ const RECENT_ROWS = 60
 // be repeated with one tap. Goal values ride along on the activity, so goals
 // update the same way as logging from a goal's own tracker. repeatRequest
 // ({ row, nonce }) adds a card copying an activity from elsewhere on the page,
-// to check and save like any other.
-export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFullForm, repeatRequest = null }) {
+// to check and save like any other. focusSkill ({ id, name }): logging from
+// that skill's page, so every activity includes it and the repeat shortcuts
+// are the ones done on it.
+export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFullForm, repeatRequest = null, focusSkill = null }) {
   const { t, language } = useLanguage()
   const exampleSeed = useExampleSeed()
   const sectionRef = useRef(null)
@@ -54,7 +57,12 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
   const [result, setResult] = useState(null)
 
   const goals = useMemo(() => goalItems.map((item) => item.goal), [goalItems])
-  const templates = useMemo(() => repeatTemplates(recentRows, skills, goals), [recentRows, skills, goals])
+  const templates = useMemo(() => {
+    const rows = focusSkill
+      ? recentRows.filter((row) => relatedSkillsFromStatement(row.statement).some((s) => s.id === focusSkill.id))
+      : recentRows
+    return repeatTemplates(rows, skills, goals)
+  }, [recentRows, skills, goals, focusSkill])
 
   async function loadSkills() {
     const { data } = await supabase.from('skills').select('id, name').eq('user_id', user.id).order('name')
@@ -121,7 +129,7 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
       if (draft.outcome === 'clarify') {
         setQuestion(draft.message)
       } else {
-        setCards((current) => [...current, ...cardsFromDraft(draft, skills, goals, experiences)])
+        setCards((current) => [...current, ...withFocusSkill(cardsFromDraft(draft, skills, goals, experiences), focusSkill)])
         setText('')
       }
     } catch (err) {

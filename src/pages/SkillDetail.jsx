@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom'
 import { handleTabListKeyDown } from '../lib/tabsKeyboard'
 import { supabase } from '../lib/supabaseClient'
@@ -9,6 +9,9 @@ import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import SkillNetworkSection from '../components/SkillNetworkSection'
 import SkillLearningSection from '../components/SkillLearningSection'
+import QuickActivityLog from '../components/QuickActivityLog'
+import { listSkillGoals } from '../lib/skillGoals'
+import { computeGoalProgress } from '../lib/skillGoalProgress'
 import { listCatalogueCourses, listEnrolledCatalogueIds } from '../lib/courseCatalogue'
 import PeopleWithSkillModal from '../components/PeopleWithSkillModal'
 import KnowledgeLevelBar from '../components/KnowledgeLevelBar'
@@ -126,6 +129,8 @@ export default function SkillDetail({ skillId, embedded = false }) {
   const [recommendAcceptors, setRecommendAcceptors] = useState({})
   const [knownPeople, setKnownPeople] = useState({})
   const [availableCourses, setAvailableCourses] = useState(null)
+  const [quickLogOpen, setQuickLogOpen] = useState(false)
+  const [quickLogGoals, setQuickLogGoals] = useState([])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [composite, setComposite] = useState(null)
   const [loadingComposite, setLoadingComposite] = useState(false)
@@ -159,6 +164,22 @@ export default function SkillDetail({ skillId, embedded = false }) {
     countSkillTrackers(skill.library_skill_id).then(setTotalTrackersCount)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [skill?.library_skill_id])
+
+  // This skill's active goals, so the quick log can fill in goal values from
+  // what was said (only the owner has goals).
+  useEffect(() => {
+    if (!quickLogOpen || !skill || skill.user_id !== user.id) return
+    let live = true
+    listSkillGoals(skill.id)
+      .then((list) => {
+        if (live) setQuickLogGoals(list.filter((goal) => goal.status === 'active'))
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- when the quick log opens
+  }, [quickLogOpen, skill?.id])
 
   // Catalogue courses that teach this skill and the learner hasn't started,
   // for the Learning section. Only on their own skill, and only when it's a
@@ -532,6 +553,13 @@ export default function SkillDetail({ skillId, embedded = false }) {
     selfAssessedCount: knowledgeSelfAssessedCount,
     knowledgeConfirmed,
   })
+  // The same object while the skill's id and name stay the same, for the quick log.
+  const focusSkillId = skill?.id
+  const focusSkillName = skill?.name
+  const focusSkill = useMemo(
+    () => (focusSkillId ? { id: focusSkillId, name: focusSkillName } : null),
+    [focusSkillId, focusSkillName],
+  )
   const trainingScopeState = skill
     ? {
         skillId: skill.id,
@@ -552,11 +580,11 @@ export default function SkillDetail({ skillId, embedded = false }) {
     'self-assess-knowledge': () => setSelfAssessKnowledgeOpen(true),
     'confirm-baseline-quiz': () => setConfirmingBaselineOpen(true),
     invite: () => setInviteOpen(true),
-    activity: () => setRecordActivityOpen(true),
+    activity: () => setQuickLogOpen(true),
     target: () => setTargetOpen(true),
     'find-course': () => navigate('/training', { state: trainingScopeState }),
     demonstrate: handleDemonstrateSkill,
-    'record-activity': () => setRecordActivityOpen(true),
+    'record-activity': () => setQuickLogOpen(true),
     'self-assess-demonstrating': () => setSelfAssessOpen(true),
     'invite-demonstrating': () => setInviteOpen(true),
     validate: handleValidateSkillStage,
@@ -822,7 +850,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
                         )
                       }
                       actions={[
-                        { label: t('skillDetail.logSkillActivity'), onClick: () => setRecordActivityOpen(true) },
+                        { label: t('skillDetail.logSkillActivity'), onClick: () => setQuickLogOpen(true) },
                         ...(canShowDemonstrateAction
                           ? [{ label: t('skillDetail.demonstrateSkillAction'), onClick: handleDemonstrateSkill }]
                           : []),
@@ -1016,6 +1044,33 @@ export default function SkillDetail({ skillId, embedded = false }) {
                 onSave={handleRecordActivity}
                 onClose={() => setRecordActivityOpen(false)}
               />
+            )}
+
+            {quickLogOpen && (
+              <AccessibleDialog
+                labelledBy="quick-log-heading"
+                onClose={() => setQuickLogOpen(false)}
+                panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+              >
+                <div className="flex justify-end -mb-6">
+                  <button type="button" onClick={() => setQuickLogOpen(false)} className="text-secondary hover:text-ink text-sm">
+                    {t('skillDetail.close')}
+                  </button>
+                </div>
+                <QuickActivityLog
+                  user={user}
+                  focusSkill={focusSkill}
+                  goalItems={quickLogGoals.map((goal) => ({ goal, progress: computeGoalProgress(goal, statements) }))}
+                  onLogged={async () => {
+                    const fresh = await loadHistory()
+                    return quickLogGoals.map((goal) => ({ goal, progress: computeGoalProgress(goal, fresh) }))
+                  }}
+                  onOpenFullForm={() => {
+                    setQuickLogOpen(false)
+                    setRecordActivityOpen(true)
+                  }}
+                />
+              </AccessibleDialog>
             )}
 
             {activitiesListOpen && (
@@ -1258,8 +1313,7 @@ function ActivitiesModal({ statements, onSelect, onClose }) {
 // (which recommends the single next step for the skill's current lifecycle
 // stage), every action here is reachable regardless of stage, so a learner
 // isn't limited to following the guided checklist in order.
-function ActionGroup({ title, accent, actions, headerExtra }) {
-  const accentClass = accent === 'slate' ? 'hover:border-slate hover:text-slate' : 'hover:border-moss hover:text-moss'
+function ActionGroup({ title, actions, headerExtra }) {
   return (
     <div>
       {title && <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">{title}</h3>}
@@ -1272,9 +1326,7 @@ function ActionGroup({ title, accent, actions, headerExtra }) {
             onClick={action.onClick}
             disabled={action.disabled}
             title={action.title}
-            className={`rounded-full border border-hairline px-3 py-1.5 text-xs font-medium text-ink transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-              action.disabled ? '' : accentClass
-            }`}
+            className="rounded-md bg-moss text-paper px-3 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {action.label}
           </button>

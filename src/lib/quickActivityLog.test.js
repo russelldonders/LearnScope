@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('./supabaseClient', () => ({ supabase: {} }))
 
-const { buildCardStatement, canRepeatRow, currentExperiences, cardFromRow, cardFromTemplate, cardsFromDraft, derivedGoalsForCard, repeatTemplates, withReflection } = await import('./quickActivityLog')
+const { buildCardStatement, canRepeatRow, currentExperiences, cardFromRow, cardFromTemplate, cardsFromDraft, derivedGoalsForCard, repeatTemplates, withFocusSkill, withReflection } = await import('./quickActivityLog')
 const { DIAGNOSTIC_EXTENSION_IRI, MEASUREMENT_EXTENSION_IRI, buildStatement, measurementsFromStatement } = await import('./xapiStatement')
 const { localDateString } = await import('./skillGoalProgress')
 
@@ -63,6 +63,28 @@ describe('cardsFromDraft', () => {
       goalValues: [{ goalId: 'goal-pace', value: '', distance: '5', time: '27:30' }],
       note: '',
     })
+  })
+})
+
+describe('withFocusSkill', () => {
+  it('puts the page’s skill first on every card, standing in for a suggested new skill when nothing matched', () => {
+    const cards = [
+      card({ key: 'a', skills: [] , newSkill: 'Jogging' }),
+      card({ key: 'b', skills: [running], newSkill: 'Sprints' }),
+      card({ key: 'c', skills: [fitness, running] }),
+    ]
+    const focused = withFocusSkill(cards, fitness)
+    expect(focused.map((c) => c.skills.map((s) => s.id))).toEqual([
+      ['skill-fit'],
+      ['skill-fit', 'skill-run'],
+      ['skill-fit', 'skill-run'],
+    ])
+    expect(focused.map((c) => c.newSkill)).toEqual([null, 'Sprints', null])
+  })
+
+  it('leaves cards alone without a focus skill', () => {
+    const cards = [card()]
+    expect(withFocusSkill(cards, null)).toBe(cards)
   })
 })
 

@@ -223,6 +223,18 @@ export function repeatTemplates(rows, skills, goals, limit = 4) {
     .map(({ label, card }) => ({ label, card }))
 }
 
+// Logging from a skill's own page: whatever was said, it's about that skill,
+// so every card includes it (first), and it stands in for a new skill the
+// draft would otherwise have suggested when nothing else matched. The learner
+// can still add or remove skills on the card.
+export function withFocusSkill(cards, skill) {
+  if (!skill) return cards
+  return cards.map((card) => {
+    if (card.skills.some((s) => s.id === skill.id)) return card
+    return { ...card, skills: [skill, ...card.skills], newSkill: card.skills.length === 0 ? null : card.newSkill }
+  })
+}
+
 // A fresh copy of a template, dated today.
 export function cardFromTemplate(template) {
   return {
