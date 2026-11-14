@@ -1,17 +1,17 @@
 import { useLanguage } from '../context/LanguageContext'
+import TimelineRail from './TimelineRail'
 
 // Timeline placeholder for training the learner is enrolled in but hasn't
 // completed -- shown dashed so it reads as upcoming, not as a dated event.
-export default function PendingTrainingEntry({ link, hasMore, onClick }) {
+export default function PendingTrainingEntry({ link, hasMore, isFirst = false, onClick }) {
   const { t } = useLanguage()
   return (
     <div className="flex gap-3">
-      <div className="flex flex-col items-center w-12 shrink-0">
-        <div className="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-hairline">
-          <span className="w-1.5 h-1.5 rounded-full bg-secondary/40" />
-        </div>
-        {hasMore && <span className="w-px flex-1 bg-hairline mt-1" />}
+      <TimelineRail isFirst={isFirst} isLast={!hasMore}>
+      <div className="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-hairline">
+        <span className="w-1.5 h-1.5 rounded-full bg-secondary/40" />
       </div>
+      </TimelineRail>
       <div
         role="button"
         tabIndex={0}

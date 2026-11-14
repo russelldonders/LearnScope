@@ -11,6 +11,7 @@ import AccessibleDialog from '../components/AccessibleDialog'
 import LifecycleStageIcon from '../components/LifecycleStageIcon'
 import PendingTrainingEntry from '../components/PendingTrainingEntry'
 import ActivityRow from '../components/ActivityRow'
+import TimelineRail from '../components/TimelineRail'
 import ActivityTimeline from '../components/ActivityTimeline'
 
 // The dashboard timeline's dot, so activities read the same in both places.
@@ -184,6 +185,7 @@ export function HistorySection({
               <PendingTrainingEntry
                 key={link.id}
                 link={link}
+                isFirst={i === 0}
                 hasMore={i < pendingCourseLinks.length - 1 || pendingValidationRequests.length > 0 || events.length > 0}
                 onClick={() => goToCourse(link.courses.id)}
               />
@@ -193,6 +195,7 @@ export function HistorySection({
                 key={request.id}
                 request={request}
                 validatorName={validatorNames[request.validator_id]}
+                isFirst={i === 0 && pendingCourseLinks.length === 0}
                 hasMore={i < pendingValidationRequests.length - 1 || events.length > 0}
               />
             ))}
@@ -203,6 +206,7 @@ export function HistorySection({
                   event.request?.id ?? (event.type === 'activity-group' ? `${event.verbId}::${event.year}` : event.type)
                 }
                 event={event}
+                isFirst={i === 0 && pendingCourseLinks.length === 0 && pendingValidationRequests.length === 0}
                 isLast={i === events.length - 1}
                 isMostRecent={i === mostRecentRatingIndex}
                 isBaseline={i === mostRecentBaselineIndex}
@@ -234,16 +238,15 @@ export function HistorySection({
   )
 }
 
-function PendingValidationEntry({ request, validatorName, hasMore }) {
+function PendingValidationEntry({ request, validatorName, hasMore, isFirst = false }) {
   const { t } = useLanguage()
   return (
     <div className="flex gap-3">
-      <div className="flex flex-col items-center w-12 shrink-0">
-        <div className="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-hairline">
-          <span className="w-1.5 h-1.5 rounded-full bg-secondary/40" />
-        </div>
-        {hasMore && <span className="w-px flex-1 bg-hairline mt-1" />}
+      <TimelineRail isFirst={isFirst} isLast={!hasMore}>
+      <div className="flex items-center justify-center w-8 h-8 rounded-full border-2 border-dashed border-hairline">
+        <span className="w-1.5 h-1.5 rounded-full bg-secondary/40" />
       </div>
+      </TimelineRail>
       <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper/60 p-3">
         <p className="text-sm text-secondary">
           {t('skillDetail.waitingOnPrefix')} <span className="text-ink font-medium">{validatorName || t('skillDetail.aValidator')}</span> {t('skillDetail.toConfirmSuffix')}{' '}
@@ -256,6 +259,7 @@ function PendingValidationEntry({ request, validatorName, hasMore }) {
 
 export function TimelineEntry({
   event,
+  isFirst = false,
   isLast,
   isMostRecent,
   isBaseline,
@@ -345,10 +349,9 @@ export function TimelineEntry({
     const course = event.link.courses
     return (
       <div className="flex gap-3">
-        <div className="flex flex-col items-center w-12 shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-secondary/40 shrink-0 mt-1.5" />
-          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
-        </div>
+        <TimelineRail isFirst={isFirst} isLast={isLast}>
+        <span className="block w-1.5 h-1.5 rounded-full bg-secondary/40" />
+        </TimelineRail>
         <div
           className={`min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3 ${onSelect ? 'cursor-pointer hover:border-moss/60 transition-colors' : ''}`}
           {...clickableProps}
@@ -369,10 +372,9 @@ export function TimelineEntry({
   if (event.type === 'added') {
     return (
       <div className="flex gap-3">
-        <div className="flex flex-col items-center w-12 shrink-0">
-          <LifecycleStageIcon stage="identified" size={14} className="text-secondary/70 mt-1" />
-          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
-        </div>
+        <TimelineRail isFirst={isFirst} isLast={isLast}>
+        <LifecycleStageIcon stage="identified" size={14} className="text-secondary/70" />
+        </TimelineRail>
         <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3">
           <p className="text-sm font-medium text-ink">{t('skillDetail.skillAdded')}</p>
           {event.source && (
@@ -394,10 +396,9 @@ export function TimelineEntry({
     const rating = event.rating
     return (
       <div className="flex gap-3">
-        <div className="flex flex-col items-center w-12 shrink-0">
-          <GrowthRing level={rating.level} size={isMostRecent ? 48 : 32} />
-          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
-        </div>
+        <TimelineRail isFirst={isFirst} isLast={isLast}>
+        <GrowthRing level={rating.level} size={isMostRecent ? 48 : 32} />
+        </TimelineRail>
         <div
           className={`min-w-0 flex-1 mb-6 ${boxClass} ${onSelect ? 'cursor-pointer hover:border-moss/60 transition-colors' : ''}`}
           {...clickableProps}
@@ -423,16 +424,15 @@ export function TimelineEntry({
     const exp = link.experience
     return (
       <div className="flex gap-3">
-        <div className="flex flex-col items-center w-12 shrink-0">
-          <div className="flex items-center justify-center w-8 h-8 rounded-full border border-hairline bg-paper">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-secondary">
-              <path d="M3 7l9-4 9 4-9 4-9-4z" />
-              <path d="M3 12l9 4 9-4" />
-              <path d="M3 17l9 4 9-4" />
-            </svg>
-          </div>
-          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
+        <TimelineRail isFirst={isFirst} isLast={isLast}>
+        <div className="flex items-center justify-center w-8 h-8 rounded-full border border-hairline bg-paper">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-secondary">
+            <path d="M3 7l9-4 9 4-9 4-9-4z" />
+            <path d="M3 12l9 4 9-4" />
+            <path d="M3 17l9 4 9-4" />
+          </svg>
         </div>
+        </TimelineRail>
         <div
           className={`min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3 ${onSelect ? 'cursor-pointer hover:border-moss/60 transition-colors' : ''}`}
           {...clickableProps}
@@ -454,18 +454,17 @@ export function TimelineEntry({
     const confirmed = request.status === 'confirmed'
     return (
       <div className="flex gap-3">
-        <div className="flex flex-col items-center w-12 shrink-0">
-          <div
-            className={`flex items-center justify-center w-8 h-8 rounded-full border ${
-              confirmed ? 'border-moss bg-moss/10' : 'border-hairline bg-paper'
-            }`}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={confirmed ? 'text-moss' : 'text-secondary'}>
-              {confirmed ? <path d="M20 6L9 17l-5-5" /> : <path d="M18 6L6 18M6 6l12 12" />}
-            </svg>
-          </div>
-          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
+        <TimelineRail isFirst={isFirst} isLast={isLast}>
+        <div
+          className={`flex items-center justify-center w-8 h-8 rounded-full border ${
+            confirmed ? 'border-moss bg-moss/10' : 'border-hairline bg-paper'
+          }`}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={confirmed ? 'text-moss' : 'text-secondary'}>
+            {confirmed ? <path d="M20 6L9 17l-5-5" /> : <path d="M18 6L6 18M6 6l12 12" />}
+          </svg>
         </div>
+        </TimelineRail>
         <div className="min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3">
           <p className="text-sm font-medium text-ink">
             {confirmed ? `${t('skillDetail.validatedAtPrefix')} ${LEVEL_LABELS[request.target_level]}` : t('skillDetail.validationDeclined')}
@@ -489,15 +488,14 @@ export function TimelineEntry({
 
   return (
     <div className="flex gap-3">
-      <div className="flex flex-col items-center w-12 shrink-0">
-        <GrowthRing
-          level={entry.level}
-          size={isMostRecent ? 48 : 32}
-          labels={entryLabels}
-          color={entry.axis === 'knowledge' ? 'var(--color-slate)' : undefined}
-        />
-        {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
-      </div>
+      <TimelineRail isFirst={isFirst} isLast={isLast}>
+      <GrowthRing
+        level={entry.level}
+        size={isMostRecent ? 48 : 32}
+        labels={entryLabels}
+        color={entry.axis === 'knowledge' ? 'var(--color-slate)' : undefined}
+      />
+      </TimelineRail>
       <div
         className={`min-w-0 flex-1 mb-6 ${boxClass} ${onSelect ? 'cursor-pointer hover:border-moss/60 transition-colors' : ''}`}
         {...clickableProps}
