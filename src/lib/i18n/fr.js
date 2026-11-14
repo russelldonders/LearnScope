@@ -1726,6 +1726,7 @@ export default {
       sessionsDone: '{done} séance(s) sur {needed}',
       today: 'Aujourd’hui {total} sur {perSession} {unit} · {count} série(s) sur {sets}',
       entryHint: 'Série {next} sur {sets} aujourd’hui — visez {perSet} {unit}. Enregistrez chaque série séparément.',
+      entryHintExtra: 'Les séries du jour sont faites — une de plus compte en bonus. Visez {perSet} {unit}.',
     },
     errorNumber: 'Saisissez un nombre.',
     errorTime: 'Saisissez un temps, par exemple 25:30.',

@@ -82,7 +82,7 @@ export default function SkillGoalsDashboardPanel({
           stretching the tile next to it. */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
         {visible.map((item) => (
-          <GoalCard
+          <SkillGoalTile
             key={item.goal.id}
             item={item}
             user={user}
@@ -398,8 +398,21 @@ function BuildUpProgress({ goal, progress }) {
 
 // Every tile has the same parts in the same places -- title, skill, current
 // value against the target, progress bar, one status line, buttons -- so the
-// grid reads evenly whatever kind of goal each one is.
-function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
+// grid reads evenly whatever kind of goal each one is. A skill's page shows the
+// same tile: there linkToSkill is off (it's already that page), adding a target
+// opens the goal's edit form in place, and Edit / See entries sit underneath.
+export function SkillGoalTile({
+  item,
+  user,
+  actor,
+  open,
+  onToggle,
+  onChanged,
+  linkToSkill = true,
+  onAddTarget = null,
+  onEdit = null,
+  onShowEntries = null,
+}) {
   const { t, language } = useLanguage()
   const { goal, skill, statements, progress, nextLog } = item
   const [note, setNote] = useState(null)
@@ -468,6 +481,22 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
     onToggle()
   }
 
+  // Always two lines tall, so long and short titles line up.
+  const titleBlock = (
+    <>
+      <h3
+        id={`dashboard-goal-${goal.id}`}
+        className={`text-sm font-medium text-ink line-clamp-2 min-h-[2.5rem] ${
+          linkToSkill ? 'group-hover:text-moss group-hover:underline underline-offset-2' : ''
+        }`}
+        title={goal.title}
+      >
+        {goal.title}
+      </h3>
+      <span className={`block text-xs text-secondary truncate ${linkToSkill ? 'group-hover:text-moss' : ''}`}>{skill.name}</span>
+    </>
+  )
+
   function startLogging(withLastValues) {
     setNote(null)
     setPrefill(withLastValues)
@@ -486,17 +515,13 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
       <div className="flex items-start justify-between gap-2">
         {/* The title and skill together open the skill's page: one bigger tap
             target, and one link for screen readers rather than two. */}
-        <Link to={`/skills/${skill.id}`} className="group block min-w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moss">
-          {/* Always two lines tall, so long and short titles line up. */}
-          <h3
-            id={`dashboard-goal-${goal.id}`}
-            className="text-sm font-medium text-ink line-clamp-2 min-h-[2.5rem] group-hover:text-moss group-hover:underline underline-offset-2"
-            title={goal.title}
-          >
-            {goal.title}
-          </h3>
-          <span className="block text-xs text-secondary group-hover:text-moss truncate">{skill.name}</span>
-        </Link>
+        {linkToSkill ? (
+          <Link to={`/skills/${skill.id}`} className="group block min-w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moss">
+            {titleBlock}
+          </Link>
+        ) : (
+          <div className="min-w-0">{titleBlock}</div>
+        )}
         {due && (
           <span className="shrink-0 rounded-full bg-gold/15 text-gold text-[11px] font-medium px-2 py-0.5">
             {t('skillGoals.dashboard.timeToLog')}
@@ -520,13 +545,19 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
           // grey. Say so, and offer the way to add one.
           <p className="truncate">
             {t('skillGoals.dashboard.noTarget')}{' · '}
-            <Link
-              to={`/skills/${skill.id}`}
-              state={{ editGoalId: goal.id }}
-              className="text-moss font-medium hover:underline underline-offset-2"
-            >
-              {t('skillGoals.dashboard.addTarget')}
-            </Link>
+            {onAddTarget ? (
+              <button type="button" onClick={onAddTarget} className="text-moss font-medium hover:underline underline-offset-2">
+                {t('skillGoals.dashboard.addTarget')}
+              </button>
+            ) : (
+              <Link
+                to={`/skills/${skill.id}`}
+                state={{ editGoalId: goal.id }}
+                className="text-moss font-medium hover:underline underline-offset-2"
+              >
+                {t('skillGoals.dashboard.addTarget')}
+              </Link>
+            )}
           </p>
         ) : (
           <p className="truncate" title={targetText}>{targetText}</p>
@@ -586,6 +617,21 @@ function GoalCard({ item, user, actor, open, onToggle, onChanged }) {
               className="rounded-md border border-hairline text-ink text-xs font-medium px-3 py-1.5 hover:border-moss"
             >
               {t('skillGoals.dashboard.sameAsLast')}
+            </button>
+          )}
+        </div>
+      )}
+
+      {(onEdit || onShowEntries) && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 pt-3 border-t border-hairline text-xs">
+          {onEdit && (
+            <button type="button" onClick={onEdit} className="text-moss font-medium hover:underline">
+              {t('skillGoals.edit')}
+            </button>
+          )}
+          {onShowEntries && (
+            <button type="button" onClick={onShowEntries} className="text-moss font-medium hover:underline">
+              {t('skillGoals.seeEntries', { count: progress.entryCount })}
             </button>
           )}
         </div>

@@ -352,6 +352,9 @@ export default function SkillDetail({ skillId, embedded = false }) {
     } else {
       setRaterAvatars({})
     }
+    // The fresh activities, for a caller that compares before and after (a
+    // goal's "3 more than last time" feedback).
+    return st ?? []
   }
 
   async function handleAddTag(tagName) {

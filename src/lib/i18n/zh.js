@@ -1705,6 +1705,7 @@ export default {
       sessionsDone: '已完成 {done}/{needed} 次',
       today: '今天 {total}/{perSession} {unit} · {count}/{sets} 组',
       entryHint: '今天第 {next}/{sets} 组——目标 {perSet} {unit}。每组单独记录。',
+      entryHintExtra: '今天的组数已完成——再做一组算额外完成。目标 {perSet} {unit}。',
     },
     errorNumber: '请输入数字。',
     errorTime: '请输入时间,例如 25:30。',

@@ -1726,6 +1726,7 @@ export default {
       sessionsDone: '{done} von {needed} Einheiten',
       today: 'Heute {total} von {perSession} {unit} · {count} von {sets} Sätzen',
       entryHint: 'Satz {next} von {sets} heute – Ziel: {perSet} {unit}. Trag jeden Satz einzeln ein.',
+      entryHintExtra: 'Die Sätze für heute sind geschafft – ein weiterer zählt als Extra. Ziel: {perSet} {unit}.',
     },
     errorNumber: 'Gib eine Zahl ein.',
     errorTime: 'Gib eine Zeit ein, zum Beispiel 25:30.',

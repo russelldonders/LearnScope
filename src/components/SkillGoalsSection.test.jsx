@@ -1,5 +1,6 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { english } from '../lib/i18n/translations'
 
 const goals = [
   { id: 'g1', title: 'Total push-ups per day', status: 'active', metric: 'push_ups', measure_kind: 'count', unit: 'push-ups', direction: 'higher', aggregation: 'total', period: 'day', target_value: null, target_date: null, started_on: '2026-11-07', tracker_question: 'How many?' },
@@ -7,8 +8,7 @@ const goals = [
 ]
 
 vi.mock('../lib/skillGoals', () => ({ listSkillGoals: vi.fn(() => Promise.resolve(goals)), logGoalEntry: vi.fn() }))
-vi.mock('./SkillGoalChart', () => ({ default: () => null }))
-vi.mock('./SkillGoalEntryForm', () => ({ default: () => null }))
+vi.mock('./SkillGoalEntryForm', () => ({ default: () => <form aria-label="Log entry" /> }))
 vi.mock('./SkillGoalEntriesModal', () => ({ default: () => null }))
 vi.mock('./SkillGoalModal', () => ({ default: ({ goal }) => <div role="dialog" aria-label={`Editing ${goal?.title ?? 'new goal'}`} /> }))
 vi.mock('../context/LanguageContext', async () => {
@@ -58,5 +58,23 @@ describe('opening a goal for editing from elsewhere', () => {
     renderSection()
     await screen.findByText('Total push-ups per day')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})
+
+describe('a goal on the skill page', () => {
+  it('is the Home tile: the entry form waits behind Log progress', async () => {
+    renderSection()
+    await screen.findByText('Total push-ups per day')
+    expect(screen.queryByRole('form', { name: 'Log entry' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: english.skillGoals.dashboard.logButton }))
+    expect(screen.getByRole('form', { name: 'Log entry' })).toBeInTheDocument()
+  })
+
+  it('keeps editing the goal and seeing its entries on the tile', async () => {
+    renderSection()
+    await screen.findByText('Total push-ups per day')
+    expect(screen.getByRole('button', { name: english.skillGoals.seeEntries.replace('{count}', '0') })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: english.skillGoals.edit }))
+    expect(screen.getByRole('dialog', { name: 'Editing Total push-ups per day' })).toBeInTheDocument()
   })
 })

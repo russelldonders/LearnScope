@@ -1724,6 +1724,7 @@ export default {
       sessionsDone: '{done} van {needed} sessies',
       today: 'Vandaag {total} van {perSession} {unit} · {count} van {sets} sets',
       entryHint: 'Set {next} van {sets} vandaag – mik op {perSet} {unit}. Log elke set apart.',
+      entryHintExtra: 'De sets van vandaag zijn klaar – nog een telt als extra. Mik op {perSet} {unit}.',
     },
     errorNumber: 'Voer een getal in.',
     errorTime: 'Voer een tijd in, bijvoorbeeld 25:30.',

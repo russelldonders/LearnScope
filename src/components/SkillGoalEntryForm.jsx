@@ -66,9 +66,12 @@ export default function SkillGoalEntryForm({ goal, row = null, prefillFrom = nul
   const kind = goal.measure_kind
   // Which set this is today, for a goal done in sets ("Set 2 of 3 today").
   const sessions = goal.aggregation === 'total' && !row ? computeGoalProgress(goal, statements).sessions : null
-  const entryHint = sessions
-    ? t('skillGoals.shape.entryHint', { next: sessions.todaySets + 1, sets: sessions.setsPerSession, perSet: formatNumber(sessions.perSet), unit: goal.unit })
-    : t('skillGoals.eachEntryAdds')
+  // Once today's sets are done, a further one is an extra, not "Set 4 of 3".
+  const entryHint = !sessions
+    ? t('skillGoals.eachEntryAdds')
+    : sessions.todaySets >= sessions.setsPerSession
+      ? t('skillGoals.shape.entryHintExtra', { perSet: formatNumber(sessions.perSet), unit: goal.unit })
+      : t('skillGoals.shape.entryHint', { next: sessions.todaySets + 1, sets: sessions.setsPerSession, perSet: formatNumber(sessions.perSet), unit: goal.unit })
 
   async function handleSubmit(e) {
     e.preventDefault()

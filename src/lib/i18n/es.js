@@ -1725,6 +1725,7 @@ export default {
       sessionsDone: '{done} de {needed} sesiones',
       today: 'Hoy {total} de {perSession} {unit} · {count} de {sets} series',
       entryHint: 'Serie {next} de {sets} hoy: apunta a {perSet} {unit}. Registra cada serie por separado.',
+      entryHintExtra: 'Ya has hecho las series de hoy: otra cuenta como extra. Apunta a {perSet} {unit}.',
     },
     errorNumber: 'Introduce un número.',
     errorTime: 'Introduce un tiempo, por ejemplo 25:30.',

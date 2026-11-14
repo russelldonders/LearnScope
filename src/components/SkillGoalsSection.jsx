@@ -1,16 +1,15 @@
 import { useEffect, useState } from 'react'
-import SkillGoalChart from './SkillGoalChart'
 import SkillGoalEntriesModal from './SkillGoalEntriesModal'
-import SkillGoalEntryForm from './SkillGoalEntryForm'
 import SkillGoalModal from './SkillGoalModal'
+import { SkillGoalTile } from './SkillGoalsDashboardPanel'
 import { useLanguage } from '../context/LanguageContext'
 import { formatFullDate } from '../lib/dates'
-import { computeGoalProgress, formatGoalValue, goalShapeText } from '../lib/skillGoalProgress'
-import { listSkillGoals, logGoalEntry } from '../lib/skillGoals'
+import { computeGoalProgress, formatGoalValue, goalDueOn } from '../lib/skillGoalProgress'
+import { listSkillGoals } from '../lib/skillGoals'
 
-// A goal's measure, target and tracker on a skill's page. Values are read from
-// the statements the page has already loaded, and saved as ordinary activities,
-// so the rest of the page updates through its usual reload.
+// A skill's goals on its page, each as the same tile Home shows. Values are
+// read from the statements the page has already loaded, and saved as ordinary
+// activities, so the rest of the page updates through its usual reload.
 // editGoalId opens that goal's edit form once it has loaded, e.g. from the
 // dashboard's "Add a target"; onEditGoalOpened lets the page forget the
 // request so going back or reloading doesn't open it again.
@@ -32,6 +31,7 @@ export default function SkillGoalsSection({
   const [editingGoal, setEditingGoal] = useState(null)
   const [entriesGoalId, setEntriesGoalId] = useState(null)
   const [pastOpen, setPastOpen] = useState(false)
+  const [openGoalId, setOpenGoalId] = useState(null)
 
   async function load() {
     try {
@@ -82,20 +82,30 @@ export default function SkillGoalsSection({
         <p className="text-sm text-secondary mt-3">{t('skillGoals.empty')}</p>
       )}
 
-      <div className="space-y-3 mt-3">
-        {activeGoals.map((goal) => (
-          <GoalCard
-            key={goal.id}
-            goal={goal}
-            skill={skill}
-            user={user}
-            actor={actor}
-            statements={statements}
-            onActivitiesChanged={onActivitiesChanged}
-            onEdit={() => setEditingGoal(goal)}
-            onShowEntries={() => setEntriesGoalId(goal.id)}
-          />
-        ))}
+      {/* The same tile as on Home, so a goal looks and works the same in
+          both places. items-start: a tile opened for logging grows on its own. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start mt-3">
+        {activeGoals.map((goal) => {
+          const progress = computeGoalProgress(goal, statements)
+          const item = { goal, skill, statements, progress, nextLog: goalDueOn(goal, progress) }
+          return (
+            <SkillGoalTile
+              key={goal.id}
+              item={item}
+              user={user}
+              actor={actor}
+              open={openGoalId === goal.id}
+              onToggle={() => setOpenGoalId((current) => (current === goal.id ? null : goal.id))}
+              // The tile compares progress before and after a log for its
+              // feedback, so it gets this goal back with the fresh activities.
+              onChanged={async () => [{ goal, statements: (await onActivitiesChanged()) ?? statements }]}
+              linkToSkill={false}
+              onAddTarget={() => setEditingGoal(goal)}
+              onEdit={() => setEditingGoal(goal)}
+              onShowEntries={() => setEntriesGoalId(goal.id)}
+            />
+          )
+        })}
       </div>
 
       {pastGoals.length > 0 && (
@@ -163,110 +173,3 @@ export default function SkillGoalsSection({
   )
 }
 
-function GoalCard({ goal, skill, user, actor, statements, onActivitiesChanged, onEdit, onShowEntries }) {
-  const { t } = useLanguage()
-  const [savedNote, setSavedNote] = useState(null)
-  const progress = computeGoalProgress(goal, statements)
-  const currentLabelKey = goal.aggregation === 'best'
-    ? 'skillGoals.bestSoFar'
-    : goal.period
-      ? `skillGoals.thisPeriod.${goal.period}`
-      : 'skillGoals.totalSoFar'
-
-  const shapeText = progress.sessions ? goalShapeText(goal, progress.sessions, t) : null
-  const showSessions = shapeText && goal.period !== 'day'
-
-  async function handleLog(values) {
-    setSavedNote(null)
-    try {
-      await logGoalEntry({
-        goal,
-        skill,
-        userId: user.id,
-        actor,
-        input: values.input,
-        date: values.date,
-        note: values.note,
-        activityTitle: values.activityTitle,
-        evidence: values.evidence,
-      })
-    } catch (err) {
-      // The activity is saved before its files upload, so it may exist even
-      // though this failed. Showing it stops a retry from adding it twice unseen.
-      await onActivitiesChanged()
-      throw err
-    }
-    await onActivitiesChanged()
-    setSavedNote(values.date < goal.started_on ? 'skillGoals.savedBeforeStart' : 'skillGoals.saved')
-  }
-
-  return (
-    <article className="rounded-md border border-hairline bg-card p-3">
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="text-sm font-medium text-ink break-words min-w-0">{goal.title}</h3>
-        <button type="button" onClick={onEdit} className="text-xs text-moss font-medium hover:underline shrink-0">
-          {t('skillGoals.edit')}
-        </button>
-      </div>
-
-      <dl className="flex flex-wrap gap-x-4 gap-y-1 mt-1 font-mono text-xs text-secondary">
-        {progress.current != null && (
-          <div className="flex gap-1">
-            <dt>{t(currentLabelKey)}</dt>
-            <dd className="text-ink">{showSessions ? shapeText.done : formatGoalValue(goal, progress.current)}</dd>
-          </div>
-        )}
-        {goal.target_value != null && (
-          <div className="flex gap-1">
-            <dt>{t('skillGoals.targetShort')}</dt>
-            <dd className="text-ink">{shapeText ? shapeText.target : formatGoalValue(goal, goal.target_value)}</dd>
-          </div>
-        )}
-        {goal.target_date && (
-          <div className="flex gap-1">
-            <dt>{t('skillGoals.byShort')}</dt>
-            <dd className="text-ink">{formatFullDate(goal.target_date)}</dd>
-          </div>
-        )}
-      </dl>
-
-      {progress.percent != null && (
-        <div
-          role="progressbar"
-          aria-label={t('skillGoals.progressLabel')}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(progress.percent)}
-          className="mt-2 h-1.5 rounded-full bg-hairline overflow-hidden"
-        >
-          <div className="h-full bg-moss" style={{ width: `${progress.percent}%` }} />
-        </div>
-      )}
-      {shapeText && <p className="text-xs text-secondary mt-1">{shapeText.today}</p>}
-      {progress.reached && <p className="text-xs font-medium text-moss mt-1">{t('skillGoals.targetReached')}</p>}
-
-      <SkillGoalChart goal={goal} statements={statements} target={progress.target} />
-
-      <div className="mt-3 pt-3 border-t border-hairline">
-        <p className="text-sm text-ink mb-2">{goal.tracker_question}</p>
-        <SkillGoalEntryForm
-          goal={goal}
-          statements={statements}
-          idPrefix={`goal-${goal.id}`}
-          submitLabel={t('skillGoals.save')}
-          onSubmit={handleLog}
-        />
-        {savedNote && <p role="status" className="text-xs text-moss mt-2">{t(savedNote)}</p>}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-secondary">
-        {progress.lastLogged && (
-          <span>{t('skillGoals.lastLogged', { date: formatFullDate(progress.lastLogged.toISOString()) })}</span>
-        )}
-        <button type="button" onClick={onShowEntries} className="text-moss font-medium hover:underline">
-          {t('skillGoals.seeEntries', { count: progress.entryCount })}
-        </button>
-      </div>
-    </article>
-  )
-}

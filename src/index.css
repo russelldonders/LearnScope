@@ -117,6 +117,22 @@ body {
   button:disabled {
     cursor: not-allowed;
   }
+
+  /* iPhone Safari gives date and time fields a minimum width of their own,
+     so w-full ones spill out of narrow cards. Let them shrink to their box,
+     with the value on the left like every other field. */
+  input[type='date'],
+  input[type='time'],
+  input[type='datetime-local'],
+  input[type='month'] {
+    min-width: 0;
+    max-width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  input::-webkit-date-and-time-value {
+    text-align: left;
+  }
 }
 
 @layer components {

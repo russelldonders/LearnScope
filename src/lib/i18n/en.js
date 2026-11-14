@@ -1723,6 +1723,7 @@ export default {
       sessionsDone: '{done} of {needed} sessions',
       today: 'Today {total} of {perSession} {unit} · {count} of {sets} sets',
       entryHint: 'Set {next} of {sets} today — aim for {perSet} {unit}. Log each set on its own.',
+      entryHintExtra: "Today's sets are done — another counts as an extra. Aim for {perSet} {unit}.",
     },
     errorNumber: 'Enter a number.',
     errorTime: 'Enter a time, such as 25:30.',
