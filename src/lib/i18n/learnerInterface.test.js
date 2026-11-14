@@ -104,7 +104,10 @@ describe('learner interface translations', () => {
 
   it.each(INTERFACE_LANGUAGES.map((l) => l.value))('has every key in %s', async (language) => {
     const dictionary = await loadTranslations(language)
-    const missing = [...staticKeys, ...dynamicKeys].filter((key) => typeof resolve(dictionary, key) !== 'string')
+    // A key is text, or a list of example texts (see placeholderExamples.js).
+    const translated = (value) =>
+      typeof value === 'string' || (Array.isArray(value) && value.length > 0 && value.every((v) => typeof v === 'string'))
+    const missing = [...staticKeys, ...dynamicKeys].filter((key) => !translated(resolve(dictionary, key)))
     expect(missing).toEqual([])
   })
 })

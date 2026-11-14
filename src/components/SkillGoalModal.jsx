@@ -7,6 +7,7 @@ import { MEASURE_KINDS, isDerivedKind, localDateString, parseClock } from '../li
 import { createSkillGoal, deleteSkillGoal, draftSkillGoal, listSkillGoals, stopSkillGoal, updateSkillGoal } from '../lib/skillGoals'
 import { supabase } from '../lib/supabaseClient'
 import { findOrCreatePersonalSkill } from '../lib/skillLibrary'
+import { pickExample, useExampleSeed } from '../lib/placeholderExamples'
 
 const INPUT_CLASS =
   'w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss'
@@ -135,6 +136,7 @@ function parseTarget(form) {
 // onSaved then gets the new goal.
 export default function SkillGoalModal({ skill = null, userId = null, goal = null, goals = [], onSaved, onSetLevelTarget, onClose }) {
   const { t, language } = useLanguage()
+  const exampleSeed = useExampleSeed()
   const today = localDateString()
   const isEdit = Boolean(goal)
   const [step, setStep] = useState(isEdit ? 'review' : 'describe')
@@ -329,7 +331,7 @@ export default function SkillGoalModal({ skill = null, userId = null, goal = nul
               maxLength={1000}
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder={t('skillGoals.describePlaceholder')}
+              placeholder={pickExample(t('skillGoals.describePlaceholder'), exampleSeed)}
               className={INPUT_CLASS}
             />
             <p className="text-xs text-secondary mt-1">{t('skillGoals.describeHint')}</p>
@@ -551,7 +553,7 @@ export default function SkillGoalModal({ skill = null, userId = null, goal = nul
               maxLength={300}
               value={form.tracker_question}
               onChange={update('tracker_question')}
-              placeholder={t('skillGoals.questionPlaceholder')}
+              placeholder={pickExample(t('skillGoals.questionPlaceholder'), exampleSeed)}
               className={INPUT_CLASS}
             />
           </div>

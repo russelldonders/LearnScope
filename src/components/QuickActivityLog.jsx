@@ -11,6 +11,7 @@ import { experienceTrail } from '../lib/xapiStatement'
 import { findOrCreatePersonalSkill } from '../lib/skillLibrary'
 import { XAPI_VERBS } from '../lib/xapiVerbs'
 import { distanceUnitFromPace, goalLogFeedback, localDateString } from '../lib/skillGoalProgress'
+import { pickExample, useExampleSeed } from '../lib/placeholderExamples'
 import {
   buildCardStatement,
   cardFromRow,
@@ -36,6 +37,7 @@ const RECENT_ROWS = 60
 // to check and save like any other.
 export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFullForm, repeatRequest = null }) {
   const { t, language } = useLanguage()
+  const exampleSeed = useExampleSeed()
   const sectionRef = useRef(null)
   const [skills, setSkills] = useState([])
   const [experiences, setExperiences] = useState([])
@@ -221,7 +223,7 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
               e.currentTarget.form.requestSubmit()
             }
           }}
-          placeholder={t('quickLog.placeholder')}
+          placeholder={pickExample(t('quickLog.placeholder'), exampleSeed)}
           className={INPUT_CLASS}
         />
         <div className="flex flex-wrap items-center gap-3">

@@ -5,6 +5,7 @@ import AccessibleDialog from './AccessibleDialog'
 import EvidenceFields from './EvidenceFields'
 import SkillPickerModal from './SkillPickerModal'
 import { useLanguage } from '../context/LanguageContext'
+import { pickExample, useExampleSeed } from '../lib/placeholderExamples'
 
 function todayDate() {
   return new Date().toISOString().slice(0, 10)
@@ -30,6 +31,7 @@ function loadPanelPreferences() {
 
 export default function RecordActivityModal({ actor, skills, experiences = [], relatedSkill: fixedSkill, relatedExperience: fixedExperience, onSave, onClose }) {
   const { t } = useLanguage()
+  const exampleSeed = useExampleSeed()
   const [verbValue, setVerbValue] = useState('experienced')
   const [activityTitle, setActivityTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -125,7 +127,7 @@ export default function RecordActivityModal({ actor, skills, experiences = [], r
               placeholder={
                 fixedSkill
                   ? t('modals.recordActivity.activityPlaceholderSkill', { skillName: fixedSkill.name })
-                  : t('modals.recordActivity.activityPlaceholderDefault')
+                  : pickExample(t('modals.recordActivity.activityPlaceholderDefault'), exampleSeed)
               }
               className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
             />
