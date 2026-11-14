@@ -223,22 +223,23 @@ export default function Dashboard() {
           )}
 
         {!loading && counts.skills > 0 && (
+          <QuickActivityLog
+            user={user}
+            goalItems={goals}
+            onLogged={handleQuickLogged}
+            onOpenFullForm={() => setFullFormOpen(true)}
+            repeatRequest={repeatRequest}
+          />
+        )}
+
+        {!loading && counts.skills > 0 && (
           <RecordActivitySection
             formOpen={fullFormOpen}
             onFormOpenChange={setFullFormOpen}
             refreshKey={activityRefresh}
             onSaved={refreshGoals}
             onLogAgain={(row) => setRepeatRequest({ row, nonce: Date.now() })}
-          >
-            <QuickActivityLog
-              embedded
-              user={user}
-              goalItems={goals}
-              onLogged={handleQuickLogged}
-              onOpenFullForm={() => setFullFormOpen(true)}
-              repeatRequest={repeatRequest}
-            />
-          </RecordActivitySection>
+          />
         )}
       </main>
 

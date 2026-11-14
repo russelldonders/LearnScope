@@ -16,9 +16,7 @@ const RECENT_LIMIT = 8
 // The form can be opened from outside (the dashboard's quick log offers it),
 // and refreshKey reloads the list after activities were saved elsewhere.
 // onLogAgain(row) hands an activity to the quick log to repeat.
-// `children` sits between the description and the list -- Home puts its quick
-// "What did you do?" box there, so logging and the log are one section.
-export default function RecordActivitySection({ formOpen, onFormOpenChange, refreshKey = 0, onSaved, onLogAgain, children }) {
+export default function RecordActivitySection({ formOpen, onFormOpenChange, refreshKey = 0, onSaved, onLogAgain }) {
   const { user } = useAuth()
   const { t } = useLanguage()
   const navigate = useNavigate()
@@ -142,8 +140,6 @@ export default function RecordActivitySection({ formOpen, onFormOpenChange, refr
       <p className="text-sm text-secondary mb-6">
         {t('skillActivity.description')}
       </p>
-
-      {children && <div className="mb-6">{children}</div>}
 
       {loading && <p className="text-secondary">{t('common.loading')}</p>}
       {error && <p className="text-red-700 text-sm">{error}</p>}
