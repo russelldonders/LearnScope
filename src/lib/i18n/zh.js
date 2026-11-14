@@ -200,7 +200,7 @@ export default {
     },
     searchPlaceholder: '搜索你的技能',
     filters: '筛选',
-    views: { all: '全部', current: '当前职位', developing: '发展中', review: '需要复核' },
+    views: { all: '全部', current: '当前职位', developing: "技能差距", review: '需要复核' },
     noMatch: {
       title: '没有符合此视图的技能',
       description: '请尝试其他搜索或移除已启用的筛选条件。',

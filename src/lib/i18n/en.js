@@ -200,7 +200,7 @@ export default {
     },
     searchPlaceholder: 'Search your skills',
     filters: 'Filters',
-    views: { all: 'All', current: 'Current role', developing: 'Developing', review: 'Needs review' },
+    views: { all: 'All', current: 'Current role', developing: "Skill gaps", review: 'Needs review' },
     noMatch: {
       title: 'No skills match this view',
       description: 'Try another search or remove the active filters.',

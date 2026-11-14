@@ -200,7 +200,7 @@ export default {
     },
     searchPlaceholder: 'Zoek je vaardigheden',
     filters: 'Filters',
-    views: { all: 'Alle', current: 'Huidige functie', developing: 'In ontwikkeling', review: 'Beoordeling nodig' },
+    views: { all: 'Alle', current: 'Huidige functie', developing: "Vaardigheidskloven", review: 'Beoordeling nodig' },
     noMatch: {
       title: 'Geen vaardigheden komen overeen met deze weergave',
       description: 'Probeer een andere zoekopdracht of verwijder de actieve filters.',

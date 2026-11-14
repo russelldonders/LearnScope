@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
@@ -8,14 +8,10 @@ import FindSkillModal from './FindSkillModal'
 import FilterRow from './FilterRow'
 import TrackingReasonIcon from './TrackingReasonIcon'
 import OrganizationLogo from './OrganizationLogo'
-import GrowthRing from './GrowthRing'
-import SetSkillTargetFlow from './SetSkillTargetFlow'
 import { TRACKING_REASONS } from '../lib/trackingReasons'
-import { LEVEL_LABELS } from '../lib/levels'
 import { isSelfAssessmentDue } from '../lib/checkin'
 import { listTargetsSetByOthers, listLatestManagerRatings, pickTargetSetByOthers } from '../lib/managerSkillActions'
 import { computeVisibleTarget } from '../lib/skillTargetPrecedence'
-import { listMySkillDevelopmentTargets } from '../lib/skillDevelopmentTargets'
 
 const SKILL_VIEWS = [
   { value: 'all', labelKey: 'skills.views.all' },
@@ -45,29 +41,11 @@ export default function SkillsSection({ intro = null }) {
 
   const [currentRoleSkillIdsByExperienceId, setCurrentRoleSkillIdsByExperienceId] = useState({})
 
-  const [developmentTargets, setDevelopmentTargets] = useState({ personal: [], employer: [] })
-  const [targetsError, setTargetsError] = useState(null)
-  const [targetsLoading, setTargetsLoading] = useState(true)
-  const [showSetTargetFlow, setShowSetTargetFlow] = useState(false)
-
   useEffect(() => {
     loadSkills()
     loadCurrentRoles()
-    loadDevelopmentTargets()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the listed values change; the loaders are recreated every render
   }, [])
-
-  async function loadDevelopmentTargets() {
-    setTargetsLoading(true)
-    setTargetsError(null)
-    try {
-      setDevelopmentTargets(await listMySkillDevelopmentTargets(user.id))
-    } catch (err) {
-      setTargetsError(err.message || 'Your skill targets could not be loaded.')
-    } finally {
-      setTargetsLoading(false)
-    }
-  }
 
   // Which specific current role(s) each current-role skill actually belongs
   // to -- used both to split the "Current role(s)" grid per role and to
@@ -213,87 +191,6 @@ export default function SkillsSection({ intro = null }) {
   const activeSkills = useMemo(() => skills.filter((s) => s.lifecycle_stage !== 'archived'), [skills])
   const archivedSkills = useMemo(() => skills.filter((s) => s.lifecycle_stage === 'archived'), [skills])
 
-  // The one list of "your skill development targets" -- built from
-  // activeSkills' already-reconciled targetLevel/targetSource (see
-  // computeVisibleTarget in loadSkills above) rather than developmentTargets'
-  // raw personal+employer rows directly, so a skill with both a personal and
-  // an employer target shows once, with whichever one actually applies --
-  // the same precedence the rest of this page (GrowthRing, skill cards)
-  // already uses. developmentTargets is still consulted per row for notes/
-  // date/employer name (data loadSkills doesn't fetch), and for employer
-  // targets on a skill the learner hasn't added to their own list yet, which
-  // activeSkills has no row for at all.
-  const targetRows = useMemo(() => {
-    const personalBySkillId = new Map(developmentTargets.personal.map((t) => [t.skillId, t]))
-    const activeEmployerTargets = developmentTargets.employer.filter((t) => t.status === 'active')
-    // Team targets can be on a custom skill with no library entry, so match
-    // by library skill or by the learner's own skill row.
-    const otherTargetFor = (skill) =>
-      activeEmployerTargets.find((t) => t.targetLevel === skill.targetLevel && ((t.skillLibraryId && t.skillLibraryId === skill.library_skill_id) || (t.skillId && t.skillId === skill.id)))
-      ?? activeEmployerTargets.find((t) => (t.skillLibraryId && t.skillLibraryId === skill.library_skill_id) || (t.skillId && t.skillId === skill.id))
-    const matchedTargetIds = new Set()
-
-    const rows = []
-    for (const skill of activeSkills) {
-      if (skill.targetLevel == null) continue
-      if (skill.targetSource === 'personal') {
-        const raw = personalBySkillId.get(skill.id)
-        rows.push({
-          id: `skill-${skill.id}`,
-          skillId: skill.id,
-          skillName: skill.name,
-          ownership: 'personal',
-          targetLevel: skill.targetLevel,
-          currentLevel: skill.displayedLevel,
-          notes: raw?.notes ?? null,
-          targetDate: raw?.targetDate ?? null,
-        })
-      } else {
-        const raw = otherTargetFor(skill)
-        for (const t of activeEmployerTargets) {
-          if ((t.skillLibraryId && t.skillLibraryId === skill.library_skill_id) || (t.skillId && t.skillId === skill.id)) matchedTargetIds.add(t.id)
-        }
-        rows.push({
-          id: `skill-${skill.id}`,
-          skillId: skill.id,
-          skillName: skill.name,
-          ownership: 'employer',
-          employerName: raw?.employerName ?? skill.targetContextName ?? '',
-          targetLevel: skill.targetLevel,
-          currentLevel: skill.displayedLevel,
-          notes: raw?.notes ?? null,
-          targetDate: raw?.targetDate ?? null,
-        })
-      }
-    }
-    // Employer targets for a skill not yet tracked personally -- still worth
-    // showing (the learner hasn't started it yet), just with no current
-    // level to compare against.
-    for (const raw of activeEmployerTargets) {
-      if (matchedTargetIds.has(raw.id)) continue
-      rows.push({
-        id: `employer-${raw.id}`,
-        skillId: null,
-        skillName: raw.skillName,
-        ownership: 'employer',
-        employerName: raw.employerName,
-        targetLevel: raw.targetLevel,
-        currentLevel: null,
-        notes: raw.notes,
-        targetDate: raw.targetDate,
-      })
-    }
-
-    // Not-yet-met targets first -- this is what "Skills to develop" used to
-    // surface as a separate section; folding it into one sorted list here
-    // instead of two sections showing overlapping target data.
-    return rows.sort((a, b) => {
-      const aMet = a.currentLevel != null && a.currentLevel >= a.targetLevel
-      const bMet = b.currentLevel != null && b.currentLevel >= b.targetLevel
-      return aMet === bMet ? 0 : aMet ? 1 : -1
-    })
-  }, [activeSkills, developmentTargets])
-
   const filteredSkills = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase()
     const attentionScore = (skill) => {
@@ -378,15 +275,6 @@ export default function SkillsSection({ intro = null }) {
       </div>
 
       {intro}
-
-      {!targetsLoading && (
-        <SkillDevelopmentTargets
-          rows={targetRows}
-          error={targetsError}
-          t={t}
-          onSetNewTarget={() => setShowSetTargetFlow(true)}
-        />
-      )}
 
       {loading && <SkillsSkeleton />}
       {error && (
@@ -577,89 +465,8 @@ export default function SkillsSection({ intro = null }) {
         />
       )}
 
-      {showSetTargetFlow && (
-        <SetSkillTargetFlow
-          skills={activeSkills}
-          user={user}
-          onClose={() => setShowSetTargetFlow(false)}
-          onSet={() => {
-            setShowSetTargetFlow(false)
-            loadSkills()
-            loadDevelopmentTargets()
-          }}
-        />
-      )}
     </section>
   )
-}
-
-function SkillDevelopmentTargets({ rows, error, t, onSetNewTarget }) {
-  return (
-    <section aria-labelledby="skill-targets-heading" className="mb-10 border-y border-hairline py-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="max-w-2xl">
-          <h2 id="skill-targets-heading" className="font-display text-xl text-ink">{t('skills.skillTargets')}</h2>
-          <p className="mt-1 text-sm text-secondary">{t('skills.skillTargetsIntro')}</p>
-        </div>
-        <button
-          type="button"
-          onClick={onSetNewTarget}
-          className="shrink-0 rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
-        >
-          {t('skills.setNewTarget')}
-        </button>
-      </div>
-
-      {error ? (
-        <p role="alert" className="mt-5 text-sm text-red-700">{t('skills.skillTargetsLoadError')}</p>
-      ) : rows.length === 0 ? (
-        <p className="mt-5 text-sm text-secondary">{t('skills.skillTargetsEmpty')}</p>
-      ) : (
-        <div className="mt-5 divide-y divide-hairline border-t border-hairline">
-          {rows.map((target) => (
-            <TargetRow key={target.id} target={target} t={t} />
-          ))}
-        </div>
-      )}
-    </section>
-  )
-}
-
-function TargetRow({ target, t }) {
-  const content = (
-    <>
-      <div className="flex items-center gap-3 min-w-0">
-        <GrowthRing level={target.currentLevel} size={40} targetLevel={target.targetLevel} />
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-medium text-ink">{target.skillName}</h3>
-            <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${target.ownership === 'personal' ? 'border-moss text-moss' : 'border-slate text-slate'}`}>
-              {target.ownership === 'personal' ? t('skills.personalTarget') : target.employerName}
-            </span>
-          </div>
-          <p className="text-sm text-secondary">
-            {target.currentLevel ? LEVEL_LABELS[target.currentLevel] : 'Not yet assessed'}
-            {' → '}
-            {LEVEL_LABELS[target.targetLevel]}
-          </p>
-          {target.notes && <p className="mt-1 line-clamp-2 text-sm text-secondary">{target.notes}</p>}
-        </div>
-      </div>
-      {target.targetDate && (
-        <p className="shrink-0 text-sm text-secondary">{t('skills.targetDatePrefix')} {new Date(`${target.targetDate}T00:00:00`).toLocaleDateString()}</p>
-      )}
-    </>
-  )
-
-  if (target.skillId) {
-    return (
-      <Link to={`/skills/${target.skillId}`} className="flex flex-col gap-2 py-4 hover:text-moss sm:flex-row sm:items-start sm:justify-between">
-        {content}
-      </Link>
-    )
-  }
-
-  return <div className="flex flex-col gap-2 py-4 sm:flex-row sm:items-start sm:justify-between">{content}</div>
 }
 
 function SkillGrid({ skills, onEdit }) {

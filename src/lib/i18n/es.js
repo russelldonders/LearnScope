@@ -200,7 +200,7 @@ export default {
     },
     searchPlaceholder: 'Busca tus habilidades',
     filters: 'Filtros',
-    views: { all: 'Todas', current: 'Puesto actual', developing: 'En desarrollo', review: 'Necesita revisión' },
+    views: { all: 'Todas', current: 'Puesto actual', developing: "Brechas de habilidades", review: 'Necesita revisión' },
     noMatch: {
       title: 'Ninguna habilidad coincide con esta vista',
       description: 'Prueba otra búsqueda o elimina los filtros activos.',

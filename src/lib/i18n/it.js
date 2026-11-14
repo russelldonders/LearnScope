@@ -200,7 +200,7 @@ export default {
     },
     searchPlaceholder: 'Cerca le tue competenze',
     filters: 'Filtri',
-    views: { all: 'Tutte', current: 'Ruolo attuale', developing: 'In sviluppo', review: 'Da rivedere' },
+    views: { all: 'Tutte', current: 'Ruolo attuale', developing: "Lacune di competenze", review: 'Da rivedere' },
     noMatch: {
       title: 'Nessuna competenza corrisponde a questa vista',
       description: "Prova un'altra ricerca o rimuovi i filtri attivi.",

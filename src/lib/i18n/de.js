@@ -200,7 +200,7 @@ export default {
     },
     searchPlaceholder: 'Fähigkeiten durchsuchen',
     filters: 'Filter',
-    views: { all: 'Alle', current: 'Aktuelle Rolle', developing: 'In Entwicklung', review: 'Braucht Überprüfung' },
+    views: { all: 'Alle', current: 'Aktuelle Rolle', developing: "Fähigkeitslücken", review: 'Braucht Überprüfung' },
     noMatch: {
       title: 'Keine Fähigkeiten passen zu dieser Ansicht',
       description: 'Versuche eine andere Suche oder entferne die aktiven Filter.',

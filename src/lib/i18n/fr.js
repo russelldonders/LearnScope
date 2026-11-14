@@ -200,7 +200,7 @@ export default {
     },
     searchPlaceholder: 'Rechercher vos compétences',
     filters: 'Filtres',
-    views: { all: 'Toutes', current: 'Poste actuel', developing: 'En développement', review: 'À revoir' },
+    views: { all: 'Toutes', current: 'Poste actuel', developing: "Écarts de compétences", review: 'À revoir' },
     noMatch: {
       title: 'Aucune compétence ne correspond à cette vue',
       description: 'Essayez une autre recherche ou supprimez les filtres actifs.',
