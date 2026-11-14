@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildCourseDraftRequest, normalizeGeneratedCourseDraft } from './courseDraft.js'
+import { COURSE_DRAFT_SCHEMA, buildCourseDraftRequest, normalizeGeneratedCourseDraft } from './courseDraft.js'
 
 const raw = {
   name: 'Safe lifting',
@@ -18,6 +18,10 @@ const raw = {
 }
 
 describe('buildCourseDraftRequest', () => {
+  it('uses only constraints supported by Anthropic structured outputs', () => {
+    expect(JSON.stringify(COURSE_DRAFT_SCHEMA)).not.toMatch(/"(minimum|maximum|minLength|maxLength|maxItems)"/)
+  })
+
   it('requires the core brief', () => {
     expect(buildCourseDraftRequest({}).error).toBeTruthy()
     expect(buildCourseDraftRequest({ topic: 'Lifting', audience: 'New starters' }).error).toBeTruthy()

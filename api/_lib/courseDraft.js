@@ -17,7 +17,7 @@ const blockSchema = {
     type: { type: 'string', enum: BLOCK_TYPES },
     content: { type: 'string' },
     secondaryContent: { type: 'string' },
-    level: { type: 'integer', minimum: 1, maximum: 3 },
+    level: { type: 'integer' },
     variant: { type: 'string', enum: CALLOUT_VARIANTS },
     align: { type: 'string', enum: TEXT_ALIGNMENTS },
   },
