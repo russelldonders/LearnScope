@@ -7,8 +7,7 @@ import { useLanguage } from '../context/LanguageContext'
 import { isSelfAssessmentDue } from '../lib/checkin'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
-import PeopleWithSkillModal from '../components/PeopleWithSkillModal'
-import PersonAvatar from '../components/PersonAvatar'
+import SkillNetworkSection from '../components/SkillNetworkSection'
 import KnowledgeLevelBar from '../components/KnowledgeLevelBar'
 import SelfAssessSection from '../components/SelfAssessSection'
 import { LEVEL_LABELS, LEVEL_DESCRIPTIONS, KNOWLEDGE_LEVEL_LABELS } from '../lib/levels'
@@ -117,8 +116,6 @@ export default function SkillDetail({ skillId, embedded = false }) {
   const [validatorNames, setValidatorNames] = useState({})
   const [connectionsWithSkill, setConnectionsWithSkill] = useState([])
   const [totalTrackersCount, setTotalTrackersCount] = useState(0)
-  const [connectionsListOpen, setConnectionsListOpen] = useState(false)
-  const [peopleWithSkillOpen, setPeopleWithSkillOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [levelDetailAxis, setLevelDetailAxis] = useState(null)
   const [composite, setComposite] = useState(null)
@@ -846,7 +843,8 @@ export default function SkillDetail({ skillId, embedded = false }) {
                         </p>
                       }
                       actions={[
-                        { label: t('skillDetail.inviteOthersToAssess'), onClick: () => setInviteOpen(true) },
+                        // Inviting others to rate lives in the Skill network
+                        // section, beside the people who'd be asked.
                         // "✨ Request AI assessment" now lives in the header next
                         // to the skill name -- see the button beside setSettingsOpen
                         // above, which shares this exact same onClick/disabled logic.
@@ -878,6 +876,14 @@ export default function SkillDetail({ skillId, embedded = false }) {
               />
             )}
 
+            <SkillNetworkSection
+              librarySkillId={skill.library_skill_id}
+              connections={connectionsWithSkill}
+              totalTrackersCount={totalTrackersCount}
+              onInviteToRate={skill.user_id === user.id ? () => setInviteOpen(true) : null}
+              onRecommend={() => setRecommendOpen(true)}
+            />
+
             <CompositeSkillProgress
               composite={composite}
               loading={loadingComposite}
@@ -887,57 +893,9 @@ export default function SkillDetail({ skillId, embedded = false }) {
               startError={startComponentError}
             />
 
-            {skill.library_skill_id && (
-              <div className="mt-4 pt-4 border-t border-hairline">
-                <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary mb-2">{t('skillDetail.skillNetwork')}</h3>
-                <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
-                  <button
-                    type="button"
-                    onClick={() => setConnectionsListOpen(true)}
-                    disabled={connectionsWithSkill.length === 0}
-                    className="flex items-center gap-1.5 text-ink underline decoration-dotted underline-offset-2 hover:text-moss disabled:no-underline disabled:cursor-default disabled:hover:text-ink"
-                  >
-                    <PeopleIcon />
-                    {connectionsWithSkill.length} {t('skillDetail.connectionsHaveSkillSuffix')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPeopleWithSkillOpen(true)}
-                    className="flex items-center gap-1.5 text-ink underline decoration-dotted underline-offset-2 hover:text-moss"
-                  >
-                    <PeopleIcon />
-                    {totalTrackersCount} {totalTrackersCount === 1 ? t('skillDetail.personSingular') : t('skillDetail.peoplePlural')} {t('skillDetail.inTotalHaveThisSkillSuffix')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRecommendOpen(true)}
-                    className="rounded-full border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:border-moss hover:text-moss transition-colors"
-                  >
-                    {t('skillDetail.recommendThisSkill')}
-                  </button>
-                </div>
-              </div>
-            )}
             </div>
             )}
             </div>
-
-            {peopleWithSkillOpen && (
-              <PeopleWithSkillModal
-                librarySkillId={skill.library_skill_id}
-                skillName={skill.name}
-                skillId={skill.id}
-                onClose={() => setPeopleWithSkillOpen(false)}
-              />
-            )}
-
-            {connectionsListOpen && (
-              <ConnectionsWithSkillModal
-                connections={connectionsWithSkill}
-                skillName={skill.name}
-                onClose={() => setConnectionsListOpen(false)}
-              />
-            )}
 
             {inviteOpen && (
               <InviteRaterModal
@@ -1269,16 +1227,6 @@ export default function SkillDetail({ skillId, embedded = false }) {
   )
 }
 
-function PeopleIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  )
-}
 
 // Only ever populated with connections who both track this skill AND have
 // opted into showing it (see listConnectionsWithSkill) -- no separate
@@ -1319,46 +1267,6 @@ function ActivitiesModal({ statements, onSelect, onClose }) {
             />
           ))}
         </div>
-    </AccessibleDialog>
-  )
-}
-
-function ConnectionsWithSkillModal({ connections, skillName, onClose }) {
-  const { t } = useLanguage()
-  return (
-    <AccessibleDialog
-      labelledBy="connections-with-skill-dialog-title"
-      onClose={onClose}
-      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
-    >
-        <div className="flex items-center justify-between mb-4">
-          <h2 id="connections-with-skill-dialog-title" className="font-display text-2xl text-ink">{t('skillDetail.connectionsWithPrefix')} {skillName}</h2>
-          <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm shrink-0">
-            {t('skillDetail.close')}
-          </button>
-        </div>
-        {connections.length === 0 ? (
-          <p className="text-sm text-secondary">{t('skillDetail.noConnectionsTrackSkill')}</p>
-        ) : (
-          <ul className="space-y-2">
-            {connections.map((c) => (
-              <li key={c.id} className="rounded-md border border-hairline p-3">
-                <div className="flex items-center gap-3">
-                  <Link to={`/skills-profile/${c.id}`} className="flex items-center gap-3 min-w-0 group flex-1">
-                    <PersonAvatar name={c.name} avatarUrl={c.avatarUrl} />
-                    <span className="text-sm text-ink font-medium truncate group-hover:text-moss group-hover:underline">
-                      {c.name}
-                    </span>
-                  </Link>
-                  <GrowthRing level={c.level} size={24} labels={LEVEL_LABELS} />
-                  <span className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 shrink-0">
-                    {t('skillDetail.connected')}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
     </AccessibleDialog>
   )
 }
