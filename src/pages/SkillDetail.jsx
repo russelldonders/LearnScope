@@ -47,6 +47,9 @@ import CompositeSkillProgress from '../components/CompositeSkillProgress'
 import SkillGoalsSection from '../components/SkillGoalsSection'
 import { HistorySection, TimelineDetailModal } from './SkillHistorySection'
 import ActivityTimeline from '../components/ActivityTimeline'
+import { timelineRows } from '../lib/activityTimeline'
+
+const DEMONSTRATE_TIMELINE_LENGTH = 5
 import { ScheduleSection, DetailsSection, DeleteSection, SettingsSection } from './SkillSettingsSections'
 
 const SKILL_DETAIL_TABS = [
@@ -556,6 +559,9 @@ export default function SkillDetail({ skillId, embedded = false }) {
   // The same object while the skill's id and name stay the same, for the quick log.
   const focusSkillId = skill?.id
   const focusSkillName = skill?.name
+  // The Demonstrate box's own timeline: the latest few, plus anything just
+  // logged for an earlier date so it shows straight away.
+  const demonstrateRows = timelineRows(practicalStatements, { limit: DEMONSTRATE_TIMELINE_LENGTH })
   const focusSkill = useMemo(
     () => (focusSkillId ? { id: focusSkillId, name: focusSkillName } : null),
     [focusSkillId, focusSkillName],
@@ -829,25 +835,34 @@ export default function SkillDetail({ skillId, embedded = false }) {
                     <NestedSkillPanel
                       title={t('skillDetail.stages.demonstrate')}
                       status={
-                        practicalStatements.length > 0 ? (
-                          <button
-                            type="button"
-                            onClick={() => setActivitiesListOpen(true)}
-                            className="text-sm text-secondary underline decoration-dotted underline-offset-2 hover:text-moss text-left"
-                          >
-                            {practicalStatements.length} {practicalStatements.length === 1 ? t('skillDetail.activityLoggedSingular') : t('skillDetail.activityLoggedPlural')}
-                            {relationshipLinks.length > 0
-                              ? ` · ${t('skillDetail.linkedToPrefix')} ${relationshipLinks.length} ${relationshipLinks.length === 1 ? t('skillDetail.experienceEntrySingular') : t('skillDetail.experienceEntryPlural')}`
-                              : ''}
-                          </button>
-                        ) : (
+                        // The latest activities right here, drawn as the
+                        // dashboard's timeline; the rest are one tap away.
+                        <div>
                           <p className="text-sm text-secondary">
                             {practicalStatements.length} {practicalStatements.length === 1 ? t('skillDetail.activityLoggedSingular') : t('skillDetail.activityLoggedPlural')}
                             {relationshipLinks.length > 0
                               ? ` · ${t('skillDetail.linkedToPrefix')} ${relationshipLinks.length} ${relationshipLinks.length === 1 ? t('skillDetail.experienceEntrySingular') : t('skillDetail.experienceEntryPlural')}`
                               : ''}
                           </p>
-                        )
+                          {demonstrateRows.length > 0 && (
+                            <div className="mt-3">
+                              <ActivityTimeline
+                                rows={demonstrateRows}
+                                allRows={practicalStatements}
+                                onOpen={(row) => setSelectedActivityEvent({ type: 'activity', statement: row })}
+                              />
+                            </div>
+                          )}
+                          {practicalStatements.length > demonstrateRows.length && (
+                            <button
+                              type="button"
+                              onClick={() => setActivitiesListOpen(true)}
+                              className="mt-3 text-sm text-moss font-medium hover:underline"
+                            >
+                              {t('activity.timeline.seeAll', { total: practicalStatements.length })}
+                            </button>
+                          )}
+                        </div>
                       }
                       actions={[
                         { label: t('skillDetail.logSkillActivity'), onClick: () => setQuickLogOpen(true) },
