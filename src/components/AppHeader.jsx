@@ -181,7 +181,7 @@ export default function AppHeader({
               aria-label={pendingActionCount > 0 ? `${t('nav.actions')}, ${pendingActionCount} pending` : t('nav.actions')}
               aria-expanded={notificationsOpen}
               aria-controls="notification-drawer"
-              className={`relative flex size-11 items-center justify-center rounded-full border shrink-0 ${
+              className={`relative flex w-9 h-9 items-center justify-center rounded-full border shrink-0 ${
                 notificationsOpen || location.pathname === '/actions'
                   ? 'border-[var(--org-primary,var(--color-moss))] text-[var(--org-text,var(--color-ink))]'
                   : 'border-hairline text-[var(--org-text,var(--color-ink))] hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]'
