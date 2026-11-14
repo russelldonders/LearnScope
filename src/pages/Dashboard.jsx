@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MoreWaysToProgress } from '../components/SkillsMomentum'
+import { MoreWaysToProgress, NeedsYourAttention } from '../components/SkillsMomentum'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useNavVisibility } from '../context/NavVisibilityContext'
@@ -177,6 +177,9 @@ export default function Dashboard() {
             }
           />
         )}
+
+        {/* Only when something's due, overdue or waiting on the learner. */}
+        {!loading && <NeedsYourAttention />}
 
         {loading ? (
           <DashboardSkeleton />

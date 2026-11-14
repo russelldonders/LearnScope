@@ -168,7 +168,17 @@ export default {
     needsAttention: 'Richiede la tua attenzione',
     moreWaysToProgress: 'Altri modi per progredire',
     moreWaysSubtitle: "Prossimi passi utili per le tue competenze.",
-    moreRecentProgress: 'Altri progressi recenti',
+    moreRecentProgress: "Mostra altri progressi recenti",
+    attention: {
+      subtitle: "In scadenza, in ritardo o in attesa di te.",
+      selfAssess: "Autovaluta il tuo livello attuale",
+      reachLevel: "Raggiungi {level}",
+      reachGoal: "Obiettivo: {goal}",
+      reviewTitle: "Qualcuno ti ha chiesto",
+      overdue: "In ritardo · {when}",
+      due: "Scade {when}",
+      asked: "Chiesto {when}",
+    },
   },
   skills: {
     heading: 'Le tue competenze',

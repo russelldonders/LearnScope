@@ -36,7 +36,7 @@ function reminderCutoff() {
 async function loadUpcomingSelfAssessments(userId) {
   const { data, error } = await supabase
     .from('skills')
-    .select('id, name, next_checkin_date')
+    .select('id, name, level, next_checkin_date')
     .eq('user_id', userId)
     .not('next_checkin_date', 'is', null)
     .lte('next_checkin_date', reminderCutoff())
@@ -52,7 +52,7 @@ async function loadUpcomingSelfAssessments(userId) {
 async function loadUpcomingTargets(userId) {
   const { data, error } = await supabase
     .from('skill_targets')
-    .select('id, skill_id, target_level, target_date, created_at, skills(name)')
+    .select('id, skill_id, target_level, target_date, created_at, skills(name, level)')
     .eq('user_id', userId)
     .not('target_date', 'is', null)
     .order('created_at', { ascending: false })
@@ -208,37 +208,22 @@ function settled(results, index, fallback) {
 }
 
 // The top of the Skills page: one recommended next step and the latest
-// progress (with any earlier progress one tap away), then what needs
-// attention. Each part shows only when it has something to show. Other
-// useful next steps across skills are on Home (MoreWaysToProgress below).
+// progress, with any earlier progress one tap away. What needs attention and
+// other useful next steps across skills are on Home (NeedsYourAttention and
+// MoreWaysToProgress below).
 export default function SkillsMomentum() {
   const { user } = useAuth()
   const { t } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [recentGrowth, setRecentGrowth] = useState([])
   const [upNext, setUpNext] = useState([])
-  const [upcomingSelfAssessments, setUpcomingSelfAssessments] = useState([])
-  const [upcomingTargets, setUpcomingTargets] = useState([])
-  const [pendingReviewTasks, setPendingReviewTasks] = useState([])
-  const [goals, setGoals] = useState([])
 
   useEffect(() => {
     let active = true
-    Promise.allSettled([
-      loadRecentGrowth(user.id),
-      loadUpNextRecommendations(user.id),
-      loadUpcomingSelfAssessments(user.id),
-      loadUpcomingTargets(user.id),
-      loadPendingReviewTasks(user.id),
-      listActiveGoalsForAttention(user.id),
-    ]).then((results) => {
+    Promise.allSettled([loadRecentGrowth(user.id), loadUpNextRecommendations(user.id)]).then((results) => {
       if (!active) return
       setRecentGrowth(settled(results, 0, []))
       setUpNext(settled(results, 1, []))
-      setUpcomingSelfAssessments(settled(results, 2, []))
-      setUpcomingTargets(settled(results, 3, []))
-      setPendingReviewTasks(settled(results, 4, []))
-      setGoals(settled(results, 5, []))
       setLoading(false)
     })
     return () => {
@@ -248,31 +233,12 @@ export default function SkillsMomentum() {
 
   if (loading) return null
 
-  const today = todayDateString()
-  const goalTargetsDue = goals.filter(
-    (item) => item.goal.target_date && item.goal.target_date <= reminderCutoff() && !item.progress.reached,
-  )
-  const targetReminders = [
-    ...upcomingTargets.map((target) => ({
-      key: `target-${target.id}`,
-      label: `${target.skills?.name ?? 'Skill'} → ${LEVEL_LABELS[target.target_level]}`,
-      to: `/skills/${target.skill_id}`,
-      date: target.target_date,
-    })),
-    ...goalTargetsDue.map(({ goal, skill }) => ({
-      key: `goal-target-${goal.id}`,
-      label: `${goal.title} · ${skill.name}`,
-      to: `/skills/${skill.id}`,
-      date: goal.target_date,
-    })),
-  ].sort((a, b) => a.date.localeCompare(b.date))
   const hasFocus = upNext.length > 0 || recentGrowth.length > 0
-  const hasReminders = upcomingSelfAssessments.length > 0 || targetReminders.length > 0 || pendingReviewTasks.length > 0
 
-  if (!hasFocus && !hasReminders) return null
+  if (!hasFocus) return null
 
   return (
-    <div className="mb-10 space-y-10">
+    <div className="mb-10">
       {hasFocus && (
         <section aria-labelledby="skills-momentum-heading">
           <h2 id="skills-momentum-heading" className="font-display text-2xl text-ink text-balance">
@@ -281,41 +247,6 @@ export default function SkillsMomentum() {
           <p className="text-sm text-secondary mt-1 mb-5 text-pretty">{t('dashboard.subheading')}</p>
           <FocusPanel recommendation={upNext[0]} recentGrowth={recentGrowth[0]} moreGrowth={recentGrowth.slice(1)} />
         </section>
-      )}
-
-      {hasReminders && (
-        <div>
-          <h2 className="font-display text-xl text-ink mb-6">{t('dashboard.needsAttention')}</h2>
-          <div className="space-y-6">
-            {upcomingSelfAssessments.length > 0 && (
-              <ReminderGroup title="Self-assessments due">
-                {upcomingSelfAssessments.map((s) => (
-                  <ReminderRow
-                    key={s.id}
-                    to={`/skills/${s.id}`}
-                    label={s.name}
-                    date={s.next_checkin_date}
-                    overdue={isSelfAssessmentDue(s.next_checkin_date)}
-                  />
-                ))}
-              </ReminderGroup>
-            )}
-            {targetReminders.length > 0 && (
-              <ReminderGroup title="Target dates">
-                {targetReminders.map((row) => (
-                  <ReminderRow key={row.key} to={row.to} label={row.label} date={row.date} overdue={row.date <= today} />
-                ))}
-              </ReminderGroup>
-            )}
-            {pendingReviewTasks.length > 0 && (
-              <ReminderGroup title="Waiting on your review">
-                {pendingReviewTasks.map((task) => (
-                  <ReminderRow key={task.key} to={task.to} label={task.label} date={task.date} />
-                ))}
-              </ReminderGroup>
-            )}
-          </div>
-        </div>
       )}
 
     </div>
@@ -829,41 +760,119 @@ function ActionSkillsButton({ label, recs, onActionComplete }) {
   )
 }
 
-function ReminderGroup({ title, children }) {
+// "Needs your attention" on Home: self-assessments and target dates due
+// within two weeks or overdue, and other people's requests waiting on the
+// learner. Each is a tile like the "More ways to make progress" cards -- the
+// skill and its level, what to do, and whether it's overdue -- overdue first.
+// Nothing shows when there's nothing to do.
+export function NeedsYourAttention() {
+  const { user } = useAuth()
+  const { t } = useLanguage()
+  const [items, setItems] = useState(null)
+
+  useEffect(() => {
+    let active = true
+    Promise.allSettled([
+      loadUpcomingSelfAssessments(user.id),
+      loadUpcomingTargets(user.id),
+      listActiveGoalsForAttention(user.id),
+      loadPendingReviewTasks(user.id),
+    ]).then((results) => {
+      if (!active) return
+      const [selfAssessments, targets, goals, reviews] = [0, 1, 2, 3].map((i) => settled(results, i, []))
+      const today = todayDateString()
+      const dueItems = [
+        ...selfAssessments.map((skill) => ({
+          key: `self-${skill.id}`,
+          to: `/skills/${skill.id}`,
+          skill: { name: skill.name, level: skill.level },
+          task: t('dashboard.attention.selfAssess'),
+          date: skill.next_checkin_date,
+          overdue: isSelfAssessmentDue(skill.next_checkin_date),
+        })),
+        ...targets.map((target) => ({
+          key: `target-${target.id}`,
+          to: `/skills/${target.skill_id}`,
+          skill: { name: target.skills?.name ?? '', level: target.skills?.level ?? null },
+          task: t('dashboard.attention.reachLevel', { level: LEVEL_LABELS[target.target_level] }),
+          date: target.target_date,
+          overdue: target.target_date < today,
+        })),
+        ...goals
+          .filter((item) => item.goal.target_date && item.goal.target_date <= reminderCutoff() && !item.progress.reached)
+          .map(({ goal, skill }) => ({
+            key: `goal-${goal.id}`,
+            to: `/skills/${skill.id}`,
+            skill,
+            task: t('dashboard.attention.reachGoal', { goal: goal.title }),
+            date: goal.target_date,
+            overdue: goal.target_date < today,
+          })),
+      ].sort((a, b) => Number(b.overdue) - Number(a.overdue) || a.date.localeCompare(b.date))
+      const reviewItems = reviews.map((task) => ({ ...task, review: true }))
+      setItems([...dueItems, ...reviewItems])
+    })
+    return () => {
+      active = false
+    }
+  }, [user.id, t])
+
+  if (!items || items.length === 0) return null
   return (
-    <div>
-      <h3 className="font-mono text-[11px] uppercase tracking-wide text-secondary mb-2">{title}</h3>
-      <div className="space-y-2">{children}</div>
-    </div>
+    <section aria-labelledby="needs-attention-heading">
+      <h2 id="needs-attention-heading" className="font-display text-xl text-ink mb-2">{t('dashboard.needsAttention')}</h2>
+      <p className="text-sm text-secondary mb-6">{t('dashboard.attention.subtitle')}</p>
+      <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {items.map((item) => (
+          <li key={item.key}>
+            <AttentionTile item={item} />
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 
-// A link to where the reminder is dealt with, or a button when it can be dealt
-// with right here on the dashboard (logging a goal).
-function ReminderRow({ to, onClick, label, date, overdue = false }) {
-  const className =
-    'flex w-full items-center justify-between gap-3 bg-card border border-hairline rounded-lg px-4 py-3 text-left hover:border-moss transition-colors'
-  const content = (
-    <>
-      <span className="text-sm text-ink truncate min-w-0">{label}</span>
-      <span
-        className={`font-mono text-xs shrink-0 ${overdue ? 'text-gold' : 'text-secondary'}`}
-        title={formatAbsoluteDate(date)}
-      >
-        {formatRelativeDate(date)}
-      </span>
-    </>
-  )
-  if (onClick) {
-    return (
-      <button type="button" onClick={onClick} className={className}>
-        {content}
-      </button>
-    )
-  }
+function AttentionTile({ item }) {
+  const { t } = useLanguage()
+  // "In 5 days" / "Today" read mid-sentence: "Due in 5 days", "Due today".
+  const relative = formatRelativeDate(item.date)
+  const when = relative.charAt(0).toLowerCase() + relative.slice(1)
+  const status = item.review
+    ? { text: t('dashboard.attention.asked', { when }), className: 'border-hairline text-secondary' }
+    : item.overdue
+      ? { text: t('dashboard.attention.overdue', { when }), className: 'border-red-700/40 bg-red-700/10 text-red-700' }
+      : { text: t('dashboard.attention.due', { when }), className: 'border-gold/40 bg-gold/15 text-gold' }
   return (
-    <Link to={to} className={className}>
-      {content}
+    <Link
+      to={item.to}
+      className={`flex h-full flex-col bg-card border rounded-lg p-4 hover:border-moss transition-colors ${
+        item.overdue ? 'border-red-700/40' : 'border-hairline'
+      }`}
+    >
+      <div className="flex items-center gap-3 mb-3">
+        {item.review ? (
+          <span aria-hidden="true" className="w-10 h-10 shrink-0 rounded-full border border-hairline bg-paper text-moss flex items-center justify-center">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+          </span>
+        ) : (
+          <GrowthRing level={item.skill.level} size={40} />
+        )}
+        <h3 className="font-display text-base text-ink truncate min-w-0">
+          {item.review ? t('dashboard.attention.reviewTitle') : item.skill.name}
+        </h3>
+      </div>
+      <p className="text-sm text-ink font-medium">{item.review ? item.label : item.task}</p>
+      <p className="mt-auto pt-3">
+        <span className={`inline-block rounded-full border px-2 py-0.5 text-xs font-medium ${status.className}`} title={formatAbsoluteDate(item.date)}>
+          {status.text}
+        </span>
+      </p>
     </Link>
   )
 }

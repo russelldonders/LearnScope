@@ -47,7 +47,7 @@ describe('dashboard focus hierarchy', () => {
     renderWithRouter(<FocusPanel recentGrowth={growth('a', 'Facilitation')} moreGrowth={[growth('b', 'Coaching'), growth('c', 'Writing')]} />)
 
     expect(screen.queryByText('Coaching')).not.toBeInTheDocument()
-    const toggle = screen.getByRole('button', { name: /More recent progress \(2\)/ })
+    const toggle = screen.getByRole('button', { name: /Show more recent progress \(2\)/ })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
@@ -58,7 +58,7 @@ describe('dashboard focus hierarchy', () => {
   it('has no such link when there is no earlier progress', () => {
     const growth = { id: 'a', skill_id: 'skill-a', skills: { name: 'Facilitation' }, level: 3, previousLevel: 2, assessed_at: '2026-11-01T10:00:00Z' }
     renderWithRouter(<FocusPanel recentGrowth={growth} />)
-    expect(screen.queryByRole('button', { name: /More recent progress/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /more recent progress/i })).not.toBeInTheDocument()
   })
 
   it('offers a useful fallback when every skill recommendation is complete', () => {

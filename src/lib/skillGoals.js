@@ -51,7 +51,7 @@ export async function listSkillGoals(skillId) {
 export async function listActiveGoalsWithActivities(userId) {
   const { data, error } = await supabase
     .from('skill_goals')
-    .select(`${GOAL_COLUMNS}, skills!inner(id, name, user_id)`)
+    .select(`${GOAL_COLUMNS}, skills!inner(id, name, user_id, level)`)
     .eq('status', 'active')
     .eq('skills.user_id', userId)
     .order('created_at', { ascending: false })
@@ -76,7 +76,7 @@ export async function listActiveGoalsWithActivities(userId) {
   const statementsBySkill = new Map(statementsEntries)
   return goals.map(({ skills, ...goal }) => ({
     goal: withTargetHistory(goal, replaced ?? []),
-    skill: { id: skills.id, name: skills.name },
+    skill: { id: skills.id, name: skills.name, level: skills.level },
     statements: statementsBySkill.get(goal.skill_id) ?? [],
   }))
 }

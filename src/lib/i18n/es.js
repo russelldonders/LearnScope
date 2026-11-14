@@ -168,7 +168,17 @@ export default {
     needsAttention: 'Necesita tu atención',
     moreWaysToProgress: 'Más formas de progresar',
     moreWaysSubtitle: "Próximos pasos útiles para tus habilidades.",
-    moreRecentProgress: 'Progreso reciente adicional',
+    moreRecentProgress: "Mostrar más progreso reciente",
+    attention: {
+      subtitle: "Vence pronto, está atrasado o espera tu respuesta.",
+      selfAssess: "Autoevalúa tu nivel actual",
+      reachLevel: "Alcanzar {level}",
+      reachGoal: "Objetivo: {goal}",
+      reviewTitle: "Alguien te lo pidió",
+      overdue: "Atrasado · {when}",
+      due: "Vence {when}",
+      asked: "Pedido {when}",
+    },
   },
   skills: {
     heading: 'Tus habilidades',

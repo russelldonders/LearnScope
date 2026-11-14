@@ -168,7 +168,17 @@ export default {
     needsAttention: 'Needs your attention',
     moreWaysToProgress: 'More ways to make progress',
     moreWaysSubtitle: "Useful next steps across your skills.",
-    moreRecentProgress: 'More recent progress',
+    moreRecentProgress: "Show more recent progress",
+    attention: {
+      subtitle: "Due soon, overdue, or waiting on you.",
+      selfAssess: "Self-assess your current level",
+      reachLevel: "Reach {level}",
+      reachGoal: "Goal: {goal}",
+      reviewTitle: "Someone asked you",
+      overdue: "Overdue · {when}",
+      due: "Due {when}",
+      asked: "Asked {when}",
+    },
   },
   skills: {
     heading: 'Your skills',

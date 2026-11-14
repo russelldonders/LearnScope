@@ -168,7 +168,17 @@ export default {
     needsAttention: 'Vraagt jouw aandacht',
     moreWaysToProgress: 'Meer manieren om vooruitgang te boeken',
     moreWaysSubtitle: "Nuttige volgende stappen voor je vaardigheden.",
-    moreRecentProgress: 'Meer recente voortgang',
+    moreRecentProgress: "Meer recente voortgang tonen",
+    attention: {
+      subtitle: "Binnenkort, te laat of wacht op jou.",
+      selfAssess: "Beoordeel je huidige niveau",
+      reachLevel: "{level} bereiken",
+      reachGoal: "Doel: {goal}",
+      reviewTitle: "Iemand heeft je gevraagd",
+      overdue: "Te laat · {when}",
+      due: "Gepland {when}",
+      asked: "Gevraagd {when}",
+    },
   },
   skills: {
     heading: 'Jouw vaardigheden',

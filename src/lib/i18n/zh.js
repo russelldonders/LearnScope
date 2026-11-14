@@ -168,7 +168,17 @@ export default {
     needsAttention: '需要你关注',
     moreWaysToProgress: '更多提升方式',
     moreWaysSubtitle: "各项技能接下来可以做的有用步骤。",
-    moreRecentProgress: '更多近期进展',
+    moreRecentProgress: "显示更多近期进展",
+    attention: {
+      subtitle: "即将到期、已逾期或等待你处理。",
+      selfAssess: "自评你当前的水平",
+      reachLevel: "达到{level}",
+      reachGoal: "目标：{goal}",
+      reviewTitle: "有人向你提出了请求",
+      overdue: "已逾期 · {when}",
+      due: "到期 {when}",
+      asked: "{when} 提出",
+    },
   },
   skills: {
     heading: '你的技能',
