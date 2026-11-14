@@ -34,7 +34,8 @@ const RECENT_ROWS = 60
 // update the same way as logging from a goal's own tracker. repeatRequest
 // ({ row, nonce }) adds a card copying an activity from elsewhere on the page,
 // to check and save like any other.
-export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFullForm, repeatRequest = null }) {
+export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFullForm, repeatRequest = null, embedded = false }) {
+  const Wrapper = embedded ? 'div' : 'section'
   const { t, language } = useLanguage()
   const sectionRef = useRef(null)
   const [skills, setSkills] = useState([])
@@ -203,12 +204,26 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
   }
 
   return (
-    <section ref={sectionRef} tabIndex={-1} aria-labelledby="quick-log-heading" className="focus:outline-none">
-      <h2 id="quick-log-heading" className="font-display text-xl text-ink mb-1">{t('quickLog.title')}</h2>
-      <p className="text-sm text-secondary mb-4">{t('quickLog.subtitle')}</p>
+    // Embedded inside another section (Home's Skill activity), it takes no
+    // heading of its own: the question becomes the box's visible label.
+    <Wrapper
+      ref={sectionRef}
+      tabIndex={-1}
+      {...(embedded ? {} : { 'aria-labelledby': 'quick-log-heading' })}
+      className="focus:outline-none"
+    >
+      {!embedded && (
+        <>
+          <h2 id="quick-log-heading" className="font-display text-xl text-ink mb-1">{t('quickLog.title')}</h2>
+          <p className="text-sm text-secondary mb-4">{t('quickLog.subtitle')}</p>
+        </>
+      )}
 
       <form onSubmit={handleRead} className="space-y-2">
-        <label htmlFor="quick-log-text" className="sr-only">{t('quickLog.title')}</label>
+        <label htmlFor="quick-log-text" className={embedded ? 'block text-sm font-medium text-ink' : 'sr-only'}>
+          {t('quickLog.title')}
+        </label>
+        {embedded && <p className="text-xs text-secondary">{t('quickLog.subtitle')}</p>}
         <textarea
           id="quick-log-text"
           rows={2}
@@ -320,7 +335,7 @@ export default function QuickActivityLog({ user, goalItems, onLogged, onOpenFull
           <ActivityReflection key={result.rows.map((row) => row.id).join(',')} rows={result.rows} promptKey={result.prompt} />
         </div>
       )}
-    </section>
+    </Wrapper>
   )
 }
 
