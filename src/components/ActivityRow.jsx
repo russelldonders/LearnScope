@@ -73,7 +73,9 @@ function CheckInLine({ row }) {
 // /activity page so the two never drift apart. The page shows each as a
 // clickable card with its date; the timeline (framed=false) has day headings
 // instead, so the title is the link to the activity and actions sit below.
-export default function ActivityRow({ row, onClick, framed = true, now = Date.now(), actions = null, children }) {
+// dated: show the date on an unframed row too, for lists without day headings
+// (a skill's history, which mixes activities with ratings and courses).
+export default function ActivityRow({ row, onClick, framed = true, dated = false, now = Date.now(), actions = null, children }) {
   const { t } = useLanguage()
   const statement = row.statement
   const title = activityName(statement)
@@ -131,7 +133,7 @@ export default function ActivityRow({ row, onClick, framed = true, now = Date.no
           )}
           <p className="text-xs text-secondary mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
             <span>{plainVerb(statement, t)}</span>
-            {framed && (
+            {(framed || dated) && (
               <span title={formatAbsoluteDate(row.recorded_at)}>· {formatRelativeDate(row.recorded_at)}</span>
             )}
             {justAdded && (

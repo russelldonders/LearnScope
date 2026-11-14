@@ -10,6 +10,13 @@ import { activityName, verbLabel, formatDuration, formatMeasurements, durationMi
 import AccessibleDialog from '../components/AccessibleDialog'
 import LifecycleStageIcon from '../components/LifecycleStageIcon'
 import PendingTrainingEntry from '../components/PendingTrainingEntry'
+import ActivityRow from '../components/ActivityRow'
+import ActivityTimeline from '../components/ActivityTimeline'
+
+// The dashboard timeline's dot, so activities read the same in both places.
+function ActivityDot() {
+  return <span aria-hidden="true" className="w-2.5 h-2.5 rounded-full bg-moss ring-4 ring-card shrink-0 mt-1.5" />
+}
 
 const TIMELINE_DETAIL_TYPES = new Set(['assessment', 'peer', 'relationship', 'activity', 'activity-group', 'training'])
 
@@ -289,31 +296,18 @@ export function TimelineEntry({
     )
   }
 
+  // Activities look exactly as they do in the dashboard's timeline (same row,
+  // no box, green dot); only the date is added, as history has no day
+  // headings.
   if (event.type === 'activity') {
-    const s = event.statement
-    const relatedExperience = relatedExperienceFromStatement(s.statement)
     return (
       <div className="flex gap-3">
         <div className="flex flex-col items-center w-12 shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-secondary/40 shrink-0 mt-1.5" />
+          <ActivityDot />
           {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
         </div>
-        <div
-          className={`min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3 ${onSelect ? 'cursor-pointer hover:border-moss/60 transition-colors' : ''}`}
-          {...clickableProps}
-        >
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">{verbLabel(s.statement)}</span>
-            <p className="text-sm font-medium text-ink truncate min-w-0">{activityName(s.statement)}</p>
-          </div>
-          <p className="font-mono text-xs text-secondary mt-0.5">
-            {new Date(s.recorded_at).toLocaleDateString()}
-            {formatMeasurements(s.statement) ? ` · ${formatMeasurements(s.statement)}` : ''}
-            {formatDuration(s.statement) ? ` · ${formatDuration(s.statement)}` : ''}
-          </p>
-          {relatedExperience && (
-            <p className="font-mono text-[10px] text-secondary mt-0.5 truncate">{experienceTrail(relatedExperience)}</p>
-          )}
+        <div className="min-w-0 flex-1 mb-6">
+          <ActivityRow row={event.statement} framed={false} dated onClick={onSelect} />
         </div>
       </div>
     )
@@ -322,24 +316,26 @@ export function TimelineEntry({
   if (event.type === 'activity-group') {
     const totalLabel = formatMinutes(event.totalMinutes)
     const yearLabel = event.year === new Date().getFullYear() ? t('skillDetail.thisYear') : `${t('skillDetail.inYearPrefix')} ${event.year}`
+    const heading = `${event.count} ${t('skillDetail.timesSuffix')} ${yearLabel}`
     return (
       <div className="flex gap-3">
         <div className="flex flex-col items-center w-12 shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-secondary/40 shrink-0 mt-1.5" />
+          <ActivityDot />
           {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
         </div>
-        <div
-          className={`min-w-0 flex-1 mb-6 rounded-md border border-hairline bg-paper p-3 ${onSelect ? 'cursor-pointer hover:border-moss/60 transition-colors' : ''}`}
-          {...clickableProps}
-        >
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary shrink-0">{event.verbLabel}</span>
-            <p className="text-sm font-medium text-ink truncate min-w-0">{event.count} {t('skillDetail.timesSuffix')} {yearLabel}</p>
-          </div>
-          <p className="font-mono text-xs text-secondary mt-0.5">
+        <div className="min-w-0 flex-1 mb-6">
+          {onSelect ? (
+            <button type="button" onClick={onSelect} className="text-left text-sm font-medium text-ink hover:text-moss hover:underline break-words">
+              {heading}
+            </button>
+          ) : (
+            <p className="text-sm font-medium text-ink break-words">{heading}</p>
+          )}
+          <p className="text-xs text-secondary mt-0.5">
+            {event.verbLabel}
+            {' · '}
             {totalLabel ? `${t('skillDetail.totalPrefix')} ${totalLabel}` : `${event.count} ${t('skillDetail.activitiesWord')}`}
           </p>
-          {onSelect && <p className="font-mono text-[10px] text-moss mt-1">{t('skillDetail.viewAllArrow')}</p>}
         </div>
       </div>
     )
@@ -728,25 +724,7 @@ export function TimelineDetailModal({ event, knowledgeLevelGuide, raterAvatars, 
     )
   } else if (event.type === 'activity-group') {
     title = `${event.verbLabel} · ${event.count} ${t('skillDetail.timesSuffix')}`
-    body = (
-      <div className="space-y-2">
-        {event.statements.map((s) => {
-          const relatedExperience = relatedExperienceFromStatement(s.statement)
-          return (
-            <div key={s.id} className="rounded-md border border-hairline bg-paper p-2">
-              <p className="text-sm font-medium text-ink">{activityName(s.statement)}</p>
-              <p className="font-mono text-xs text-secondary mt-0.5">
-                {new Date(s.recorded_at).toLocaleDateString()}
-                {formatDuration(s.statement) ? ` · ${formatDuration(s.statement)}` : ''}
-              </p>
-              {relatedExperience && (
-                <p className="font-mono text-[10px] text-secondary mt-0.5">{experienceTrail(relatedExperience)}</p>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    )
+    body = <ActivityTimeline rows={event.statements} />
   }
 
   return (

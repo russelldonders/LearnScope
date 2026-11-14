@@ -42,7 +42,8 @@ import { listTargetsSetByOthers, listLatestManagerRatings, pickTargetSetByOthers
 import { computeVisibleTarget } from '../lib/skillTargetPrecedence'
 import CompositeSkillProgress from '../components/CompositeSkillProgress'
 import SkillGoalsSection from '../components/SkillGoalsSection'
-import { HistorySection, TimelineEntry, TimelineDetailModal } from './SkillHistorySection'
+import { HistorySection, TimelineDetailModal } from './SkillHistorySection'
+import ActivityTimeline from '../components/ActivityTimeline'
 import { ScheduleSection, DetailsSection, DeleteSection, SettingsSection } from './SkillSettingsSections'
 
 const SKILL_DETAIL_TABS = [
@@ -1227,9 +1228,8 @@ export default function SkillDetail({ skillId, embedded = false }) {
 // to their skills profile, GrowthRing for their level) -- these two modals
 // are opened from adjacent lines in the Skill Network section and should
 // read as one visual language, not a plain list next to a rich one.
-// Lists just the logged-activity entries the "Demonstrate" panel counts --
-// reuses TimelineEntry's activity card so the summary and the full Timeline
-// further down the page stay visually consistent. Selecting one hands off
+// Lists just the logged-activity entries the "Demonstrate" panel counts, as
+// the dashboard's activity timeline, so activities look the same everywhere. Selecting one hands off
 // to TimelineDetailModal instead of stacking a second dialog on top of this
 // one, so only one AccessibleDialog is ever mounted at a time.
 function ActivitiesModal({ statements, onSelect, onClose }) {
@@ -1249,16 +1249,7 @@ function ActivitiesModal({ statements, onSelect, onClose }) {
             {t('skillDetail.close')}
           </button>
         </div>
-        <div>
-          {sorted.map((s, i) => (
-            <TimelineEntry
-              key={s.id}
-              event={{ type: 'activity', statement: s }}
-              isLast={i === sorted.length - 1}
-              onSelect={() => onSelect({ type: 'activity', statement: s })}
-            />
-          ))}
-        </div>
+        <ActivityTimeline rows={sorted} onOpen={(row) => onSelect({ type: 'activity', statement: row })} />
     </AccessibleDialog>
   )
 }
