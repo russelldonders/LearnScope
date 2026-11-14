@@ -635,7 +635,7 @@ export default {
     requestAiAssessmentDisabledHint: 'Self-assess, invite a rating, or record activity first',
     skillSettings: 'Skill settings',
     tabsAriaLabel: 'Skill sections',
-    tabs: { overview: 'Overview', history: 'History' },
+    tabs: { knowledge: "Knowledge", application: "Application", overview: 'Overview', history: 'History' },
     knowledgeFoundation: 'Knowledge foundation',
     practicalFoundation: 'Practical foundation',
     noTrainingLinkedYet: 'No training linked yet',

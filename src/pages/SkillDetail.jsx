@@ -52,8 +52,11 @@ import { timelineRows } from '../lib/activityTimeline'
 const DEMONSTRATE_TIMELINE_LENGTH = 5
 import { ScheduleSection, DetailsSection, DeleteSection, SettingsSection } from './SkillSettingsSections'
 
+// Knowing about the skill (level, quizzes, learning), doing it (level,
+// activities, ratings, goals, network), and everything that's happened.
 const SKILL_DETAIL_TABS = [
-  { key: 'overview' },
+  { key: 'knowledge' },
+  { key: 'application' },
   { key: 'history' },
 ]
 
@@ -78,11 +81,15 @@ export default function SkillDetail({ skillId, embedded = false }) {
   // A deep link that highlights a specific timeline entry (from Activity.jsx
   // or elsewhere) needs to land on History by default, or the highlighted
   // entry is hidden behind the Overview tab.
+  // Opening a goal for editing (e.g. Home's "Add a target") lands where goals
+  // are. An old ?tab=overview link falls through to the first tab.
   const tab = SKILL_DETAIL_TABS.some((d) => d.key === requestedTab)
     ? requestedTab
     : location.state?.highlightActivityId
       ? 'history'
-      : 'overview'
+      : location.state?.editGoalId
+        ? 'application'
+        : 'knowledge'
   const tabRefs = useRef({})
 
   function buildTabParams(overrides) {
@@ -785,9 +792,9 @@ export default function SkillDetail({ skillId, embedded = false }) {
               ))}
             </div>
 
-            {tab === 'overview' && (
-            <div id="skill-detail-panel-overview" role="tabpanel" aria-labelledby="skill-detail-tab-overview">
-            <div className="mt-4 pt-4 border-t border-hairline grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {tab === 'knowledge' && (
+            <div id="skill-detail-panel-knowledge" role="tabpanel" aria-labelledby="skill-detail-tab-knowledge">
+            <div className="mt-4 pt-4 border-t border-hairline">
               <SkillPanel
                 title={t('skillDetail.knowledge')}
                 accent="slate"
@@ -809,7 +816,20 @@ export default function SkillDetail({ skillId, embedded = false }) {
                 }
                 actions={[]}
               />
+            </div>
 
+            <SkillLearningSection
+              courseLinks={courseLinks}
+              availableCourses={availableCourses}
+              onFindCourse={skill.user_id === user.id ? () => navigate('/training', { state: trainingScopeState }) : null}
+              onOpenAvailable={() => navigate('/training', { state: trainingScopeState })}
+            />
+            </div>
+            )}
+
+            {tab === 'application' && (
+            <div id="skill-detail-panel-application" role="tabpanel" aria-labelledby="skill-detail-tab-application">
+            <div className="mt-4 pt-4 border-t border-hairline">
               <SkillPanel
                 title={t('skillDetail.application')}
                 status={
@@ -938,13 +958,6 @@ export default function SkillDetail({ skillId, embedded = false }) {
               />
             )}
 
-            <SkillLearningSection
-              courseLinks={courseLinks}
-              availableCourses={availableCourses}
-              onFindCourse={skill.user_id === user.id ? () => navigate('/training', { state: trainingScopeState }) : null}
-              onOpenAvailable={() => navigate('/training', { state: trainingScopeState })}
-            />
-
             <SkillNetworkSection
               skillName={skill.name}
               librarySkillId={skill.library_skill_id}
@@ -975,7 +988,6 @@ export default function SkillDetail({ skillId, embedded = false }) {
               startingComponentId={startingComponentId}
               startError={startComponentError}
             />
-
             </div>
             )}
             </div>

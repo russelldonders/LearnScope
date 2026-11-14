@@ -635,7 +635,7 @@ export default {
     requestAiAssessmentDisabledHint: 'Beoordeel jezelf eerst, nodig uit voor een beoordeling of leg een activiteit vast',
     skillSettings: 'Vaardigheidsinstellingen',
     tabsAriaLabel: 'Vaardigheidsonderdelen',
-    tabs: { overview: 'Overzicht', history: 'Geschiedenis' },
+    tabs: { knowledge: "Kennis", application: "Toepassing", overview: 'Overzicht', history: 'Geschiedenis' },
     knowledgeFoundation: 'Kennisbasis',
     practicalFoundation: 'Praktijkbasis',
     noTrainingLinkedYet: 'Nog geen training gekoppeld',

@@ -635,7 +635,7 @@ export default {
     requestAiAssessmentDisabledHint: 'Autovalutati, invita a una valutazione o registra prima un\'attività',
     skillSettings: 'Impostazioni competenza',
     tabsAriaLabel: 'Sezioni della competenza',
-    tabs: { overview: 'Panoramica', history: 'Cronologia' },
+    tabs: { knowledge: "Conoscenza", application: "Applicazione", overview: 'Panoramica', history: 'Cronologia' },
     knowledgeFoundation: 'Base di conoscenza',
     practicalFoundation: 'Base pratica',
     noTrainingLinkedYet: 'Nessuna formazione ancora collegata',

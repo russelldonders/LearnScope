@@ -635,7 +635,7 @@ export default {
     requestAiAssessmentDisabledHint: "Auto-évaluez-vous, invitez une évaluation ou enregistrez d'abord une activité",
     skillSettings: 'Paramètres de la compétence',
     tabsAriaLabel: 'Sections de la compétence',
-    tabs: { overview: "Vue d'ensemble", history: 'Historique' },
+    tabs: { knowledge: "Connaissance", application: "Application", overview: "Vue d'ensemble", history: 'Historique' },
     knowledgeFoundation: 'Base de connaissance',
     practicalFoundation: 'Base pratique',
     noTrainingLinkedYet: 'Aucune formation liée pour le moment',

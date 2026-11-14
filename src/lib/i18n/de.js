@@ -635,7 +635,7 @@ export default {
     requestAiAssessmentDisabledHint: 'Schätze dich zuerst selbst ein, lade zu einer Bewertung ein oder erfasse eine Aktivität',
     skillSettings: 'Fähigkeitseinstellungen',
     tabsAriaLabel: 'Fähigkeitsbereiche',
-    tabs: { overview: 'Übersicht', history: 'Verlauf' },
+    tabs: { knowledge: "Wissen", application: "Anwendung", overview: 'Übersicht', history: 'Verlauf' },
     knowledgeFoundation: 'Wissensgrundlage',
     practicalFoundation: 'Praktische Grundlage',
     noTrainingLinkedYet: 'Noch keine Schulung verknüpft',
