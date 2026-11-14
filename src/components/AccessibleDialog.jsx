@@ -15,6 +15,19 @@ const FOCUSABLE = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',')
 
+const NON_TEXT_INPUTS = new Set(['button', 'checkbox', 'color', 'file', 'image', 'radio', 'range', 'reset', 'submit'])
+
+function isTouchScreen() {
+  return Boolean(window.matchMedia?.('(pointer: coarse)').matches)
+}
+
+// Whether focusing this element would bring up an on-screen keyboard.
+function opensKeyboard(element) {
+  if (!element) return false
+  if (element.matches('textarea, [contenteditable="true"]')) return true
+  return element.matches('input') && !NON_TEXT_INPUTS.has(element.type)
+}
+
 export default function AccessibleDialog({
   children,
   label,
@@ -38,7 +51,13 @@ export default function AccessibleDialog({
     const dialog = dialogRef.current
     const instance = {}
     openDialogStack.push(instance)
-    const initialFocus = dialog?.querySelector('[data-dialog-initial-focus]') ?? dialog?.querySelector(FOCUSABLE)
+    // On a phone, focusing a text field brings up the keyboard over the form
+    // before the learner has seen it, so the dialog itself takes focus there
+    // instead (screen readers still start inside it). A field marked
+    // data-dialog-initial-focus is still focused.
+    const first = dialog?.querySelector(FOCUSABLE)
+    const skipFirst = isTouchScreen() && opensKeyboard(first)
+    const initialFocus = dialog?.querySelector('[data-dialog-initial-focus]') ?? (skipFirst ? null : first)
     ;(initialFocus ?? dialog)?.focus()
 
     function handleKeyDown(event) {
