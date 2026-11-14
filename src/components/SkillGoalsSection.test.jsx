@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { english } from '../lib/i18n/translations'
 
@@ -50,8 +50,10 @@ describe('opening a goal for editing from elsewhere', () => {
     const onEditGoalOpened = vi.fn()
     renderSection({ editGoalId: 'g0', onEditGoalOpened })
     await screen.findByText('Total push-ups per day')
+    // The request is let go in an effect after the goals arrive, which can
+    // land a moment after they're on screen.
+    await waitFor(() => expect(onEditGoalOpened).toHaveBeenCalledTimes(1))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(onEditGoalOpened).toHaveBeenCalledTimes(1)
   })
 
   it('opens nothing without a request', async () => {

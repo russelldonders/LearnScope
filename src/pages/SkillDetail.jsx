@@ -8,6 +8,8 @@ import { isSelfAssessmentDue } from '../lib/checkin'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import SkillNetworkSection from '../components/SkillNetworkSection'
+import SkillLearningSection from '../components/SkillLearningSection'
+import { listCatalogueCourses, listEnrolledCatalogueIds } from '../lib/courseCatalogue'
 import PeopleWithSkillModal from '../components/PeopleWithSkillModal'
 import KnowledgeLevelBar from '../components/KnowledgeLevelBar'
 import SelfAssessSection from '../components/SelfAssessSection'
@@ -122,6 +124,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
   const [recommendInvites, setRecommendInvites] = useState([])
   const [recommendAcceptors, setRecommendAcceptors] = useState({})
   const [knownPeople, setKnownPeople] = useState({})
+  const [availableCourses, setAvailableCourses] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [composite, setComposite] = useState(null)
   const [loadingComposite, setLoadingComposite] = useState(false)
@@ -155,6 +158,35 @@ export default function SkillDetail({ skillId, embedded = false }) {
     countSkillTrackers(skill.library_skill_id).then(setTotalTrackersCount)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [skill?.library_skill_id])
+
+  // Catalogue courses that teach this skill and the learner hasn't started,
+  // for the Learning section. Only on their own skill, and only when it's a
+  // library skill a course can be tagged with.
+  useEffect(() => {
+    if (!skill || skill.user_id !== user.id || !skill.library_skill_id) {
+      setAvailableCourses(null)
+      return
+    }
+    let live = true
+    Promise.all([listCatalogueCourses(), listEnrolledCatalogueIds(user.id)])
+      .then(([catalogue, enrolled]) => {
+        if (!live) return
+        setAvailableCourses(
+          catalogue
+            .filter((course) => !enrolled.has(course.id))
+            .map((course) => ({ course, level: course.skillEntries.find((e) => e.skillId === skill.library_skill_id)?.level ?? null }))
+            .filter((entry) => entry.course.skillEntries.some((e) => e.skillId === skill.library_skill_id))
+            .sort((a, b) => (a.level ?? 0) - (b.level ?? 0)),
+        )
+      })
+      .catch(() => {
+        if (live) setAvailableCourses(null)
+      })
+    return () => {
+      live = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per skill
+  }, [skill?.id, skill?.library_skill_id])
 
   // Names for the people invites were sent to: an invite only keeps the
   // email address, so match it to a connection's. Anyone else stays an
@@ -550,8 +582,6 @@ export default function SkillDetail({ skillId, embedded = false }) {
   // shows its own axis independently of the others (deliberately not gated
   // on lifecycle_stage), since knowledge/practical/training/practice/
   // validation can all progress out of strict order.
-  const pendingCourseLinks = courseLinks.filter((l) => l.courses && !l.courses.completed_date)
-  const completedCourseLinksCount = courseLinks.filter((l) => l.courses?.completed_date).length
   const currentTarget = targets[0] ?? null
   const visibleTarget = computeVisibleTarget({
     employerTargetLevel: targetSetByOthers?.level ?? null,
@@ -735,68 +765,14 @@ export default function SkillDetail({ skillId, embedded = false }) {
                     trustLabel={knowledgeVerification ?? t('skillDetail.knowledgeFoundation')}
                     milestoneLevel={knowledgeMilestone}
                     onSelfAssess={() => setSelfAssessKnowledgeOpen(true)}
+                    onAssess={() => setConfirmingBaselineOpen(true)}
+                    onInterview={() => setInterviewOpen(true)}
                     onGuideGenerated={(statements) =>
                       setSkill((s) => (s ? { ...s, knowledge_level_guide: statements } : s))
                     }
                   />
                 }
                 actions={[]}
-                nested={
-                  <div className="space-y-3">
-                    <NestedSkillPanel
-                      title={t('skillDetail.stages.learn')}
-                      status={
-                        <div>
-                          {completedCourseLinksCount > 0 && (
-                            <p className="text-sm text-secondary">{completedCourseLinksCount} completed</p>
-                          )}
-                          {pendingCourseLinks.length > 0 ? (
-                            <ul className="space-y-1 mt-1 first:mt-0">
-                              {pendingCourseLinks.map((link) => (
-                                <li key={link.id}>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      navigate(`/courses/${link.courses.id}/learn`, {
-                                        state: { backTo: `/skills/${skill.id}`, backLabel: skill.name },
-                                      })
-                                    }
-                                    className="text-sm text-ink underline decoration-dotted underline-offset-2 hover:text-moss text-left"
-                                  >
-                                    {link.courses.name}
-                                  </button>
-                                  <span className="text-xs text-secondary"> · {t('skillDetail.enrolledSuffix')}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            completedCourseLinksCount === 0 && (
-                              <p className="text-sm text-secondary">{t('skillDetail.noTrainingLinkedYet')}</p>
-                            )
-                          )}
-                        </div>
-                      }
-                      actions={[
-                        {
-                          label: t('skillDetail.findACourse'),
-                          onClick: () => navigate('/training', { state: trainingScopeState }),
-                        },
-                      ]}
-                    />
-                    <NestedSkillPanel
-                      title={t('skillDetail.stages.verify')}
-                      status={
-                        <p className="text-sm text-secondary">
-                          {knowledgeConfirmed ? t('skillDetail.confirmed') : t('skillDetail.notYetConfirmed')}
-                        </p>
-                      }
-                      actions={[
-                        { label: t('skillDetail.takeAQuiz'), onClick: () => setConfirmingBaselineOpen(true) },
-                        { label: t('skillDetail.interviewMe'), onClick: () => setInterviewOpen(true) },
-                      ]}
-                    />
-                  </div>
-                }
               />
 
               <SkillPanel
@@ -900,6 +876,13 @@ export default function SkillDetail({ skillId, embedded = false }) {
                   })}
               />
             )}
+
+            <SkillLearningSection
+              courseLinks={courseLinks}
+              availableCourses={availableCourses}
+              onFindCourse={skill.user_id === user.id ? () => navigate('/training', { state: trainingScopeState }) : null}
+              onOpenAvailable={() => navigate('/training', { state: trainingScopeState })}
+            />
 
             <SkillNetworkSection
               skillName={skill.name}
@@ -1366,6 +1349,8 @@ function LevelDetail({
   onSelfAssess,
   onSetTarget = null,
   onAskToRate = null,
+  onAssess = null,
+  onInterview = null,
   onGuideGenerated,
 }) {
   const { t } = useLanguage()
@@ -1465,32 +1450,27 @@ function LevelDetail({
         </div>
       )}
 
+      {/* Every action for this level, one look: green like the rest of the page's
+          main buttons. */}
       <div className="flex flex-wrap gap-2 mt-3">
-        <button
-          type="button"
-          onClick={onSelfAssess}
-          className="rounded-md bg-moss text-paper py-1.5 px-3 text-xs font-medium hover:opacity-90"
-        >
-          {isKnowledge ? t('skillDetail.rateCurrentLevel') : t('skillDetail.selfAssessCurrentLevel')}
-        </button>
-        {onSetTarget && (
-          <button
-            type="button"
-            onClick={onSetTarget}
-            className="rounded-md border border-hairline text-ink py-1.5 px-3 text-xs font-medium hover:border-moss"
-          >
-            {t('skillDetail.setTargetAction')}
-          </button>
-        )}
-        {onAskToRate && (
-          <button
-            type="button"
-            onClick={onAskToRate}
-            className="rounded-md border border-hairline text-ink py-1.5 px-3 text-xs font-medium hover:border-moss"
-          >
-            {t('skillDetail.askToRateAbility')}
-          </button>
-        )}
+        {[
+          { label: isKnowledge ? t('skillDetail.rateCurrentLevel') : t('skillDetail.selfAssessCurrentLevel'), onClick: onSelfAssess },
+          onAssess && { label: level ? t('skillDetail.assessMeAtThisLevel') : t('skillDetail.findMyLevel'), onClick: onAssess },
+          onInterview && { label: t('skillDetail.interviewMe'), onClick: onInterview },
+          onSetTarget && { label: t('skillDetail.setTargetAction'), onClick: onSetTarget },
+          onAskToRate && { label: t('skillDetail.askToRateAbility'), onClick: onAskToRate },
+        ]
+          .filter(Boolean)
+          .map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              onClick={action.onClick}
+              className="rounded-md bg-moss text-paper py-1.5 px-3 text-xs font-medium hover:opacity-90"
+            >
+              {action.label}
+            </button>
+          ))}
       </div>
     </div>
   )
