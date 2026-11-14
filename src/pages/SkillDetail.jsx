@@ -53,10 +53,13 @@ const DEMONSTRATE_TIMELINE_LENGTH = 5
 import { ScheduleSection, DetailsSection, DeleteSection, SettingsSection } from './SkillSettingsSections'
 
 // Knowing about the skill (level, quizzes, learning), doing it (level,
-// activities, ratings, goals, network), and everything that's happened.
+// activities, ratings, goals), who else has it, and everything that's
+// happened. Network only for a library skill -- without one the skill can't
+// be matched to anyone else's.
 const SKILL_DETAIL_TABS = [
   { key: 'knowledge' },
   { key: 'application' },
+  { key: 'network', needsLibrarySkill: true },
   { key: 'history' },
 ]
 
@@ -78,18 +81,6 @@ export default function SkillDetail({ skillId, embedded = false }) {
     : location.state?.from ? t('skillDetail.backToExperience') : t('skillDetail.backToSkills')
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedTab = searchParams.get('tab')
-  // A deep link that highlights a specific timeline entry (from Activity.jsx
-  // or elsewhere) needs to land on History by default, or the highlighted
-  // entry is hidden behind the Overview tab.
-  // Opening a goal for editing (e.g. Home's "Add a target") lands where goals
-  // are. An old ?tab=overview link falls through to the first tab.
-  const tab = SKILL_DETAIL_TABS.some((d) => d.key === requestedTab)
-    ? requestedTab
-    : location.state?.highlightActivityId
-      ? 'history'
-      : location.state?.editGoalId
-        ? 'application'
-        : 'knowledge'
   const tabRefs = useRef({})
 
   function buildTabParams(overrides) {
@@ -103,6 +94,18 @@ export default function SkillDetail({ skillId, embedded = false }) {
 
   const [skill, setSkill] = useState(null)
   const [loadingSkill, setLoadingSkill] = useState(true)
+  // A deep link that highlights a specific timeline entry (from Activity.jsx
+  // or elsewhere) lands on History, or the highlighted entry would be hidden.
+  // Opening a goal for editing (e.g. Home's "Add a target") lands where goals
+  // are. An old ?tab=overview link falls through to the first tab.
+  const visibleTabs = SKILL_DETAIL_TABS.filter((d) => !d.needsLibrarySkill || skill?.library_skill_id)
+  const tab = visibleTabs.some((d) => d.key === requestedTab)
+    ? requestedTab
+    : location.state?.highlightActivityId
+      ? 'history'
+      : location.state?.editGoalId
+        ? 'application'
+        : 'knowledge'
   const [notFound, setNotFound] = useState(false)
   const [history, setHistory] = useState([])
   const [peerRatings, setPeerRatings] = useState([])
@@ -762,7 +765,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
               aria-label={t('skillDetail.tabsAriaLabel')}
               className="flex items-center flex-wrap gap-1 mt-4 border-b border-hairline"
             >
-              {SKILL_DETAIL_TABS.map((tabDef) => (
+              {visibleTabs.map((tabDef) => (
                 <button
                   key={tabDef.key}
                   type="button"
@@ -775,7 +778,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
                   onClick={() => setSearchParams(buildTabParams({ tab: tabDef.key }))}
                   onKeyDown={(event) =>
                     handleTabListKeyDown(event, {
-                      keys: SKILL_DETAIL_TABS.map((d) => d.key),
+                      keys: visibleTabs.map((d) => d.key),
                       activeKey: tab,
                       refs: tabRefs,
                       onChange: (key) => setSearchParams(buildTabParams({ tab: key })),
@@ -958,6 +961,19 @@ export default function SkillDetail({ skillId, embedded = false }) {
               />
             )}
 
+            <CompositeSkillProgress
+              composite={composite}
+              loading={loadingComposite}
+              error={compositeError}
+              onStartComponent={handleStartComponent}
+              startingComponentId={startingComponentId}
+              startError={startComponentError}
+            />
+            </div>
+            )}
+
+            {tab === 'network' && (
+            <div id="skill-detail-panel-network" role="tabpanel" aria-labelledby="skill-detail-tab-network">
             <SkillNetworkSection
               skillName={skill.name}
               librarySkillId={skill.library_skill_id}
@@ -979,15 +995,6 @@ export default function SkillDetail({ skillId, embedded = false }) {
                 onClose={() => setFindExpertOpen(false)}
               />
             )}
-
-            <CompositeSkillProgress
-              composite={composite}
-              loading={loadingComposite}
-              error={compositeError}
-              onStartComponent={handleStartComponent}
-              startingComponentId={startingComponentId}
-              startError={startComponentError}
-            />
             </div>
             )}
             </div>

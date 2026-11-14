@@ -635,7 +635,7 @@ export default {
     requestAiAssessmentDisabledHint: 'Autoevalúate, invita a una valoración o registra una actividad primero',
     skillSettings: 'Configuración de la habilidad',
     tabsAriaLabel: 'Secciones de la habilidad',
-    tabs: { knowledge: "Conocimiento", application: "Aplicación", overview: 'Resumen', history: 'Historial' },
+    tabs: { knowledge: "Conocimiento", application: "Aplicación", network: "Red", overview: 'Resumen', history: 'Historial' },
     knowledgeFoundation: 'Base de conocimiento',
     practicalFoundation: 'Base práctica',
     noTrainingLinkedYet: 'Aún no hay formación vinculada',

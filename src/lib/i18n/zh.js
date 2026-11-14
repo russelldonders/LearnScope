@@ -635,7 +635,7 @@ export default {
     requestAiAssessmentDisabledHint: '请先进行自我评估、邀请他人评分或记录一项活动',
     skillSettings: '技能设置',
     tabsAriaLabel: '技能分区',
-    tabs: { knowledge: "知识", application: "应用", overview: '概览', history: '历史' },
+    tabs: { knowledge: "知识", application: "应用", network: "网络", overview: '概览', history: '历史' },
     knowledgeFoundation: '知识基础',
     practicalFoundation: '实践基础',
     noTrainingLinkedYet: '尚未关联培训',
