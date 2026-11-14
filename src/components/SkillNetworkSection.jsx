@@ -32,10 +32,12 @@ export default function SkillNetworkSection({
   if (!librarySkillId) return null
 
   return (
-    <section aria-labelledby="skill-network-heading" className="mt-4 rounded-md border border-hairline bg-paper p-4">
-      <h2 id="skill-network-heading" className="font-display text-xl text-ink">{t('skillDetail.skillNetwork')}</h2>
+    // The skill's Network tab already says what this is, so no box around the
+    // parts: each is a top-level card like Goals and Learning.
+    <section aria-labelledby="skill-network-heading">
+      <h2 id="skill-network-heading" className="sr-only">{t('skillDetail.skillNetwork')}</h2>
 
-      <div className="space-y-3 mt-3">
+      <div>
         {librarySkillId && (
           <Part
             id="skill-network-recommend"
@@ -155,23 +157,28 @@ export function RatingsFromOthers({ ratings = [], raterAvatars = {}, rateInvites
   )
 }
 
-// One of the parts: a card like a goal tile, its title and one-line
-// explanation, the action for it, then what's happened so far.
+// One of the parts, as a section card styled like Goals and Learning: title
+// and one-line explanation with its action beside them, then what's
+// happened so far.
 function Part({ id, title, description, action, children }) {
   return (
-    <section aria-labelledby={id} className="rounded-lg border border-hairline bg-card p-4">
-      <h3 id={id} className="text-sm font-medium text-ink">{title}</h3>
-      <p className="text-xs text-secondary mt-0.5">{description}</p>
+    <section aria-labelledby={id} className="mt-4 rounded-md border border-hairline bg-paper p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h3 id={id} className="font-display text-xl text-ink">{title}</h3>
+          <p className="text-xs text-secondary">{description}</p>
+        </div>
+        {action?.onClick && (
+          <button
+            type="button"
+            onClick={action.onClick}
+            className="rounded-md bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90"
+          >
+            {action.label}
+          </button>
+        )}
+      </div>
       <div className="mt-3 space-y-3">{children}</div>
-      {action?.onClick && (
-        <button
-          type="button"
-          onClick={action.onClick}
-          className="mt-3 rounded-md bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90"
-        >
-          {action.label}
-        </button>
-      )}
     </section>
   )
 }
