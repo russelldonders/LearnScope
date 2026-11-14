@@ -8,6 +8,7 @@ import { listIncomingPendingValidationRequests } from '../lib/skillValidationReq
 import { listActiveGoalsForAttention } from '../lib/skillGoals'
 import RecordActivityModal from './RecordActivityModal'
 import SetTargetModal from './SetTargetModal'
+import SelfAssessSection from './SelfAssessSection'
 import InviteRaterModal from './InviteRaterModal'
 import AccessibleDialog from './AccessibleDialog'
 import GrowthRing from './GrowthRing'
@@ -764,11 +765,42 @@ function ActionSkillsButton({ label, recs, onActionComplete }) {
 // within two weeks or overdue, and other people's requests waiting on the
 // learner. Each is a tile like the "More ways to make progress" cards -- the
 // skill and its level, what to do, and whether it's overdue -- overdue first.
-// Nothing shows when there's nothing to do.
-export function NeedsYourAttention() {
+// Nothing shows when there's nothing to do. What can be done on the spot is
+// a button on the tile: self-assessing and changing a target open right
+// here, and logging a goal opens that goal's tile (onLogGoal, on Home).
+export function NeedsYourAttention({ onLogGoal = null }) {
   const { user } = useAuth()
   const { t } = useLanguage()
+  const navigate = useNavigate()
   const [items, setItems] = useState(null)
+  // Bumped after an action so what's left to do reloads.
+  const [version, setVersion] = useState(0)
+  const [assessing, setAssessing] = useState(null)
+  const [targeting, setTargeting] = useState(null)
+
+  async function runAction(kind, item) {
+    if (kind === 'logGoal') {
+      if (onLogGoal) onLogGoal(item.goalId)
+      else navigate(item.to)
+      return
+    }
+    // The forms need the whole skill (its check-in schedule, level guides).
+    const { data: skill } = await supabase.from('skills').select('*').eq('id', item.skillId).single()
+    if (!skill) {
+      navigate(item.to)
+      return
+    }
+    if (kind === 'selfAssess') {
+      setAssessing(skill)
+      return
+    }
+    const { data: targets } = await supabase
+      .from('skill_targets')
+      .select('*')
+      .eq('skill_id', skill.id)
+      .order('created_at', { ascending: false })
+    setTargeting({ skill, targets: targets ?? [] })
+  }
 
   useEffect(() => {
     let active = true
@@ -788,7 +820,8 @@ export function NeedsYourAttention() {
           skill: { name: skill.name, level: skill.level },
           task: t('dashboard.attention.selfAssess'),
           detail: t('dashboard.attention.selfAssessDetail'),
-          action: t('dashboard.attention.selfAssessAction'),
+          skillId: skill.id,
+          actions: ['selfAssess'],
           date: skill.next_checkin_date,
           overdue: isSelfAssessmentDue(skill.next_checkin_date),
         })),
@@ -798,7 +831,8 @@ export function NeedsYourAttention() {
           skill: { name: target.skills?.name ?? '', level: target.skills?.level ?? null },
           task: t('dashboard.attention.targetTask', { level: LEVEL_LABELS[target.target_level], date: formatFullDate(target.target_date) }),
           detail: t(target.target_date < today ? 'dashboard.attention.targetDetailOverdue' : 'dashboard.attention.targetDetailDue'),
-          action: t('dashboard.attention.targetAction'),
+          skillId: target.skill_id,
+          actions: ['selfAssess', 'changeTarget'],
           date: target.target_date,
           overdue: target.target_date < today,
         })),
@@ -812,7 +846,8 @@ export function NeedsYourAttention() {
             detail: t(goal.target_date < today ? 'dashboard.attention.goalDetailOverdue' : 'dashboard.attention.goalDetailDue', {
               date: formatFullDate(goal.target_date),
             }),
-            action: t('dashboard.attention.goalAction'),
+            goalId: goal.id,
+            actions: ['logGoal'],
             date: goal.target_date,
             overdue: goal.target_date < today,
           })),
@@ -823,7 +858,7 @@ export function NeedsYourAttention() {
     return () => {
       active = false
     }
-  }, [user.id, t])
+  }, [user.id, t, version])
 
   if (!items || items.length === 0) return null
   return (
@@ -833,15 +868,62 @@ export function NeedsYourAttention() {
       <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {items.map((item) => (
           <li key={item.key}>
-            <AttentionTile item={item} />
+            <AttentionTile item={item} onAction={runAction} />
           </li>
         ))}
       </ul>
+
+      {assessing && (
+        <AccessibleDialog
+          labelledBy="attention-self-assess-title"
+          onClose={() => setAssessing(null)}
+          panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+        >
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="min-w-0">
+              <h2 id="attention-self-assess-title" className="font-display text-2xl text-ink">{t('skillDetail.selfAssessTitle')}</h2>
+              <p className="text-sm text-secondary truncate">{assessing.name}</p>
+            </div>
+            <button type="button" onClick={() => setAssessing(null)} className="text-secondary hover:text-ink text-sm shrink-0">
+              {t('skillDetail.close')}
+            </button>
+          </div>
+          <SelfAssessSection
+            skill={assessing}
+            user={user}
+            currentLevel={assessing.level}
+            onAssessed={() => {
+              setAssessing(null)
+              setVersion((v) => v + 1)
+            }}
+          />
+        </AccessibleDialog>
+      )}
+
+      {targeting && (
+        <SetTargetModal
+          skill={targeting.skill}
+          user={user}
+          targets={targeting.targets}
+          currentLevel={targeting.skill.level}
+          onClose={() => setTargeting(null)}
+          onSet={() => {
+            setTargeting(null)
+            setVersion((v) => v + 1)
+          }}
+        />
+      )}
     </section>
   )
 }
 
-function AttentionTile({ item }) {
+const ATTENTION_ACTION_LABELS = {
+  selfAssess: 'dashboard.attention.selfAssessAction',
+  changeTarget: 'dashboard.attention.changeTarget',
+  logGoal: 'dashboard.attention.goalAction',
+}
+
+function AttentionTile({ item, onAction }) {
   const { t } = useLanguage()
   // "In 5 days" / "Today" read mid-sentence: "Due in 5 days", "Due today".
   const relative = formatRelativeDate(item.date)
@@ -851,15 +933,12 @@ function AttentionTile({ item }) {
     : item.overdue
       ? { text: t('dashboard.attention.overdue', { when }), className: 'border-red-700/40 bg-red-700/10 text-red-700' }
       : { text: t('dashboard.attention.due', { when }), className: 'border-gold/40 bg-gold/15 text-gold' }
+  const primary = 'rounded-md bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90'
+  const secondary = 'rounded-md border border-hairline text-ink text-xs font-medium px-3 py-1.5 hover:border-moss'
   return (
-    <Link
-      to={item.to}
-      className={`flex h-full flex-col bg-card border rounded-lg p-4 hover:border-moss transition-colors ${
-        item.overdue ? 'border-red-700/40' : 'border-hairline'
-      }`}
-    >
-      <div className="flex items-center gap-3 mb-3">
-        {item.review ? (
+    <article className={`flex h-full flex-col bg-card border rounded-lg p-4 ${item.overdue ? 'border-red-700/40' : 'border-hairline'}`}>
+      {item.review ? (
+        <div className="flex items-center gap-3 mb-3">
           <span aria-hidden="true" className="w-10 h-10 shrink-0 rounded-full border border-hairline bg-paper text-moss flex items-center justify-center">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -868,24 +947,35 @@ function AttentionTile({ item }) {
               <path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
           </span>
-        ) : (
+          <h3 className="font-display text-base text-ink truncate min-w-0">{t('dashboard.attention.reviewTitle')}</h3>
+        </div>
+      ) : (
+        // The skill's name opens the skill; the buttons below do the task.
+        <Link to={item.to} className="group flex items-center gap-3 mb-3 min-w-0">
           <GrowthRing level={item.skill.level} size={40} />
-        )}
-        <h3 className="font-display text-base text-ink truncate min-w-0">
-          {item.review ? t('dashboard.attention.reviewTitle') : item.skill.name}
-        </h3>
-      </div>
-      {/* What it is, why it's here, and what tapping the tile will do. */}
+          <h3 className="font-display text-base text-ink truncate min-w-0 group-hover:text-moss group-hover:underline underline-offset-2">
+            {item.skill.name}
+          </h3>
+        </Link>
+      )}
       <p className="text-sm text-ink font-medium">{item.review ? item.label : item.task}</p>
       {item.detail && <p className="text-xs text-secondary mt-1">{item.detail}</p>}
-      <p className="mt-auto pt-3 flex flex-wrap items-center justify-between gap-2">
+      <p className="mt-3">
         <span className={`inline-block rounded-full border px-2 py-0.5 text-xs font-medium ${status.className}`} title={formatAbsoluteDate(item.date)}>
           {status.text}
         </span>
-        <span className="text-xs font-medium text-moss">
-          {item.review ? t('dashboard.attention.reviewAction') : item.action} <span aria-hidden="true">→</span>
-        </span>
       </p>
-    </Link>
+      <div className="mt-auto pt-3 flex flex-wrap gap-2">
+        {item.review ? (
+          <Link to={item.to} className={primary}>{t('dashboard.attention.reviewAction')}</Link>
+        ) : (
+          item.actions.map((kind, index) => (
+            <button key={kind} type="button" onClick={() => onAction(kind, item)} className={index === 0 ? primary : secondary}>
+              {t(ATTENTION_ACTION_LABELS[kind])}
+            </button>
+          ))
+        )}
+      </div>
+    </article>
   )
 }

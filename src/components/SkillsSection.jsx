@@ -411,6 +411,22 @@ export default function SkillsSection({ intro = null }) {
 
       {!loading && !error && activeSkills.length > 0 && (
         <div className="border-y border-hairline py-4 mb-8 space-y-4">
+          <div className="flex gap-1 overflow-x-auto scrollbar-hide" aria-label="Skill views">
+            {SKILL_VIEWS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setView(option.value)}
+                aria-pressed={view === option.value}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                  view === option.value ? 'bg-moss text-paper' : 'text-secondary hover:bg-card hover:text-ink'
+                }`}
+              >
+                {t(option.labelKey)}
+              </button>
+            ))}
+          </div>
+
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
             <label className="min-w-0">
               <span className="sr-only">{t('skills.searchPlaceholder')}</span>
@@ -430,22 +446,6 @@ export default function SkillsSection({ intro = null }) {
             >
               {t('skills.filters')}{activeMoreFilterCount > 0 ? ` (${activeMoreFilterCount})` : ''}
             </button>
-          </div>
-
-          <div className="flex gap-1 overflow-x-auto scrollbar-hide" aria-label="Skill views">
-            {SKILL_VIEWS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setView(option.value)}
-                aria-pressed={view === option.value}
-                className={`shrink-0 rounded-full px-3 py-1.5 text-sm transition-colors ${
-                  view === option.value ? 'bg-moss text-paper' : 'text-secondary hover:bg-card hover:text-ink'
-                }`}
-              >
-                {t(option.labelKey)}
-              </button>
-            ))}
           </div>
 
           {showFilters && (

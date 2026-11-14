@@ -177,7 +177,7 @@ export default {
       targetTask: "你的目标：在 {date} 前达到“{level}”水平",
       targetDetailOverdue: "这个日期已经过了。请自评以说明是否达到，或设定新的目标日期。",
       targetDetailDue: "日期快到了。请自评以展示进展，如需更多时间可以调整日期。",
-      targetAction: "查看你的目标",
+      changeTarget: "修改目标",
       goalTask: "你的目标：{goal}",
       goalDetailOverdue: "截止日期 {date} 已过，目标尚未达成。请记录进展或修改截止日期。",
       goalDetailDue: "截止日期是 {date}，目标尚未达成。记录你的进展来完成它。",

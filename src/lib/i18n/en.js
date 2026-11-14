@@ -177,7 +177,7 @@ export default {
       targetTask: "Your target: reach the {level} level by {date}",
       targetDetailOverdue: "That date has passed. Self-assess to show whether you got there, or set a new target date.",
       targetDetailDue: "The date is coming up. Self-assess to show your progress, or move the date if you need longer.",
-      targetAction: "Review your target",
+      changeTarget: "Change target",
       goalTask: "Your goal: {goal}",
       goalDetailOverdue: "Its deadline of {date} has passed and it isn't reached yet. Log your progress or change the deadline.",
       goalDetailDue: "Its deadline is {date} and it isn't reached yet. Log your progress to get there.",

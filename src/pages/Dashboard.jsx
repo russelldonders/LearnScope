@@ -163,7 +163,7 @@ export default function Dashboard() {
 
         {/* First on the page, and only when something's due, overdue or
             waiting on the learner. */}
-        {!loading && <NeedsYourAttention />}
+        {!loading && <NeedsYourAttention onLogGoal={setOpenGoalId} />}
 
         {!loading && (
           <SkillGoalsDashboardPanel

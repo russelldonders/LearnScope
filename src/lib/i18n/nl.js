@@ -177,7 +177,7 @@ export default {
       targetTask: "Jouw doel: niveau {level} bereiken vóór {date}",
       targetDetailOverdue: "Die datum is voorbij. Beoordeel jezelf om te laten zien of het gelukt is, of kies een nieuwe streefdatum.",
       targetDetailDue: "De datum komt eraan. Beoordeel jezelf om je voortgang te laten zien, of verschuif de datum als je meer tijd nodig hebt.",
-      targetAction: "Bekijk je doel",
+      changeTarget: "Doel aanpassen",
       goalTask: "Jouw doel: {goal}",
       goalDetailOverdue: "De deadline van {date} is voorbij en het doel is nog niet gehaald. Log je voortgang of pas de deadline aan.",
       goalDetailDue: "De deadline is {date} en het doel is nog niet gehaald. Log je voortgang om het te halen.",

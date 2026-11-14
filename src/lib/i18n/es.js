@@ -177,7 +177,7 @@ export default {
       targetTask: "Tu objetivo: alcanzar el nivel {level} antes del {date}",
       targetDetailOverdue: "Esa fecha ya pasó. Autoevalúate para mostrar si lo lograste, o fija una nueva fecha objetivo.",
       targetDetailDue: "La fecha se acerca. Autoevalúate para mostrar tu progreso, o cambia la fecha si necesitas más tiempo.",
-      targetAction: "Revisar tu objetivo",
+      changeTarget: "Cambiar objetivo",
       goalTask: "Tu objetivo: {goal}",
       goalDetailOverdue: "Su plazo del {date} ya pasó y aún no lo has alcanzado. Registra tu progreso o cambia el plazo.",
       goalDetailDue: "Su plazo es el {date} y aún no lo has alcanzado. Registra tu progreso para conseguirlo.",
