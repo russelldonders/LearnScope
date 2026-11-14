@@ -127,15 +127,11 @@ export default function RecordActivitySection({ formOpen, onFormOpenChange, refr
 
   return (
     <section>
-      <div className="flex items-center justify-between mb-1">
+      {/* No log button of its own: "What did you do?" just above is where
+          activity is logged, and its "full form" link opens this section's
+          form (formOpen). */}
+      <div className="mb-1">
         <h2 className="font-display text-xl text-ink">{t('activity.heading')}</h2>
-        <button
-          type="button"
-          onClick={() => setModalOpen(true)}
-          className="shrink-0 rounded-md border border-hairline text-ink text-sm py-1.5 px-3 font-medium hover:border-moss hover:text-moss"
-        >
-          {t('skillActivity.logActivity')}
-        </button>
       </div>
       <p className="text-sm text-secondary mb-6">
         {t('skillActivity.description')}

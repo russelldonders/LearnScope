@@ -873,8 +873,12 @@ export default function SkillDetail({ skillId, embedded = false }) {
                         </p>
                       }
                       actions={[
-                        // Inviting others to rate lives in the Skill network
-                        // section, beside the people who'd be asked.
+                        // Ratings are what Validate is about, so asking for one
+                        // is here too (as well as in Skill network and beside
+                        // the level). Only on the learner's own skill.
+                        ...(skill.user_id === user.id
+                          ? [{ label: t('skillDetail.askToRateAbility'), onClick: () => setInviteOpen(true) }]
+                          : []),
                         // "✨ Request AI assessment" now lives in the header next
                         // to the skill name -- see the button beside setSettingsOpen
                         // above, which shares this exact same onClick/disabled logic.
