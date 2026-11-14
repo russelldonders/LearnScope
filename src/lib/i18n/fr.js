@@ -713,9 +713,11 @@ export default {
     learning: {
       title: "Apprentissage",
       description: "Les formations derrière cette compétence, et celles de LearnScope qui l’enseignent.",
+      inProgress: "En cours",
+      nothingYet: "Aucun apprentissage pour cette compétence pour l’instant.",
       completed: "Terminées",
-      enrolled: "En cours",
-      available: "Disponibles pour vous",
+      enrolled: "Inscrit",
+      available: "Recommandées",
       noneCompleted: "Aucune formation terminée liée pour l’instant.",
       noneEnrolled: "Vous n’êtes inscrit à aucune formation pour cette compétence.",
       noneAvailable: "Aucune autre formation de LearnScope n’enseigne encore cette compétence.",

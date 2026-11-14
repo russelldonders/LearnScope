@@ -713,9 +713,11 @@ export default {
     learning: {
       title: "Learning",
       description: "Courses behind this skill, and ones in LearnScope that teach it.",
+      inProgress: "In progress",
+      nothingYet: "No learning for this skill yet.",
       completed: "Completed",
-      enrolled: "Currently enrolled",
-      available: "Available to you",
+      enrolled: "Enrolled",
+      available: "Recommended",
       noneCompleted: "No completed courses linked yet.",
       noneEnrolled: "Not enrolled on any course for this skill.",
       noneAvailable: "No other courses in LearnScope teach this skill yet.",

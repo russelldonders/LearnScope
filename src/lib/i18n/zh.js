@@ -713,9 +713,11 @@ export default {
     learning: {
       title: "学习",
       description: "与这项技能相关的课程，以及 LearnScope 中教授它的课程。",
+      inProgress: "进行中",
+      nothingYet: "这项技能还没有学习记录。",
       completed: "已完成",
-      enrolled: "正在学习",
-      available: "可供你选择",
+      enrolled: "已报名",
+      available: "推荐",
       noneCompleted: "还没有关联已完成的课程。",
       noneEnrolled: "还没有报名这项技能的任何课程。",
       noneAvailable: "LearnScope 中还没有其他教授这项技能的课程。",

@@ -713,9 +713,11 @@ export default {
     learning: {
       title: "Leren",
       description: "Cursussen achter deze vaardigheid en cursussen in LearnScope die haar leren.",
+      inProgress: "Bezig",
+      nothingYet: "Nog geen leeractiviteiten voor deze vaardigheid.",
       completed: "Afgerond",
-      enrolled: "Nu ingeschreven",
-      available: "Beschikbaar voor jou",
+      enrolled: "Ingeschreven",
+      available: "Aanbevolen",
       noneCompleted: "Nog geen afgeronde cursussen gekoppeld.",
       noneEnrolled: "Je bent voor geen enkele cursus voor deze vaardigheid ingeschreven.",
       noneAvailable: "Nog geen andere cursussen in LearnScope leren deze vaardigheid.",

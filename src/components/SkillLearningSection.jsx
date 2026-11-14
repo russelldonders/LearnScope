@@ -3,17 +3,32 @@ import { useLanguage } from '../context/LanguageContext'
 import { formatFullDate } from '../lib/dates'
 import { LEVEL_LABELS } from '../lib/levels'
 
-// The learning behind a skill, styled like the Goals section: courses done,
-// courses under way, and courses in LearnScope's catalogue that teach this
-// skill and the learner hasn't started. Course links are associations --
-// listing them here changes nothing about the courses themselves.
-export default function SkillLearningSection({ courseLinks, availableCourses = null, onFindCourse, onOpenAvailable }) {
+// The learning behind a skill, styled like the Goals section, top to bottom:
+// recommended (catalogue courses teaching the skill the learner hasn't
+// started), enrolled, in progress (a lesson started), completed. A group with
+// nothing in it isn't shown at all. Course links are associations -- listing
+// them here changes nothing about the courses themselves.
+// startedCatalogueIds: catalogue courses with a lesson started (see
+// startedCatalogueCourseIds); a course outside the catalogue has no lessons
+// to start, so it stays Enrolled until it's completed.
+export default function SkillLearningSection({
+  courseLinks,
+  availableCourses = null,
+  startedCatalogueIds = new Set(),
+  onFindCourse,
+  onOpenAvailable,
+}) {
   const { t } = useLanguage()
   const courses = courseLinks.map((link) => link.courses).filter(Boolean)
   const completed = courses
     .filter((course) => course.completed_date)
     .sort((a, b) => b.completed_date.localeCompare(a.completed_date))
-  const enrolled = courses.filter((course) => !course.completed_date)
+  const underway = courses.filter((course) => !course.completed_date)
+  const started = (course) => Boolean(course.catalogue_course_id && startedCatalogueIds.has(course.catalogue_course_id))
+  const inProgress = underway.filter(started)
+  const enrolled = underway.filter((course) => !started(course))
+  const recommended = availableCourses ?? []
+  const nothingYet = recommended.length === 0 && courses.length === 0
 
   return (
     <section aria-labelledby="skill-learning-heading" className="mt-4 rounded-md border border-hairline bg-paper p-4">
@@ -33,8 +48,33 @@ export default function SkillLearningSection({ courseLinks, availableCourses = n
         )}
       </div>
 
-      <div className="space-y-4 mt-3">
-        <Group title={t('skillDetail.learning.completed')} empty={t('skillDetail.learning.noneCompleted')}>
+      {nothingYet && <p className="text-sm text-secondary mt-3">{t('skillDetail.learning.nothingYet')}</p>}
+
+      <div className="space-y-4 mt-3 empty:hidden">
+        <Group title={t('skillDetail.learning.available')}>
+          {recommended.map(({ course, level }) => (
+            <Course
+              key={course.id}
+              name={course.name}
+              detail={[course.provider, level ? t('skillDetail.learning.teachesLevel', { level: LEVEL_LABELS[level] }) : null]}
+              onClick={() => onOpenAvailable(course)}
+            />
+          ))}
+        </Group>
+
+        <Group title={t('skillDetail.learning.enrolled')}>
+          {enrolled.map((course) => (
+            <Course key={course.id} name={course.name} detail={[course.provider]} to={`/courses/${course.id}/learn`} />
+          ))}
+        </Group>
+
+        <Group title={t('skillDetail.learning.inProgress')}>
+          {inProgress.map((course) => (
+            <Course key={course.id} name={course.name} detail={[course.provider]} to={`/courses/${course.id}/learn`} />
+          ))}
+        </Group>
+
+        <Group title={t('skillDetail.learning.completed')}>
           {completed.map((course) => (
             <Course
               key={course.id}
@@ -44,40 +84,19 @@ export default function SkillLearningSection({ courseLinks, availableCourses = n
             />
           ))}
         </Group>
-
-        <Group title={t('skillDetail.learning.enrolled')} empty={t('skillDetail.learning.noneEnrolled')}>
-          {enrolled.map((course) => (
-            <Course key={course.id} name={course.name} detail={[course.provider]} to={`/courses/${course.id}/learn`} />
-          ))}
-        </Group>
-
-        {availableCourses && (
-          <Group title={t('skillDetail.learning.available')} empty={t('skillDetail.learning.noneAvailable')}>
-            {availableCourses.map(({ course, level }) => (
-              <Course
-                key={course.id}
-                name={course.name}
-                detail={[course.provider, level ? t('skillDetail.learning.teachesLevel', { level: LEVEL_LABELS[level] }) : null]}
-                onClick={() => onOpenAvailable(course)}
-              />
-            ))}
-          </Group>
-        )}
       </div>
     </section>
   )
 }
 
-function Group({ title, empty, children }) {
+// Not shown at all when there's nothing in it.
+function Group({ title, children }) {
   const items = [children].flat().filter(Boolean)
+  if (items.length === 0) return null
   return (
     <div>
       <h3 className="text-sm font-medium text-ink mb-1">{title}</h3>
-      {items.length === 0 ? (
-        <p className="text-sm text-secondary">{empty}</p>
-      ) : (
-        <ul className="divide-y divide-hairline">{items}</ul>
-      )}
+      <ul className="divide-y divide-hairline">{items}</ul>
     </div>
   )
 }

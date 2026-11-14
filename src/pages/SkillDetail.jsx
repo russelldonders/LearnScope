@@ -12,7 +12,7 @@ import SkillLearningSection from '../components/SkillLearningSection'
 import QuickActivityLog from '../components/QuickActivityLog'
 import { listSkillGoals } from '../lib/skillGoals'
 import { computeGoalProgress } from '../lib/skillGoalProgress'
-import { listCatalogueCourses, listEnrolledCatalogueIds } from '../lib/courseCatalogue'
+import { listCatalogueCourses, listEnrolledCatalogueIds, startedCatalogueCourseIds } from '../lib/courseCatalogue'
 import PeopleWithSkillModal from '../components/PeopleWithSkillModal'
 import KnowledgeLevelBar from '../components/KnowledgeLevelBar'
 import SelfAssessSection from '../components/SelfAssessSection'
@@ -144,6 +144,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
   const [recommendAcceptors, setRecommendAcceptors] = useState({})
   const [knownPeople, setKnownPeople] = useState({})
   const [availableCourses, setAvailableCourses] = useState(null)
+  const [startedCatalogueIds, setStartedCatalogueIds] = useState(new Set())
   const [quickLogOpen, setQuickLogOpen] = useState(false)
   const [quickLogGoals, setQuickLogGoals] = useState([])
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -195,6 +196,33 @@ export default function SkillDetail({ skillId, embedded = false }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- when the quick log opens
   }, [quickLogOpen, skill?.id])
+
+  // Which enrolled catalogue courses have a lesson started, so the Learning
+  // section can tell In progress from Enrolled.
+  const underwayCatalogueKey = courseLinks
+    .map((link) => link.courses)
+    .filter((course) => course && !course.completed_date && course.catalogue_course_id)
+    .map((course) => course.catalogue_course_id)
+    .sort()
+    .join(',')
+  useEffect(() => {
+    if (!underwayCatalogueKey || skill?.user_id !== user.id) {
+      setStartedCatalogueIds(new Set())
+      return
+    }
+    let live = true
+    startedCatalogueCourseIds(user.id, underwayCatalogueKey.split(','))
+      .then((ids) => {
+        if (live) setStartedCatalogueIds(ids)
+      })
+      .catch(() => {
+        if (live) setStartedCatalogueIds(new Set())
+      })
+    return () => {
+      live = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- when the set of underway courses changes
+  }, [underwayCatalogueKey, skill?.user_id])
 
   // Catalogue courses that teach this skill and the learner hasn't started,
   // for the Learning section. Only on their own skill, and only when it's a
@@ -847,6 +875,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
             <SkillLearningSection
               courseLinks={courseLinks}
               availableCourses={availableCourses}
+              startedCatalogueIds={startedCatalogueIds}
               onFindCourse={skill.user_id === user.id ? () => navigate('/training', { state: trainingScopeState }) : null}
               onOpenAvailable={() => navigate('/training', { state: trainingScopeState })}
             />

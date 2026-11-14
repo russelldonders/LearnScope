@@ -713,9 +713,11 @@ export default {
     learning: {
       title: "Aprendizaje",
       description: "Cursos detrás de esta habilidad y cursos en LearnScope que la enseñan.",
+      inProgress: "En curso",
+      nothingYet: "Todavía no hay aprendizaje para esta habilidad.",
       completed: "Completados",
-      enrolled: "Inscrito actualmente",
-      available: "Disponibles para ti",
+      enrolled: "Inscrito",
+      available: "Recomendados",
       noneCompleted: "Todavía no hay cursos completados vinculados.",
       noneEnrolled: "No estás inscrito en ningún curso para esta habilidad.",
       noneAvailable: "Todavía no hay otros cursos en LearnScope que enseñen esta habilidad.",

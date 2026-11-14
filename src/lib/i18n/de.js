@@ -713,9 +713,11 @@ export default {
     learning: {
       title: "Lernen",
       description: "Kurse zu dieser Fähigkeit und Kurse in LearnScope, die sie vermitteln.",
+      inProgress: "In Bearbeitung",
+      nothingYet: "Noch kein Lernen für diese Fähigkeit.",
       completed: "Abgeschlossen",
-      enrolled: "Derzeit eingeschrieben",
-      available: "Für dich verfügbar",
+      enrolled: "Eingeschrieben",
+      available: "Empfohlen",
       noneCompleted: "Noch keine abgeschlossenen Kurse verknüpft.",
       noneEnrolled: "In keinem Kurs für diese Fähigkeit eingeschrieben.",
       noneAvailable: "Noch keine weiteren Kurse in LearnScope vermitteln diese Fähigkeit.",

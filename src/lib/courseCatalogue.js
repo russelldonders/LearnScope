@@ -100,6 +100,30 @@ export async function getCatalogueCourse(id, { currentOnly = true } = {}) {
   return data ? mapCatalogueCourse(data) : null
 }
 
+// Which of these catalogue courses the learner has started: at least one of
+// its lessons has progress beyond "not attempted". Enrolled but untouched
+// courses aren't in the set. Read-only, from the progress the course player
+// already records (course_content_progress), so nothing new is stored.
+export async function startedCatalogueCourseIds(userId, catalogueIds) {
+  const ids = [...new Set(catalogueIds)].filter(Boolean)
+  if (ids.length === 0) return new Set()
+  const { data: links, error } = await supabase
+    .from('course_content_links')
+    .select('course_id, resource_id')
+    .in('course_id', ids)
+  if (error) throw error
+  const courseByResource = new Map((links ?? []).map((link) => [link.resource_id, link.course_id]))
+  if (courseByResource.size === 0) return new Set()
+  const { data: progress, error: progressError } = await supabase
+    .from('course_content_progress')
+    .select('content_item_id')
+    .eq('user_id', userId)
+    .in('content_item_id', [...courseByResource.keys()])
+    .neq('status', 'not_attempted')
+  if (progressError) throw progressError
+  return new Set((progress ?? []).map((row) => courseByResource.get(row.content_item_id)).filter(Boolean))
+}
+
 // Maps catalogue_course_id -> { id, completed_date } for the learner's own
 // courses row, so an already-enrolled catalogue card can link straight to
 // that personal record and show whether it's actually been completed.
