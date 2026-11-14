@@ -167,6 +167,7 @@ export default {
     },
     needsAttention: '需要你关注',
     moreWaysToProgress: '更多提升方式',
+    moreWaysSubtitle: "各项技能接下来可以做的有用步骤。",
     moreRecentProgress: '更多近期进展',
   },
   skills: {

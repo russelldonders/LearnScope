@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { MoreWaysToProgress } from '../components/SkillsMomentum'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useNavVisibility } from '../context/NavVisibilityContext'
@@ -244,6 +245,9 @@ export default function Dashboard() {
             onLogAgain={(row) => setRepeatRequest({ row, nonce: Date.now() })}
           />
         )}
+
+        {/* Useful next steps across the learner's skills, last on the page. */}
+        {!loading && counts.skills > 0 && <MoreWaysToProgress />}
       </main>
 
       {addGoalOpen && (

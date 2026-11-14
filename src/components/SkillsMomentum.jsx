@@ -208,8 +208,9 @@ function settled(results, index, fallback) {
 }
 
 // The top of the Skills page: one recommended next step and the latest
-// progress, then what needs attention and other useful next steps across
-// skills. Each part shows only when it has something to show.
+// progress (with any earlier progress one tap away), then what needs
+// attention. Each part shows only when it has something to show. Other
+// useful next steps across skills are on Home (MoreWaysToProgress below).
 export default function SkillsMomentum() {
   const { user } = useAuth()
   const { t } = useLanguage()
@@ -245,13 +246,6 @@ export default function SkillsMomentum() {
     }
   }, [user.id])
 
-  // A quick action taken straight from a card (logging activity, setting a
-  // target, an invite sent...) can change what a skill's next recommended
-  // step is -- refetched on its own so the rest doesn't flash back to loading.
-  async function refreshUpNext() {
-    setUpNext(await loadUpNextRecommendations(user.id))
-  }
-
   if (loading) return null
 
   const today = todayDateString()
@@ -285,7 +279,7 @@ export default function SkillsMomentum() {
             {t('dashboard.heading')}
           </h2>
           <p className="text-sm text-secondary mt-1 mb-5 text-pretty">{t('dashboard.subheading')}</p>
-          <FocusPanel recommendation={upNext[0]} recentGrowth={recentGrowth[0]} />
+          <FocusPanel recommendation={upNext[0]} recentGrowth={recentGrowth[0]} moreGrowth={recentGrowth.slice(1)} />
         </section>
       )}
 
@@ -324,19 +318,84 @@ export default function SkillsMomentum() {
         </div>
       )}
 
-      {upNext.length > 1 && (
-        <div>
-          <h2 className="font-display text-xl text-ink mb-2">{t('dashboard.moreWaysToProgress')}</h2>
-          <p className="text-sm text-secondary mb-6">Useful next steps across your other skills.</p>
-          <UpNextSlider recommendations={upNext.slice(1)} onActionComplete={refreshUpNext} />
+    </div>
+  )
+}
+
+export function FocusPanel({ recommendation, recentGrowth: growth, moreGrowth = [] }) {
+  const { t } = useLanguage()
+  const hasGrowth = Boolean(growth)
+  const [showMore, setShowMore] = useState(false)
+  const moreId = useId()
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      <div className={`rounded-lg bg-moss text-paper p-6 sm:p-8 ${hasGrowth ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
+        <h2 className="font-display text-2xl sm:text-3xl text-balance">
+          {recommendation ? recommendation.item.label : 'Choose where to grow next'}
+        </h2>
+        <p className="mt-3 max-w-xl text-sm sm:text-base text-paper">
+          {recommendation
+            ? `${recommendation.item.description} Keep ${recommendation.skill.name} moving forward with this next step.`
+            : 'Review your skills and choose the one that matters most right now.'}
+        </p>
+        <Link
+          to={recommendation ? `/skills/${recommendation.skill.id}` : '/skills'}
+          className="inline-flex items-center rounded-md bg-paper text-ink px-4 py-2.5 mt-6 text-sm font-medium hover:opacity-90"
+        >
+          {recommendation ? `Continue with ${recommendation.skill.name}` : 'Review your skills'}
+          <span aria-hidden="true" className="ml-2">→</span>
+        </Link>
+      </div>
+
+      {growth && (
+        <div className="flex flex-col">
+        <Link
+          to={`/skills/${growth.skill_id}`}
+          className="flex-1 rounded-lg border border-hairline bg-card p-6 hover:border-moss transition-colors"
+        >
+          <h2 className="font-display text-xl text-ink">Your latest progress</h2>
+          <div className="flex items-center gap-3 mt-5">
+            <GrowthRing level={growth.previousLevel} size={42} color="var(--color-hairline)" />
+            <GrowthArrow />
+            <GrowthRing level={growth.level} size={58} targetLevel={growth.target?.target_level} />
+          </div>
+          <p className="font-medium text-ink mt-4 truncate">{growth.skills?.name ?? 'Skill'}</p>
+          <p className="text-sm text-secondary mt-1">
+            {growth.previousLevel ? LEVEL_LABELS[growth.previousLevel] : 'New'} → {LEVEL_LABELS[growth.level]}
+          </p>
+          <p className="font-mono text-xs text-secondary mt-3" title={formatAbsoluteDate(growth.assessed_at)}>
+            {formatRelativeDate(growth.assessed_at)}
+          </p>
+        </Link>
+        {/* Earlier progress, folded away under the latest. */}
+        {moreGrowth.length > 0 && (
+          <button
+            type="button"
+            aria-expanded={showMore}
+            aria-controls={moreId}
+            onClick={() => setShowMore((open) => !open)}
+            className="self-start mt-2 text-sm text-moss font-medium hover:underline"
+          >
+            {t('dashboard.moreRecentProgress')} ({moreGrowth.length}) {showMore ? '▴' : '▾'}
+          </button>
+        )}
         </div>
       )}
 
-      {recentGrowth.length > 1 && (
-        <div>
-          <h2 className="font-display text-xl text-ink mb-6">{t('dashboard.moreRecentProgress')}</h2>
+      {showMore && moreGrowth.length > 0 && (
+        <div id={moreId} className="lg:col-span-3">
+          <MoreRecentProgress rows={moreGrowth} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MoreRecentProgress({ rows }) {
+  return (
           <div className="space-y-3">
-            {recentGrowth.slice(1).map((row) => (
+            {rows.map((row) => (
               <Link
                 key={row.id}
                 to={`/skills/${row.skill_id}`}
@@ -371,56 +430,43 @@ export default function SkillsMomentum() {
               </Link>
             ))}
           </div>
-        </div>
-      )}
-    </div>
   )
 }
 
-export function FocusPanel({ recommendation, recentGrowth: growth }) {
-  const hasGrowth = Boolean(growth)
+// "More ways to make progress": the next useful step on each skill, as a
+// slider with quick actions. Loads its own recommendations, so it can sit
+// anywhere (it's at the bottom of Home); nothing shows without any.
+export function MoreWaysToProgress() {
+  const { user } = useAuth()
+  const { t } = useLanguage()
+  const [recommendations, setRecommendations] = useState([])
 
+  useEffect(() => {
+    let active = true
+    loadUpNextRecommendations(user.id)
+      .then((list) => {
+        if (active) setRecommendations(list)
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [user.id])
+
+  // A quick action taken straight from a card (logging activity, setting a
+  // target, an invite sent...) can change what a skill's next recommended
+  // step is.
+  async function refresh() {
+    setRecommendations(await loadUpNextRecommendations(user.id))
+  }
+
+  if (recommendations.length === 0) return null
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <div className={`rounded-lg bg-moss text-paper p-6 sm:p-8 ${hasGrowth ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
-        <h2 className="font-display text-2xl sm:text-3xl text-balance">
-          {recommendation ? recommendation.item.label : 'Choose where to grow next'}
-        </h2>
-        <p className="mt-3 max-w-xl text-sm sm:text-base text-paper">
-          {recommendation
-            ? `${recommendation.item.description} Keep ${recommendation.skill.name} moving forward with this next step.`
-            : 'Review your skills and choose the one that matters most right now.'}
-        </p>
-        <Link
-          to={recommendation ? `/skills/${recommendation.skill.id}` : '/skills'}
-          className="inline-flex items-center rounded-md bg-paper text-ink px-4 py-2.5 mt-6 text-sm font-medium hover:opacity-90"
-        >
-          {recommendation ? `Continue with ${recommendation.skill.name}` : 'Review your skills'}
-          <span aria-hidden="true" className="ml-2">→</span>
-        </Link>
-      </div>
-
-      {growth && (
-        <Link
-          to={`/skills/${growth.skill_id}`}
-          className="rounded-lg border border-hairline bg-card p-6 hover:border-moss transition-colors"
-        >
-          <h2 className="font-display text-xl text-ink">Your latest progress</h2>
-          <div className="flex items-center gap-3 mt-5">
-            <GrowthRing level={growth.previousLevel} size={42} color="var(--color-hairline)" />
-            <GrowthArrow />
-            <GrowthRing level={growth.level} size={58} targetLevel={growth.target?.target_level} />
-          </div>
-          <p className="font-medium text-ink mt-4 truncate">{growth.skills?.name ?? 'Skill'}</p>
-          <p className="text-sm text-secondary mt-1">
-            {growth.previousLevel ? LEVEL_LABELS[growth.previousLevel] : 'New'} → {LEVEL_LABELS[growth.level]}
-          </p>
-          <p className="font-mono text-xs text-secondary mt-3" title={formatAbsoluteDate(growth.assessed_at)}>
-            {formatRelativeDate(growth.assessed_at)}
-          </p>
-        </Link>
-      )}
-    </div>
+    <section aria-labelledby="more-ways-heading">
+      <h2 id="more-ways-heading" className="font-display text-xl text-ink mb-2">{t('dashboard.moreWaysToProgress')}</h2>
+      <p className="text-sm text-secondary mb-6">{t('dashboard.moreWaysSubtitle')}</p>
+      <UpNextSlider recommendations={recommendations} onActionComplete={refresh} />
+    </section>
   )
 }
 

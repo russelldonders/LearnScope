@@ -167,6 +167,7 @@ export default {
     },
     needsAttention: 'Necesita tu atención',
     moreWaysToProgress: 'Más formas de progresar',
+    moreWaysSubtitle: "Próximos pasos útiles para tus habilidades.",
     moreRecentProgress: 'Progreso reciente adicional',
   },
   skills: {

@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../lib/supabaseClient', () => ({ supabase: {} }))
 vi.mock('../context/LanguageContext', async () => {
@@ -14,6 +14,8 @@ vi.mock('../context/LanguageContext', async () => {
 
 import { dashboardResultValue, OverviewStrip } from './Dashboard'
 import { FocusPanel } from '../components/SkillsMomentum'
+
+afterEach(cleanup)
 
 function renderWithRouter(ui) {
   return render(<MemoryRouter>{ui}</MemoryRouter>)
@@ -38,6 +40,25 @@ describe('dashboard focus hierarchy', () => {
       'href',
       '/skills/skill-1',
     )
+  })
+
+  it('keeps earlier progress behind a link under the latest, opening it in place', () => {
+    const growth = (id, name) => ({ id, skill_id: `skill-${id}`, skills: { name }, level: 3, previousLevel: 2, assessed_at: '2026-11-01T10:00:00Z' })
+    renderWithRouter(<FocusPanel recentGrowth={growth('a', 'Facilitation')} moreGrowth={[growth('b', 'Coaching'), growth('c', 'Writing')]} />)
+
+    expect(screen.queryByText('Coaching')).not.toBeInTheDocument()
+    const toggle = screen.getByRole('button', { name: /More recent progress \(2\)/ })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('link', { name: /Coaching/ })).toHaveAttribute('href', '/skills/skill-b')
+    expect(screen.getByRole('link', { name: /Writing/ })).toHaveAttribute('href', '/skills/skill-c')
+  })
+
+  it('has no such link when there is no earlier progress', () => {
+    const growth = { id: 'a', skill_id: 'skill-a', skills: { name: 'Facilitation' }, level: 3, previousLevel: 2, assessed_at: '2026-11-01T10:00:00Z' }
+    renderWithRouter(<FocusPanel recentGrowth={growth} />)
+    expect(screen.queryByRole('button', { name: /More recent progress/ })).not.toBeInTheDocument()
   })
 
   it('offers a useful fallback when every skill recommendation is complete', () => {

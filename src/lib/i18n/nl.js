@@ -167,6 +167,7 @@ export default {
     },
     needsAttention: 'Vraagt jouw aandacht',
     moreWaysToProgress: 'Meer manieren om vooruitgang te boeken',
+    moreWaysSubtitle: "Nuttige volgende stappen voor je vaardigheden.",
     moreRecentProgress: 'Meer recente voortgang',
   },
   skills: {

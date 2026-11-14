@@ -167,6 +167,7 @@ export default {
     },
     needsAttention: 'Richiede la tua attenzione',
     moreWaysToProgress: 'Altri modi per progredire',
+    moreWaysSubtitle: "Prossimi passi utili per le tue competenze.",
     moreRecentProgress: 'Altri progressi recenti',
   },
   skills: {
