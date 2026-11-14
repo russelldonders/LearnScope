@@ -973,6 +973,8 @@ export default {
       confirmingResultPass: '你在 {level} 水平上得分 {score} / {total} -- 符合该水平的预期，因此这现在是你已确认的知识水平。',
       confirmingResultFail: '你在 {level} 水平上得分 {score} / {total} -- 低于该水平的预期，因此你的已确认水平已调整为 {adjustedLevel}。',
       continue: '继续',
+      savedToSkill: '已保存为你在此技能上的知识水平。',
+      tryAgain: '重新保存',
     },
     interview: {
       title: '面试我',

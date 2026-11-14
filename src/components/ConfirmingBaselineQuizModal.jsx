@@ -66,6 +66,7 @@ export default function ConfirmingBaselineQuizModal({
   const [settled, setSettled] = useState(false)
   const [savingRound, setSavingRound] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -133,11 +134,11 @@ export default function ConfirmingBaselineQuizModal({
     }
     setSavingRound(false)
 
-    setRoundHistory((prev) => [...prev, { level: roundLevel, score, total, pass }])
+    const rounds = [...roundHistory, { level: roundLevel, score, total, pass }]
+    setRoundHistory(rounds)
 
     if (!calibrating) {
-      setDiagnosedLevel(pass ? roundLevel : Math.max(1, roundLevel - 1))
-      setSettled(true)
+      settle(pass ? roundLevel : Math.max(1, roundLevel - 1), rounds)
       return
     }
 
@@ -147,8 +148,7 @@ export default function ConfirmingBaselineQuizModal({
       // Nothing left to learn by going up if the next level is already
       // known to fail (or there is no next level).
       if (roundLevel + 1 >= highFail) {
-        setDiagnosedLevel(nextLowPass)
-        setSettled(true)
+        settle(nextLowPass, rounds)
         return
       }
       setRoundLevel(roundLevel + 1)
@@ -158,8 +158,7 @@ export default function ConfirmingBaselineQuizModal({
       // Nothing left to learn by going down if the level below is already
       // known to pass (or we're already at the floor).
       if (roundLevel - 1 <= lowPass) {
-        setDiagnosedLevel(Math.max(1, lowPass))
-        setSettled(true)
+        settle(Math.max(1, lowPass), rounds)
         return
       }
       setRoundLevel(roundLevel - 1)
@@ -169,30 +168,40 @@ export default function ConfirmingBaselineQuizModal({
     setContent(null)
   }
 
-  function buildComments() {
+  function buildComments(rounds, level) {
     if (!calibrating) {
-      const round = roundHistory[0]
+      const round = rounds[0]
       return round.pass
         ? `Confirmed via knowledge check: scored ${round.score}/${round.total} at ${KNOWLEDGE_LEVEL_LABELS[round.level]}, meeting expectations for that level.`
-        : `Confirmed via knowledge check: scored ${round.score}/${round.total} at ${KNOWLEDGE_LEVEL_LABELS[round.level]}, below expectations for that level -- adjusted to ${KNOWLEDGE_LEVEL_LABELS[diagnosedLevel]}.`
+        : `Confirmed via knowledge check: scored ${round.score}/${round.total} at ${KNOWLEDGE_LEVEL_LABELS[round.level]}, below expectations for that level -- adjusted to ${KNOWLEDGE_LEVEL_LABELS[level]}.`
     }
-    const path = roundHistory
+    const path = rounds
       .map((r) => `${KNOWLEDGE_LEVEL_LABELS[r.level]} (${r.score}/${r.total}, ${r.pass ? 'passed' : 'below expectations'})`)
       .join(' → ')
-    return `Calibrated via knowledge check -- no self-assessment existed to pitch at, so this found the level from scratch: ${path}. Diagnosed at ${KNOWLEDGE_LEVEL_LABELS[diagnosedLevel]}.`
+    return `Calibrated via knowledge check -- no self-assessment existed to pitch at, so this found the level from scratch: ${path}. Diagnosed at ${KNOWLEDGE_LEVEL_LABELS[level]}.`
   }
 
-  async function handleConfirm() {
+  // The quiz's result becomes the skill's knowledge level as soon as it's
+  // known -- with no self-assessment, that's how the learner gets a level at
+  // all. It used to wait for "Continue", so closing the result any other way
+  // kept the scores but quietly dropped the level.
+  function settle(level, rounds) {
+    setDiagnosedLevel(level)
+    setSettled(true)
+    saveLevel(level, rounds)
+  }
+
+  async function saveLevel(level, rounds) {
     setError(null)
     setSaving(true)
     try {
       const { error: assessError } = await supabase.from('skill_assessments').insert({
         skill_id: skill.id,
         user_id: user.id,
-        level: diagnosedLevel,
+        level,
         axis: 'knowledge',
         source: 'diagnostic_confirmed',
-        comments: buildComments(),
+        comments: buildComments(rounds, level),
       })
       if (assessError) throw assessError
 
@@ -201,22 +210,26 @@ export default function ConfirmingBaselineQuizModal({
       // at any point in a skill's life (not just fresh off self-assessing
       // knowledge), and forcing the stage backwards for a skill that has since
       // moved on (e.g. validated) would regress its displayed progress.
-      const skillUpdate = { knowledge_level: diagnosedLevel }
+      const skillUpdate = { knowledge_level: level }
       if (skill.lifecycle_stage === 'confirming_baseline') skillUpdate.lifecycle_stage = 'identified'
       const { error: skillError } = await supabase.from('skills').update(skillUpdate).eq('id', skill.id)
       if (skillError) throw skillError
 
-      onConfirmed()
+      setSaved(true)
     } catch (err) {
       setError(err.message)
+    } finally {
       setSaving(false)
     }
   }
 
+  // However it's closed once the level is saved, the page reloads to show it.
+  const close = saved ? onConfirmed : onClose
+
   return (
     <AccessibleDialog
       labelledBy="knowledge-quiz-dialog-title"
-      onClose={onClose}
+      onClose={close}
       panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
     >
         <h2 id="knowledge-quiz-dialog-title" className="font-display text-2xl text-ink mb-1">
@@ -322,15 +335,21 @@ export default function ConfirmingBaselineQuizModal({
               </p>
             )}
 
+            {saved && <p role="status" className="text-sm text-moss mb-3">{t('modals.confirmingBaselineQuiz.savedToSkill')}</p>}
             {error && <p className="text-sm text-red-700 mb-2">{error}</p>}
 
+            {/* Saved already; if that failed, this tries again. */}
             <button
               type="button"
-              onClick={handleConfirm}
+              onClick={saved ? onConfirmed : () => saveLevel(diagnosedLevel, roundHistory)}
               disabled={saving}
               className="w-full rounded-md bg-moss text-paper py-2 font-medium hover:opacity-90 disabled:opacity-60"
             >
-              {saving ? t('modals.confirmingBaselineQuiz.saving') : t('modals.confirmingBaselineQuiz.continue')}
+              {saving
+                ? t('modals.confirmingBaselineQuiz.saving')
+                : saved
+                  ? t('modals.confirmingBaselineQuiz.continue')
+                  : t('modals.confirmingBaselineQuiz.tryAgain')}
             </button>
           </div>
         )}

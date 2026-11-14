@@ -983,6 +983,8 @@ export default {
       confirmingResultFail:
         'Obtuviste {score} / {total} en el nivel {level} -- eso está por debajo de lo esperado en ese nivel, así que tu nivel confirmado se ha ajustado a {adjustedLevel}.',
       continue: 'Continuar',
+      savedToSkill: 'Guardado como tu nivel de conocimiento para esta habilidad.',
+      tryAgain: 'Intentar guardar de nuevo',
     },
     interview: {
       title: 'Entrevístame',

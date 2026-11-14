@@ -983,6 +983,8 @@ export default {
       confirmingResultFail:
         'Je scoorde {score} / {total} op het niveau {level} -- dat ligt onder wat op dat niveau wordt verwacht, dus je bevestigde niveau is aangepast naar {adjustedLevel}.',
       continue: 'Doorgaan',
+      savedToSkill: 'Opgeslagen als je kennisniveau voor deze vaardigheid.',
+      tryAgain: 'Opnieuw opslaan',
     },
     interview: {
       title: 'Interview mij',

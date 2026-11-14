@@ -982,6 +982,8 @@ export default {
       confirmingResultFail:
         "You scored {score} / {total} at the {level} level -- that's below what's expected at that level, so your confirmed level has been adjusted to {adjustedLevel}.",
       continue: 'Continue',
+      savedToSkill: 'Saved as your knowledge level for this skill.',
+      tryAgain: 'Try saving again',
     },
     interview: {
       title: 'Interview me',

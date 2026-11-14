@@ -984,6 +984,8 @@ export default {
       confirmingResultFail:
         "Vous avez obtenu {score} / {total} au niveau {level} -- c'est en dessous de ce qui est attendu à ce niveau, donc votre niveau confirmé a été ajusté à {adjustedLevel}.",
       continue: 'Continuer',
+      savedToSkill: 'Enregistré comme votre niveau de connaissance pour cette compétence.',
+      tryAgain: 'Réessayer l’enregistrement',
     },
     interview: {
       title: 'Interviewez-moi',

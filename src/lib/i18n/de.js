@@ -985,6 +985,8 @@ export default {
       confirmingResultFail:
         'Du hast {score} / {total} auf dem Niveau {level} erreicht -- das liegt unter den Erwartungen für dieses Niveau, daher wurde dein bestätigtes Niveau auf {adjustedLevel} angepasst.',
       continue: 'Weiter',
+      savedToSkill: 'Als dein Wissensniveau für diese Fähigkeit gespeichert.',
+      tryAgain: 'Erneut speichern',
     },
     interview: {
       title: 'Interview mich',
