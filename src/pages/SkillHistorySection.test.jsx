@@ -31,6 +31,31 @@ function activityRow(name) {
   return { id: 'a1', statement, recorded_at: statement.timestamp, created_at: statement.timestamp }
 }
 
+describe('sets in a skill’s history', () => {
+  it('shows same-day sets as one row with their total, opening to each set, as on the dashboard', () => {
+    const set = (id, value) => {
+      const statement = buildStatement({
+        actor: { name: 'Me', email: 'me@example.com' },
+        verbValue: 'practiced',
+        activityName: 'Push-ups',
+        timestamp: `2026-11-10T0${id}:00:00.000Z`,
+        relatedSkills: [{ id: 's1', name: 'Fitness' }],
+        measurements: [{ metric: 'push_ups', kind: 'count', value, unit: 'push-ups' }],
+      })
+      return { id: `p${id}`, statement, recorded_at: statement.timestamp, created_at: statement.timestamp }
+    }
+    render(
+      <MemoryRouter>
+        <TimelineEntry event={{ type: 'sets', rows: [set(3, 20), set(2, 20), set(1, 25)] }} isLast onOpenActivity={vi.fn()} />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('65 push-ups')).toBeInTheDocument()
+    expect(screen.getByText('25 + 20 + 20')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /3 sets/ }))
+    expect(screen.getAllByRole('button', { name: 'Push-ups' })).toHaveLength(3)
+  })
+})
+
 describe('an activity in a skill’s history', () => {
   it('uses the dashboard timeline’s row -- title to open it, skill chip, figures -- with its date', () => {
     const onSelect = vi.fn()

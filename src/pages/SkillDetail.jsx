@@ -7,7 +7,7 @@ import { useLanguage } from '../context/LanguageContext'
 import { isSelfAssessmentDue } from '../lib/checkin'
 import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
-import SkillNetworkSection from '../components/SkillNetworkSection'
+import SkillNetworkSection, { RatingsFromOthers } from '../components/SkillNetworkSection'
 import SkillLearningSection from '../components/SkillLearningSection'
 import QuickActivityLog from '../components/QuickActivityLog'
 import { listSkillGoals } from '../lib/skillGoals'
@@ -877,6 +877,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
                     <NestedSkillPanel
                       title={t('skillDetail.stages.validate')}
                       status={
+                        <div className="space-y-3">
                         <p className="text-sm text-secondary">
                           {peerRatings.length > 0
                             ? `${peerRatings.length} ${peerRatings.length === 1 ? t('skillDetail.peerRatingSingular') : t('skillDetail.peerRatingPlural')}`
@@ -886,6 +887,18 @@ export default function SkillDetail({ skillId, embedded = false }) {
                             : ''}
                           {decidedValidationRequestsCount > 0 ? ` · ${decidedValidationRequestsCount} ${t('skillDetail.decidedSuffix')}` : ''}
                         </p>
+                        {/* Who has rated you and who you're waiting on -- the
+                            learner's own invites and ratings, so only on their
+                            own skill. */}
+                        {skill.user_id === user.id && (
+                          <RatingsFromOthers
+                            ratings={peerRatings}
+                            raterAvatars={raterAvatars}
+                            rateInvites={invites}
+                            knownPeople={knownPeople}
+                          />
+                        )}
+                        </div>
                       }
                       actions={[
                         // Ratings are what Validate is about, so asking for one
@@ -936,15 +949,11 @@ export default function SkillDetail({ skillId, embedded = false }) {
               skillName={skill.name}
               librarySkillId={skill.library_skill_id}
               isOwner={skill.user_id === user.id}
-              ratings={peerRatings}
-              raterAvatars={raterAvatars}
-              rateInvites={invites}
               recommendInvites={recommendInvites}
               recommendAcceptors={recommendAcceptors}
               knownPeople={knownPeople}
               connections={connectionsWithSkill}
               totalTrackersCount={totalTrackersCount}
-              onInviteToRate={skill.user_id === user.id ? () => setInviteOpen(true) : null}
               onFindExpert={() => setFindExpertOpen(true)}
               onRecommend={() => setRecommendOpen(true)}
             />

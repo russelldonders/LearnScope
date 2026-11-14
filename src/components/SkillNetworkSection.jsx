@@ -5,88 +5,37 @@ import { formatFullDate } from '../lib/dates'
 import { LEVEL_LABELS } from '../lib/levels'
 
 // Who else is involved with a skill, styled like the Goals section above it,
-// in three parts:
-//   1. Ratings -- asking people to rate you, with who's been asked and who has
-//      rated (owner only: these are the owner's own invites and ratings).
-//   2. Recommending -- your connections who have the skill, and who you've
+// in two parts:
+//   1. Recommending -- your connections who have the skill, and who you've
 //      recommended it to.
-//   3. Beyond your connections -- how many people have it (information only,
+//   2. Beyond your connections -- how many people have it (information only,
 //      no names), and Find an expert among those who chose to be findable.
 // Without a librarySkillId the skill can't be matched to anyone else's, so
-// parts 2 and 3 have nothing to show.
+// there's nothing to show. Ratings from others live in the skill's Validate
+// box (RatingsFromOthers below).
 export default function SkillNetworkSection({
   skillName,
   librarySkillId,
   isOwner,
-  ratings = [],
-  raterAvatars = {},
-  rateInvites = [],
   recommendInvites = [],
   recommendAcceptors = {},
   knownPeople = {},
   connections,
   totalTrackersCount,
-  onInviteToRate,
   onFindExpert,
   onRecommend,
 }) {
   const { t } = useLanguage()
-  // Share links have no one's email on them, so only invites sent to someone
-  // are listed; once accepted, a rate invite shows as the rating itself.
-  const waitingForRating = rateInvites.filter((invite) => invite.status === 'pending' && invite.invitee_email)
   const recommendedWaiting = recommendInvites.filter((invite) => invite.status === 'pending' && invite.invitee_email)
   const recommendedAccepted = recommendInvites.filter((invite) => invite.status === 'accepted')
-  // An invite only stores the address it went to. knownPeople (lower-cased
-  // email -> { name, avatarUrl }) names the ones that belong to a connection;
-  // anyone else has no name in LearnScope yet, so their address stands in.
-  const known = (email) => knownPeople[email?.toLowerCase()] ?? null
-  const nameFor = (email) => known(email)?.name || email
+  const { known, nameFor } = peopleByEmail(knownPeople)
+  if (!librarySkillId) return null
 
   return (
     <section aria-labelledby="skill-network-heading" className="mt-4 rounded-md border border-hairline bg-paper p-4">
       <h2 id="skill-network-heading" className="font-display text-xl text-ink">{t('skillDetail.skillNetwork')}</h2>
 
       <div className="space-y-3 mt-3">
-        {isOwner && (
-          <Part
-            id="skill-network-ratings"
-            title={t('skillDetail.network.ratingsTitle')}
-            description={t('skillDetail.network.ratingsDescription')}
-            action={{ label: t('skillDetail.network.askToRate', { skill: skillName }), onClick: onInviteToRate }}
-          >
-            {ratings.length === 0 && waitingForRating.length === 0 ? (
-              <Empty>{t('skillDetail.network.noRatingsYet')}</Empty>
-            ) : (
-              <>
-                {ratings.length > 0 && (
-                  <PeopleList heading={t('skillDetail.network.rated')}>
-                    {ratings.map((rating) => (
-                      <Person
-                        key={rating.id}
-                        name={rating.rater_name || rating.rater_email}
-                        avatarUrl={raterAvatars[rating.rater_id] ?? null}
-                        detail={`${LEVEL_LABELS[rating.level] ?? ''} · ${formatFullDate(rating.rated_at)}`}
-                      />
-                    ))}
-                  </PeopleList>
-                )}
-                {waitingForRating.length > 0 && (
-                  <PeopleList heading={t('skillDetail.network.waitingForRating')}>
-                    {waitingForRating.map((invite) => (
-                      <Person
-                        key={invite.id}
-                        name={nameFor(invite.invitee_email)}
-                        avatarUrl={known(invite.invitee_email)?.avatarUrl ?? null}
-                        detail={t('skillDetail.network.askedOn', { date: formatFullDate(invite.created_at) })}
-                      />
-                    ))}
-                  </PeopleList>
-                )}
-              </>
-            )}
-          </Part>
-        )}
-
         {librarySkillId && (
           <Part
             id="skill-network-recommend"
@@ -158,7 +107,55 @@ export default function SkillNetworkSection({
   )
 }
 
-// One of the three parts: a card like a goal tile, its title and one-line
+// An invite only stores the address it went to. knownPeople (lower-cased
+// email -> { name, avatarUrl }) names the ones that belong to a connection;
+// anyone else has no name in LearnScope yet, so their address stands in.
+function peopleByEmail(knownPeople) {
+  const known = (email) => knownPeople[email?.toLowerCase()] ?? null
+  return { known, nameFor: (email) => known(email)?.name || email }
+}
+
+// Who has rated the learner on this skill and who they've asked and are
+// still waiting on -- shown in the skill's Validate box, below its "Ask
+// someone to rate your ability" button. Share links have no one's email on
+// them, so only invites sent to someone are listed; once accepted, a rate
+// invite shows as the rating itself.
+export function RatingsFromOthers({ ratings = [], raterAvatars = {}, rateInvites = [], knownPeople = {} }) {
+  const { t } = useLanguage()
+  const { known, nameFor } = peopleByEmail(knownPeople)
+  const waitingForRating = rateInvites.filter((invite) => invite.status === 'pending' && invite.invitee_email)
+  if (ratings.length === 0 && waitingForRating.length === 0) return <Empty>{t('skillDetail.network.noRatingsYet')}</Empty>
+  return (
+    <div className="space-y-3">
+      {ratings.length > 0 && (
+        <PeopleList heading={t('skillDetail.network.rated')}>
+          {ratings.map((rating) => (
+            <Person
+              key={rating.id}
+              name={rating.rater_name || rating.rater_email}
+              avatarUrl={raterAvatars[rating.rater_id] ?? null}
+              detail={`${LEVEL_LABELS[rating.level] ?? ''} · ${formatFullDate(rating.rated_at)}`}
+            />
+          ))}
+        </PeopleList>
+      )}
+      {waitingForRating.length > 0 && (
+        <PeopleList heading={t('skillDetail.network.waitingForRating')}>
+          {waitingForRating.map((invite) => (
+            <Person
+              key={invite.id}
+              name={nameFor(invite.invitee_email)}
+              avatarUrl={known(invite.invitee_email)?.avatarUrl ?? null}
+              detail={t('skillDetail.network.askedOn', { date: formatFullDate(invite.created_at) })}
+            />
+          ))}
+        </PeopleList>
+      )}
+    </div>
+  )
+}
+
+// One of the parts: a card like a goal tile, its title and one-line
 // explanation, the action for it, then what's happened so far.
 function Part({ id, title, description, action, children }) {
   return (

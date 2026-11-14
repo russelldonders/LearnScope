@@ -12,7 +12,7 @@ vi.mock('../context/LanguageContext', async () => {
   return { useLanguage: () => ({ language: 'en', setLanguage: vi.fn(), t }) }
 })
 
-const { default: SkillNetworkSection } = await import('./SkillNetworkSection')
+const { default: SkillNetworkSection, RatingsFromOthers } = await import('./SkillNetworkSection')
 
 const n = english.skillDetail.network
 
@@ -25,12 +25,6 @@ function renderSection(props = {}) {
         skillName="Golf"
         librarySkillId="lib-1"
         isOwner
-        ratings={[{ id: 'r1', rater_id: 'p1', rater_name: 'Rita Rater', level: 4, rated_at: '2026-11-01T10:00:00Z' }]}
-        raterAvatars={{}}
-        rateInvites={[
-          { id: 'i1', status: 'pending', invitee_email: 'pat@example.com', created_at: '2026-11-10T10:00:00Z' },
-          { id: 'i2', status: 'pending', invitee_email: null, created_at: '2026-11-10T10:00:00Z' },
-        ]}
         recommendInvites={[
           { id: 'm1', status: 'pending', invitee_email: 'sam@example.com', created_at: '2026-11-11T10:00:00Z' },
           { id: 'm2', status: 'accepted', invitee_email: 'ann@example.com', accepted_by: 'u9', accepted_at: '2026-11-12T10:00:00Z' },
@@ -39,7 +33,6 @@ function renderSection(props = {}) {
         knownPeople={{ 'pat@example.com': { name: 'Pat Known', avatarUrl: null } }}
         connections={[{ id: 'c1', name: 'Alex Kim', avatarUrl: null }]}
         totalTrackersCount={12}
-        onInviteToRate={vi.fn()}
         onFindExpert={vi.fn()}
         onRecommend={vi.fn()}
         {...props}
@@ -51,19 +44,6 @@ function renderSection(props = {}) {
 const part = (title) => screen.getByRole('region', { name: title })
 
 describe('SkillNetworkSection', () => {
-  it('asks for ratings by skill name, listing who rated and who is still to (not share links)', () => {
-    const onInviteToRate = vi.fn()
-    renderSection({ onInviteToRate })
-    const ratings = part(n.ratingsTitle)
-    expect(within(ratings).getByText('Rita Rater')).toBeInTheDocument()
-    // Named when the address belongs to a connection, not shown as the email.
-    expect(within(ratings).getByText('Pat Known')).toBeInTheDocument()
-    expect(within(ratings).queryByText('pat@example.com')).not.toBeInTheDocument()
-    expect(within(ratings).getAllByRole('listitem')).toHaveLength(2)
-    fireEvent.click(within(ratings).getByRole('button', { name: 'Ask someone to rate your Golf ability' }))
-    expect(onInviteToRate).toHaveBeenCalledOnce()
-  })
-
   it('shows connections with the skill and recommendations sent and taken up', () => {
     const onRecommend = vi.fn()
     renderSection({ onRecommend })
@@ -85,10 +65,33 @@ describe('SkillNetworkSection', () => {
     expect(onFindExpert).toHaveBeenCalledOnce()
   })
 
-  it('shows someone else’s skill without the owner’s ratings or invites', () => {
+  it('shows someone else’s skill without the owner’s recommendations', () => {
     renderSection({ isOwner: false })
-    expect(screen.queryByRole('region', { name: n.ratingsTitle })).not.toBeInTheDocument()
     expect(screen.queryByText('sam@example.com')).not.toBeInTheDocument()
     expect(screen.getByText('Alex Kim')).toBeInTheDocument()
+  })
+})
+
+describe('RatingsFromOthers (in the Validate box)', () => {
+  it('lists who rated and who is still to, by name where known, leaving out share links', () => {
+    render(
+      <RatingsFromOthers
+        ratings={[{ id: 'r1', rater_id: 'p1', rater_name: 'Rita Rater', level: 4, rated_at: '2026-11-01T10:00:00Z' }]}
+        rateInvites={[
+          { id: 'i1', status: 'pending', invitee_email: 'pat@example.com', created_at: '2026-11-10T10:00:00Z' },
+          { id: 'i2', status: 'pending', invitee_email: null, created_at: '2026-11-10T10:00:00Z' },
+        ]}
+        knownPeople={{ 'pat@example.com': { name: 'Pat Known', avatarUrl: null } }}
+      />,
+    )
+    expect(screen.getByText('Rita Rater')).toBeInTheDocument()
+    expect(screen.getByText('Pat Known')).toBeInTheDocument()
+    expect(screen.queryByText('pat@example.com')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('listitem')).toHaveLength(2)
+  })
+
+  it('says so when no one has been asked yet', () => {
+    render(<RatingsFromOthers />)
+    expect(screen.getByText(n.noRatingsYet)).toBeInTheDocument()
   })
 })

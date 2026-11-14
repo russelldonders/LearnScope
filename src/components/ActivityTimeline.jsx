@@ -77,34 +77,43 @@ function ActivityItem({ row, now, onOpen, onLogAgain, onReflected, onEdit, dot =
 // Sets of the same thing on one day (three sets of push-ups) as one line with
 // their total and how it was made up, opening to show each set with its own
 // actions. The sets stay separate activities; only the timeline joins them.
-function SetsItem({ rows, now, onOpen, onLogAgain, onReflected, onEdit }) {
+// Also used by a skill's History tab, which lists activities among ratings
+// and courses rather than under day headings (dated adds the date).
+export function ActivitySets({ rows, now = Date.now(), dated = false, onOpen, onLogAgain, onReflected, onEdit }) {
   const { t } = useLanguage()
   const [open, setOpen] = useState(false)
   const { row, parts, ordered } = combinedSetRow(rows)
   // Sets are counted, so each part is a plain number.
   const partText = parts.map((part) => String(Math.round(part * 100) / 100)).join(' + ')
   return (
+    <ActivityRow
+      row={row}
+      framed={false}
+      dated={dated}
+      now={now}
+      actions={(
+        <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className={ACTION_CLASS}>
+          {t('activity.timeline.sets', { count: rows.length })} {open ? '▴' : '▾'}
+        </button>
+      )}
+    >
+      <p className="text-xs text-secondary mt-1">{partText}</p>
+      {open && (
+        <ol className="mt-3 ml-1 pl-4 border-l border-hairline/50 space-y-3">
+          {[...ordered].reverse().map((set) => (
+            <ActivityItem key={set.id} row={set} now={now} onOpen={onOpen} onLogAgain={onLogAgain} onReflected={onReflected} onEdit={onEdit} dot={false} />
+          ))}
+        </ol>
+      )}
+    </ActivityRow>
+  )
+}
+
+function SetsItem(props) {
+  return (
     <li className="relative">
       <Dot />
-      <ActivityRow
-        row={row}
-        framed={false}
-        now={now}
-        actions={(
-          <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className={ACTION_CLASS}>
-            {t('activity.timeline.sets', { count: rows.length })} {open ? '▴' : '▾'}
-          </button>
-        )}
-      >
-        <p className="text-xs text-secondary mt-1">{partText}</p>
-        {open && (
-          <ol className="mt-3 ml-1 pl-4 border-l border-hairline/50 space-y-3">
-            {[...ordered].reverse().map((set) => (
-              <ActivityItem key={set.id} row={set} now={now} onOpen={onOpen} onLogAgain={onLogAgain} onReflected={onReflected} onEdit={onEdit} dot={false} />
-            ))}
-          </ol>
-        )}
-      </ActivityRow>
+      <ActivitySets {...props} />
     </li>
   )
 }

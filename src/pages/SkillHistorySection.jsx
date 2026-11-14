@@ -12,6 +12,8 @@ import LifecycleStageIcon from '../components/LifecycleStageIcon'
 import PendingTrainingEntry from '../components/PendingTrainingEntry'
 import ActivityRow from '../components/ActivityRow'
 import TimelineRail from '../components/TimelineRail'
+import { ActivitySets } from '../components/ActivityTimeline'
+import { dayGroups, foldTimeline } from '../lib/activityTimeline'
 
 // The dashboard timeline's dot, so activities read the same in both places.
 function ActivityDot() {
@@ -19,6 +21,21 @@ function ActivityDot() {
 }
 
 const TIMELINE_DETAIL_TYPES = new Set(['assessment', 'peer', 'relationship', 'activity', 'training'])
+
+// The skill's activities as timeline entries, folded the way the dashboard
+// does it (dayGroups + foldTimeline): newest first, one entry per activity,
+// with same-day sets of the same thing as one 'sets' entry.
+function activityEvents(practicalStatements) {
+  const byHappened = [...practicalStatements].sort((a, b) => new Date(b.recorded_at) - new Date(a.recorded_at))
+  return dayGroups(byHappened)
+    .flatMap((group) => foldTimeline(group.rows))
+    .map((item) => {
+      if (item.type !== 'sets') return { type: 'activity', date: item.row.recorded_at, createdAt: item.row.created_at, statement: item.row }
+      const newest = item.rows.reduce((a, b) => (new Date(b.recorded_at) > new Date(a.recorded_at) ? b : a))
+      const latestCreated = item.rows.reduce((a, b) => (new Date(b.created_at) > new Date(a.created_at) ? b : a))
+      return { type: 'sets', date: newest.recorded_at, createdAt: latestCreated.created_at, rows: item.rows }
+    })
+}
 
 export function HistorySection({
   skill,
@@ -88,8 +105,10 @@ export function HistorySection({
               createdAt: link.created_at,
               link,
             })),
-          // Every activity is its own entry, in date order with everything else.
-          ...practicalStatements.map((s) => ({ type: 'activity', date: s.recorded_at, createdAt: s.created_at, statement: s })),
+          // Every activity is its own entry, in date order with everything
+          // else -- except sets of the same thing on one day, which fold into
+          // one entry exactly as on the dashboard's timeline.
+          ...activityEvents(practicalStatements),
           ...courseLinks
             .filter((link) => link.courses?.completed_date)
             .map((link) => ({
@@ -160,7 +179,7 @@ export function HistorySection({
               <TimelineEntry
                 key={
                   event.entry?.id ?? event.rating?.id ?? event.link?.id ?? event.statement?.id ??
-                  event.request?.id ?? event.type
+                  event.request?.id ?? (event.type === 'sets' ? `sets-${event.rows[0].id}` : event.type)
                 }
                 event={event}
                 isFirst={i === 0 && pendingCourseLinks.length === 0 && pendingValidationRequests.length === 0}
@@ -169,6 +188,7 @@ export function HistorySection({
                 isBaseline={i === mostRecentBaselineIndex}
                 raterAvatars={raterAvatars}
                 assessorName={assessorName}
+                onOpenActivity={(row) => setSelectedEvent({ type: 'activity', statement: row })}
                 onSelect={
                   event.type === 'training'
                     ? () => goToCourse(event.link.courses.id)
@@ -218,6 +238,7 @@ export function TimelineEntry({
   event,
   isFirst = false,
   isLast,
+  onOpenActivity,
   isMostRecent,
   isBaseline,
   raterAvatars,
@@ -260,6 +281,20 @@ export function TimelineEntry({
   // Activities look exactly as they do in the dashboard's timeline (same row,
   // no box, green dot); only the date is added, as history has no day
   // headings.
+  if (event.type === 'sets') {
+    return (
+      <div className="flex gap-3">
+        <div className="flex flex-col items-center w-12 shrink-0">
+          <ActivityDot />
+          {!isLast && <span className="w-px flex-1 bg-hairline mt-1" />}
+        </div>
+        <div className="min-w-0 flex-1 mb-6">
+          <ActivitySets rows={event.rows} dated onOpen={onOpenActivity} />
+        </div>
+      </div>
+    )
+  }
+
   if (event.type === 'activity') {
     return (
       <div className="flex gap-3">
