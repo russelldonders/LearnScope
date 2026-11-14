@@ -704,6 +704,7 @@ export default {
     rateCurrentLevel: '为你当前的等级评分',
     selfAssessCurrentLevel: '自我评估你当前的等级',
     setTargetAction: '设定目标',
+    askToRateAbility: '请别人评价你的能力',
     selfAssessKnowledgeTitle: '自我评估你的知识',
     selfAssessTitle: '自我评估',
     selfAssessmentWord: '自我评估',

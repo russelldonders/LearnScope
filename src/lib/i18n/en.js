@@ -704,6 +704,7 @@ export default {
     rateCurrentLevel: 'Rate your current level',
     selfAssessCurrentLevel: 'Self-assess your current level',
     setTargetAction: 'Set target',
+    askToRateAbility: 'Ask someone to rate your ability',
     selfAssessKnowledgeTitle: 'Self-assess your knowledge',
     selfAssessTitle: 'Self-assess',
     selfAssessmentWord: 'Self-assessment',

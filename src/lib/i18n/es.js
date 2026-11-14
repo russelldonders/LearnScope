@@ -704,6 +704,7 @@ export default {
     rateCurrentLevel: 'Valora tu nivel actual',
     selfAssessCurrentLevel: 'Autoevalúa tu nivel actual',
     setTargetAction: 'Establecer objetivo',
+    askToRateAbility: 'Pedir a alguien que valore tu habilidad',
     selfAssessKnowledgeTitle: 'Autoevalúa tu conocimiento',
     selfAssessTitle: 'Autoevaluación',
     selfAssessmentWord: 'Autoevaluación',

@@ -704,6 +704,7 @@ export default {
     rateCurrentLevel: 'Beoordeel je huidige niveau',
     selfAssessCurrentLevel: 'Beoordeel jezelf op je huidige niveau',
     setTargetAction: 'Doel instellen',
+    askToRateAbility: 'Vraag iemand je vaardigheid te beoordelen',
     selfAssessKnowledgeTitle: 'Beoordeel jezelf op je kennis',
     selfAssessTitle: 'Zelfbeoordeling',
     selfAssessmentWord: 'Zelfbeoordeling',

@@ -123,7 +123,6 @@ export default function SkillDetail({ skillId, embedded = false }) {
   const [recommendAcceptors, setRecommendAcceptors] = useState({})
   const [knownPeople, setKnownPeople] = useState({})
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [levelDetailAxis, setLevelDetailAxis] = useState(null)
   const [composite, setComposite] = useState(null)
   const [loadingComposite, setLoadingComposite] = useState(false)
   const [compositeError, setCompositeError] = useState(null)
@@ -728,29 +727,18 @@ export default function SkillDetail({ skillId, embedded = false }) {
                 title={t('skillDetail.knowledge')}
                 accent="slate"
                 status={
-                  <button
-                    type="button"
-                    onClick={() => setLevelDetailAxis('knowledge')}
-                    className="w-full flex items-center gap-3 text-left rounded-md -m-1 p-1 hover:bg-card transition-colors"
-                  >
-                    <KnowledgeLevelBar
-                      level={displayedKnowledgeLevel}
-                      size={28}
-                      color={TRUST_STATUS_COLORS[knowledgeVerification]}
-                      milestoneLevel={knowledgeMilestone}
-                      milestoneColor={TRUST_STATUS_COLORS[TRUST_STATUS.CONFIRMED]}
-                    />
-                    <div>
-                      <p className="text-sm text-secondary">
-                        {displayedKnowledgeLevel
-                          ? KNOWLEDGE_LEVEL_LABELS[displayedKnowledgeLevel]
-                          : t('skillDetail.notYetSelfAssessed')}
-                      </p>
-                      <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
-                        {knowledgeVerification ?? t('skillDetail.knowledgeFoundation')}
-                      </p>
-                    </div>
-                  </button>
+                  <LevelDetail
+                    skill={skill}
+                    axis="knowledge"
+                    level={displayedKnowledgeLevel}
+                    trustStatus={knowledgeVerification}
+                    trustLabel={knowledgeVerification ?? t('skillDetail.knowledgeFoundation')}
+                    milestoneLevel={knowledgeMilestone}
+                    onSelfAssess={() => setSelfAssessKnowledgeOpen(true)}
+                    onGuideGenerated={(statements) =>
+                      setSkill((s) => (s ? { ...s, knowledge_level_guide: statements } : s))
+                    }
+                  />
                 }
                 actions={[]}
                 nested={
@@ -814,26 +802,21 @@ export default function SkillDetail({ skillId, embedded = false }) {
               <SkillPanel
                 title={t('skillDetail.application')}
                 status={
-                  <button
-                    type="button"
-                    onClick={() => setLevelDetailAxis('practical')}
-                    className="w-full flex items-center gap-3 text-left rounded-md -m-1 p-1 hover:bg-card transition-colors"
-                  >
-                    <GrowthRing
-                      level={displayedPracticalLevel}
-                      size={35}
-                      targetLevel={visibleTarget?.level}
-                      color={TRUST_STATUS_COLORS[practicalVerification]}
-                    />
-                    <div>
-                      <p className="text-sm text-secondary">
-                        {displayedPracticalLevel ? LEVEL_LABELS[displayedPracticalLevel] : t('skillDetail.notYetSelfAssessed')}
-                      </p>
-                      <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">
-                        {practicalVerification ?? t('skillDetail.practicalFoundation')}
-                      </p>
-                    </div>
-                  </button>
+                  <LevelDetail
+                    skill={skill}
+                    axis="practical"
+                    level={displayedPracticalLevel}
+                    trustStatus={practicalVerification}
+                    trustLabel={practicalVerification ?? t('skillDetail.practicalFoundation')}
+                    ringTargetLevel={visibleTarget?.level}
+                    currentTarget={currentTarget}
+                    onSelfAssess={() => setSelfAssessOpen(true)}
+                    onSetTarget={() => setTargetOpen(true)}
+                    onAskToRate={skill.user_id === user.id ? () => setInviteOpen(true) : null}
+                    onGuideGenerated={(statements) =>
+                      setSkill((s) => (s ? { ...s, practical_level_guide: statements } : s))
+                    }
+                  />
                 }
                 actions={[]}
                 nested={
@@ -1009,37 +992,6 @@ export default function SkillDetail({ skillId, embedded = false }) {
               />
             )}
 
-            {levelDetailAxis && (
-              <LevelDetailModal
-                skill={skill}
-                axis={levelDetailAxis}
-                level={levelDetailAxis === 'knowledge' ? displayedKnowledgeLevel : displayedPracticalLevel}
-                trustStatus={levelDetailAxis === 'knowledge' ? knowledgeVerification : practicalVerification}
-                currentTarget={levelDetailAxis === 'practical' ? currentTarget : null}
-                onClose={() => setLevelDetailAxis(null)}
-                onSelfAssess={() => {
-                  setLevelDetailAxis(null)
-                  if (levelDetailAxis === 'knowledge') setSelfAssessKnowledgeOpen(true)
-                  else setSelfAssessOpen(true)
-                }}
-                onSetTarget={() => {
-                  setLevelDetailAxis(null)
-                  setTargetOpen(true)
-                }}
-                onGuideGenerated={(statements) =>
-                  setSkill((s) =>
-                    s
-                      ? {
-                          ...s,
-                          [levelDetailAxis === 'knowledge' ? 'knowledge_level_guide' : 'practical_level_guide']:
-                            statements,
-                        }
-                      : s
-                  )
-                }
-              />
-            )}
-
             {confirmingBaselineOpen && (
               <ConfirmingBaselineQuizModal
                 skill={skill}
@@ -1123,10 +1075,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
                 user={user}
                 targets={targets}
                 currentLevel={displayedPracticalLevel}
-                onClose={() => {
-                  setTargetOpen(false)
-                  setLevelDetailAxis('practical')
-                }}
+                onClose={() => setTargetOpen(false)}
                 onSet={() => {
                   loadHistory()
                   loadSkill()
@@ -1398,37 +1347,36 @@ function NestedSkillPanel({ title, accent, status, actions }) {
   )
 }
 
-// Explains what the learner's current (or most recent self-assessed)
-// level actually means, then offers the same self-assess/rate action as
-// the panel's own button -- reached by clicking the level itself rather
-// than only the explicit action button. Both axes reuse the same
-// per-skill AI guide as their self-assess picker (see ensureKnowledgeLevelGuide
-// / ensurePracticalLevelGuide); LEVEL_DESCRIPTIONS is only a fallback for
-// the practical axis if generation hasn't completed or fails.
-function LevelDetailModal({
+// A panel's level, shown in place on the skill page: what the current level
+// means, the confirmed level under a newer self-assessment (knowledge) or the
+// target (application), and what to do next. Both axes reuse the per-skill
+// AI guide their self-assess picker uses (see ensureKnowledgeLevelGuide /
+// ensurePracticalLevelGuide); LEVEL_DESCRIPTIONS is only a fallback for the
+// practical axis if generation hasn't completed or fails. The guide is only
+// fetched when there's a level or target to describe.
+function LevelDetail({
   skill,
   axis,
   level,
   trustStatus,
-  currentTarget,
-  onClose,
+  trustLabel,
+  milestoneLevel = null,
+  ringTargetLevel = null,
+  currentTarget = null,
   onSelfAssess,
-  onSetTarget,
+  onSetTarget = null,
+  onAskToRate = null,
   onGuideGenerated,
 }) {
   const { t } = useLanguage()
   const isKnowledge = axis === 'knowledge'
   const labels = isKnowledge ? KNOWLEDGE_LEVEL_LABELS : LEVEL_LABELS
-  // A newer self-assessment can claim higher than the last confirmed
-  // knowledge_level -- when it has, the bar splits at the confirmed level so
-  // "verified" and "claimed since" read as visually distinct, not one flat
-  // colour overstating how settled the higher number is.
-  const knowledgeMilestone =
-    isKnowledge && skill.knowledge_level && level && skill.knowledge_level < level ? skill.knowledge_level : null
+  const needsGuide = Boolean(level || currentTarget)
   const [guideStatements, setGuideStatements] = useState([])
-  const [guideLoading, setGuideLoading] = useState(true)
+  const [guideLoading, setGuideLoading] = useState(needsGuide)
 
   useEffect(() => {
+    if (!needsGuide) return
     let cancelled = false
     setGuideLoading(true)
     const ensureGuide = isKnowledge ? ensureKnowledgeLevelGuide : ensurePracticalLevelGuide
@@ -1446,111 +1394,105 @@ function LevelDetailModal({
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
-  }, [isKnowledge, skill.id])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per skill, axis and whether there's anything to describe
+  }, [isKnowledge, skill.id, needsGuide])
 
   const description = level
     ? guideStatements[level - 1] ?? (!isKnowledge ? LEVEL_DESCRIPTIONS[level] : undefined)
     : null
 
   return (
-    <AccessibleDialog
-      labelledBy="axis-summary-dialog-title"
-      onClose={onClose}
-      panelClassName="w-full max-w-md bg-card border border-hairline rounded-lg p-6"
-    >
-        <div className="flex items-center justify-between mb-4">
-          <h2 id="axis-summary-dialog-title" className="font-display text-2xl text-ink">{isKnowledge ? t('skillDetail.knowledge') : t('skillDetail.application')}</h2>
-          <button type="button" onClick={onClose} className="text-secondary hover:text-ink text-sm">
-            {t('skillDetail.close')}
-          </button>
-        </div>
-        <div className="flex items-center gap-3 mb-3">
-          {isKnowledge ? (
-            <KnowledgeLevelBar level={level} size={32} color={TRUST_STATUS_COLORS[trustStatus]} />
-          ) : (
-            <GrowthRing level={level} size={40} color={TRUST_STATUS_COLORS[trustStatus]} />
-          )}
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">{t('skillDetail.currentLevel')}</p>
-            <p className="text-base font-medium text-ink">{level ? labels[level] : t('skillDetail.notYetSelfAssessed')}</p>
-          </div>
-        </div>
-        {level ? (
-          guideLoading && description == null ? (
-            <p className="text-sm text-secondary mb-4">{t('skillDetail.loadingGuidance')}</p>
-          ) : (
-            description && <p className="text-sm text-secondary mb-4">{description}</p>
-          )
+    <div>
+      <div className="flex items-center gap-3">
+        {isKnowledge ? (
+          <KnowledgeLevelBar
+            level={level}
+            size={28}
+            color={TRUST_STATUS_COLORS[trustStatus]}
+            milestoneLevel={milestoneLevel}
+            milestoneColor={TRUST_STATUS_COLORS[TRUST_STATUS.CONFIRMED]}
+          />
         ) : (
-          <p className="text-sm text-secondary mb-4">
-            {isKnowledge
-              ? t('skillDetail.knowledgeNotRatedYet')
-              : t('skillDetail.practicalNotAssessedYet')}
-          </p>
+          <GrowthRing level={level} size={35} targetLevel={ringTargetLevel} color={TRUST_STATUS_COLORS[trustStatus]} />
         )}
-        {/* Mirrors the practical Current/Target pair below -- a newer
-            self-assessment claiming higher than the last confirmed
-            knowledge_level is shown as its own block rather than folded
-            into the current level's icon, same reasoning as Target. */}
-        {knowledgeMilestone && (() => {
-          const confirmedDescription = guideStatements[knowledgeMilestone - 1]
-          return (
-            <div className="mb-4">
-              <div className="flex items-center gap-3">
-                <KnowledgeLevelBar
-                  level={knowledgeMilestone}
-                  size={32}
-                  color={TRUST_STATUS_COLORS[TRUST_STATUS.CONFIRMED]}
-                />
-                <div>
-                  <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">{t('skillDetail.confirmed')}</p>
-                  <p className="text-base font-medium text-ink">{KNOWLEDGE_LEVEL_LABELS[knowledgeMilestone]}</p>
-                </div>
-              </div>
-              {confirmedDescription && <p className="text-sm text-secondary mt-2">{confirmedDescription}</p>}
-            </div>
-          )
-        })()}
-        {currentTarget && (() => {
-          const targetDescription =
-            guideStatements[currentTarget.target_level - 1] ?? LEVEL_DESCRIPTIONS[currentTarget.target_level]
-          return (
-            <div className="mb-4">
-              <div className="flex items-center gap-3">
-                <GrowthRing level={0} size={40} targetLevel={currentTarget.target_level} />
-                <div>
-                  <p className="font-mono text-[10px] uppercase tracking-wide text-secondary">{t('skillDetail.target')}</p>
-                  <p className="text-base font-medium text-ink">{LEVEL_LABELS[currentTarget.target_level]}</p>
-                  <p className="font-mono text-xs text-secondary/80 mt-0.5">
-                    {t('skillDetail.byPrefix')} {new Date(`${currentTarget.target_date}T00:00:00`).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-              {targetDescription && <p className="text-sm text-secondary mt-2">{targetDescription}</p>}
-              {currentTarget.comments && <p className="text-sm text-secondary mt-2 whitespace-pre-wrap">{currentTarget.comments}</p>}
-            </div>
-          )
-        })()}
-        <div className="flex flex-wrap gap-2">
+        <div>
+          <p className="text-base font-medium text-ink">{level ? labels[level] : t('skillDetail.notYetSelfAssessed')}</p>
+          <p className="font-mono text-[10px] uppercase tracking-wide text-secondary/70 mt-0.5">{trustLabel}</p>
+        </div>
+      </div>
+
+      {level ? (
+        guideLoading && description == null ? (
+          <p className="text-sm text-secondary mt-3">{t('skillDetail.loadingGuidance')}</p>
+        ) : (
+          description && <p className="text-sm text-secondary mt-3">{description}</p>
+        )
+      ) : (
+        <p className="text-sm text-secondary mt-3">
+          {isKnowledge ? t('skillDetail.knowledgeNotRatedYet') : t('skillDetail.practicalNotAssessedYet')}
+        </p>
+      )}
+
+      {/* A newer self-assessment claiming higher than the last confirmed
+          knowledge_level gets its own line, like the practical target. */}
+      {isKnowledge && milestoneLevel && (
+        <div className="mt-3">
+          <p className="text-sm text-ink">
+            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mr-2">{t('skillDetail.confirmed')}</span>
+            {KNOWLEDGE_LEVEL_LABELS[milestoneLevel]}
+          </p>
+          {guideStatements[milestoneLevel - 1] && (
+            <p className="text-sm text-secondary mt-1">{guideStatements[milestoneLevel - 1]}</p>
+          )}
+        </div>
+      )}
+
+      {currentTarget && (
+        <div className="mt-3">
+          <p className="text-sm text-ink">
+            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary mr-2">{t('skillDetail.target')}</span>
+            {LEVEL_LABELS[currentTarget.target_level]}
+            <span className="font-mono text-xs text-secondary/80">
+              {' · '}{t('skillDetail.byPrefix')} {new Date(`${currentTarget.target_date}T00:00:00`).toLocaleDateString()}
+            </span>
+          </p>
+          {(guideStatements[currentTarget.target_level - 1] ?? LEVEL_DESCRIPTIONS[currentTarget.target_level]) && (
+            <p className="text-sm text-secondary mt-1">
+              {guideStatements[currentTarget.target_level - 1] ?? LEVEL_DESCRIPTIONS[currentTarget.target_level]}
+            </p>
+          )}
+          {currentTarget.comments && <p className="text-sm text-secondary mt-1 whitespace-pre-wrap">{currentTarget.comments}</p>}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2 mt-3">
+        <button
+          type="button"
+          onClick={onSelfAssess}
+          className="rounded-md bg-moss text-paper py-1.5 px-3 text-xs font-medium hover:opacity-90"
+        >
+          {isKnowledge ? t('skillDetail.rateCurrentLevel') : t('skillDetail.selfAssessCurrentLevel')}
+        </button>
+        {onSetTarget && (
           <button
             type="button"
-            onClick={onSelfAssess}
-            className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
+            onClick={onSetTarget}
+            className="rounded-md border border-hairline text-ink py-1.5 px-3 text-xs font-medium hover:border-moss"
           >
-            {isKnowledge ? t('skillDetail.rateCurrentLevel') : t('skillDetail.selfAssessCurrentLevel')}
+            {t('skillDetail.setTargetAction')}
           </button>
-          {!isKnowledge && (
-            <button
-              type="button"
-              onClick={onSetTarget}
-              className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper"
-            >
-              {t('skillDetail.setTargetAction')}
-            </button>
-          )}
-        </div>
-    </AccessibleDialog>
+        )}
+        {onAskToRate && (
+          <button
+            type="button"
+            onClick={onAskToRate}
+            className="rounded-md border border-hairline text-ink py-1.5 px-3 text-xs font-medium hover:border-moss"
+          >
+            {t('skillDetail.askToRateAbility')}
+          </button>
+        )}
+      </div>
+    </div>
   )
 }
 
