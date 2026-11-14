@@ -18,6 +18,9 @@ const KINDS = ['count', 'number', 'duration', 'pace', 'activities', 'practice_ti
 // as isMeasuredUnit in src/lib/skillGoalProgress.js (a test checks).
 export const MEASURED_UNIT = /^(kg|kgs|kilo(gram)?s?|g|grams?|lbs?|pounds?|st|stones?|km|kilomet(er|re)s?|m|met(er|re)s?|cm|mm|mi|miles?|ft|feet|in|inch(es)?|l|litres?|liters?|ml|%|percent|bpm|kcal|cal(orie)?s?)$/i
 const PERIODS = ['day', 'week', 'month', 'year']
+// Units that only say something happened, optionally naming what: "acts",
+// "times", "sessions of yoga".
+const OCCURRENCE_UNIT = /^(acts?|times?|sessions?|occasions?|occurrences?|instances?|activit(y|ies)|goes)(\s+of\s+.+)?$/i
 
 const nullable = (type) => ({ type: [type, 'null'] })
 
@@ -164,11 +167,12 @@ Choose one outcome:
 For a goal:
 ${skillNames ? `- skill_name: the skill this goal develops. Use one of their skills above, spelled exactly as listed, when it clearly fits. Otherwise a short, reusable skill name in ${language}, such as "Running", "Strength training" or "Weight management": the ability or area, never the goal itself.
 ` : ''}- measure_kind: "count" for whole numbers (push-ups, books); "number" for decimals (kg, km); "duration" for how long something takes or lasts; "pace" for time per distance; "activities" for how often they do the skill ("run 3 times a week"), where each activity they log counts; "practice_time" for total time spent practising ("2 hours a week").
+  - When each time they do it counts as one, use "activities", not "count": "3 acts of kindness each month", "meditate 5 times a week", "go to 2 networking events a month". Never use "count" with a unit such as acts, times, sessions or occasions -- every activity they log on the skill should count, without them typing a number.
 - metric: lowercase letters, digits and underscores only, in English, describing what is measured, such as push_ups or 5km_pace.
 - unit: short and plain, such as "push-ups", "kg" or "km". Use "seconds" for duration. Use "min/km" or "min/mi" for pace. Use "activities" for activities and "minutes" for practice_time.
 - direction: "lower" when a smaller value is better, such as pace or finish time; otherwise "higher".
 - aggregation: "best" when the goal is a single best result (40 push-ups in one set); "total" when values add up (100 push-ups a week, 12 books this year). Totals are always direction "higher".
-- period: "day", "week", "month" or "year" for a repeating or calendar total; null for a best result or a one-off total.
+- period: "day", "week", "month" or "year" for a repeating or calendar total; null for a best result or a one-off total. Wording such as "each month", "every week", "per day", "a month" or "monthly" always means a repeating total with that period, for activities too.
 - target_value: the number only, in the goal's unit. Use seconds for duration and seconds per km or mile for pace (5:00 per km is 300). Use minutes for practice_time. Null if they only want to keep track. Never invent a target they did not state.
 - target_date: YYYY-MM-DD if they gave a date or deadline, otherwise null. Never invent one. Work out a relative deadline from today: "in 12 weeks" is today plus 84 days, "by the end of the month" is the last day of this month, "this year" is 31 December.
 - title: a short restatement of the goal, in ${language}.
@@ -192,6 +196,10 @@ function normalizeDraftGoal(goal, today) {
   // Weights, distances and volumes aren't whole numbers, whatever the model
   // said: "101.4 kg" has to be enterable.
   if (kind === 'count' && MEASURED_UNIT.test(clean(goal?.unit, 40))) kind = 'number'
+  // Counting "acts", "times" or "sessions" is counting how often they do it:
+  // each activity logged on the skill should count, not only entries where a
+  // number was typed ("Made Rick a tea" for "3 acts of kindness a month").
+  if (kind === 'count' && OCCURRENCE_UNIT.test(clean(goal?.unit, 40))) kind = 'activities'
 
   let metric = clean(goal?.metric, 60).toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '')
   let unit = clean(goal?.unit, 40)

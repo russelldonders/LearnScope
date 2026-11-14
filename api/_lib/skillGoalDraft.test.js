@@ -93,6 +93,25 @@ describe('normalizeGoalDraft', () => {
     expect(normalizeGoalDraft({ outcome: 'goal', goal: pushUps }, TODAY).goal.measure_kind).toBe('count')
   })
 
+  it('makes a "count" of acts, times or sessions a goal that counts every activity on the skill', () => {
+    const kindness = {
+      ...pushUps,
+      title: 'Do 3 acts of kindness each month',
+      metric: 'acts_of_kindness',
+      unit: 'Acts',
+      aggregation: 'total',
+      period: 'month',
+      target_value: 3,
+    }
+    for (const unit of ['Acts', 'times', 'Sessions', 'acts of kindness', 'activity']) {
+      const { goal } = normalizeGoalDraft({ outcome: 'goal', goal: { ...kindness, unit } }, TODAY)
+      expect(goal).toMatchObject({ measure_kind: 'activities', metric: 'activity_count', unit: 'activities', period: 'month', target_value: 3 })
+    }
+    for (const unit of ['push-ups', 'books', 'pages']) {
+      expect(normalizeGoalDraft({ outcome: 'goal', goal: { ...kindness, unit } }, TODAY).goal.measure_kind).toBe('count')
+    }
+  })
+
   it('cleans metric names and drops values the table would reject', () => {
     const { goal } = normalizeGoalDraft({
       outcome: 'goal',
