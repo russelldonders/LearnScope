@@ -44,11 +44,25 @@ function renderSection(props = {}) {
 const part = (title) => screen.getByRole('region', { name: title })
 
 describe('SkillNetworkSection', () => {
-  it('shows connections with the skill and recommendations sent and taken up', () => {
+  it('shows your connections with the skill in their own card at the top', () => {
+    renderSection()
+    // The first region is the section itself (headed "Skill network" for
+    // screen readers); its cards follow in order.
+    const [, firstCard] = screen.getAllByRole('region')
+    expect(firstCard).toHaveAccessibleName(n.yourNetworkTitle)
+    expect(within(firstCard).getByRole('link', { name: /Alex Kim/ })).toHaveAttribute('href', '/skills-profile/c1')
+  })
+
+  it('says when none of your connections have the skill', () => {
+    renderSection({ connections: [] })
+    expect(within(part(n.yourNetworkTitle)).getByText(english.skillDetail.noConnectionsTrackSkill)).toBeInTheDocument()
+  })
+
+  it('shows recommendations sent and taken up', () => {
     const onRecommend = vi.fn()
     renderSection({ onRecommend })
     const recommend = part(n.recommendTitle)
-    expect(within(recommend).getByRole('link', { name: /Alex Kim/ })).toHaveAttribute('href', '/skills-profile/c1')
+    expect(within(recommend).queryByText('Alex Kim')).not.toBeInTheDocument()
     expect(within(recommend).getByText('Ann Accepted')).toBeInTheDocument()
     // Not a connection yet, so there's no name to show -- the address stands in.
     expect(within(recommend).getByText('sam@example.com')).toBeInTheDocument()

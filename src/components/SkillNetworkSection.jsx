@@ -4,11 +4,10 @@ import { useLanguage } from '../context/LanguageContext'
 import { formatFullDate } from '../lib/dates'
 import { LEVEL_LABELS } from '../lib/levels'
 
-// Who else is involved with a skill, styled like the Goals section above it,
-// in two parts:
-//   1. Recommending -- your connections who have the skill, and who you've
-//      recommended it to.
-//   2. Beyond your connections -- how many people have it (information only,
+// Who else is involved with a skill, on its Network tab, in three cards:
+//   1. Your skill network -- your connections who also have the skill.
+//   2. Recommending -- who you've recommended it to, and who took it up.
+//   3. Beyond your connections -- how many people have it (information only,
 //      no names), and Find an expert among those who chose to be findable.
 // Without a librarySkillId the skill can't be matched to anyone else's, so
 // there's nothing to show. Ratings from others live in the skill's Validate
@@ -38,6 +37,27 @@ export default function SkillNetworkSection({
       <h2 id="skill-network-heading" className="sr-only">{t('skillDetail.skillNetwork')}</h2>
 
       <div>
+        <Part
+          id="skill-network-yours"
+          title={t('skillDetail.network.yourNetworkTitle')}
+          description={t('skillDetail.network.yourNetworkDescription')}
+        >
+          {connections.length === 0 ? (
+            <Empty>{t('skillDetail.noConnectionsTrackSkill')}</Empty>
+          ) : (
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+              {connections.map((connection) => (
+                <Person
+                  key={connection.id}
+                  name={connection.name}
+                  avatarUrl={connection.avatarUrl}
+                  to={`/skills-profile/${connection.id}`}
+                />
+              ))}
+            </ul>
+          )}
+        </Part>
+
         {librarySkillId && (
           <Part
             id="skill-network-recommend"
@@ -45,20 +65,9 @@ export default function SkillNetworkSection({
             description={t('skillDetail.network.recommendDescription')}
             action={{ label: t('skillDetail.network.recommendToSomeoneNew', { skill: skillName }), onClick: onRecommend }}
           >
-            <PeopleList heading={t('skillDetail.network.connectionsWithSkill')}>
-              {connections.length === 0 ? (
-                <Empty as="li">{t('skillDetail.noConnectionsTrackSkill')}</Empty>
-              ) : (
-                connections.map((connection) => (
-                  <Person
-                    key={connection.id}
-                    name={connection.name}
-                    avatarUrl={connection.avatarUrl}
-                    to={`/skills-profile/${connection.id}`}
-                  />
-                ))
-              )}
-            </PeopleList>
+            {isOwner && recommendedAccepted.length === 0 && recommendedWaiting.length === 0 && (
+              <Empty>{t('skillDetail.network.noRecommendationsYet')}</Empty>
+            )}
             {isOwner && recommendedAccepted.length > 0 && (
               <PeopleList heading={t('skillDetail.network.recommendationsAccepted')}>
                 {recommendedAccepted.map((invite) => {
@@ -178,7 +187,7 @@ function Part({ id, title, description, action, children }) {
           </button>
         )}
       </div>
-      <div className="mt-3 space-y-3">{children}</div>
+      {[children].flat().some(Boolean) && <div className="mt-3 space-y-3">{children}</div>}
     </section>
   )
 }
