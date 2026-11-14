@@ -34,7 +34,7 @@ import { ensureKnowledgeLevelGuide } from '../lib/knowledgeLevelGuide'
 import { ensurePracticalLevelGuide } from '../lib/practicalLevelGuide'
 import { computeTrustStatus, isPersonValidated, TRUST_STATUS, TRUST_STATUS_COLORS } from '../lib/skillProficiencyModel'
 import { countSkillTrackers, listConnectionsWithSkill } from '../lib/skillStats'
-import { getProfiles } from '../lib/connections'
+import { getProfiles, listConnections } from '../lib/connections'
 import { getLearnerCompositeProgress, getParentCompositesForSkill } from '../lib/skillComposites'
 import { listTargetsSetByOthers, listLatestManagerRatings, pickTargetSetByOthers } from '../lib/managerSkillActions'
 import { computeVisibleTarget } from '../lib/skillTargetPrecedence'
@@ -121,6 +121,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
   const [findExpertOpen, setFindExpertOpen] = useState(false)
   const [recommendInvites, setRecommendInvites] = useState([])
   const [recommendAcceptors, setRecommendAcceptors] = useState({})
+  const [knownPeople, setKnownPeople] = useState({})
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [levelDetailAxis, setLevelDetailAxis] = useState(null)
   const [composite, setComposite] = useState(null)
@@ -155,6 +156,29 @@ export default function SkillDetail({ skillId, embedded = false }) {
     countSkillTrackers(skill.library_skill_id).then(setTotalTrackersCount)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reads its inputs once when opened, by design
   }, [skill?.library_skill_id])
+
+  // Names for the people invites were sent to: an invite only keeps the
+  // email address, so match it to a connection's. Anyone else stays an
+  // address until they join and connect.
+  useEffect(() => {
+    if (!skill || skill.user_id !== user.id) return
+    let live = true
+    listConnections(user.id)
+      .then(async (list) => {
+        const withEmail = list.filter((connection) => connection.email)
+        const profiles = await getProfiles(withEmail.map((connection) => connection.id))
+        if (!live) return
+        setKnownPeople(Object.fromEntries(withEmail.map((connection) => [
+          connection.email.toLowerCase(),
+          { name: connection.name, avatarUrl: profiles[connection.id]?.avatarUrl ?? null },
+        ])))
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per skill
+  }, [skill?.id])
 
   useEffect(() => {
     let active = true
@@ -903,6 +927,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
               rateInvites={invites}
               recommendInvites={recommendInvites}
               recommendAcceptors={recommendAcceptors}
+              knownPeople={knownPeople}
               connections={connectionsWithSkill}
               totalTrackersCount={totalTrackersCount}
               onInviteToRate={skill.user_id === user.id ? () => setInviteOpen(true) : null}

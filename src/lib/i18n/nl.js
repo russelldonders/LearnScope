@@ -679,6 +679,7 @@ export default {
       askedOn: 'Gevraagd op {date}',
       recommendTitle: 'Aanraden aan anderen',
       recommendDescription: 'Raad deze vaardigheid aan bij mensen die er iets aan hebben.',
+      recommendToSomeoneNew: '{skill} aanraden aan iemand nieuw',
       connectionsWithSkill: 'Je connecties met deze vaardigheid',
       recommendationsAccepted: 'Hebben je aanrader opgevolgd',
       recommendationsWaiting: 'Aanrader verstuurd',

@@ -679,6 +679,7 @@ export default {
       askedOn: 'Pedido el {date}',
       recommendTitle: 'Recomendar a otros',
       recommendDescription: 'Sugiere esta habilidad a personas a las que podría ayudar.',
+      recommendToSomeoneNew: 'Recomendar {skill} a alguien nuevo',
       connectionsWithSkill: 'Tus contactos con esta habilidad',
       recommendationsAccepted: 'Aceptaron tu recomendación',
       recommendationsWaiting: 'Recomendación enviada',

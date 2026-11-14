@@ -679,6 +679,7 @@ export default {
       askedOn: '{date} 发出邀请',
       recommendTitle: '推荐给他人',
       recommendDescription: '把这项技能推荐给可能用得上的人。',
+      recommendToSomeoneNew: '把{skill}推荐给新的人',
       connectionsWithSkill: '拥有此技能的联系人',
       recommendationsAccepted: '已接受你的推荐',
       recommendationsWaiting: '推荐已发送',

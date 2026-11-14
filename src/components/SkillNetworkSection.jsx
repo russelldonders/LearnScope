@@ -23,6 +23,7 @@ export default function SkillNetworkSection({
   rateInvites = [],
   recommendInvites = [],
   recommendAcceptors = {},
+  knownPeople = {},
   connections,
   totalTrackersCount,
   onInviteToRate,
@@ -35,6 +36,11 @@ export default function SkillNetworkSection({
   const waitingForRating = rateInvites.filter((invite) => invite.status === 'pending' && invite.invitee_email)
   const recommendedWaiting = recommendInvites.filter((invite) => invite.status === 'pending' && invite.invitee_email)
   const recommendedAccepted = recommendInvites.filter((invite) => invite.status === 'accepted')
+  // An invite only stores the address it went to. knownPeople (lower-cased
+  // email -> { name, avatarUrl }) names the ones that belong to a connection;
+  // anyone else has no name in LearnScope yet, so their address stands in.
+  const known = (email) => knownPeople[email?.toLowerCase()] ?? null
+  const nameFor = (email) => known(email)?.name || email
 
   return (
     <section aria-labelledby="skill-network-heading" className="mt-4 rounded-md border border-hairline bg-paper p-4">
@@ -46,7 +52,7 @@ export default function SkillNetworkSection({
             id="skill-network-ratings"
             title={t('skillDetail.network.ratingsTitle')}
             description={t('skillDetail.network.ratingsDescription')}
-            action={{ label: t('skillDetail.network.askToRate', { skill: skillName }), onClick: onInviteToRate, primary: true }}
+            action={{ label: t('skillDetail.network.askToRate', { skill: skillName }), onClick: onInviteToRate }}
           >
             {ratings.length === 0 && waitingForRating.length === 0 ? (
               <Empty>{t('skillDetail.network.noRatingsYet')}</Empty>
@@ -69,7 +75,8 @@ export default function SkillNetworkSection({
                     {waitingForRating.map((invite) => (
                       <Person
                         key={invite.id}
-                        name={invite.invitee_email}
+                        name={nameFor(invite.invitee_email)}
+                        avatarUrl={known(invite.invitee_email)?.avatarUrl ?? null}
                         detail={t('skillDetail.network.askedOn', { date: formatFullDate(invite.created_at) })}
                       />
                     ))}
@@ -85,7 +92,7 @@ export default function SkillNetworkSection({
             id="skill-network-recommend"
             title={t('skillDetail.network.recommendTitle')}
             description={t('skillDetail.network.recommendDescription')}
-            action={{ label: t('skillDetail.recommendThisSkill'), onClick: onRecommend }}
+            action={{ label: t('skillDetail.network.recommendToSomeoneNew', { skill: skillName }), onClick: onRecommend }}
           >
             <PeopleList heading={t('skillDetail.network.connectionsWithSkill')}>
               {connections.length === 0 ? (
@@ -108,8 +115,8 @@ export default function SkillNetworkSection({
                   return (
                     <Person
                       key={invite.id}
-                      name={person?.name || invite.invitee_email || t('skillDetail.network.someone')}
-                      avatarUrl={person?.avatarUrl ?? null}
+                      name={person?.name || (invite.invitee_email ? nameFor(invite.invitee_email) : t('skillDetail.network.someone'))}
+                      avatarUrl={person?.avatarUrl ?? known(invite.invitee_email)?.avatarUrl ?? null}
                       detail={formatFullDate(invite.accepted_at)}
                     />
                   )
@@ -121,7 +128,8 @@ export default function SkillNetworkSection({
                 {recommendedWaiting.map((invite) => (
                   <Person
                     key={invite.id}
-                    name={invite.invitee_email}
+                    name={nameFor(invite.invitee_email)}
+                    avatarUrl={known(invite.invitee_email)?.avatarUrl ?? null}
                     detail={t('skillDetail.network.sentOn', { date: formatFullDate(invite.created_at) })}
                   />
                 ))}
@@ -162,11 +170,7 @@ function Part({ id, title, description, action, children }) {
         <button
           type="button"
           onClick={action.onClick}
-          className={
-            action.primary
-              ? 'mt-3 rounded-md border border-transparent bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90'
-              : 'mt-3 rounded-md border border-hairline text-ink text-xs font-medium px-3 py-1.5 hover:border-moss'
-          }
+          className="mt-3 rounded-md bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90"
         >
           {action.label}
         </button>
@@ -179,7 +183,7 @@ function PeopleList({ heading, children }) {
   return (
     <div>
       <p className="text-xs text-secondary mb-1">{heading}</p>
-      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">{children}</ul>
+      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">{children}</ul>
     </div>
   )
 }
@@ -196,7 +200,7 @@ function Person({ name, avatarUrl = null, detail = null, to = null }) {
       </span>
     </>
   )
-  const className = 'flex items-center gap-2 rounded-md border border-hairline bg-paper px-3 py-2 min-w-0'
+  const className = 'flex items-center gap-2 py-1 min-w-0'
   return (
     <li>
       {to ? (

@@ -679,6 +679,7 @@ export default {
       askedOn: 'Chiesto il {date}',
       recommendTitle: 'Consiglia ad altri',
       recommendDescription: 'Suggerisci questa competenza a chi potrebbe trarne beneficio.',
+      recommendToSomeoneNew: 'Consiglia {skill} a qualcuno di nuovo',
       connectionsWithSkill: 'I tuoi contatti con questa competenza',
       recommendationsAccepted: 'Hanno accolto il tuo consiglio',
       recommendationsWaiting: 'Consiglio inviato',

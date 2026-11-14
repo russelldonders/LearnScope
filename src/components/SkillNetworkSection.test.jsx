@@ -36,6 +36,7 @@ function renderSection(props = {}) {
           { id: 'm2', status: 'accepted', invitee_email: 'ann@example.com', accepted_by: 'u9', accepted_at: '2026-11-12T10:00:00Z' },
         ]}
         recommendAcceptors={{ u9: { name: 'Ann Accepted', avatarUrl: null } }}
+        knownPeople={{ 'pat@example.com': { name: 'Pat Known', avatarUrl: null } }}
         connections={[{ id: 'c1', name: 'Alex Kim', avatarUrl: null }]}
         totalTrackersCount={12}
         onInviteToRate={vi.fn()}
@@ -55,7 +56,9 @@ describe('SkillNetworkSection', () => {
     renderSection({ onInviteToRate })
     const ratings = part(n.ratingsTitle)
     expect(within(ratings).getByText('Rita Rater')).toBeInTheDocument()
-    expect(within(ratings).getByText('pat@example.com')).toBeInTheDocument()
+    // Named when the address belongs to a connection, not shown as the email.
+    expect(within(ratings).getByText('Pat Known')).toBeInTheDocument()
+    expect(within(ratings).queryByText('pat@example.com')).not.toBeInTheDocument()
     expect(within(ratings).getAllByRole('listitem')).toHaveLength(2)
     fireEvent.click(within(ratings).getByRole('button', { name: 'Ask someone to rate your Golf ability' }))
     expect(onInviteToRate).toHaveBeenCalledOnce()
@@ -67,8 +70,9 @@ describe('SkillNetworkSection', () => {
     const recommend = part(n.recommendTitle)
     expect(within(recommend).getByRole('link', { name: /Alex Kim/ })).toHaveAttribute('href', '/skills-profile/c1')
     expect(within(recommend).getByText('Ann Accepted')).toBeInTheDocument()
+    // Not a connection yet, so there's no name to show -- the address stands in.
     expect(within(recommend).getByText('sam@example.com')).toBeInTheDocument()
-    fireEvent.click(within(recommend).getByRole('button', { name: english.skillDetail.recommendThisSkill }))
+    fireEvent.click(within(recommend).getByRole('button', { name: 'Recommend Golf to someone new' }))
     expect(onRecommend).toHaveBeenCalledOnce()
   })
 
