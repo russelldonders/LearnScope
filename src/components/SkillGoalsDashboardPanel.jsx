@@ -17,6 +17,7 @@ import {
   goalStreak,
   lastGoalEntry,
   localDateString,
+  remainingSetPieces,
 } from '../lib/skillGoalProgress'
 import { logGoalEntry } from '../lib/skillGoals'
 
@@ -136,25 +137,10 @@ const BAR_TONES = {
   exceeded: 'bg-moss',
   missed: 'bg-red-700/70',
   // The current period is drawn in two parts instead (see openTargetOf): what's
-  // logged in full green, what's left of the target as a dashed outline.
+  // logged in full green, what's left of the target as a dashed outline, each
+  // piece open at the bottom and closed off by the green or the piece below.
   inProgress: '',
   none: 'bg-hairline/60',
-}
-
-// What's still to do on the current period, cut where each set would end on
-// a goal done in sets: 40 of "3 x 20" leaves one dashed set of 20, and 30
-// leaves the last 10 of the second set and then the third. Each piece is drawn
-// open at the bottom, closed off by the green or the piece below it.
-function remainingPieces(value, target, perSet) {
-  const step = Number(perSet) > 0 ? Number(perSet) : target
-  const pieces = []
-  let at = value
-  while (at < target) {
-    const next = Math.min(target, (Math.floor(at / step) + 1) * step)
-    pieces.push(next - at)
-    at = next
-  }
-  return pieces
 }
 
 function EntryParts({ parts, divider }) {
@@ -287,7 +273,7 @@ function MiniHistory({ goal, history }) {
                     {bar.parts?.length > 1 && <EntryParts parts={bar.parts} divider="border-card" />}
                   </span>
                 )}
-                {remainingPieces(bar.value, openTargetOf(bar), goal.per_set).map((piece, pieceIndex) => (
+                {remainingSetPieces(bar.value, openTargetOf(bar), goal.per_set).map((piece, pieceIndex) => (
                   <span
                     key={`left-${pieceIndex}`}
                     data-remaining=""

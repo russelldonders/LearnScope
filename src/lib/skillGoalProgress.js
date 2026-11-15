@@ -125,6 +125,21 @@ export function goalSessionShape(goal) {
   return { perSet, setsPerSession, perSession: perSet * setsPerSession, sessions: Number(goal.sessions_per_period) }
 }
 
+// What's still to do towards a day's target, cut where each set would end on
+// a goal done in sets: 40 of "3 x 20" leaves one set of 20, and 30 leaves the
+// last 10 of the second set and then the third.
+export function remainingSetPieces(value, target, perSet) {
+  const step = Number(perSet) > 0 ? Number(perSet) : target
+  const pieces = []
+  let at = Math.max(0, value)
+  while (at < target) {
+    const next = Math.min(target, (Math.floor(at / step) + 1) * step)
+    pieces.push(next - at)
+    at = next
+  }
+  return pieces
+}
+
 // The words for a goal with a shape, from computeGoalProgress().sessions:
 // target ("3 × 100 sit-ups · 4 days a week"), done ("1 of 4 sessions") and
 // today ("Today 150 of 300 sit-ups · 2 of 3 sets").
