@@ -62,7 +62,27 @@ export async function generateSkillCourseDraft(brief, organisationId) {
     },
     body: JSON.stringify({ ...brief, organisationId }),
   })
-  const body = await response.json().catch(() => ({}))
+  const responseText = await response.text()
+  const isJsonLineStream = response.headers.get('content-type')?.includes('application/x-ndjson')
+  if (isJsonLineStream) {
+    const events = responseText
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+    const outcome = [...events].reverse().find((event) => event.type === 'result' || event.type === 'error')
+    if (!outcome || outcome.type === 'error') {
+      throw new Error(outcome?.error || 'The course generator connection ended before the course was ready.')
+    }
+    return outcome.draft
+  }
+
+  let body = {}
+  try {
+    body = responseText ? JSON.parse(responseText) : {}
+  } catch {
+    // A platform-generated HTML error page should still produce useful UI
+    // copy instead of leaking a JSON parser error to the administrator.
+  }
   if (!response.ok) throw new Error(body.error || 'Failed to generate the level course.')
   return body.draft
 }

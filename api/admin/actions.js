@@ -42,6 +42,7 @@ export default async function handler(req, res) {
     return generateCourseDraftHandler(req, res, {
       requirePlatformAdmin: true,
       feature: 'skill_level_course_generation',
+      streamKeepAlive: true,
     })
   }
   if (req.method !== 'POST') {

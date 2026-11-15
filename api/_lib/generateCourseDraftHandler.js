@@ -6,6 +6,36 @@ import { createTrackedMessage } from './trackedAnthropic.js'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
+function beginJsonLineStream(res, enabled) {
+  if (!enabled || typeof res.write !== 'function' || typeof res.end !== 'function') return null
+
+  res.status(200)
+  res.setHeader?.('Content-Type', 'application/x-ndjson; charset=utf-8')
+  res.setHeader?.('Cache-Control', 'no-cache, no-transform')
+  res.setHeader?.('X-Accel-Buffering', 'no')
+  res.flushHeaders?.()
+  res.write(`${JSON.stringify({ type: 'started' })}\n`)
+  res.flush?.()
+  const heartbeat = setInterval(() => {
+    res.write(`${JSON.stringify({ type: 'keepalive' })}\n`)
+    res.flush?.()
+  }, 8_000)
+  heartbeat.unref?.()
+  return heartbeat
+}
+
+function sendResult(res, streamHeartbeat, status, payload) {
+  if (!streamHeartbeat) {
+    res.status(status).json(payload)
+    return
+  }
+
+  clearInterval(streamHeartbeat)
+  res.write(`${JSON.stringify({ type: status >= 400 ? 'error' : 'result', status, ...payload })}\n`)
+  res.flush?.()
+  res.end()
+}
+
 export default async function generateCourseDraftHandler(req, res, options = {}) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
@@ -88,6 +118,13 @@ export default async function generateCourseDraftHandler(req, res, options = {})
     return
   }
 
+  // A complete editable course can take 40–55 seconds to generate. Mobile
+  // Safari and some intermediaries drop a long HTTP request when it remains
+  // entirely silent, even though Anthropic and the serverless function keep
+  // working. This endpoint sends tiny JSON-line heartbeats so the connection
+  // stays active; the ordinary single-course endpoint retains its JSON API.
+  const streamHeartbeat = beginJsonLineStream(res, options.streamKeepAlive)
+
   try {
     const response = await createTrackedMessage({
       feature: options.feature ?? 'course_draft_generation',
@@ -101,27 +138,27 @@ export default async function generateCourseDraftHandler(req, res, options = {})
       },
     })
     if (response.stop_reason === 'refusal') {
-      res.status(422).json({ error: "Couldn't generate this course. Try a different brief." })
+      sendResult(res, streamHeartbeat, 422, { error: "Couldn't generate this course. Try a different brief." })
       return
     }
     const textBlock = response.content.find((block) => block.type === 'text')
     const draft = textBlock ? normalizeGeneratedCourseDraft(JSON.parse(textBlock.text), request.values) : null
     if (!draft) throw new Error('The generated course did not match the required structure.')
-    res.status(200).json({ draft })
+    sendResult(res, streamHeartbeat, 200, { draft })
   } catch (err) {
     console.error('generate-course-draft error:', err)
     if (err?.status === 401 || err?.status === 403) {
-      res.status(503).json({ error: 'Course generation could not authenticate with the AI service.' })
+      sendResult(res, streamHeartbeat, 503, { error: 'Course generation could not authenticate with the AI service.' })
       return
     }
     if (err?.status === 429) {
-      res.status(429).json({ error: 'The AI service is busy or its usage limit has been reached. Try again shortly.' })
+      sendResult(res, streamHeartbeat, 429, { error: 'The AI service is busy or its usage limit has been reached. Try again shortly.' })
       return
     }
     if (err?.status === 400) {
-      res.status(502).json({ error: 'The AI service rejected the course request format.' })
+      sendResult(res, streamHeartbeat, 502, { error: 'The AI service rejected the course request format.' })
       return
     }
-    res.status(500).json({ error: 'Failed to generate the course. Try again.' })
+    sendResult(res, streamHeartbeat, 500, { error: 'Failed to generate the course. Try again.' })
   }
 }
