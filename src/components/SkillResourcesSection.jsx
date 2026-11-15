@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useLanguage } from '../context/LanguageContext'
 import { formatFullDate } from '../lib/dates'
 import { listConnections } from '../lib/connections'
+import { KNOWLEDGE_LEVEL_LABELS, LEVEL_LABELS } from '../lib/levels'
 import {
   MAX_RESOURCE_FILE_BYTES,
   RESOURCE_FILE_ACCEPT,
@@ -247,6 +248,20 @@ function ResourceSummary({ resource, onOpenFile }) {
           {resource.kind === 'file' && resource.file_name ? ` · ${resource.file_name}` : ''}
         </span>
       </div>
+      {(resource.knowledge_level || resource.practical_level) && (
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          {resource.knowledge_level && (
+            <span data-level="knowledge" className="rounded-full border border-hairline px-2 py-0.5 text-[11px] text-secondary">
+              {t('skillDetail.resources.knowledgeTag', { level: KNOWLEDGE_LEVEL_LABELS[resource.knowledge_level] })}
+            </span>
+          )}
+          {resource.practical_level && (
+            <span data-level="practical" className="rounded-full border border-hairline px-2 py-0.5 text-[11px] text-secondary">
+              {t('skillDetail.resources.practicalTag', { level: LEVEL_LABELS[resource.practical_level] })}
+            </span>
+          )}
+        </div>
+      )}
       {resource.note && <p className="text-sm text-secondary mt-1 whitespace-pre-wrap break-words">{resource.note}</p>}
     </div>
   )
@@ -273,6 +288,8 @@ function ResourceForm({ resource = null, hasLibrarySkill, connections, onNeedCon
   const [note, setNote] = useState(resource?.note ?? '')
   const [audience, setAudience] = useState(resource?.audience ?? 'private')
   const [recipientIds, setRecipientIds] = useState(resource?.recipientIds ?? [])
+  const [knowledgeLevel, setKnowledgeLevel] = useState(resource?.knowledge_level ?? '')
+  const [practicalLevel, setPracticalLevel] = useState(resource?.practical_level ?? '')
   const [formError, setFormError] = useState(null)
   const idPrefix = `skill-resource-${resource?.id ?? 'new'}`
   const audiences = audiencesFor(kind, { hasLibrarySkill })
@@ -297,7 +314,11 @@ function ResourceForm({ resource = null, hasLibrarySkill, connections, onNeedCon
       if (file.size > MAX_RESOURCE_FILE_BYTES) return setFormError(t('skillDetail.resources.errorFileSize'))
     }
     if (audience === 'selected' && recipientIds.length === 0) return setFormError(t('skillDetail.resources.errorRecipients'))
-    onSubmit({ kind, title, url, file, note, audience, recipientIds })
+    onSubmit({
+      kind, title, url, file, note, audience, recipientIds,
+      knowledgeLevel: knowledgeLevel ? Number(knowledgeLevel) : null,
+      practicalLevel: practicalLevel ? Number(practicalLevel) : null,
+    })
   }
 
   const inputClass = 'mt-1 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:border-moss'
@@ -358,6 +379,28 @@ function ResourceForm({ resource = null, hasLibrarySkill, connections, onNeedCon
       <div>
         <label htmlFor={`${idPrefix}-note`} className="text-xs text-secondary">{t('skillDetail.resources.noteLabel')}</label>
         <textarea id={`${idPrefix}-note`} value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} rows={2} className={inputClass} />
+      </div>
+
+      {/* Which level it suits, on either axis -- both optional. */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label htmlFor={`${idPrefix}-knowledge-level`} className="text-xs text-secondary">{t('skillDetail.resources.knowledgeLevelLabel')}</label>
+          <select id={`${idPrefix}-knowledge-level`} value={knowledgeLevel} onChange={(e) => setKnowledgeLevel(e.target.value)} className={inputClass}>
+            <option value="">{t('skillDetail.resources.anyLevel')}</option>
+            {Object.entries(KNOWLEDGE_LEVEL_LABELS).map(([level, label]) => (
+              <option key={level} value={level}>{level} · {label}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor={`${idPrefix}-practical-level`} className="text-xs text-secondary">{t('skillDetail.resources.practicalLevelLabel')}</label>
+          <select id={`${idPrefix}-practical-level`} value={practicalLevel} onChange={(e) => setPracticalLevel(e.target.value)} className={inputClass}>
+            <option value="">{t('skillDetail.resources.anyLevel')}</option>
+            {Object.entries(LEVEL_LABELS).map(([level, label]) => (
+              <option key={level} value={level}>{level} · {label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <fieldset>

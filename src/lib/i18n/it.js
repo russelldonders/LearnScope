@@ -796,6 +796,11 @@ export default {
       errorFile: 'Scegli un file da caricare.',
       errorFileSize: 'Il file è troppo grande (max 50 MB).',
       errorRecipients: 'Scegli almeno un contatto.',
+      knowledgeLevelLabel: 'Livello di conoscenza (facoltativo)',
+      practicalLevelLabel: 'Livello di applicazione (facoltativo)',
+      anyLevel: 'Qualsiasi livello',
+      knowledgeTag: 'Conoscenza: {level}',
+      practicalTag: 'Applicazione: {level}',
     },
     learning: {
       title: "Apprendimento",

@@ -796,6 +796,11 @@ export default {
       errorFile: 'Kies een bestand om te uploaden.',
       errorFileSize: 'Dat bestand is te groot (max. 50 MB).',
       errorRecipients: 'Kies minstens één contact.',
+      knowledgeLevelLabel: 'Kennisniveau (optioneel)',
+      practicalLevelLabel: 'Toepassingsniveau (optioneel)',
+      anyLevel: 'Elk niveau',
+      knowledgeTag: 'Kennis: {level}',
+      practicalTag: 'Toepassing: {level}',
     },
     learning: {
       title: "Leren",

@@ -83,7 +83,7 @@ function fileExtension(name) {
 }
 
 // kind 'link' or 'video' takes url; 'file' takes file (a File).
-export async function addResource({ userId, skillId, kind, title, url, file, note, audience, recipientIds = [] }) {
+export async function addResource({ userId, skillId, kind, title, url, file, note, audience, recipientIds = [], knowledgeLevel = null, practicalLevel = null }) {
   const base = {
     user_id: userId,
     skill_id: skillId,
@@ -91,6 +91,8 @@ export async function addResource({ userId, skillId, kind, title, url, file, not
     title: title.trim(),
     note: note?.trim() || null,
     audience,
+    knowledge_level: knowledgeLevel || null,
+    practical_level: practicalLevel || null,
   }
   let row
   if (kind === 'file') {
@@ -118,11 +120,18 @@ export async function addResource({ userId, skillId, kind, title, url, file, not
   return data.id
 }
 
-// Title, note and who it's shared with; what the resource is stays as added.
-export async function updateResource(resource, { title, note, audience, recipientIds = [] }) {
+// Title, note, levels and who it's shared with; what the resource is stays
+// as added.
+export async function updateResource(resource, { title, note, audience, recipientIds = [], knowledgeLevel = null, practicalLevel = null }) {
   const { error } = await supabase
     .from('skill_resources')
-    .update({ title: title.trim(), note: note?.trim() || null, audience })
+    .update({
+      title: title.trim(),
+      note: note?.trim() || null,
+      audience,
+      knowledge_level: knowledgeLevel || null,
+      practical_level: practicalLevel || null,
+    })
     .eq('id', resource.id)
   if (error) throw error
   await setRecipients(resource.id, audience, recipientIds, resource.recipientIds ?? [])

@@ -2,7 +2,7 @@
 
 begin;
 
-select plan(22);
+select plan(24);
 
 -- A owns the resources. B and C are A's connections (B chosen, C not), D
 -- tracks the same library skill without being connected, E tracks nothing.
@@ -93,6 +93,13 @@ select results_eq(
 
 select is((select count(*)::int from public.skill_resources), 5, 'the owner sees all of their resources');
 
+update public.skill_resources set knowledge_level = 3, practical_level = 2
+where id = '7c000000-0000-0000-0000-000000000204';
+select throws_ok(
+  $$update public.skill_resources set knowledge_level = 6 where id = '7c000000-0000-0000-0000-000000000204'$$,
+  '23514', null, 'a level is between 1 and 5'
+);
+
 select throws_ok(
   $$select private.can_view_skill_resource('7c000000-0000-0000-0000-000000000202', '7c000000-0000-0000-0000-00000000000b')$$,
   '42501', null, 'learners cannot ask whether someone else can see a resource'
@@ -138,6 +145,11 @@ select is(
   'someone tracking the same skill is shown only the public link'
 );
 select ok(not public.can_read_skill_resource_file('7c000000-0000-0000-0000-00000000000a/notes.pdf'), 'and cannot open the file');
+select results_eq(
+  $$select knowledge_level, practical_level from public.list_shared_skill_resources('7c000000-0000-0000-0000-0000000000d1')$$,
+  $$values (3::smallint, 2::smallint)$$,
+  'a shared resource carries the levels it is aligned to'
+);
 
 reset role;
 select set_config('request.jwt.claim.sub', '7c000000-0000-0000-0000-00000000000e', true);

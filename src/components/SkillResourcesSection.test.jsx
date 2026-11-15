@@ -113,6 +113,31 @@ describe('SkillResourcesSection', () => {
     expect(lib.listSharedResources).not.toHaveBeenCalled()
   })
 
+  it('can align a resource to a knowledge and an application level, both optional', async () => {
+    lib.listMyResources.mockResolvedValue([
+      { id: 'r1', kind: 'link', title: 'Primer', url: 'https://example.com', audience: 'private', recipientIds: [], knowledge_level: 2, practical_level: null },
+    ])
+    lib.listSharedResources.mockResolvedValue([
+      { id: 's1', kind: 'link', title: 'Deep dive', url: 'https://example.com/d', sharer_name: 'Pat', created_at: '2026-11-10T10:00:00Z', knowledge_level: 5, practical_level: 4 },
+    ])
+    render(<SkillResourcesSection skill={librarySkill} user={user} />)
+    expect(await screen.findByText('Knowledge: Aware')).toBeInTheDocument()
+    expect(screen.getByText('Knowledge: Deep understanding')).toBeInTheDocument()
+    expect(screen.getByText('Application: Skilled')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add resource' }))
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Basics' } })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Link' }), { target: { value: 'https://example.com/b' } })
+    fireEvent.change(screen.getByLabelText('Knowledge level (optional)'), { target: { value: '3' } })
+    fireEvent.submit(screen.getByLabelText('Title').closest('form'))
+    await waitFor(() => expect(lib.addResource).toHaveBeenCalled())
+    expect(lib.addResource.mock.calls[0][0]).toMatchObject({ knowledgeLevel: 3, practicalLevel: null })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    expect(screen.getByLabelText('Knowledge level (optional)')).toHaveValue('2')
+    expect(screen.getByLabelText('Application level (optional)')).toHaveValue('')
+  })
+
   it('asks before deleting', async () => {
     const resource = { id: 'r1', kind: 'link', title: 'Style guide', url: 'https://example.com', audience: 'private', recipientIds: [] }
     lib.listMyResources.mockResolvedValue([resource])

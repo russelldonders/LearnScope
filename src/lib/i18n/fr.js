@@ -796,6 +796,11 @@ export default {
       errorFile: 'Choisissez un fichier à importer.',
       errorFileSize: 'Ce fichier est trop volumineux (50 Mo max.).',
       errorRecipients: 'Choisissez au moins un contact.',
+      knowledgeLevelLabel: 'Niveau de connaissance (facultatif)',
+      practicalLevelLabel: 'Niveau d’application (facultatif)',
+      anyLevel: 'Tout niveau',
+      knowledgeTag: 'Connaissance : {level}',
+      practicalTag: 'Application : {level}',
     },
     learning: {
       title: "Apprentissage",

@@ -796,6 +796,11 @@ export default {
       errorFile: 'Choose a file to upload.',
       errorFileSize: 'That file is too large (max 50MB).',
       errorRecipients: 'Choose at least one contact.',
+      knowledgeLevelLabel: 'Knowledge level (optional)',
+      practicalLevelLabel: 'Application level (optional)',
+      anyLevel: 'Any level',
+      knowledgeTag: 'Knowledge: {level}',
+      practicalTag: 'Application: {level}',
     },
     learning: {
       title: "Learning",

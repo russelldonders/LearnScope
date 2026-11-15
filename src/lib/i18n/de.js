@@ -796,6 +796,11 @@ export default {
       errorFile: 'Wähle eine Datei zum Hochladen.',
       errorFileSize: 'Die Datei ist zu groß (max. 50 MB).',
       errorRecipients: 'Wähle mindestens einen Kontakt.',
+      knowledgeLevelLabel: 'Wissensstufe (optional)',
+      practicalLevelLabel: 'Anwendungsstufe (optional)',
+      anyLevel: 'Jede Stufe',
+      knowledgeTag: 'Wissen: {level}',
+      practicalTag: 'Anwendung: {level}',
     },
     learning: {
       title: "Lernen",

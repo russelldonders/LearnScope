@@ -796,6 +796,11 @@ export default {
       errorFile: '请选择要上传的文件。',
       errorFileSize: '文件太大（最大 50MB）。',
       errorRecipients: '请至少选择一位联系人。',
+      knowledgeLevelLabel: '知识水平（可选）',
+      practicalLevelLabel: '应用水平（可选）',
+      anyLevel: '任意水平',
+      knowledgeTag: '知识：{level}',
+      practicalTag: '应用：{level}',
     },
     learning: {
       title: "学习",
