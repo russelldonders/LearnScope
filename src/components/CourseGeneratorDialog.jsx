@@ -41,7 +41,7 @@ export default function CourseGeneratorDialog({ organisationId, onClose, onCreat
     setGenerating(true)
     setError(null)
     try {
-      setDraft(await generateCourseDraft(brief))
+      setDraft(await generateCourseDraft(brief, organisationId))
     } catch (err) {
       setError(err.message)
     } finally {

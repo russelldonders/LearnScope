@@ -1,14 +1,12 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { verifySupabaseUser } from './_lib/auth.js'
 import { consumeQuota, sendQuotaExceeded } from './_lib/quota.js'
 import { supabaseAdmin } from './_lib/supabaseAdmin.js'
 import { readableLibrarySkillName } from './_lib/skillLibrary.js'
+import { createTrackedMessage } from './_lib/trackedAnthropic.js'
 
 // Longer names are trimmed rather than rejected: nothing else in the app
 // limits a custom skill's name, so rejecting would break the feature for it.
 const MAX_SKILL_NAME_LENGTH = 200
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 const QUIZ_SCHEMA = {
   type: 'object',
@@ -152,13 +150,17 @@ Return exactly 10 questions.`
   }
 
   try {
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2048,
-      output_config: {
-        format: { type: 'json_schema', schema: QUIZ_SCHEMA },
+    const response = await createTrackedMessage({
+      feature: 'diagnostic_quiz_generation',
+      userId: user.id,
+      params: {
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2048,
+        output_config: {
+          format: { type: 'json_schema', schema: QUIZ_SCHEMA },
+        },
+        messages: [{ role: 'user', content: prompt }],
       },
-      messages: [{ role: 'user', content: prompt }],
     })
 
     if (response.stop_reason === 'refusal') {

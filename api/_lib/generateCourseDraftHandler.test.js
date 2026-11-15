@@ -4,6 +4,8 @@ const mocks = vi.hoisted(() => ({
   createMessage: vi.fn(),
   verifySupabaseUser: vi.fn(),
   consumeQuota: vi.fn(),
+  checkOrganisationAccess: vi.fn(),
+  insertUsage: vi.fn(),
 }))
 
 vi.mock('@anthropic-ai/sdk', () => ({
@@ -15,6 +17,12 @@ vi.mock('./auth.js', () => ({ verifySupabaseUser: mocks.verifySupabaseUser }))
 vi.mock('./quota.js', () => ({
   consumeQuota: mocks.consumeQuota,
   sendQuotaExceeded: vi.fn(),
+}))
+vi.mock('./supabaseAdmin.js', () => ({
+  supabaseAdmin: () => ({
+    rpc: mocks.checkOrganisationAccess,
+    from: () => ({ insert: mocks.insertUsage }),
+  }),
 }))
 
 import generateCourseDraftHandler from './generateCourseDraftHandler.js'
@@ -43,6 +51,8 @@ describe('generateCourseDraftHandler errors', () => {
     mocks.createMessage.mockReset()
     mocks.verifySupabaseUser.mockReset().mockResolvedValue({ id: 'user-1' })
     mocks.consumeQuota.mockReset().mockResolvedValue(true)
+    mocks.checkOrganisationAccess.mockReset().mockResolvedValue({ data: true, error: null })
+    mocks.insertUsage.mockReset().mockResolvedValue({ error: null })
   })
 
   afterEach(() => {
@@ -74,6 +84,24 @@ describe('generateCourseDraftHandler errors', () => {
       statusCode: 503,
       body: { error: 'Course generation could not authenticate with the AI service.' },
     })
+  })
+
+  it('rejects organisation attribution the caller cannot access', async () => {
+    process.env.ANTHROPIC_API_KEY = 'configured-for-test'
+    mocks.checkOrganisationAccess.mockResolvedValue({ data: false, error: null })
+    const res = response()
+
+    await generateCourseDraftHandler({
+      method: 'POST',
+      headers: { authorization: 'Bearer token' },
+      body: { ...validBody, organisationId: '79000000-0000-4000-8000-000000000010' },
+    }, res)
+
+    expect(res).toMatchObject({
+      statusCode: 403,
+      body: { error: 'You cannot generate training for this organisation.' },
+    })
+    expect(mocks.createMessage).not.toHaveBeenCalled()
   })
 
   it('identifies requests rejected by the AI provider', async () => {

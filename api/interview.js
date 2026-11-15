@@ -1,8 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { verifySupabaseUser } from './_lib/auth.js'
 import { consumeQuota, sendQuotaExceeded } from './_lib/quota.js'
 import { supabaseAdmin } from './_lib/supabaseAdmin.js'
 import { readableLibrarySkillName } from './_lib/skillLibrary.js'
+import { createTrackedMessage } from './_lib/trackedAnthropic.js'
 
 // Single dispatcher for the two halves of the spoken-interview diagnostic
 // (generate a plan, then continue it turn by turn) -- same "one file, many
@@ -13,8 +13,6 @@ import { readableLibrarySkillName } from './_lib/skillLibrary.js'
 // Longer names are trimmed rather than rejected: nothing else in the app
 // limits a custom skill's name, so rejecting would break the feature for it.
 const MAX_SKILL_NAME_LENGTH = 200
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 const PLAN_SCHEMA = {
   type: 'object',
@@ -129,13 +127,17 @@ Pitch everything specifically at level ${level} ("${levelLabel}") -- not easier,
   }
 
   try {
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
-      output_config: {
-        format: { type: 'json_schema', schema: PLAN_SCHEMA },
+    const response = await createTrackedMessage({
+      feature: 'interview_plan',
+      userId: user.id,
+      params: {
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1024,
+        output_config: {
+          format: { type: 'json_schema', schema: PLAN_SCHEMA },
+        },
+        messages: [{ role: 'user', content: prompt }],
       },
-      messages: [{ role: 'user', content: prompt }],
     })
 
     if (response.stop_reason === 'refusal') {
@@ -277,14 +279,18 @@ async function handleTurn(req, res, user) {
   }
 
   try {
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
-      system: buildSystemPrompt({ skillName, level, calibrate, plan, mustConclude }),
-      output_config: {
-        format: { type: 'json_schema', schema: TURN_SCHEMA },
+    const response = await createTrackedMessage({
+      feature: 'interview_turn',
+      userId: user.id,
+      params: {
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1024,
+        system: buildSystemPrompt({ skillName, level, calibrate, plan, mustConclude }),
+        output_config: {
+          format: { type: 'json_schema', schema: TURN_SCHEMA },
+        },
+        messages: transcript.map((t) => ({ role: t.role, content: t.content })),
       },
-      messages: transcript.map((t) => ({ role: t.role, content: t.content })),
     })
 
     if (response.stop_reason === 'refusal') {

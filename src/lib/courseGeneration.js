@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient'
 
-export async function generateCourseDraft(brief) {
+export async function generateCourseDraft(brief, organisationId) {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.access_token) throw new Error('Your session has expired. Sign in and try again.')
   const response = await fetch('/api/generate-course-draft', {
@@ -9,7 +9,7 @@ export async function generateCourseDraft(brief) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify(brief),
+    body: JSON.stringify({ ...brief, organisationId }),
   })
   const body = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(body.error || 'Failed to generate the course.')

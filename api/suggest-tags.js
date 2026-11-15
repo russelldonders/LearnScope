@@ -1,10 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { verifySupabaseUser } from './_lib/auth.js'
 import { consumeQuota, sendQuotaExceeded } from './_lib/quota.js'
 import { buildGoalDraftRequest, normalizeGoalDraft } from './_lib/skillGoalDraft.js'
 import { buildActivityDraftRequest, normalizeActivityDraft } from './_lib/activityDraft.js'
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+import { createTrackedMessage } from './_lib/trackedAnthropic.js'
 
 const SUGGESTION_SCHEMA = {
   type: 'object',
@@ -152,6 +150,15 @@ export default async function handler(req, res) {
       : body.operation === 'activity-skills'
         ? buildActivitySkillSuggestionRequest(body)
         : buildTagSuggestionRequest(body)
+  const feature = body.operation === 'skill-goal'
+    ? 'goal_drafting'
+    : body.operation === 'log-activity'
+      ? 'activity_drafting'
+      : body.operation === 'experience-skills'
+        ? 'experience_skill_recommendations'
+        : body.operation === 'activity-skills'
+          ? 'activity_skill_suggestions'
+          : 'tag_suggestions'
   if (request.error) {
     res.status(400).json({ error: request.error })
     return
@@ -163,13 +170,17 @@ export default async function handler(req, res) {
   }
 
   try {
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: request.maxTokens,
-      output_config: {
-        format: { type: 'json_schema', schema: request.schema },
+    const response = await createTrackedMessage({
+      feature,
+      userId: user.id,
+      params: {
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: request.maxTokens,
+        output_config: {
+          format: { type: 'json_schema', schema: request.schema },
+        },
+        messages: [{ role: 'user', content: request.prompt }],
       },
-      messages: [{ role: 'user', content: request.prompt }],
     })
 
     if (response.stop_reason === 'refusal') {

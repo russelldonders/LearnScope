@@ -62,6 +62,7 @@ const AdminCourseDetail = lazyRoute(() => import('./pages/admin/AdminCourseDetai
 const AdminSkills = lazyRoute(() => import('./pages/admin/AdminSkills'))
 const AdminSkillDetail = lazyRoute(() => import('./pages/admin/AdminSkillDetail'))
 const AdminTags = lazyRoute(() => import('./pages/admin/AdminTags'))
+const AdminAiUsage = lazyRoute(() => import('./pages/admin/AdminAiUsage'))
 const AdminSettings = lazyRoute(() => import('./pages/admin/AdminSettings'))
 const EmployerHome = lazyRoute(() => import('./pages/employer/EmployerHome'))
 const EmployerRoleProfileDetail = lazyRoute(() => import('./pages/employer/EmployerRoleProfileDetail'))
@@ -417,6 +418,14 @@ function App() {
             element={
               <PlatformAdminRoute>
                 <AdminSettings />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/ai-usage"
+            element={
+              <PlatformAdminRoute>
+                <AdminAiUsage />
               </PlatformAdminRoute>
             }
           />

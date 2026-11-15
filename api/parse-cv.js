@@ -2,19 +2,17 @@ import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
 import ipaddr from 'ipaddr.js'
 import { Agent, fetch as undiciFetch } from 'undici'
-import Anthropic from '@anthropic-ai/sdk'
 import mammoth from 'mammoth'
 import { PDFDocument, PDFName, PDFRawStream } from 'pdf-lib'
 import { verifySupabaseUser } from './_lib/auth.js'
 import { consumeQuota, sendQuotaExceeded } from './_lib/quota.js'
+import { createTrackedMessage } from './_lib/trackedAnthropic.js'
 
 export const config = {
   api: {
     bodyParser: { sizeLimit: '15mb' },
   },
 }
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 const MAX_URL_FILE_BYTES = 8 * 1024 * 1024
 const URL_FETCH_TIMEOUT_MS = 10000
@@ -389,14 +387,18 @@ export default async function handler(req, res) {
       ]
     }
 
-    const response = await anthropic.messages.create({
-      model: 'claude-opus-5',
-      max_tokens: 8192,
-      output_config: {
-        effort: 'low',
-        format: { type: 'json_schema', schema: EXTRACTION_SCHEMA },
+    const response = await createTrackedMessage({
+      feature: 'cv_parsing',
+      userId: user.id,
+      params: {
+        model: 'claude-opus-5',
+        max_tokens: 8192,
+        output_config: {
+          effort: 'low',
+          format: { type: 'json_schema', schema: EXTRACTION_SCHEMA },
+        },
+        messages: [{ role: 'user', content: messageContent }],
       },
-      messages: [{ role: 'user', content: messageContent }],
     })
 
     if (response.stop_reason === 'refusal') {
