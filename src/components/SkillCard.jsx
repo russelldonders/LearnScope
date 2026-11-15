@@ -80,7 +80,7 @@ export default function SkillCard({ skill, onEdit, compact = false }) {
           <p className="text-sm text-secondary mt-1">
             {displayedLevel ? LEVEL_LABELS[displayedLevel] : t('modals.skillCard.notYetAssessed')}
             {skill.targetLevel
-              ? ` ${t('modals.skillCard.targetArrowPrefix')} ${LEVEL_LABELS[skill.targetLevel]}${skill.targetSource === 'employer' ? ` ${t('modals.skillCard.setBySuffix', { name: skill.targetContextName ?? '' })}` : ''}`
+              ? ` · ${t('modals.skillCard.targetLabel', { level: LEVEL_LABELS[skill.targetLevel] })}${skill.targetSource === 'employer' ? ` ${t('modals.skillCard.setBySuffix', { name: skill.targetContextName ?? '' })}` : ''}`
               : ''}
             {skill.employerTargetMet &&
               (skill.targetSource === 'personal'

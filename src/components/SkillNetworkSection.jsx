@@ -13,7 +13,6 @@ import { LEVEL_LABELS } from '../lib/levels'
 // there's nothing to show. Ratings from others live in the skill's Validate
 // box (RatingsFromOthers below).
 export default function SkillNetworkSection({
-  skillName,
   librarySkillId,
   isOwner,
   recommendInvites = [],
@@ -63,7 +62,7 @@ export default function SkillNetworkSection({
             id="skill-network-recommend"
             title={t('skillDetail.network.recommendTitle')}
             description={t('skillDetail.network.recommendDescription')}
-            action={{ label: t('skillDetail.network.recommendToSomeoneNew', { skill: skillName }), onClick: onRecommend }}
+            action={{ label: t('skillDetail.network.recommendToSomeoneNew'), onClick: onRecommend }}
           >
             {isOwner && recommendedAccepted.length === 0 && recommendedWaiting.length === 0 && (
               <Empty>{t('skillDetail.network.noRecommendationsYet')}</Empty>

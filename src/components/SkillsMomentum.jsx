@@ -12,7 +12,7 @@ import SelfAssessSection from './SelfAssessSection'
 import InviteRaterModal from './InviteRaterModal'
 import AccessibleDialog from './AccessibleDialog'
 import GrowthRing from './GrowthRing'
-import GrowthArrow from './GrowthArrow'
+import { LevelChangeRings, LevelChangeText } from './LevelChange'
 import { LEVEL_LABELS } from '../lib/levels'
 import { computeUpNextItems } from '../lib/skillNextAction'
 import { SKILL_LIFECYCLE_FLOW_STAGES } from '../lib/skillLifecycle'
@@ -288,13 +288,17 @@ export function FocusPanel({ recommendation, recentGrowth: growth, moreGrowth = 
         >
           <h2 className="font-display text-xl text-ink">Your latest progress</h2>
           <div className="flex items-center gap-3 mt-5">
-            <GrowthRing level={growth.previousLevel} size={42} color="var(--color-hairline)" />
-            <GrowthArrow />
-            <GrowthRing level={growth.level} size={58} targetLevel={growth.target?.target_level} />
+            <LevelChangeRings
+              previousLevel={growth.previousLevel}
+              level={growth.level}
+              targetLevel={growth.target?.target_level}
+              previousSize={42}
+              size={58}
+            />
           </div>
           <p className="font-medium text-ink mt-4 truncate">{growth.skills?.name ?? 'Skill'}</p>
           <p className="text-sm text-secondary mt-1">
-            {growth.previousLevel ? LEVEL_LABELS[growth.previousLevel] : 'New'} → {LEVEL_LABELS[growth.level]}
+            <LevelChangeText previousLevel={growth.previousLevel} level={growth.level} />
           </p>
           <p className="font-mono text-xs text-secondary mt-3" title={formatAbsoluteDate(growth.assessed_at)}>
             {formatRelativeDate(growth.assessed_at)}
@@ -334,17 +338,18 @@ function MoreRecentProgress({ rows }) {
                 className="flex items-center gap-4 bg-card border border-hairline rounded-lg px-4 py-4 hover:border-moss transition-colors"
               >
                 <div className="flex items-center gap-2 shrink-0">
-                  <GrowthRing level={row.previousLevel} size={38} color="var(--color-hairline)" />
-                  <GrowthArrow />
-                  <GrowthRing level={row.level} size={56} targetLevel={row.target?.target_level} />
+                  <LevelChangeRings
+                    previousLevel={row.previousLevel}
+                    level={row.level}
+                    targetLevel={row.target?.target_level}
+                    previousSize={38}
+                    size={56}
+                  />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-ink truncate">{row.skills?.name ?? 'Skill'}</p>
-                  <p className="text-sm">
-                    <span className="text-secondary">
-                      {row.previousLevel ? LEVEL_LABELS[row.previousLevel] : 'New'} →{' '}
-                    </span>
-                    <span className="text-ink font-medium">{LEVEL_LABELS[row.level]}</span>
+                  <p className="text-sm text-secondary">
+                    <LevelChangeText previousLevel={row.previousLevel} level={row.level} emphasiseCurrent />
                   </p>
                   {row.target && (
                     <p

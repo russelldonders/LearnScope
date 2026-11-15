@@ -713,7 +713,7 @@ export default {
       noRecommendationsYet: "You haven't recommended this skill to anyone yet.",
       recommendTitle: 'Recommend to others',
       recommendDescription: 'Suggest this skill to people it could help.',
-      recommendToSomeoneNew: 'Recommend {skill} to someone new',
+      recommendToSomeoneNew: 'Recommend this skill to someone new',
       connectionsWithSkill: 'Your connections with this skill',
       recommendationsAccepted: 'Took up your recommendation',
       recommendationsWaiting: 'Recommendation sent',
@@ -1342,7 +1342,7 @@ export default {
     skillCard: {
       selfAssessmentDue: 'Self-assessment due',
       notYetAssessed: 'Not yet assessed',
-      targetArrowPrefix: '→ target',
+      targetLabel: 'Target: {level}',
       setBySuffix: '(set by {name})',
       otherTargetMetWorkingTowardOwnSuffix: '{name} target met, now working toward your own',
       otherTargetMetSuffix: '{name} target met',
@@ -1522,6 +1522,8 @@ export default {
     },
   },
   common: {
+    levelReassessedSame: 'Reassessed: still {level}',
+    levelReassessedDown: 'Reassessed at {level} (was {previous})',
     loading: 'Loading…',
     notYetSelfAssessed: 'Not yet self-assessed',
     somethingWentWrong: 'Something went wrong.',

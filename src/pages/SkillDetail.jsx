@@ -68,8 +68,6 @@ const SKILL_DETAIL_TABS = [
   { key: 'knowledge' },
   { key: 'application' },
   { key: 'network', needsLibrarySkill: true },
-  // Opened from the timeline icon beside settings, not the tab row.
-  { key: 'history', inTabRow: false },
 ]
 
 export default function SkillDetail({ skillId, embedded = false }) {
@@ -103,19 +101,25 @@ export default function SkillDetail({ skillId, embedded = false }) {
 
   const [skill, setSkill] = useState(null)
   const [loadingSkill, setLoadingSkill] = useState(true)
-  // A deep link that highlights a specific timeline entry (from Activity.jsx
-  // or elsewhere) lands on History, or the highlighted entry would be hidden.
   // Opening a goal for editing (e.g. Home's "Add a target") lands where goals
-  // are. An old ?tab=overview link falls through to the first tab.
+  // are. An old ?tab=overview (or ?tab=history) link falls through to the
+  // first tab.
   const visibleTabs = SKILL_DETAIL_TABS.filter((d) => !d.needsLibrarySkill || skill?.library_skill_id)
-  const tabRowTabs = visibleTabs.filter((d) => d.inTabRow !== false)
   const tab = visibleTabs.some((d) => d.key === requestedTab)
     ? requestedTab
-    : location.state?.highlightActivityId
-      ? 'history'
-      : location.state?.editGoalId
-        ? 'application'
-        : 'knowledge'
+    : location.state?.editGoalId
+      ? 'application'
+      : 'knowledge'
+  // The timeline opens in a popup over the current tab, like settings. A deep
+  // link that highlights a specific timeline entry (from Activity.jsx or
+  // elsewhere), or an old ?tab=history link, opens it straight away.
+  const [historyOpen, setHistoryOpen] = useState(
+    () => requestedTab === 'history' || Boolean(location.state?.highlightActivityId)
+  )
+  function closeHistory() {
+    setHistoryOpen(false)
+    if (requestedTab === 'history') setSearchParams(buildTabParams({ tab: null }), { replace: true })
+  }
   const [notFound, setNotFound] = useState(false)
   const [history, setHistory] = useState([])
   const [peerRatings, setPeerRatings] = useState([])
@@ -788,14 +792,11 @@ export default function SkillDetail({ skillId, embedded = false }) {
                 <button
                   type="button"
                   id="skill-detail-history-button"
-                  onClick={() => setSearchParams(buildTabParams({ tab: 'history' }))}
-                  aria-pressed={tab === 'history'}
-                  aria-controls="skill-detail-panel-history"
+                  onClick={() => setHistoryOpen(true)}
+                  aria-haspopup="dialog"
                   aria-label={t('skillDetail.tabs.history')}
                   title={t('skillDetail.tabs.history')}
-                  className={`p-1.5 rounded-md transition-colors ${
-                    tab === 'history' ? 'bg-moss/15 text-moss' : 'text-moss hover:opacity-75'
-                  }`}
+                  className="p-1.5 rounded-md text-moss hover:opacity-75 transition-opacity"
                 >
                   {/* A clock with an arrow turning back: the skill's timeline. */}
                   <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -841,7 +842,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
               aria-label={t('skillDetail.tabsAriaLabel')}
               className="flex items-center flex-wrap gap-1 mt-4 border-b border-hairline"
             >
-              {tabRowTabs.map((tabDef, tabIndex) => (
+              {visibleTabs.map((tabDef) => (
                 <button
                   key={tabDef.key}
                   type="button"
@@ -850,13 +851,11 @@ export default function SkillDetail({ skillId, embedded = false }) {
                   role="tab"
                   aria-selected={tab === tabDef.key}
                   aria-controls={`skill-detail-panel-${tabDef.key}`}
-                  // On History none of these is selected; the first stays
-                  // reachable from the keyboard.
-                  tabIndex={tab === tabDef.key || (tab === 'history' && tabIndex === 0) ? 0 : -1}
+                  tabIndex={tab === tabDef.key ? 0 : -1}
                   onClick={() => setSearchParams(buildTabParams({ tab: tabDef.key }))}
                   onKeyDown={(event) =>
                     handleTabListKeyDown(event, {
-                      keys: tabRowTabs.map((d) => d.key),
+                      keys: visibleTabs.map((d) => d.key),
                       activeKey: tab,
                       refs: tabRefs,
                       onChange: (key) => setSearchParams(buildTabParams({ tab: key })),
@@ -1059,7 +1058,6 @@ export default function SkillDetail({ skillId, embedded = false }) {
             {tab === 'network' && (
             <div id="skill-detail-panel-network" role="tabpanel" aria-labelledby="skill-detail-tab-network">
             <SkillNetworkSection
-              skillName={skill.name}
               librarySkillId={skill.library_skill_id}
               isOwner={skill.user_id === user.id}
               recommendInvites={recommendInvites}
@@ -1393,8 +1391,21 @@ export default function SkillDetail({ skillId, embedded = false }) {
               </div>
             )}
 
-            {tab === 'history' && (
-            <div id="skill-detail-panel-history" role="region" aria-labelledby="skill-detail-history-button">
+            {historyOpen && (
+              <AccessibleDialog
+                labelledBy="skill-history-dialog-title"
+                onClose={closeHistory}
+                overlayClassName="z-40"
+                panelClassName="w-full max-w-2xl bg-card border border-hairline rounded-lg p-6 max-h-[90vh] overflow-y-auto overscroll-contain"
+              >
+                <div className="flex items-center justify-between">
+                  <h2 id="skill-history-dialog-title" className="font-display text-2xl text-ink">
+                    {t('skillDetail.tabs.history')}
+                  </h2>
+                  <button type="button" onClick={closeHistory} className="text-secondary hover:text-ink text-sm">
+                    {t('skillDetail.close')}
+                  </button>
+                </div>
             <HistorySection
               skill={skill}
               assessorName={assessorName}
@@ -1409,7 +1420,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
               raterAvatars={raterAvatars}
               highlightActivityId={location.state?.highlightActivityId}
             />
-            </div>
+              </AccessibleDialog>
             )}
           </div>
         )}

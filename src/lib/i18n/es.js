@@ -713,7 +713,7 @@ export default {
       noRecommendationsYet: "Todavía no has recomendado esta habilidad a nadie.",
       recommendTitle: 'Recomendar a otros',
       recommendDescription: 'Sugiere esta habilidad a personas a las que podría ayudar.',
-      recommendToSomeoneNew: 'Recomendar {skill} a alguien nuevo',
+      recommendToSomeoneNew: 'Recomendar esta habilidad a alguien nuevo',
       connectionsWithSkill: 'Tus contactos con esta habilidad',
       recommendationsAccepted: 'Aceptaron tu recomendación',
       recommendationsWaiting: 'Recomendación enviada',
@@ -1344,7 +1344,7 @@ export default {
     skillCard: {
       selfAssessmentDue: 'Autoevaluación pendiente',
       notYetAssessed: 'Aún no evaluado',
-      targetArrowPrefix: '→ objetivo',
+      targetLabel: 'Objetivo: {level}',
       setBySuffix: '(establecido por {name})',
       otherTargetMetWorkingTowardOwnSuffix: 'objetivo de {name} alcanzado, ahora trabajando hacia el tuyo propio',
       otherTargetMetSuffix: 'objetivo de {name} alcanzado',
@@ -1524,6 +1524,8 @@ export default {
     },
   },
   common: {
+    levelReassessedSame: 'Reevaluado: sigue en {level}',
+    levelReassessedDown: 'Reevaluado en {level} (antes {previous})',
     loading: 'Cargando…',
     notYetSelfAssessed: 'Aún sin autoevaluar',
     somethingWentWrong: 'Algo salió mal.',

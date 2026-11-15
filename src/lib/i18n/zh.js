@@ -713,7 +713,7 @@ export default {
       noRecommendationsYet: "你还没有向任何人推荐这项技能。",
       recommendTitle: '推荐给他人',
       recommendDescription: '把这项技能推荐给可能用得上的人。',
-      recommendToSomeoneNew: '把{skill}推荐给新的人',
+      recommendToSomeoneNew: '把这项技能推荐给新的人',
       connectionsWithSkill: '拥有此技能的联系人',
       recommendationsAccepted: '已接受你的推荐',
       recommendationsWaiting: '推荐已发送',
@@ -1324,7 +1324,7 @@ export default {
     skillCard: {
       selfAssessmentDue: '待自我评估',
       notYetAssessed: '尚未评估',
-      targetArrowPrefix: '→ 目标',
+      targetLabel: '目标：{level}',
       setBySuffix: '（由 {name} 设定）',
       otherTargetMetWorkingTowardOwnSuffix: '已达成 {name} 设定的目标，现正朝自己的目标努力',
       otherTargetMetSuffix: '已达成 {name} 设定的目标',
@@ -1504,6 +1504,8 @@ export default {
     },
   },
   common: {
+    levelReassessedSame: '重新评估：仍为{level}',
+    levelReassessedDown: '重新评估为{level}（之前为{previous}）',
     loading: '加载中…',
     notYetSelfAssessed: '尚未自我评估',
     somethingWentWrong: '出了点问题。',

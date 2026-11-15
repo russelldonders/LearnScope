@@ -9,7 +9,7 @@ import { LEVELS, LEVEL_LABELS } from '../lib/levels'
 import AppHeader from '../components/AppHeader'
 import AccessibleDialog from '../components/AccessibleDialog'
 import GrowthRing from '../components/GrowthRing'
-import GrowthArrow from '../components/GrowthArrow'
+import { LevelChangeRings, LevelChangeText } from '../components/LevelChange'
 import PersonAvatar from '../components/PersonAvatar'
 import { useLanguage } from '../context/LanguageContext'
 
@@ -317,17 +317,18 @@ export default function SkillsProfile() {
                         className="flex items-center gap-4 bg-card border border-hairline rounded-lg px-4 py-4"
                       >
                         <div className="flex items-center gap-2 shrink-0">
-                          <GrowthRing level={row.previous_level} size={38} color="var(--color-hairline)" />
-                          <GrowthArrow />
-                          <GrowthRing level={row.level} size={56} targetLevel={row.target_level} />
+                          <LevelChangeRings
+                            previousLevel={row.previous_level}
+                            level={row.level}
+                            targetLevel={row.target_level}
+                            previousSize={38}
+                            size={56}
+                          />
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-ink truncate">{row.skill_name}</p>
-                          <p className="text-sm">
-                            <span className="text-secondary">
-                              {row.previous_level ? LEVEL_LABELS[row.previous_level] : t('skillsProfile.newLevel')} →{' '}
-                            </span>
-                            <span className="text-ink font-medium">{LEVEL_LABELS[row.level]}</span>
+                          <p className="text-sm text-secondary">
+                            <LevelChangeText previousLevel={row.previous_level} level={row.level} emphasiseCurrent />
                           </p>
                           {row.target_level && (
                             <p

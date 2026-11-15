@@ -116,8 +116,8 @@ export default function SkillGoalEntryForm({ goal, row = null, prefillFrom = nul
   const field = (key) => `${idPrefix}-${key}`
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-2">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+    <form onSubmit={handleSubmit} className="@container space-y-2">
+      <div className="grid grid-cols-1 @xs:grid-cols-2 gap-2">
         {(kind === 'count' || kind === 'number') && (
           <div>
             <label htmlFor={field('value')} className="block text-xs text-secondary mb-1">{goal.unit}</label>

@@ -22,7 +22,6 @@ function renderSection(props = {}) {
   return render(
     <MemoryRouter>
       <SkillNetworkSection
-        skillName="Golf"
         librarySkillId="lib-1"
         isOwner
         recommendInvites={[
@@ -66,7 +65,7 @@ describe('SkillNetworkSection', () => {
     expect(within(recommend).getByText('Ann Accepted')).toBeInTheDocument()
     // Not a connection yet, so there's no name to show -- the address stands in.
     expect(within(recommend).getByText('sam@example.com')).toBeInTheDocument()
-    fireEvent.click(within(recommend).getByRole('button', { name: 'Recommend Golf to someone new' }))
+    fireEvent.click(within(recommend).getByRole('button', { name: 'Recommend this skill to someone new' }))
     expect(onRecommend).toHaveBeenCalledOnce()
   })
 

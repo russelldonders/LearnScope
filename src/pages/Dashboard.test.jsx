@@ -55,6 +55,25 @@ describe('dashboard focus hierarchy', () => {
     expect(screen.getByRole('link', { name: /Writing/ })).toHaveAttribute('href', '/skills/skill-c')
   })
 
+  it('describes a level change only as a step up when the level actually rose', () => {
+    const growth = (level, previousLevel) => ({ id: 'a', skill_id: 'skill-a', skills: { name: 'Facilitation' }, level, previousLevel, assessed_at: '2026-11-01T10:00:00Z' })
+
+    renderWithRouter(<FocusPanel recentGrowth={growth(3, 2)} />)
+    expect(screen.getByText('Developing → Capable')).toBeInTheDocument()
+    cleanup()
+
+    renderWithRouter(<FocusPanel recentGrowth={growth(2, 2)} />)
+    expect(screen.getByText('Reassessed: still Developing')).toBeInTheDocument()
+    cleanup()
+
+    renderWithRouter(<FocusPanel recentGrowth={growth(2, 3)} />)
+    expect(screen.getByText('Reassessed at Developing (was Capable)')).toBeInTheDocument()
+    cleanup()
+
+    renderWithRouter(<FocusPanel recentGrowth={growth(2, null)} />)
+    expect(screen.getByText('New → Developing')).toBeInTheDocument()
+  })
+
   it('has no such link when there is no earlier progress', () => {
     const growth = { id: 'a', skill_id: 'skill-a', skills: { name: 'Facilitation' }, level: 3, previousLevel: 2, assessed_at: '2026-11-01T10:00:00Z' }
     renderWithRouter(<FocusPanel recentGrowth={growth} />)

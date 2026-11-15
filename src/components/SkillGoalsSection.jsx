@@ -84,7 +84,7 @@ export default function SkillGoalsSection({
 
       {/* The same tile as on Home, so a goal looks and works the same in
           both places. items-start: a tile opened for logging grows on its own. */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start mt-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 items-start mt-3">
         {activeGoals.map((goal) => {
           const progress = computeGoalProgress(goal, statements)
           const item = { goal, skill, statements, progress, nextLog: goalDueOn(goal, progress) }

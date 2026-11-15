@@ -713,7 +713,7 @@ export default {
       noRecommendationsYet: "Je hebt deze vaardigheid nog aan niemand aangeraden.",
       recommendTitle: 'Aanraden aan anderen',
       recommendDescription: 'Raad deze vaardigheid aan bij mensen die er iets aan hebben.',
-      recommendToSomeoneNew: '{skill} aanraden aan iemand nieuw',
+      recommendToSomeoneNew: 'Deze vaardigheid aanraden aan iemand nieuw',
       connectionsWithSkill: 'Je connecties met deze vaardigheid',
       recommendationsAccepted: 'Hebben je aanrader opgevolgd',
       recommendationsWaiting: 'Aanrader verstuurd',
@@ -1343,7 +1343,7 @@ export default {
     skillCard: {
       selfAssessmentDue: 'Zelfbeoordeling verschuldigd',
       notYetAssessed: 'Nog niet beoordeeld',
-      targetArrowPrefix: '→ doel',
+      targetLabel: 'Doel: {level}',
       setBySuffix: '(ingesteld door {name})',
       otherTargetMetWorkingTowardOwnSuffix: 'doel van {name} behaald, werkt nu aan eigen doel',
       otherTargetMetSuffix: 'doel van {name} behaald',
@@ -1523,6 +1523,8 @@ export default {
     },
   },
   common: {
+    levelReassessedSame: 'Opnieuw beoordeeld: nog steeds {level}',
+    levelReassessedDown: 'Opnieuw beoordeeld als {level} (was {previous})',
     loading: 'Laden…',
     notYetSelfAssessed: 'Nog niet zelf beoordeeld',
     somethingWentWrong: 'Er is iets misgegaan.',

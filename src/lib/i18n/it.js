@@ -713,7 +713,7 @@ export default {
       noRecommendationsYet: "Non hai ancora consigliato questa competenza a nessuno.",
       recommendTitle: 'Consiglia ad altri',
       recommendDescription: 'Suggerisci questa competenza a chi potrebbe trarne beneficio.',
-      recommendToSomeoneNew: 'Consiglia {skill} a qualcuno di nuovo',
+      recommendToSomeoneNew: 'Consiglia questa competenza a qualcuno di nuovo',
       connectionsWithSkill: 'I tuoi contatti con questa competenza',
       recommendationsAccepted: 'Hanno accolto il tuo consiglio',
       recommendationsWaiting: 'Consiglio inviato',
@@ -1345,7 +1345,7 @@ export default {
     skillCard: {
       selfAssessmentDue: 'Autovalutazione in scadenza',
       notYetAssessed: 'Non ancora valutato',
-      targetArrowPrefix: '→ obiettivo',
+      targetLabel: 'Obiettivo: {level}',
       setBySuffix: '(impostato da {name})',
       otherTargetMetWorkingTowardOwnSuffix: 'obiettivo di {name} raggiunto, ora al lavoro sul proprio',
       otherTargetMetSuffix: 'obiettivo di {name} raggiunto',
@@ -1525,6 +1525,8 @@ export default {
     },
   },
   common: {
+    levelReassessedSame: 'Rivalutato: ancora {level}',
+    levelReassessedDown: 'Rivalutato a {level} (prima {previous})',
     loading: 'Caricamento…',
     notYetSelfAssessed: 'Non ancora autovalutato',
     somethingWentWrong: 'Qualcosa è andato storto.',

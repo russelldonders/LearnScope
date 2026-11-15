@@ -80,7 +80,7 @@ export default function SkillGoalsDashboardPanel({
       <p className="text-sm text-secondary mb-6">{subtitle ?? t('skillGoals.dashboard.subtitle')}</p>
       {/* items-start: a tile opened for logging grows on its own, without
           stretching the tile next to it. */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 items-start">
         {visible.map((item) => (
           <SkillGoalTile
             key={item.goal.id}
@@ -600,7 +600,7 @@ export function SkillGoalTile({
           />
         </div>
       ) : (
-        <div className="flex items-center gap-2 mt-3">
+        <div className="flex flex-wrap items-center gap-2 mt-3">
           <button
             type="button"
             onClick={() => startLogging(false)}
