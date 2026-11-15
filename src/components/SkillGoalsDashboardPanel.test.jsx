@@ -210,6 +210,32 @@ describe('goal tiles', () => {
     expect(remaining[0].style.flexGrow).toBe('20')
   })
 
+  it('gives a goal met for this period a gold trophy in place of the nudge to log', () => {
+    const goal = { title: 'Daily', aggregation: 'total', period: 'day', target_value: 20 }
+    renderPanel([
+      { ...item(goal, [pushUps('a', 25, daysAgo(0))]), nextLog: localDateString() },
+      { ...item({ ...goal, title: 'Short' }, [pushUps('b', 5, daysAgo(0))]), nextLog: localDateString() },
+    ])
+    const done = screen.getByRole('article', { name: 'Daily' })
+    expect(done.querySelector('[data-achieved]')).toHaveTextContent('Done today')
+    expect(done.querySelector('[data-achieved] svg')).not.toBeNull()
+    expect(within(done).queryByText('Time to log')).not.toBeInTheDocument()
+    const short = screen.getByRole('article', { name: 'Short' })
+    expect(short.querySelector('[data-achieved]')).toBeNull()
+    expect(within(short).getByText('Time to log')).toBeInTheDocument()
+  })
+
+  it('says which days make up this week on a weekly goal, and shades them on the chart', () => {
+    const goal = {
+      title: 'Sit-ups', aggregation: 'total', period: 'week', target_value: 1200,
+      per_set: 100, sets_per_session: 3, sessions_per_period: 4, started_on: localDateString(daysAgo(30)),
+    }
+    renderPanel([item(goal, [pushUps('a', 100, daysAgo(0))])])
+    const tile = screen.getByRole('article', { name: 'Sit-ups' })
+    expect(tile.querySelector('[data-week-range]')).toHaveTextContent(/^· Mon \d+.* – Sun .+$/)
+    expect(within(tile).getByRole('img').querySelector('[data-this-week]')).not.toBeNull()
+  })
+
   it('shows any other goal its recent entries as a line with a dot on each, latest on the right', () => {
     renderPanel([item({ title: 'Best', target_value: 40 }, [pushUps('a', 10, daysAgo(5)), pushUps('b', 25, daysAgo(3))])])
     const tile = screen.getByRole('article', { name: 'Best' })

@@ -154,15 +154,61 @@ function EntryParts({ parts, divider }) {
   ))
 }
 
+// Weeks run Monday to Sunday, as everywhere else goals are counted.
+function weekEnd(start) {
+  const end = new Date(start)
+  end.setDate(end.getDate() + 6)
+  return end
+}
+
+function startOfWeek(date) {
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7))
+  return start
+}
+
+// "Mon 10 – Sun 16 Nov", with a month on both ends when the week spans two.
+function weekRangeText(start, locale) {
+  const end = weekEnd(start)
+  // Built from parts: weekday-and-day alone formats unpredictably ("9 Mon").
+  const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short' })
+  const dayMonth = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' })
+  const day = new Intl.DateTimeFormat(locale, { day: 'numeric' })
+  const sameMonth = start.getMonth() === end.getMonth()
+  const from = `${weekday.format(start)} ${(sameMonth ? day : dayMonth).format(start)}`
+  return `${from} – ${weekday.format(end)} ${dayMonth.format(end)}`
+}
+
+// Short enough for a bar's label: a week reads as its days, "10–16".
 function periodLabel(bar, period, locale, t) {
   if (bar.current) return period === 'day' ? t('skillGoals.thisPeriod.day') : t('skillGoals.dashboard.now')
+  if (period === 'week') {
+    const day = new Intl.DateTimeFormat(locale, { day: 'numeric' })
+    return `${day.format(bar.start)}–${day.format(weekEnd(bar.start))}`
+  }
   const options = {
     day: { weekday: 'short' },
-    week: { day: 'numeric', month: 'numeric' },
     month: { month: 'short' },
     year: { year: 'numeric' },
   }[period]
   return new Intl.DateTimeFormat(locale, options).format(bar.start)
+}
+
+// What a bar is for, in full, for its tooltip and screen readers.
+function periodName(bar, period, locale, t) {
+  if (period === 'week') {
+    const range = weekRangeText(bar.start, locale)
+    return bar.current ? `${t('skillGoals.thisPeriod.week')} (${range})` : range
+  }
+  return periodLabel(bar, period, locale, t)
+}
+
+function TrophyIcon({ className = '' }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="currentColor">
+      <path d="M7 3h10v2h3a1 1 0 0 1 1 1v2a5 5 0 0 1-4.6 5A5 5 0 0 1 13 15.9V18h3v2H8v-2h3v-2.1A5 5 0 0 1 7.6 13 5 5 0 0 1 3 8V6a1 1 0 0 1 1-1h3V3Zm0 4H5v1a3 3 0 0 0 2 2.8V7Zm10 0v3.8A3 3 0 0 0 19 8V7h-2Z" />
+    </svg>
+  )
 }
 
 // Seven slots, oldest on the left. A goal begun recently, or with few
@@ -211,7 +257,7 @@ function MiniHistory({ goal, history }) {
   const partText = (value) => (goal.measure_kind === 'duration' ? formatGoalValue(goal, value) : formatNumber(value))
   const describe = (bar) => {
     const when = isRepeating
-      ? periodLabel(bar, barPeriod, locale, t)
+      ? periodName(bar, barPeriod, locale, t)
       : new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' }).format(bar.start)
     const outcomeKey = bar.status === 'met' || bar.status === 'missed' ? toneOf(bar) : null
     const outcome = outcomeKey ? ` (${t(`skillGoals.dashboard.${outcomeKey}`)})` : ''
@@ -236,6 +282,13 @@ function MiniHistory({ goal, history }) {
     : active > middle
       ? { right: 0 }
       : { left: '50%', transform: 'translateX(-50%)' }
+  // A weekly goal charted by day (one done in sets): the days of this week,
+  // Monday on, are shaded together, so it's clear where the week began.
+  const weekFrom = isRepeating && barPeriod === 'day' && goal.period === 'week'
+    ? slots.findIndex((bar) => bar && bar.start >= startOfWeek(new Date()))
+    : -1
+  // Slots are flex-1 with a 4px gap between each of the seven.
+  const slotLeft = (index) => `calc(${index} * (100% - ${(MINI_HISTORY_LENGTH - 1) * 4}px) / ${MINI_HISTORY_LENGTH} + ${index * 4 - 2}px)`
 
   return (
     <div role="img" aria-label={label}>
@@ -243,10 +296,18 @@ function MiniHistory({ goal, history }) {
         className={`relative flex items-end gap-1 ${isRepeating ? 'h-10' : 'h-8'}`}
         onMouseLeave={() => setActive(null)}
       >
+        {weekFrom >= 0 && (
+          <div
+            aria-hidden="true"
+            data-this-week=""
+            className={`absolute -top-1 bottom-0 -right-0.5 rounded-t-md bg-moss/10 ${weekFrom > 0 ? 'border-l border-dashed border-moss/70' : ''}`}
+            style={{ left: slotLeft(weekFrom) }}
+          />
+        )}
         {target != null && max > 0 && (
           <div
             aria-hidden="true"
-            className="absolute inset-x-0 border-t border-dashed border-secondary/60"
+            className="absolute z-[1] inset-x-0 border-t border-dashed border-secondary/60"
             style={{ bottom: `${scale(target)}%` }}
           />
         )}
@@ -255,7 +316,7 @@ function MiniHistory({ goal, history }) {
             key={bar ? bar.start.getTime() : `empty-${index}`}
             onMouseEnter={bar ? () => setActive(index) : undefined}
             onClick={bar ? () => setActive((value) => (value === index ? null : index)) : undefined}
-            className={`flex-1 flex flex-col-reverse overflow-hidden rounded-t-sm ${
+            className={`relative flex-1 flex flex-col-reverse overflow-hidden rounded-t-sm ${
               !bar
                 ? ''
                 : isRepeating
@@ -300,7 +361,12 @@ function MiniHistory({ goal, history }) {
       {isRepeating && (
         <div aria-hidden="true" className="mt-1 flex gap-1 text-[11px] leading-4 text-secondary">
           {slots.map((bar, index) => (
-            <span key={bar ? bar.start.getTime() : `empty-${index}`} className="flex-1 text-center truncate">
+            <span
+              key={bar ? bar.start.getTime() : `empty-${index}`}
+              className={`flex-1 text-center truncate ${weekFrom > 0 && index < weekFrom ? 'opacity-60' : ''} ${
+                index === weekFrom ? 'text-moss font-medium' : ''
+              }`}
+            >
               {bar ? periodLabel(bar, barPeriod, locale, t) : ''}
             </span>
           ))}
@@ -460,6 +526,7 @@ export function SkillGoalTile({
   const streak = goalStreak(goal, statements)
   const history = goalMiniHistory(goal, statements)
   const due = nextLog != null && nextLog <= today
+  const achieved = (goal.target_value != null || progress.sessions != null) && progress.reached === true
   const formId = `dashboard-goal-form-${goal.id}`
   const currentLabelKey = goal.aggregation === 'best'
     ? 'skillGoals.bestSoFar'
@@ -559,7 +626,17 @@ export function SkillGoalTile({
         ) : (
           <div className="min-w-0">{titleBlock}</div>
         )}
-        {due && (
+        {achieved ? (
+          // Met for this period (or for good, on a one-off goal): a reward,
+          // in place of the nudge to log.
+          <span
+            data-achieved=""
+            className="shrink-0 inline-flex items-center gap-1 rounded-full bg-gold/15 text-gold text-[11px] font-medium pl-1.5 pr-2 py-0.5"
+          >
+            <TrophyIcon className="w-3.5 h-3.5" />
+            {t(`skillGoals.achieved.${goal.period ?? 'once'}`)}
+          </span>
+        ) : due && (
           <span className="shrink-0 rounded-full bg-gold/15 text-gold text-[11px] font-medium px-2 py-0.5">
             {t('skillGoals.dashboard.timeToLog')}
           </span>
@@ -567,7 +644,12 @@ export function SkillGoalTile({
       </div>
 
       <dl className="mt-3 min-w-0">
-        <dt className="text-xs text-secondary">{t(currentLabelKey)}</dt>
+        <dt className="text-xs text-secondary truncate">
+          {t(currentLabelKey)}
+          {goal.period === 'week' && goal.aggregation !== 'best' && (
+            <span data-week-range=""> · {weekRangeText(startOfWeek(new Date()), displayLocale(language))}</span>
+          )}
+        </dt>
         <dd className="font-display text-2xl leading-tight text-ink truncate">
           {showSessions ? shapeText.done : progress.current != null ? formatGoalValue(goal, progress.current) : '–'}
         </dd>
