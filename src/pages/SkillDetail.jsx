@@ -911,7 +911,14 @@ export default function SkillDetail({ skillId, embedded = false }) {
               onFindCourse={skill.user_id === user.id ? () => navigate('/training', { state: trainingScopeState }) : null}
               onOpenAvailable={() => navigate('/training', { state: trainingScopeState })}
             />
-            {skill.user_id === user.id && <SkillResourcesSection skill={skill} user={user} />}
+            {skill.user_id === user.id && (
+              <SkillResourcesSection
+                skill={skill}
+                user={user}
+                knowledgeLevel={displayedKnowledgeLevel}
+                practicalLevel={displayedPracticalLevel}
+              />
+            )}
             </div>
             )}
 

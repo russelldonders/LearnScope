@@ -151,3 +151,56 @@ export async function getResourceFileUrl(path) {
   if (error) throw error
   return data.signedUrl
 }
+
+// How well a resource suits the learner's current levels, on the axes where
+// both the resource and the learner have one. Per axis: 'current' (the
+// learner's level), 'next' (one above: the next step), or null (further off).
+// distance is 0 for a resource at the current or next level, growing by one
+// for each level further away; null when nothing can be compared.
+export function resourceLevelFit(resource, { knowledge = null, practical = null } = {}) {
+  const axes = []
+  if (resource.knowledge_level && knowledge) axes.push({ axis: 'knowledge', gap: resource.knowledge_level - knowledge })
+  if (resource.practical_level && practical) axes.push({ axis: 'practical', gap: resource.practical_level - practical })
+  if (axes.length === 0) return null
+  const fitOf = (gap) => (gap === 0 ? 'current' : gap === 1 ? 'next' : null)
+  const distanceOf = (gap) => (gap < 0 ? -gap : Math.max(0, gap - 1))
+  return {
+    distance: axes.reduce((sum, a) => sum + distanceOf(a.gap), 0) / axes.length,
+    // The next step reads first: it's where the learner is heading.
+    fit: axes.some((a) => fitOf(a.gap) === 'next') ? 'next' : axes.every((a) => fitOf(a.gap) === 'current') ? 'current' : null,
+  }
+}
+
+// Resources at the chosen levels. An empty filter keeps everything; a level
+// chosen on an axis keeps only resources aligned to exactly that level there.
+export function filterResourcesByLevel(resources, { knowledge = '', practical = '' } = {}) {
+  return resources.filter((resource) =>
+    (!knowledge || resource.knowledge_level === Number(knowledge))
+    && (!practical || resource.practical_level === Number(practical)))
+}
+
+// Nearest the learner's levels first, then newest. Resources that can't be
+// compared go last, newest first.
+export function sortResourcesByFit(resources, levels) {
+  const keyed = resources.map((resource) => ({ resource, fit: resourceLevelFit(resource, levels) }))
+  return keyed
+    .sort((a, b) => {
+      if (a.fit && !b.fit) return -1
+      if (!a.fit && b.fit) return 1
+      if (a.fit && b.fit && a.fit.distance !== b.fit.distance) return a.fit.distance - b.fit.distance
+      return String(b.resource.created_at ?? '').localeCompare(String(a.resource.created_at ?? ''))
+    })
+    .map(({ resource }) => resource)
+}
+
+// Up to `limit` resources at the learner's current level or the next one up,
+// next steps first.
+export function suggestResourcesForLevel(resources, levels, limit = 3) {
+  const rank = { next: 0, current: 1 }
+  return resources
+    .map((resource) => ({ resource, fit: resourceLevelFit(resource, levels) }))
+    .filter(({ fit }) => fit && fit.distance === 0 && fit.fit)
+    .sort((a, b) => rank[a.fit.fit] - rank[b.fit.fit]
+      || String(b.resource.created_at ?? '').localeCompare(String(a.resource.created_at ?? '')))
+    .slice(0, limit)
+}

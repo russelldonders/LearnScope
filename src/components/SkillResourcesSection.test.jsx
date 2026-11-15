@@ -138,6 +138,50 @@ describe('SkillResourcesSection', () => {
     expect(screen.getByLabelText('Application level (optional)')).toHaveValue('')
   })
 
+  it('suggests resources for the learner\'s level, sorts by fit, and filters by level', async () => {
+    lib.listMyResources.mockResolvedValue([
+      { id: 'r1', kind: 'link', title: 'Old basics', url: 'https://example.com/1', audience: 'private', recipientIds: [], knowledge_level: 1, created_at: '2026-11-12' },
+      { id: 'r2', kind: 'link', title: 'Unlevelled', url: 'https://example.com/2', audience: 'private', recipientIds: [], created_at: '2026-11-13' },
+      { id: 'r3', kind: 'link', title: 'At my level', url: 'https://example.com/3', audience: 'private', recipientIds: [], knowledge_level: 3, created_at: '2026-11-01' },
+    ])
+    lib.listSharedResources.mockResolvedValue([
+      { id: 's1', kind: 'link', title: 'Stretch', url: 'https://example.com/s', sharer_name: 'Pat', created_at: '2026-11-10', knowledge_level: 4 },
+    ])
+    const { container } = render(<SkillResourcesSection skill={librarySkill} user={user} knowledgeLevel={3} />)
+    const suggestions = await waitFor(() => {
+      const box = container.querySelector('[data-suggestions]')
+      expect(box).not.toBeNull()
+      return box
+    })
+    // The next step first, then the current level; not the far or unlevelled.
+    expect(within(suggestions).getAllByRole('link').map((a) => a.textContent)).toEqual(['Stretch', 'At my level'])
+    expect(within(suggestions).getByText('Next step')).toBeInTheDocument()
+    expect(within(suggestions).getByText(/Pat/)).toBeInTheDocument()
+
+    const ownTitles = () => [...container.querySelectorAll('ul.mt-3 > li')].map((li) => li.querySelector('a, button').textContent)
+    // Sorted by fit by default once the learner has a level.
+    expect(ownTitles()).toEqual(['At my level', 'Old basics', 'Unlevelled'])
+    fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'newest' } })
+    // Newest keeps the order they were loaded in (newest first from the database).
+    expect(ownTitles()).toEqual(['Old basics', 'Unlevelled', 'At my level'])
+
+    fireEvent.change(screen.getByLabelText('Knowledge'), { target: { value: '1' } })
+    expect(ownTitles()).toEqual(['Old basics'])
+    expect(container.querySelector('[data-suggestions]')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Knowledge'), { target: { value: '5' } })
+    expect(screen.getByText('No resources at these levels.')).toBeInTheDocument()
+  })
+
+  it('offers no sort by fit before the learner has a level', async () => {
+    lib.listMyResources.mockResolvedValue([
+      { id: 'r1', kind: 'link', title: 'Levelled', url: 'https://example.com/1', audience: 'private', recipientIds: [], knowledge_level: 2 },
+    ])
+    const { container } = render(<SkillResourcesSection skill={librarySkill} user={user} />)
+    expect(await screen.findByLabelText('Knowledge')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Sort')).not.toBeInTheDocument()
+    expect(container.querySelector('[data-suggestions]')).toBeNull()
+  })
+
   it('asks before deleting', async () => {
     const resource = { id: 'r1', kind: 'link', title: 'Style guide', url: 'https://example.com', audience: 'private', recipientIds: [] }
     lib.listMyResources.mockResolvedValue([resource])

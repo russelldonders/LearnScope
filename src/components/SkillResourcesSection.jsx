@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLanguage } from '../context/LanguageContext'
 import { formatFullDate } from '../lib/dates'
 import { listConnections } from '../lib/connections'
@@ -9,10 +9,14 @@ import {
   addResource,
   audiencesFor,
   deleteResource,
+  filterResourcesByLevel,
   getResourceFileUrl,
   isHttpUrl,
   listMyResources,
   listSharedResources,
+  resourceLevelFit,
+  sortResourcesByFit,
+  suggestResourcesForLevel,
   updateResource,
 } from '../lib/skillResources'
 
@@ -20,7 +24,9 @@ import {
 // shared as they choose, and below them what others have shared with them for
 // the same skill. Nothing here is evidence of ability: a resource is study
 // material, so it doesn't change the skill's levels.
-export default function SkillResourcesSection({ skill, user }) {
+// knowledgeLevel and practicalLevel are the learner's current levels on the
+// skill (either may be null), used to sort and suggest by fit.
+export default function SkillResourcesSection({ skill, user, knowledgeLevel = null, practicalLevel = null }) {
   const { t } = useLanguage()
   const [mine, setMine] = useState([])
   const [shared, setShared] = useState([])
@@ -32,6 +38,20 @@ export default function SkillResourcesSection({ skill, user }) {
   const [confirmingId, setConfirmingId] = useState(null)
   const [busy, setBusy] = useState(false)
   const hasLibrarySkill = Boolean(skill.library_skill_id)
+  const levels = useMemo(() => ({ knowledge: knowledgeLevel, practical: practicalLevel }), [knowledgeLevel, practicalLevel])
+  const hasLearnerLevel = Boolean(knowledgeLevel || practicalLevel)
+  const [sortMode, setSortMode] = useState(hasLearnerLevel ? 'fit' : 'newest')
+  const [levelFilter, setLevelFilter] = useState({ knowledge: '', practical: '' })
+  const filtering = Boolean(levelFilter.knowledge || levelFilter.practical)
+  const anyLevelled = [...mine, ...shared].some((r) => r.knowledge_level || r.practical_level)
+  // Sorting by fit only means something once the learner has a level.
+  const arrange = (list) => {
+    const kept = filterResourcesByLevel(list, levelFilter)
+    return sortMode === 'fit' && hasLearnerLevel ? sortResourcesByFit(kept, levels) : kept
+  }
+  const shownMine = arrange(mine)
+  const shownShared = arrange(shared)
+  const suggestions = filtering ? [] : suggestResourcesForLevel([...mine, ...shared], levels)
 
   const load = useCallback(async () => {
     const [own, others] = await Promise.all([
@@ -136,9 +156,41 @@ export default function SkillResourcesSection({ skill, user }) {
       ) : (
         <>
           {mine.length === 0 && !adding && <p className="text-sm text-secondary mt-3">{t('skillDetail.resources.nothingYet')}</p>}
-          {mine.length > 0 && (
+
+          {anyLevelled && (
+            <LevelToolbar
+              filter={levelFilter}
+              onFilter={setLevelFilter}
+              sortMode={sortMode}
+              onSort={hasLearnerLevel ? setSortMode : null}
+            />
+          )}
+
+          {suggestions.length > 0 && (
+            <div data-suggestions="" className="mt-3 rounded-md border border-moss/40 bg-moss/5 p-3">
+              <h3 className="text-sm font-medium text-ink">{t('skillDetail.resources.suggestedTitle')}</h3>
+              <p className="text-xs text-secondary">{t('skillDetail.resources.suggestedHint')}</p>
+              <ul className="mt-2 space-y-2">
+                {suggestions.map(({ resource, fit }) => (
+                  <li key={resource.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                    <ResourceTitle resource={resource} onOpenFile={openFile} />
+                    <span className="text-xs text-secondary">
+                      <FitBadge fit={fit.fit} />
+                      {resource.sharer_name ? ` · ${resource.sharer_name}` : ` · ${t('skillDetail.resources.yours')}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {filtering && shownMine.length === 0 && shownShared.length === 0 && (mine.length > 0 || shared.length > 0) && (
+            <p className="text-sm text-secondary mt-3">{t('skillDetail.resources.noneAtLevel')}</p>
+          )}
+
+          {shownMine.length > 0 && (
             <ul className="mt-3 space-y-2">
-              {mine.map((resource) => (
+              {shownMine.map((resource) => (
                 <li key={resource.id} className="rounded-md border border-hairline bg-card p-3">
                   {editingId === resource.id ? (
                     <ResourceForm
@@ -156,7 +208,7 @@ export default function SkillResourcesSection({ skill, user }) {
                     />
                   ) : (
                     <>
-                      <ResourceSummary resource={resource} onOpenFile={openFile} />
+                      <ResourceSummary resource={resource} onOpenFile={openFile} fit={resourceLevelFit(resource, levels)?.fit} />
                       <p className="mt-1 text-xs text-secondary">
                         <AudienceText resource={resource} connections={connections} />
                       </p>
@@ -206,13 +258,13 @@ export default function SkillResourcesSection({ skill, user }) {
             </ul>
           )}
 
-          {shared.length > 0 && (
+          {shownShared.length > 0 && (
             <div className="mt-5">
               <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary">{t('skillDetail.resources.sharedWithYou')}</h3>
               <ul className="mt-2 space-y-2">
-                {shared.map((resource) => (
+                {shownShared.map((resource) => (
                   <li key={resource.id} className="rounded-md border border-hairline bg-card p-3">
-                    <ResourceSummary resource={resource} onOpenFile={openFile} />
+                    <ResourceSummary resource={resource} onOpenFile={openFile} fit={resourceLevelFit(resource, levels)?.fit} />
                     <p className="mt-1 text-xs text-secondary">
                       {t('skillDetail.resources.sharedBy', { name: resource.sharer_name, date: formatFullDate(resource.created_at) })}
                     </p>
@@ -227,26 +279,92 @@ export default function SkillResourcesSection({ skill, user }) {
   )
 }
 
-function ResourceSummary({ resource, onOpenFile }) {
+// Opens a link in a new tab, or a stored file through a short-lived URL.
+function ResourceTitle({ resource, onOpenFile }) {
+  const titleClass = 'text-sm font-medium text-moss hover:underline underline-offset-2 break-words text-left'
+  return resource.kind === 'file' ? (
+    <button type="button" onClick={() => onOpenFile(resource.file_path)} className={titleClass}>
+      {resource.title}
+    </button>
+  ) : (
+    <a href={resource.url} target="_blank" rel="noopener noreferrer" className={titleClass}>
+      {resource.title}
+    </a>
+  )
+}
+
+// "Your level" or "Next step", against the learner's current levels.
+function FitBadge({ fit }) {
+  const { t } = useLanguage()
+  if (!fit) return null
+  return (
+    <span
+      data-fit={fit}
+      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${fit === 'next' ? 'bg-gold/15 text-gold' : 'bg-moss/15 text-moss'}`}
+    >
+      {t(`skillDetail.resources.fit.${fit}`)}
+    </span>
+  )
+}
+
+// Narrow the lists to a level on either axis, and order them newest first or
+// by how well they suit the learner (offered once the learner has a level).
+function LevelToolbar({ filter, onFilter, sortMode, onSort }) {
+  const { t } = useLanguage()
+  const selectClass = 'rounded-md border border-hairline bg-paper px-2 py-1 text-xs text-ink focus:outline-none focus:border-moss'
+  return (
+    <div className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-2">
+      <label className="text-xs text-secondary">
+        {t('skillDetail.resources.filterKnowledge')}
+        <select
+          value={filter.knowledge}
+          onChange={(e) => onFilter((f) => ({ ...f, knowledge: e.target.value }))}
+          className={`ml-1 ${selectClass}`}
+        >
+          <option value="">{t('skillDetail.resources.allLevels')}</option>
+          {Object.entries(KNOWLEDGE_LEVEL_LABELS).map(([level, label]) => (
+            <option key={level} value={level}>{label}</option>
+          ))}
+        </select>
+      </label>
+      <label className="text-xs text-secondary">
+        {t('skillDetail.resources.filterPractical')}
+        <select
+          value={filter.practical}
+          onChange={(e) => onFilter((f) => ({ ...f, practical: e.target.value }))}
+          className={`ml-1 ${selectClass}`}
+        >
+          <option value="">{t('skillDetail.resources.allLevels')}</option>
+          {Object.entries(LEVEL_LABELS).map(([level, label]) => (
+            <option key={level} value={level}>{label}</option>
+          ))}
+        </select>
+      </label>
+      {onSort && (
+        <label className="text-xs text-secondary">
+          {t('skillDetail.resources.sortLabel')}
+          <select value={sortMode} onChange={(e) => onSort(e.target.value)} className={`ml-1 ${selectClass}`}>
+            <option value="fit">{t('skillDetail.resources.sortFit')}</option>
+            <option value="newest">{t('skillDetail.resources.sortNewest')}</option>
+          </select>
+        </label>
+      )}
+    </div>
+  )
+}
+
+function ResourceSummary({ resource, onOpenFile, fit = null }) {
   const { t } = useLanguage()
   const kindLabel = t(`skillDetail.resources.kinds.${resource.kind}`)
-  const titleClass = 'text-sm font-medium text-moss hover:underline underline-offset-2 break-words text-left'
   return (
     <div>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        {resource.kind === 'file' ? (
-          <button type="button" onClick={() => onOpenFile(resource.file_path)} className={titleClass}>
-            {resource.title}
-          </button>
-        ) : (
-          <a href={resource.url} target="_blank" rel="noopener noreferrer" className={titleClass}>
-            {resource.title}
-          </a>
-        )}
+        <ResourceTitle resource={resource} onOpenFile={onOpenFile} />
         <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">
           {kindLabel}
           {resource.kind === 'file' && resource.file_name ? ` · ${resource.file_name}` : ''}
         </span>
+        <FitBadge fit={fit} />
       </div>
       {(resource.knowledge_level || resource.practical_level) && (
         <div className="mt-1 flex flex-wrap gap-1.5">
