@@ -390,6 +390,14 @@ function App() {
             }
           />
           <Route
+            path="/admin/catalogue/:courseId/edit"
+            element={
+              <PlatformAdminRoute>
+                <ProviderCourseEditor adminMode />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
             path="/admin/skills"
             element={
               <PlatformAdminRoute>

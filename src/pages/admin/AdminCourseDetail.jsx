@@ -53,10 +53,17 @@ export default function AdminCourseDetail() {
                   <h2 className="font-display text-xl text-ink mb-1">{course.name}</h2>
                   <p className="font-mono text-xs text-secondary">{course.course_code || 'Not set'}</p>
                 </div>
-                <StatusBadge
-                  label={COURSE_STATUS_LABELS[course.status] ?? course.status}
-                  tone={course.status === 'rejected' || course.status === 'inactive' ? 'danger' : 'neutral'}
-                />
+                <div className="flex items-center gap-2">
+                  {course.organisations?.is_system && (
+                    <Link to={`/admin/catalogue/${course.id}/edit`} className="rounded-md border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:bg-paper">
+                      Open course builder
+                    </Link>
+                  )}
+                  <StatusBadge
+                    label={COURSE_STATUS_LABELS[course.status] ?? course.status}
+                    tone={course.status === 'rejected' || course.status === 'inactive' ? 'danger' : 'neutral'}
+                  />
+                </div>
               </div>
               {course.synopsis && <p className="text-sm text-secondary mt-2">{course.synopsis}</p>}
               <div className="flex flex-wrap gap-2 text-xs mt-3">

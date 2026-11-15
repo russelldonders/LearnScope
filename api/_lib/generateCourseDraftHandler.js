@@ -6,7 +6,7 @@ import { createTrackedMessage } from './trackedAnthropic.js'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-export default async function generateCourseDraftHandler(req, res) {
+export default async function generateCourseDraftHandler(req, res, options = {}) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
     return
@@ -22,6 +22,23 @@ export default async function generateCourseDraftHandler(req, res) {
   if (!user) {
     res.status(401).json({ error: 'Invalid or expired session' })
     return
+  }
+
+  let isPlatformAdmin = false
+  if (options.requirePlatformAdmin) {
+    const { data, error } = await supabaseAdmin().rpc('is_platform_admin', {
+      check_user_id: user.id,
+    })
+    if (error) {
+      console.error('generate-course-draft platform access error:', error)
+      res.status(500).json({ error: 'Could not verify platform administrator access.' })
+      return
+    }
+    isPlatformAdmin = Boolean(data)
+    if (!isPlatformAdmin) {
+      res.status(403).json({ error: 'Platform administrator access required.' })
+      return
+    }
   }
 
   if (!process.env.ANTHROPIC_API_KEY?.trim()) {
@@ -50,7 +67,18 @@ export default async function generateCourseDraftHandler(req, res) {
       res.status(500).json({ error: 'Could not verify organisation access.' })
       return
     }
-    if (!canGenerate) {
+    if (!canGenerate && !isPlatformAdmin) {
+      const { data: platformAccess, error: platformError } = await supabaseAdmin().rpc('is_platform_admin', {
+        check_user_id: user.id,
+      })
+      if (platformError) {
+        console.error('generate-course-draft platform access error:', platformError)
+        res.status(500).json({ error: 'Could not verify organisation access.' })
+        return
+      }
+      isPlatformAdmin = Boolean(platformAccess)
+    }
+    if (!canGenerate && !isPlatformAdmin) {
       res.status(403).json({ error: 'You cannot generate training for this organisation.' })
       return
     }
@@ -62,7 +90,7 @@ export default async function generateCourseDraftHandler(req, res) {
 
   try {
     const response = await createTrackedMessage({
-      feature: 'course_draft_generation',
+      feature: options.feature ?? 'course_draft_generation',
       userId: user.id,
       organisationId,
       params: {

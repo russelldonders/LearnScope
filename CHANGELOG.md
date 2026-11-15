@@ -4,6 +4,7 @@
 
 - Added privacy-safe AI usage metering across every Anthropic-powered feature, including token counts, latency, provider errors and request-time cost estimates.
 - Added a platform-admin AI usage dashboard with feature, model and organisation breakdowns; prompts and generated content are never stored in the usage ledger.
+- Added a bulk platform-admin course-series builder that turns selected skills into editable courses for each knowledge-matrix level, with optional immediate Global catalogue publication.
 
 ## 2026-11-14
 

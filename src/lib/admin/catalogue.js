@@ -222,7 +222,7 @@ export async function getAdminCourseDetail(id) {
   const [{ data: course, error: courseError }, sections, resources, versions, counts] = await Promise.all([
     supabase
       .from('course_catalogue')
-      .select(`*, organisations(id, name),
+      .select(`*, organisations(id, name, is_system),
         course_catalogue_skills(id, level, skill_library(id, name)),
         course_catalogue_publications(catalogue_id, published_at, catalogues(id, name, is_global))`)
       .eq('id', id)
@@ -301,7 +301,7 @@ export async function listCourseVersionHistory(courseId) {
 export async function getCatalogueCourse(id) {
   const { data, error } = await supabase
     .from('course_catalogue')
-    .select('*, course_catalogue_publications(catalogue_id, published_at, catalogues(id, name, is_global))')
+    .select('*, organisations(id, is_system), course_catalogue_publications(catalogue_id, published_at, catalogues(id, name, is_global))')
     .eq('id', id)
     .maybeSingle()
   if (error) throw error

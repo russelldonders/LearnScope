@@ -2,7 +2,7 @@ import { supabase } from '../supabaseClient'
 
 // Admin listing -- every status, unlike src/lib/skillLibrary.js's
 // listLibrarySkills (learner-facing, active-only).
-const ADMIN_SKILL_SELECT = 'id, skill_code, name, category, description, status, is_private, organisation_id, created_by, icon_url'
+const ADMIN_SKILL_SELECT = 'id, skill_code, name, category, description, status, is_private, organisation_id, created_by, icon_url, knowledge_level_guide'
 
 // skill_library.created_by only references auth.users, and organisation_id
 // references organisations -- neither is a foreign key PostgREST can embed
@@ -60,13 +60,10 @@ export async function listAllLibrarySkills() {
   return attachOwnerInfo(data ?? [])
 }
 
-// Includes the shared level-guide cache columns (0089) on top of
-// ADMIN_SKILL_SELECT -- only needed for this single-skill detail fetch, not
-// the list view, so kept out of the shared constant.
 export async function getLibrarySkill(id) {
   const { data, error } = await supabase
     .from('skill_library')
-    .select(`${ADMIN_SKILL_SELECT}, knowledge_level_guide, practical_level_guide`)
+    .select(`${ADMIN_SKILL_SELECT}, practical_level_guide`)
     .eq('id', id)
     .single()
   if (error) throw error

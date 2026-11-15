@@ -38,6 +38,12 @@ function inviteRedirectTo() {
 export default async function handler(req, res) {
   if (req.query?.lti) return ltiHandler(req, res)
   if (req.query?.ai === 'generate-course-draft') return generateCourseDraftHandler(req, res)
+  if (req.query?.ai === 'generate-skill-course-draft') {
+    return generateCourseDraftHandler(req, res, {
+      requirePlatformAdmin: true,
+      feature: 'skill_level_course_generation',
+    })
+  }
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
     return

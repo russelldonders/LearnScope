@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
 import AccessibleDialog from '../../components/AccessibleDialog'
+import ConfirmDialog from '../../components/ConfirmDialog'
 import CourseThumbnail from '../../components/CourseThumbnail'
 import {
   getCatalogueCourse,
@@ -26,6 +27,7 @@ import { DURATION_UNITS } from '../../lib/courseDuration'
 import { CURRENCIES } from '../../lib/currencies'
 import { CourseSections } from './CourseSections'
 import { TrainerPicker, CourseCohorts } from './CourseCohorts'
+import { publishSystemCourseToGlobal } from '../../lib/admin/skillCourseGeneration'
 
 const MAX_IMAGE_BYTES = COURSE_IMAGE_MAX_INPUT_BYTES
 
@@ -268,7 +270,7 @@ const TABS = [
 // AdminSkillDetail moved their consoles' inline expansions onto dedicated
 // pages. Mirrors the learner-facing CourseLearn's grouped-by-section
 // structure, just for building it rather than taking it.
-export default function ProviderCourseEditor() {
+export default function ProviderCourseEditor({ adminMode = false }) {
   const { courseId } = useParams()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -291,6 +293,7 @@ export default function ProviderCourseEditor() {
   const [showPublishDialog, setShowPublishDialog] = useState(false)
   const [showGlobalSubmitDialog, setShowGlobalSubmitDialog] = useState(false)
   const [showCatalogueDialog, setShowCatalogueDialog] = useState(false)
+  const [showAdminPublishDialog, setShowAdminPublishDialog] = useState(false)
   const [saveError, setSaveError] = useState(null)
   // Whichever version is currently live for this course (which may not be
   // the one being edited -- a new draft starts with no publications of its
@@ -390,7 +393,8 @@ export default function ProviderCourseEditor() {
   }
 
   const myRole = (organisationMemberships ?? []).find((m) => m.organisation_id === course?.organisation_id)?.role
-  const canEdit = Boolean(myRole) && (course?.status === 'draft' || course?.status === 'rejected')
+  const isSystemCourse = Boolean(course?.organisations?.is_system)
+  const canEdit = (adminMode ? isSystemCourse : Boolean(myRole)) && (course?.status === 'draft' || course?.status === 'rejected')
   const publishedCatalogues = (course?.course_catalogue_publications ?? [])
     .filter((publication) => publication.published_at && publication.catalogues)
     .map((publication) => publication.catalogues)
@@ -404,11 +408,28 @@ export default function ProviderCourseEditor() {
     setSaving(true)
     try {
       const draftId = await createDraftCourseVersion(course.id)
-      navigate(`/organisation/training/${draftId}${employerContext ? `?org=${encodeURIComponent(employerContext)}` : ''}`)
+      navigate(adminMode
+        ? `/admin/catalogue/${draftId}/edit`
+        : `/organisation/training/${draftId}${employerContext ? `?org=${encodeURIComponent(employerContext)}` : ''}`)
     } catch (err) {
       setSaveError(err.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleAdminPublishGlobal() {
+    setSubmitting(true)
+    setSaveError(null)
+    try {
+      await updateProviderCourse(course.id, form)
+      await publishSystemCourseToGlobal(course.id)
+      setShowAdminPublishDialog(false)
+      await load()
+    } catch (err) {
+      setSaveError(err.message)
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -423,12 +444,14 @@ export default function ProviderCourseEditor() {
             straight to this course. Falls back to a bare /provider before
             the course has loaded. */}
         <Link
-          to={employerContext
-            ? `/organisation?org=${encodeURIComponent(employerContext)}&section=provider-training`
-            : course ? `/organisation?org=${course.organisation_id}&section=training` : '/organisation'}
+          to={adminMode
+            ? (course ? `/admin/catalogue/${course.id}` : '/admin/catalogue')
+            : employerContext
+              ? `/organisation?org=${encodeURIComponent(employerContext)}&section=provider-training`
+              : course ? `/organisation?org=${course.organisation_id}&section=training` : '/organisation'}
           className="text-sm text-secondary hover:text-ink mb-4 inline-block"
         >
-          ← Back to provider console
+          ← Back to {adminMode ? 'course details' : 'provider console'}
         </Link>
 
         {loading && <p className="text-secondary">Loading…</p>}
@@ -473,20 +496,20 @@ export default function ProviderCourseEditor() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowPublishDialog(true)}
+                    onClick={() => adminMode ? setShowAdminPublishDialog(true) : setShowPublishDialog(true)}
                     disabled={saving || submitting}
                     className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60"
                   >
-                    Publish
+                    {adminMode ? 'Publish to Global' : 'Publish'}
                   </button>
-                  <button
+                  {!adminMode && <button
                     type="button"
                     onClick={() => setShowGlobalSubmitDialog(true)}
                     disabled={saving || submitting}
                     className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
                   >
                     {course.status === 'rejected' ? 'Resubmit to Global catalogue' : 'Submit to Global catalogue'}
-                  </button>
+                  </button>}
                 </div>
               </div>
             )}
@@ -497,6 +520,16 @@ export default function ProviderCourseEditor() {
                 submitting={submitting}
                 onClose={() => setShowPublishDialog(false)}
                 onPublish={handlePublish}
+              />
+            )}
+
+            {showAdminPublishDialog && (
+              <ConfirmDialog
+                message={`Publish ${course.name} to the Global catalogue now? Learners will be able to find it immediately.`}
+                confirmLabel="Publish to Global"
+                confirming={submitting}
+                onConfirm={handleAdminPublishGlobal}
+                onCancel={() => setShowAdminPublishDialog(false)}
               />
             )}
 
@@ -553,6 +586,7 @@ export default function ProviderCourseEditor() {
                   publishedCatalogues={publishedCatalogues}
                   globalCataloguePending={globalCataloguePending}
                   onPushToCatalogue={() => setShowCatalogueDialog(true)}
+                  adminMode={adminMode}
                 />
                 <CourseTrainers courseCatalogueId={course.id} organisationId={course.organisation_id} canManage={Boolean(myRole)} />
               </div>
@@ -570,7 +604,7 @@ export default function ProviderCourseEditor() {
   )
 }
 
-function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCreateDraftVersion, creatingDraft, publishedCatalogues, globalCataloguePending, onPushToCatalogue }) {
+function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCreateDraftVersion, creatingDraft, publishedCatalogues, globalCataloguePending, onPushToCatalogue, adminMode = false }) {
   return (
     <div className="bg-card border border-hairline rounded-lg p-6">
       <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
@@ -605,13 +639,13 @@ function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCre
             >
               {creatingDraft ? 'Creating draft…' : 'Create next version'}
             </button>
-            <button
+            {!adminMode && <button
               type="button"
               onClick={onPushToCatalogue}
               className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper"
             >
               Push to catalogue
-            </button>
+            </button>}
           </div>
         </div>
       )}

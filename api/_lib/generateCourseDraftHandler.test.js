@@ -104,6 +104,24 @@ describe('generateCourseDraftHandler errors', () => {
     expect(mocks.createMessage).not.toHaveBeenCalled()
   })
 
+  it('restricts skill-series generation to platform administrators', async () => {
+    process.env.ANTHROPIC_API_KEY = 'configured-for-test'
+    mocks.checkOrganisationAccess.mockResolvedValue({ data: false, error: null })
+    const res = response()
+
+    await generateCourseDraftHandler(
+      { method: 'POST', headers: { authorization: 'Bearer token' }, body: validBody },
+      res,
+      { requirePlatformAdmin: true, feature: 'skill_level_course_generation' },
+    )
+
+    expect(res).toMatchObject({
+      statusCode: 403,
+      body: { error: 'Platform administrator access required.' },
+    })
+    expect(mocks.createMessage).not.toHaveBeenCalled()
+  })
+
   it('identifies requests rejected by the AI provider', async () => {
     process.env.ANTHROPIC_API_KEY = 'configured-for-test'
     mocks.createMessage.mockRejectedValue(Object.assign(new Error('bad request'), { status: 400 }))

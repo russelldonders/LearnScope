@@ -8,6 +8,7 @@ import { SKILL_TYPE_LABELS } from '../../lib/statusLabels'
 import { useColumnPreferences, useRowSelection, useSortedPage, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
 import { BulkActionBar, ColumnCustomizer, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 import SkillIcon from '../../components/SkillIcon'
+import AdminSkillCourseBuilderDialog from '../../components/AdminSkillCourseBuilderDialog'
 
 const SKILL_SORT_ACCESSORS = {
   code: (s) => s.skill_code?.toLowerCase() ?? '',
@@ -128,6 +129,7 @@ export default function AdminSkills() {
   const [actioningId, setActioningId] = useState(null)
   const [bulkAction, setBulkAction] = useState(null)
   const [bulkActing, setBulkActing] = useState(false)
+  const [courseBuilderSkills, setCourseBuilderSkills] = useState(null)
 
   useEffect(() => {
     load()
@@ -239,6 +241,7 @@ export default function AdminSkills() {
   const selectedSkills = useMemo(() => filtered.filter((s) => selection.selected.has(s.id)), [filtered, selection.selected])
   const selectedToActivate = useMemo(() => selectedSkills.filter((s) => s.status !== 'active'), [selectedSkills])
   const selectedToDeactivate = useMemo(() => selectedSkills.filter((s) => s.status === 'active'), [selectedSkills])
+  const selectedActiveSkills = useMemo(() => selectedSkills.filter((s) => s.status === 'active'), [selectedSkills])
   const pageIds = pageItems.map((s) => s.id)
   const selectedOnPage = pageIds.filter((id) => selection.selected.has(id)).length
 
@@ -313,6 +316,12 @@ export default function AdminSkills() {
                 busy={bulkActing}
                 actions={[
                   {
+                    label: `Build level courses (${selectedActiveSkills.length})`,
+                    disabled: selectedActiveSkills.length === 0,
+                    title: selectedActiveSkills.length === 0 ? 'Reactivate a selected skill before building courses' : undefined,
+                    onClick: () => setCourseBuilderSkills(selectedSkills),
+                  },
+                  {
                     label: `Activate selected (${selectedToActivate.length})`,
                     disabled: selectedToActivate.length === 0,
                     title: selectedToActivate.length === 0 ? 'Every selected skill is already active' : undefined,
@@ -385,6 +394,14 @@ export default function AdminSkills() {
           confirming={bulkActing}
           onConfirm={handleBulkStatusChange}
           onCancel={() => setBulkAction(null)}
+        />
+      )}
+
+      {courseBuilderSkills && (
+        <AdminSkillCourseBuilderDialog
+          skills={courseBuilderSkills}
+          onClose={() => setCourseBuilderSkills(null)}
+          onFinished={selection.clear}
         />
       )}
     </AdminLayout>

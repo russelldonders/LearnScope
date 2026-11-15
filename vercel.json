@@ -9,6 +9,7 @@
     { "src": "/lti/(session|deep-link|resources/[0-9a-f-]+)", "dest": "/api/admin/actions?lti=surface" },
     { "src": "/api/lti/([a-z-]+)", "dest": "/api/admin/actions?lti=$1" },
     { "src": "/api/generate-course-draft", "dest": "/api/admin/actions?ai=generate-course-draft" },
+    { "src": "/api/generate-skill-course-draft", "dest": "/api/admin/actions?ai=generate-skill-course-draft" },
     {
       "src": "/course-content/(.*\\.(?:html|htm))$",
       "dest": "${VITE_SUPABASE_URL}/storage/v1/object/public/course-content/$1",
