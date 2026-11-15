@@ -1,4 +1,4 @@
-const EVIDENCE_BUCKETS = ['skill-evidence', 'avatars']
+const EVIDENCE_BUCKETS = ['skill-evidence', 'avatars', 'skill-resources']
 const LIST_PAGE_SIZE = 100
 
 // Storage .list() only returns one level at a time (paginated, 100 per page

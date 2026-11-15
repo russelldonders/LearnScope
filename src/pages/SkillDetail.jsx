@@ -9,6 +9,7 @@ import AppHeader from '../components/AppHeader'
 import GrowthRing from '../components/GrowthRing'
 import SkillNetworkSection, { RatingsFromOthers } from '../components/SkillNetworkSection'
 import SkillLearningSection from '../components/SkillLearningSection'
+import SkillResourcesSection from '../components/SkillResourcesSection'
 import ConfirmDialog from '../components/ConfirmDialog'
 import QuickActivityLog from '../components/QuickActivityLog'
 import { listSkillGoals } from '../lib/skillGoals'
@@ -910,6 +911,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
               onFindCourse={skill.user_id === user.id ? () => navigate('/training', { state: trainingScopeState }) : null}
               onOpenAvailable={() => navigate('/training', { state: trainingScopeState })}
             />
+            {skill.user_id === user.id && <SkillResourcesSection skill={skill} user={user} />}
             </div>
             )}
 
