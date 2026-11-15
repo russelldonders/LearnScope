@@ -23,6 +23,12 @@ export default async function generateCourseDraftHandler(req, res) {
     return
   }
 
+  if (!process.env.ANTHROPIC_API_KEY?.trim()) {
+    console.error('generate-course-draft error: ANTHROPIC_API_KEY is not configured')
+    res.status(503).json({ error: 'Course generation is not configured on this environment.' })
+    return
+  }
+
   const request = buildCourseDraftRequest(req.body)
   if (request.error) {
     res.status(400).json({ error: request.error })
@@ -50,6 +56,18 @@ export default async function generateCourseDraftHandler(req, res) {
     res.status(200).json({ draft })
   } catch (err) {
     console.error('generate-course-draft error:', err)
+    if (err?.status === 401 || err?.status === 403) {
+      res.status(503).json({ error: 'Course generation could not authenticate with the AI service.' })
+      return
+    }
+    if (err?.status === 429) {
+      res.status(429).json({ error: 'The AI service is busy or its usage limit has been reached. Try again shortly.' })
+      return
+    }
+    if (err?.status === 400) {
+      res.status(502).json({ error: 'The AI service rejected the course request format.' })
+      return
+    }
     res.status(500).json({ error: 'Failed to generate the course. Try again.' })
   }
 }
