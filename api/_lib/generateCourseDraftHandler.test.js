@@ -36,20 +36,6 @@ function response() {
   }
 }
 
-function streamingResponse() {
-  return {
-    statusCode: null,
-    headers: {},
-    chunks: [],
-    ended: false,
-    status(code) { this.statusCode = code; return this },
-    json(body) { this.body = body; return this },
-    setHeader(name, value) { this.headers[name] = value },
-    write(chunk) { this.chunks.push(chunk) },
-    end() { this.ended = true },
-  }
-}
-
 const validBody = {
   topic: 'Safe lifting',
   audience: 'New starters',
@@ -149,25 +135,4 @@ describe('generateCourseDraftHandler errors', () => {
     })
   })
 
-  it('keeps long skill-series requests alive with JSON-line events', async () => {
-    process.env.ANTHROPIC_API_KEY = 'configured-for-test'
-    mocks.checkOrganisationAccess.mockResolvedValue({ data: true, error: null })
-    mocks.createMessage.mockRejectedValue(Object.assign(new Error('bad request'), { status: 400 }))
-    const res = streamingResponse()
-
-    await generateCourseDraftHandler(
-      { method: 'POST', headers: { authorization: 'Bearer token' }, body: validBody },
-      res,
-      { requirePlatformAdmin: true, feature: 'skill_level_course_generation', streamKeepAlive: true },
-    )
-
-    expect(res.statusCode).toBe(200)
-    expect(res.headers['Content-Type']).toContain('application/x-ndjson')
-    expect(res.ended).toBe(true)
-    expect(res.chunks.map((chunk) => JSON.parse(chunk)).map((event) => event.type)).toEqual(['started', 'error'])
-    expect(JSON.parse(res.chunks.at(-1))).toMatchObject({
-      status: 502,
-      error: 'The AI service rejected the course request format.',
-    })
-  })
 })

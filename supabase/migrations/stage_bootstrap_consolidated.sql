@@ -32221,6 +32221,54 @@ revoke all on function public.publish_system_course_to_global(uuid)
   from public, anon;
 grant execute on function public.publish_system_course_to_global(uuid)
   to authenticated;
+-- 20261115145034_skill_course_generation_jobs.sql
+
+-- Durable hand-off between short browser requests and long-running AI course
+-- generation. Course drafts are available only to the service-role API; the
+-- browser receives them through a caller-verified status endpoint.
+create table public.skill_course_generation_jobs (
+  id uuid primary key default gen_random_uuid(),
+  requested_by uuid not null references auth.users(id) on delete cascade,
+  organisation_id uuid not null references public.organisations(id) on delete cascade,
+  skill_library_id uuid not null references public.skill_library(id) on delete cascade,
+  knowledge_level smallint not null check (knowledge_level between 1 and 5),
+  status text not null default 'queued'
+    check (status in ('queued', 'running', 'completed', 'failed', 'cancelled')),
+  draft jsonb,
+  error_message text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  completed_at timestamptz,
+  expires_at timestamptz not null default (now() + interval '24 hours'),
+  check (draft is null or jsonb_typeof(draft) = 'object'),
+  check (
+    (status = 'completed' and draft is not null and completed_at is not null)
+    or (status <> 'completed' and draft is null)
+  ),
+  check (
+    (status in ('completed', 'failed', 'cancelled') and completed_at is not null)
+    or (status in ('queued', 'running') and completed_at is null)
+  )
+);
+
+create index skill_course_generation_jobs_requester_created_idx
+  on public.skill_course_generation_jobs (requested_by, created_at desc);
+
+create index skill_course_generation_jobs_organisation_idx
+  on public.skill_course_generation_jobs (organisation_id);
+
+create index skill_course_generation_jobs_skill_idx
+  on public.skill_course_generation_jobs (skill_library_id);
+
+create index skill_course_generation_jobs_expiry_idx
+  on public.skill_course_generation_jobs (expires_at);
+
+alter table public.skill_course_generation_jobs enable row level security;
+
+-- No browser role can read generated drafts directly. The serverless API uses
+-- service_role after independently verifying the caller and job ownership.
+revoke all on table public.skill_course_generation_jobs from public, anon, authenticated;
+grant select, insert, update, delete on table public.skill_course_generation_jobs to service_role;
 -- 20261115160000_0288_skill_resources.sql
 
 -- Learner resources on a skill: documents, videos and links a learner keeps
@@ -32543,3 +32591,107 @@ $$;
 
 revoke all on function public.list_shared_skill_resources(uuid) from public, anon;
 grant execute on function public.list_shared_skill_resources(uuid) to authenticated;
+-- 20261115180000_0291_atomic_skill_course_job_save.sql
+
+-- Cancellation and course saving must contend on the same locked job row.
+-- Whichever transaction claims a completed job first determines whether a
+-- course is saved or the job is cancelled.
+alter table public.skill_course_generation_jobs
+  -- A saved job is only a record of the hand-off, so it goes with its course
+  -- (set null would break the saved-needs-a-course check below).
+  add column course_id uuid references public.course_catalogue(id) on delete cascade;
+
+create index skill_course_generation_jobs_course_idx
+  on public.skill_course_generation_jobs (course_id)
+  where course_id is not null;
+
+alter table public.skill_course_generation_jobs
+  drop constraint skill_course_generation_jobs_status_check,
+  drop constraint skill_course_generation_jobs_check,
+  drop constraint skill_course_generation_jobs_check1;
+
+alter table public.skill_course_generation_jobs
+  add constraint skill_course_generation_jobs_status_check
+    check (status in ('queued', 'running', 'completed', 'saving', 'saved', 'failed', 'cancelled')),
+  add constraint skill_course_generation_jobs_draft_state_check
+    check (
+      (status in ('completed', 'saving') and draft is not null)
+      or (status not in ('completed', 'saving') and draft is null)
+    ),
+  add constraint skill_course_generation_jobs_completed_state_check
+    check (
+      (status in ('queued', 'running') and completed_at is null)
+      or (status not in ('queued', 'running') and completed_at is not null)
+    ),
+  add constraint skill_course_generation_jobs_course_state_check
+    check (
+      (status = 'saved' and course_id is not null)
+      or (status <> 'saved' and course_id is null)
+    );
+
+create or replace function public.save_generated_skill_course_job(
+  p_job_id uuid,
+  p_publish_global boolean default true
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_caller uuid := (select auth.uid());
+  v_job public.skill_course_generation_jobs%rowtype;
+  v_course_id uuid;
+begin
+  if v_caller is null or not public.is_platform_admin(v_caller) then
+    raise insufficient_privilege using message = 'Platform administrator access required';
+  end if;
+
+  select *
+  into v_job
+  from public.skill_course_generation_jobs
+  where id = p_job_id
+    and requested_by = v_caller
+    and expires_at > now()
+  for update;
+
+  if not found then
+    raise exception 'Generation job not found or expired';
+  end if;
+  if v_job.status = 'saved' then
+    return v_job.course_id;
+  end if;
+  if v_job.status = 'cancelled' then
+    raise exception 'Course build was aborted';
+  end if;
+  if v_job.status <> 'completed' then
+    raise exception 'The generated course is not ready to save';
+  end if;
+
+  update public.skill_course_generation_jobs
+  set status = 'saving', updated_at = now()
+  where id = p_job_id;
+
+  v_course_id := public.create_generated_skill_course(
+    v_job.skill_library_id,
+    v_job.knowledge_level,
+    v_job.draft,
+    p_publish_global
+  );
+
+  update public.skill_course_generation_jobs
+  set status = 'saved',
+      draft = null,
+      course_id = v_course_id,
+      updated_at = now()
+  where id = p_job_id;
+
+  return v_course_id;
+end;
+$$;
+
+revoke all on function public.save_generated_skill_course_job(uuid, boolean)
+  from public, anon;
+grant execute on function public.save_generated_skill_course_job(uuid, boolean)
+  to authenticated;
+

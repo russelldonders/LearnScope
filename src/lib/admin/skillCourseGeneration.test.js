@@ -2,15 +2,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
+  rpc: vi.fn(),
 }))
 
 vi.mock('../supabaseClient', () => ({
   supabase: {
     auth: { getSession: mocks.getSession },
+    rpc: mocks.rpc,
   },
 }))
 
-import { buildSkillCourseBrief, generateSkillCourseDraft } from './skillCourseGeneration'
+import { buildSkillCourseBrief, generateSkillCourseDraft, saveGeneratedSkillCourseJob } from './skillCourseGeneration'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -46,35 +48,48 @@ describe('buildSkillCourseBrief', () => {
 })
 
 describe('generateSkillCourseDraft', () => {
-  it('reads the final draft from a keep-alive JSON-line response', async () => {
+  it('starts a background job and polls until its draft is ready', async () => {
     mocks.getSession.mockResolvedValue({ data: { session: { access_token: 'token' } } })
     const draft = { name: 'Coaching — Aware', sections: [] }
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: true,
-      headers: { get: () => 'application/x-ndjson; charset=utf-8' },
-      text: async () => [
-        JSON.stringify({ type: 'started' }),
-        JSON.stringify({ type: 'keepalive' }),
-        JSON.stringify({ type: 'result', status: 200, draft }),
-        '',
-      ].join('\n'),
-    })
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ jobId: 'job-1' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'running' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'completed', draft }) })
 
-    await expect(generateSkillCourseDraft({ topic: 'Coaching' }, 'org-1')).resolves.toEqual(draft)
+    await expect(generateSkillCourseDraft({ topic: 'Coaching' }, 'org-1', {
+      skillId: 'skill-1',
+      level: 2,
+      pollInterval: 0,
+    })).resolves.toEqual({ jobId: 'job-1', draft })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(fetchMock.mock.calls[0][1].body).toContain('"skillId":"skill-1"')
   })
 
-  it('surfaces an error returned at the end of a keep-alive stream', async () => {
+  it('aborts a job when the batch is cancelled after it starts', async () => {
     mocks.getSession.mockResolvedValue({ data: { session: { access_token: 'token' } } })
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: true,
-      headers: { get: () => 'application/x-ndjson; charset=utf-8' },
-      text: async () => [
-        JSON.stringify({ type: 'started' }),
-        JSON.stringify({ type: 'error', status: 429, error: 'Usage limit reached.' }),
-        '',
-      ].join('\n'),
-    })
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ jobId: 'job-1' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ jobs: [{ id: 'job-1', status: 'cancelled' }] }) })
 
-    await expect(generateSkillCourseDraft({ topic: 'Coaching' }, 'org-1')).rejects.toThrow('Usage limit reached.')
+    await expect(generateSkillCourseDraft({ topic: 'Coaching' }, 'org-1', {
+      skillId: 'skill-1',
+      level: 2,
+      pollInterval: 0,
+      shouldAbort: () => true,
+    })).rejects.toMatchObject({ code: 'COURSE_BUILD_ABORTED' })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('saveGeneratedSkillCourseJob', () => {
+  it('saves the course from the finished job', async () => {
+    mocks.rpc.mockResolvedValue({ data: 'course-1', error: null })
+    await expect(saveGeneratedSkillCourseJob({ jobId: 'job-1', publishGlobal: false })).resolves.toBe('course-1')
+    expect(mocks.rpc).toHaveBeenCalledWith('save_generated_skill_course_job', { p_job_id: 'job-1', p_publish_global: false })
+  })
+
+  it('reports a job aborted before it was saved as an aborted build', async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { message: 'Course build was aborted' } })
+    await expect(saveGeneratedSkillCourseJob({ jobId: 'job-1', publishGlobal: true })).rejects.toMatchObject({ code: 'COURSE_BUILD_ABORTED' })
   })
 })

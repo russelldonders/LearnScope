@@ -1,7 +1,7 @@
 {
   "functions": {
     "api/parse-cv.js": { "maxDuration": 60 },
-    "api/admin/actions.js": { "includeFiles": "dist/index.html", "maxDuration": 60 }
+    "api/admin/actions.js": { "includeFiles": "dist/index.html", "maxDuration": 300 }
   },
   "routes": [
     { "src": "/(.*)", "headers": { "X-Content-Type-Options": "nosniff", "Referrer-Policy": "strict-origin-when-cross-origin" }, "continue": true },

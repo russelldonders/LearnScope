@@ -19,6 +19,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",
     "@supabase/supabase-js": "^2.112.2",
+    "@vercel/functions": "3.11.3",
     "ipaddr.js": "2.5.0",
     "jose": "6.2.12",
     "jszip": "^3.10.1",

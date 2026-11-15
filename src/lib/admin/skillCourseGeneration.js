@@ -51,50 +51,97 @@ export async function getSystemProviderOrganisationId() {
   return data.id
 }
 
-export async function generateSkillCourseDraft(brief, organisationId) {
+async function accessToken() {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session?.access_token) throw new Error('Your session has expired. Sign in and try again.')
-  const response = await fetch('/api/generate-skill-course-draft', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.access_token}`,
-    },
-    body: JSON.stringify({ ...brief, organisationId }),
-  })
-  const responseText = await response.text()
-  const isJsonLineStream = response.headers.get('content-type')?.includes('application/x-ndjson')
-  if (isJsonLineStream) {
-    const events = responseText
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => JSON.parse(line))
-    const outcome = [...events].reverse().find((event) => event.type === 'result' || event.type === 'error')
-    if (!outcome || outcome.type === 'error') {
-      throw new Error(outcome?.error || 'The course generator connection ended before the course was ready.')
-    }
-    return outcome.draft
-  }
-
-  let body = {}
-  try {
-    body = responseText ? JSON.parse(responseText) : {}
-  } catch {
-    // A platform-generated HTML error page should still produce useful UI
-    // copy instead of leaking a JSON parser error to the administrator.
-  }
-  if (!response.ok) throw new Error(body.error || 'Failed to generate the level course.')
-  return body.draft
+  return session.access_token
 }
 
-export async function createGeneratedSkillCourse({ skillId, level, draft, publishGlobal }) {
-  const { data, error } = await supabase.rpc('create_generated_skill_course', {
-    p_skill_library_id: skillId,
-    p_level: level,
-    p_draft: draft,
+async function jobRequest(path, options = {}) {
+  const token = await accessToken()
+  const response = await fetch(path, {
+    ...options,
+    headers: {
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      Authorization: `Bearer ${token}`,
+      ...options.headers,
+    },
+  })
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(body.error || 'The course generation request failed.')
+  return body
+}
+
+export async function startSkillCourseGeneration({ brief, organisationId, skillId, level }) {
+  const body = await jobRequest('/api/generate-skill-course-draft', {
+    method: 'POST',
+    body: JSON.stringify({ ...brief, organisationId, skillId, level }),
+  })
+  return body.jobId
+}
+
+export function getSkillCourseGenerationJob(jobId) {
+  return jobRequest(`/api/generate-skill-course-draft?jobId=${encodeURIComponent(jobId)}`)
+}
+
+export function abortSkillCourseGeneration(jobIds) {
+  if (jobIds.length === 0) return Promise.resolve({ jobs: [] })
+  return jobRequest('/api/generate-skill-course-draft', {
+    method: 'POST',
+    body: JSON.stringify({ action: 'abort', jobIds }),
+  })
+}
+
+export function skillCourseBuildAbortedError() {
+  return Object.assign(new Error('Course build aborted.'), { code: 'COURSE_BUILD_ABORTED' })
+}
+
+export async function generateSkillCourseDraft(brief, organisationId, {
+  skillId,
+  level,
+  onJobCreated,
+  shouldAbort = () => false,
+  pollInterval = 1_500,
+} = {}) {
+  const jobId = await startSkillCourseGeneration({ brief, organisationId, skillId, level })
+  onJobCreated?.(jobId)
+
+  let consecutivePollErrors = 0
+  while (true) {
+    if (shouldAbort()) {
+      await abortSkillCourseGeneration([jobId]).catch(() => {})
+      throw skillCourseBuildAbortedError()
+    }
+    if (pollInterval > 0) await new Promise((resolve) => setTimeout(resolve, pollInterval))
+    let job
+    try {
+      job = await getSkillCourseGenerationJob(jobId)
+      consecutivePollErrors = 0
+    } catch (error) {
+      consecutivePollErrors += 1
+      if (consecutivePollErrors < 3) continue
+      throw error
+    }
+    // The job id comes back with the draft: the course is saved from the job
+    // (see saveGeneratedSkillCourseJob), not from the draft the browser holds.
+    if (job.status === 'completed') return { jobId, draft: job.draft }
+    if (job.status === 'failed') throw new Error(job.error || 'Failed to generate the level course.')
+    if (job.status === 'cancelled') throw skillCourseBuildAbortedError()
+  }
+}
+
+// Saves a finished generation job as a course. Saving and aborting lock the
+// same job row, so an abort that lands first stops the save (and one that
+// lands after finds the course already saved).
+export async function saveGeneratedSkillCourseJob({ jobId, publishGlobal }) {
+  const { data, error } = await supabase.rpc('save_generated_skill_course_job', {
+    p_job_id: jobId,
     p_publish_global: publishGlobal,
   })
-  if (error) throw error
+  if (error) {
+    if (/aborted/i.test(error.message ?? '')) throw skillCourseBuildAbortedError()
+    throw error
+  }
   return data
 }
 
