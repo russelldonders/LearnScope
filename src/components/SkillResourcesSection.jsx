@@ -11,12 +11,16 @@ import {
   deleteResource,
   filterResourcesByLevel,
   getResourceFileUrl,
+  hideSharedResource,
   isHttpUrl,
   listMyResources,
   listSharedResources,
+  REPORT_REASONS,
+  reportSharedResource,
   resourceLevelFit,
   sortResourcesByFit,
   suggestResourcesForLevel,
+  unhideSharedResource,
   updateResource,
 } from '../lib/skillResources'
 
@@ -37,6 +41,9 @@ export default function SkillResourcesSection({ skill, user, knowledgeLevel = nu
   const [editingId, setEditingId] = useState(null)
   const [confirmingId, setConfirmingId] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [reportingId, setReportingId] = useState(null)
+  // The shared resource just hidden or reported, for "Hidden. Undo".
+  const [hiddenNotice, setHiddenNotice] = useState(null)
   const hasLibrarySkill = Boolean(skill.library_skill_id)
   const levels = useMemo(() => ({ knowledge: knowledgeLevel, practical: practicalLevel }), [knowledgeLevel, practicalLevel])
   const hasLearnerLevel = Boolean(knowledgeLevel || practicalLevel)
@@ -258,6 +265,25 @@ export default function SkillResourcesSection({ skill, user, knowledgeLevel = nu
             </ul>
           )}
 
+          {hiddenNotice && (
+            <p role="status" className="mt-4 text-sm text-secondary">
+              {t(hiddenNotice.reported ? 'skillDetail.resources.reportedNotice' : 'skillDetail.resources.hiddenNotice', { title: hiddenNotice.title })}{' '}
+              {!hiddenNotice.reported && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={async () => {
+                    const ok = await run(() => unhideSharedResource(user.id, hiddenNotice.id))
+                    if (ok) setHiddenNotice(null)
+                  }}
+                  className="text-moss font-medium hover:underline disabled:opacity-60"
+                >
+                  {t('skillDetail.resources.undo')}
+                </button>
+              )}
+            </p>
+          )}
+
           {shownShared.length > 0 && (
             <div className="mt-5">
               <h3 className="font-mono text-[10px] uppercase tracking-wide text-secondary">{t('skillDetail.resources.sharedWithYou')}</h3>
@@ -268,6 +294,36 @@ export default function SkillResourcesSection({ skill, user, knowledgeLevel = nu
                     <p className="mt-1 text-xs text-secondary">
                       {t('skillDetail.resources.sharedBy', { name: resource.sharer_name, date: formatFullDate(resource.created_at) })}
                     </p>
+                    {reportingId === resource.id ? (
+                      <ReportForm
+                        busy={busy}
+                        onCancel={() => setReportingId(null)}
+                        onSubmit={async (reason, details) => {
+                          const ok = await run(() => reportSharedResource(resource.id, reason, details))
+                          if (ok) {
+                            setReportingId(null)
+                            setHiddenNotice({ id: resource.id, title: resource.title, reported: true })
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="flex gap-3 mt-2">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={async () => {
+                            const ok = await run(() => hideSharedResource(user.id, resource.id))
+                            if (ok) setHiddenNotice({ id: resource.id, title: resource.title, reported: false })
+                          }}
+                          className="text-xs text-secondary hover:text-ink disabled:opacity-60"
+                        >
+                          {t('skillDetail.resources.hide')}
+                        </button>
+                        <button type="button" onClick={() => setReportingId(resource.id)} className="text-xs text-red-700 font-medium hover:underline">
+                          {t('skillDetail.resources.report')}
+                        </button>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -387,6 +443,7 @@ function ResourceSummary({ resource, onOpenFile, fit = null }) {
 
 function AudienceText({ resource, connections }) {
   const { t } = useLanguage()
+  if (resource.moderation_removed_at) return t('skillDetail.resources.removedByModerators')
   if (resource.audience !== 'selected') return t(`skillDetail.resources.audienceShort.${resource.audience}`)
   const names = connections
     ? resource.recipientIds.map((id) => connections.find((c) => c.id === id)?.name).filter(Boolean)
@@ -521,6 +578,9 @@ function ResourceForm({ resource = null, hasLibrarySkill, connections, onNeedCon
         </div>
       </div>
 
+      {resource?.moderation_removed_at ? (
+        <p className="text-xs text-secondary">{t('skillDetail.resources.removedCantShare')}</p>
+      ) : (
       <fieldset>
         <legend className="text-xs text-secondary">{t('skillDetail.resources.audienceLabel')}</legend>
         <div className="mt-1 space-y-1.5">
@@ -545,8 +605,9 @@ function ResourceForm({ resource = null, hasLibrarySkill, connections, onNeedCon
           <p className="mt-1 text-xs text-secondary">{t('skillDetail.resources.filesNotPublic')}</p>
         )}
       </fieldset>
+      )}
 
-      {audience === 'selected' && (
+      {audience === 'selected' && !resource?.moderation_removed_at && (
         <fieldset>
           <legend className="text-xs text-secondary">{t('skillDetail.resources.chooseContacts')}</legend>
           {connections === null ? (
@@ -580,6 +641,60 @@ function ResourceForm({ resource = null, hasLibrarySkill, connections, onNeedCon
           {busy ? t('skillDetail.resources.saving') : submitLabel}
         </button>
         <button type="button" onClick={onCancel} disabled={busy} className="text-sm text-secondary hover:text-ink">
+          {t('skillDetail.resources.cancel')}
+        </button>
+      </div>
+    </form>
+  )
+}
+
+// Why a shared resource is being reported, with optional detail. Sending it
+// also hides the resource for the reporter.
+function ReportForm({ busy, onCancel, onSubmit }) {
+  const { t } = useLanguage()
+  const [reason, setReason] = useState('')
+  const [details, setDetails] = useState('')
+  const [formError, setFormError] = useState(null)
+  return (
+    <form
+      noValidate
+      className="mt-2 space-y-2 rounded-md border border-hairline bg-paper p-3"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (!reason) return setFormError(t('skillDetail.resources.reportErrorReason'))
+        setFormError(null)
+        onSubmit(reason, details)
+      }}
+    >
+      <fieldset>
+        <legend className="text-sm text-ink">{t('skillDetail.resources.reportTitle')}</legend>
+        <p className="text-xs text-secondary">{t('skillDetail.resources.reportHint')}</p>
+        <div className="mt-1 space-y-1">
+          {REPORT_REASONS.map((option) => (
+            <label key={option} className="flex items-center gap-2 text-sm text-ink cursor-pointer">
+              <input type="radio" name="report-reason" value={option} checked={reason === option} onChange={() => setReason(option)} className="accent-moss" />
+              {t(`skillDetail.resources.reportReasons.${option}`)}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <div>
+        <label htmlFor="report-details" className="text-xs text-secondary">{t('skillDetail.resources.reportDetailsLabel')}</label>
+        <textarea
+          id="report-details"
+          value={details}
+          onChange={(e) => setDetails(e.target.value)}
+          maxLength={1000}
+          rows={2}
+          className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:border-moss"
+        />
+      </div>
+      {formError && <p role="alert" className="text-sm text-red-700">{formError}</p>}
+      <div className="flex gap-3">
+        <button type="submit" disabled={busy} className="rounded-md bg-red-700 text-white text-xs font-medium px-3 py-1.5 hover:opacity-90 disabled:opacity-60">
+          {t('skillDetail.resources.reportSend')}
+        </button>
+        <button type="button" onClick={onCancel} disabled={busy} className="text-xs text-secondary hover:text-ink">
           {t('skillDetail.resources.cancel')}
         </button>
       </div>

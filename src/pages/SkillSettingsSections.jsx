@@ -9,6 +9,7 @@ import CurrentRoleSelectModal from '../components/CurrentRoleSelectModal'
 import { isDuplicateSkillNameError, duplicateSkillMessage } from '../lib/skillDuplicates'
 import TagsField from '../components/TagsField'
 import ConfirmDialog from '../components/ConfirmDialog'
+import { deleteSkillWithFiles } from '../lib/skillDeletion'
 
 export function ScheduleSection({ skill, onUpdated }) {
   const { t } = useLanguage()
@@ -311,8 +312,8 @@ export function DeleteSection({ skill, onUpdated, onDeleted }) {
   async function handleDelete() {
     setSaving(true)
     try {
-      const { error } = await supabase.from('skills').delete().eq('id', skill.id)
-      if (error) throw error
+      // Also removes the uploaded files that go with the skill.
+      await deleteSkillWithFiles(skill, skill.user_id)
       onDeleted()
     } catch (err) {
       setError(err.message)

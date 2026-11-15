@@ -28,6 +28,7 @@ function builder(table) {
     eq() { return this },
     in() { return this },
     lt() { return this },
+    gt() { return this },
     maybeSingle() {
       if (table === 'organisations') return Promise.resolve({ data: { id: '79000000-0000-4000-8000-000000000010' }, error: null })
       if (table === 'skill_library') return Promise.resolve({ data: { id: '79000000-0000-4000-8000-000000000020' }, error: null })
@@ -53,7 +54,7 @@ vi.mock('./supabaseAdmin.js', () => ({
   }),
 }))
 
-import skillCourseGenerationJobHandler from './skillCourseGenerationJobHandler.js'
+import skillCourseGenerationJobHandler, { failStalledJobs } from './skillCourseGenerationJobHandler.js'
 
 function response() {
   return {
@@ -106,5 +107,37 @@ describe('skillCourseGenerationJobHandler', () => {
     })
     expect(mocks.waitUntil).toHaveBeenCalledTimes(1)
     expect(mocks.createMessage).not.toHaveBeenCalled()
+  })
+})
+
+describe('failStalledJobs', () => {
+  function recorder() {
+    const calls = []
+    const chain = {
+      update(values) { calls.push(['update', values]); return chain },
+      eq(column, value) { calls.push(['eq', column, value]); return chain },
+      lt(column, value) { calls.push(['lt', column, value]); return chain },
+      then(resolve) { resolve({ error: null }) },
+    }
+    return { calls, admin: { from: (table) => { calls.push(['from', table]); return chain } } }
+  }
+
+  it('fails only jobs still running six minutes after their last update', async () => {
+    const { calls, admin } = recorder()
+    const now = Date.parse('2026-11-15T12:00:00Z')
+    await failStalledJobs(admin, { now })
+    expect(calls).toContainEqual(['from', 'skill_course_generation_jobs'])
+    expect(calls).toContainEqual(['eq', 'status', 'running'])
+    expect(calls).toContainEqual(['lt', 'updated_at', '2026-11-15T11:54:00.000Z'])
+    const [, values] = calls.find(([op]) => op === 'update')
+    expect(values).toMatchObject({ status: 'failed', completed_at: '2026-11-15T12:00:00.000Z' })
+    expect(values.error_message).toMatch(/took too long/)
+    expect(calls.some(([op, column]) => op === 'eq' && column === 'id')).toBe(false)
+  })
+
+  it('can be limited to one job', async () => {
+    const { calls, admin } = recorder()
+    await failStalledJobs(admin, { jobId: 'job-1' })
+    expect(calls).toContainEqual(['eq', 'id', 'job-1'])
   })
 })

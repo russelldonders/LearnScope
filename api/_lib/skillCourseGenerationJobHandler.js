@@ -5,6 +5,28 @@ import { COURSE_DRAFT_SCHEMA, buildCourseDraftRequest, normalizeGeneratedCourseD
 import { supabaseAdmin } from './supabaseAdmin.js'
 import { createTrackedMessage } from './trackedAnthropic.js'
 
+// A job still running after the function's own time limit (300s in
+// vercel.json) was cut off and will never finish. Past this, it's failed.
+const STALLED_AFTER_MS = 6 * 60 * 1000
+const STALLED_MESSAGE = 'The course took too long to generate and was stopped. Try again.'
+
+export async function failStalledJobs(admin, { jobId = null, requestedBy = null, now = Date.now() } = {}) {
+  let query = admin
+    .from('skill_course_generation_jobs')
+    .update({
+      status: 'failed',
+      error_message: STALLED_MESSAGE,
+      updated_at: new Date(now).toISOString(),
+      completed_at: new Date(now).toISOString(),
+    })
+    .eq('status', 'running')
+    .lt('updated_at', new Date(now - STALLED_AFTER_MS).toISOString())
+  if (jobId) query = query.eq('id', jobId)
+  if (requestedBy) query = query.eq('requested_by', requestedBy)
+  const { error } = await query
+  if (error) console.error('skill course generation stalled job update failed:', error)
+}
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 async function platformAdminCaller(req, res) {
@@ -143,6 +165,7 @@ async function startJob(req, res, caller) {
     .delete()
     .lt('expires_at', now)
   if (cleanupError) console.error('skill course generation job cleanup failed:', cleanupError)
+  await failStalledJobs(admin)
 
   const { data: job, error: insertError } = await admin
     .from('skill_course_generation_jobs')
@@ -175,6 +198,7 @@ async function readJob(req, res, caller) {
     res.status(400).json({ error: 'Invalid generation job.' })
     return
   }
+  await failStalledJobs(supabaseAdmin(), { jobId, requestedBy: caller.id })
   const { data: job, error } = await supabaseAdmin()
     .from('skill_course_generation_jobs')
     .select('status, draft, error_message')

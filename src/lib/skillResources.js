@@ -204,3 +204,48 @@ export function suggestResourcesForLevel(resources, levels, limit = 3) {
       || String(b.resource.created_at ?? '').localeCompare(String(a.resource.created_at ?? '')))
     .slice(0, limit)
 }
+
+// Hiding and reporting a resource someone else shared (0292). Reporting
+// hides it too.
+export const REPORT_REASONS = ['spam', 'inappropriate', 'misleading', 'other']
+
+export async function hideSharedResource(userId, resourceId) {
+  const { error } = await supabase.from('skill_resource_hides').upsert(
+    { user_id: userId, resource_id: resourceId },
+    { onConflict: 'user_id,resource_id', ignoreDuplicates: true },
+  )
+  if (error) throw error
+}
+
+export async function unhideSharedResource(userId, resourceId) {
+  const { error } = await supabase
+    .from('skill_resource_hides')
+    .delete()
+    .eq('user_id', userId)
+    .eq('resource_id', resourceId)
+  if (error) throw error
+}
+
+export async function reportSharedResource(resourceId, reason, details) {
+  const { error } = await supabase.rpc('report_skill_resource', {
+    p_resource_id: resourceId,
+    p_reason: reason,
+    p_details: details?.trim() || null,
+  })
+  if (error) throw error
+}
+
+// Platform admins.
+export async function adminListResourceReports() {
+  const { data, error } = await supabase.rpc('admin_list_skill_resource_reports')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function adminResolveResourceReports(resourceId, action) {
+  const { error } = await supabase.rpc('admin_resolve_skill_resource_reports', {
+    p_resource_id: resourceId,
+    p_action: action,
+  })
+  if (error) throw error
+}

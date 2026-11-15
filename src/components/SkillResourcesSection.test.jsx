@@ -8,6 +8,9 @@ const lib = vi.hoisted(() => ({
   updateResource: vi.fn(),
   deleteResource: vi.fn(),
   getResourceFileUrl: vi.fn(),
+  hideSharedResource: vi.fn(),
+  unhideSharedResource: vi.fn(),
+  reportSharedResource: vi.fn(),
 }))
 const connections = vi.hoisted(() => ({ listConnections: vi.fn() }))
 
@@ -34,6 +37,9 @@ beforeEach(() => {
   lib.addResource.mockResolvedValue('new-id')
   lib.updateResource.mockResolvedValue()
   lib.deleteResource.mockResolvedValue()
+  lib.hideSharedResource.mockResolvedValue()
+  lib.unhideSharedResource.mockResolvedValue()
+  lib.reportSharedResource.mockResolvedValue()
   connections.listConnections.mockResolvedValue([{ id: 'sam', name: 'Sam' }, { id: 'alex', name: 'Alex' }])
 })
 afterEach(() => {
@@ -180,6 +186,45 @@ describe('SkillResourcesSection', () => {
     expect(await screen.findByLabelText('Knowledge')).toBeInTheDocument()
     expect(screen.queryByLabelText('Sort')).not.toBeInTheDocument()
     expect(container.querySelector('[data-suggestions]')).toBeNull()
+  })
+
+  it('lets a viewer hide a shared resource, with undo', async () => {
+    lib.listSharedResources.mockResolvedValue([
+      { id: 's1', kind: 'link', title: 'Spammy', url: 'https://example.com/s', sharer_name: 'Pat', created_at: '2026-11-10' },
+    ])
+    render(<SkillResourcesSection skill={librarySkill} user={user} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Hide' }))
+    await waitFor(() => expect(lib.hideSharedResource).toHaveBeenCalledWith('me', 's1'))
+    expect(await screen.findByRole('status')).toHaveTextContent('“Spammy” is hidden from your list.')
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(lib.unhideSharedResource).toHaveBeenCalledWith('me', 's1'))
+  })
+
+  it('asks for a reason before reporting a shared resource', async () => {
+    lib.listSharedResources.mockResolvedValue([
+      { id: 's1', kind: 'link', title: 'Spammy', url: 'https://example.com/s', sharer_name: 'Pat', created_at: '2026-11-10' },
+    ])
+    render(<SkillResourcesSection skill={librarySkill} user={user} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Report' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send report' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Choose a reason.')
+    fireEvent.click(screen.getByRole('radio', { name: 'Spam or advertising' }))
+    fireEvent.change(screen.getByLabelText(/Anything else moderators/), { target: { value: 'An advert' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send report' }))
+    await waitFor(() => expect(lib.reportSharedResource).toHaveBeenCalledWith('s1', 'spam', 'An advert'))
+    expect(await screen.findByRole('status')).toHaveTextContent('has been reported and hidden')
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument()
+  })
+
+  it('tells the owner a resource was removed from sharing, with no way to share it again', async () => {
+    lib.listMyResources.mockResolvedValue([
+      { id: 'r1', kind: 'link', title: 'Pulled', url: 'https://example.com', audience: 'private', recipientIds: [], moderation_removed_at: '2026-11-15T10:00:00Z' },
+    ])
+    render(<SkillResourcesSection skill={librarySkill} user={user} />)
+    expect(await screen.findByText(/Removed from sharing by LearnScope moderators/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(screen.queryByRole('group', { name: 'Who can see it?' })).not.toBeInTheDocument()
+    expect(screen.getByText(/can only be kept for yourself/)).toBeInTheDocument()
   })
 
   it('asks before deleting', async () => {
