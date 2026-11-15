@@ -214,6 +214,14 @@ export default {
     skillTargetsEmpty: 'Noch keine aktiven Kompetenzziele. Lege ein Ziel fest, um deinen Stand einzuschätzen und den nächsten Schritt zu bestimmen.',
     personalTarget: 'Persönliches Ziel',
     targetDatePrefix: 'bis',
+    setForYou: {
+      heading: "Für dich festgelegt",
+      description: "Fähigkeiten, für die dein Arbeitgeber oder Team ein Ziel gesetzt hat und die du noch nicht verfolgst. Füge eine hinzu, um darauf hinzuarbeiten.",
+      badge: "Für dich",
+      line: "Noch nicht in deinen Fähigkeiten · Ziel: {level}, gesetzt von {name}",
+      add: "Zu meinen Fähigkeiten hinzufügen",
+      adding: "Wird hinzugefügt…",
+    },
   },
   connections: {
     heading: 'Verbindungen',

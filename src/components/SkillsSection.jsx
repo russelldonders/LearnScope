@@ -10,7 +10,15 @@ import TrackingReasonIcon from './TrackingReasonIcon'
 import OrganizationLogo from './OrganizationLogo'
 import { TRACKING_REASONS } from '../lib/trackingReasons'
 import { isSelfAssessmentDue } from '../lib/checkin'
-import { listTargetsSetByOthers, listLatestManagerRatings, pickTargetSetByOthers } from '../lib/managerSkillActions'
+import {
+  addSkillSetByOthers,
+  listLatestManagerRatings,
+  listTargetsSetByOthers,
+  listUntrackedTargetsSetByOthers,
+  pickTargetSetByOthers,
+} from '../lib/managerSkillActions'
+import GrowthRing from './GrowthRing'
+import { LEVEL_LABELS } from '../lib/levels'
 import { computeVisibleTarget } from '../lib/skillTargetPrecedence'
 
 const SKILL_VIEWS = [
@@ -27,6 +35,10 @@ export default function SkillsSection({ intro = null }) {
   const { t } = useLanguage()
   const navigate = useNavigate()
   const [skills, setSkills] = useState([])
+  // Skills someone else set a target on that the learner doesn't track yet.
+  const [setForYou, setSetForYou] = useState([])
+  const [addingLibraryId, setAddingLibraryId] = useState(null)
+  const [addError, setAddError] = useState(null)
   const [currentRoles, setCurrentRoles] = useState([])
   const [tagsBySkill, setTagsBySkill] = useState(new Map())
   const [loading, setLoading] = useState(true)
@@ -172,6 +184,9 @@ export default function SkillsSection({ intro = null }) {
           }
         })
       )
+      listUntrackedTargetsSetByOthers(data, targetsSetByOthers, latestManagerRatings)
+        .then(setSetForYou)
+        .catch(() => setSetForYou([]))
       const map = new Map()
       for (const link of tagLinks ?? []) {
         if (!link.tags?.name) continue
@@ -218,6 +233,28 @@ export default function SkillsSection({ intro = null }) {
         return attentionScore(b) - attentionScore(a)
       })
   }, [activeSkills, query, sortBy, tagFilter, tagsBySkill, trackingReasonFilter, view])
+  // Only under All and Skill gaps (they're all below their target), and only
+  // when they match the search.
+  const visibleSetForYou = useMemo(() => {
+    if (view !== 'all' && view !== 'developing') return []
+    if (tagFilter || trackingReasonFilter) return []
+    const normalizedQuery = query.trim().toLocaleLowerCase()
+    return setForYou.filter((item) => !normalizedQuery || item.name.toLocaleLowerCase().includes(normalizedQuery))
+  }, [setForYou, view, query, tagFilter, trackingReasonFilter])
+
+  async function handleAddSetForYou(item) {
+    setAddError(null)
+    setAddingLibraryId(item.libraryId)
+    try {
+      await addSkillSetByOthers(user.id, item)
+      await loadSkills()
+    } catch (err) {
+      setAddError(err.message)
+    } finally {
+      setAddingLibraryId(null)
+    }
+  }
+
   const currentRoleSkills = useMemo(
     () => filteredSkills.filter((s) => s.is_current_role),
     [filteredSkills]
@@ -376,7 +413,7 @@ export default function SkillsSection({ intro = null }) {
         </div>
       )}
 
-      {!loading && !error && activeSkills.length > 0 && filteredSkills.length === 0 && (
+      {!loading && !error && activeSkills.length > 0 && filteredSkills.length === 0 && visibleSetForYou.length === 0 && (
         <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
           <h2 className="font-display text-xl text-ink">{t('skills.noMatch.title')}</h2>
           <p className="text-secondary mt-2 mb-5">{t('skills.noMatch.description')}</p>
@@ -437,6 +474,25 @@ export default function SkillsSection({ intro = null }) {
         </div>
       )}
 
+      {!loading && !error && visibleSetForYou.length > 0 && (
+        <section aria-labelledby="set-for-you-heading" className="mt-10">
+          <h3 id="set-for-you-heading" className="font-display text-base text-ink">{t('skills.setForYou.heading')}</h3>
+          <p className="text-sm text-secondary mt-1 mb-4">{t('skills.setForYou.description')}</p>
+          {addError && <p role="alert" className="text-sm text-red-700 mb-3">{addError}</p>}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {visibleSetForYou.map((item) => (
+              <SetForYouCard
+                key={item.libraryId}
+                item={item}
+                adding={addingLibraryId === item.libraryId}
+                onAdd={() => handleAddSetForYou(item)}
+                t={t}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
       {archivedSkills.length > 0 && (
         <div className="mt-10 pt-6 border-t border-hairline">
           <button
@@ -466,6 +522,36 @@ export default function SkillsSection({ intro = null }) {
       )}
 
     </section>
+  )
+}
+
+// A skill someone else set a target on that isn't in the learner's own list
+// yet, drawn like their own skill cards: the ring shows no level yet with the
+// target marked. Adding it is the learner's choice.
+function SetForYouCard({ item, adding, onAdd, t }) {
+  return (
+    <div className="bg-card border border-dashed border-hairline rounded-lg p-4 flex gap-4 items-center w-full">
+      <GrowthRing level={null} size={56} targetLevel={item.level} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <h3 className="font-display text-lg text-ink truncate min-w-0">{item.name}</h3>
+          <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-moss border border-moss/40 rounded-full px-2 py-0.5">
+            {t('skills.setForYou.badge')}
+          </span>
+        </div>
+        <p className="text-sm text-secondary mt-1">
+          {t('skills.setForYou.line', { level: LEVEL_LABELS[item.level], name: item.contextName })}
+        </p>
+        <button
+          type="button"
+          onClick={onAdd}
+          disabled={adding}
+          className="mt-2 rounded-md bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90 disabled:opacity-60"
+        >
+          {adding ? t('skills.setForYou.adding') : t('skills.setForYou.add')}
+        </button>
+      </div>
+    </div>
   )
 }
 

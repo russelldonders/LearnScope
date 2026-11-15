@@ -214,6 +214,14 @@ export default {
     skillTargetsEmpty: '目前没有进行中的技能目标。请设定一个目标，评估当前水平并确定下一步。',
     personalTarget: '个人目标',
     targetDatePrefix: '截止',
+    setForYou: {
+      heading: "为你设定的技能",
+      description: "你的雇主或团队已设定目标、但你还没有跟踪的技能。添加后即可开始朝目标努力。",
+      badge: "为你设定",
+      line: "尚未在你的技能中 · 目标：{level}，由 {name} 设定",
+      add: "添加到我的技能",
+      adding: "正在添加…",
+    },
   },
   connections: {
     heading: '连接',

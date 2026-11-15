@@ -214,6 +214,14 @@ export default {
     skillTargetsEmpty: 'Aún no hay objetivos de habilidades activos. Establece un objetivo para evaluar dónde estás y definir tu siguiente paso.',
     personalTarget: 'Objetivo personal',
     targetDatePrefix: 'para el',
+    setForYou: {
+      heading: "Asignadas a ti",
+      description: "Habilidades en las que tu empresa o equipo fijó un objetivo y que aún no sigues. Añade una para empezar a trabajar en ella.",
+      badge: "Para ti",
+      line: "Aún no está en tus habilidades · Objetivo: {level}, fijado por {name}",
+      add: "Añadir a mis habilidades",
+      adding: "Añadiendo…",
+    },
   },
   connections: {
     heading: 'Conexiones',

@@ -214,6 +214,14 @@ export default {
     skillTargetsEmpty: 'Nog geen actieve vaardigheidsdoelen. Stel een doel in om te bepalen waar je staat en wat je volgende stap wordt.',
     personalTarget: 'Persoonlijk doel',
     targetDatePrefix: 'voor',
+    setForYou: {
+      heading: "Voor jou ingesteld",
+      description: "Vaardigheden waarvoor je werkgever of team een doel heeft gesteld en die je nog niet volgt. Voeg er een toe om eraan te werken.",
+      badge: "Voor jou",
+      line: "Nog niet in je vaardigheden · Doel: {level}, gesteld door {name}",
+      add: "Toevoegen aan mijn vaardigheden",
+      adding: "Toevoegen…",
+    },
   },
   connections: {
     heading: 'Connecties',

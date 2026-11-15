@@ -214,6 +214,14 @@ export default {
     skillTargetsEmpty: 'No active skill targets yet. Set a target to assess where you are and where you want to go next.',
     personalTarget: 'Personal target',
     targetDatePrefix: 'by',
+    setForYou: {
+      heading: "Set for you",
+      description: "Skills your employer or team set a target on that you don’t track yet. Add one to start working towards it.",
+      badge: "Set for you",
+      line: "Not in your skills yet · Target: {level}, set by {name}",
+      add: "Add to my skills",
+      adding: "Adding…",
+    },
   },
   connections: {
     heading: 'Connections',

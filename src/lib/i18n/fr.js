@@ -214,6 +214,14 @@ export default {
     skillTargetsEmpty: 'Aucun objectif de compétence actif. Définissez un objectif pour évaluer votre niveau et la prochaine étape.',
     personalTarget: 'Objectif personnel',
     targetDatePrefix: 'avant le',
+    setForYou: {
+      heading: "Fixées pour vous",
+      description: "Des compétences pour lesquelles votre employeur ou votre équipe a fixé un objectif et que vous ne suivez pas encore. Ajoutez-en une pour commencer à progresser.",
+      badge: "Pour vous",
+      line: "Pas encore dans vos compétences · Objectif : {level}, fixé par {name}",
+      add: "Ajouter à mes compétences",
+      adding: "Ajout…",
+    },
   },
   connections: {
     heading: 'Connexions',

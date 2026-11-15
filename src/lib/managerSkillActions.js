@@ -170,3 +170,58 @@ export function pickTargetSetByOthers({ libraryId, skillId }, targets, latestRat
   const chosen = unmet[0] ?? scored.sort(byLevel)[0]
   return { level: chosen.level, met: chosen.met, contextType: chosen.contextType, contextName: chosen.contextName }
 }
+
+// Targets someone else set for the learner (see listTargetsSetByOthers) on
+// skills they don't track yet, one per library skill with the target that
+// applies (pickTargetSetByOthers), named from the skill library. skills is
+// the learner's own skills list (any stage). Nothing is added for them --
+// these are shown so they can choose to add the skill.
+export async function listUntrackedTargetsSetByOthers(skills, targets, latestRatings) {
+  const trackedLibraryIds = new Set(skills.map((s) => s.library_skill_id).filter(Boolean))
+  const trackedSkillIds = new Set(skills.map((s) => s.id))
+  const libraryIds = [
+    ...new Set(
+      targets
+        .filter((t) => t.libraryId && !trackedLibraryIds.has(t.libraryId) && !(t.skillId && trackedSkillIds.has(t.skillId)))
+        .map((t) => t.libraryId),
+    ),
+  ]
+  if (libraryIds.length === 0) return []
+  const { data, error } = await supabase.from('skill_library').select('id, name').in('id', libraryIds)
+  if (error) throw error
+  const nameById = new Map((data ?? []).map((row) => [row.id, row.name]))
+  return libraryIds
+    .filter((id) => nameById.has(id))
+    .map((libraryId) => ({ libraryId, name: nameById.get(libraryId), ...pickTargetSetByOthers({ libraryId, skillId: null }, targets, latestRatings) }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+// The learner adds a skill someone set a target on: their own skill, linked
+// to the same library skill so that target attaches to it. Reuses a skill
+// they already have for it rather than adding a second.
+export async function addSkillSetByOthers(userId, { libraryId, name }) {
+  const { data: existing, error: readError } = await supabase
+    .from('skills')
+    .select('id, name')
+    .eq('user_id', userId)
+    .eq('library_skill_id', libraryId)
+    .limit(1)
+    .maybeSingle()
+  if (readError) throw readError
+  if (existing) return existing
+  const { data, error } = await supabase
+    .from('skills')
+    .insert({
+      name,
+      level: null,
+      is_current_role: false,
+      tracking_reason: 'career_development',
+      lifecycle_stage: 'identified',
+      library_skill_id: libraryId,
+      user_id: userId,
+    })
+    .select('id, name')
+    .single()
+  if (error) throw error
+  return data
+}
