@@ -232,7 +232,7 @@ describe('goal tiles', () => {
     }
     renderPanel([item(goal, [pushUps('a', 100, daysAgo(0))])])
     const tile = screen.getByRole('article', { name: 'Sit-ups' })
-    expect(tile.querySelector('[data-week-range]')).toHaveTextContent(/^· Mon \d+.* – Sun .+$/)
+    expect(tile.querySelector('[data-week-range]')).toHaveTextContent(/^· By Sun .+$/)
     expect(within(tile).getByRole('img').querySelector('[data-this-week]')).not.toBeNull()
   })
 

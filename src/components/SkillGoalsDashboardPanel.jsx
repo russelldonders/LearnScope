@@ -168,6 +168,14 @@ function startOfWeek(date) {
 }
 
 // "Mon 10 – Sun 16 Nov", with a month on both ends when the week spans two.
+// "Sun 15 Nov": the last day of the week starting on start.
+function weekEndText(start, locale) {
+  const end = weekEnd(start)
+  const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short' })
+  const dayMonth = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' })
+  return `${weekday.format(end)} ${dayMonth.format(end)}`
+}
+
 function weekRangeText(start, locale) {
   const end = weekEnd(start)
   // Built from parts: weekday-and-day alone formats unpredictably ("9 Mon").
@@ -647,7 +655,8 @@ export function SkillGoalTile({
         <dt className="text-xs text-secondary truncate">
           {t(currentLabelKey)}
           {goal.period === 'week' && goal.aggregation !== 'best' && (
-            <span data-week-range=""> · {weekRangeText(startOfWeek(new Date()), displayLocale(language))}</span>
+            // Just when this week's sessions are due: "By Sun 15 Nov".
+            <span data-week-range=""> · {t('skillGoals.byShort')} {weekEndText(startOfWeek(new Date()), displayLocale(language))}</span>
           )}
         </dt>
         <dd className="font-display text-2xl leading-tight text-ink truncate">
