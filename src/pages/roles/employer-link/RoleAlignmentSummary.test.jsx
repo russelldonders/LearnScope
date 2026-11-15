@@ -36,11 +36,11 @@ describe('RoleAlignmentSummary', () => {
   it('shows aligned skills and gaps (including an untracked skill) separately', () => {
     renderSummary()
     expect(screen.getByText('Aligned (1)')).toBeInTheDocument()
-    expect(screen.getByText(/Facilitation -- at Skilled, requires Capable/)).toBeInTheDocument()
+    expect(screen.getByText(/Facilitation — at Skilled, requires Capable/)).toBeInTheDocument()
 
     expect(screen.getByText('Gaps (2)')).toBeInTheDocument()
-    expect(screen.getByText(/Stakeholder communication -- requires Skilled, you're at Developing/)).toBeInTheDocument()
-    expect(screen.getByText(/Incident response -- requires Capable, you haven't tracked this skill yet/)).toBeInTheDocument()
+    expect(screen.getByText(/Stakeholder communication — requires Skilled, you're at Developing/)).toBeInTheDocument()
+    expect(screen.getByText(/Incident response — requires Capable, you haven't tracked this skill yet/)).toBeInTheDocument()
   })
 
   it('shows employer training keyed by course, with its requirement', () => {
@@ -61,7 +61,7 @@ describe('RoleAlignmentSummary', () => {
 
   it('labels requirements as employer-managed', () => {
     renderSummary()
-    expect(screen.getByText(/Employer requirements -- managed by Acme Corp/)).toBeInTheDocument()
+    expect(screen.getByText(/Employer requirements — managed by Acme Corp/)).toBeInTheDocument()
   })
 
   it('opens a confirm dialog before disconnecting, and calls onDisconnect with no arguments', () => {

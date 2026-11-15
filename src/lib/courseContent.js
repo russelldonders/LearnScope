@@ -587,7 +587,7 @@ export async function uploadScormResource(organisationId, userId, zipFile, title
 
   const manifestEntry = zip.file(/^imsmanifest\.xml$/i)[0]
   if (!manifestEntry) {
-    throw new Error('This doesn\'t look like a SCORM package -- no imsmanifest.xml found in the zip.')
+    throw new Error('This doesn\'t look like a SCORM package — no imsmanifest.xml found in the zip.')
   }
   const manifestXml = await manifestEntry.async('string')
   const launchPath = parseScormLaunchPath(manifestXml)
@@ -628,7 +628,7 @@ export async function uploadXapiResource(organisationId, userId, zipFile, title)
 
   const manifestEntry = zip.file(/^tincan\.xml$/i)[0]
   if (!manifestEntry) {
-    throw new Error('This doesn\'t look like an xAPI package -- no tincan.xml found in the zip.')
+    throw new Error('This doesn\'t look like an xAPI package — no tincan.xml found in the zip.')
   }
   const manifestXml = await manifestEntry.async('string')
   const launchPath = parseTincanLaunchPath(manifestXml)
@@ -668,7 +668,7 @@ export async function uploadCmi5Resource(organisationId, userId, zipFile, title)
 
   const manifestEntry = zip.file(/^cmi5\.xml$/i)[0]
   if (!manifestEntry) {
-    throw new Error('This doesn\'t look like a cmi5 package -- no cmi5.xml found in the zip.')
+    throw new Error('This doesn\'t look like a cmi5 package — no cmi5.xml found in the zip.')
   }
   const manifestXml = await manifestEntry.async('string')
   const launchPath = parseCmi5LaunchPath(manifestXml)

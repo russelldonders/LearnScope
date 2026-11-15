@@ -11,7 +11,7 @@ describe('TransferConflictsSummary', () => {
   it('lists same-name skills with both accounts\' levels', () => {
     render(<TransferConflictsSummary conflicts={FIXTURE_CONFLICTS} />)
     expect(screen.getByText('Same-name skills (2)')).toBeInTheDocument()
-    expect(screen.getByText(/Facilitation -- Skilled on one account, Capable on the other/)).toBeInTheDocument()
+    expect(screen.getByText(/Facilitation — Skilled on one account, Capable on the other/)).toBeInTheDocument()
   })
 
   it('lists overlapping courses', () => {

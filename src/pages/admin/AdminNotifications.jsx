@@ -159,7 +159,7 @@ function TemplateCard({ template, onSaved }) {
           {showPreview && (
             <div className="border border-hairline rounded-md overflow-hidden">
               <div className="bg-paper px-3 py-2 border-b border-hairline">
-                <p className="text-[11px] uppercase tracking-wide text-secondary">Preview -- sample data, not a real send</p>
+                <p className="text-[11px] uppercase tracking-wide text-secondary">Preview — sample data, not a real send</p>
                 <p className="text-sm font-medium text-ink mt-0.5">{preview.subject}</p>
               </div>
               <div className="p-4 bg-white" dangerouslySetInnerHTML={{ __html: preview.html }} />

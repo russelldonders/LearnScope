@@ -130,7 +130,7 @@ export default function ScormPlayer({ contentItem, userId, onProgress }) {
   return (
     <>
       <p className="text-xs text-secondary mb-2">
-        SCORM progress tracking (completion, score) isn't wired up yet -- content displays, but doesn't report
+        SCORM progress tracking (completion, score) isn't wired up yet — content displays, but doesn't report
         back to your account.
       </p>
       <iframe

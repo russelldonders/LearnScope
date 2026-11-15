@@ -65,7 +65,7 @@ function buildBulkCatalogueDeleteMessage(targets) {
   return (
     `Delete ${targets.length} ${label}? ${withCourses.length} of ${
       targets.length === 1 ? 'it currently has' : 'them currently have'
-    } courses published there (${totalCourses} course${totalCourses === 1 ? '' : 's'} total) -- ${
+    } courses published there (${totalCourses} course${totalCourses === 1 ? '' : 's'} total) — ${
       totalCourses === 1 ? 'it' : 'they'
     } will disappear from that catalogue, and may become invisible to learners entirely if this was its only destination.`
   )
@@ -443,7 +443,7 @@ export function ProviderCataloguesSection({ organisation, userId, canCreate, rea
 
       {unlinkTarget && (
         <ConfirmDialog
-          message={`Unlink "${unlinkTarget.name}" from ${organisation.name || 'your organisation'}? It stays owned by ${unlinkTarget.ownerOrganisationName || 'the other provider'} -- this only stops offering it alongside your own catalogues.`}
+          message={`Unlink "${unlinkTarget.name}" from ${organisation.name || 'your organisation'}? It stays owned by ${unlinkTarget.ownerOrganisationName || 'the other provider'} — this only stops offering it alongside your own catalogues.`}
           confirmLabel="Unlink"
           onConfirm={handleUnlink}
           onCancel={() => setUnlinkTarget(null)}
@@ -961,7 +961,7 @@ export function ProviderTrainingSection({ organisation, userId, canViewParticipa
 
       {confirmingNewVersionCourse && (
         <ConfirmDialog
-          message={`"${confirmingNewVersionCourse.name}" is approved. Editing it creates a new draft version to work on -- the approved version stays exactly as-is (and published) until this new one is submitted and approved in turn.`}
+          message={`"${confirmingNewVersionCourse.name}" is approved. Editing it creates a new draft version to work on — the approved version stays exactly as-is (and published) until this new one is submitted and approved in turn.`}
           confirmLabel="Create new version"
           onConfirm={handleConfirmCreateDraftVersion}
           onCancel={() => setConfirmingNewVersionCourse(null)}

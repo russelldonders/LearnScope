@@ -39,7 +39,8 @@ export default function GrowthRing({
             cy="50"
             r={RADII[targetLevel - 1]}
             fill="none"
-            stroke="#dc2626"
+            // Green, not red: a target is where you're heading, not a warning.
+            stroke="var(--color-moss)"
             strokeWidth={2}
             strokeDasharray="7 5"
           />

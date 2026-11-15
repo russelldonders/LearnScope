@@ -456,7 +456,7 @@ export default function OrganisationSettingsModal({ organisation, learnerPortal,
               <span>
                 {learnerPortal ? 'Show a public catalogue to other visitors' : 'Show a public provider page'}
                 <span className="block text-xs text-secondary mt-0.5 font-normal">
-                  Lists the skills you offer and your approved training courses -- visible to anyone with the
+                  Lists the skills you offer and your approved training courses — visible to anyone with the
                   link, including people who aren't logged in.
                 </span>
               </span>

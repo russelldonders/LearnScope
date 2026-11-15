@@ -113,7 +113,7 @@ export default function ProviderLtiToolsSection({ organisationId, userId }) {
       // this is the one place that's worth translating into plain language.
       setError(
         err.message?.includes('foreign key')
-          ? `"${pendingDelete.name}" is still used by at least one course resource -- remove those first.`
+          ? `"${pendingDelete.name}" is still used by at least one course resource — remove those first.`
           : err.message
       )
       setDeleting(false)

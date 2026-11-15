@@ -83,7 +83,7 @@ export default function RoleProfileLinkedEmployeesPanel({
     <div className="bg-card border border-hairline rounded-lg p-6">
       <h3 className="font-display text-lg text-ink mb-1">Linked employees</h3>
       <p className="text-sm text-secondary mb-4">
-        Employees assigned to this role profile. Assigning proposes the role -- an employee must accept it
+        Employees assigned to this role profile. Assigning proposes the role — an employee must accept it
         themselves before it's linked, and it never overwrites their own current role.
       </p>
 

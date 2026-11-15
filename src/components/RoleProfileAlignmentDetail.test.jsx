@@ -41,8 +41,8 @@ describe('RoleProfileAlignmentDetail', () => {
   it('expands to show aligned/gaps/training detail and a disconnect action', () => {
     renderDetail()
     fireEvent.click(screen.getByText('1/2 skills met · 1/2 training complete'))
-    expect(screen.getByText(/Facilitation -- at/)).toBeInTheDocument()
-    expect(screen.getByText(/Incident response -- requires/)).toBeInTheDocument()
+    expect(screen.getByText(/Facilitation — at/)).toBeInTheDocument()
+    expect(screen.getByText(/Incident response — requires/)).toBeInTheDocument()
     expect(screen.getByText(/De-escalation fundamentals/)).toHaveTextContent('(Completed)')
     expect(screen.getByText(/Advanced troubleshooting/)).toHaveTextContent('(Not completed)')
     expect(screen.getByRole('button', { name: 'Disconnect role profile' })).toBeInTheDocument()

@@ -173,12 +173,12 @@ export default function ConfirmingBaselineQuizModal({
       const round = rounds[0]
       return round.pass
         ? `Confirmed via knowledge check: scored ${round.score}/${round.total} at ${KNOWLEDGE_LEVEL_LABELS[round.level]}, meeting expectations for that level.`
-        : `Confirmed via knowledge check: scored ${round.score}/${round.total} at ${KNOWLEDGE_LEVEL_LABELS[round.level]}, below expectations for that level -- adjusted to ${KNOWLEDGE_LEVEL_LABELS[level]}.`
+        : `Confirmed via knowledge check: scored ${round.score}/${round.total} at ${KNOWLEDGE_LEVEL_LABELS[round.level]}, below expectations for that level — adjusted to ${KNOWLEDGE_LEVEL_LABELS[level]}.`
     }
     const path = rounds
       .map((r) => `${KNOWLEDGE_LEVEL_LABELS[r.level]} (${r.score}/${r.total}, ${r.pass ? 'passed' : 'below expectations'})`)
       .join(' → ')
-    return `Calibrated via knowledge check -- no self-assessment existed to pitch at, so this found the level from scratch: ${path}. Diagnosed at ${KNOWLEDGE_LEVEL_LABELS[level]}.`
+    return `Calibrated via knowledge check — no self-assessment existed to pitch at, so this found the level from scratch: ${path}. Diagnosed at ${KNOWLEDGE_LEVEL_LABELS[level]}.`
   }
 
   // The quiz's result becomes the skill's knowledge level as soon as it's

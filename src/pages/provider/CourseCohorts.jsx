@@ -216,7 +216,7 @@ export function CourseCohorts({ courseCatalogueId, organisationId, canManage }) 
         <div className="text-center py-8 px-3 border border-dashed border-hairline rounded-lg">
           <p className="text-xs text-secondary">
             {canManage
-              ? 'No cohorts yet -- learners enrol into this course directly. Add a cohort to offer specific scheduled runs instead.'
+              ? 'No cohorts yet — learners enrol into this course directly. Add a cohort to offer specific scheduled runs instead.'
               : 'No cohorts have been scheduled for this course.'}
           </p>
         </div>

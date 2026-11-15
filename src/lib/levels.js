@@ -26,7 +26,7 @@ export const LEVEL_DESCRIPTIONS = {
   2: "You can attempt this with guidance, supervision, or a reference to follow.",
   3: "You can complete this on your own, without needing help.",
   4: "You can handle harder or less familiar situations with confidence, not just the routine ones.",
-  5: "Others turn to you on this -- you're pushing quality or improving how it's done.",
+  5: "Others turn to you on this — you're pushing quality or improving how it's done.",
 }
 
 // A separate scale for the knowledge/understanding axis -- kept distinct

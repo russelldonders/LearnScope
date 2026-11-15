@@ -42,7 +42,7 @@ export function computeUpNextItems({
         {
           key: 'self-assess-knowledge',
           label: 'Self-assess your knowledge',
-          description: "Rate what you already know, in theory -- you'll confirm it with a quiz next.",
+          description: "Rate what you already know, in theory — you'll confirm it with a quiz next.",
           done: (knowledgeSelfAssessedCount ?? 0) > 0,
         },
       ]

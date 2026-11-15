@@ -171,7 +171,7 @@ export default function InterviewModal({
         axis: 'knowledge',
         source: 'diagnostic_confirmed',
         comments: calibrating
-          ? `Calibrated via conversational interview -- no self-assessment existed to pitch at, so this found the level from scratch: ${reasoning}`
+          ? `Calibrated via conversational interview — no self-assessment existed to pitch at, so this found the level from scratch: ${reasoning}`
           : `Confirmed via conversational interview: ${reasoning}`,
       })
       if (assessError) throw assessError

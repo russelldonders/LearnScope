@@ -771,7 +771,7 @@ function AssignTrainingModal({ employer, members, skippedCount = 0, onClose, onA
       <h2 id="assign-training-dialog-title" className="font-display text-xl text-ink mb-1">Assign training</h2>
       <p className="text-sm text-secondary mb-4">
         Push a course from {employer.name}'s own catalogue to {members.length} selected learner{members.length === 1 ? '' : 's'}.
-        They'll see it on their Actions page and choose whether to start it -- this doesn't enrol anyone
+        They'll see it on their Actions page and choose whether to start it — this doesn't enrol anyone
         automatically.
       </p>
       {skippedCount > 0 && (
@@ -1069,7 +1069,7 @@ function AssignSkillModal({ employer, members, skippedCount = 0, onClose, onAssi
       <h2 id="assign-skill-dialog-title" className="font-display text-xl text-ink mb-1">Assign skill</h2>
       <p className="text-sm text-secondary mb-4">
         Suggest a skill (and optionally a target level/date) to {members.length} selected learner{members.length === 1 ? '' : 's'}.
-        They'll see it on their Actions page and decide whether to add it to their own profile -- this doesn't
+        They'll see it on their Actions page and decide whether to add it to their own profile — this doesn't
         touch their skills automatically.
       </p>
       {skippedCount > 0 && (
@@ -1283,7 +1283,7 @@ function AssignRoleModal({ employer, members, skippedCount = 0, onClose, onAssig
         <p className="text-sm text-secondary">Loading role profiles…</p>
       ) : profiles.length === 0 ? (
         <p className="text-sm text-secondary">
-          No role profiles yet -- create one from the Role profiles tab first.
+          No role profiles yet — create one from the Role profiles tab first.
         </p>
       ) : (
         <form onSubmit={handleAssign} className="space-y-4">

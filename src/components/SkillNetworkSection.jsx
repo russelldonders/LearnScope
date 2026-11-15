@@ -106,9 +106,7 @@ export default function SkillNetworkSection({
           >
             <p className="flex items-center gap-1.5 text-sm text-ink">
               <PeopleIcon />
-              {totalTrackersCount}{' '}
-              {totalTrackersCount === 1 ? t('skillDetail.personSingular') : t('skillDetail.peoplePlural')}{' '}
-              {t('skillDetail.inTotalHaveThisSkillSuffix')}
+              {t(totalTrackersCount === 1 ? 'skillDetail.totalTrackersOne' : 'skillDetail.totalTrackersMany', { count: totalTrackersCount })}
             </p>
           </Part>
         )}

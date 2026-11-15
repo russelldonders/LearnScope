@@ -588,7 +588,7 @@ function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCre
           <p className="text-sm text-ink mb-2">This published version remains live while you work on the next version.</p>
           <p className="text-sm text-secondary mb-2">
             {publishedCatalogues.length === 0
-              ? "Not in any catalogue yet -- it's only visible within your organisation."
+              ? "Not in any catalogue yet — it's only visible within your organisation."
               : `Published to: ${publishedCatalogues.map((c) => c.name).join(', ')}.`}
           </p>
           {globalCataloguePending && (

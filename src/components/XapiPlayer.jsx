@@ -13,7 +13,7 @@ export default function XapiPlayer({ contentItem, userId, courseId = null }) {
     <>
       <p className="text-xs text-secondary mb-2">
         Activity this package reports is recorded to your LearnScope record. Bookmarking/resume support varies by
-        package, and completion isn't detected automatically yet -- use the mark-complete button below when you're
+        package, and completion isn't detected automatically yet — use the mark-complete button below when you're
         done.
       </p>
       <iframe

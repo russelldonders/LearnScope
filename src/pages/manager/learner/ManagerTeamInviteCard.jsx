@@ -19,7 +19,7 @@ export default function ManagerTeamInviteCard({ invite, submitting = false, erro
         {formatRelativeDate(invite.invitedAt)}
       </p>
       <p className="text-sm text-secondary mt-2">
-        Joining lets you collaborate with this team -- it does not give {invite.managerName} access to your
+        Joining lets you collaborate with this team — it does not give {invite.managerName} access to your
         complete profile. They'll only ever see the specific skills and evidence you choose to share, and any
         learning you do together as a team. You can leave the team at any time.
       </p>
