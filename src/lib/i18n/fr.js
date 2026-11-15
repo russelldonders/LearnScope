@@ -231,6 +231,10 @@ export default {
     activityHeading: 'Ce que font vos connexions',
     emptyState: "Pas encore de connexions. Invitez quelqu'un à évaluer une compétence, ou connectez-vous avec des personnes suivant la même compétence depuis sa page de détail.",
     pendingInvites: 'Invitations en attente',
+    disconnect: 'Se déconnecter',
+    disconnectFrom: 'Se déconnecter de {name}',
+    disconnectConfirm: 'Se déconnecter de {name} ? Vous ne verrez plus ni l’un ni l’autre ce que vous partagez avec vos relations (compétences, activité et ressources), et vous serez retirés des contacts choisis de l’autre. Les évaluations déjà données et les équipes communes restent. Vous pourrez vous reconnecter plus tard.',
+    disconnected: 'Vous n’êtes plus en relation avec {name}.',
   },
   connectedAccounts: {
     heading: 'Comptes et applications connectés',

@@ -231,6 +231,10 @@ export default {
     activityHeading: 'Cosa stanno facendo le tue connessioni',
     emptyState: 'Nessuna connessione ancora. Invita qualcuno a valutare una competenza, oppure connettiti con persone che seguono la stessa competenza dalla sua pagina di dettaglio.',
     pendingInvites: 'Inviti in sospeso',
+    disconnect: 'Disconnetti',
+    disconnectFrom: 'Disconnettiti da {name}',
+    disconnectConfirm: 'Disconnetterti da {name}? Nessuno dei due vedrà più ciò che condividete con i vostri contatti (competenze, attività e risorse) e verrete rimossi dai contatti scelti dell’altro. Le valutazioni già date e i team in comune restano. Potrete ricollegarvi in seguito.',
+    disconnected: 'Non sei più collegato con {name}.',
   },
   connectedAccounts: {
     heading: 'Account e app collegati',

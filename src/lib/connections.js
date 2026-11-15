@@ -338,6 +338,13 @@ export async function getProfiles(userIds) {
 // enriched from rating history where available (connections formed purely
 // via a request have no email snapshot), needed so the invite flow can
 // offer "pick an existing connection" instead of retyping an address.
+// Ends a connection, from either side (0293). Anything shared because the two
+// were connected stops being shared; past ratings and history stay.
+export async function disconnectConnection(otherUserId) {
+  const { error } = await supabase.rpc('disconnect_connection', { p_other_user_id: otherUserId })
+  if (error) throw error
+}
+
 export async function listConnections(currentUserId) {
   const { data: rows, error } = await supabase.from('connections').select('user_a_id, user_b_id')
   if (error) throw error

@@ -231,6 +231,10 @@ export default {
     activityHeading: '你的连接人正在做什么',
     emptyState: '目前还没有连接。邀请他人为某项技能评分，或在该技能的详情页与关注同一技能的人建立连接。',
     pendingInvites: '待处理的邀请',
+    disconnect: '断开联系',
+    disconnectFrom: '与 {name} 断开联系',
+    disconnectConfirm: '要与 {name} 断开联系吗？你们将不再看到彼此与联系人共享的内容（包括技能、动态和资源），也会从对方选定的联系人中移除。已给出的评分和共同所在的团队会保留。之后你们任何一方都可以重新建立联系。',
+    disconnected: '你已不再与 {name} 保持联系。',
   },
   connectedAccounts: {
     heading: '已关联的账号和应用',

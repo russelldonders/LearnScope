@@ -231,6 +231,10 @@ export default {
     activityHeading: 'What your connections are up to',
     emptyState: "No connections yet. Invite someone to rate a skill, or connect with people tracking the same skill from that skill's detail view.",
     pendingInvites: 'Pending invites',
+    disconnect: 'Disconnect',
+    disconnectFrom: 'Disconnect from {name}',
+    disconnectConfirm: 'Disconnect from {name}? You’ll both stop seeing what you share with your connections, including skills, activity and resources, and you’ll be removed from each other’s chosen contacts. Ratings already given and any teams you share stay. Either of you can connect again later.',
+    disconnected: 'You’re no longer connected to {name}.',
   },
   connectedAccounts: {
     heading: 'Connected accounts and apps',

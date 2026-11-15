@@ -231,6 +231,10 @@ export default {
     activityHeading: 'Lo que están haciendo tus conexiones',
     emptyState: 'Aún no tienes conexiones. Invita a alguien a valorar una habilidad, o conecta con personas que sigan la misma habilidad desde su vista de detalle.',
     pendingInvites: 'Invitaciones pendientes',
+    disconnect: 'Desconectar',
+    disconnectFrom: 'Desconectarte de {name}',
+    disconnectConfirm: '¿Desconectarte de {name}? Ninguno de los dos verá ya lo que compartís con vuestras conexiones (habilidades, actividad y recursos) y os quitaréis de los contactos elegidos del otro. Las valoraciones ya dadas y los equipos que compartáis se mantienen. Cualquiera de los dos puede volver a conectar más adelante.',
+    disconnected: 'Ya no estás conectado con {name}.',
   },
   connectedAccounts: {
     heading: 'Cuentas y aplicaciones conectadas',

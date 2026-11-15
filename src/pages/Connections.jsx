@@ -19,6 +19,7 @@ import {
   getSharedSkillCounts,
   sendInviteEmail,
   revokeInvite,
+  disconnectConnection,
 } from '../lib/connections'
 import { formatFullDate } from '../lib/dates'
 import {
@@ -70,6 +71,9 @@ export default function Connections() {
   const [revokingId, setRevokingId] = useState(null)
   const [revokeError, setRevokeError] = useState(null)
   const [pendingRevoke, setPendingRevoke] = useState(null)
+  const [pendingDisconnect, setPendingDisconnect] = useState(null)
+  const [disconnecting, setDisconnecting] = useState(false)
+  const [disconnectNotice, setDisconnectNotice] = useState(null)
   const [ledTeams, setLedTeams] = useState([])
   const [sharedTeamsByConnection, setSharedTeamsByConnection] = useState({})
   const [activity, setActivity] = useState([])
@@ -225,6 +229,21 @@ export default function Connections() {
     }
   }
 
+  async function handleDisconnect(connection) {
+    setDisconnecting(true)
+    setError(null)
+    try {
+      await disconnectConnection(connection.id)
+      setDisconnectNotice(t('connections.disconnected', { name: connection.name }))
+      await Promise.all([load(), loadActivity()])
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setDisconnecting(false)
+      setPendingDisconnect(null)
+    }
+  }
+
   async function handleCreateTeam(name) {
     const workspaceId = await createManagerWorkspace()
     const id = await createManagerTeam(workspaceId, { name })
@@ -307,6 +326,7 @@ export default function Connections() {
 
           {loading && <p className="text-secondary">Loading…</p>}
           {error && <p role="alert" className="text-red-700 text-sm">{error}</p>}
+          {disconnectNotice && <p role="status" className="text-sm text-moss mb-4">{disconnectNotice}</p>}
 
           {!loading && connections.length === 0 && (
             <div className="text-center py-16 border border-dashed border-hairline rounded-lg">
@@ -342,6 +362,7 @@ export default function Connections() {
                 ledTeams={ledTeams}
                 onInviteToTeam={inviteConnectionToManagerTeam}
                 onCreateTeam={handleCreateTeam}
+                onDisconnect={() => setPendingDisconnect(c)}
               />
             ))}
           </div>
@@ -414,6 +435,16 @@ export default function Connections() {
         </div>
       </main>
 
+      {pendingDisconnect && (
+        <ConfirmDialog
+          message={t('connections.disconnectConfirm', { name: pendingDisconnect.name })}
+          confirmLabel={t('connections.disconnect')}
+          onConfirm={() => handleDisconnect(pendingDisconnect)}
+          onCancel={() => setPendingDisconnect(null)}
+          confirming={disconnecting}
+        />
+      )}
+
       {pendingRevoke && (
         <ConfirmDialog
           message={`Revoke the invite to ${pendingRevoke.invitee_email}? They'll no longer be able to use this link.`}
@@ -431,7 +462,8 @@ const VISIBLE_EVENTS = 1
 // One connection's card -- broken out from the list above so its "show
 // more history" state is scoped per-card instead of one shared array of
 // expanded ids the parent would otherwise have to track.
-function ConnectionCard({ connection: c, sharedSkillCount, sharedTeams, showTeamInvite, ledTeams, onInviteToTeam, onCreateTeam }) {
+function ConnectionCard({ connection: c, sharedSkillCount, sharedTeams, showTeamInvite, ledTeams, onInviteToTeam, onCreateTeam, onDisconnect }) {
+  const { t } = useLanguage()
   const [expanded, setExpanded] = useState(false)
   const active = sharedTeams?.active ?? []
   const pending = sharedTeams?.pending ?? []
@@ -527,6 +559,20 @@ function ConnectionCard({ connection: c, sharedSkillCount, sharedTeams, showTeam
       </div>
       {showTeamInvite && active.length === 0 && (
         <ConnectionTeamInviteControl connection={c} teams={ledTeams} onInvite={onInviteToTeam} onCreateTeam={onCreateTeam} />
+      )}
+      {/* Kept apart from everything above, at the foot of the card, so it's
+          never mistaken for one of the everyday actions. */}
+      {onDisconnect && (
+        <div className="mt-3 pt-3 border-t border-hairline flex justify-end">
+          <button
+            type="button"
+            onClick={onDisconnect}
+            aria-label={t('connections.disconnectFrom', { name: c.name })}
+            className="text-xs text-red-700 font-medium hover:underline"
+          >
+            {t('connections.disconnect')}
+          </button>
+        </div>
       )}
     </div>
   )

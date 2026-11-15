@@ -231,6 +231,10 @@ export default {
     activityHeading: 'Was deine Verbindungen gerade tun',
     emptyState: 'Noch keine Verbindungen. Lade jemanden ein, eine Fähigkeit zu bewerten, oder verbinde dich mit Personen, die dieselbe Fähigkeit über deren Detailansicht verfolgen.',
     pendingInvites: 'Ausstehende Einladungen',
+    disconnect: 'Verbindung trennen',
+    disconnectFrom: 'Verbindung mit {name} trennen',
+    disconnectConfirm: 'Verbindung mit {name} trennen? Ihr seht dann beide nicht mehr, was ihr mit euren Kontakten teilt – Fähigkeiten, Aktivitäten und Ressourcen –, und ihr werdet aus den ausgewählten Kontakten des anderen entfernt. Bereits abgegebene Bewertungen und gemeinsame Teams bleiben. Ihr könnt euch später jederzeit wieder verbinden.',
+    disconnected: 'Du bist nicht mehr mit {name} verbunden.',
   },
   connectedAccounts: {
     heading: 'Verbundene Konten und Apps',

@@ -231,6 +231,10 @@ export default {
     activityHeading: 'Waar je connecties mee bezig zijn',
     emptyState: 'Nog geen connecties. Nodig iemand uit om een vaardigheid te beoordelen, of maak contact met mensen die dezelfde vaardigheid volgen via de detailweergave van die vaardigheid.',
     pendingInvites: 'Openstaande uitnodigingen',
+    disconnect: 'Verbinding verbreken',
+    disconnectFrom: 'Verbinding met {name} verbreken',
+    disconnectConfirm: 'Verbinding met {name} verbreken? Jullie zien dan allebei niet meer wat je met je connecties deelt, zoals vaardigheden, activiteit en bronnen, en je wordt uit elkaars gekozen contacten gehaald. Al gegeven beoordelingen en gedeelde teams blijven. Jullie kunnen later altijd opnieuw verbinden.',
+    disconnected: 'Je bent niet meer verbonden met {name}.',
   },
   connectedAccounts: {
     heading: 'Gekoppelde accounts en apps',

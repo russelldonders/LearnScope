@@ -26,6 +26,7 @@ vi.mock('../components/ConnectionsTeams', () => ({ default: () => <section>Team 
 vi.mock('../lib/connections', () => ({
   listMyPeerRatings: vi.fn(), listConnections: vi.fn(), listConnectionsActivity: vi.fn(), listSentInvites: vi.fn(),
   getProfiles: vi.fn(), getSharedSkillCounts: vi.fn(), sendInviteEmail: vi.fn(), revokeInvite: vi.fn(),
+  disconnectConnection: vi.fn(),
 }))
 vi.mock('../lib/managerTeams', () => ({
   listMyLedManagerTeams: vi.fn(), inviteConnectionToManagerTeam: vi.fn(),
@@ -75,6 +76,32 @@ describe('Connections sections', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send invite' }))
     expect(managerApi.inviteConnectionToManagerTeam).toHaveBeenCalledWith('team-1', 'alex')
     expect(await screen.findByText('Invitation sent to Coaching.')).toBeInTheDocument()
+  })
+
+  it('disconnects from a connection only after confirming, then refreshes the list', async () => {
+    connectionApi.listConnections
+      .mockResolvedValueOnce([{ id: 'alex', name: 'Alex' }])
+      .mockResolvedValue([])
+    connectionApi.getProfiles.mockResolvedValue({ alex: { name: 'Alex' } })
+    connectionApi.disconnectConnection.mockResolvedValue()
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Disconnect from Alex' }))
+    expect(screen.getByText(/^Disconnect from Alex\? You.ll both stop seeing/)).toBeInTheDocument()
+    expect(connectionApi.disconnectConnection).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }))
+    await waitFor(() => expect(connectionApi.disconnectConnection).toHaveBeenCalledWith('alex'))
+    expect(await screen.findByText('You’re no longer connected to Alex.')).toBeInTheDocument()
+    expect(await screen.findByText(/No connections yet/)).toBeInTheDocument()
+  })
+
+  it('keeps the connection when cancelling the disconnect', async () => {
+    connectionApi.listConnections.mockResolvedValue([{ id: 'alex', name: 'Alex' }])
+    connectionApi.getProfiles.mockResolvedValue({ alex: { name: 'Alex' } })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Disconnect from Alex' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(connectionApi.disconnectConnection).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Disconnect from Alex' })).toBeInTheDocument()
   })
 
   it('opens the teams tab directly and supports arrow-key tab navigation', () => {
