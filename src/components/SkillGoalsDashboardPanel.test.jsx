@@ -187,6 +187,29 @@ describe('goal tiles', () => {
     expect(within(chart).queryByText(/from 3 entries/)).not.toBeInTheDocument()
   })
 
+  it('fills each set logged today in green and dashes the sets still to do', () => {
+    const today = new Date()
+    today.setHours(12, 0, 0, 0)
+    const earlier = (hours) => new Date(today.getTime() - hours * 60 * 60 * 1000)
+    const goal = {
+      title: 'Push-ups', aggregation: 'total', period: 'day', target_value: 60,
+      per_set: 20, sets_per_session: 3, sessions_per_period: 1, started_on: localDateString(daysAgo(10)),
+    }
+    renderPanel([item(goal, [pushUps('a', 20, earlier(3)), pushUps('b', 20, earlier(2))])])
+    const chart = within(screen.getByRole('article', { name: 'Push-ups' })).getByRole('img')
+    const todayBar = chart.firstChild.querySelectorAll(':scope > span')[6]
+    // As tall as the target, not as what's logged so far.
+    expect(todayBar.style.height).toBe('100%')
+    const logged = todayBar.querySelector('[data-logged]')
+    expect(logged).toHaveClass('bg-moss')
+    expect(logged.style.flexGrow).toBe('40')
+    expect(logged.querySelectorAll('[data-part]')).toHaveLength(2)
+    const remaining = todayBar.querySelectorAll('[data-remaining]')
+    expect(remaining).toHaveLength(1)
+    expect(remaining[0]).toHaveClass('border-dashed')
+    expect(remaining[0].style.flexGrow).toBe('20')
+  })
+
   it('shows any other goal its recent entries as a line with a dot on each, latest on the right', () => {
     renderPanel([item({ title: 'Best', target_value: 40 }, [pushUps('a', 10, daysAgo(5)), pushUps('b', 25, daysAgo(3))])])
     const tile = screen.getByRole('article', { name: 'Best' })

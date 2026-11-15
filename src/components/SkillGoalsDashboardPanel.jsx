@@ -135,8 +135,37 @@ const BAR_TONES = {
   met: 'bg-moss',
   exceeded: 'bg-moss',
   missed: 'bg-red-700/70',
-  inProgress: 'border border-dashed border-b-0 border-moss',
+  // The current period is drawn in two parts instead (see openTargetOf): what's
+  // logged in full green, what's left of the target as a dashed outline.
+  inProgress: '',
   none: 'bg-hairline/60',
+}
+
+// What's still to do on the current period, cut where each set would end on
+// a goal done in sets: 40 of "3 x 20" leaves one dashed set of 20, and 30
+// leaves the last 10 of the second set and then the third. Each piece is drawn
+// open at the bottom, closed off by the green or the piece below it.
+function remainingPieces(value, target, perSet) {
+  const step = Number(perSet) > 0 ? Number(perSet) : target
+  const pieces = []
+  let at = value
+  while (at < target) {
+    const next = Math.min(target, (Math.floor(at / step) + 1) * step)
+    pieces.push(next - at)
+    at = next
+  }
+  return pieces
+}
+
+function EntryParts({ parts, divider }) {
+  return parts.map((part, partIndex) => (
+    <span
+      key={partIndex}
+      data-part=""
+      className={`block min-h-px ${partIndex > 0 ? `border-b ${divider}` : ''}`}
+      style={{ flexGrow: part, flexBasis: 0 }}
+    />
+  ))
 }
 
 function periodLabel(bar, period, locale, t) {
@@ -173,7 +202,15 @@ function MiniHistory({ goal, history }) {
   const floor = isRepeating ? 0 : Math.max(0, span > 0 ? low - span * 0.35 : low * 0.9)
   const scale = (value) => (max > floor ? ((value - floor) / (max - floor)) * 100 : 0)
   const slots = [...Array(MINI_HISTORY_LENGTH - bars.length).fill(null), ...bars]
+  // The current period still short of its target: the bar stands as tall as
+  // the target, filled up to what's logged and dashed above that.
+  const openTargetOf = (bar) => {
+    const barTarget = bar.target ?? target
+    return isRepeating && bar.status === 'inProgress' && barTarget != null && barTarget > bar.value ? barTarget : null
+  }
   const heightOf = (bar) => {
+    const openTarget = openTargetOf(bar)
+    if (openTarget != null) return Math.max(2, scale(openTarget))
     const height = Math.max(2, scale(bar.value))
     return bar.status === 'missed' ? Math.max(MISSED_MIN_HEIGHT, height) : height
   }
@@ -243,16 +280,25 @@ function MiniHistory({ goal, history }) {
             } ${bar ? 'cursor-default' : ''} ${active === index ? 'opacity-80' : ''}`}
             style={{ height: bar ? `${heightOf(bar)}%` : 0, background: bar ? backgroundOf(bar) : undefined }}
           >
-            {bar?.parts?.length > 1 && bar.parts.map((part, partIndex) => (
-              <span
-                key={partIndex}
-                data-part=""
-                className={`block min-h-px ${
-                  partIndex > 0 ? `border-b ${bar.status === 'inProgress' ? 'border-moss/60' : 'border-card'}` : ''
-                }`}
-                style={{ flexGrow: part, flexBasis: 0 }}
-              />
-            ))}
+            {bar && openTargetOf(bar) != null ? (
+              <>
+                {bar.value > 0 && (
+                  <span data-logged="" className="flex flex-col-reverse bg-moss" style={{ flexGrow: bar.value, flexBasis: 0 }}>
+                    {bar.parts?.length > 1 && <EntryParts parts={bar.parts} divider="border-card" />}
+                  </span>
+                )}
+                {remainingPieces(bar.value, openTargetOf(bar), goal.per_set).map((piece, pieceIndex) => (
+                  <span
+                    key={`left-${pieceIndex}`}
+                    data-remaining=""
+                    className="block border border-b-0 border-dashed border-moss"
+                    style={{ flexGrow: piece, flexBasis: 0 }}
+                  />
+                ))}
+              </>
+            ) : (
+              bar?.parts?.length > 1 && <EntryParts parts={bar.parts} divider="border-card" />
+            )}
           </span>
         ))}
         {activeBar && (
