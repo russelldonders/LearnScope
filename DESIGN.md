@@ -21,6 +21,8 @@ LearnScope is calm, editorial and trust-first. It favours scanable information, 
 - Inputs and buttons use modest radii, visible hairline borders and the shared gold focus ring.
 - Primary actions use moss with paper text. Secondary actions remain outlined or quiet.
 - Responsive layouts stack naturally; preserve reading order, labels and action context rather than compressing desktop grids.
+- For admin batch builders, use a focused setup-to-progress flow: confirm the eligible scope and projected output count before starting, keep secondary format controls behind progressive disclosure, then show aggregate and per-item status while work runs.
+- Preserve completed batch results when individual items fail. Offer a retry for failed items only, keep successful outputs directly accessible, and prevent accidental dismissal while the batch is active.
 - When personal and organisation-owned records appear together, label ownership on every row with text-backed semantic pills rather than colour alone. Personal rows may link to personal editing surfaces; employer-owned rows stay read-only in the learner context and name the owning employer. Reinforce the boundary in nearby explanatory copy.
 
 ## My Team Surface Brief
