@@ -67,8 +67,10 @@ export default function SkillGoalEntryForm({ goal, row = null, prefillFrom = nul
   // Which set this is today, for a goal done in sets ("Set 2 of 3 today").
   const sessions = goal.aggregation === 'total' && !row ? computeGoalProgress(goal, statements).sessions : null
   // Once today's sets are done, a further one is an extra, not "Set 4 of 3".
+  // The general "log each set on its own" note sits once on the goals
+  // section rather than in every form.
   const entryHint = !sessions
-    ? t('skillGoals.eachEntryAdds')
+    ? null
     : sessions.todaySets >= sessions.setsPerSession
       ? t('skillGoals.shape.entryHintExtra', { perSet: formatNumber(sessions.perSet), unit: goal.unit })
       : t('skillGoals.shape.entryHint', { next: sessions.todaySets + 1, sets: sessions.setsPerSession, perSet: formatNumber(sessions.perSet), unit: goal.unit })
@@ -129,12 +131,12 @@ export default function SkillGoalEntryForm({ goal, row = null, prefillFrom = nul
               step={kind === 'count' ? '1' : 'any'}
               value={fields.value}
               onChange={set('value')}
-              aria-describedby={goal.aggregation === 'total' ? field('each-entry-hint') : undefined}
+              aria-describedby={entryHint ? field('each-entry-hint') : undefined}
               className={INPUT_CLASS}
             />
             {/* A total is built from entries, so one set is one entry, not the
                 day's total across sets. */}
-            {goal.aggregation === 'total' && (
+            {entryHint && (
               <p id={field('each-entry-hint')} className="text-xs text-secondary mt-1">{entryHint}</p>
             )}
           </div>

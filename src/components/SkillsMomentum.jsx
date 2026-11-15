@@ -115,7 +115,8 @@ async function loadRecentGrowth(userId) {
     .eq('axis', 'practical')
     .gte('assessed_at', cutoff)
     .order('assessed_at', { ascending: false })
-    .limit(3)
+    // Extra rows, since same-level reassessments are dropped below.
+    .limit(12)
   if (error || !data || data.length === 0) return []
 
   const skillIds = [...new Set(data.map((row) => row.skill_id))]
@@ -153,6 +154,9 @@ async function loadRecentGrowth(userId) {
     const previousLevel = priorLevels.length > 0 ? priorLevels[priorLevels.length - 1].level : null
     return { ...row, previousLevel, target: targetBySkill.get(row.skill_id) ?? null }
   })
+    // A reassessment at the same level isn't progress.
+    .filter((row) => row.level !== row.previousLevel)
+    .slice(0, 3)
 }
 
 const STAGE_ORDER = Object.fromEntries(SKILL_LIFECYCLE_FLOW_STAGES.map((s, i) => [s.value, i]))

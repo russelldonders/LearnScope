@@ -67,6 +67,9 @@ export default function SkillGoalsSection({
         <div className="min-w-0">
           <h2 id="skill-goals-heading" className="font-display text-xl text-ink">{t('skillGoals.title')}</h2>
           <p className="text-xs text-secondary">{t('skillGoals.privateNote')}</p>
+          {activeGoals.some((goal) => goal.aggregation === 'total') && (
+            <p className="text-xs text-secondary">{t('skillGoals.eachEntryAdds')}</p>
+          )}
         </div>
         <button
           type="button"

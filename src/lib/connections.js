@@ -302,13 +302,15 @@ export async function getMemberSince(userId) {
 // 0103_connection_profile_growth_and_member_since.sql for why this needs a
 // SECURITY DEFINER RPC rather than the direct skill_assessments/
 // skill_targets queries Dashboard uses for the signed-in user's own data.
+// A reassessment at the same level isn't growth, so it's left out -- the RPC
+// is asked for extra rows so those don't crowd out real changes.
 export async function listConnectionRecentGrowth(userId, limit = 5) {
   const { data, error } = await supabase.rpc('list_connection_recent_growth', {
     p_user_id: userId,
-    p_limit: limit,
+    p_limit: limit * 4,
   })
   if (error) throw error
-  return data ?? []
+  return (data ?? []).filter((row) => row.level !== row.previous_level).slice(0, limit)
 }
 
 export async function getProfileNames(userIds) {

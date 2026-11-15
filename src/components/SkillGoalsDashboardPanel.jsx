@@ -77,7 +77,12 @@ export default function SkillGoalsDashboardPanel({
           </button>
         )}
       </div>
-      <p className="text-sm text-secondary mb-6">{subtitle ?? t('skillGoals.dashboard.subtitle')}</p>
+      <div className="mb-6">
+        <p className="text-sm text-secondary">{subtitle ?? t('skillGoals.dashboard.subtitle')}</p>
+        {items.some((item) => item.goal.aggregation === 'total') && (
+          <p className="text-xs text-secondary mt-1">{t('skillGoals.eachEntryAdds')}</p>
+        )}
+      </div>
       {/* items-start: a tile opened for logging grows on its own, without
           stretching the tile next to it. */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 items-start">
