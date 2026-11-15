@@ -64,6 +64,12 @@ export default function SkillCard({ skill, onEdit, compact = false }) {
               {t('skillDetail.roleProfileBadgeLabel')}
             </span>
           )}
+          {/* Added because a manager or employer set a target on it. */}
+          {skill.source === 'manager_target' && (
+            <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-moss border border-moss/40 rounded-full px-2 py-0.5">
+              {t('skills.setForYou.badge')}
+            </span>
+          )}
           {due && (
             <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-gold border border-gold rounded-full px-2 py-0.5">
               {t('modals.skillCard.selfAssessmentDue')}
