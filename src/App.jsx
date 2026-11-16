@@ -51,6 +51,8 @@ const CourseCatalogue = lazyRoute(() => import('./pages/CourseCatalogue'))
 const CourseDetail = lazyRoute(() => import('./pages/CourseDetail'))
 const CourseLearn = lazyRoute(() => import('./pages/CourseLearn'))
 const Learning = lazyRoute(() => import('./pages/Learning'))
+const Plans = lazyRoute(() => import('./pages/Plans'))
+const PlanDetail = lazyRoute(() => import('./pages/PlanDetail'))
 const MyTeam = lazyRoute(() => import('./pages/MyTeam'))
 const ValidateRequest = lazyRoute(() => import('./pages/ValidateRequest'))
 const AdminOverview = lazyRoute(() => import('./pages/admin/AdminOverview'))
@@ -235,6 +237,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <Learning />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/plans"
+            element={
+              <ProtectedRoute>
+                <Plans />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/plans/:planId"
+            element={
+              <ProtectedRoute>
+                <PlanDetail />
               </ProtectedRoute>
             }
           />

@@ -16,6 +16,7 @@ const NAV_LINKS = [
   { to: '/skills', label: 'nav.skills', requires: 'hasSkills' },
   { to: '/experience', label: 'nav.experience' },
   { to: '/learning', label: 'nav.learning', requires: 'hasCourses' },
+  { to: '/plans', label: 'nav.plans' },
   { to: '/team', label: 'nav.team', requires: 'managerContexts' },
 ]
 
