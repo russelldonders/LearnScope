@@ -75,6 +75,8 @@ export default function PlanDetail() {
   const [editingItemId, setEditingItemId] = useState(null)
   const [editingSectionId, setEditingSectionId] = useState(null)
   const [confirm, setConfirm] = useState(null)
+  const [dragging, setDragging] = useState(null)
+  const [dragOver, setDragOver] = useState(null)
   // Who the activities recorded by ticking are by (xAPI actor).
   const [actorName, setActorName] = useState('')
 
@@ -168,9 +170,45 @@ export default function PlanDetail() {
     await run(() => savePositions(table, reordered.map((row, position) => ({ id: row.id, position }))))
   }
 
-  function renderItem(item, index, items) {
+  async function dropAt(list, targetId, table, listKey) {
+    if (!dragging || dragging.table !== table || dragging.listKey !== listKey) return
+    const from = list.findIndex((row) => row.id === dragging.id)
+    const to = list.findIndex((row) => row.id === targetId)
+    setDragging(null)
+    setDragOver(null)
+    if (from < 0 || to < 0 || from === to) return
+    const reordered = [...list]
+    const [moved] = reordered.splice(from, 1)
+    reordered.splice(to, 0, moved)
+    await run(() => savePositions(table, reordered.map((row, position) => ({ id: row.id, position }))))
+  }
+
+  function beginDrag(event, payload) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', payload.id)
+    setDragging(payload)
+  }
+
+  function allowDrop(event, kind, id, listKey) {
+    if (!dragging || dragging.kind !== kind || dragging.listKey !== listKey) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    setDragOver({ kind, id })
+  }
+
+  function renderItem(item, index, items, listKey) {
+    const isDropTarget = dragOver?.kind === 'item' && dragOver.id === item.id && dragging?.id !== item.id
+    const isDraggingItem = dragging?.kind === 'item' && dragging.id === item.id
     return (
-      <li key={item.id} className="rounded-md border border-hairline bg-card p-3">
+      <li
+        key={item.id}
+        onDragOver={(event) => allowDrop(event, 'item', item.id, listKey)}
+        onDrop={(event) => {
+          event.preventDefault()
+          dropAt(items, item.id, 'learner_plan_items', listKey)
+        }}
+        className={`relative rounded-md border bg-card p-3 transition-[border-color,background-color,opacity] ${isDropTarget ? 'border-moss bg-moss/5' : 'border-hairline'} ${isDraggingItem ? 'opacity-50' : ''} ${!editing && item.item_type === 'step' ? 'hover:border-moss/50' : ''}`}
+      >
         {editingItemId === item.id ? (
           <ItemEditForm
             item={item}
@@ -192,6 +230,8 @@ export default function PlanDetail() {
             backState={backState}
             canMoveUp={index > 0}
             canMoveDown={index < items.length - 1}
+            onDragStart={(event) => beginDrag(event, { kind: 'item', id: item.id, listKey, table: 'learner_plan_items' })}
+            onDragEnd={() => { setDragging(null); setDragOver(null) }}
             onMoveUp={() => move(items, index, -1, 'learner_plan_items')}
             onMoveDown={() => move(items, index, 1, 'learner_plan_items')}
             onComplete={(values) => run(() => setItemDone(item, true, { userId: user.id, actor: { name: actorName, email: user.email }, ...values }))}
@@ -218,6 +258,7 @@ export default function PlanDetail() {
           <div className="min-w-0">
             <p className="text-sm font-medium text-ink">{planning ? t('plans.planningBannerTitle') : t('plans.editBannerTitle')}</p>
             <p className="text-xs text-secondary">{planning ? t('plans.planningBannerHint') : t('plans.editBannerHint')}</p>
+            <p className="text-xs text-secondary">{t('plans.dragReorderHint')}</p>
           </div>
           {planning ? (
             <button type="button" disabled={busy || plan.items.length === 0} onClick={makeReady} className="shrink-0 rounded-md bg-moss text-paper text-sm font-medium px-4 py-2 hover:opacity-90 disabled:opacity-60">
@@ -321,33 +362,13 @@ export default function PlanDetail() {
       {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
 
       <div className="mt-6 space-y-6">
-        {(skillItems.length > 0 || editing) && (
-          <section aria-labelledby="plan-skills-heading">
+        {(contentItems.length > 0 || editing) && (
+          <div>
             <div className="border-b border-hairline pb-2">
-              <h2 id="plan-skills-heading" className="font-display text-xl text-ink">{t('plans.skillsSectionTitle')}</h2>
-              <p className="text-xs text-secondary">{t('plans.skillsSectionHint')}</p>
+              <h2 id="plan-activities-heading" className="font-display text-xl text-ink">{t('plans.activitiesSectionTitle')}</h2>
+              <p className="text-xs text-secondary">{t('plans.activitiesSectionHint')}</p>
             </div>
-            {skillItems.length === 0 && editing && <p className="mt-2 text-sm text-secondary">{t('plans.skillsSectionEmpty')}</p>}
-            <ul className="mt-2 space-y-2">
-              {skillItems.map((item, index) => renderItem(item, index, skillItems))}
-            </ul>
-            {editing && (addingTo === 'skills' ? (
-              <AddItemForm
-                userId={user.id}
-                busy={busy}
-                allowedTypes={['skill']}
-                onCancel={() => setAddingTo(null)}
-                onSubmit={async (values) => {
-                  const ok = await run(() => addItem(plan.id, { ...values, sectionId: null, position: skillItems.length }))
-                  if (ok) setAddingTo(null)
-                }}
-              />
-            ) : (
-              <button type="button" onClick={() => setAddingTo('skills')} className="mt-2 text-sm text-moss font-medium hover:underline">
-                {t('plans.addSkill')}
-              </button>
-            ))}
-          </section>
+          </div>
         )}
 
         {groups.map(({ section, items }, groupIndex) => {
@@ -355,8 +376,20 @@ export default function PlanDetail() {
           if (!section && items.length === 0 && (plan.sections.length > 0 || !editing)) return null
           if (section && items.length === 0 && !editing) return null
           const sectionIndex = groupIndex - 1
+          const listKey = section?.id ?? 'top'
+          const isSectionDropTarget = section && dragOver?.kind === 'section' && dragOver.id === section.id && dragging?.id !== section.id
+          const isDraggingSection = section && dragging?.kind === 'section' && dragging.id === section.id
           return (
-            <section key={section?.id ?? 'top'} aria-labelledby={section ? `plan-section-${section.id}` : undefined}>
+            <section
+              key={listKey}
+              aria-labelledby={section ? `plan-section-${section.id}` : undefined}
+              onDragOver={section ? (event) => allowDrop(event, 'section', section.id, 'sections') : undefined}
+              onDrop={section ? (event) => {
+                event.preventDefault()
+                dropAt(plan.sections, section.id, 'learner_plan_sections', 'sections')
+              } : undefined}
+              className={`${isSectionDropTarget ? 'rounded-md bg-moss/5 outline outline-1 outline-moss/50 outline-offset-3' : ''} ${isDraggingSection ? 'opacity-50' : ''}`.trim() || undefined}
+            >
               {section && (
                 editingSectionId === section.id ? (
                   <SectionForm
@@ -369,16 +402,22 @@ export default function PlanDetail() {
                     }}
                   />
                 ) : (
-                  <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-hairline pb-2">
+                  <div className="flex flex-wrap items-start justify-between gap-2 border-b border-hairline pb-2">
                     <div className="min-w-0">
-                      <h2 id={`plan-section-${section.id}`} className="font-display text-xl text-ink break-words">{section.title}</h2>
+                      <h3 id={`plan-section-${section.id}`} className="font-display text-lg text-ink break-words">{section.title}</h3>
                       <p className="text-xs text-secondary">
                         {t('plans.doneCount', { done: sectionProgress.done, total: sectionProgress.total })}
                         {section.target_on && ` · ${t('plans.byDate', { date: formatFullDate(section.target_on) })}`}
                       </p>
                     </div>
                     {editing && (
-                    <div className="flex gap-2 text-xs">
+                    <div className="flex items-center gap-2 text-xs">
+                      <DragHandle
+                        label={t('plans.dragSection', { title: section.title })}
+                        disabled={busy}
+                        onDragStart={(event) => beginDrag(event, { kind: 'section', id: section.id, listKey: 'sections', table: 'learner_plan_sections' })}
+                        onDragEnd={() => { setDragging(null); setDragOver(null) }}
+                      />
                       <IconButton label={t('plans.moveSectionUp', { title: section.title })} disabled={busy || sectionIndex === 0} onClick={() => move(plan.sections, sectionIndex, -1, 'learner_plan_sections')}>↑</IconButton>
                       <IconButton label={t('plans.moveSectionDown', { title: section.title })} disabled={busy || sectionIndex === plan.sections.length - 1} onClick={() => move(plan.sections, sectionIndex, 1, 'learner_plan_sections')}>↓</IconButton>
                       <button type="button" onClick={() => setEditingSectionId(section.id)} className="text-moss font-medium hover:underline">{t('plans.edit')}</button>
@@ -391,7 +430,7 @@ export default function PlanDetail() {
 
               {items.length === 0 && section && editing && <p className="mt-2 text-sm text-secondary">{t('plans.sectionEmpty')}</p>}
               <ul className="mt-2 space-y-2">
-                {items.map((item, index) => renderItem(item, index, items))}
+                {items.map((item, index) => renderItem(item, index, items, listKey))}
               </ul>
 
               {!editing ? null : addingTo === (section?.id ?? 'top') ? (
@@ -417,6 +456,35 @@ export default function PlanDetail() {
             </section>
           )
         })}
+
+        {(skillItems.length > 0 || editing) && (
+          <section aria-labelledby="plan-skills-heading">
+            <div className="border-b border-hairline pb-2">
+              <h2 id="plan-skills-heading" className="font-display text-xl text-ink">{t('plans.skillsSectionTitle')}</h2>
+              <p className="text-xs text-secondary">{t('plans.skillsSectionHint')}</p>
+            </div>
+            {skillItems.length === 0 && editing && <p className="mt-2 text-sm text-secondary">{t('plans.skillsSectionEmpty')}</p>}
+            <ul className="mt-2 space-y-2">
+              {skillItems.map((item, index) => renderItem(item, index, skillItems, 'skills'))}
+            </ul>
+            {editing && (addingTo === 'skills' ? (
+              <AddItemForm
+                userId={user.id}
+                busy={busy}
+                allowedTypes={['skill']}
+                onCancel={() => setAddingTo(null)}
+                onSubmit={async (values) => {
+                  const ok = await run(() => addItem(plan.id, { ...values, sectionId: null, position: skillItems.length }))
+                  if (ok) setAddingTo(null)
+                }}
+              />
+            ) : (
+              <button type="button" onClick={() => setAddingTo('skills')} className="mt-2 text-sm text-moss font-medium hover:underline">
+                {t('plans.addSkill')}
+              </button>
+            ))}
+          </section>
+        )}
       </div>
 
       {editing && (
@@ -502,6 +570,25 @@ function IconButton({ label, disabled, onClick, children }) {
   )
 }
 
+function DragHandle({ label, disabled, onDragStart, onDragEnd }) {
+  return (
+    <span
+      aria-hidden="true"
+      title={label}
+      draggable={!disabled}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className={`grid h-6 w-6 shrink-0 place-items-center rounded border border-hairline text-secondary ${disabled ? 'cursor-not-allowed opacity-40' : 'cursor-grab hover:border-moss hover:text-ink active:cursor-grabbing'}`}
+    >
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+        <circle cx="5" cy="4" r="1" /><circle cx="11" cy="4" r="1" />
+        <circle cx="5" cy="8" r="1" /><circle cx="11" cy="8" r="1" />
+        <circle cx="5" cy="12" r="1" /><circle cx="11" cy="12" r="1" />
+      </svg>
+    </span>
+  )
+}
+
 // What an item is, where it leads, and the one line that says how it's going.
 function describeItem(item, status, context, t) {
   switch (item.item_type) {
@@ -544,7 +631,7 @@ function describeItem(item, status, context, t) {
   }
 }
 
-function PlanItem({ item, status, context, busy, editing, backState = null, canMoveUp, canMoveDown, onMoveUp, onMoveDown, onComplete, onUntick, onLoadActivity, onEdit, onRemove, onSetTarget }) {
+function PlanItem({ item, status, context, busy, editing, backState = null, canMoveUp, canMoveDown, onDragStart, onDragEnd, onMoveUp, onMoveDown, onComplete, onUntick, onLoadActivity, onEdit, onRemove, onSetTarget }) {
   const { t } = useLanguage()
   const state = status?.state ?? 'not_started'
   // Marking a step done asks for a date, comment and evidence first; a
@@ -582,6 +669,7 @@ function PlanItem({ item, status, context, busy, editing, backState = null, canM
   const typeLabel = t(`plans.itemTypes.${item.item_type}`)
   const shownTitle = state === 'removed' ? t('plans.removedRecord', { type: typeLabel }) : title
   const stepComplete = state === 'done' || completing
+  const stepTileClickable = !editing && item.item_type === 'step' && !completing && !untickChoice
   const statusDotClass = editing
     ? 'border border-hairline'
     : stepComplete
@@ -591,29 +679,42 @@ function PlanItem({ item, status, context, busy, editing, backState = null, canM
         : 'border border-hairline'
 
   return (
-    <div className="flex gap-3">
-      {tickable && item.item_type === 'step' ? (
+    <>
+      {stepTileClickable && (
         <button
           type="button"
           aria-label={t('plans.markDone', { title: shownTitle })}
           aria-pressed={stepComplete}
-          disabled={busy || checking || untickChoice}
+          disabled={busy || checking}
           onClick={() => handleToggle(!stepComplete)}
-          className={`relative mt-1.5 h-3 w-3 shrink-0 rounded-full transition-[background-color,border-color,box-shadow] after:absolute after:-inset-3 after:rounded-full hover:ring-4 hover:ring-moss/15 disabled:cursor-wait disabled:opacity-50 ${statusDotClass}`}
+          className="absolute inset-0 rounded-md cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-paper disabled:cursor-wait"
         />
-      ) : tickable ? (
-        <input
-          type="checkbox"
-          checked={state === 'done' || completing}
-          disabled={busy || checking || untickChoice}
-          onChange={(e) => handleToggle(e.target.checked)}
-          aria-label={t('plans.markDone', { title: shownTitle })}
-          className="mt-1 h-4 w-4 accent-moss shrink-0"
-        />
-      ) : (
-        <span aria-hidden="true" className={`mt-1.5 h-3 w-3 shrink-0 rounded-full ${statusDotClass}`} />
       )}
-      <div className="min-w-0 flex-1">
+      <div className={`relative z-10 flex gap-3 ${stepTileClickable ? 'pointer-events-none' : ''}`}>
+        {stepTileClickable ? (
+          <span aria-hidden="true" className={`mt-1.5 h-3 w-3 shrink-0 rounded-full ${statusDotClass}`} />
+        ) : tickable && item.item_type === 'step' ? (
+          <button
+            type="button"
+            aria-label={t('plans.markDone', { title: shownTitle })}
+            aria-pressed={stepComplete}
+            disabled={busy || checking || untickChoice}
+            onClick={() => handleToggle(!stepComplete)}
+            className={`relative mt-1.5 h-3 w-3 shrink-0 rounded-full transition-[background-color,border-color,box-shadow] after:absolute after:-inset-3 after:rounded-full hover:ring-4 hover:ring-moss/15 disabled:cursor-wait disabled:opacity-50 ${statusDotClass}`}
+          />
+        ) : tickable ? (
+          <input
+            type="checkbox"
+            checked={state === 'done' || completing}
+            disabled={busy || checking || untickChoice}
+            onChange={(e) => handleToggle(e.target.checked)}
+            aria-label={t('plans.markDone', { title: shownTitle })}
+            className="mt-1 h-4 w-4 accent-moss shrink-0"
+          />
+        ) : (
+          <span aria-hidden="true" className={`mt-1.5 h-3 w-3 shrink-0 rounded-full ${statusDotClass}`} />
+        )}
+        <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
             {href && state !== 'removed' ? (
@@ -654,7 +755,7 @@ function PlanItem({ item, status, context, busy, editing, backState = null, canM
         {!editing && state === 'done' && item.completion_statement_id && (
           <p className="mt-0.5 text-xs text-secondary">
             {t('plans.loggedActivity')}{' '}
-            <Link to="/activity" className="text-moss font-medium hover:underline">{t('plans.viewActivityLog')}</Link>
+            <Link to="/activity" className="pointer-events-auto relative z-20 text-moss font-medium hover:underline">{t('plans.viewActivityLog')}</Link>
           </p>
         )}
         {completing && (
@@ -690,14 +791,16 @@ function PlanItem({ item, status, context, busy, editing, backState = null, canM
         )}
         {editing && (
         <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+          <DragHandle label={t('plans.dragItem', { title: shownTitle })} disabled={busy} onDragStart={onDragStart} onDragEnd={onDragEnd} />
           <button type="button" onClick={onEdit} className="text-moss font-medium hover:underline">{t('plans.edit')}</button>
           <button type="button" onClick={onRemove} className="text-red-700 font-medium hover:underline">{t('plans.remove')}</button>
           <IconButton label={t('plans.moveUp', { title: shownTitle })} disabled={busy || !canMoveUp} onClick={onMoveUp}>↑</IconButton>
           <IconButton label={t('plans.moveDown', { title: shownTitle })} disabled={busy || !canMoveDown} onClick={onMoveDown}>↓</IconButton>
         </div>
         )}
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 

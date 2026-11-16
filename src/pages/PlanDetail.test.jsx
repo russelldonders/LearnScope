@@ -128,7 +128,10 @@ describe('PlanDetail', () => {
     expect(screen.getByText('2 of 5 done')).toBeInTheDocument()
     expect(screen.getByText('This Course was deleted')).toBeInTheDocument()
     expect(screen.getByText('Overdue: 1')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'What you’ll do' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Skills that this plan works on' })).toBeInTheDocument()
+    const sectionHeadings = screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)
+    expect(sectionHeadings.indexOf('What you’ll do')).toBeLessThan(sectionHeadings.indexOf('Skills that this plan works on'))
     expect(screen.getAllByText('Plan target')).toHaveLength(2)
     expect(screen.getByText('Ability: Skilled')).toBeInTheDocument()
     expect(screen.getByText('Knowledge: Aware · Ability: Developing')).toBeInTheDocument()
@@ -136,7 +139,9 @@ describe('PlanDetail', () => {
 
   it('marks a step done with a date and a comment', async () => {
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Mark “Shadow a senior lead” done' }))
+    const tileButton = await screen.findByRole('button', { name: 'Mark “Shadow a senior lead” done' })
+    expect(tileButton).toHaveClass('absolute', 'inset-0')
+    fireEvent.click(tileButton)
     expect(lib.setItemDone).not.toHaveBeenCalled()
     const form = screen.getByRole('form', { name: 'Mark this step done' })
     fireEvent.change(within(form).getByLabelText('Done on'), { target: { value: '2026-11-10' } })
@@ -226,6 +231,37 @@ describe('PlanDetail', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Move Run 10k up' }))
     await waitFor(() => expect(lib.savePositions).toHaveBeenCalledWith('learner_plan_items', [
       { id: 'i4', position: 0 }, { id: 'i1', position: 1 },
+    ]))
+  })
+
+  it('reorders items by dragging their edit handles', async () => {
+    renderPage('/plans/p1?mode=edit')
+    const dataTransfer = { effectAllowed: '', dropEffect: '', setData: vi.fn() }
+    const target = (await screen.findByText('Leading teams')).closest('li')
+    fireEvent.dragStart(screen.getByTitle('Drag Run 10k'), { dataTransfer })
+    fireEvent.dragOver(target, { dataTransfer })
+    fireEvent.drop(target, { dataTransfer })
+    await waitFor(() => expect(lib.savePositions).toHaveBeenCalledWith('learner_plan_items', [
+      { id: 'i4', position: 0 }, { id: 'i1', position: 1 },
+    ]))
+  })
+
+  it('reorders plan sections by dragging their edit handles', async () => {
+    lib.getPlan.mockResolvedValue({
+      ...plan,
+      sections: [
+        ...plan.sections,
+        { id: 'sec2', title: 'Practice', position: 1, target_on: null },
+      ],
+    })
+    renderPage('/plans/p1?mode=edit')
+    const dataTransfer = { effectAllowed: '', dropEffect: '', setData: vi.fn() }
+    const target = (await screen.findByRole('heading', { name: 'Foundations' })).closest('section')
+    fireEvent.dragStart(screen.getByTitle('Drag Practice'), { dataTransfer })
+    fireEvent.dragOver(target, { dataTransfer })
+    fireEvent.drop(target, { dataTransfer })
+    await waitFor(() => expect(lib.savePositions).toHaveBeenCalledWith('learner_plan_sections', [
+      { id: 'sec2', position: 0 }, { id: 'sec1', position: 1 },
     ]))
   })
 
