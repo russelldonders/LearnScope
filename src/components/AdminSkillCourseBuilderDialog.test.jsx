@@ -45,6 +45,39 @@ describe('AdminSkillCourseBuilderDialog', () => {
   })
   afterEach(() => cleanup())
 
+  it('keeps the course format numbers as typed, without a leading zero, and builds with them', async () => {
+    render(
+      <MemoryRouter>
+        <AdminSkillCourseBuilderDialog skills={[skill]} onClose={vi.fn()} onFinished={vi.fn()} />
+      </MemoryRouter>,
+    )
+    const duration = screen.getByRole('spinbutton', { name: 'Duration' })
+    const sections = screen.getByRole('spinbutton', { name: 'Sections' })
+    const pages = screen.getByRole('spinbutton', { name: 'Pages each' })
+
+    // Clearing a field leaves it empty rather than putting a 0 in it.
+    fireEvent.change(duration, { target: { value: '' } })
+    expect(duration).toHaveValue(null)
+    fireEvent.change(duration, { target: { value: '15' } })
+    expect(duration).toHaveValue(15)
+    expect(duration.value).toBe('15')
+
+    // A leading zero, or a number out of range, is tidied when the field is left.
+    fireEvent.change(sections, { target: { value: '05' } })
+    fireEvent.blur(sections)
+    expect(sections.value).toBe('5')
+    fireEvent.change(pages, { target: { value: '40' } })
+    fireEvent.blur(pages)
+    expect(pages.value).toBe('6')
+
+    // Building straight from a field still being typed in uses a whole number.
+    fireEvent.change(duration, { target: { value: '015' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Build 5 courses' }))
+    await waitFor(() => expect(generateSkillCourseDraft).toHaveBeenCalled())
+    const brief = generateSkillCourseDraft.mock.calls[0][0]
+    expect(brief).toEqual(expect.objectContaining({ durationValue: '15', sectionCount: '5', pagesPerSection: '6' }))
+  })
+
   it('builds all five knowledge-level courses with automatic Global publication', async () => {
     render(
       <MemoryRouter>

@@ -18,6 +18,32 @@ const DEFAULT_SETTINGS = {
   tone: 'Practical and encouraging',
 }
 
+// The number fields hold what was typed (a string) while editing: turning it
+// into a number on every keystroke made a cleared field 0, so typing "15"
+// showed "015". A whole number within the field's range is used when the
+// field is left (kept as text, so a number input showing "05" redraws as
+// "5" -- React compares a number input's value loosely) and when the
+// courses are built.
+const NUMBER_FIELDS = {
+  durationValue: { min: 1, max: 10000 },
+  sectionCount: { min: 1, max: 8 },
+  pagesPerSection: { min: 1, max: 6 },
+}
+
+function wholeNumberInRange(value, field) {
+  const { min, max } = NUMBER_FIELDS[field]
+  const parsed = Number.parseInt(String(value).trim(), 10)
+  if (!Number.isFinite(parsed)) return DEFAULT_SETTINGS[field]
+  return Math.min(max, Math.max(min, parsed))
+}
+
+function normalisedSettings(settings) {
+  return Object.fromEntries(Object.entries(settings).map(([key, value]) => [
+    key,
+    key in NUMBER_FIELDS ? wholeNumberInRange(value, key) : value,
+  ]))
+}
+
 function taskKey(skillId, level) {
   return `${skillId}:${level}`
 }
@@ -60,7 +86,7 @@ export default function AdminSkillCourseBuilderDialog({ skills, onClose, onFinis
         nextIndex += 1
         updateResult(task.key, { status: 'building', error: null })
         try {
-          const brief = buildSkillCourseBrief(task.skill, task.level, settings)
+          const brief = buildSkillCourseBrief(task.skill, task.level, normalisedSettings(settings))
           const { jobId, draft } = await generateSkillCourseDraft(brief, organisationId, {
             skillId: task.skill.id,
             level: task.level,
@@ -251,7 +277,7 @@ export default function AdminSkillCourseBuilderDialog({ skills, onClose, onFinis
               <summary className="cursor-pointer text-sm font-medium text-ink">Course format</summary>
               <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
                 <label className="text-xs text-secondary">Duration
-                  <input type="number" min="1" max="10000" value={settings.durationValue} onChange={(event) => setSettings((current) => ({ ...current, durationValue: Number(event.target.value) }))} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-gold" />
+                  <input type="number" min="1" max="10000" inputMode="numeric" value={settings.durationValue} onChange={(event) => setSettings((current) => ({ ...current, durationValue: event.target.value }))} onBlur={() => setSettings((current) => ({ ...current, durationValue: String(wholeNumberInRange(current.durationValue, 'durationValue')) }))} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-gold" />
                 </label>
                 <label className="text-xs text-secondary">Unit
                   <select value={settings.durationUnit} onChange={(event) => setSettings((current) => ({ ...current, durationUnit: event.target.value }))} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-gold">
@@ -259,10 +285,10 @@ export default function AdminSkillCourseBuilderDialog({ skills, onClose, onFinis
                   </select>
                 </label>
                 <label className="text-xs text-secondary">Sections
-                  <input type="number" min="1" max="8" value={settings.sectionCount} onChange={(event) => setSettings((current) => ({ ...current, sectionCount: Number(event.target.value) }))} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-gold" />
+                  <input type="number" min="1" max="8" inputMode="numeric" value={settings.sectionCount} onChange={(event) => setSettings((current) => ({ ...current, sectionCount: event.target.value }))} onBlur={() => setSettings((current) => ({ ...current, sectionCount: String(wholeNumberInRange(current.sectionCount, 'sectionCount')) }))} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-gold" />
                 </label>
                 <label className="text-xs text-secondary">Pages each
-                  <input type="number" min="1" max="6" value={settings.pagesPerSection} onChange={(event) => setSettings((current) => ({ ...current, pagesPerSection: Number(event.target.value) }))} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-gold" />
+                  <input type="number" min="1" max="6" inputMode="numeric" value={settings.pagesPerSection} onChange={(event) => setSettings((current) => ({ ...current, pagesPerSection: event.target.value }))} onBlur={() => setSettings((current) => ({ ...current, pagesPerSection: String(wholeNumberInRange(current.pagesPerSection, 'pagesPerSection')) }))} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-gold" />
                 </label>
                 <label className="col-span-2 text-xs text-secondary sm:col-span-1">Style
                   <select value={settings.tone} onChange={(event) => setSettings((current) => ({ ...current, tone: event.target.value }))} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-gold">
