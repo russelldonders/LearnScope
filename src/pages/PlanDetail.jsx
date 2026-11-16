@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
@@ -43,6 +43,7 @@ import {
   updatePlan,
   updateSection,
   withdrawPlanInvitation,
+  PLAN_RESOURCE_VISIBILITIES,
 } from '../lib/learnerPlans'
 import { currentGoal, paceOf, planItemStatus, summariseProgress, timeElapsedPercent } from '../lib/planProgress'
 import { KNOWLEDGE_LEVEL_LABELS, LEVEL_LABELS, LEVELS } from '../lib/levels'
@@ -89,6 +90,8 @@ export default function PlanDetail() {
   const [confirm, setConfirm] = useState(null)
   const [dragging, setDragging] = useState(null)
   const [dragOver, setDragOver] = useState(null)
+  // The drag in progress, for pointer events that arrive before a re-render.
+  const dragRef = useRef(null)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [inviteConnections, setInviteConnections] = useState([])
   const [planInvitations, setPlanInvitations] = useState([])
@@ -266,12 +269,9 @@ export default function PlanDetail() {
     await run(() => savePositions(table, reordered.map((row, position) => ({ id: row.id, position }))))
   }
 
-  async function dropAt(list, targetId, table, listKey) {
-    if (!dragging || dragging.table !== table || dragging.listKey !== listKey) return
-    const from = list.findIndex((row) => row.id === dragging.id)
-    const to = list.findIndex((row) => row.id === targetId)
-    setDragging(null)
-    setDragOver(null)
+  async function reorder(list, fromId, toId, table) {
+    const from = list.findIndex((row) => row.id === fromId)
+    const to = list.findIndex((row) => row.id === toId)
     if (from < 0 || to < 0 || from === to) return
     const reordered = [...list]
     const [moved] = reordered.splice(from, 1)
@@ -279,17 +279,49 @@ export default function PlanDetail() {
     await run(() => savePositions(table, reordered.map((row, position) => ({ id: row.id, position }))))
   }
 
-  function beginDrag(event, payload) {
-    event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData('text/plain', payload.id)
-    setDragging(payload)
+  // Dragging works by pointer (mouse, touch or pen) rather than the
+  // browser's own drag and drop, which touch screens don't support: the
+  // handle keeps the pointer while it moves, and whichever tile of the same
+  // list is under it is the drop target. Near the top or bottom of the
+  // window, the page scrolls along.
+  function dropTargetAt(event, payload) {
+    const element = document.elementFromPoint?.(event.clientX, event.clientY)
+    const target = element?.closest?.(`[data-drop-kind="${payload.kind}"][data-drop-list="${payload.listKey}"]`)
+    return target?.dataset.dropId ?? null
   }
 
-  function allowDrop(event, kind, id, listKey) {
-    if (!dragging || dragging.kind !== kind || dragging.listKey !== listKey) return
-    event.preventDefault()
-    event.dataTransfer.dropEffect = 'move'
-    setDragOver({ kind, id })
+  function dragHandlers(payload) {
+    return {
+      onPointerDown(event) {
+        if (busy || (event.pointerType === 'mouse' && event.button !== 0)) return
+        event.preventDefault()
+        event.currentTarget.setPointerCapture?.(event.pointerId)
+        dragRef.current = payload
+        setDragging(payload)
+        setDragOver(null)
+      },
+      onPointerMove(event) {
+        if (dragRef.current?.id !== payload.id) return
+        const targetId = dropTargetAt(event, payload)
+        setDragOver(targetId && targetId !== payload.id ? { kind: payload.kind, id: targetId } : null)
+        const edge = 72
+        if (event.clientY < edge) window.scrollBy?.(0, -16)
+        else if (event.clientY > window.innerHeight - edge) window.scrollBy?.(0, 16)
+      },
+      onPointerUp(event) {
+        if (dragRef.current?.id !== payload.id) return
+        const targetId = dropTargetAt(event, payload)
+        dragRef.current = null
+        setDragging(null)
+        setDragOver(null)
+        if (targetId) reorder(payload.list, payload.id, targetId, payload.table)
+      },
+      onPointerCancel() {
+        dragRef.current = null
+        setDragging(null)
+        setDragOver(null)
+      },
+    }
   }
 
   function renderItem(item, index, items, listKey) {
@@ -298,12 +330,10 @@ export default function PlanDetail() {
     return (
       <li
         key={item.id}
-        onDragOver={(event) => allowDrop(event, 'item', item.id, listKey)}
-        onDrop={(event) => {
-          event.preventDefault()
-          dropAt(items, item.id, 'learner_plan_items', listKey)
-        }}
-        className={`relative rounded-md border bg-card p-3 transition-[border-color,background-color,opacity] ${isDropTarget ? 'border-moss bg-moss/5' : 'border-hairline'} ${isDraggingItem ? 'opacity-50' : ''} ${!editing && item.item_type === 'step' ? 'hover:border-moss/50' : ''}`}
+        data-drop-kind="item"
+        data-drop-id={item.id}
+        data-drop-list={listKey}
+        className={`relative rounded-md border bg-card p-3 transition-[border-color,background-color,opacity,box-shadow] ${isDropTarget ? 'border-moss bg-moss/5 ring-2 ring-moss/40' : 'border-hairline'} ${isDraggingItem ? 'opacity-60 shadow-lg' : ''} ${!editing && item.item_type === 'step' ? 'hover:border-moss/50' : ''}`}
       >
         {editingItemId === item.id ? (
           <ItemEditForm
@@ -326,8 +356,7 @@ export default function PlanDetail() {
             backState={backState}
             canMoveUp={index > 0}
             canMoveDown={index < items.length - 1}
-            onDragStart={(event) => beginDrag(event, { kind: 'item', id: item.id, listKey, table: 'learner_plan_items' })}
-            onDragEnd={() => { setDragging(null); setDragOver(null) }}
+            dragHandlers={dragHandlers({ kind: 'item', id: item.id, listKey, table: 'learner_plan_items', list: items })}
             onMoveUp={() => move(items, index, -1, 'learner_plan_items')}
             onMoveDown={() => move(items, index, 1, 'learner_plan_items')}
             onComplete={(values) => run(() => setItemDone(item, true, { userId: user.id, actor: { name: actorName, email: user.email }, ...values }))}
@@ -583,12 +612,10 @@ export default function PlanDetail() {
             <section
               key={listKey}
               aria-labelledby={section ? `plan-section-${section.id}` : undefined}
-              onDragOver={section ? (event) => allowDrop(event, 'section', section.id, 'sections') : undefined}
-              onDrop={section ? (event) => {
-                event.preventDefault()
-                dropAt(plan.sections, section.id, 'learner_plan_sections', 'sections')
-              } : undefined}
-              className={`${isSectionDropTarget ? 'rounded-md bg-moss/5 outline outline-1 outline-moss/50 outline-offset-3' : ''} ${isDraggingSection ? 'opacity-50' : ''}`.trim() || undefined}
+              data-drop-kind={section ? 'section' : undefined}
+              data-drop-id={section?.id}
+              data-drop-list={section ? 'sections' : undefined}
+              className={`${isSectionDropTarget ? 'rounded-md bg-moss/5 outline outline-2 outline-moss/50 outline-offset-4' : ''} ${isDraggingSection ? 'opacity-60' : ''}`.trim() || undefined}
             >
               {section && (
                 editingSectionId === section.id ? (
@@ -603,6 +630,16 @@ export default function PlanDetail() {
                   />
                 ) : (
                   <div className="flex flex-wrap items-start justify-between gap-2 border-b border-hairline pb-2">
+                    <div className="flex min-w-0 items-stretch gap-3">
+                    {editing && (
+                      <DragHandle
+                        label={t('plans.dragSection', { title: section.title })}
+                        disabled={busy}
+                        handlers={dragHandlers({ kind: 'section', id: section.id, listKey: 'sections', table: 'learner_plan_sections', list: plan.sections })}
+                        onMoveUp={sectionIndex > 0 ? () => move(plan.sections, sectionIndex, -1, 'learner_plan_sections') : null}
+                        onMoveDown={sectionIndex < plan.sections.length - 1 ? () => move(plan.sections, sectionIndex, 1, 'learner_plan_sections') : null}
+                      />
+                    )}
                     <div className="min-w-0">
                       <h3 id={`plan-section-${section.id}`} className="font-display text-lg text-ink break-words">{section.title}</h3>
                       <p className="text-xs text-secondary">
@@ -610,14 +647,9 @@ export default function PlanDetail() {
                         {section.target_on && ` · ${t('plans.byDate', { date: formatFullDate(section.target_on) })}`}
                       </p>
                     </div>
+                    </div>
                     {editing && (
                     <div className="flex items-center gap-2 text-xs">
-                      <DragHandle
-                        label={t('plans.dragSection', { title: section.title })}
-                        disabled={busy}
-                        onDragStart={(event) => beginDrag(event, { kind: 'section', id: section.id, listKey: 'sections', table: 'learner_plan_sections' })}
-                        onDragEnd={() => { setDragging(null); setDragOver(null) }}
-                      />
                       <IconButton label={t('plans.moveSectionUp', { title: section.title })} disabled={busy || sectionIndex === 0} onClick={() => move(plan.sections, sectionIndex, -1, 'learner_plan_sections')}>↑</IconButton>
                       <IconButton label={t('plans.moveSectionDown', { title: section.title })} disabled={busy || sectionIndex === plan.sections.length - 1} onClick={() => move(plan.sections, sectionIndex, 1, 'learner_plan_sections')}>↓</IconButton>
                       <button type="button" onClick={() => setEditingSectionId(section.id)} className="text-moss font-medium hover:underline">{t('plans.edit')}</button>
@@ -817,22 +849,34 @@ function IconButton({ label, disabled, onClick, children }) {
   )
 }
 
-function DragHandle({ label, disabled, onDragStart, onDragEnd }) {
+// The grip on the left of an item or section in edit mode: a large target
+// that drags by mouse, touch or pen (see dragHandlers), and moves its item
+// up or down with the arrow keys once focused.
+function DragHandle({ label, disabled, handlers, onMoveUp, onMoveDown }) {
   return (
-    <span
-      aria-hidden="true"
+    <button
+      type="button"
+      aria-label={label}
       title={label}
-      draggable={!disabled}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      className={`grid h-6 w-6 shrink-0 place-items-center rounded border border-hairline text-secondary ${disabled ? 'cursor-not-allowed opacity-40' : 'cursor-grab hover:border-moss hover:text-ink active:cursor-grabbing'}`}
+      disabled={disabled}
+      {...handlers}
+      onKeyDown={(event) => {
+        if (event.key === 'ArrowUp' && onMoveUp) {
+          event.preventDefault()
+          onMoveUp()
+        } else if (event.key === 'ArrowDown' && onMoveDown) {
+          event.preventDefault()
+          onMoveDown()
+        }
+      }}
+      className="flex min-h-11 w-10 shrink-0 touch-none select-none items-center justify-center self-stretch rounded-md border border-hairline bg-paper text-secondary transition-colors hover:border-moss hover:bg-moss/5 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-moss cursor-grab active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
     >
-      <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
-        <circle cx="5" cy="4" r="1" /><circle cx="11" cy="4" r="1" />
-        <circle cx="5" cy="8" r="1" /><circle cx="11" cy="8" r="1" />
-        <circle cx="5" cy="12" r="1" /><circle cx="11" cy="12" r="1" />
+      <svg aria-hidden="true" viewBox="0 0 16 16" width="20" height="20" fill="currentColor">
+        <circle cx="5.5" cy="3.5" r="1.4" /><circle cx="10.5" cy="3.5" r="1.4" />
+        <circle cx="5.5" cy="8" r="1.4" /><circle cx="10.5" cy="8" r="1.4" />
+        <circle cx="5.5" cy="12.5" r="1.4" /><circle cx="10.5" cy="12.5" r="1.4" />
       </svg>
-    </span>
+    </button>
   )
 }
 
@@ -884,7 +928,7 @@ function describeItem(item, status, context, t) {
   }
 }
 
-function PlanItem({ item, status, context, busy, editing, backState = null, canMoveUp, canMoveDown, onDragStart, onDragEnd, onMoveUp, onMoveDown, onComplete, onUntick, onLoadActivity, onEdit, onRemove, onOpenGoal }) {
+function PlanItem({ item, status, context, busy, editing, backState = null, canMoveUp, canMoveDown, dragHandlers, onMoveUp, onMoveDown, onComplete, onUntick, onLoadActivity, onEdit, onRemove, onOpenGoal }) {
   const { t } = useLanguage()
   const state = status?.state ?? 'not_started'
   // Marking a step done asks for a date, comment and evidence first; a
@@ -944,7 +988,15 @@ function PlanItem({ item, status, context, busy, editing, backState = null, canM
         />
       )}
       <div className={`relative z-10 flex gap-3 ${stepTileClickable ? 'pointer-events-none' : ''}`}>
-        {stepTileClickable ? (
+        {editing ? (
+          <DragHandle
+            label={t('plans.dragItem', { title: shownTitle })}
+            disabled={busy}
+            handlers={dragHandlers}
+            onMoveUp={canMoveUp ? onMoveUp : null}
+            onMoveDown={canMoveDown ? onMoveDown : null}
+          />
+        ) : stepTileClickable ? (
           <span aria-hidden="true" className={`mt-1.5 h-3 w-3 shrink-0 rounded-full ${statusDotClass}`} />
         ) : tickable && item.item_type === 'step' ? (
           <button
@@ -982,6 +1034,11 @@ function PlanItem({ item, status, context, busy, editing, backState = null, canM
               <span className={`text-sm font-medium break-words ${state === 'removed' ? 'text-secondary italic' : 'text-ink'} ${state === 'done' && tickable ? 'line-through decoration-secondary' : ''}`}>{shownTitle}</span>
             )}
             <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{typeLabel}</span>
+            {item.visibility && item.visibility !== 'members' && (
+              <span data-visibility={item.visibility} className="rounded-full border border-hairline px-1.5 py-px text-[10px] text-secondary">
+                {t(`plans.visibilityBadge.${item.visibility}`)}
+              </span>
+            )}
           </div>
           <div className="ml-auto flex shrink-0 flex-wrap justify-end gap-1.5">
             {(!editing || state === 'removed') && (
@@ -1041,7 +1098,6 @@ function PlanItem({ item, status, context, busy, editing, backState = null, canM
         )}
         {editing && (
         <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
-          <DragHandle label={t('plans.dragItem', { title: shownTitle })} disabled={busy} onDragStart={onDragStart} onDragEnd={onDragEnd} />
           <button type="button" onClick={onEdit} className="text-moss font-medium hover:underline">{t('plans.edit')}</button>
           <button type="button" onClick={onRemove} className="text-red-700 font-medium hover:underline">{t('plans.remove')}</button>
           <IconButton label={t('plans.moveUp', { title: shownTitle })} disabled={busy || !canMoveUp} onClick={onMoveUp}>↑</IconButton>
@@ -1177,6 +1233,8 @@ function AddItemForm({ userId, busy, allowedTypes = CONTENT_ITEM_TYPES, onSubmit
   const [note, setNote] = useState('')
   const [planKnowledgeLevel, setPlanKnowledgeLevel] = useState('')
   const [planPracticalLevel, setPlanPracticalLevel] = useState('')
+  // Who on the plan sees a resource added to it; everyone, unless chosen.
+  const [visibility, setVisibility] = useState('members')
   const [error, setError] = useState(null)
   // Making a new goal or resource here, rather than picking an existing one.
   const [creatingGoal, setCreatingGoal] = useState(false)
@@ -1224,12 +1282,15 @@ function AddItemForm({ userId, busy, allowedTypes = CONTENT_ITEM_TYPES, onSubmit
               busy={busy || saving}
               submitLabel={t('plans.createAndAdd')}
               onCancel={() => setCreatingResource(false)}
+              // Who sees it is the plan's choice; the resource itself stays
+              // private in the learner's own skill.
+              audienceSlot={<PlanVisibilityField idPrefix="plan-new-resource" value={visibility} onChange={setVisibility} />}
               onSubmit={async (values) => {
                 setSaving(true)
                 setError(null)
                 try {
                   const id = await addResource({ userId, skillId: resourceSkill.id, ...values })
-                  await onSubmit({ itemType: 'skill_resource', recordId: id, targetOn, note })
+                  await onSubmit({ itemType: 'skill_resource', recordId: id, targetOn, note, visibility })
                 } catch (err) {
                   setError(err.message)
                 } finally {
@@ -1250,7 +1311,7 @@ function AddItemForm({ userId, busy, allowedTypes = CONTENT_ITEM_TYPES, onSubmit
             if (itemType === 'step' ? !stepTitle.trim() : !recordId) return setError(t(itemType === 'step' ? 'plans.errorStepTitle' : 'plans.errorChooseRecord'))
             if (itemType === 'skill' && !planKnowledgeLevel && !planPracticalLevel) return setError(t('plans.errorPlanSkillLevel'))
             setError(null)
-            onSubmit({ itemType, recordId, stepTitle, stepSkillId, targetOn, note, planKnowledgeLevel, planPracticalLevel })
+            onSubmit({ itemType, recordId, stepTitle, stepSkillId, targetOn, note, planKnowledgeLevel, planPracticalLevel, visibility })
           }}
         >
           {allowedTypes.length > 1 && <fieldset>
@@ -1328,6 +1389,9 @@ function AddItemForm({ userId, busy, allowedTypes = CONTENT_ITEM_TYPES, onSubmit
             </button>
           )}
           {itemType === 'skill_resource' && (
+            <PlanVisibilityField idPrefix="plan-item" value={visibility} onChange={setVisibility} />
+          )}
+          {itemType === 'skill_resource' && (
             <button type="button" onClick={() => { setError(null); setCreatingResource(true) }} className="text-xs text-moss font-medium hover:underline">
               {t('plans.createResource')}
             </button>
@@ -1371,10 +1435,42 @@ function AddItemForm({ userId, busy, allowedTypes = CONTENT_ITEM_TYPES, onSubmit
   )
 }
 
+// Who on the plan sees a resource: only whoever added it, all owners, or
+// everyone following the plan (the default).
+function PlanVisibilityField({ idPrefix, value, onChange }) {
+  const { t } = useLanguage()
+  return (
+    <fieldset>
+      <legend className="text-xs text-secondary">{t('plans.visibilityLabel')}</legend>
+      <div className="mt-1 space-y-1.5">
+        {PLAN_RESOURCE_VISIBILITIES.slice().reverse().map((option) => (
+          <label key={option} className="flex cursor-pointer items-start gap-2 text-sm text-ink">
+            <input
+              type="radio"
+              name={`${idPrefix}-visibility`}
+              value={option}
+              checked={value === option}
+              onChange={() => onChange(option)}
+              className="mt-1 accent-moss"
+            />
+            <span>
+              {t(`plans.visibility.${option}`)}
+              <span className="block text-xs text-secondary">{t(`plans.visibilityHints.${option}`)}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  )
+}
+
 function ItemEditForm({ item, sections, busy, onSubmit, onCancel }) {
   const { t } = useLanguage()
   const { user } = useAuth()
   const isStep = item.item_type === 'step'
+  // Who sees a resource is the choice of whoever added it (0304).
+  const isResource = item.item_type === 'skill_resource' && item.is_author !== false
+  const [visibility, setVisibility] = useState(item.visibility ?? 'members')
   const isSkill = item.item_type === 'skill'
   // A step's skill is a record of whoever added it, so only they change it.
   const canChangeStepSkill = isStep && item.is_author !== false
@@ -1411,6 +1507,7 @@ function ItemEditForm({ item, sections, busy, onSubmit, onCancel }) {
           stepSkillId: canChangeStepSkill ? stepSkillId : undefined,
           planKnowledgeLevel: isSkill ? planKnowledgeLevel : undefined,
           planPracticalLevel: isSkill ? planPracticalLevel : undefined,
+          visibility: isResource ? visibility : undefined,
         })
       }}
     >
@@ -1432,6 +1529,9 @@ function ItemEditForm({ item, sections, busy, onSubmit, onCancel }) {
             </select>
           </div>}
         </div>
+      )}
+      {isResource && (
+        <PlanVisibilityField idPrefix={idPrefix} value={visibility} onChange={setVisibility} />
       )}
       {isSkill && (
         <fieldset>

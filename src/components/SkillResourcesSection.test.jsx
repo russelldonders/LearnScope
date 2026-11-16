@@ -86,6 +86,24 @@ describe('SkillResourcesSection', () => {
     })
   })
 
+  it('takes http or https from the address typed, or from the choice beside it', async () => {
+    render(<SkillResourcesSection skill={librarySkill} user={user} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Add resource' }))
+    const address = screen.getByRole('textbox', { name: 'Link' })
+    const protocol = screen.getByRole('combobox', { name: 'Web address type' })
+    expect(protocol).toHaveValue('https://')
+
+    fireEvent.change(address, { target: { value: 'HTTP://intranet.example.com/wiki' } })
+    expect(protocol).toHaveValue('http://')
+    expect(address).toHaveValue('intranet.example.com/wiki')
+
+    fireEvent.change(protocol, { target: { value: 'https://' } })
+    fireEvent.change(address, { target: { value: 'example.com/guide' } })
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Guide' } })
+    fireEvent.submit(address.closest('form'))
+    await waitFor(() => expect(lib.addResource).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://example.com/guide' })))
+  })
+
   it('checks the link and the chosen contacts before saving', async () => {
     render(<SkillResourcesSection skill={librarySkill} user={user} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Add resource' }))

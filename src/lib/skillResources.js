@@ -38,6 +38,16 @@ export function isHttpUrl(value) {
   }
 }
 
+// A web address typed or pasted with its http:// or https:// sets the
+// protocol choice and leaves the rest in the box; without one, the chosen
+// protocol is used.
+export function splitWebAddress(value, fallbackProtocol = 'https://') {
+  const match = String(value ?? '').match(/^\s*(https?):\/\//i)
+  return match
+    ? { protocol: `${match[1].toLowerCase()}://`, address: value.slice(match[0].length) }
+    : { protocol: fallbackProtocol, address: value ?? '' }
+}
+
 export async function listMyResources(skillId) {
   const { data, error } = await supabase
     .from('skill_resources')

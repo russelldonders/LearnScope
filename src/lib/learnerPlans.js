@@ -302,7 +302,11 @@ const REFERENCE_COLUMN = {
   skill_resource: 'skill_resource_id',
 }
 
-export async function addItem(planId, { itemType, recordId, stepTitle, stepSkillId, sectionId, note, targetOn, position, planKnowledgeLevel, planPracticalLevel }) {
+// Who on a shared plan sees a resource on it (0304): only whoever added it,
+// all owners, or everyone on the plan. Other items are always for everyone.
+export const PLAN_RESOURCE_VISIBILITIES = ['private', 'owners', 'members']
+
+export async function addItem(planId, { itemType, recordId, stepTitle, stepSkillId, sectionId, note, targetOn, position, planKnowledgeLevel, planPracticalLevel, visibility }) {
   const row = {
     plan_id: planId,
     section_id: sectionId || null,
@@ -317,6 +321,9 @@ export async function addItem(planId, { itemType, recordId, stepTitle, stepSkill
   } else {
     row[REFERENCE_COLUMN[itemType]] = recordId
   }
+  if (itemType === 'skill_resource') {
+    row.visibility = PLAN_RESOURCE_VISIBILITIES.includes(visibility) ? visibility : 'members'
+  }
   if (itemType === 'skill') {
     row.plan_knowledge_level = planKnowledgeLevel ? Number(planKnowledgeLevel) : null
     row.plan_practical_level = planPracticalLevel ? Number(planPracticalLevel) : null
@@ -328,8 +335,9 @@ export async function addItem(planId, { itemType, recordId, stepTitle, stepSkill
   if (error) throw error
 }
 
-export async function updateItem(itemId, { note, targetOn, sectionId, stepTitle, stepSkillId, planKnowledgeLevel, planPracticalLevel }) {
+export async function updateItem(itemId, { note, targetOn, sectionId, stepTitle, stepSkillId, planKnowledgeLevel, planPracticalLevel, visibility }) {
   const changes = { note: blankToNull(note), target_on: targetOn || null, section_id: sectionId || null }
+  if (visibility !== undefined && PLAN_RESOURCE_VISIBILITIES.includes(visibility)) changes.visibility = visibility
   if (stepTitle !== undefined) changes.step_title = stepTitle.trim()
   if (stepSkillId !== undefined) changes.step_skill_id = stepSkillId || null
   if (planKnowledgeLevel !== undefined) changes.plan_knowledge_level = planKnowledgeLevel ? Number(planKnowledgeLevel) : null

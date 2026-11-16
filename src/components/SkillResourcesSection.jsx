@@ -13,6 +13,7 @@ import {
   getResourceFileUrl,
   hideSharedResource,
   isHttpUrl,
+  splitWebAddress,
   listMyResources,
   listSharedResources,
   REPORT_REASONS,
@@ -453,12 +454,16 @@ function AudienceText({ resource, connections }) {
     : t('skillDetail.resources.sharedWithCount', { count: resource.recipientIds.length })
 }
 
-export function ResourceForm({ resource = null, hasLibrarySkill, connections, onNeedConnections, busy, submitLabel, onCancel, onSubmit }) {
+// audienceSlot: shown instead of the skill-resource audience choices, for a
+// resource made somewhere that decides its own audience (a plan). The
+// resource itself is then kept private to its owner.
+export function ResourceForm({ resource = null, hasLibrarySkill, connections, onNeedConnections, busy, submitLabel, onCancel, onSubmit, audienceSlot = null }) {
   const { t } = useLanguage()
   const editing = Boolean(resource)
   const [kind, setKind] = useState(resource?.kind ?? 'link')
   const [title, setTitle] = useState(resource?.title ?? '')
-  const [url, setUrl] = useState(resource?.url ?? '')
+  const [webAddress, setWebAddress] = useState(() => splitWebAddress(resource?.url ?? ''))
+  const url = webAddress.address.trim() ? `${webAddress.protocol}${webAddress.address.trim()}` : ''
   const [file, setFile] = useState(null)
   const [note, setNote] = useState(resource?.note ?? '')
   const [audience, setAudience] = useState(resource?.audience ?? 'private')
@@ -488,9 +493,11 @@ export function ResourceForm({ resource = null, hasLibrarySkill, connections, on
       if (!file) return setFormError(t('skillDetail.resources.errorFile'))
       if (file.size > MAX_RESOURCE_FILE_BYTES) return setFormError(t('skillDetail.resources.errorFileSize'))
     }
-    if (audience === 'selected' && recipientIds.length === 0) return setFormError(t('skillDetail.resources.errorRecipients'))
+    if (!audienceSlot && audience === 'selected' && recipientIds.length === 0) return setFormError(t('skillDetail.resources.errorRecipients'))
     onSubmit({
-      kind, title, url, file, note, audience, recipientIds,
+      kind, title, url, file, note,
+      audience: audienceSlot ? 'private' : audience,
+      recipientIds: audienceSlot ? [] : recipientIds,
       knowledgeLevel: knowledgeLevel ? Number(knowledgeLevel) : null,
       practicalLevel: practicalLevel ? Number(practicalLevel) : null,
     })
@@ -529,7 +536,29 @@ export function ResourceForm({ resource = null, hasLibrarySkill, connections, on
           <label htmlFor={`${idPrefix}-url`} className="text-xs text-secondary">
             {kind === 'video' ? t('skillDetail.resources.videoUrlLabel') : t('skillDetail.resources.urlLabel')}
           </label>
-          <input id={`${idPrefix}-url`} type="url" inputMode="url" placeholder="https://" value={url} onChange={(e) => setUrl(e.target.value)} className={inputClass} />
+          <div className="mt-1 flex">
+            <select
+              aria-label={t('skillDetail.resources.protocolLabel')}
+              value={webAddress.protocol}
+              onChange={(e) => setWebAddress((current) => ({ ...current, protocol: e.target.value }))}
+              className="shrink-0 rounded-l-md border border-r-0 border-hairline bg-card px-2 py-2 text-sm text-ink focus:outline-none focus:border-moss"
+            >
+              <option value="https://">https://</option>
+              <option value="http://">http://</option>
+            </select>
+            <input
+              id={`${idPrefix}-url`}
+              type="text"
+              inputMode="url"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              placeholder="example.com/page"
+              value={webAddress.address}
+              onChange={(e) => setWebAddress((current) => splitWebAddress(e.target.value, current.protocol))}
+              className="min-w-0 flex-1 rounded-r-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:border-moss"
+            />
+          </div>
         </div>
       )}
 
@@ -578,7 +607,7 @@ export function ResourceForm({ resource = null, hasLibrarySkill, connections, on
         </div>
       </div>
 
-      {resource?.moderation_removed_at ? (
+      {audienceSlot ?? (resource?.moderation_removed_at ? (
         <p className="text-xs text-secondary">{t('skillDetail.resources.removedCantShare')}</p>
       ) : (
       <fieldset>
@@ -605,9 +634,9 @@ export function ResourceForm({ resource = null, hasLibrarySkill, connections, on
           <p className="mt-1 text-xs text-secondary">{t('skillDetail.resources.filesNotPublic')}</p>
         )}
       </fieldset>
-      )}
+      ))}
 
-      {audience === 'selected' && !resource?.moderation_removed_at && (
+      {!audienceSlot && audience === 'selected' && !resource?.moderation_removed_at && (
         <fieldset>
           <legend className="text-xs text-secondary">{t('skillDetail.resources.chooseContacts')}</legend>
           {connections === null ? (

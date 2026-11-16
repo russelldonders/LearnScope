@@ -35,6 +35,7 @@ const lib = vi.hoisted(() => ({
   linkPlanItemsForMe: vi.fn(),
   setPlanMemberRole: vi.fn(),
   removePlanMember: vi.fn(),
+  PLAN_RESOURCE_VISIBILITIES: ['private', 'owners', 'members'],
 }))
 
 vi.mock('../lib/learnerPlans', () => lib)
@@ -52,9 +53,10 @@ vi.mock('../components/SkillGoalModal', () => ({
   ),
 }))
 vi.mock('../components/SkillResourcesSection', () => ({
-  ResourceForm: ({ hasLibrarySkill, submitLabel, onSubmit }) => (
+  ResourceForm: ({ hasLibrarySkill, submitLabel, onSubmit, audienceSlot }) => (
     <div>
       <span>{hasLibrarySkill ? 'library skill' : 'own skill'}</span>
+      {audienceSlot}
       <button type="button" onClick={() => onSubmit({ kind: 'link', title: 'Guide', url: 'https://example.com', audience: 'private' })}>{submitLabel}</button>
     </div>
   ),
@@ -437,19 +439,54 @@ describe('PlanDetail', () => {
     ]))
   })
 
-  it('reorders items by dragging their edit handles', async () => {
+  // Dragging is by pointer (mouse, touch or pen): whatever tile is under the
+  // pointer is the drop target, which jsdom can't work out, so it's given.
+  function dragTo(handle, target) {
+    const original = document.elementFromPoint
+    document.elementFromPoint = () => target
+    try {
+      fireEvent.pointerDown(handle, { pointerId: 1, button: 0, pointerType: 'touch' })
+      fireEvent.pointerMove(handle, { pointerId: 1, pointerType: 'touch' })
+      expect(target.className).toMatch(/ring-moss|outline-moss/)
+      fireEvent.pointerUp(handle, { pointerId: 1, pointerType: 'touch' })
+    } finally {
+      document.elementFromPoint = original
+    }
+  }
+
+  it('reorders items by dragging the grip on the left of the tile, by touch too', async () => {
     renderPage('/plans/p1?mode=edit')
-    const dataTransfer = { effectAllowed: '', dropEffect: '', setData: vi.fn() }
     const target = (await screen.findByText('Leading teams')).closest('li')
-    fireEvent.dragStart(screen.getByTitle('Drag Run 10k'), { dataTransfer })
-    fireEvent.dragOver(target, { dataTransfer })
-    fireEvent.drop(target, { dataTransfer })
+    const handle = screen.getByRole('button', { name: 'Move “Run 10k”: drag, or use the up and down arrow keys' })
+    // The grip leads the tile, before its title.
+    expect(handle.closest('li').firstElementChild.contains(handle)).toBe(true)
+    dragTo(handle, target)
     await waitFor(() => expect(lib.savePositions).toHaveBeenCalledWith('learner_plan_items', [
       { id: 'i4', position: 0 }, { id: 'i1', position: 1 },
     ]))
   })
 
-  it('reorders plan sections by dragging their edit handles', async () => {
+  it('moves an item with the arrow keys on its grip', async () => {
+    renderPage('/plans/p1?mode=edit')
+    const handle = await screen.findByRole('button', { name: 'Move “Run 10k”: drag, or use the up and down arrow keys' })
+    fireEvent.keyDown(handle, { key: 'ArrowUp' })
+    await waitFor(() => expect(lib.savePositions).toHaveBeenCalledWith('learner_plan_items', [
+      { id: 'i4', position: 0 }, { id: 'i1', position: 1 },
+    ]))
+  })
+
+  it('does not reorder when dropped outside the list', async () => {
+    renderPage('/plans/p1?mode=edit')
+    const handle = await screen.findByRole('button', { name: 'Move “Run 10k”: drag, or use the up and down arrow keys' })
+    const original = document.elementFromPoint
+    document.elementFromPoint = () => document.body
+    fireEvent.pointerDown(handle, { pointerId: 1, button: 0, pointerType: 'mouse' })
+    fireEvent.pointerUp(handle, { pointerId: 1, pointerType: 'mouse' })
+    document.elementFromPoint = original
+    expect(lib.savePositions).not.toHaveBeenCalled()
+  })
+
+  it('reorders plan sections by dragging their grip', async () => {
     lib.getPlan.mockResolvedValue({
       ...plan,
       sections: [
@@ -458,11 +495,8 @@ describe('PlanDetail', () => {
       ],
     })
     renderPage('/plans/p1?mode=edit')
-    const dataTransfer = { effectAllowed: '', dropEffect: '', setData: vi.fn() }
     const target = (await screen.findByRole('heading', { name: 'Foundations' })).closest('section')
-    fireEvent.dragStart(screen.getByTitle('Drag Practice'), { dataTransfer })
-    fireEvent.dragOver(target, { dataTransfer })
-    fireEvent.drop(target, { dataTransfer })
+    dragTo(screen.getByRole('button', { name: 'Move the section “Practice”: drag, or use the up and down arrow keys' }), target)
     await waitFor(() => expect(lib.savePositions).toHaveBeenCalledWith('learner_plan_sections', [
       { id: 'sec2', position: 0 }, { id: 'sec1', position: 1 },
     ]))
@@ -501,9 +535,12 @@ describe('PlanDetail', () => {
     fireEvent.click(await screen.findByRole('button', { name: '+ Create a new resource' }))
     fireEvent.change(screen.getByLabelText('Which skill is it for?'), { target: { value: 's1' } })
     expect(screen.getByText('library skill')).toBeInTheDocument()
+    // Who on the plan sees it replaces the skill's own audience: everyone, unless chosen.
+    expect(screen.getByRole('radio', { name: /Everyone following this plan/ })).toBeChecked()
+    fireEvent.click(screen.getByRole('radio', { name: /All owners of this plan/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Create and add to plan' }))
     await waitFor(() => expect(extra.addResource).toHaveBeenCalledWith(expect.objectContaining({ userId: 'me', skillId: 's1', title: 'Guide' })))
-    await waitFor(() => expect(lib.addItem).toHaveBeenCalledWith('p1', expect.objectContaining({ itemType: 'skill_resource', recordId: 'r-new' })))
+    await waitFor(() => expect(lib.addItem).toHaveBeenCalledWith('p1', expect.objectContaining({ itemType: 'skill_resource', recordId: 'r-new', visibility: 'owners' })))
   })
 
   it('lets a step name the skill it develops, and says ticking it is recorded', async () => {
