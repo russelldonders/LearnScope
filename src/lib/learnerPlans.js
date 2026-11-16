@@ -12,9 +12,9 @@ import { buildStatement } from './xapiStatement'
 // Items point at skills twice (a skill item, and the skill a step develops),
 // so both are named by their foreign key.
 const ITEM_COLUMNS = `id, plan_id, section_id, position, item_type, course_id, skill_id, skill_goal_id, skill_resource_id,
-  step_title, step_skill_id, completion_statement_id, note, target_on, completed_on, created_at,
+  step_title, step_skill_id, completion_statement_id, note, target_on, completed_on, plan_knowledge_level, plan_practical_level, created_at,
   courses(id, name, provider, completed_date, status, cancelled_at, catalogue_course_id),
-  skills:skills!learner_plan_items_skill_id_fkey(id, name, level, lifecycle_stage, library_skill_id, practical_level_guide),
+  skills:skills!learner_plan_items_skill_id_fkey(id, name, level, knowledge_level, lifecycle_stage, library_skill_id, practical_level_guide),
   step_skill:skills!learner_plan_items_step_skill_id_fkey(id, name),
   skill_goals(id, title, status, skill_id),
   skill_resources(id, title, kind, url, file_path, skill_id, skills(id, name))`
@@ -39,34 +39,26 @@ export async function getPlan(planId) {
   return { ...plan.data, sections: sections.data ?? [], items: items.data ?? [] }
 }
 
-// What planItemStatus needs beyond the items themselves: each skill's latest
-// target, the learner's goals (to follow a replaced goal to its successor)
-// and progress on the active ones, worked out exactly as on the dashboard.
+// What planItemStatus needs beyond the items themselves: the learner's goals
+// (to follow a replaced goal to its successor) and progress on the active
+// ones, worked out exactly as on the dashboard. Skill targets live on their
+// plan items and are deliberately separate from the learner's own targets.
 export async function loadPlanContext(userId, items) {
-  const skillIds = [...new Set(items.filter((i) => i.skill_id).map((i) => i.skill_id))]
   const needsGoals = items.some((i) => i.skill_goal_id)
-  const [targets, goals, activeGoals] = await Promise.all([
-    skillIds.length
-      ? supabase.from('skill_targets').select('skill_id, target_level, target_date, created_at').in('skill_id', skillIds).order('created_at', { ascending: false })
-      : Promise.resolve({ data: [] }),
+  const [goals, activeGoals] = await Promise.all([
     needsGoals
       ? supabase.from('skill_goals').select('id, title, status, replaces_goal_id, skill_id, skills!inner(user_id)').eq('skills.user_id', userId)
       : Promise.resolve({ data: [] }),
     needsGoals ? listActiveGoalsWithActivities(userId) : Promise.resolve([]),
   ])
-  if (targets.error) throw targets.error
   if (goals.error) throw goals.error
 
-  const latestTargetBySkill = new Map()
-  for (const target of targets.data ?? []) {
-    if (!latestTargetBySkill.has(target.skill_id)) latestTargetBySkill.set(target.skill_id, target)
-  }
   const goalsById = new Map((goals.data ?? []).map((goal) => [goal.id, goal]))
   const replacedBy = new Map()
   for (const goal of goals.data ?? []) if (goal.replaces_goal_id) replacedBy.set(goal.replaces_goal_id, goal.id)
   const goalProgressById = new Map(activeGoals.map((item) => [item.goal.id, computeGoalProgress(item.goal, item.statements)]))
 
-  return { latestTargetBySkill, goalsById, replacedBy, goalProgressById, today: localDateString() }
+  return { goalsById, replacedBy, goalProgressById, today: localDateString() }
 }
 
 // The learner's records that can go into a plan.
@@ -165,7 +157,7 @@ const REFERENCE_COLUMN = {
   skill_resource: 'skill_resource_id',
 }
 
-export async function addItem(planId, { itemType, recordId, stepTitle, stepSkillId, sectionId, note, targetOn, position }) {
+export async function addItem(planId, { itemType, recordId, stepTitle, stepSkillId, sectionId, note, targetOn, position, planKnowledgeLevel, planPracticalLevel }) {
   const row = {
     plan_id: planId,
     section_id: sectionId || null,
@@ -180,14 +172,24 @@ export async function addItem(planId, { itemType, recordId, stepTitle, stepSkill
   } else {
     row[REFERENCE_COLUMN[itemType]] = recordId
   }
+  if (itemType === 'skill') {
+    row.plan_knowledge_level = planKnowledgeLevel ? Number(planKnowledgeLevel) : null
+    row.plan_practical_level = planPracticalLevel ? Number(planPracticalLevel) : null
+    // Skills are shown in their own plan-wide section, never inside an
+    // activity section even if an older caller sends one.
+    row.section_id = null
+  }
   const { error } = await supabase.from('learner_plan_items').insert(row)
   if (error) throw error
 }
 
-export async function updateItem(itemId, { note, targetOn, sectionId, stepTitle, stepSkillId }) {
+export async function updateItem(itemId, { note, targetOn, sectionId, stepTitle, stepSkillId, planKnowledgeLevel, planPracticalLevel }) {
   const changes = { note: blankToNull(note), target_on: targetOn || null, section_id: sectionId || null }
   if (stepTitle !== undefined) changes.step_title = stepTitle.trim()
   if (stepSkillId !== undefined) changes.step_skill_id = stepSkillId || null
+  if (planKnowledgeLevel !== undefined) changes.plan_knowledge_level = planKnowledgeLevel ? Number(planKnowledgeLevel) : null
+  if (planPracticalLevel !== undefined) changes.plan_practical_level = planPracticalLevel ? Number(planPracticalLevel) : null
+  if (planKnowledgeLevel !== undefined || planPracticalLevel !== undefined) changes.section_id = null
   const { error } = await supabase.from('learner_plan_items').update(changes).eq('id', itemId)
   if (error) throw error
 }

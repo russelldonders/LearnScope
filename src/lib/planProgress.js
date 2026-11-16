@@ -28,7 +28,6 @@ export function currentGoal(goalId, goalsById, replacedBy) {
 }
 
 // context:
-//   latestTargetBySkill: Map(skillId -> { target_level, target_date })
 //   goalsById / replacedBy: the learner's goals, for currentGoal
 //   goalProgressById: Map(goalId -> computeGoalProgress result), active goals
 //   today: 'YYYY-MM-DD'
@@ -53,9 +52,12 @@ function baseState(item, context) {
     case 'skill': {
       const skill = item.skills
       if (!item.skill_id || !skill) return 'removed'
-      const target = context.latestTargetBySkill?.get(skill.id)
-      if (!target) return 'needs_target'
-      return Number(skill.level ?? 0) >= Number(target.target_level) ? 'done' : 'in_progress'
+      const knowledgeTarget = item.plan_knowledge_level
+      const practicalTarget = item.plan_practical_level
+      if (!knowledgeTarget && !practicalTarget) return 'needs_target'
+      const knowledgeReached = !knowledgeTarget || Number(skill.knowledge_level ?? 0) >= Number(knowledgeTarget)
+      const practicalReached = !practicalTarget || Number(skill.level ?? 0) >= Number(practicalTarget)
+      return knowledgeReached && practicalReached ? 'done' : 'in_progress'
     }
     case 'skill_goal': {
       if (!item.skill_goal_id) return 'removed'

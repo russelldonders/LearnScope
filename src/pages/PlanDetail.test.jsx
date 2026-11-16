@@ -72,8 +72,8 @@ const plan = {
   sections: [{ id: 'sec1', title: 'Foundations', position: 0, target_on: null }],
   items: [
     { id: 'i1', section_id: 'sec1', item_type: 'course', course_id: 'c1', courses: { id: 'c1', name: 'Leading teams', completed_date: '2026-11-10', status: null } },
-    { id: 'i2', section_id: 'sec1', item_type: 'skill', skill_id: 's1', skills: { id: 's1', name: 'Coaching', level: 2 } },
-    { id: 'i3', section_id: 'sec1', item_type: 'skill', skill_id: 's2', skills: { id: 's2', name: 'Feedback', level: 3 } },
+    { id: 'i2', section_id: 'sec1', item_type: 'skill', skill_id: 's1', plan_knowledge_level: null, plan_practical_level: null, skills: { id: 's1', name: 'Coaching', level: 2, knowledge_level: 2 } },
+    { id: 'i3', section_id: 'sec1', item_type: 'skill', skill_id: 's2', plan_knowledge_level: null, plan_practical_level: 4, skills: { id: 's2', name: 'Feedback', level: 3, knowledge_level: 3 } },
     { id: 'i4', section_id: 'sec1', item_type: 'skill_goal', skill_goal_id: 'g1', skill_goals: { id: 'g1', title: 'Run 10k', skill_id: 's1' } },
     { id: 'i5', section_id: null, item_type: 'step', step_title: 'Shadow a senior lead', completed_on: null, target_on: '2026-11-10' },
     { id: 'i6', section_id: null, item_type: 'course', course_id: null, courses: null },
@@ -128,7 +128,10 @@ describe('PlanDetail', () => {
     expect(screen.getByText('2 of 5 done')).toBeInTheDocument()
     expect(screen.getByText('This Course was deleted')).toBeInTheDocument()
     expect(screen.getByText('Overdue: 1')).toBeInTheDocument()
-    expect(screen.getByText('Now Developing · set a target to measure progress')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Skills that this plan works on' })).toBeInTheDocument()
+    expect(screen.getAllByText('Plan target')).toHaveLength(2)
+    expect(screen.getByText('Ability: Skilled')).toBeInTheDocument()
+    expect(screen.getByText('Knowledge: Aware · Ability: Developing')).toBeInTheDocument()
   })
 
   it('marks a step done with a date and a comment', async () => {
@@ -189,11 +192,14 @@ describe('PlanDetail', () => {
     expect(screen.queryByRole('group', { name: 'Untick this step' })).not.toBeInTheDocument()
   })
 
-  it('opens the skill target dialog for a skill with no target', async () => {
+  it('sets plan-specific skill levels without opening the learner skill target flow', async () => {
     renderPage()
     const coaching = (await screen.findByText('Coaching')).closest('li')
-    fireEvent.click(within(coaching).getByRole('button', { name: 'Set a target' }))
-    expect(screen.getByRole('dialog')).toHaveTextContent('Set target for Coaching')
+    fireEvent.click(within(coaching).getByRole('button', { name: 'Set plan target' }))
+    expect(screen.getByText('Editing this plan')).toBeInTheDocument()
+    fireEvent.change(within(coaching).getByLabelText('Knowledge target (optional)'), { target: { value: '3' } })
+    fireEvent.click(within(coaching).getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(lib.updateItem).toHaveBeenCalledWith('i2', expect.objectContaining({ planKnowledgeLevel: '3', planPracticalLevel: '' })))
   })
 
   it('adds one of the learner\'s courses to a section', async () => {
@@ -201,7 +207,7 @@ describe('PlanDetail', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Add to Foundations' }))
     fireEvent.change(await screen.findByLabelText('Choose a course'), { target: { value: 'c9' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add' }))
-    await waitFor(() => expect(lib.addItem).toHaveBeenCalledWith('p1', expect.objectContaining({ itemType: 'course', recordId: 'c9', sectionId: 'sec1', position: 4 })))
+    await waitFor(() => expect(lib.addItem).toHaveBeenCalledWith('p1', expect.objectContaining({ itemType: 'course', recordId: 'c9', sectionId: 'sec1', position: 2 })))
   })
 
   it('removes an item only after confirming, and says the record stays', async () => {
@@ -217,10 +223,21 @@ describe('PlanDetail', () => {
 
   it('reorders items within a section', async () => {
     renderPage('/plans/p1?mode=edit')
-    fireEvent.click(await screen.findByRole('button', { name: 'Move Coaching up' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Move Run 10k up' }))
     await waitFor(() => expect(lib.savePositions).toHaveBeenCalledWith('learner_plan_items', [
-      { id: 'i2', position: 0 }, { id: 'i1', position: 1 }, { id: 'i3', position: 2 }, { id: 'i4', position: 3 },
+      { id: 'i4', position: 0 }, { id: 'i1', position: 1 },
     ]))
+  })
+
+  it('adds a skill to the dedicated section with plan-specific levels', async () => {
+    renderPage('/plans/p1?mode=edit')
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a skill' }))
+    fireEvent.change(await screen.findByLabelText('Choose a skill'), { target: { value: 's1' } })
+    fireEvent.change(screen.getByLabelText('Ability target (optional)'), { target: { value: '4' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(lib.addItem).toHaveBeenCalledWith('p1', expect.objectContaining({
+      itemType: 'skill', recordId: 's1', planKnowledgeLevel: '', planPracticalLevel: '4', sectionId: null,
+    })))
   })
 
   it('marks the plan complete', async () => {

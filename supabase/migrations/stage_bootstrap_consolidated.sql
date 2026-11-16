@@ -31555,6 +31555,8 @@ $$;
 revoke all on function public.create_generated_course_draft(uuid, jsonb) from public, anon;
 grant execute on function public.create_generated_course_draft(uuid, jsonb) to authenticated;
 
+
+
 -- =============================================================================
 -- 20261115090000_manager_targets_add_skill.sql
 -- =============================================================================
@@ -31677,6 +31679,8 @@ begin
     perform private.add_skill_for_target(r.learner_id, r.skill_library_id);
   end loop;
 end $$;
+
+
 
 -- =============================================================================
 -- 20261115100000_copy_work_set_skills_to_personal.sql
@@ -31854,6 +31858,8 @@ begin
     end loop;
   end loop;
 end $$;
+
+
 
 -- =============================================================================
 -- 20261115101500_ai_usage_observability.sql
@@ -32055,6 +32061,8 @@ $$;
 revoke all on function public.get_ai_usage_dashboard(integer) from public, anon;
 grant execute on function public.get_ai_usage_dashboard(integer) to authenticated;
 
+
+
 -- =============================================================================
 -- 20261115110000_set_skills_copy_guards.sql
 -- =============================================================================
@@ -32097,7 +32105,18 @@ as $function$
     and personal.account_type = 'personal'
     and personal.status = 'active'
 $function$;
+
+
+
+-- =============================================================================
 -- 20261115141309_admin_skill_course_series.sql
+-- =============================================================================
+
+-- Platform administrators can turn a curated skill into one editable course
+-- per knowledge-matrix level. Course content is still produced by the
+-- existing AI/page-builder pipeline; these functions only package the
+-- database writes needed to attach the skill and optionally publish the
+-- result into the platform-owned Global catalogue.
 
 create or replace function public.create_generated_skill_course(
   p_skill_library_id uuid,
@@ -32120,21 +32139,28 @@ begin
   if v_caller is null or not public.is_platform_admin(v_caller) then
     raise insufficient_privilege using message = 'Platform administrator access required';
   end if;
+
   if p_level not between 1 and 5 then
     raise exception 'Knowledge level must be between 1 and 5';
   end if;
+
   if not exists (
-    select 1 from public.skill_library skill
-    where skill.id = p_skill_library_id and skill.status = 'active'
+    select 1
+    from public.skill_library skill
+    where skill.id = p_skill_library_id
+      and skill.status = 'active'
   ) then
     raise exception 'Select an active skill';
   end if;
 
-  select organisation.id into v_system_organisation_id
+  select organisation.id
+  into v_system_organisation_id
   from public.organisations organisation
-  where organisation.is_system and organisation.status = 'active';
+  where organisation.is_system
+    and organisation.status = 'active';
 
-  select catalogue.id into v_global_catalogue_id
+  select catalogue.id
+  into v_global_catalogue_id
   from public.catalogues catalogue
   where catalogue.is_global
     and catalogue.organisation_id = v_system_organisation_id;
@@ -32145,27 +32171,62 @@ begin
 
   v_course_id := public.create_generated_course_draft(v_system_organisation_id, p_draft);
 
-  insert into public.course_catalogue_skills (course_catalogue_id, skill_library_id, level)
-  values (v_course_id, p_skill_library_id, p_level);
+  insert into public.course_catalogue_skills (
+    course_catalogue_id,
+    skill_library_id,
+    level
+  ) values (
+    v_course_id,
+    p_skill_library_id,
+    p_level
+  );
 
-  insert into public.catalogue_skills (catalogue_id, skill_library_id, created_by)
-  values (v_global_catalogue_id, p_skill_library_id, v_caller)
-  on conflict (catalogue_id, skill_library_id) do nothing;
+  -- Curating a provider-owned skill into a Global course also makes the
+  -- skill itself discoverable in the Global catalogue. The unique key turns
+  -- repeat builds for the same skill into a harmless no-op here.
+  insert into public.catalogue_skills (
+    catalogue_id,
+    skill_library_id,
+    created_by
+  ) values (
+    v_global_catalogue_id,
+    p_skill_library_id,
+    v_caller
+  ) on conflict (catalogue_id, skill_library_id) do nothing;
 
   select course.name into v_course_name
-  from public.course_catalogue course where course.id = v_course_id;
+  from public.course_catalogue course
+  where course.id = v_course_id;
 
   insert into public.admin_activity_log (
-    actor_id, actor_label, action, entity_type, entity_id, entity_label
+    actor_id,
+    actor_label,
+    action,
+    entity_type,
+    entity_id,
+    entity_label
   ) values (
-    v_caller, public.admin_activity_actor_label(v_caller),
-    'course.ai_level_generated', 'course_catalogue', v_course_id, v_course_name
+    v_caller,
+    public.admin_activity_actor_label(v_caller),
+    'course.ai_level_generated',
+    'course_catalogue',
+    v_course_id,
+    v_course_name
   );
 
   if p_publish_global then
     insert into public.course_catalogue_publications (
-      course_id, catalogue_id, selected_by, published_at
-    ) values (v_course_id, v_global_catalogue_id, v_caller, null);
+      course_id,
+      catalogue_id,
+      selected_by,
+      published_at
+    ) values (
+      v_course_id,
+      v_global_catalogue_id,
+      v_caller,
+      null
+    );
+
     perform public.publish_course_version(v_course_id);
   end if;
 
@@ -32191,10 +32252,12 @@ begin
   if v_caller is null or not public.is_platform_admin(v_caller) then
     raise insufficient_privilege using message = 'Platform administrator access required';
   end if;
+
   if not exists (
     select 1
     from public.course_catalogue course
-    join public.organisations organisation on organisation.id = course.organisation_id
+    join public.organisations organisation
+      on organisation.id = course.organisation_id
     where course.id = p_course_id
       and organisation.is_system
       and course.status in ('draft', 'rejected')
@@ -32203,15 +32266,24 @@ begin
   end if;
 
   select catalogue.id into v_global_catalogue_id
-  from public.catalogues catalogue where catalogue.is_global;
+  from public.catalogues catalogue
+  where catalogue.is_global;
+
   if v_global_catalogue_id is null then
     raise exception 'The Global catalogue could not be found';
   end if;
 
   insert into public.course_catalogue_publications (
-    course_id, catalogue_id, selected_by, published_at
-  ) values (p_course_id, v_global_catalogue_id, v_caller, null)
-  on conflict (course_id, catalogue_id) do nothing;
+    course_id,
+    catalogue_id,
+    selected_by,
+    published_at
+  ) values (
+    p_course_id,
+    v_global_catalogue_id,
+    v_caller,
+    null
+  ) on conflict (course_id, catalogue_id) do nothing;
 
   perform public.publish_course_version(p_course_id);
 end;
@@ -32221,7 +32293,12 @@ revoke all on function public.publish_system_course_to_global(uuid)
   from public, anon;
 grant execute on function public.publish_system_course_to_global(uuid)
   to authenticated;
+
+
+
+-- =============================================================================
 -- 20261115145034_skill_course_generation_jobs.sql
+-- =============================================================================
 
 -- Durable hand-off between short browser requests and long-running AI course
 -- generation. Course drafts are available only to the service-role API; the
@@ -32269,7 +32346,12 @@ alter table public.skill_course_generation_jobs enable row level security;
 -- service_role after independently verifying the caller and job ownership.
 revoke all on table public.skill_course_generation_jobs from public, anon, authenticated;
 grant select, insert, update, delete on table public.skill_course_generation_jobs to service_role;
+
+
+
+-- =============================================================================
 -- 20261115160000_0288_skill_resources.sql
+-- =============================================================================
 
 -- Learner resources on a skill: documents, videos and links a learner keeps
 -- for learning the skill. Distinct from evidence (proof of ability, on
@@ -32537,7 +32619,12 @@ create policy "Learners read skill resource files they can see"
       or public.can_read_skill_resource_file(storage.objects.name)
     )
   );
+
+
+
+-- =============================================================================
 -- 20261115170000_0289_skill_resource_levels.sql
+-- =============================================================================
 
 -- A resource can say which level of the skill it's for, on either or both of
 -- the skill's two axes: knowledge (1 Unfamiliar .. 5 Deep understanding) and
@@ -32591,7 +32678,12 @@ $$;
 
 revoke all on function public.list_shared_skill_resources(uuid) from public, anon;
 grant execute on function public.list_shared_skill_resources(uuid) to authenticated;
+
+
+
+-- =============================================================================
 -- 20261115180000_0291_atomic_skill_course_job_save.sql
+-- =============================================================================
 
 -- Cancellation and course saving must contend on the same locked job row.
 -- Whichever transaction claims a completed job first determines whether a
@@ -32695,7 +32787,11 @@ revoke all on function public.save_generated_skill_course_job(uuid, boolean)
 grant execute on function public.save_generated_skill_course_job(uuid, boolean)
   to authenticated;
 
+
+
+-- =============================================================================
 -- 20261115200000_0292_skill_resource_moderation.sql
+-- =============================================================================
 
 -- Keeping shared skill resources in check (see 0288):
 --   1. Hiding: anyone a resource is shared with can hide it from their own
@@ -33149,7 +33245,12 @@ revoke all on function public.drop_resource_recipients_on_disconnect() from publ
 create trigger connections_drop_resource_recipients
   after delete on public.connections
   for each row execute function public.drop_resource_recipients_on_disconnect();
+
+
+
+-- =============================================================================
 -- 20261115210000_0293_disconnect_connection.sql
+-- =============================================================================
 
 -- Lets a learner end a connection themselves. Until now a connection only
 -- ended when an account was deleted.
@@ -33191,7 +33292,12 @@ $$;
 
 revoke all on function public.disconnect_connection(uuid) from public, anon;
 grant execute on function public.disconnect_connection(uuid) to authenticated;
+
+
+
+-- =============================================================================
 -- 20261116090000_0294_close_skill_access_requests_on_disconnect.sql
+-- =============================================================================
 
 -- A "please share your skills" request (request_type 'skill_access', see
 -- 20260907200000) only makes sense between connected people. When the two
@@ -33232,7 +33338,12 @@ revoke all on function public.close_skill_access_requests_on_disconnect() from p
 create trigger connections_close_skill_access_requests
   after delete on public.connections
   for each row execute function public.close_skill_access_requests_on_disconnect();
+
+
+
+-- =============================================================================
 -- 20261116100000_0295_learner_plans.sql
+-- =============================================================================
 
 -- Learner plans (phase 1: private to the learner). A plan gathers the
 -- learner's own records -- courses, skills, skill goals, resources -- plus
@@ -33434,7 +33545,12 @@ create policy "Learners manage their own plan items"
   with check (exists (select 1 from public.learner_plans p where p.id = learner_plan_items.plan_id and p.user_id = (select auth.uid())));
 
 grant select, insert, update, delete on table public.learner_plans, public.learner_plan_sections, public.learner_plan_items to authenticated;
+
+
+
+-- =============================================================================
 -- 20261116110000_0296_learner_plan_planning_status.sql
+-- =============================================================================
 
 -- A plan can now be in preparation before it's used: 'planning' is for a
 -- plan still being put together, 'active' for one the learner is working
@@ -33448,7 +33564,12 @@ alter table public.learner_plans
 
 alter table public.learner_plans
   alter column status set default 'planning';
+
+
+
+-- =============================================================================
 -- 20261116120000_0297_plan_item_activities.sql
+-- =============================================================================
 
 -- Ticking off a step or a resource in a plan now records it as an activity
 -- in the learner's activity log (an xapi_statements row, saved through the
@@ -33541,7 +33662,12 @@ end;
 $$;
 
 revoke all on function public.check_learner_plan_item() from public, anon, authenticated;
+
+
+
+-- =============================================================================
 -- 20261116130000_0298_activity_skill_ownership.sql
+-- =============================================================================
 
 -- An activity can only be linked to skills that belong to the person whose
 -- activity it is: its main skill (xapi_statements.skill_id) and every
@@ -33600,3 +33726,26 @@ for each row execute function private.check_activity_skill_owner();
 create trigger check_xapi_statement_skill_link_owner
 before insert or update of skill_id, user_id on public.xapi_statement_skills
 for each row execute function private.check_activity_skill_owner();
+
+
+
+-- =============================================================================
+-- 20261116140000_0299_learner_plan_skill_levels.sql
+-- =============================================================================
+
+-- A skill on a learner plan describes what that plan is intended to build,
+-- independently of the learner's current self-assessed or confirmed levels.
+-- Either axis may be used on its own. Existing skill items remain valid with
+-- no plan levels so the UI can ask the learner to add them when next edited.
+alter table public.learner_plan_items
+  add column plan_knowledge_level smallint,
+  add column plan_practical_level smallint,
+  add constraint learner_plan_items_plan_knowledge_level_check
+    check (plan_knowledge_level is null or plan_knowledge_level between 1 and 5),
+  add constraint learner_plan_items_plan_practical_level_check
+    check (plan_practical_level is null or plan_practical_level between 1 and 5),
+  add constraint learner_plan_items_plan_skill_levels_type_check
+    check (
+      (plan_knowledge_level is null and plan_practical_level is null)
+      or item_type = 'skill'
+    );

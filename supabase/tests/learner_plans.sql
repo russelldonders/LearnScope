@@ -2,7 +2,7 @@
 
 begin;
 
-select plan(22);
+select plan(26);
 
 insert into auth.users (id, email, email_confirmed_at) values
   ('80000000-0000-0000-0000-00000000000a', 'plan-a@example.com', now()),
@@ -46,6 +46,29 @@ insert into public.learner_plan_items (id, plan_id, position, item_type, step_ti
 
 select is((select count(*)::int from public.learner_plan_items), 4, 'a learner builds a plan from their own records and a step');
 select is((select status from public.learner_plans where id = '80000000-0000-0000-0000-000000000100'), 'planning', 'a new plan starts out being prepared');
+
+-- Plan skill levels describe what this plan aims to build and are separate
+-- from the level already stored on the learner's skill.
+update public.learner_plan_items
+set plan_knowledge_level = 3, plan_practical_level = 4
+where id = '80000000-0000-0000-0000-000000000122';
+select results_eq(
+  $$select plan_knowledge_level, plan_practical_level, skill_id from public.learner_plan_items where id = '80000000-0000-0000-0000-000000000122'$$,
+  $$values (3::smallint, 4::smallint, '80000000-0000-0000-0000-0000000000a1'::uuid)$$,
+  'a plan keeps its own knowledge and ability targets for a skill'
+);
+select throws_ok(
+  $$update public.learner_plan_items set plan_knowledge_level = 6 where id = '80000000-0000-0000-0000-000000000122'$$,
+  '23514', null, 'a plan knowledge target stays on the five-level scale'
+);
+select throws_ok(
+  $$update public.learner_plan_items set plan_practical_level = 0 where id = '80000000-0000-0000-0000-000000000122'$$,
+  '23514', null, 'a plan ability target stays on the five-level scale'
+);
+select throws_ok(
+  $$update public.learner_plan_items set plan_knowledge_level = 2 where id = '80000000-0000-0000-0000-000000000121'$$,
+  '23514', null, 'only a skill item can carry plan skill targets'
+);
 
 -- A step can name one of the learner's own skills, and a tick can point at
 -- one of their own activities -- never someone else's.

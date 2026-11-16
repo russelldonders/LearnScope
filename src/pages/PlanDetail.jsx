@@ -5,7 +5,6 @@ import { useLanguage } from '../context/LanguageContext'
 import AppHeader from '../components/AppHeader'
 import ConfirmDialog from '../components/ConfirmDialog'
 import PlanProgressBar from '../components/PlanProgressBar'
-import SetTargetModal from '../components/SetTargetModal'
 import SkillGoalModal from '../components/SkillGoalModal'
 import EvidenceFields from '../components/EvidenceFields'
 import { localDateString } from '../lib/skillGoalProgress'
@@ -34,10 +33,10 @@ import {
   updateSection,
 } from '../lib/learnerPlans'
 import { currentGoal, paceOf, planItemStatus, summariseProgress, timeElapsedPercent } from '../lib/planProgress'
-import { LEVEL_LABELS } from '../lib/levels'
+import { KNOWLEDGE_LEVEL_LABELS, LEVEL_LABELS, LEVELS } from '../lib/levels'
 import { formatFullDate } from '../lib/dates'
 
-const ITEM_TYPES = ['course', 'skill', 'skill_goal', 'skill_resource', 'step']
+const CONTENT_ITEM_TYPES = ['course', 'skill_goal', 'skill_resource', 'step']
 
 const STATE_TONES = {
   done: 'bg-moss/15 text-moss',
@@ -53,7 +52,7 @@ const STATE_TONES = {
 //
 // Two modes, kept apart so working through a plan never risks changing it:
 //   use  -- follow progress, tick off steps and resources, set a missing
-//           skill target. Nothing about the plan's structure can change.
+//           plan-specific skill target. Nothing else can change.
 //   edit -- add, remove, reorder and edit items and sections, and the
 //           plan's details. Opened with ?mode=edit; a plan still being
 //           prepared (status planning) is always in edit mode, until the
@@ -76,7 +75,6 @@ export default function PlanDetail() {
   const [editingItemId, setEditingItemId] = useState(null)
   const [editingSectionId, setEditingSectionId] = useState(null)
   const [confirm, setConfirm] = useState(null)
-  const [targetFor, setTargetFor] = useState(null)
   // Who the activities recorded by ticking are by (xAPI actor).
   const [actorName, setActorName] = useState('')
 
@@ -155,9 +153,11 @@ export default function PlanDetail() {
     const ok = await run(() => startPlan(plan))
     if (ok) setEditing(false)
   }
+  const skillItems = plan.items.filter((item) => item.item_type === 'skill')
+  const contentItems = plan.items.filter((item) => item.item_type !== 'skill')
   const groups = [
-    { section: null, items: plan.items.filter((item) => !item.section_id) },
-    ...plan.sections.map((section) => ({ section, items: plan.items.filter((item) => item.section_id === section.id) })),
+    { section: null, items: contentItems.filter((item) => !item.section_id) },
+    ...plan.sections.map((section) => ({ section, items: contentItems.filter((item) => item.section_id === section.id) })),
   ]
 
   async function move(list, index, delta, table) {
@@ -166,6 +166,47 @@ export default function PlanDetail() {
     const reordered = [...list]
     ;[reordered[index], reordered[target]] = [reordered[target], reordered[index]]
     await run(() => savePositions(table, reordered.map((row, position) => ({ id: row.id, position }))))
+  }
+
+  function renderItem(item, index, items) {
+    return (
+      <li key={item.id} className="rounded-md border border-hairline bg-card p-3">
+        {editingItemId === item.id ? (
+          <ItemEditForm
+            item={item}
+            sections={plan.sections}
+            busy={busy}
+            onCancel={() => setEditingItemId(null)}
+            onSubmit={async (values) => {
+              const ok = await run(() => updateItem(item.id, values))
+              if (ok) setEditingItemId(null)
+            }}
+          />
+        ) : (
+          <PlanItem
+            item={item}
+            status={statusById.get(item.id)}
+            context={context}
+            busy={busy}
+            editing={editing}
+            backState={backState}
+            canMoveUp={index > 0}
+            canMoveDown={index < items.length - 1}
+            onMoveUp={() => move(items, index, -1, 'learner_plan_items')}
+            onMoveDown={() => move(items, index, 1, 'learner_plan_items')}
+            onComplete={(values) => run(() => setItemDone(item, true, { userId: user.id, actor: { name: actorName, email: user.email }, ...values }))}
+            onUntick={(removeActivity) => run(() => setItemDone(item, false, { userId: user.id, actor: { name: actorName, email: user.email }, removeActivity }))}
+            onLoadActivity={() => getItemActivity(item)}
+            onEdit={() => setEditingItemId(item.id)}
+            onRemove={() => setConfirm({ kind: 'item', item })}
+            onSetTarget={() => {
+              setEditing(true)
+              setEditingItemId(item.id)
+            }}
+          />
+        )}
+      </li>
+    )
   }
 
   return (
@@ -280,6 +321,35 @@ export default function PlanDetail() {
       {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
 
       <div className="mt-6 space-y-6">
+        {(skillItems.length > 0 || editing) && (
+          <section aria-labelledby="plan-skills-heading">
+            <div className="border-b border-hairline pb-2">
+              <h2 id="plan-skills-heading" className="font-display text-xl text-ink">{t('plans.skillsSectionTitle')}</h2>
+              <p className="text-xs text-secondary">{t('plans.skillsSectionHint')}</p>
+            </div>
+            {skillItems.length === 0 && editing && <p className="mt-2 text-sm text-secondary">{t('plans.skillsSectionEmpty')}</p>}
+            <ul className="mt-2 space-y-2">
+              {skillItems.map((item, index) => renderItem(item, index, skillItems))}
+            </ul>
+            {editing && (addingTo === 'skills' ? (
+              <AddItemForm
+                userId={user.id}
+                busy={busy}
+                allowedTypes={['skill']}
+                onCancel={() => setAddingTo(null)}
+                onSubmit={async (values) => {
+                  const ok = await run(() => addItem(plan.id, { ...values, sectionId: null, position: skillItems.length }))
+                  if (ok) setAddingTo(null)
+                }}
+              />
+            ) : (
+              <button type="button" onClick={() => setAddingTo('skills')} className="mt-2 text-sm text-moss font-medium hover:underline">
+                {t('plans.addSkill')}
+              </button>
+            ))}
+          </section>
+        )}
+
         {groups.map(({ section, items }, groupIndex) => {
           const sectionProgress = summariseProgress(items.map((item) => statusById.get(item.id) ?? { state: 'not_started' }))
           if (!section && items.length === 0 && (plan.sections.length > 0 || !editing)) return null
@@ -321,47 +391,14 @@ export default function PlanDetail() {
 
               {items.length === 0 && section && editing && <p className="mt-2 text-sm text-secondary">{t('plans.sectionEmpty')}</p>}
               <ul className="mt-2 space-y-2">
-                {items.map((item, index) => (
-                  <li key={item.id} className="rounded-md border border-hairline bg-card p-3">
-                    {editingItemId === item.id ? (
-                      <ItemEditForm
-                        item={item}
-                        sections={plan.sections}
-                        busy={busy}
-                        onCancel={() => setEditingItemId(null)}
-                        onSubmit={async (values) => {
-                          const ok = await run(() => updateItem(item.id, values))
-                          if (ok) setEditingItemId(null)
-                        }}
-                      />
-                    ) : (
-                      <PlanItem
-                        item={item}
-                        status={statusById.get(item.id)}
-                        context={context}
-                        busy={busy}
-                        editing={editing}
-                        backState={backState}
-                        canMoveUp={index > 0}
-                        canMoveDown={index < items.length - 1}
-                        onMoveUp={() => move(items, index, -1, 'learner_plan_items')}
-                        onMoveDown={() => move(items, index, 1, 'learner_plan_items')}
-                        onComplete={(values) => run(() => setItemDone(item, true, { userId: user.id, actor: { name: actorName, email: user.email }, ...values }))}
-                        onUntick={(removeActivity) => run(() => setItemDone(item, false, { userId: user.id, actor: { name: actorName, email: user.email }, removeActivity }))}
-                        onLoadActivity={() => getItemActivity(item)}
-                        onEdit={() => setEditingItemId(item.id)}
-                        onRemove={() => setConfirm({ kind: 'item', item })}
-                        onSetTarget={() => setTargetFor(item)}
-                      />
-                    )}
-                  </li>
-                ))}
+                {items.map((item, index) => renderItem(item, index, items))}
               </ul>
 
               {!editing ? null : addingTo === (section?.id ?? 'top') ? (
                 <AddItemForm
                   userId={user.id}
                   busy={busy}
+                  allowedTypes={CONTENT_ITEM_TYPES}
                   onCancel={() => setAddingTo(null)}
                   onSubmit={async (values) => {
                     const ok = await run(() => addItem(plan.id, { ...values, sectionId: section?.id ?? null, position: items.length }))
@@ -437,19 +474,6 @@ export default function PlanDetail() {
         />
       )}
 
-      {targetFor && (
-        <SetTargetModal
-          skill={targetFor.skills}
-          user={user}
-          targets={[]}
-          currentLevel={targetFor.skills.level}
-          onClose={() => setTargetFor(null)}
-          onSet={async () => {
-            setTargetFor(null)
-            await load()
-          }}
-        />
-      )}
     </Shell>
   )
 }
@@ -485,15 +509,18 @@ function describeItem(item, status, context, t) {
       return { title: item.courses?.name, href: item.courses ? `/courses/${item.courses.id}/learn` : null, detail: item.courses?.provider }
     case 'skill': {
       const skill = item.skills
-      const target = skill ? context?.latestTargetBySkill?.get(skill.id) : null
+      const currentLevels = skill ? [
+        skill.knowledge_level && t('plans.knowledgeLevelValue', { level: KNOWLEDGE_LEVEL_LABELS[skill.knowledge_level] ?? skill.knowledge_level }),
+        skill.level && t('plans.abilityLevelValue', { level: LEVEL_LABELS[skill.level] ?? skill.level }),
+      ].filter(Boolean) : []
+      const planLevels = [
+        item.plan_knowledge_level && t('plans.knowledgeLevelValue', { level: KNOWLEDGE_LEVEL_LABELS[item.plan_knowledge_level] ?? item.plan_knowledge_level }),
+        item.plan_practical_level && t('plans.abilityLevelValue', { level: LEVEL_LABELS[item.plan_practical_level] ?? item.plan_practical_level }),
+      ].filter(Boolean)
       return {
         title: skill?.name,
         href: skill ? `/skills/${skill.id}` : null,
-        detail: skill
-          ? target
-            ? t('plans.skillLevelOfTarget', { level: LEVEL_LABELS[skill.level] ?? skill.level, target: LEVEL_LABELS[target.target_level] ?? target.target_level })
-            : t('plans.skillNoTarget', { level: LEVEL_LABELS[skill.level] ?? skill.level })
-          : null,
+        skillLevels: skill ? { currentLevels, planLevels } : null,
       }
     }
     case 'skill_goal': {
@@ -549,7 +576,7 @@ function PlanItem({ item, status, context, busy, editing, backState = null, canM
       setChecking(false)
     }
   }
-  const { title, href, external, detail } = describeItem(item, status, context, t)
+  const { title, href, external, detail, skillLevels } = describeItem(item, status, context, t)
   // Ticking off is part of working through the plan, so only in use mode.
   const tickable = !editing && (item.item_type === 'step' || (item.item_type === 'skill_resource' && state !== 'removed'))
   const typeLabel = t(`plans.itemTypes.${item.item_type}`)
@@ -587,25 +614,41 @@ function PlanItem({ item, status, context, busy, editing, backState = null, canM
         <span aria-hidden="true" className={`mt-1.5 h-3 w-3 shrink-0 rounded-full ${statusDotClass}`} />
       )}
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          {href && state !== 'removed' ? (
-            external ? (
-              <a href={href} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-moss hover:underline break-words">{shownTitle}</a>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+            {href && state !== 'removed' ? (
+              external ? (
+                <a href={href} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-moss hover:underline break-words">{shownTitle}</a>
+              ) : (
+                <Link to={href} state={backState} className="text-sm font-medium text-moss hover:underline break-words">{shownTitle}</Link>
+              )
             ) : (
-              <Link to={href} state={backState} className="text-sm font-medium text-moss hover:underline break-words">{shownTitle}</Link>
-            )
-          ) : (
-            <span className={`text-sm font-medium break-words ${state === 'removed' ? 'text-secondary italic' : 'text-ink'} ${state === 'done' && tickable ? 'line-through decoration-secondary' : ''}`}>{shownTitle}</span>
-          )}
-          <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{typeLabel}</span>
-          {(!editing || state === 'removed') && (
-            <span data-state={state} className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATE_TONES[state]}`}>
-              {t(`plans.states.${state}`)}
-            </span>
-          )}
-          {!editing && status?.overdue && <span className="rounded-full bg-red-700/15 text-red-700 px-2 py-0.5 text-[11px] font-medium">{t('plans.overdue')}</span>}
+              <span className={`text-sm font-medium break-words ${state === 'removed' ? 'text-secondary italic' : 'text-ink'} ${state === 'done' && tickable ? 'line-through decoration-secondary' : ''}`}>{shownTitle}</span>
+            )}
+            <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{typeLabel}</span>
+          </div>
+          <div className="ml-auto flex shrink-0 flex-wrap justify-end gap-1.5">
+            {(!editing || state === 'removed') && (
+              <span data-state={state} className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATE_TONES[state]}`}>
+                {t(`plans.states.${state}`)}
+              </span>
+            )}
+            {!editing && status?.overdue && <span className="rounded-full bg-red-700/15 text-red-700 px-2 py-0.5 text-[11px] font-medium">{t('plans.overdue')}</span>}
+          </div>
         </div>
         {detail && <p className="mt-0.5 text-xs text-secondary">{detail}</p>}
+        {skillLevels && (
+          <dl className="mt-1 grid gap-x-4 gap-y-0.5 text-xs sm:grid-cols-2">
+            <div className="flex min-w-0 gap-1.5">
+              <dt className="shrink-0 text-secondary">{t('plans.planSkillTargetLabel')}</dt>
+              <dd className="break-words font-medium text-ink">{skillLevels.planLevels.length ? skillLevels.planLevels.join(' · ') : t('plans.planSkillTargetMissing')}</dd>
+            </div>
+            <div className="flex min-w-0 gap-1.5">
+              <dt className="shrink-0 text-secondary">{t('plans.yourSkillLevelLabel')}</dt>
+              <dd className="break-words text-ink">{skillLevels.currentLevels.length ? skillLevels.currentLevels.join(' · ') : t('plans.skillLevelNotSet')}</dd>
+            </div>
+          </dl>
+        )}
         {item.target_on && <p className="mt-0.5 text-xs text-secondary">{t('plans.byDate', { date: formatFullDate(item.target_on) })}</p>}
         {item.note && <p className="mt-1 text-sm text-secondary whitespace-pre-wrap break-words">{item.note}</p>}
         {!editing && state === 'done' && item.completion_statement_id && (
@@ -642,7 +685,7 @@ function PlanItem({ item, status, context, busy, editing, backState = null, canM
         )}
         {!editing && state === 'needs_target' && (
           <div className="mt-2 text-xs">
-            <button type="button" onClick={onSetTarget} className="text-gold font-medium hover:underline">{t('plans.setTarget')}</button>
+            <button type="button" onClick={onSetTarget} className="text-gold font-medium hover:underline">{t('plans.setPlanTarget')}</button>
           </div>
         )}
         {editing && (
@@ -769,16 +812,18 @@ function recordLabel(type, record, t) {
   }
 }
 
-function AddItemForm({ userId, busy, onSubmit, onCancel }) {
+function AddItemForm({ userId, busy, allowedTypes = CONTENT_ITEM_TYPES, onSubmit, onCancel }) {
   const { t } = useLanguage()
   const [records, setRecords] = useState(null)
   const [loadError, setLoadError] = useState(null)
-  const [itemType, setItemType] = useState('course')
+  const [itemType, setItemType] = useState(allowedTypes[0])
   const [recordId, setRecordId] = useState('')
   const [stepTitle, setStepTitle] = useState('')
   const [stepSkillId, setStepSkillId] = useState('')
   const [targetOn, setTargetOn] = useState('')
   const [note, setNote] = useState('')
+  const [planKnowledgeLevel, setPlanKnowledgeLevel] = useState('')
+  const [planPracticalLevel, setPlanPracticalLevel] = useState('')
   const [error, setError] = useState(null)
   // Making a new goal or resource here, rather than picking an existing one.
   const [creatingGoal, setCreatingGoal] = useState(false)
@@ -850,21 +895,22 @@ function AddItemForm({ userId, busy, onSubmit, onCancel }) {
           onSubmit={(event) => {
             event.preventDefault()
             if (itemType === 'step' ? !stepTitle.trim() : !recordId) return setError(t(itemType === 'step' ? 'plans.errorStepTitle' : 'plans.errorChooseRecord'))
+            if (itemType === 'skill' && !planKnowledgeLevel && !planPracticalLevel) return setError(t('plans.errorPlanSkillLevel'))
             setError(null)
-            onSubmit({ itemType, recordId, stepTitle, stepSkillId, targetOn, note })
+            onSubmit({ itemType, recordId, stepTitle, stepSkillId, targetOn, note, planKnowledgeLevel, planPracticalLevel })
           }}
         >
-          <fieldset>
+          {allowedTypes.length > 1 && <fieldset>
             <legend className="text-xs text-secondary">{t('plans.itemTypeLabel')}</legend>
             <div className="mt-1 flex flex-wrap gap-2">
-              {ITEM_TYPES.map((type) => (
+              {allowedTypes.map((type) => (
                 <label key={type} className={`cursor-pointer rounded-md border px-3 py-1.5 text-xs font-medium ${itemType === type ? 'border-moss text-moss' : 'border-hairline text-ink'}`}>
                   <input type="radio" name="plan-item-type" value={type} checked={itemType === type} onChange={() => { setItemType(type); setRecordId(''); setError(null) }} className="sr-only" />
                   {t(`plans.itemTypes.${type}`)}
                 </label>
               ))}
             </div>
-          </fieldset>
+          </fieldset>}
 
           {itemType === 'step' ? (
             <div className="grid gap-3 sm:grid-cols-2">
@@ -898,6 +944,29 @@ function AddItemForm({ userId, busy, onSubmit, onCancel }) {
                 </select>
               )}
             </div>
+          )}
+
+          {itemType === 'skill' && (
+            <fieldset>
+              <legend className="text-xs text-secondary">{t('plans.planSkillLevelsLegend')}</legend>
+              <p className="mt-0.5 text-xs text-secondary">{t('plans.planSkillLevelsHint')}</p>
+              <div className="mt-1 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="plan-item-knowledge-level" className="text-xs text-secondary">{t('plans.planKnowledgeLevelLabel')}</label>
+                  <select id="plan-item-knowledge-level" value={planKnowledgeLevel} onChange={(event) => setPlanKnowledgeLevel(event.target.value)} className={inputClass}>
+                    <option value="">{t('plans.noPlanLevel')}</option>
+                    {LEVELS.map((level) => <option key={level} value={level}>{level} · {KNOWLEDGE_LEVEL_LABELS[level]}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="plan-item-practical-level" className="text-xs text-secondary">{t('plans.planAbilityLevelLabel')}</label>
+                  <select id="plan-item-practical-level" value={planPracticalLevel} onChange={(event) => setPlanPracticalLevel(event.target.value)} className={inputClass}>
+                    <option value="">{t('plans.noPlanLevel')}</option>
+                    {LEVELS.map((level) => <option key={level} value={level}>{level} · {LEVEL_LABELS[level]}</option>)}
+                  </select>
+                </div>
+              </div>
+            </fieldset>
           )}
 
           {itemType === 'skill_goal' && (
@@ -953,12 +1022,15 @@ function ItemEditForm({ item, sections, busy, onSubmit, onCancel }) {
   const { t } = useLanguage()
   const { user } = useAuth()
   const isStep = item.item_type === 'step'
+  const isSkill = item.item_type === 'skill'
   const [stepTitle, setStepTitle] = useState(item.step_title ?? '')
   const [stepSkillId, setStepSkillId] = useState(item.step_skill_id ?? '')
   const [skills, setSkills] = useState([])
   const [targetOn, setTargetOn] = useState(item.target_on ?? '')
   const [note, setNote] = useState(item.note ?? '')
   const [sectionId, setSectionId] = useState(item.section_id ?? '')
+  const [planKnowledgeLevel, setPlanKnowledgeLevel] = useState(item.plan_knowledge_level ?? '')
+  const [planPracticalLevel, setPlanPracticalLevel] = useState(item.plan_practical_level ?? '')
   const [error, setError] = useState(null)
   const idPrefix = `plan-item-${item.id}`
 
@@ -974,6 +1046,7 @@ function ItemEditForm({ item, sections, busy, onSubmit, onCancel }) {
       onSubmit={(event) => {
         event.preventDefault()
         if (isStep && !stepTitle.trim()) return setError(t('plans.errorStepTitle'))
+        if (isSkill && !planKnowledgeLevel && !planPracticalLevel) return setError(t('plans.errorPlanSkillLevel'))
         setError(null)
         onSubmit({
           targetOn,
@@ -981,6 +1054,8 @@ function ItemEditForm({ item, sections, busy, onSubmit, onCancel }) {
           sectionId,
           stepTitle: isStep ? stepTitle : undefined,
           stepSkillId: isStep ? stepSkillId : undefined,
+          planKnowledgeLevel: isSkill ? planKnowledgeLevel : undefined,
+          planPracticalLevel: isSkill ? planPracticalLevel : undefined,
         })
       }}
     >
@@ -1003,14 +1078,36 @@ function ItemEditForm({ item, sections, busy, onSubmit, onCancel }) {
           </div>
         </div>
       )}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
+      {isSkill && (
+        <fieldset>
+          <legend className="text-xs text-secondary">{t('plans.planSkillLevelsLegend')}</legend>
+          <p className="mt-0.5 text-xs text-secondary">{t('plans.planSkillLevelsHint')}</p>
+          <div className="mt-1 grid gap-3 sm:grid-cols-2">
+            <div>
+              <label htmlFor={`${idPrefix}-knowledge-level`} className="text-xs text-secondary">{t('plans.planKnowledgeLevelLabel')}</label>
+              <select id={`${idPrefix}-knowledge-level`} value={planKnowledgeLevel} onChange={(event) => setPlanKnowledgeLevel(event.target.value)} className={inputClass}>
+                <option value="">{t('plans.noPlanLevel')}</option>
+                {LEVELS.map((level) => <option key={level} value={level}>{level} · {KNOWLEDGE_LEVEL_LABELS[level]}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor={`${idPrefix}-practical-level`} className="text-xs text-secondary">{t('plans.planAbilityLevelLabel')}</label>
+              <select id={`${idPrefix}-practical-level`} value={planPracticalLevel} onChange={(event) => setPlanPracticalLevel(event.target.value)} className={inputClass}>
+                <option value="">{t('plans.noPlanLevel')}</option>
+                {LEVELS.map((level) => <option key={level} value={level}>{level} · {LEVEL_LABELS[level]}</option>)}
+              </select>
+            </div>
+          </div>
+        </fieldset>
+      )}
+      <div className={`grid gap-3 ${isSkill ? '' : 'sm:grid-cols-2'}`}>
+        {!isSkill && <div>
           <label htmlFor={`${idPrefix}-section`} className="text-xs text-secondary">{t('plans.sectionLabel')}</label>
           <select id={`${idPrefix}-section`} value={sectionId} onChange={(e) => setSectionId(e.target.value)} className={inputClass}>
             <option value="">{t('plans.noSection')}</option>
             {sections.map((section) => <option key={section.id} value={section.id}>{section.title}</option>)}
           </select>
-        </div>
+        </div>}
         <div>
           <label htmlFor={`${idPrefix}-target`} className="text-xs text-secondary">{t('plans.itemTargetLabel')}</label>
           <input id={`${idPrefix}-target`} type="date" value={targetOn} onChange={(e) => setTargetOn(e.target.value)} className={inputClass} />

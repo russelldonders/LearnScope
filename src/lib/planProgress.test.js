@@ -4,7 +4,6 @@ import { currentGoal, paceOf, planItemStatus, summariseProgress, timeElapsedPerc
 const today = '2026-11-16'
 const context = (extra = {}) => ({
   today,
-  latestTargetBySkill: new Map(),
   goalsById: new Map(),
   replacedBy: new Map(),
   goalProgressById: new Map(),
@@ -21,11 +20,13 @@ describe('planItemStatus', () => {
     expect(planItemStatus({ item_type: 'course', course_id: null, courses: null }, context()).state).toBe('removed')
   })
 
-  it('measures a skill against its own target, and asks for one when there is none', () => {
-    const item = { item_type: 'skill', skill_id: 's', skills: { id: 's', level: 3 } }
+  it('measures both plan-specific skill axes without changing the learner\'s own targets', () => {
+    const item = { item_type: 'skill', skill_id: 's', skills: { id: 's', level: 3, knowledge_level: 2 } }
     expect(planItemStatus(item, context()).state).toBe('needs_target')
-    expect(planItemStatus(item, context({ latestTargetBySkill: new Map([['s', { target_level: 4 }]]) })).state).toBe('in_progress')
-    expect(planItemStatus(item, context({ latestTargetBySkill: new Map([['s', { target_level: 3 }]]) })).state).toBe('done')
+    expect(planItemStatus({ ...item, plan_practical_level: 4 }, context()).state).toBe('in_progress')
+    expect(planItemStatus({ ...item, plan_practical_level: 3 }, context()).state).toBe('done')
+    expect(planItemStatus({ ...item, plan_knowledge_level: 3, plan_practical_level: 3 }, context()).state).toBe('in_progress')
+    expect(planItemStatus({ ...item, plan_knowledge_level: 2, plan_practical_level: 3 }, context()).state).toBe('done')
   })
 
   it('follows a goal replaced by a new target to the goal in force now', () => {
