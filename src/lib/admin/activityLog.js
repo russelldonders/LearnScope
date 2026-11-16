@@ -14,6 +14,8 @@ export const ACTIVITY_ACTION_LABELS = {
   'user.blocked': 'User blocked',
   'user.unblocked': 'User unblocked',
   'user.deleted': 'User deleted',
+  'user.impersonation_started': 'User preview started',
+  'user.impersonation_ended': 'User preview ended',
   'skill.activated': 'Skill activated',
   'skill.deactivated': 'Skill deactivated',
   'tag.blacklisted': 'Tag blacklisted',

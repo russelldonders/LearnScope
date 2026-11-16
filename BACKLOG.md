@@ -16,14 +16,13 @@ move active work to **In progress** and completed work to **Done**.
   experience-type labels, duplicate-skill messages, and generated AI content
   stay English unless that product decision changes.
 
-- If literal admin impersonation is still wanted, run a dedicated security
-  design review first. A safe proposal must cover session scope and expiry,
-  write blocking, audit logging, and exclusion of privileged accounts. The
-  existing `AdminUserDetail.jsx` remains the supported read-only learner view.
-
 ## In progress
 
 ## Done
+
+- Added short-lived, read-only platform-admin user previews in a separate
+  browser session, with database-enforced write blocking, start/end audit
+  events, a required access reason, and privileged-account exclusion.
 
 - Added optional authenticated Playwright infrastructure for a seeded staging
   learner. It reuses ignored storage state and covers dashboard, profile,

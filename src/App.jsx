@@ -17,6 +17,7 @@ import Login from './pages/Login'
 import RouteTitle from './components/RouteTitle'
 import PreloadPages from './components/PreloadPages'
 import ErrorBoundary from './components/ErrorBoundary'
+import ImpersonationBanner from './components/ImpersonationBanner'
 
 // Each page is its own chunk, so a visitor only downloads the screens they
 // open -- the login page no longer ships the admin console or course editor.
@@ -86,6 +87,7 @@ function App() {
       <AuthProvider>
         <ThemeProvider>
         <LanguageProvider>
+        <ImpersonationBanner />
         <RouteTitle />
         <PreloadPages pages={PRELOADED_PAGES} />
         <PendingActionsProvider>

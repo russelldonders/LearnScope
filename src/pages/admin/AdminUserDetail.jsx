@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import AdminLayout from './AdminLayout'
 import StatusBadge from '../../components/StatusBadge'
-import { getUserProfile } from '../../lib/admin/users'
+import { getUserProfile, startUserImpersonation } from '../../lib/admin/users'
+import { IMPERSONATION_BOOTSTRAP_KEY } from '../../lib/supabaseClient'
+import AccessibleDialog from '../../components/AccessibleDialog'
 import { formatMonthYear } from '../../lib/dates'
 import GrowthRing from '../../components/GrowthRing'
 
@@ -30,6 +32,10 @@ export default function AdminUserDetail() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewReason, setPreviewReason] = useState('')
+  const [previewing, setPreviewing] = useState(false)
+  const [previewError, setPreviewError] = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -41,6 +47,32 @@ export default function AdminUserDetail() {
   }, [userId])
 
   const name = data ? [data.profile.firstName, data.profile.lastName].filter(Boolean).join(' ') : ''
+
+  async function startPreview(event) {
+    event.preventDefault()
+    setPreviewing(true)
+    setPreviewError(null)
+    const previewWindow = window.open('about:blank', '_blank')
+    if (!previewWindow) {
+      setPreviewError('Allow pop-ups for LearnScope, then try again.')
+      setPreviewing(false)
+      return
+    }
+    previewWindow.document.title = 'Opening read-only preview…'
+    previewWindow.document.body.textContent = 'Opening read-only preview…'
+    try {
+      const session = await startUserImpersonation(userId, previewReason)
+      previewWindow.sessionStorage.setItem(IMPERSONATION_BOOTSTRAP_KEY, JSON.stringify(session))
+      previewWindow.location.replace('/dashboard')
+      setPreviewOpen(false)
+      setPreviewReason('')
+    } catch (err) {
+      previewWindow.close()
+      setPreviewError(err.message)
+    } finally {
+      setPreviewing(false)
+    }
+  }
 
   return (
     <AdminLayout>
@@ -56,9 +88,22 @@ export default function AdminUserDetail() {
         ) : (
           <>
             <div className="bg-card border border-hairline rounded-lg p-6">
-              <h2 className="font-display text-xl text-ink mb-1">{name || '(no name set)'}</h2>
-              <p className="font-mono text-xs text-secondary">{data.profile.userCode}</p>
-              <p className="text-sm text-secondary mb-3">{data.profile.email}</p>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-display text-xl text-ink mb-1">{name || '(no name set)'}</h2>
+                  <p className="font-mono text-xs text-secondary">{data.profile.userCode}</p>
+                  <p className="text-sm text-secondary mb-3">{data.profile.email}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setPreviewError(null); setPreviewOpen(true) }}
+                  disabled={data.isPlatformAdmin || data.profile.accountStatus === 'blocked'}
+                  title={data.isPlatformAdmin ? 'Platform administrator accounts cannot be previewed' : undefined}
+                  className="rounded-md border border-hairline px-3 py-2 text-sm font-medium text-ink hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Preview as user
+                </button>
+              </div>
               <div className="flex flex-wrap gap-2 text-xs">
                 <StatusBadge
                   size="inherit"
@@ -179,6 +224,61 @@ export default function AdminUserDetail() {
                 </ul>
               )}
             </Section>
+            {previewOpen && (
+              <AccessibleDialog
+                label={`Preview ${name || data.profile.email} as a user`}
+                describedBy="impersonation-description"
+                onClose={previewing ? undefined : () => setPreviewOpen(false)}
+                closeOnBackdrop={!previewing}
+                panelClassName="w-full max-w-lg bg-card border border-hairline rounded-lg p-6"
+              >
+                <form onSubmit={startPreview} className="space-y-5">
+                  <div>
+                    <h3 className="font-display text-xl text-ink">Open a read-only user preview</h3>
+                    <p id="impersonation-description" className="mt-2 text-sm leading-relaxed text-secondary">
+                      This opens a separate window for 15 minutes. Changes are blocked, privileged accounts are excluded,
+                      and the reason is retained in the audit log.
+                    </p>
+                  </div>
+                  <div>
+                    <label htmlFor="impersonation-reason" className="mb-1.5 block text-sm font-medium text-ink">
+                      Reason for access
+                    </label>
+                    <textarea
+                      id="impersonation-reason"
+                      aria-describedby="impersonation-reason-help"
+                      required
+                      minLength={10}
+                      maxLength={500}
+                      rows={4}
+                      value={previewReason}
+                      onChange={(event) => setPreviewReason(event.target.value)}
+                      placeholder="For example: Investigating support ticket LS-1042"
+                      className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-gold"
+                    />
+                    <span id="impersonation-reason-help" className="mt-1 block text-xs text-secondary">10–500 characters</span>
+                  </div>
+                  {previewError && <p role="alert" className="text-sm text-red-700">{previewError}</p>}
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewOpen(false)}
+                      disabled={previewing}
+                      className="rounded-md border border-hairline px-4 py-2 text-sm font-medium text-ink hover:bg-paper disabled:opacity-60"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={previewing || previewReason.trim().length < 10}
+                      className="rounded-md bg-moss px-4 py-2 text-sm font-medium text-paper hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {previewing ? 'Opening…' : 'Open preview'}
+                    </button>
+                  </div>
+                </form>
+              </AccessibleDialog>
+            )}
           </>
         )}
       </div>

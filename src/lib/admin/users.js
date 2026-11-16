@@ -21,6 +21,10 @@ export async function getUserProfile(userId) {
   return callAdminApi('getUserProfile', { userId })
 }
 
+export async function startUserImpersonation(userId, reason) {
+  return callAdminApi('startUserImpersonation', { userId, reason })
+}
+
 export async function deleteUser(userId) {
   return callAdminApi('deleteUser', { userId })
 }

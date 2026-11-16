@@ -8,6 +8,8 @@ import { selectAllRows } from '../_lib/selectAllRows.js'
 import { consumeQuota, sendQuotaExceeded } from '../_lib/quota.js'
 import { deleteUserEvidenceFiles } from '../_lib/evidenceStorage.js'
 import { getWebsiteBrandColours } from '../_lib/websiteBrandColours.js'
+import { createClient } from '@supabase/supabase-js'
+import { decodeJwt } from 'jose'
 
 // Single dispatcher for every service-role action needing the Supabase Auth
 // admin API or otherwise needing to bypass RLS, rather than one serverless
@@ -53,7 +55,7 @@ export default async function handler(req, res) {
     return
   }
 
-  const caller = await verifySupabaseUser(authHeader.slice(7))
+  const caller = await verifySupabaseUser(authHeader.slice(7), { allowImpersonation: true })
   if (!caller) {
     res.status(401).json({ error: 'Invalid or expired session' })
     return
@@ -63,6 +65,10 @@ export default async function handler(req, res) {
 
   try {
     const admin = supabaseAdmin()
+    if (caller.__impersonation && action !== 'endUserImpersonation') {
+      res.status(403).json({ error: 'This user preview is read-only.' })
+      return
+    }
     switch (action) {
       case 'listUsers':
         await listUsers(admin, caller, res)
@@ -78,6 +84,12 @@ export default async function handler(req, res) {
         return
       case 'getUserProfile':
         await getUserProfile(admin, caller, payload, res)
+        return
+      case 'startUserImpersonation':
+        await startUserImpersonation(admin, caller, payload, res)
+        return
+      case 'endUserImpersonation':
+        await endUserImpersonation(admin, caller, payload, res)
         return
       case 'deleteUser':
         await deleteUser(admin, caller, payload, res)
@@ -586,6 +598,184 @@ async function getUserProfile(admin, caller, { userId }, res) {
     experience,
     connections,
   })
+}
+
+const IMPERSONATION_DURATION_MS = 15 * 60 * 1000
+
+// Creates a separate target-user Auth session, registers its immutable
+// session_id as read-only before returning either token, and leaves the
+// administrator's own browser session untouched. The database migration's
+// trigger is the authoritative write boundary; the client guard is only a
+// friendlier early error for ordinary table/storage/auth mutations.
+async function startUserImpersonation(admin, caller, { userId, reason }, res) {
+  if (!userId || typeof reason !== 'string' || reason.trim().length < 10 || reason.trim().length > 500) {
+    res.status(400).json({ error: 'Choose a user and enter a reason of 10 to 500 characters.' })
+    return
+  }
+  if (!(await isPlatformAdmin(admin, caller.id))) {
+    res.status(403).json({ error: 'Platform admin access required' })
+    return
+  }
+  if (userId === caller.id) {
+    res.status(400).json({ error: "You can't preview your own account." })
+    return
+  }
+
+  const [{ data: targetResult, error: targetError }, { data: profile, error: profileError }] = await Promise.all([
+    admin.auth.admin.getUserById(userId),
+    admin.from('profiles').select('first_name, last_name, full_name, account_status').eq('id', userId).maybeSingle(),
+  ])
+  if (targetError || !targetResult?.user || profileError) {
+    res.status(404).json({ error: 'User not found.' })
+    return
+  }
+  const hasActiveBan = targetResult.user.banned_until
+    && new Date(targetResult.user.banned_until).getTime() > Date.now()
+  if (profile?.account_status === 'blocked' || hasActiveBan) {
+    res.status(400).json({ error: 'Blocked accounts cannot be previewed.' })
+    return
+  }
+  if (!targetResult.user.email) {
+    res.status(400).json({ error: 'This account has no email sign-in and cannot be previewed.' })
+    return
+  }
+
+  // Exclude every account that can administer or moderate another person's
+  // data. Read-only enforcement is still present, but privileged targets are
+  // deliberately out of scope so their navigation and sensitive reads are
+  // never exposed through this support tool.
+  const [platformResult, orgAdminResult, employerAdminResult, catalogueApproverResult, managerResult] = await Promise.all([
+    admin.from('platform_admins').select('user_id').eq('user_id', userId).maybeSingle(),
+    admin.from('organisation_members').select('id').eq('user_id', userId).eq('status', 'active').limit(1),
+    admin.from('employer_members').select('id').eq('user_id', userId).eq('role', 'admin').eq('status', 'active').limit(1),
+    admin.from('catalogue_approvers').select('id').eq('user_id', userId).limit(1),
+    admin.from('manager_team_memberships').select('id').eq('member_user_id', userId).eq('role', 'manager').eq('status', 'active').limit(1),
+  ])
+  for (const result of [platformResult, orgAdminResult, employerAdminResult, catalogueApproverResult, managerResult]) {
+    if (result.error) throw result.error
+  }
+  if (platformResult.data || orgAdminResult.data.length || employerAdminResult.data.length || catalogueApproverResult.data.length || managerResult.data.length) {
+    res.status(400).json({ error: 'Privileged accounts cannot be previewed.' })
+    return
+  }
+
+  const { data: employerMemberships, error: employerMembershipsError } = await admin
+    .from('employer_members')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('status', 'active')
+  if (employerMembershipsError) throw employerMembershipsError
+  if (employerMemberships.length > 0) {
+    const { data: managementRelationships, error: managementRelationshipsError } = await admin
+      .from('employer_management_relationships')
+      .select('id')
+      .in('manager_member_id', employerMemberships.map((membership) => membership.id))
+      .lte('valid_from', new Date().toISOString().slice(0, 10))
+      .or(`valid_until.is.null,valid_until.gte.${new Date().toISOString().slice(0, 10)}`)
+      .limit(1)
+    if (managementRelationshipsError) throw managementRelationshipsError
+    if (managementRelationships.length > 0) {
+      res.status(400).json({ error: 'Privileged accounts cannot be previewed.' })
+      return
+    }
+  }
+
+  // A fresh magic-link token is verified server-side; it is never emailed or
+  // placed in a URL. This is the supported Supabase admin flow for issuing a
+  // user session without knowing or changing that person's password.
+  const { data: link, error: linkError } = await admin.auth.admin.generateLink({
+    type: 'magiclink',
+    email: targetResult.user.email,
+  })
+  if (linkError) throw linkError
+
+  const authClient = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  })
+  const { data: verified, error: verifyError } = await authClient.auth.verifyOtp({
+    type: 'magiclink',
+    token_hash: link.properties.hashed_token,
+  })
+  if (verifyError || !verified.session) throw verifyError ?? new Error('Supabase did not return an impersonation session')
+
+  const claims = decodeJwt(verified.session.access_token)
+  if (!claims.session_id) throw new Error('Supabase impersonation session has no session_id claim')
+  const now = new Date()
+  const expiresAt = new Date(now.getTime() + IMPERSONATION_DURATION_MS)
+  const targetName = profile?.full_name
+    || [profile?.first_name, profile?.last_name].filter(Boolean).join(' ')
+    || targetResult.user.email
+
+  // End any abandoned preview from this administrator before creating the
+  // new one. Its row remains as a durable token deny-list and audit record.
+  const { error: closePreviousError } = await admin
+    .from('admin_impersonation_sessions')
+    .update({ ended_at: now.toISOString() })
+    .eq('actor_id', caller.id)
+    .is('ended_at', null)
+  if (closePreviousError) throw closePreviousError
+
+  const { data: impersonation, error: sessionError } = await admin
+    .from('admin_impersonation_sessions')
+    .insert({
+      auth_session_id: claims.session_id,
+      actor_id: caller.id,
+      target_user_id: userId,
+      reason: reason.trim(),
+      started_at: now.toISOString(),
+      expires_at: expiresAt.toISOString(),
+    })
+    .select('id')
+    .single()
+  if (sessionError) throw sessionError
+
+  await logAdminActivity(admin, {
+    actorId: caller.id,
+    action: 'user.impersonation_started',
+    entityType: 'profile',
+    entityId: userId,
+    entityLabel: targetName,
+    reason: reason.trim(),
+  })
+
+  res.setHeader('Cache-Control', 'no-store')
+  res.status(200).json({
+    sessionId: impersonation.id,
+    accessToken: verified.session.access_token,
+    refreshToken: verified.session.refresh_token,
+    expiresAt: expiresAt.toISOString(),
+    targetName,
+    targetEmail: targetResult.user.email,
+  })
+}
+
+async function endUserImpersonation(admin, caller, { sessionId }, res) {
+  if (!caller.__impersonation || !sessionId || caller.__impersonation.id !== sessionId) {
+    res.status(403).json({ error: 'Impersonation session not found.' })
+    return
+  }
+  const { data: session, error: sessionError } = await admin
+    .from('admin_impersonation_sessions')
+    .update({ ended_at: new Date().toISOString() })
+    .eq('id', sessionId)
+    .eq('target_user_id', caller.id)
+    .is('ended_at', null)
+    .select('actor_id, target_user_id, reason')
+    .maybeSingle()
+  if (sessionError) throw sessionError
+
+  if (session?.actor_id) {
+    const { data: targetProfile } = await admin.from('profiles').select('full_name').eq('id', session.target_user_id).maybeSingle()
+    await logAdminActivity(admin, {
+      actorId: session.actor_id,
+      action: 'user.impersonation_ended',
+      entityType: 'profile',
+      entityId: session.target_user_id,
+      entityLabel: targetProfile?.full_name ?? caller.email,
+      reason: session.reason,
+    })
+  }
+  res.status(200).json({ ok: true })
 }
 
 // Hard delete -- irreversible, unlike setUserBlocked above. The client is

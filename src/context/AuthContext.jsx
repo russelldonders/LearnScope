@@ -1,10 +1,16 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabaseClient'
 import { getPendingInviteCode } from '../lib/connections'
 import { getPendingEnrolCourseId } from '../lib/courseCatalogue'
 import { chooseActiveWorkspace, listAvailableWorkspaces } from '../lib/workspaces'
 import { listMyEmployerManagementContexts } from '../lib/employerManagement'
 import { invalidateHeaderCache } from '../lib/headerCache'
+import {
+  supabase,
+  activateImpersonationState,
+  clearImpersonationState,
+  readImpersonationBootstrap,
+  readImpersonationState,
+} from '../lib/supabaseClient'
 
 const AuthContext = createContext(undefined)
 
@@ -54,18 +60,51 @@ export function AuthProvider({ children }) {
   const [workspaces, setWorkspaces] = useState(null)
   const [activeWorkspace, setActiveWorkspace] = useState(null)
   const [workspaceError, setWorkspaceError] = useState(null)
+  const [impersonation, setImpersonation] = useState(() => readImpersonationState())
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-      setLoading(false)
-    })
+    let cancelled = false
+    async function initialiseSession() {
+      const bootstrap = readImpersonationBootstrap()
+      if (bootstrap) {
+        const { data, error } = await supabase.auth.setSession({
+          access_token: bootstrap.accessToken,
+          refresh_token: bootstrap.refreshToken,
+        })
+        if (!error && data.session) {
+          const state = {
+            sessionId: bootstrap.sessionId,
+            targetName: bootstrap.targetName,
+            targetEmail: bootstrap.targetEmail,
+            expiresAt: bootstrap.expiresAt,
+          }
+          activateImpersonationState(state)
+          if (!cancelled) {
+            setImpersonation(state)
+            setSession(data.session)
+            setLoading(false)
+          }
+          return
+        }
+        clearImpersonationState()
+      }
+
+      const { data } = await supabase.auth.getSession()
+      if (!cancelled) {
+        setSession(data.session)
+        setLoading(false)
+      }
+    }
+    initialiseSession()
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession)
     })
 
-    return () => listener.subscription.unsubscribe()
+    return () => {
+      cancelled = true
+      listener.subscription.unsubscribe()
+    }
   }, [])
 
   const userId = session?.user?.id ?? null
@@ -196,6 +235,24 @@ export function AuthProvider({ children }) {
     return { error }
   }
 
+  const endImpersonation = useCallback(async ({ closeWindow = true } = {}) => {
+    if (!impersonation) return
+    try {
+      await fetch('/api/admin/actions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ action: 'endUserImpersonation', sessionId: impersonation.sessionId }),
+        keepalive: true,
+      })
+    } finally {
+      clearImpersonationState()
+      if (closeWindow) window.close()
+    }
+  }, [impersonation, session?.access_token])
+
   const value = {
     session,
     user: session?.user ?? null,
@@ -218,6 +275,8 @@ export function AuthProvider({ children }) {
     selectWorkspace,
     refreshNeedsName,
     markOnboardingComplete,
+    impersonation,
+    endImpersonation,
     // Carries a pending rate-invite code (and/or a pending course
     // enrolment) through as a query param on the confirmation-email
     // redirect, rather than relying solely on localStorage -- the
