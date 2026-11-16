@@ -12,6 +12,7 @@ import { listMyCourseAssignments } from './courseCatalogue'
 import { listMyManagerSkillSuggestions } from './managerSkillActions'
 import { listMyManagerTeamInvites } from './managerTeams'
 import { loadActionSources } from './actionLoading'
+import { listIncomingPlanInvitations } from './learnerPlans'
 
 const personalSource = 'Personal'
 
@@ -28,6 +29,13 @@ function notification({ id, kind, title, detail, source = personalSource, occurr
 
 export function buildNotificationItems(values, profiles = {}) {
   const items = [
+    ...(values.planInvites ?? []).map((item) => notification({
+      id: item.id,
+      kind: 'plan-invite',
+      title: 'Plan Invitation',
+      detail: `${item.inviter_name || 'A connection'} invited you to follow ${item.plan_title || 'a plan'}.`,
+      occurredAt: item.created_at,
+    })),
     ...values.rateInvites.map((item) => notification({
       id: item.id,
       kind: 'rate-invite',
@@ -133,6 +141,7 @@ export async function loadNotifications(userId) {
     { key: 'courseAssignments', label: 'course assignments', fallback: [], load: () => listMyCourseAssignments(userId) },
     { key: 'skillSuggestions', label: 'skill suggestions', fallback: [], load: () => listMyManagerSkillSuggestions(userId) },
     { key: 'managerTeamInvites', label: 'manager-team invitations', fallback: [], load: listMyManagerTeamInvites },
+    { key: 'planInvites', label: 'plan invitations', fallback: [], load: listIncomingPlanInvitations },
   ])
 
   const requesterIds = [

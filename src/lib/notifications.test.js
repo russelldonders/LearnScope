@@ -16,6 +16,7 @@ const emptyValues = {
   skillSuggestions: [],
   managerTeamInvites: [],
   managerTeamSkillSuggestions: [],
+  planInvites: [],
 }
 
 describe('buildNotificationItems', () => {
@@ -35,13 +36,20 @@ describe('buildNotificationItems', () => {
         teamName: 'Product Team',
         invitedAt: '2026-09-28T10:00:00Z',
       }],
+      planInvites: [{
+        id: 'plan-1',
+        inviter_name: 'Jamie',
+        plan_title: 'Lead better meetings',
+        created_at: '2026-09-30T10:00:00Z',
+      }],
     }
 
     const items = buildNotificationItems(values, { 'person-1': { name: 'Taylor' } })
 
-    expect(items.map((item) => item.title)).toEqual(['Course Assigned', 'Team Invitation', 'Connection Request'])
-    expect(items.map((item) => item.source)).toEqual(['Acme', 'Product Team', 'Personal'])
-    expect(items[2].detail).toContain('Taylor')
+    expect(items.map((item) => item.title)).toEqual(['Plan Invitation', 'Course Assigned', 'Team Invitation', 'Connection Request'])
+    expect(items.map((item) => item.source)).toEqual(['Personal', 'Acme', 'Product Team', 'Personal'])
+    expect(items[0].detail).toContain('Jamie invited you to follow Lead better meetings')
+    expect(items[3].detail).toContain('Taylor')
   })
 
   it('uses resilient labels when joined records or profile names are unavailable', () => {

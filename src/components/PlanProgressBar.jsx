@@ -10,9 +10,9 @@ export default function PlanProgressBar({ percent, elapsed = null, label, classN
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={percent}
-        className="h-2 rounded-full bg-hairline overflow-hidden"
+        className="h-3 overflow-hidden rounded-full border border-hairline bg-paper"
       >
-        <div className="h-full bg-moss rounded-full transition-all" style={{ width: `${percent}%` }} />
+        <div className="h-full rounded-full bg-moss transition-all" style={{ width: `${percent}%` }} />
       </div>
       {elapsed != null && elapsed > 0 && elapsed < 100 && (
         <span

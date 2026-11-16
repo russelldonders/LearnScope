@@ -5,6 +5,7 @@ import { useLanguage } from '../context/LanguageContext'
 import AppHeader from '../components/AppHeader'
 import ConfirmDialog from '../components/ConfirmDialog'
 import PlanProgressBar from '../components/PlanProgressBar'
+import PlanInviteDialog from '../components/PlanInviteDialog'
 import SkillGoalModal from '../components/SkillGoalModal'
 import EvidenceFields from '../components/EvidenceFields'
 import { localDateString } from '../lib/skillGoalProgress'
@@ -21,6 +22,8 @@ import {
   getActorName,
   getItemActivity,
   getPlan,
+  inviteConnectionsToPlan,
+  listPlanInvitations,
   listPlannableRecords,
   loadPlanContext,
   removeItem,
@@ -77,6 +80,12 @@ export default function PlanDetail() {
   const [confirm, setConfirm] = useState(null)
   const [dragging, setDragging] = useState(null)
   const [dragOver, setDragOver] = useState(null)
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [inviteConnections, setInviteConnections] = useState([])
+  const [planInvitations, setPlanInvitations] = useState([])
+  const [inviteBusy, setInviteBusy] = useState(false)
+  const [inviteError, setInviteError] = useState(null)
+  const [inviteNotice, setInviteNotice] = useState(null)
   // Who the activities recorded by ticking are by (xAPI actor).
   const [actorName, setActorName] = useState('')
 
@@ -115,6 +124,40 @@ export default function PlanDetail() {
     }
   }
 
+  async function openInvites() {
+    setInviteError(null)
+    setInviteNotice(null)
+    setInviteOpen(true)
+    setInviteBusy(true)
+    try {
+      const [connections, invitations] = await Promise.all([
+        listConnections(user.id),
+        listPlanInvitations(plan.id),
+      ])
+      setInviteConnections(connections)
+      setPlanInvitations(invitations)
+    } catch (err) {
+      setInviteError(err.message)
+    } finally {
+      setInviteBusy(false)
+    }
+  }
+
+  async function sendInvites(recipientIds) {
+    setInviteError(null)
+    setInviteBusy(true)
+    try {
+      const sent = await inviteConnectionsToPlan(plan.id, recipientIds)
+      setPlanInvitations(await listPlanInvitations(plan.id))
+      setInviteOpen(false)
+      setInviteNotice(t('plans.inviteSent', { count: sent.filter((row) => row.created).length }))
+    } catch (err) {
+      setInviteError(err.message)
+    } finally {
+      setInviteBusy(false)
+    }
+  }
+
   const statusById = useMemo(() => {
     if (!plan || !context) return new Map()
     return new Map(plan.items.map((item) => [item.id, planItemStatus(item, context)]))
@@ -139,6 +182,7 @@ export default function PlanDetail() {
   const backState = { backTo: here, backLabel: plan.title, from: here, fromLabel: plan.title }
   const editing = planning || searchParams.get('mode') === 'edit'
   const progress = summariseProgress([...statusById.values()])
+  const remaining = Math.max(0, progress.total - progress.done)
   const elapsed = timeElapsedPercent(plan, context?.today)
   const pace = plan.status === 'active' ? paceOf(progress, elapsed) : null
 
@@ -306,6 +350,9 @@ export default function PlanDetail() {
               </button>
             ) : (
             <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={openInvites} className="rounded-md border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:border-moss">
+                {t('plans.inviteConnections')}
+              </button>
               <button type="button" onClick={() => setEditing(true)} className="rounded-md bg-moss text-paper px-3 py-1.5 text-xs font-medium hover:opacity-90">
                 {t('plans.editPlan')}
               </button>
@@ -327,28 +374,38 @@ export default function PlanDetail() {
             )}
           </div>
           {plan.description && <p className="mt-2 text-sm text-ink whitespace-pre-wrap break-words max-w-2xl">{plan.description}</p>}
+          {inviteNotice && <p role="status" className="mt-3 text-sm text-moss">{inviteNotice}</p>}
         </div>
       )}
 
       {!editing && (
-      <section aria-label={t('plans.progressHeading')} className="mt-6 rounded-lg border border-hairline bg-card p-4">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <p className="text-sm text-ink">
-            <span className="font-display text-2xl">{progress.percent}%</span>{' '}
-            <span className="text-secondary">{t('plans.doneCount', { done: progress.done, total: progress.total })}</span>
-          </p>
+      <section aria-labelledby="plan-progress-heading" className="mt-6 rounded-xl border border-hairline bg-card p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 id="plan-progress-heading" className="text-xs font-medium uppercase tracking-wide text-secondary">{t('plans.progressHeading')}</h2>
+            <p className="mt-1 flex items-baseline gap-2 text-ink">
+              <span className="font-display text-4xl tabular-nums leading-none">{progress.percent}%</span>
+              <span className="text-sm text-secondary">{t('plans.complete')}</span>
+            </p>
+          </div>
           {pace && (
-            <span data-pace={pace} className={`rounded-full px-2 py-0.5 text-xs font-medium ${pace === 'behind' ? 'bg-red-700/15 text-red-700' : pace === 'ahead' ? 'bg-moss/15 text-moss' : 'bg-gold/15 text-gold'}`}>
+            <span data-pace={pace} className={`rounded-full px-2.5 py-1 text-xs font-medium ${pace === 'behind' ? 'bg-red-700/15 text-red-700' : pace === 'ahead' ? 'bg-moss/15 text-moss' : 'bg-gold/15 text-gold'}`}>
               {t(`plans.pace.${pace}`)}
             </span>
           )}
         </div>
-        <PlanProgressBar className="mt-2" percent={progress.percent} elapsed={elapsed} label={t('plans.progressLabel', { title: plan.title })} />
-        <p className="mt-2 text-xs text-secondary">
-          {elapsed != null && t('plans.timeElapsed', { percent: elapsed })}
-          {elapsed != null && progress.overdue > 0 && ' · '}
-          {progress.overdue > 0 && <span className="text-red-700">{t('plans.overdueCount', { count: progress.overdue })}</span>}
-        </p>
+        <PlanProgressBar className="mt-4" percent={progress.percent} elapsed={elapsed} label={t('plans.progressLabel', { title: plan.title })} />
+        <div className="mt-2 flex items-center justify-between gap-4 text-xs text-secondary">
+          <span>{t('plans.completedCount', { count: progress.done })}</span>
+          <span>{t('plans.remainingCount', { count: remaining })}</span>
+        </div>
+        {(elapsed != null || progress.overdue > 0) && (
+          <div className="mt-4 border-t border-hairline pt-3 text-xs text-secondary">
+            {elapsed != null && t('plans.timelineElapsed', { percent: elapsed })}
+            {elapsed != null && progress.overdue > 0 && ' · '}
+            {progress.overdue > 0 && <span className="font-medium text-red-700">{t('plans.overdueCount', { count: progress.overdue })}</span>}
+          </div>
+        )}
       </section>
       )}
 
@@ -360,6 +417,19 @@ export default function PlanDetail() {
       )}
 
       {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
+
+      {inviteOpen && (
+        <PlanInviteDialog
+          planTitle={plan.title}
+          connections={inviteConnections}
+          invitations={planInvitations}
+          busy={inviteBusy}
+          error={inviteError}
+          onClose={() => setInviteOpen(false)}
+          onInvite={sendInvites}
+          t={t}
+        />
+      )}
 
       <div className="mt-6 space-y-6">
         {(contentItems.length > 0 || editing) && (

@@ -29,6 +29,7 @@ import {
 } from '../lib/managerTeams'
 import { loadActionSources } from '../lib/actionLoading'
 import { getEmployerLoginContext } from '../lib/employerRoleProfiles'
+import { listIncomingPlanInvitations, respondToPlanInvitation } from '../lib/learnerPlans'
 
 // Everything actually waiting on this learner to act -- the same sources
 // PendingActionsContext counts for the header badge, just rendered in full
@@ -83,6 +84,10 @@ export default function Actions() {
   const [respondingId, setRespondingId] = useState(null)
   const [respondError, setRespondError] = useState(null)
   const [profiles, setProfiles] = useState({})
+  const [planInvites, setPlanInvites] = useState([])
+  const [planInviteDecidingId, setPlanInviteDecidingId] = useState(null)
+  const [planInviteError, setPlanInviteError] = useState(null)
+  const [acceptedPlan, setAcceptedPlan] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -123,6 +128,7 @@ export default function Actions() {
         { key: 'dataAccessRequests', label: 'employer data-access requests', fallback: [], load: () => listMyPendingDataAccessRequests(user.id) },
         { key: 'courseAssignments', label: 'course assignments', fallback: [], load: () => listMyCourseAssignments(user.id) },
         { key: 'skillSuggestions', label: 'skill suggestions', fallback: [], load: () => listMyManagerSkillSuggestions(user.id) },
+        { key: 'planInvites', label: 'plan invitations', fallback: [], load: listIncomingPlanInvitations },
         {
           key: 'skills',
           label: 'skills available to share',
@@ -163,6 +169,7 @@ export default function Actions() {
       setSkillSuggestions(skillSuggestionsData)
       setMySkills(values.skills)
       setUnseenRatings(values.unseenRatings)
+      setPlanInvites(values.planInvites)
       if (failures.length > 0) {
         setError(`Some actions could not be loaded (${failures.map(({ label }) => label).join(', ')}). Other actions are shown below.`)
       }
@@ -415,6 +422,21 @@ export default function Actions() {
     }
   }
 
+  async function handlePlanInviteResponse(invitation, accept) {
+    setPlanInviteError(null)
+    setPlanInviteDecidingId(invitation.id)
+    try {
+      const copiedPlanId = await respondToPlanInvitation(invitation.id, accept)
+      setPlanInvites((current) => current.filter((item) => item.id !== invitation.id))
+      if (accept && copiedPlanId) setAcceptedPlan({ id: copiedPlanId, title: invitation.plan_title })
+      refreshPendingActionCount()
+    } catch (err) {
+      setPlanInviteError({ id: invitation.id, message: err.message })
+    } finally {
+      setPlanInviteDecidingId(null)
+    }
+  }
+
   const connectionRequests = incomingRequests.filter((r) => r.request_type !== 'skill_access')
   const skillAccessRequests = incomingRequests.filter((r) => r.request_type === 'skill_access')
 
@@ -428,11 +450,13 @@ export default function Actions() {
     dataAccessRequests.length +
     courseAssignments.length +
     skillSuggestions.length +
+    planInvites.length +
     validationRequests.length
 
   const hasNothingPending =
     !loading &&
     !error &&
+    !acceptedPlan &&
     actionableCount === 0 &&
     unseenRatings.length === 0
 
@@ -490,8 +514,56 @@ export default function Actions() {
           </div>
         )}
 
+        {acceptedPlan && (
+          <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-moss/30 bg-moss/5 px-4 py-3 text-sm">
+            <p className="text-ink">{t('actions.planInviteAccepted', { title: acceptedPlan.title })}</p>
+            <Link to={`/plans/${acceptedPlan.id}?mode=edit`} className="font-medium text-moss underline underline-offset-2 hover:no-underline">
+              {t('actions.reviewPlan')}
+            </Link>
+          </div>
+        )}
+
         {actionableCount > 0 && (
         <div className="space-y-10">
+
+        {planInvites.length > 0 && (
+          <section aria-labelledby="plan-invitations-heading">
+            <h2 id="plan-invitations-heading" className="mb-6 font-display text-xl text-ink">{t('actions.planInvitations')}</h2>
+            <div className="space-y-3">
+              {planInvites.map((invite) => (
+                <div key={invite.id} className="rounded-lg border border-hairline bg-card p-4">
+                  <p className="text-sm text-ink">
+                    <strong>{invite.inviter_name}</strong>{' '}
+                    {t('actions.invitedToFollowPlan')}{' '}
+                    <strong>{invite.plan_title}</strong>
+                  </p>
+                  {invite.plan_description && <p className="mt-1 text-sm text-secondary">{invite.plan_description}</p>}
+                  <p className="mt-2 text-xs text-secondary">{t('actions.planInvitePrivateCopy')}</p>
+                  <p className="mt-1 font-mono text-xs text-secondary">{new Date(invite.created_at).toLocaleDateString()}</p>
+                  {planInviteError?.id === invite.id && <p className="mt-2 text-xs text-red-700">{planInviteError.message}</p>}
+                  <div className="mt-3 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handlePlanInviteResponse(invite, true)}
+                      disabled={planInviteDecidingId === invite.id}
+                      className="rounded-md bg-moss px-3 py-1.5 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-60"
+                    >
+                      {t('actions.acceptPlanInvite')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handlePlanInviteResponse(invite, false)}
+                      disabled={planInviteDecidingId === invite.id}
+                      className="rounded-md border border-hairline px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper disabled:opacity-60"
+                    >
+                      {t('actions.declinePlanInvite')}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {incomingRateInvites.length > 0 && (
           <div>

@@ -23,15 +23,17 @@ const lib = vi.hoisted(() => ({
   updateSection: vi.fn(),
   listPlans: vi.fn(),
   createPlan: vi.fn(),
+  listPlanInvitations: vi.fn(),
+  inviteConnectionsToPlan: vi.fn(),
 }))
 
 vi.mock('../lib/learnerPlans', () => lib)
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'me', email: 'me@example.com' } }) }))
 vi.mock('../components/AppHeader', () => ({ default: () => <header>Header</header> }))
 vi.mock('../components/SetTargetModal', () => ({ default: ({ skill }) => <div role="dialog">Set target for {skill.name}</div> }))
-const extra = vi.hoisted(() => ({ addResource: vi.fn() }))
+const extra = vi.hoisted(() => ({ addResource: vi.fn(), listConnections: vi.fn() }))
 vi.mock('../lib/skillResources', () => ({ addResource: extra.addResource }))
-vi.mock('../lib/connections', () => ({ listConnections: vi.fn().mockResolvedValue([]) }))
+vi.mock('../lib/connections', () => ({ listConnections: extra.listConnections }))
 vi.mock('../components/SkillGoalModal', () => ({
   default: ({ onSaved }) => (
     <div role="dialog" aria-label="Add a goal">
@@ -106,6 +108,9 @@ beforeEach(() => {
   lib.listPlannableRecords.mockResolvedValue({ course: [{ id: 'c9', name: 'Public speaking', provider: 'Acme' }], skill: [{ id: 's1', name: 'Coaching', library_skill_id: 'lib-1' }], skill_goal: [], skill_resource: [] })
   lib.getActorName.mockResolvedValue('Sam')
   extra.addResource.mockResolvedValue('r-new')
+  extra.listConnections.mockResolvedValue([])
+  lib.listPlanInvitations.mockResolvedValue([])
+  lib.inviteConnectionsToPlan.mockResolvedValue([])
   for (const fn of ['addItem', 'addSection', 'deletePlan', 'removeItem', 'savePositions', 'setItemDone', 'setPlanStatus', 'startPlan', 'updateItem']) lib[fn].mockResolvedValue()
 })
 afterEach(() => {
@@ -125,7 +130,10 @@ describe('PlanDetail', () => {
     expect(stateOf('Run 10k')).toBe('done')
     expect(stateOf('Shadow a senior lead')).toBe('not_started')
     // 2 done of 5 counted: the deleted course is left out.
-    expect(screen.getByText('2 of 5 done')).toBeInTheDocument()
+    expect(screen.getByText('40%')).toBeInTheDocument()
+    expect(screen.getByText('2 completed')).toBeInTheDocument()
+    expect(screen.getByText('3 remaining')).toBeInTheDocument()
+    expect(screen.getByText((_, element) => element?.classList.contains('pt-3') && element.textContent.includes('Timeline: 4% elapsed'))).toBeInTheDocument()
     expect(screen.getByText('This Course was deleted')).toBeInTheDocument()
     expect(screen.getByText('Overdue: 1')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'What you’ll do' })).toBeInTheDocument()
@@ -135,6 +143,27 @@ describe('PlanDetail', () => {
     expect(screen.getAllByText('Plan target')).toHaveLength(2)
     expect(screen.getByText('Ability: Skilled')).toBeInTheDocument()
     expect(screen.getByText('Knowledge: Aware · Ability: Developing')).toBeInTheDocument()
+  })
+
+  it('invites one or more connections to follow their own copy', async () => {
+    extra.listConnections.mockResolvedValue([
+      { id: 'friend-1', name: 'Ari Friend', email: 'ari@example.com' },
+      { id: 'friend-2', name: 'Bo Friend', email: 'bo@example.com' },
+    ])
+    lib.inviteConnectionsToPlan.mockResolvedValue([
+      { recipient_id: 'friend-1', created: true },
+      { recipient_id: 'friend-2', created: true },
+    ])
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Invite connections' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Invite people to follow this plan' })
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Ari Friend/ }))
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Bo Friend/ }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send invitations' }))
+
+    await waitFor(() => expect(lib.inviteConnectionsToPlan).toHaveBeenCalledWith('p1', ['friend-1', 'friend-2']))
+    expect(await screen.findByText('Invitations sent: 2')).toBeInTheDocument()
   })
 
   it('marks a step done with a date and a comment', async () => {

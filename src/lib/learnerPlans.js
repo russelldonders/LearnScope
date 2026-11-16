@@ -39,6 +39,43 @@ export async function getPlan(planId) {
   return { ...plan.data, sections: sections.data ?? [], items: items.data ?? [] }
 }
 
+// A plan invitation never grants access to the source plan. The recipient
+// sees only the deliberately small preview returned by the RPC; accepting
+// creates a separate private plan owned by them.
+export async function listPlanInvitations(planId) {
+  const { data, error } = await supabase
+    .from('learner_plan_invitations')
+    .select('id, recipient_id, status, created_at')
+    .eq('source_plan_id', planId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function inviteConnectionsToPlan(planId, recipientIds) {
+  const { data, error } = await supabase.rpc('invite_connections_to_learner_plan', {
+    p_plan_id: planId,
+    p_recipient_ids: recipientIds,
+  })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function listIncomingPlanInvitations() {
+  const { data, error } = await supabase.rpc('list_incoming_learner_plan_invitations')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function respondToPlanInvitation(invitationId, accept) {
+  const { data, error } = await supabase.rpc('respond_to_learner_plan_invitation', {
+    p_invitation_id: invitationId,
+    p_accept: accept,
+  })
+  if (error) throw error
+  return data
+}
+
 // What planItemStatus needs beyond the items themselves: the learner's goals
 // (to follow a replaced goal to its successor) and progress on the active
 // ones, worked out exactly as on the dashboard. Skill targets live on their
