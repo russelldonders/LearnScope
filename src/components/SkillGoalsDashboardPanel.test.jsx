@@ -114,6 +114,32 @@ describe('goal tiles', () => {
     expect(chart.lastChild.lastChild).toHaveTextContent('Today')
   })
 
+  it('replaces previous-week detail with one result at the start of a fresh week', () => {
+    const goal = {
+      title: 'Fresh-week sit-ups', aggregation: 'total', period: 'week', target_value: 1200,
+      per_set: 100, sets_per_session: 3, sessions_per_period: 4, started_on: localDateString(daysAgo(60)),
+    }
+    const today = new Date()
+    today.setHours(12, 0, 0, 0)
+    const thisMonday = new Date(today)
+    thisMonday.setDate(thisMonday.getDate() - ((thisMonday.getDay() + 6) % 7))
+    const previousMonday = new Date(thisMonday)
+    previousMonday.setDate(previousMonday.getDate() - 7)
+    const statements = [0, 1, 3, 5].flatMap((offset, dayIndex) => {
+      const day = new Date(previousMonday)
+      day.setDate(day.getDate() + offset)
+      return [1, 2, 3].map((set) => pushUps(`${dayIndex}-${set}`, 100, day))
+    })
+    renderPanel([item(goal, statements)])
+
+    const tile = screen.getByRole('article')
+    expect(within(tile).queryByRole('img')).not.toBeInTheDocument()
+    expect(within(tile).getByRole('group', { name: 'Last week: 4 of 4 sessions. Completed' })).toBeInTheDocument()
+    expect(within(tile).queryByText('Met 1 week in a row')).not.toBeInTheDocument()
+    expect(within(tile).getByText('Completed once so far')).toBeInTheDocument()
+    expect(within(tile).queryByText(/^Last logged/)).not.toBeInTheDocument()
+  })
+
   it('opens the skill from the title, as one link with the skill named', () => {
     renderPanel([item({ title: 'Best', target_value: 40 })])
     const tile = screen.getByRole('article', { name: 'Best' })

@@ -310,6 +310,29 @@ export function goalStreak(goal, statements, now = new Date()) {
   return streak
 }
 
+// At the start of a fresh repeating period, the dashboard should not carry
+// the previous period's detailed bars forward as though they belong to the
+// new one. Return one compact result instead, until the first current-period
+// entry is logged. `completedPeriods` counts the whole goal history rather
+// than only the periods shown in the mini chart.
+export function previousPeriodResult(goal, statements, now = new Date()) {
+  if (goal.aggregation !== 'total' || !goal.period || isBuildUpGoal(goal, now)) return null
+  const bars = allPeriodBars(goal, statements, now)
+  const current = bars.at(-1)
+  const previous = bars.at(-2)
+  if (!current || !previous || current.parts.length > 0) return null
+  return {
+    period: goal.period,
+    status: previous.status,
+    value: previous.value,
+    target: previous.target,
+    sessions: previous.sessions ?? null,
+    sessionsTarget: previous.sessionsTarget ?? null,
+    streak: goalStreak(goal, statements, now),
+    completedPeriods: bars.slice(0, -1).filter((bar) => bar.status === 'met').length,
+  }
+}
+
 export const MINI_HISTORY_LENGTH = 7
 
 // On goal charts, the part of a bar past its target: a lighter green than the
@@ -437,7 +460,7 @@ function allPeriodBars(goal, statements, now) {
       // daily goal never has more than one session in a day, so 80 push-ups
       // against "3 x 20 a day" only shows up as the total.
       const exceeded = sessions > shape.sessions || (status === 'met' && value > shape.perSession * shape.sessions)
-      bars.push({ start: new Date(start), value, parts, status, exceeded, current: isCurrent, target, sessions })
+      bars.push({ start: new Date(start), value, parts, status, exceeded, current: isCurrent, target, sessions, sessionsTarget: shape.sessions })
       continue
     }
     let status = 'none'

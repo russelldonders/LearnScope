@@ -26,6 +26,7 @@ import {
   localDateString,
   nextLogDate,
   parseClock,
+  previousPeriodResult,
   sortGoalsForAttention,
   resolveMetric,
   slugifyMetric,
@@ -646,6 +647,37 @@ describe('goalMiniHistory', () => {
   it('leaves the target line off a running total without a target, which has no progress to show', () => {
     const total = { ...pushUpGoal, aggregation: 'total', period: null, target_value: null }
     expect(goalMiniHistory(total, [entry('a', '2026-10-20', 50)], now).target).toBeNull()
+  })
+})
+
+describe('previousPeriodResult', () => {
+  const weekly = { ...pushUpGoal, aggregation: 'total', period: 'week', target_value: 100, started_on: '2026-10-01' }
+  const now = new Date('2026-11-16T09:00:00') // Monday, a fresh week
+
+  it('summarises the last period while the new period has no entries', () => {
+    const result = previousPeriodResult(weekly, [
+      entry('old', '2026-11-03', 100),
+      entry('last', '2026-11-10', 120),
+    ], now)
+    expect(result).toMatchObject({
+      period: 'week', status: 'met', value: 120, target: 100,
+      streak: 2, completedPeriods: 2,
+    })
+  })
+
+  it('stops carrying the previous result once the learner logs this period', () => {
+    expect(previousPeriodResult(weekly, [entry('current', '2026-11-16', 10)], now)).toBeNull()
+  })
+
+  it('reports sessions for a shaped goal and handles a missed month', () => {
+    const shaped = { ...weekly, target_value: 1200, per_set: 100, sets_per_session: 3, sessions_per_period: 4 }
+    const sessions = ['2026-11-09', '2026-11-10', '2026-11-12', '2026-11-14']
+      .flatMap((day, dayIndex) => [1, 2, 3].map((set) => entry(`${dayIndex}-${set}`, day, 100)))
+    expect(previousPeriodResult(shaped, sessions, now)).toMatchObject({ sessions: 4, sessionsTarget: 4, status: 'met' })
+
+    const monthly = { ...weekly, period: 'month', started_on: '2026-09-01' }
+    expect(previousPeriodResult(monthly, [entry('oct', '2026-10-10', 80)], new Date('2026-11-01T09:00:00')))
+      .toMatchObject({ period: 'month', value: 80, status: 'missed', completedPeriods: 0 })
   })
 })
 

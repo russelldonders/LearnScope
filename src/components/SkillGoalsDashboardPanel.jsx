@@ -17,6 +17,7 @@ import {
   goalStreak,
   lastGoalEntry,
   localDateString,
+  previousPeriodResult,
   remainingSetPieces,
 } from '../lib/skillGoalProgress'
 import { logGoalEntry } from '../lib/skillGoals'
@@ -507,6 +508,36 @@ function BuildUpProgress({ goal, progress }) {
   )
 }
 
+function PreviousPeriodSummary({ goal, result }) {
+  const { t } = useLanguage()
+  const resultText = result.sessions != null
+    ? t('skillGoals.shape.sessionsDone', { done: result.sessions, needed: result.sessionsTarget })
+    : result.target != null
+      ? t('skillGoals.dashboard.previousValueOfTarget', {
+          value: formatGoalValue(goal, result.value),
+          target: formatGoalValue(goal, result.target),
+        })
+      : formatGoalValue(goal, result.value)
+  const met = result.status === 'met'
+  const outcome = met
+    ? t('skillGoals.dashboard.completed')
+    : result.status === 'missed' ? t('skillGoals.dashboard.notCompleted') : null
+
+  return (
+    <div
+      role="group"
+      aria-label={`${t(`skillGoals.dashboard.lastPeriod.${result.period}`)}: ${resultText}${outcome ? `. ${outcome}` : ''}`}
+      className="border-y border-hairline py-2"
+    >
+      <p className="text-xs text-secondary">{t(`skillGoals.dashboard.lastPeriod.${result.period}`)}</p>
+      <p className="mt-0.5 truncate text-sm font-medium text-ink" title={resultText}>
+        {resultText}
+        {outcome && <span className={met ? 'text-moss' : 'text-secondary'}>{' · '}{outcome}</span>}
+      </p>
+    </div>
+  )
+}
+
 // Every tile has the same parts in the same places -- title, skill, current
 // value against the target, progress bar, one status line, buttons -- so the
 // grid reads evenly whatever kind of goal each one is. A skill's page shows the
@@ -533,6 +564,7 @@ export function SkillGoalTile({
   const lastEntry = lastGoalEntry(goal, statements)
   const streak = goalStreak(goal, statements)
   const history = goalMiniHistory(goal, statements)
+  const previousResult = previousPeriodResult(goal, statements)
   const due = nextLog != null && nextLog <= today
   const achieved = (goal.target_value != null || progress.sessions != null) && progress.reached === true
   const formId = `dashboard-goal-form-${goal.id}`
@@ -541,7 +573,18 @@ export function SkillGoalTile({
     : goal.period
       ? `skillGoals.thisPeriod.${goal.period}`
       : 'skillGoals.totalSoFar'
-  const status = statusFor({ note, progress, streak, goal, t })
+  const status = previousResult && !note
+    ? previousResult.streak >= 2
+      ? { text: t(`skillGoals.streak.${goal.period}`, { count: previousResult.streak }), tone: 'text-moss font-medium' }
+      : previousResult.completedPeriods > 0
+        ? {
+            text: previousResult.completedPeriods === 1
+              ? t('skillGoals.dashboard.completedOnce')
+              : t('skillGoals.dashboard.completedPeriods', { count: previousResult.completedPeriods }),
+            tone: 'text-secondary',
+          }
+        : { text: '', tone: 'text-secondary' }
+    : statusFor({ note, progress, streak, goal, t })
   const shapeText = progress.sessions ? goalShapeText(goal, progress.sessions, t) : null
   // Sessions lead for a goal done in sets across a week or month; a daily one
   // has a single session, so today's total says more.
@@ -698,7 +741,9 @@ export function SkillGoalTile({
           a goal heading for one value shows its trend; a repeating goal,
           its recent periods as bars. */}
       <div className="mt-3 h-16 flex flex-col justify-end">
-        {history.kind === 'progress' ? (
+        {previousResult ? (
+          <PreviousPeriodSummary goal={goal} result={previousResult} />
+        ) : history.kind === 'progress' ? (
           <BuildUpProgress goal={goal} progress={progress} />
         ) : history.kind === 'entries' ? (
           <MiniTrend
@@ -711,7 +756,7 @@ export function SkillGoalTile({
         )}
       </div>
 
-      <p role={status.role} className={`mt-2 text-xs truncate ${status.tone}`}>{status.text}</p>
+      <p role={status.role} className={`mt-2 min-h-4 text-xs truncate ${status.tone}`}>{status.text}</p>
 
       {open ? (
         <div id={formId} className="mt-3 pt-3 border-t border-hairline">
