@@ -554,10 +554,27 @@ function PlanItem({ item, status, context, busy, editing, backState = null, canM
   const tickable = !editing && (item.item_type === 'step' || (item.item_type === 'skill_resource' && state !== 'removed'))
   const typeLabel = t(`plans.itemTypes.${item.item_type}`)
   const shownTitle = state === 'removed' ? t('plans.removedRecord', { type: typeLabel }) : title
+  const stepComplete = state === 'done' || completing
+  const statusDotClass = editing
+    ? 'border border-hairline'
+    : stepComplete
+      ? 'bg-moss'
+      : state === 'in_progress'
+        ? 'bg-gold'
+        : 'border border-hairline'
 
   return (
     <div className="flex gap-3">
-      {tickable ? (
+      {tickable && item.item_type === 'step' ? (
+        <button
+          type="button"
+          aria-label={t('plans.markDone', { title: shownTitle })}
+          aria-pressed={stepComplete}
+          disabled={busy || checking || untickChoice}
+          onClick={() => handleToggle(!stepComplete)}
+          className={`relative mt-1.5 h-3 w-3 shrink-0 rounded-full transition-[background-color,border-color,box-shadow] after:absolute after:-inset-3 after:rounded-full hover:ring-4 hover:ring-moss/15 disabled:cursor-wait disabled:opacity-50 ${statusDotClass}`}
+        />
+      ) : tickable ? (
         <input
           type="checkbox"
           checked={state === 'done' || completing}
@@ -567,7 +584,7 @@ function PlanItem({ item, status, context, busy, editing, backState = null, canM
           className="mt-1 h-4 w-4 accent-moss shrink-0"
         />
       ) : (
-        <span aria-hidden="true" className={`mt-1.5 h-3 w-3 shrink-0 rounded-full ${editing ? 'border border-hairline' : state === 'done' ? 'bg-moss' : state === 'in_progress' ? 'bg-gold' : 'border border-hairline'}`} />
+        <span aria-hidden="true" className={`mt-1.5 h-3 w-3 shrink-0 rounded-full ${statusDotClass}`} />
       )}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">

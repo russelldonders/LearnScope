@@ -133,7 +133,7 @@ describe('PlanDetail', () => {
 
   it('marks a step done with a date and a comment', async () => {
     renderPage()
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'Mark “Shadow a senior lead” done' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Mark “Shadow a senior lead” done' }))
     expect(lib.setItemDone).not.toHaveBeenCalled()
     const form = screen.getByRole('form', { name: 'Mark this step done' })
     fireEvent.change(within(form).getByLabelText('Done on'), { target: { value: '2026-11-10' } })
@@ -155,7 +155,7 @@ describe('PlanDetail', () => {
 
   it('refuses a done date in the future', async () => {
     renderPage()
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'Mark “Shadow a senior lead” done' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Mark “Shadow a senior lead” done' }))
     const form = screen.getByRole('form', { name: 'Mark this step done' })
     fireEvent.change(within(form).getByLabelText('Done on'), { target: { value: '2999-01-01' } })
     fireEvent.click(within(form).getByRole('button', { name: 'Mark done' }))
@@ -170,7 +170,7 @@ describe('PlanDetail', () => {
     })
     lib.getItemActivity.mockResolvedValue({ id: 'st1', evidence_url: 'https://example.com' })
     renderPage()
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'Mark “Shadow a senior lead” done' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Mark “Shadow a senior lead” done' }))
     const choice = await screen.findByRole('group', { name: 'Untick this step' })
     expect(lib.setItemDone).not.toHaveBeenCalled()
     fireEvent.click(within(choice).getByRole('button', { name: 'Untick and keep the activity' }))
@@ -184,7 +184,7 @@ describe('PlanDetail', () => {
     })
     lib.getItemActivity.mockResolvedValue({ id: 'st1' })
     renderPage()
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'Mark “Shadow a senior lead” done' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Mark “Shadow a senior lead” done' }))
     await waitFor(() => expect(lib.setItemDone).toHaveBeenCalledWith(expect.objectContaining({ id: 'i5' }), false, expect.objectContaining({ removeActivity: undefined })))
     expect(screen.queryByRole('group', { name: 'Untick this step' })).not.toBeInTheDocument()
   })
@@ -268,7 +268,7 @@ describe('PlanDetail', () => {
     expect(screen.queryByRole('button', { name: 'Add to Foundations' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add section' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete plan' })).not.toBeInTheDocument()
-    expect(screen.getByRole('checkbox', { name: 'Mark “Shadow a senior lead” done' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Mark “Shadow a senior lead” done' })).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('switches to edit mode and back, where steps are arranged rather than ticked', async () => {
