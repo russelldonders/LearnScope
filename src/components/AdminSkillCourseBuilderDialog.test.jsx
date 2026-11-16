@@ -78,6 +78,35 @@ describe('AdminSkillCourseBuilderDialog', () => {
     expect(brief).toEqual(expect.objectContaining({ durationValue: '15', sectionCount: '5', pagesPerSection: '6' }))
   })
 
+  it('shows why a course failed and retries just that one', async () => {
+    let failedOnce = false
+    const ok = generateSkillCourseDraft.getMockImplementation()
+    generateSkillCourseDraft.mockImplementation(async (brief, organisationId, options) => {
+      if (options.level === 2 && !failedOnce) {
+        failedOnce = true
+        throw new Error('The AI wrote 4 sections instead of 5. The course wasn’t saved. Try again.')
+      }
+      return ok(brief, organisationId, options)
+    })
+    render(
+      <MemoryRouter>
+        <AdminSkillCourseBuilderDialog skills={[skill]} onClose={vi.fn()} onFinished={vi.fn()} />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Build 5 courses' }))
+
+    expect(await screen.findByText('The AI wrote 4 sections instead of 5. The course wasn’t saved. Try again.')).toBeInTheDocument()
+    await waitFor(() => expect(saveGeneratedSkillCourseJob).toHaveBeenCalledTimes(4))
+    generateSkillCourseDraft.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry Coaching level 2' }))
+
+    await waitFor(() => expect(saveGeneratedSkillCourseJob).toHaveBeenCalledTimes(5))
+    expect(generateSkillCourseDraft).toHaveBeenCalledTimes(1)
+    expect(generateSkillCourseDraft.mock.calls[0][2].level).toBe(2)
+    expect(await screen.findByText('Course series ready')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Retry Coaching/ })).not.toBeInTheDocument()
+  })
+
   it('builds all five knowledge-level courses with automatic Global publication', async () => {
     render(
       <MemoryRouter>

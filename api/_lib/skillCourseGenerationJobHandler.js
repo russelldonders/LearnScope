@@ -1,7 +1,7 @@
 import { waitUntil } from '@vercel/functions'
 import { verifySupabaseUser } from './auth.js'
 import { consumeQuota, sendQuotaExceeded } from './quota.js'
-import { COURSE_DRAFT_SCHEMA, buildCourseDraftRequest, normalizeGeneratedCourseDraft } from './courseDraft.js'
+import { COURSE_DRAFT_SCHEMA, buildCourseDraftRequest, checkGeneratedCourseDraft } from './courseDraft.js'
 import { supabaseAdmin } from './supabaseAdmin.js'
 import { createTrackedMessage } from './trackedAnthropic.js'
 
@@ -57,11 +57,22 @@ async function platformAdminCaller(req, res) {
   return caller
 }
 
-function generationErrorMessage(error) {
+// What an administrator sees when a course fails: what actually went wrong,
+// in plain words, and whether trying again is likely to help.
+export function generationErrorMessage(error) {
+  if (error?.userMessage) return error.userMessage
   if (error?.status === 401 || error?.status === 403) return 'Course generation could not authenticate with the AI service.'
   if (error?.status === 429) return 'The AI service is busy or its usage limit has been reached. Try again shortly.'
   if (error?.status === 400) return 'The AI service rejected the course request format.'
+  if (error?.status === 422) return 'The AI declined to write this course. Try again, or change the skill’s description.'
+  if (error?.status === 529 || error?.error?.type === 'overloaded_error') return 'The AI service is overloaded right now. Try again in a minute.'
+  if (error?.status >= 500) return 'The AI service had an error. Try again.'
+  if (error instanceof SyntaxError) return 'The AI’s reply couldn’t be read as a course. Try again.'
   return 'Failed to generate the course. Try again.'
+}
+
+function unusableCourse(message) {
+  return Object.assign(new Error(message), { userMessage: message })
 }
 
 async function runGenerationJob({ jobId, request, userId, organisationId }) {
@@ -89,9 +100,13 @@ async function runGenerationJob({ jobId, request, userId, organisationId }) {
       },
     })
     if (response.stop_reason === 'refusal') throw Object.assign(new Error('AI refusal'), { status: 422 })
+    if (response.stop_reason === 'max_tokens') {
+      throw unusableCourse('The course was too long to write in one go. Try again with fewer sections or pages.')
+    }
     const textBlock = response.content.find((block) => block.type === 'text')
-    const draft = textBlock ? normalizeGeneratedCourseDraft(JSON.parse(textBlock.text), request.values) : null
-    if (!draft) throw new Error('The generated course did not match the required structure.')
+    if (!textBlock) throw unusableCourse('The AI’s reply had no course in it. Try again.')
+    const { draft, problem } = checkGeneratedCourseDraft(JSON.parse(textBlock.text), request.values)
+    if (!draft) throw unusableCourse(`${problem} The course wasn’t saved. Try again.`)
 
     // A cancellation update and this completion update race safely: only a
     // job still marked running may receive and expose the generated draft.

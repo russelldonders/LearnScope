@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { COURSE_DRAFT_SCHEMA, buildCourseDraftRequest, normalizeGeneratedCourseDraft } from './courseDraft.js'
+import { COURSE_DRAFT_SCHEMA, buildCourseDraftRequest, checkGeneratedCourseDraft, normalizeGeneratedCourseDraft } from './courseDraft.js'
 
 const raw = {
   name: 'Safe lifting',
@@ -69,5 +69,35 @@ describe('normalizeGeneratedCourseDraft', () => {
     expect(normalizeGeneratedCourseDraft(raw, { sectionCount: 2, pagesPerSection: 1 })).toBeNull()
     expect(normalizeGeneratedCourseDraft(raw, { sectionCount: 1, pagesPerSection: 2 })).toBeNull()
     expect(normalizeGeneratedCourseDraft(raw, { sectionCount: 1, pagesPerSection: 1 })).not.toBeNull()
+  })
+})
+
+describe('checkGeneratedCourseDraft', () => {
+  const page = (title) => ({ title, blocks: [{ type: 'text', content: `About ${title}`, secondaryContent: '', level: 2, variant: 'info', align: 'left' }] })
+  const section = (title, pageCount) => ({ title, instructions: '', pages: Array.from({ length: pageCount }, (_, index) => page(`${title} ${index + 1}`)) })
+  const course = (sections) => ({ name: 'Coaching — Aware', synopsis: 'An introduction.', sections })
+
+  it('says how many sections came back when there are too few', () => {
+    const result = checkGeneratedCourseDraft(course([section('A', 4), section('B', 4)]), { sectionCount: 5, pagesPerSection: 4 })
+    expect(result.draft).toBeNull()
+    expect(result.problem).toBe('The AI wrote 2 sections instead of 5.')
+  })
+
+  it('says which section is short of pages', () => {
+    const result = checkGeneratedCourseDraft(course([section('A', 4), section('B', 3)]), { sectionCount: 2, pagesPerSection: 4 })
+    expect(result.problem).toBe('Section 2 came back with 3 pages instead of 4.')
+  })
+
+  it('says which page came back empty', () => {
+    const raw = course([section('A', 2)])
+    raw.sections[0].pages[1] = { title: '', blocks: [] }
+    expect(checkGeneratedCourseDraft(raw, { sectionCount: 1, pagesPerSection: 2 }).problem).toBe('Section 1, page 2 came back empty.')
+  })
+
+  it('keeps a course with extra sections or pages, trimmed to what was asked for', () => {
+    const result = checkGeneratedCourseDraft(course([section('A', 5), section('B', 4), section('C', 4)]), { sectionCount: 2, pagesPerSection: 4 })
+    expect(result.problem).toBeUndefined()
+    expect(result.draft.sections.map((s) => s.title)).toEqual(['A', 'B'])
+    expect(result.draft.sections.map((s) => s.pages.length)).toEqual([4, 4])
   })
 })

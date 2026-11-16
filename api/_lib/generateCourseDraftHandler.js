@@ -1,6 +1,6 @@
 import { verifySupabaseUser } from './auth.js'
 import { consumeQuota, sendQuotaExceeded } from './quota.js'
-import { COURSE_DRAFT_SCHEMA, buildCourseDraftRequest, normalizeGeneratedCourseDraft } from './courseDraft.js'
+import { COURSE_DRAFT_SCHEMA, buildCourseDraftRequest, checkGeneratedCourseDraft } from './courseDraft.js'
 import { supabaseAdmin } from './supabaseAdmin.js'
 import { createTrackedMessage } from './trackedAnthropic.js'
 
@@ -104,12 +104,28 @@ export default async function generateCourseDraftHandler(req, res, options = {})
       res.status(422).json({ error: "Couldn't generate this course. Try a different brief." })
       return
     }
+    if (response.stop_reason === 'max_tokens') {
+      res.status(502).json({ error: 'The course was too long to write in one go. Try again with fewer sections or pages.' })
+      return
+    }
     const textBlock = response.content.find((block) => block.type === 'text')
-    const draft = textBlock ? normalizeGeneratedCourseDraft(JSON.parse(textBlock.text), request.values) : null
-    if (!draft) throw new Error('The generated course did not match the required structure.')
+    if (!textBlock) throw new Error('The AI reply had no text block.')
+    const { draft, problem } = checkGeneratedCourseDraft(JSON.parse(textBlock.text), request.values)
+    if (!draft) {
+      res.status(502).json({ error: `${problem} The course wasn’t generated. Try again.` })
+      return
+    }
     res.status(200).json({ draft })
   } catch (err) {
     console.error('generate-course-draft error:', err)
+    if (err instanceof SyntaxError) {
+      res.status(502).json({ error: 'The AI’s reply couldn’t be read as a course. Try again.' })
+      return
+    }
+    if (err?.status === 529 || err?.error?.type === 'overloaded_error') {
+      res.status(503).json({ error: 'The AI service is overloaded right now. Try again in a minute.' })
+      return
+    }
     if (err?.status === 401 || err?.status === 403) {
       res.status(503).json({ error: 'Course generation could not authenticate with the AI service.' })
       return

@@ -151,39 +151,54 @@ function normalizeBlock(block) {
 }
 
 export function normalizeGeneratedCourseDraft(raw, values = {}) {
+  return checkGeneratedCourseDraft(raw, values).draft
+}
+
+// As normalizeGeneratedCourseDraft, with what was wrong when it can't be
+// used: { draft } or { draft: null, problem } where problem is a plain
+// sentence an administrator can act on. The AI can't be held to an exact
+// number of sections or pages, so extra ones are trimmed rather than failing
+// the whole course; too few still fails, and says so.
+export function checkGeneratedCourseDraft(raw, values = {}) {
+  const fail = (problem) => ({ draft: null, problem })
   const name = clean(raw?.name, 200)
   const synopsis = clean(raw?.synopsis, 5000)
-  if (!name || !synopsis || !Array.isArray(raw?.sections)) return null
+  if (!name || !synopsis) return fail('The AI’s course came back without a title or synopsis.')
+  if (!Array.isArray(raw?.sections)) return fail('The AI’s course came back without any sections.')
   const expectedSections = positiveInteger(values.sectionCount, raw.sections.length, MAX_SECTIONS)
   const expectedPages = positiveInteger(values.pagesPerSection, 0, MAX_PAGES_PER_SECTION)
-  if (raw.sections.length !== expectedSections) return null
-  if (expectedPages && raw.sections.some((section) => !Array.isArray(section?.pages) || section.pages.length !== expectedPages)) return null
+  if (raw.sections.length < expectedSections) {
+    return fail(`The AI wrote ${raw.sections.length} ${raw.sections.length === 1 ? 'section' : 'sections'} instead of ${expectedSections}.`)
+  }
 
-  const sections = raw.sections.slice(0, MAX_SECTIONS).map((section) => {
+  const sections = []
+  for (const [sectionIndex, section] of raw.sections.slice(0, expectedSections).entries()) {
     const title = clean(section?.title, 200)
-    if (!title || !Array.isArray(section?.pages)) return null
-    const pages = section.pages.slice(0, MAX_PAGES_PER_SECTION).map((page) => {
+    if (!title) return fail(`Section ${sectionIndex + 1} came back without a title.`)
+    const rawPages = Array.isArray(section?.pages) ? section.pages : []
+    const wantedPages = expectedPages || Math.min(rawPages.length, MAX_PAGES_PER_SECTION)
+    if (rawPages.length < wantedPages || rawPages.length === 0) {
+      return fail(`Section ${sectionIndex + 1} came back with ${rawPages.length} ${rawPages.length === 1 ? 'page' : 'pages'} instead of ${wantedPages || 'at least 1'}.`)
+    }
+    const pages = []
+    for (const [pageIndex, page] of rawPages.slice(0, wantedPages).entries()) {
       const pageTitle = clean(page?.title, 200)
-      if (!pageTitle || !Array.isArray(page?.blocks)) return null
-      let blocks = page.blocks.slice(0, MAX_BLOCKS_PER_PAGE).map(normalizeBlock).filter(Boolean)
-      if (!blocks.some((block) => block.type === 'heading')) {
+      let blocks = Array.isArray(page?.blocks) ? page.blocks.slice(0, MAX_BLOCKS_PER_PAGE).map(normalizeBlock).filter(Boolean) : []
+      if (pageTitle && !blocks.some((block) => block.type === 'heading')) {
         blocks = [{ id: blockId(), type: 'heading', level: 1, content: escapeHtml(pageTitle, 200), align: 'left' }, ...blocks]
       }
-      if (blocks.length < 2) return null
-      return { title: pageTitle, pageContent: { version: 1, blocks } }
-    }).filter(Boolean)
-    if (pages.length === 0) return null
-    return { title, instructions: clean(section?.instructions, 2000) || null, pages }
-  }).filter(Boolean)
+      if (!pageTitle || blocks.length < 2) return fail(`Section ${sectionIndex + 1}, page ${pageIndex + 1} came back empty.`)
+      pages.push({ title: pageTitle, pageContent: { version: 1, blocks } })
+    }
+    sections.push({ title, instructions: clean(section?.instructions, 2000) || null, pages })
+  }
 
-  if (sections.length !== expectedSections) return null
-  if (expectedPages && sections.some((section) => section.pages.length !== expectedPages)) return null
-  return {
+  return { draft: {
     name,
     synopsis,
     courseType: clean(values.courseType, 100) || 'Online',
     durationValue: positiveInteger(values.durationValue, 6, 10000),
     durationUnit: DURATION_UNITS.includes(values.durationUnit) ? values.durationUnit : 'hours',
     sections,
-  }
+  } }
 }

@@ -54,7 +54,7 @@ vi.mock('./supabaseAdmin.js', () => ({
   }),
 }))
 
-import skillCourseGenerationJobHandler, { failStalledJobs } from './skillCourseGenerationJobHandler.js'
+import skillCourseGenerationJobHandler, { failStalledJobs, generationErrorMessage } from './skillCourseGenerationJobHandler.js'
 
 function response() {
   return {
@@ -139,5 +139,16 @@ describe('failStalledJobs', () => {
     const { calls, admin } = recorder()
     await failStalledJobs(admin, { jobId: 'job-1' })
     expect(calls).toContainEqual(['eq', 'id', 'job-1'])
+  })
+})
+
+describe('generationErrorMessage', () => {
+  it('says what went wrong rather than a generic failure', () => {
+    expect(generationErrorMessage(Object.assign(new Error('x'), { userMessage: 'The AI wrote 4 sections instead of 5. The course wasn’t saved. Try again.' })))
+      .toBe('The AI wrote 4 sections instead of 5. The course wasn’t saved. Try again.')
+    expect(generationErrorMessage({ status: 529 })).toBe('The AI service is overloaded right now. Try again in a minute.')
+    expect(generationErrorMessage({ status: 500 })).toBe('The AI service had an error. Try again.')
+    expect(generationErrorMessage(new SyntaxError('Unexpected end of JSON'))).toBe('The AI’s reply couldn’t be read as a course. Try again.')
+    expect(generationErrorMessage({ status: 429 })).toMatch(/busy/)
   })
 })

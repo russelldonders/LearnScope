@@ -333,6 +333,18 @@ export default function AdminSkillCourseBuilderDialog({ skills, onClose, onFinis
                   <div className="shrink-0 text-right">
                     {result.status === 'complete' && result.courseId ? (
                       <Link to={`/admin/catalogue/${result.courseId}/edit`} className="text-xs font-medium text-moss hover:underline">Open course</Link>
+                    ) : result.status === 'failed' && stage === 'complete' ? (
+                      <span className="flex items-center justify-end gap-3">
+                        <span className="text-xs text-red-700">Failed</span>
+                        <button
+                          type="button"
+                          onClick={() => handleBuild([{ key: result.key, skill: result.skill, level: result.level }])}
+                          aria-label={`Retry ${result.skill.name} level ${result.level}`}
+                          className="rounded-md border border-hairline px-2.5 py-1 text-xs font-medium text-ink hover:border-moss hover:bg-paper"
+                        >
+                          Retry
+                        </button>
+                      </span>
                     ) : (
                       <span className={`text-xs ${result.status === 'failed' ? 'text-red-700' : 'text-secondary'}`}>
                         {result.status === 'building' ? 'Building…' : result.status === 'failed' ? 'Failed' : result.status === 'cancelled' ? 'Aborted' : 'Queued'}
