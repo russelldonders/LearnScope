@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const lib = vi.hoisted(() => ({
@@ -80,12 +80,21 @@ const plan = {
   ],
 }
 
+// Stands in for the course and skill pages: shows where their back link
+// would go.
+function WhereBack() {
+  const { state } = useLocation()
+  return <p>Back to {state?.backTo ?? 'nowhere'} as {state?.backLabel} / {state?.from} as {state?.fromLabel}</p>
+}
+
 function renderPage(path = '/plans/p1') {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/plans/:planId" element={<PlanDetail />} />
         <Route path="/plans" element={<p>All plans</p>} />
+        <Route path="/courses/:id/learn" element={<WhereBack />} />
+        <Route path="/skills/:id" element={<WhereBack />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -290,6 +299,18 @@ describe('PlanDetail', () => {
     lib.getPlan.mockResolvedValue({ ...plan, status: 'planning', sections: [], items: [] })
     renderPage()
     expect(await screen.findByRole('button', { name: 'Ready to use' })).toBeDisabled()
+  })
+
+  it('sends a course opened from the plan back to the plan', async () => {
+    renderPage()
+    fireEvent.click(await screen.findByRole('link', { name: 'Leading teams' }))
+    expect(await screen.findByText(/^Back to \/plans\/p1 as Become a team lead/)).toBeInTheDocument()
+  })
+
+  it('sends a skill opened from the plan back to the plan, in the same mode', async () => {
+    renderPage('/plans/p1?mode=edit')
+    fireEvent.click(await screen.findByRole('link', { name: 'Coaching' }))
+    expect(await screen.findByText('Back to /plans/p1?mode=edit as Become a team lead / /plans/p1?mode=edit as Become a team lead')).toBeInTheDocument()
   })
 
   it('says when a plan does not exist', async () => {

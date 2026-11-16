@@ -133,6 +133,10 @@ export default function PlanDetail() {
   }
 
   const planning = plan.status === 'planning'
+  // Where a page opened from this plan should lead back to: here, in the same
+  // mode. Course pages read backTo/backLabel, skill pages from/fromLabel.
+  const here = `/plans/${plan.id}${searchParams.toString() ? `?${searchParams}` : ''}`
+  const backState = { backTo: here, backLabel: plan.title, from: here, fromLabel: plan.title }
   const editing = planning || searchParams.get('mode') === 'edit'
   const progress = summariseProgress([...statusById.values()])
   const elapsed = timeElapsedPercent(plan, context?.today)
@@ -337,6 +341,7 @@ export default function PlanDetail() {
                         context={context}
                         busy={busy}
                         editing={editing}
+                        backState={backState}
                         canMoveUp={index > 0}
                         canMoveDown={index < items.length - 1}
                         onMoveUp={() => move(items, index, -1, 'learner_plan_items')}
@@ -477,7 +482,7 @@ function IconButton({ label, disabled, onClick, children }) {
 function describeItem(item, status, context, t) {
   switch (item.item_type) {
     case 'course':
-      return { title: item.courses?.name, href: item.courses ? `/courses/${item.courses.id}` : null, detail: item.courses?.provider }
+      return { title: item.courses?.name, href: item.courses ? `/courses/${item.courses.id}/learn` : null, detail: item.courses?.provider }
     case 'skill': {
       const skill = item.skills
       const target = skill ? context?.latestTargetBySkill?.get(skill.id) : null
@@ -512,7 +517,7 @@ function describeItem(item, status, context, t) {
   }
 }
 
-function PlanItem({ item, status, context, busy, editing, canMoveUp, canMoveDown, onMoveUp, onMoveDown, onComplete, onUntick, onLoadActivity, onEdit, onRemove, onSetTarget }) {
+function PlanItem({ item, status, context, busy, editing, backState = null, canMoveUp, canMoveDown, onMoveUp, onMoveDown, onComplete, onUntick, onLoadActivity, onEdit, onRemove, onSetTarget }) {
   const { t } = useLanguage()
   const state = status?.state ?? 'not_started'
   // Marking a step done asks for a date, comment and evidence first; a
@@ -570,7 +575,7 @@ function PlanItem({ item, status, context, busy, editing, canMoveUp, canMoveDown
             external ? (
               <a href={href} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-moss hover:underline break-words">{shownTitle}</a>
             ) : (
-              <Link to={href} className="text-sm font-medium text-moss hover:underline break-words">{shownTitle}</Link>
+              <Link to={href} state={backState} className="text-sm font-medium text-moss hover:underline break-words">{shownTitle}</Link>
             )
           ) : (
             <span className={`text-sm font-medium break-words ${state === 'removed' ? 'text-secondary italic' : 'text-ink'} ${state === 'done' && tickable ? 'line-through decoration-secondary' : ''}`}>{shownTitle}</span>
