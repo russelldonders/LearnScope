@@ -2,7 +2,7 @@
 
 begin;
 
-select plan(8);
+select plan(11);
 
 -- A and B are connected, and so are B and C. A shared a resource with B.
 insert into auth.users (id, email, email_confirmed_at) values
@@ -24,7 +24,12 @@ values ('7f000000-0000-0000-0000-000000000201', '7f000000-0000-0000-0000-0000000
 insert into public.skill_resource_recipients (resource_id, recipient_id)
 values ('7f000000-0000-0000-0000-000000000201', '7f000000-0000-0000-0000-00000000000b');
 
-grant all on table public.connections to authenticated;
+insert into public.connection_requests (id, requester_id, recipient_id, request_type, status) values
+  ('7f000000-0000-0000-0000-000000000301', '7f000000-0000-0000-0000-00000000000a', '7f000000-0000-0000-0000-00000000000b', 'skill_access', 'pending'),
+  ('7f000000-0000-0000-0000-000000000302', '7f000000-0000-0000-0000-00000000000c', '7f000000-0000-0000-0000-00000000000b', 'skill_access', 'pending'),
+  ('7f000000-0000-0000-0000-000000000303', '7f000000-0000-0000-0000-00000000000b', '7f000000-0000-0000-0000-00000000000a', 'connect', 'pending');
+
+grant all on table public.connections, public.connection_requests to authenticated;
 
 -- A can't end a connection they aren't part of.
 select set_config('request.jwt.claim.sub', '7f000000-0000-0000-0000-00000000000a', true);
@@ -63,6 +68,25 @@ select is(
   (select count(*)::int from public.skill_resource_recipients where resource_id = '7f000000-0000-0000-0000-000000000201'),
   0, 'B is dropped from A''s chosen contacts'
 );
+select results_eq(
+  $$select status, decided_at is not null from public.connection_requests where id = '7f000000-0000-0000-0000-000000000301'$$,
+  $$values ('closed'::text, true)$$,
+  'a pending request to share skills between them is closed'
+);
+select results_eq(
+  $$select status from public.connection_requests where id in ('7f000000-0000-0000-0000-000000000302', '7f000000-0000-0000-0000-000000000303') order by id$$,
+  $$values ('pending'::text), ('pending'::text)$$,
+  'requests between other people, and requests to connect, are left alone'
+);
+
+-- A closed request can't be answered afterwards.
+select set_config('request.jwt.claim.sub', '7f000000-0000-0000-0000-00000000000b', true);
+set local role authenticated;
+select throws_ok(
+  $$select public.respond_to_connection_request('7f000000-0000-0000-0000-000000000301', true)$$,
+  null, null, 'a closed request cannot be accepted'
+);
+reset role;
 
 select * from finish();
 
