@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient'
-import { computeGoalProgress, localDateString } from './skillGoalProgress'
+import { computeGoalProgress, goalDueOn, localDateString } from './skillGoalProgress'
 import { listActiveGoalsWithActivities } from './skillGoals'
 import { saveActivity } from './activitySkillLinks'
 import { deleteActivity } from './activityEdits'
@@ -93,9 +93,15 @@ export async function loadPlanContext(userId, items) {
   const goalsById = new Map((goals.data ?? []).map((goal) => [goal.id, goal]))
   const replacedBy = new Map()
   for (const goal of goals.data ?? []) if (goal.replaces_goal_id) replacedBy.set(goal.replaces_goal_id, goal.id)
-  const goalProgressById = new Map(activeGoals.map((item) => [item.goal.id, computeGoalProgress(item.goal, item.statements)]))
+  // Each active goal as its tile needs it (as on Home), so a plan can show the
+  // goal itself rather than sending the learner to its skill's page.
+  const goalItemsById = new Map(activeGoals.map((item) => {
+    const progress = computeGoalProgress(item.goal, item.statements)
+    return [item.goal.id, { ...item, progress, nextLog: goalDueOn(item.goal, progress) }]
+  }))
+  const goalProgressById = new Map([...goalItemsById].map(([id, item]) => [id, item.progress]))
 
-  return { goalsById, replacedBy, goalProgressById, today: localDateString() }
+  return { goalsById, replacedBy, goalProgressById, goalItemsById, today: localDateString() }
 }
 
 // The learner's records that can go into a plan.

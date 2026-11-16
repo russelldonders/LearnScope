@@ -316,6 +316,7 @@ export default {
     inviteDescription: 'Wähle Kontakte aus, die „{title}“ selbst verfolgen möchten.',
     invitePrivacy: 'Nach der Annahme erhalten sie eine eigene private Kopie. Ihr Fortschritt bleibt getrennt und wird nicht mit dir geteilt.',
     closeInvite: 'Einladungsdialog schließen',
+    closeGoal: 'Ziel schließen',
     searchConnections: 'Kontakte suchen',
     loadingConnections: 'Kontakte werden geladen…',
     noConnectionsToInvite: 'Stelle zuerst eine Verbindung her, um jemanden zu diesem Plan einzuladen.',

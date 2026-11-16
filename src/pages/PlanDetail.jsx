@@ -3,7 +3,9 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import AppHeader from '../components/AppHeader'
+import AccessibleDialog from '../components/AccessibleDialog'
 import ConfirmDialog from '../components/ConfirmDialog'
+import { SkillGoalTile } from '../components/SkillGoalsDashboardPanel'
 import PlanProgressBar from '../components/PlanProgressBar'
 import PlanInviteDialog from '../components/PlanInviteDialog'
 import SkillGoalModal from '../components/SkillGoalModal'
@@ -86,6 +88,8 @@ export default function PlanDetail() {
   const [inviteBusy, setInviteBusy] = useState(false)
   const [inviteError, setInviteError] = useState(null)
   const [inviteNotice, setInviteNotice] = useState(null)
+  // A goal in the plan, shown as its own tile in a pop-up.
+  const [openGoalId, setOpenGoalId] = useState(null)
   // Who the activities recorded by ticking are by (xAPI actor).
   const [actorName, setActorName] = useState('')
 
@@ -100,7 +104,9 @@ export default function PlanDetail() {
       return
     }
     setPlan(loaded)
-    setContext(await loadPlanContext(user.id, loaded.items))
+    const nextContext = await loadPlanContext(user.id, loaded.items)
+    setContext(nextContext)
+    return nextContext
   }, [planId, user.id])
 
   useEffect(() => {
@@ -287,6 +293,7 @@ export default function PlanDetail() {
               setEditing(true)
               setEditingItemId(item.id)
             }}
+            onOpenGoal={setOpenGoalId}
           />
         )}
       </li>
@@ -428,6 +435,21 @@ export default function PlanDetail() {
           onClose={() => setInviteOpen(false)}
           onInvite={sendInvites}
           t={t}
+        />
+      )}
+
+      {openGoalId && context?.goalItemsById?.has(openGoalId) && (
+        <GoalTileDialog
+          item={context.goalItemsById.get(openGoalId)}
+          user={user}
+          actor={{ name: actorName, email: user.email }}
+          onClose={() => setOpenGoalId(null)}
+          // Logging from the tile reloads the plan too, so the item's state
+          // moves on, and hands the tile its goal back with the new entries.
+          onChanged={async () => {
+            const next = await load()
+            return next ? [...next.goalItemsById.values()] : []
+          }}
         />
       )}
 
@@ -616,6 +638,41 @@ export default function PlanDetail() {
   )
 }
 
+// A goal in the plan as the same tile Home shows -- progress, history and
+// logging -- without leaving the plan for the goal's skill page.
+function GoalTileDialog({ item, user, actor, onClose, onChanged }) {
+  const { t } = useLanguage()
+  const [logging, setLogging] = useState(false)
+  return (
+    <AccessibleDialog
+      labelledBy={`dashboard-goal-${item.goal.id}`}
+      onClose={onClose}
+      panelClassName="flex w-full max-w-sm max-h-[90vh] flex-col focus:outline-none"
+    >
+      <button
+        type="button"
+        aria-label={t('plans.closeGoal')}
+        title={t('plans.closeGoal')}
+        onClick={onClose}
+        className="mb-2 grid h-8 w-8 shrink-0 place-items-center self-end rounded-full border border-hairline bg-card text-lg leading-none text-secondary shadow hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-moss"
+      >
+        <span aria-hidden="true">×</span>
+      </button>
+      <div className="min-h-0 overflow-y-auto rounded-lg shadow-xl">
+        <SkillGoalTile
+          item={item}
+          user={user}
+          actor={actor}
+          open={logging}
+          onToggle={() => setLogging((value) => !value)}
+          onChanged={onChanged}
+          linkToSkill={false}
+        />
+      </div>
+    </AccessibleDialog>
+  )
+}
+
 function Shell({ children }) {
   return (
     <div className="min-h-screen bg-paper">
@@ -683,7 +740,11 @@ function describeItem(item, status, context, t) {
     case 'skill_goal': {
       const goal = context ? currentGoal(item.skill_goal_id, context.goalsById, context.replacedBy) : null
       const title = goal?.title ?? item.skill_goals?.title
-      return { title, href: goal?.skill_id || item.skill_goals?.skill_id ? `/skills/${goal?.skill_id ?? item.skill_goals.skill_id}` : null, detail: null }
+      // An active goal opens as its own tile in a pop-up; one that has ended
+      // has no tile, so it still leads to its skill's page.
+      const goalTileId = goal && context.goalItemsById?.has(goal.id) ? goal.id : null
+      const skillId = goal?.skill_id ?? item.skill_goals?.skill_id
+      return { title, goalTileId, href: !goalTileId && skillId ? `/skills/${skillId}` : null, detail: null }
     }
     case 'skill_resource':
       return {
@@ -701,7 +762,7 @@ function describeItem(item, status, context, t) {
   }
 }
 
-function PlanItem({ item, status, context, busy, editing, backState = null, canMoveUp, canMoveDown, onDragStart, onDragEnd, onMoveUp, onMoveDown, onComplete, onUntick, onLoadActivity, onEdit, onRemove, onSetTarget }) {
+function PlanItem({ item, status, context, busy, editing, backState = null, canMoveUp, canMoveDown, onDragStart, onDragEnd, onMoveUp, onMoveDown, onComplete, onUntick, onLoadActivity, onEdit, onRemove, onSetTarget, onOpenGoal }) {
   const { t } = useLanguage()
   const state = status?.state ?? 'not_started'
   // Marking a step done asks for a date, comment and evidence first; a
@@ -733,7 +794,7 @@ function PlanItem({ item, status, context, busy, editing, backState = null, canM
       setChecking(false)
     }
   }
-  const { title, href, external, detail, skillLevels } = describeItem(item, status, context, t)
+  const { title, href, external, detail, skillLevels, goalTileId } = describeItem(item, status, context, t)
   // Ticking off is part of working through the plan, so only in use mode.
   const tickable = !editing && (item.item_type === 'step' || (item.item_type === 'skill_resource' && state !== 'removed'))
   const typeLabel = t(`plans.itemTypes.${item.item_type}`)
@@ -787,7 +848,9 @@ function PlanItem({ item, status, context, busy, editing, backState = null, canM
         <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-            {href && state !== 'removed' ? (
+            {goalTileId && state !== 'removed' ? (
+              <button type="button" onClick={() => onOpenGoal(goalTileId)} className="text-left text-sm font-medium text-moss hover:underline break-words">{shownTitle}</button>
+            ) : href && state !== 'removed' ? (
               external ? (
                 <a href={href} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-moss hover:underline break-words">{shownTitle}</a>
               ) : (

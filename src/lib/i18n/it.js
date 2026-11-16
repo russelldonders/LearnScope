@@ -316,6 +316,7 @@ export default {
     inviteDescription: 'Scegli i contatti che seguiranno “{title}” per conto proprio.',
     invitePrivacy: 'Quando accettano, ricevono una copia privata. I loro progressi restano separati e non vengono condivisi con te.',
     closeInvite: 'Chiudi la finestra degli inviti',
+    closeGoal: 'Chiudi l’obiettivo',
     searchConnections: 'Cerca contatti',
     loadingConnections: 'Caricamento dei contatti…',
     noConnectionsToInvite: 'Collegati prima con qualcuno per poterlo invitare a questo piano.',

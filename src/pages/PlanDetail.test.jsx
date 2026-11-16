@@ -49,6 +49,15 @@ vi.mock('../components/SkillResourcesSection', () => ({
     </div>
   ),
 }))
+vi.mock('../components/SkillGoalsDashboardPanel', () => ({
+  SkillGoalTile: ({ item, linkToSkill, onChanged }) => (
+    <article aria-labelledby={`dashboard-goal-${item.goal.id}`}>
+      <h3 id={`dashboard-goal-${item.goal.id}`}>{item.goal.title} tile</h3>
+      <span>{linkToSkill ? 'links to skill' : 'no skill link'}</span>
+      <button type="button" onClick={onChanged}>Log progress</button>
+    </article>
+  ),
+}))
 vi.mock('../context/LanguageContext', async () => {
   const { english } = await import('../lib/i18n/translations')
   const t = (key, params) => {
@@ -253,6 +262,29 @@ describe('PlanDetail', () => {
     const buttons = screen.getAllByRole('button', { name: 'Remove' })
     fireEvent.click(buttons[buttons.length - 1])
     await waitFor(() => expect(lib.removeItem).toHaveBeenCalledWith('i5'))
+  })
+
+  it('opens an active goal as its own tile in a pop-up, not its skill page', async () => {
+    const goalItem = { goal: { id: 'g1', title: 'Run 10k' }, skill: { id: 's1', name: 'Coaching' }, statements: [], progress: { reached: true }, nextLog: null }
+    lib.loadPlanContext.mockResolvedValue({ ...context, goalItemsById: new Map([['g1', goalItem]]) })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Run 10k' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Run 10k tile' })
+    expect(within(dialog).getByText('no skill link')).toBeInTheDocument()
+    expect(screen.queryByText(/^Back to/)).not.toBeInTheDocument()
+
+    // Logging from the tile reloads the plan.
+    lib.getPlan.mockClear()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Log progress' }))
+    await waitFor(() => expect(lib.getPlan).toHaveBeenCalled())
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close goal' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('still links a goal that has ended to its skill page', async () => {
+    renderPage()
+    expect(await screen.findByRole('link', { name: 'Run 10k' })).toHaveAttribute('href', '/skills/s1')
   })
 
   it('reorders items within a section', async () => {

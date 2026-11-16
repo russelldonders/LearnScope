@@ -316,6 +316,7 @@ export default {
     inviteDescription: 'Kies connecties die ‘{title}’ voor zichzelf willen volgen.',
     invitePrivacy: 'Na acceptatie krijgen zij een eigen privékopie. Hun voortgang blijft apart en wordt niet met jou gedeeld.',
     closeInvite: 'Uitnodigingen sluiten',
+    closeGoal: 'Doel sluiten',
     searchConnections: 'Connecties zoeken',
     loadingConnections: 'Connecties laden…',
     noConnectionsToInvite: 'Maak eerst een connectie om iemand voor dit plan uit te nodigen.',

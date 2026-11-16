@@ -316,6 +316,7 @@ export default {
     inviteDescription: 'Choisissez les contacts qui suivront « {title} » pour eux-mêmes.',
     invitePrivacy: 'Après acceptation, ils reçoivent leur propre copie privée. Leur progression reste séparée et ne vous est pas communiquée.',
     closeInvite: 'Fermer la fenêtre d’invitation',
+    closeGoal: 'Fermer l’objectif',
     searchConnections: 'Rechercher des contacts',
     loadingConnections: 'Chargement des contacts…',
     noConnectionsToInvite: 'Ajoutez d’abord un contact pour pouvoir l’inviter à ce plan.',

@@ -316,6 +316,7 @@ export default {
     inviteDescription: 'Choose connections to follow “{title}” for themselves.',
     invitePrivacy: 'When they accept, they get their own private copy. Their progress is separate and is not shared with you.',
     closeInvite: 'Close invitation dialog',
+    closeGoal: 'Close goal',
     searchConnections: 'Search connections',
     loadingConnections: 'Loading connections…',
     noConnectionsToInvite: 'Connect with someone first, then you can invite them to this plan.',

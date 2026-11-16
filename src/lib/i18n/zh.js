@@ -316,6 +316,7 @@ export default {
     inviteDescription: '选择联系人，让他们独立执行“{title}”。',
     invitePrivacy: '接受后，对方会获得自己的私密副本。对方的进度独立保存，不会与你共享。',
     closeInvite: '关闭邀请窗口',
+    closeGoal: '关闭目标',
     searchConnections: '搜索联系人',
     loadingConnections: '正在加载联系人…',
     noConnectionsToInvite: '请先与他人建立联系，然后即可邀请他们加入此计划。',

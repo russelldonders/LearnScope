@@ -316,6 +316,7 @@ export default {
     inviteDescription: 'Elige contactos para que sigan «{title}» por su cuenta.',
     invitePrivacy: 'Cuando acepten, recibirán su propia copia privada. Su progreso será independiente y no se compartirá contigo.',
     closeInvite: 'Cerrar invitaciones',
+    closeGoal: 'Cerrar meta',
     searchConnections: 'Buscar contactos',
     loadingConnections: 'Cargando contactos…',
     noConnectionsToInvite: 'Conecta primero con alguien para poder invitarlo a este plan.',
