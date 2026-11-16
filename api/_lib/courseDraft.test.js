@@ -101,3 +101,47 @@ describe('checkGeneratedCourseDraft', () => {
     expect(result.draft.sections.map((s) => s.pages.length)).toEqual([4, 4])
   })
 })
+
+describe('interactive and visual blocks from the AI', () => {
+  const unused = { secondaryContent: '', level: 2, variant: 'info', align: 'left', layout: 'none', unit: '', items: [] }
+  const item = (label, detail = '', extra = {}) => ({ label, detail, value: 0, correct: false, ...extra })
+  const pageWith = (...blocks) => ({
+    name: 'Coaching', synopsis: 'A course.',
+    sections: [{ title: 'One', instructions: '', pages: [{ title: 'Page', blocks: [{ ...unused, type: 'heading', content: 'Page' }, ...blocks] }] }],
+  })
+  const blocksOf = (raw) => checkGeneratedCourseDraft(raw, { sectionCount: 1, pagesPerSection: 1 }).draft.sections[0].pages[0].pageContent.blocks.slice(1)
+
+  it('lets the AI use every interactive and visual block', () => {
+    const types = COURSE_DRAFT_SCHEMA.properties.sections.items.properties.pages.items.properties.blocks.items.properties.type.enum
+    expect(types).toEqual(expect.arrayContaining(['knowledge_check', 'flip_cards', 'hotspots', 'accordion', 'ordering', 'chart', 'diagram', 'animation']))
+    expect(buildCourseDraftRequest({ topic: 'Coaching', audience: 'Leads', outcomes: 'Coach' }).prompt).toMatch(/Every section must include at least one knowledge_check/)
+  })
+
+  it('keeps a knowledge check as plain text, its layout following how many answers are right', () => {
+    const [check] = blocksOf(pageWith({
+      ...unused, type: 'knowledge_check', content: 'Which <b>two</b> help?', layout: 'single',
+      items: [item('Listening', 'Yes.', { correct: true }), item('Reflecting', 'Yes.', { correct: true }), item('Interrupting', 'No.')],
+    }))
+    expect(check).toMatchObject({ type: 'knowledge_check', title: 'Which two help?', layout: 'multiple' })
+    expect(check.items.map((answer) => [answer.label, answer.correct])).toEqual([['Listening', true], ['Reflecting', true], ['Interrupting', false]])
+    expect(check).not.toHaveProperty('content')
+  })
+
+  it('drops a block that can’t work rather than showing it broken', () => {
+    const blocks = blocksOf(pageWith(
+      { ...unused, type: 'knowledge_check', content: 'No right answer', layout: 'single', items: [item('A'), item('B')] },
+      { ...unused, type: 'chart', content: 'Empty chart', layout: 'bar', items: [item('A'), item('B')] },
+      { ...unused, type: 'flip_cards', content: '', items: [item('Term', 'Meaning')] },
+      { ...unused, type: 'text', content: 'Still here' },
+    ))
+    expect(blocks.map((block) => block.type)).toEqual(['flip_cards', 'text'])
+  })
+
+  it('keeps a chart’s figures, unit and caption', () => {
+    const [chart] = blocksOf(pageWith({
+      ...unused, type: 'chart', content: 'Time spent', layout: 'pie', unit: '%', secondaryContent: 'Illustrative example',
+      items: [item('Listening', '', { value: 60 }), item('Talking', '', { value: 40 })],
+    }))
+    expect(chart).toMatchObject({ type: 'chart', layout: 'pie', unit: '%', caption: 'Illustrative example', items: [{ label: 'Listening', value: 60 }, { label: 'Talking', value: 40 }] })
+  })
+})

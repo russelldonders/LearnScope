@@ -3,13 +3,16 @@ import { contentFileUrl, createPageResource, listOrganisationResources, removePa
 import {
   CALLOUT_VARIANTS,
   EMPTY_PAGE_DOCUMENT,
+  INTERACTIVE_BLOCKS,
   MEDIA_SIZES,
   TEXT_ALIGNMENTS,
+  newInteractiveBlock,
   normalisePageDocument,
   pageDocumentWordCount,
   sanitiseRichText,
 } from '../lib/pageBuilder'
 import PageContent, { PageMedia } from './PageContent'
+import PageInteractiveEditor from './PageInteractiveEditor'
 import AccessibleDialog from './AccessibleDialog'
 import { DragHandle } from './DragHandle'
 import { sideOf, findDropTarget } from '../lib/dragReorder'
@@ -23,6 +26,7 @@ const BLOCK_LABELS = {
   quote: 'Quote',
   columns: 'Two columns',
   divider: 'Divider',
+  ...Object.fromEntries(Object.entries(INTERACTIVE_BLOCKS).map(([type, spec]) => [type, spec.label])),
 }
 
 const BLOCK_PLACEHOLDERS = {
@@ -35,6 +39,7 @@ const BLOCK_PLACEHOLDERS = {
 const ALIGN_LABELS = { left: 'Left', center: 'Center', right: 'Right' }
 
 function newBlock(type) {
+  if (INTERACTIVE_BLOCKS[type]) return newInteractiveBlock(type)
   if (type === 'divider') return { id: crypto.randomUUID(), type }
   if (type === 'columns') return { id: crypto.randomUUID(), type, content: 'First column', secondaryContent: 'Second column', align: 'left' }
   if (type === 'image' || type === 'video') return { id: crypto.randomUUID(), type, url: '', alt: '', caption: '', size: 'full' }
@@ -328,8 +333,12 @@ function InsertMenu({ onInsert, label = 'Add content' }) {
       </button>
       {open && (
         <div className="page-insert-options">
-          {Object.entries(BLOCK_LABELS).map(([type, blockLabel]) => (
+          {Object.entries(BLOCK_LABELS).filter(([type]) => !INTERACTIVE_BLOCKS[type]).map(([type, blockLabel]) => (
             <button key={type} type="button" onClick={() => { onInsert(type); setOpen(false) }}>{blockLabel}</button>
+          ))}
+          <span className="page-insert-options__group">Interactive and visual</span>
+          {Object.entries(INTERACTIVE_BLOCKS).map(([type, spec]) => (
+            <button key={type} type="button" onClick={() => { onInsert(type); setOpen(false) }}>{spec.label}</button>
           ))}
         </div>
       )}
@@ -735,6 +744,13 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
                           <Editable value={block.secondaryContent} onChange={(secondaryContent) => updateBlock(block.id, { secondaryContent })} onFocus={() => setActiveBlockId(block.id)}
                             label="Second column" placeholder="Second column…" />
                         </div>
+                      )}
+                      {INTERACTIVE_BLOCKS[block.type] && (
+                        <PageInteractiveEditor
+                          block={block}
+                          onChange={(changes) => updateBlock(block.id, changes)}
+                          onChangeWithHistory={(changes) => updateBlockWithHistory(block.id, changes)}
+                        />
                       )}
                       {isMedia && (
                         <MediaEditor block={block} onChange={(changes) => updateBlock(block.id, changes)}

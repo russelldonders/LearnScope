@@ -85,3 +85,15 @@ export function useLanguage() {
   if (ctx === undefined) throw new Error('useLanguage must be used within a LanguageProvider')
   return ctx
 }
+
+// For shared pieces that can also render outside the app's provider (course
+// page content shown in previews and players): the learner's language when
+// there is one, English otherwise.
+const ENGLISH_FALLBACK = {
+  language: DEFAULT_LANGUAGE,
+  t: (key, params) => interpolate(resolve(english, key) ?? key, params),
+}
+
+export function useOptionalLanguage() {
+  return useContext(LanguageContext) ?? ENGLISH_FALLBACK
+}

@@ -1,4 +1,16 @@
 import { normaliseMediaUrl, normalisePageDocument } from '../lib/pageBuilder'
+import { Accordion, Animation, Chart, Diagram, FlipCards, Hotspots, KnowledgeCheck, Ordering } from './PageInteractiveBlocks'
+
+const INTERACTIVE_COMPONENTS = {
+  knowledge_check: KnowledgeCheck,
+  flip_cards: FlipCards,
+  hotspots: Hotspots,
+  accordion: Accordion,
+  ordering: Ordering,
+  chart: Chart,
+  diagram: Diagram,
+  animation: Animation,
+}
 
 function RichText({ html, className = '' }) {
   return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />
@@ -12,6 +24,8 @@ export default function PageContent({ document, compact = false }) {
   return (
     <article className={`page-content mx-auto w-full ${compact ? 'max-w-3xl' : 'max-w-[70ch]'}`}>
       {page.blocks.map((block) => {
+        const Interactive = INTERACTIVE_COMPONENTS[block.type]
+        if (Interactive) return block.items.length > 0 ? <Interactive key={block.id} block={block} /> : null
         if (block.type === 'heading') {
           return (
             <RichText

@@ -6,7 +6,68 @@ export const EMPTY_PAGE_DOCUMENT = {
   ],
 }
 
-export const BLOCK_TYPES = ['heading', 'text', 'callout', 'quote', 'divider', 'columns', 'image', 'video']
+// Interactive and visual blocks: plain-text title and items, drawn by
+// LearnScope (never raw HTML or AI-written graphics). Answers to the
+// interactive ones are formative -- feedback only, never saved.
+//   title    the question, prompt or heading
+//   layout   how it's drawn (see BLOCK_LAYOUTS)
+//   items    [{ id, label, detail, value, correct }] -- which fields matter
+//            depends on the type (see INTERACTIVE_BLOCKS)
+//   caption  a note under it (a chart's "Illustrative example", ordering
+//            feedback)
+//   unit     a chart's unit
+export const INTERACTIVE_BLOCKS = {
+  knowledge_check: { label: 'Knowledge check', minItems: 2, maxItems: 6 },
+  flip_cards: { label: 'Flip cards', minItems: 1, maxItems: 8 },
+  hotspots: { label: 'Hotspots', minItems: 2, maxItems: 8 },
+  accordion: { label: 'Reveal sections', minItems: 1, maxItems: 8 },
+  ordering: { label: 'Put in order', minItems: 2, maxItems: 7 },
+  chart: { label: 'Chart', minItems: 1, maxItems: 12 },
+  diagram: { label: 'Diagram', minItems: 2, maxItems: 8 },
+  animation: { label: 'Animated explainer', minItems: 2, maxItems: 8 },
+}
+export const BLOCK_LAYOUTS = {
+  knowledge_check: ['single', 'multiple'],
+  chart: ['bar', 'line', 'pie'],
+  diagram: ['flow', 'cycle', 'hub', 'comparison'],
+  hotspots: ['flow', 'cycle', 'hub', 'grid'],
+  animation: ['flow', 'cycle', 'build'],
+}
+
+export const BLOCK_TYPES = ['heading', 'text', 'callout', 'quote', 'divider', 'columns', 'image', 'video', ...Object.keys(INTERACTIVE_BLOCKS)]
+
+const PLAIN_TEXT_LIMITS = { title: 300, label: 300, detail: 1200, caption: 500, unit: 30 }
+
+// Interactive blocks hold plain text only: any markup is stripped, and it's
+// always shown as text.
+export function plainText(value, limit) {
+  const withoutTags = String(value ?? '').replace(/<[^>]*>/g, '')
+  // Control characters out, keeping tabs and line breaks.
+  const printable = [...withoutTags].filter((character) => {
+    const code = character.charCodeAt(0)
+    return code >= 32 || code === 9 || code === 10 || code === 13
+  }).join('')
+  return printable.trim().slice(0, limit)
+}
+
+function normaliseInteractive(block) {
+  const spec = INTERACTIVE_BLOCKS[block.type]
+  const layouts = BLOCK_LAYOUTS[block.type]
+  const items = (Array.isArray(block.items) ? block.items : []).slice(0, spec.maxItems).map((item) => ({
+    id: String(item?.id || crypto.randomUUID()),
+    label: plainText(item?.label, PLAIN_TEXT_LIMITS.label),
+    detail: plainText(item?.detail, PLAIN_TEXT_LIMITS.detail),
+    value: Number.isFinite(Number(item?.value)) ? Number(item.value) : 0,
+    correct: item?.correct === true,
+  }))
+  return {
+    title: plainText(block.title, PLAIN_TEXT_LIMITS.title),
+    ...(layouts ? { layout: layouts.includes(block.layout) ? block.layout : layouts[0] } : {}),
+    items,
+    caption: plainText(block.caption, PLAIN_TEXT_LIMITS.caption),
+    ...(block.type === 'chart' ? { unit: plainText(block.unit, PLAIN_TEXT_LIMITS.unit) } : {}),
+  }
+}
 export const CALLOUT_VARIANTS = ['info', 'warning', 'success', 'tip']
 export const MEDIA_SIZES = ['small', 'medium', 'large', 'full']
 export const TEXT_ALIGNMENTS = ['left', 'center', 'right']
@@ -100,7 +161,11 @@ export function normalisePageDocument(document) {
   const blocks = Array.isArray(document?.blocks) ? document.blocks : []
   return {
     version: 1,
-    blocks: blocks.slice(0, 100).map((block) => ({
+    blocks: blocks.slice(0, 100).map((block) => INTERACTIVE_BLOCKS[block.type] ? {
+      id: String(block.id || crypto.randomUUID()),
+      type: block.type,
+      ...normaliseInteractive(block),
+    } : {
       id: String(block.id || crypto.randomUUID()),
       type: BLOCK_TYPES.includes(block.type) ? block.type : 'text',
       ...(block.type === 'heading' ? { level: [1, 2, 3].includes(block.level) ? block.level : 1 } : {}),
@@ -115,7 +180,7 @@ export function normalisePageDocument(document) {
         caption: String(block.caption || '').slice(0, 500),
         size: MEDIA_SIZES.includes(block.size) ? block.size : 'full',
       } : {}),
-    })),
+    }),
   }
 }
 
@@ -128,8 +193,52 @@ export function pageDocumentWordCount(document) {
   if (typeof DOMParser === 'undefined') return 0
   const page = normalisePageDocument(document)
   const text = page.blocks
-    .flatMap((block) => [block.content, block.secondaryContent, block.caption].filter(Boolean))
+    .flatMap((block) => [
+      block.content, block.secondaryContent, block.caption, block.title,
+      ...(block.items ?? []).flatMap((item) => [item.label, item.detail]),
+    ].filter(Boolean))
     .map((html) => new DOMParser().parseFromString(html.replace(/<(li|br|p|div)[^>]*>/gi, ' '), 'text/html').body.textContent || '')
     .join(' ')
   return (text.match(/\S+/g) || []).length
+}
+
+// A new block of one of these types, with enough to show what it does.
+export function newInteractiveBlock(type) {
+  const item = (label, detail = '', extra = {}) => ({ id: crypto.randomUUID(), label, detail, value: 0, correct: false, ...extra })
+  const base = { id: crypto.randomUUID(), type, title: '', caption: '' }
+  switch (type) {
+    case 'knowledge_check':
+      return { ...base, title: 'Your question', layout: 'single', items: [item('Right answer', 'Why this is right.', { correct: true }), item('Another answer', 'Why this isn’t right.')] }
+    case 'flip_cards':
+      return { ...base, items: [item('Term', 'What it means.'), item('Another term', 'What it means.')] }
+    case 'hotspots':
+      return { ...base, title: 'Explore the parts', layout: 'hub', items: [item('Centre', 'What this is.'), item('Part one', 'What this does.'), item('Part two', 'What this does.')] }
+    case 'accordion':
+      return { ...base, items: [item('First section', 'More detail.'), item('Second section', 'More detail.')] }
+    case 'ordering':
+      return { ...base, title: 'Put these steps in order', items: [item('First step'), item('Second step'), item('Third step')] }
+    case 'chart':
+      return { ...base, title: 'Chart title', layout: 'bar', unit: '', caption: 'Illustrative example', items: [item('A', '', { value: 3 }), item('B', '', { value: 5 }), item('C', '', { value: 2 })] }
+    case 'diagram':
+      return { ...base, title: 'How it fits together', layout: 'flow', items: [item('Start'), item('Then'), item('Finally')] }
+    case 'animation':
+    default:
+      return { ...base, title: 'How it works', layout: 'flow', items: [item('Step one', 'What happens first.'), item('Step two', 'What happens next.'), item('Step three', 'How it ends.')] }
+  }
+}
+
+// The same mixed-up order every time for a given block, never already right.
+export function startingOrder(items, seed) {
+  const ids = items.map((item) => item.id)
+  if (ids.length < 2) return ids
+  let hash = 0
+  for (const character of String(seed)) hash = (hash * 31 + character.charCodeAt(0)) >>> 0
+  const shuffled = [...ids]
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    hash = (hash * 1103515245 + 12345) >>> 0
+    const swap = hash % (index + 1)
+    ;[shuffled[index], shuffled[swap]] = [shuffled[swap], shuffled[index]]
+  }
+  if (shuffled.every((id, index) => id === ids[index])) shuffled.push(shuffled.shift())
+  return shuffled
 }
