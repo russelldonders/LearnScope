@@ -115,6 +115,16 @@ export async function setPlanStatus(planId, status) {
   if (error) throw error
 }
 
+// A plan in preparation becomes ready to use. Without a start date, it
+// starts today, so its timeframe and pace have something to go by.
+export async function startPlan(plan) {
+  const changes = { status: 'active', completed_on: null }
+  const today = localDateString()
+  if (!plan.starts_on && (!plan.target_on || plan.target_on >= today)) changes.starts_on = today
+  const { error } = await supabase.from('learner_plans').update(changes).eq('id', plan.id)
+  if (error) throw error
+}
+
 // Removes the plan and its sections and items, never the records they point at.
 export async function deletePlan(planId) {
   const { error } = await supabase.from('learner_plans').delete().eq('id', planId)

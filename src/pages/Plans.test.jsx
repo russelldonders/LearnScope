@@ -57,8 +57,14 @@ describe('Plans', () => {
         ],
       },
       { id: 'p2', title: 'Old plan', status: 'archived', items: [] },
+      { id: 'p3', title: 'Next year', status: 'planning', items: [] },
     ])
     renderPage()
+    // Grouped by where each plan is; one still being prepared shows no progress yet.
+    expect(await screen.findByRole('heading', { name: 'In use' })).toBeInTheDocument()
+    const preparing = screen.getByRole('region', { name: 'Being prepared' })
+    expect(preparing).toHaveTextContent('Next year')
+    expect(preparing.querySelector('[role="progressbar"]')).toBeNull()
     expect(await screen.findByRole('link', { name: /Become a team lead/ })).toHaveAttribute('href', '/plans/p1')
     expect(await screen.findByText('1 of 2 done')).toBeInTheDocument()
     expect(screen.getByRole('progressbar', { name: 'Progress on Become a team lead' })).toHaveAttribute('aria-valuenow', '50')

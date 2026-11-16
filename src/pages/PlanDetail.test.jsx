@@ -14,6 +14,7 @@ const lib = vi.hoisted(() => ({
   savePositions: vi.fn(),
   setItemDone: vi.fn(),
   setPlanStatus: vi.fn(),
+  startPlan: vi.fn(),
   updateItem: vi.fn(),
   updatePlan: vi.fn(),
   updateSection: vi.fn(),
@@ -58,9 +59,9 @@ const plan = {
   ],
 }
 
-function renderPage() {
+function renderPage(path = '/plans/p1') {
   return render(
-    <MemoryRouter initialEntries={['/plans/p1']}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/plans/:planId" element={<PlanDetail />} />
         <Route path="/plans" element={<p>All plans</p>} />
@@ -73,7 +74,7 @@ beforeEach(() => {
   lib.getPlan.mockResolvedValue(plan)
   lib.loadPlanContext.mockResolvedValue(context)
   lib.listPlannableRecords.mockResolvedValue({ course: [{ id: 'c9', name: 'Public speaking', provider: 'Acme' }], skill: [], skill_goal: [], skill_resource: [] })
-  for (const fn of ['addItem', 'addSection', 'deletePlan', 'removeItem', 'savePositions', 'setItemDone', 'setPlanStatus', 'updateItem']) lib[fn].mockResolvedValue()
+  for (const fn of ['addItem', 'addSection', 'deletePlan', 'removeItem', 'savePositions', 'setItemDone', 'setPlanStatus', 'startPlan', 'updateItem']) lib[fn].mockResolvedValue()
 })
 afterEach(() => {
   cleanup()
@@ -112,7 +113,7 @@ describe('PlanDetail', () => {
   })
 
   it('adds one of the learner\'s courses to a section', async () => {
-    renderPage()
+    renderPage('/plans/p1?mode=edit')
     fireEvent.click(await screen.findByRole('button', { name: 'Add to Foundations' }))
     fireEvent.change(await screen.findByLabelText('Choose a course'), { target: { value: 'c9' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add' }))
@@ -120,7 +121,7 @@ describe('PlanDetail', () => {
   })
 
   it('removes an item only after confirming, and says the record stays', async () => {
-    renderPage()
+    renderPage('/plans/p1?mode=edit')
     const step = (await screen.findByText('Shadow a senior lead')).closest('li')
     fireEvent.click(within(step).getByRole('button', { name: 'Remove' }))
     expect(screen.getByText(/isn’t changed/)).toBeInTheDocument()
@@ -131,7 +132,7 @@ describe('PlanDetail', () => {
   })
 
   it('reorders items within a section', async () => {
-    renderPage()
+    renderPage('/plans/p1?mode=edit')
     fireEvent.click(await screen.findByRole('button', { name: 'Move Coaching up' }))
     await waitFor(() => expect(lib.savePositions).toHaveBeenCalledWith('learner_plan_items', [
       { id: 'i2', position: 0 }, { id: 'i1', position: 1 }, { id: 'i3', position: 2 }, { id: 'i4', position: 3 },
@@ -142,6 +143,46 @@ describe('PlanDetail', () => {
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'Mark plan complete' }))
     await waitFor(() => expect(lib.setPlanStatus).toHaveBeenCalledWith('p1', 'completed'))
+  })
+
+  it('keeps use mode free of anything that changes the plan', async () => {
+    renderPage()
+    await screen.findByRole('heading', { name: 'Become a team lead' })
+    expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add to Foundations' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add section' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete plan' })).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Mark “Shadow a senior lead” done' })).toBeInTheDocument()
+  })
+
+  it('switches to edit mode and back, where steps are arranged rather than ticked', async () => {
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit plan' }))
+    expect(screen.getByText('Editing this plan')).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add section' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Done editing' }))
+    expect(screen.queryByText('Editing this plan')).not.toBeInTheDocument()
+    expect(screen.getByRole('progressbar')).toBeInTheDocument()
+  })
+
+  it('opens a plan still being prepared in edit mode, until it is made ready', async () => {
+    lib.getPlan.mockResolvedValue({ ...plan, status: 'planning' })
+    renderPage()
+    expect(await screen.findByText('This plan is being prepared')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Done editing' })).not.toBeInTheDocument()
+    lib.getPlan.mockResolvedValue({ ...plan, status: 'active' })
+    fireEvent.click(screen.getByRole('button', { name: 'Ready to use' }))
+    await waitFor(() => expect(lib.startPlan).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' })))
+    expect(await screen.findByRole('progressbar')).toBeInTheDocument()
+    expect(screen.queryByText('This plan is being prepared')).not.toBeInTheDocument()
+  })
+
+  it('cannot make an empty plan ready to use', async () => {
+    lib.getPlan.mockResolvedValue({ ...plan, status: 'planning', sections: [], items: [] })
+    renderPage()
+    expect(await screen.findByRole('button', { name: 'Ready to use' })).toBeDisabled()
   })
 
   it('says when a plan does not exist', async () => {

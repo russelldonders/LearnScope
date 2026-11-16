@@ -33434,3 +33434,17 @@ create policy "Learners manage their own plan items"
   with check (exists (select 1 from public.learner_plans p where p.id = learner_plan_items.plan_id and p.user_id = (select auth.uid())));
 
 grant select, insert, update, delete on table public.learner_plans, public.learner_plan_sections, public.learner_plan_items to authenticated;
+-- 20261116110000_0296_learner_plan_planning_status.sql
+
+-- A plan can now be in preparation before it's used: 'planning' is for a
+-- plan still being put together, 'active' for one the learner is working
+-- through. New plans start in 'planning' and the learner makes them ready
+-- when they're set up. Plans that already exist keep their status: they were
+-- created as active and may already be in use.
+alter table public.learner_plans
+  drop constraint learner_plans_status_check,
+  add constraint learner_plans_status_check
+    check (status in ('planning', 'active', 'completed', 'archived'));
+
+alter table public.learner_plans
+  alter column status set default 'planning';

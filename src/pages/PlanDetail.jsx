@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import AppHeader from '../components/AppHeader'
@@ -19,6 +19,7 @@ import {
   savePositions,
   setItemDone,
   setPlanStatus,
+  startPlan,
   updateItem,
   updatePlan,
   updateSection,
@@ -39,14 +40,21 @@ const STATE_TONES = {
 }
 
 // A learner's plan: its sections in order, each with its items, every item's
-// state worked out from the record it points at (planProgress.js). The
-// learner ticks off steps and resources here; everything else moves on as
-// the course, skill or goal itself does.
+// state worked out from the record it points at (planProgress.js).
+//
+// Two modes, kept apart so working through a plan never risks changing it:
+//   use  -- follow progress, tick off steps and resources, set a missing
+//           skill target. Nothing about the plan's structure can change.
+//   edit -- add, remove, reorder and edit items and sections, and the
+//           plan's details. Opened with ?mode=edit; a plan still being
+//           prepared (status planning) is always in edit mode, until the
+//           learner makes it ready to use.
 export default function PlanDetail() {
   const { planId } = useParams()
   const { user } = useAuth()
   const { t } = useLanguage()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [plan, setPlan] = useState(null)
   const [context, setContext] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -109,9 +117,25 @@ export default function PlanDetail() {
     )
   }
 
+  const planning = plan.status === 'planning'
+  const editing = planning || searchParams.get('mode') === 'edit'
   const progress = summariseProgress([...statusById.values()])
   const elapsed = timeElapsedPercent(plan, context?.today)
   const pace = plan.status === 'active' ? paceOf(progress, elapsed) : null
+
+  function setEditing(on) {
+    setAddingTo(null)
+    setAddingSection(false)
+    setEditingItemId(null)
+    setEditingSectionId(null)
+    setEditingDetails(false)
+    setSearchParams(on ? { mode: 'edit' } : {}, { replace: true })
+  }
+
+  async function makeReady() {
+    const ok = await run(() => startPlan(plan))
+    if (ok) setEditing(false)
+  }
   const groups = [
     { section: null, items: plan.items.filter((item) => !item.section_id) },
     ...plan.sections.map((section) => ({ section, items: plan.items.filter((item) => item.section_id === section.id) })),
@@ -128,6 +152,24 @@ export default function PlanDetail() {
   return (
     <Shell>
       <Link to="/plans" className="text-sm text-moss font-medium hover:underline">{t('plans.backToPlans')}</Link>
+
+      {editing && (
+        <div data-mode="edit" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gold/50 bg-gold/10 px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-ink">{planning ? t('plans.planningBannerTitle') : t('plans.editBannerTitle')}</p>
+            <p className="text-xs text-secondary">{planning ? t('plans.planningBannerHint') : t('plans.editBannerHint')}</p>
+          </div>
+          {planning ? (
+            <button type="button" disabled={busy || plan.items.length === 0} onClick={makeReady} className="shrink-0 rounded-md bg-moss text-paper text-sm font-medium px-4 py-2 hover:opacity-90 disabled:opacity-60">
+              {t('plans.readyToUse')}
+            </button>
+          ) : (
+            <button type="button" onClick={() => setEditing(false)} className="shrink-0 rounded-md bg-moss text-paper text-sm font-medium px-4 py-2 hover:opacity-90">
+              {t('plans.doneEditing')}
+            </button>
+          )}
+        </div>
+      )}
 
       {editingDetails ? (
         <div className="mt-4 rounded-lg border border-hairline bg-card p-4">
@@ -157,9 +199,14 @@ export default function PlanDetail() {
                 {plan.status === 'completed' && plan.completed_on && ` ${formatFullDate(plan.completed_on)}`}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            {editing ? (
               <button type="button" onClick={() => setEditingDetails(true)} className="rounded-md border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:border-moss">
                 {t('plans.editDetails')}
+              </button>
+            ) : (
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setEditing(true)} className="rounded-md bg-moss text-paper px-3 py-1.5 text-xs font-medium hover:opacity-90">
+                {t('plans.editPlan')}
               </button>
               {plan.status === 'active' ? (
                 <button type="button" disabled={busy} onClick={() => run(() => setPlanStatus(plan.id, 'completed'))} className="rounded-md border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:border-moss disabled:opacity-60">
@@ -176,11 +223,13 @@ export default function PlanDetail() {
                 </button>
               )}
             </div>
+            )}
           </div>
           {plan.description && <p className="mt-2 text-sm text-ink whitespace-pre-wrap break-words max-w-2xl">{plan.description}</p>}
         </div>
       )}
 
+      {!editing && (
       <section aria-label={t('plans.progressHeading')} className="mt-6 rounded-lg border border-hairline bg-card p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="text-sm text-ink">
@@ -200,13 +249,22 @@ export default function PlanDetail() {
           {progress.overdue > 0 && <span className="text-red-700">{t('plans.overdueCount', { count: progress.overdue })}</span>}
         </p>
       </section>
+      )}
+
+      {!editing && plan.items.length === 0 && (
+        <div className="mt-6 text-center py-12 border border-dashed border-hairline rounded-lg">
+          <p className="text-secondary">{t('plans.emptyPlan')}</p>
+          <button type="button" onClick={() => setEditing(true)} className="mt-3 text-sm text-moss font-medium hover:underline">{t('plans.editPlan')}</button>
+        </div>
+      )}
 
       {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
 
       <div className="mt-6 space-y-6">
         {groups.map(({ section, items }, groupIndex) => {
           const sectionProgress = summariseProgress(items.map((item) => statusById.get(item.id) ?? { state: 'not_started' }))
-          if (!section && items.length === 0 && plan.sections.length > 0) return null
+          if (!section && items.length === 0 && (plan.sections.length > 0 || !editing)) return null
+          if (section && items.length === 0 && !editing) return null
           const sectionIndex = groupIndex - 1
           return (
             <section key={section?.id ?? 'top'} aria-labelledby={section ? `plan-section-${section.id}` : undefined}>
@@ -230,17 +288,19 @@ export default function PlanDetail() {
                         {section.target_on && ` · ${t('plans.byDate', { date: formatFullDate(section.target_on) })}`}
                       </p>
                     </div>
+                    {editing && (
                     <div className="flex gap-2 text-xs">
                       <IconButton label={t('plans.moveSectionUp', { title: section.title })} disabled={busy || sectionIndex === 0} onClick={() => move(plan.sections, sectionIndex, -1, 'learner_plan_sections')}>↑</IconButton>
                       <IconButton label={t('plans.moveSectionDown', { title: section.title })} disabled={busy || sectionIndex === plan.sections.length - 1} onClick={() => move(plan.sections, sectionIndex, 1, 'learner_plan_sections')}>↓</IconButton>
                       <button type="button" onClick={() => setEditingSectionId(section.id)} className="text-moss font-medium hover:underline">{t('plans.edit')}</button>
                       <button type="button" onClick={() => setConfirm({ kind: 'section', section })} className="text-red-700 font-medium hover:underline">{t('plans.delete')}</button>
                     </div>
+                    )}
                   </div>
                 )
               )}
 
-              {items.length === 0 && section && <p className="mt-2 text-sm text-secondary">{t('plans.sectionEmpty')}</p>}
+              {items.length === 0 && section && editing && <p className="mt-2 text-sm text-secondary">{t('plans.sectionEmpty')}</p>}
               <ul className="mt-2 space-y-2">
                 {items.map((item, index) => (
                   <li key={item.id} className="rounded-md border border-hairline bg-card p-3">
@@ -261,6 +321,7 @@ export default function PlanDetail() {
                         status={statusById.get(item.id)}
                         context={context}
                         busy={busy}
+                        editing={editing}
                         canMoveUp={index > 0}
                         canMoveDown={index < items.length - 1}
                         onMoveUp={() => move(items, index, -1, 'learner_plan_items')}
@@ -275,7 +336,7 @@ export default function PlanDetail() {
                 ))}
               </ul>
 
-              {addingTo === (section?.id ?? 'top') ? (
+              {!editing ? null : addingTo === (section?.id ?? 'top') ? (
                 <AddItemForm
                   userId={user.id}
                   busy={busy}
@@ -299,6 +360,7 @@ export default function PlanDetail() {
         })}
       </div>
 
+      {editing && (
       <div className="mt-8 border-t border-hairline pt-4">
         {addingSection ? (
           <SectionForm
@@ -320,6 +382,7 @@ export default function PlanDetail() {
           </button>
         </p>
       </div>
+      )}
 
       {confirm && (
         <ConfirmDialog
@@ -428,11 +491,12 @@ function describeItem(item, status, context, t) {
   }
 }
 
-function PlanItem({ item, status, context, busy, canMoveUp, canMoveDown, onMoveUp, onMoveDown, onToggleDone, onEdit, onRemove, onSetTarget }) {
+function PlanItem({ item, status, context, busy, editing, canMoveUp, canMoveDown, onMoveUp, onMoveDown, onToggleDone, onEdit, onRemove, onSetTarget }) {
   const { t } = useLanguage()
   const state = status?.state ?? 'not_started'
   const { title, href, external, detail } = describeItem(item, status, context, t)
-  const tickable = item.item_type === 'step' || (item.item_type === 'skill_resource' && state !== 'removed')
+  // Ticking off is part of working through the plan, so only in use mode.
+  const tickable = !editing && (item.item_type === 'step' || (item.item_type === 'skill_resource' && state !== 'removed'))
   const typeLabel = t(`plans.itemTypes.${item.item_type}`)
   const shownTitle = state === 'removed' ? t('plans.removedRecord', { type: typeLabel }) : title
 
@@ -448,7 +512,7 @@ function PlanItem({ item, status, context, busy, canMoveUp, canMoveDown, onMoveU
           className="mt-1 h-4 w-4 accent-moss shrink-0"
         />
       ) : (
-        <span aria-hidden="true" className={`mt-1.5 h-3 w-3 shrink-0 rounded-full ${state === 'done' ? 'bg-moss' : state === 'in_progress' ? 'bg-gold' : 'border border-hairline'}`} />
+        <span aria-hidden="true" className={`mt-1.5 h-3 w-3 shrink-0 rounded-full ${editing ? 'border border-hairline' : state === 'done' ? 'bg-moss' : state === 'in_progress' ? 'bg-gold' : 'border border-hairline'}`} />
       )}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -462,23 +526,29 @@ function PlanItem({ item, status, context, busy, canMoveUp, canMoveDown, onMoveU
             <span className={`text-sm font-medium break-words ${state === 'removed' ? 'text-secondary italic' : 'text-ink'} ${state === 'done' && tickable ? 'line-through decoration-secondary' : ''}`}>{shownTitle}</span>
           )}
           <span className="font-mono text-[10px] uppercase tracking-wide text-secondary">{typeLabel}</span>
-          <span data-state={state} className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATE_TONES[state]}`}>
-            {t(`plans.states.${state}`)}
-          </span>
-          {status?.overdue && <span className="rounded-full bg-red-700/15 text-red-700 px-2 py-0.5 text-[11px] font-medium">{t('plans.overdue')}</span>}
+          {(!editing || state === 'removed') && (
+            <span data-state={state} className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATE_TONES[state]}`}>
+              {t(`plans.states.${state}`)}
+            </span>
+          )}
+          {!editing && status?.overdue && <span className="rounded-full bg-red-700/15 text-red-700 px-2 py-0.5 text-[11px] font-medium">{t('plans.overdue')}</span>}
         </div>
         {detail && <p className="mt-0.5 text-xs text-secondary">{detail}</p>}
         {item.target_on && <p className="mt-0.5 text-xs text-secondary">{t('plans.byDate', { date: formatFullDate(item.target_on) })}</p>}
         {item.note && <p className="mt-1 text-sm text-secondary whitespace-pre-wrap break-words">{item.note}</p>}
-        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
-          {state === 'needs_target' && (
+        {!editing && state === 'needs_target' && (
+          <div className="mt-2 text-xs">
             <button type="button" onClick={onSetTarget} className="text-gold font-medium hover:underline">{t('plans.setTarget')}</button>
-          )}
+          </div>
+        )}
+        {editing && (
+        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
           <button type="button" onClick={onEdit} className="text-moss font-medium hover:underline">{t('plans.edit')}</button>
           <button type="button" onClick={onRemove} className="text-red-700 font-medium hover:underline">{t('plans.remove')}</button>
           <IconButton label={t('plans.moveUp', { title: shownTitle })} disabled={busy || !canMoveUp} onClick={onMoveUp}>↑</IconButton>
           <IconButton label={t('plans.moveDown', { title: shownTitle })} disabled={busy || !canMoveDown} onClick={onMoveDown}>↓</IconButton>
         </div>
+        )}
       </div>
     </div>
   )

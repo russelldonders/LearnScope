@@ -8,6 +8,10 @@ import { createPlan, listPlans, loadPlanContext } from '../lib/learnerPlans'
 import { planItemStatus, summariseProgress, timeElapsedPercent } from '../lib/planProgress'
 import { formatFullDate } from '../lib/dates'
 
+// Plans by where they are: in use, still being prepared, done, and (on
+// request) archived.
+const PLAN_GROUPS = ['active', 'planning', 'completed', 'archived']
+
 export default function Plans() {
   const { user } = useAuth()
   const { t } = useLanguage()
@@ -76,40 +80,50 @@ export default function Plans() {
             <p className="text-secondary max-w-md mx-auto">{t('plans.emptyState')}</p>
           </div>
         ) : (
-          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {visible.map((plan) => {
-              const progress = context
-                ? summariseProgress(plan.items.map((item) => planItemStatus(item, context)))
-                : { percent: 0, done: 0, total: plan.items.length }
-              const elapsed = timeElapsedPercent(plan)
+          <div className="space-y-8">
+            {PLAN_GROUPS.filter((status) => status !== 'archived' || showArchived).map((status) => {
+              const groupPlans = visible.filter((plan) => plan.status === status)
+              if (groupPlans.length === 0) return null
               return (
-                <li key={plan.id}>
-                  <Link
-                    to={`/plans/${plan.id}`}
-                    className="block h-full rounded-lg border border-hairline bg-card p-4 hover:border-moss focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moss"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <h2 className="font-medium text-ink line-clamp-2">{plan.title}</h2>
-                      {plan.status !== 'active' && (
-                        <span className="shrink-0 rounded-full border border-hairline px-2 py-0.5 text-[11px] text-secondary">
-                          {t(`plans.status.${plan.status}`)}
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-1 text-xs text-secondary">
-                      {plan.target_on ? t('plans.byDate', { date: formatFullDate(plan.target_on) }) : t('plans.noEndDate')}
-                      {' · '}
-                      {t('plans.itemCount', { count: plan.items.length })}
-                    </p>
-                    <PlanProgressBar className="mt-3" percent={progress.percent} elapsed={elapsed} label={t('plans.progressLabel', { title: plan.title })} />
-                    {context && progress.total > 0 && (
-                      <p className="mt-1.5 text-xs text-secondary">{t('plans.doneCount', { done: progress.done, total: progress.total })}</p>
-                    )}
-                  </Link>
-                </li>
+                <section key={status} aria-labelledby={`plans-group-${status}`}>
+                  <h2 id={`plans-group-${status}`} className="font-display text-xl text-ink">{t(`plans.groups.${status}`)}</h2>
+                  <p className="text-xs text-secondary mb-3">{t(`plans.groupHints.${status}`)}</p>
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {groupPlans.map((plan) => {
+                  const progress = context
+                    ? summariseProgress(plan.items.map((item) => planItemStatus(item, context)))
+                    : { percent: 0, done: 0, total: plan.items.length }
+                  const elapsed = timeElapsedPercent(plan)
+                  return (
+                    <li key={plan.id}>
+                      <Link
+                        to={`/plans/${plan.id}`}
+                        className="block h-full rounded-lg border border-hairline bg-card p-4 hover:border-moss focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moss"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="font-medium text-ink line-clamp-2">{plan.title}</h3>
+                        </div>
+                        <p className="mt-1 text-xs text-secondary">
+                          {plan.target_on ? t('plans.byDate', { date: formatFullDate(plan.target_on) }) : t('plans.noEndDate')}
+                          {' · '}
+                          {t('plans.itemCount', { count: plan.items.length })}
+                        </p>
+                        {/* Progress only means something once a plan is in use. */}
+                        {status !== 'planning' && (
+                          <PlanProgressBar className="mt-3" percent={progress.percent} elapsed={elapsed} label={t('plans.progressLabel', { title: plan.title })} />
+                        )}
+                        {status !== 'planning' && context && progress.total > 0 && (
+                          <p className="mt-1.5 text-xs text-secondary">{t('plans.doneCount', { done: progress.done, total: progress.total })}</p>
+                        )}
+                      </Link>
+                    </li>
+                  )
+                })}
+                  </ul>
+                </section>
               )
             })}
-          </ul>
+          </div>
         )}
 
         {archivedCount > 0 && (

@@ -2,7 +2,7 @@
 
 begin;
 
-select plan(16);
+select plan(17);
 
 insert into auth.users (id, email, email_confirmed_at) values
   ('80000000-0000-0000-0000-00000000000a', 'plan-a@example.com', now()),
@@ -40,6 +40,7 @@ insert into public.learner_plan_items (id, plan_id, position, item_type, step_ti
   ('80000000-0000-0000-0000-000000000124', '80000000-0000-0000-0000-000000000100', 3, 'step', 'Shadow a senior planner');
 
 select is((select count(*)::int from public.learner_plan_items), 4, 'a learner builds a plan from their own records and a step');
+select is((select status from public.learner_plans where id = '80000000-0000-0000-0000-000000000100'), 'planning', 'a new plan starts out being prepared');
 
 select throws_ok(
   $$insert into public.learner_plan_items (plan_id, item_type, course_id)
