@@ -145,3 +145,45 @@ describe('interactive and visual blocks from the AI', () => {
     expect(chart).toMatchObject({ type: 'chart', layout: 'pie', unit: '%', caption: 'Illustrative example', items: [{ label: 'Listening', value: 60 }, { label: 'Talking', value: 40 }] })
   })
 })
+
+describe('choosing the interactive and visual elements', () => {
+  const brief = { topic: 'Coaching', audience: 'Team leads', outcomes: 'Coach well', sectionCount: 2, pagesPerSection: 2 }
+  const allowedTypes = (request) => request.schema.properties.sections.items.properties.pages.items.properties.blocks.items.properties.type.enum
+
+  it('uses every element, in balance, unless told otherwise', () => {
+    const request = buildCourseDraftRequest(brief)
+    expect(allowedTypes(request)).toEqual(expect.arrayContaining(['knowledge_check', 'chart', 'animation']))
+    expect(request.prompt).toMatch(/Most pages should have one/)
+  })
+
+  it('lets the AI use only the chosen elements, as much as asked', () => {
+    const request = buildCourseDraftRequest({ ...brief, elements: ['flip_cards', 'chart', 'not-a-block'], elementAmount: 'rich' })
+    expect(allowedTypes(request)).toEqual(['heading', 'text', 'callout', 'quote', 'columns', 'divider', 'flip_cards', 'chart'])
+    expect(request.prompt).toMatch(/Every page should have at least one/)
+    expect(request.prompt).toMatch(/- flip_cards:/)
+    expect(request.prompt).not.toMatch(/- animation:|knowledge_check/)
+    expect(request.values.elements).toEqual(['flip_cards', 'chart'])
+  })
+
+  it('writes a text-only course when none are chosen, with less room needed', () => {
+    const none = buildCourseDraftRequest({ ...brief, elements: [] })
+    expect(allowedTypes(none)).toEqual(['heading', 'text', 'callout', 'quote', 'columns', 'divider'])
+    expect(none.prompt).toMatch(/no interactive or visual blocks/)
+    expect(none.maxTokens).toBeLessThan(buildCourseDraftRequest(brief).maxTokens)
+    expect(buildCourseDraftRequest({ ...brief, elementAmount: 'rich' }).maxTokens).toBeGreaterThan(buildCourseDraftRequest(brief).maxTokens)
+  })
+
+  it('drops an element that wasn’t chosen if the AI uses it anyway', () => {
+    const unused = { secondaryContent: '', level: 2, variant: 'info', align: 'left', layout: 'none', unit: '', items: [] }
+    const raw = {
+      name: 'Coaching', synopsis: 'A course.',
+      sections: [{ title: 'One', instructions: '', pages: [{ title: 'Page', blocks: [
+        { ...unused, type: 'heading', content: 'Page' },
+        { ...unused, type: 'text', content: 'Hello' },
+        { ...unused, type: 'flip_cards', content: '', items: [{ label: 'Term', detail: 'Meaning', value: 0, correct: false }] },
+      ] }] }],
+    }
+    const blocks = checkGeneratedCourseDraft(raw, { sectionCount: 1, pagesPerSection: 1, elements: ['chart'] }).draft.sections[0].pages[0].pageContent.blocks
+    expect(blocks.map((block) => block.type)).toEqual(['heading', 'text'])
+  })
+})

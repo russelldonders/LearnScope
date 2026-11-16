@@ -3,6 +3,8 @@ import AccessibleDialog from './AccessibleDialog'
 import { COURSE_TYPES } from '../lib/courseTypes'
 import { DURATION_UNITS } from '../lib/courseDuration'
 import { createGeneratedCourseDraft, generateCourseDraft } from '../lib/courseGeneration'
+import { INTERACTIVE_BLOCKS } from '../lib/pageBuilder'
+import CourseElementsPicker from './CourseElementsPicker'
 
 const DEFAULT_BRIEF = {
   topic: '',
@@ -15,6 +17,9 @@ const DEFAULT_BRIEF = {
   pagesPerSection: '2',
   tone: 'Practical and encouraging',
   sourceMaterial: '',
+  // Every interactive and visual element, used in balance, unless chosen otherwise.
+  elements: Object.keys(INTERACTIVE_BLOCKS),
+  elementAmount: 'balanced',
 }
 
 const fieldClass = 'w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink placeholder:text-secondary focus:outline-none focus:ring-2 focus:ring-gold'
@@ -236,6 +241,15 @@ export default function CourseGeneratorDialog({ organisationId, onClose, onCreat
               <option>Conversational and approachable</option>
             </select>
           </div>
+
+          <CourseElementsPicker
+            elements={brief.elements}
+            amount={brief.elementAmount}
+            onChange={(choice) => {
+              if (choice.elements) change('elements', choice.elements)
+              if (choice.amount) change('elementAmount', choice.amount)
+            }}
+          />
 
           <div>
             <label htmlFor="course-generator-source" className="mb-1 block text-sm font-medium text-ink">Source material <span className="font-normal text-secondary">(optional)</span></label>

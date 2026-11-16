@@ -57,4 +57,23 @@ describe('CourseGeneratorDialog', () => {
     await waitFor(() => expect(createGeneratedCourseDraft).toHaveBeenCalledWith('org-1', draft))
     expect(onCreated).toHaveBeenCalledWith('course-1')
   })
+
+  it('sends the chosen interactive and visual elements with the brief', async () => {
+    generateCourseDraft.mockResolvedValue(draft)
+    render(<CourseGeneratorDialog organisationId="org-1" onClose={vi.fn()} onCreated={vi.fn()} />)
+    for (const [label, value] of [
+      ['Course topic', 'Manual handling'],
+      ['Who is it for?', 'Warehouse starters'],
+      ['Learning outcomes', 'Assess a lift safely'],
+    ]) fireEvent.change(screen.getByLabelText(label), { target: { value } })
+    fireEvent.click(screen.getByRole('checkbox', { name: /Chart/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /Flip cards/ }))
+    fireEvent.click(screen.getByRole('radio', { name: /Rich/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Generate course' }))
+
+    await waitFor(() => expect(generateCourseDraft).toHaveBeenCalled())
+    const brief = generateCourseDraft.mock.calls[0][0]
+    expect(brief.elementAmount).toBe('rich')
+    expect(brief.elements).toEqual(['knowledge_check', 'hotspots', 'accordion', 'ordering', 'diagram', 'animation'])
+  })
 })

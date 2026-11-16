@@ -107,6 +107,27 @@ describe('AdminSkillCourseBuilderDialog', () => {
     expect(screen.queryByRole('button', { name: /^Retry Coaching/ })).not.toBeInTheDocument()
   })
 
+  it('builds with only the chosen interactive and visual elements, and how much of them', async () => {
+    render(
+      <MemoryRouter>
+        <AdminSkillCourseBuilderDialog skills={[skill]} onClose={vi.fn()} onFinished={vi.fn()} />
+      </MemoryRouter>,
+    )
+    // All chosen to start with, in balance.
+    expect(screen.getByRole('checkbox', { name: /Knowledge check/ })).toBeChecked()
+    expect(screen.getByRole('radio', { name: /Balanced/ })).toBeChecked()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    expect(screen.getByText(/None chosen: courses will use text, callouts and quotes only/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('checkbox', { name: /Flip cards/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /Animated explainer/ }))
+    fireEvent.click(screen.getByRole('radio', { name: /Light/ }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Build 5 courses' }))
+    await waitFor(() => expect(generateSkillCourseDraft).toHaveBeenCalled())
+    expect(generateSkillCourseDraft.mock.calls[0][0]).toEqual(expect.objectContaining({ elements: ['flip_cards', 'animation'], elementAmount: 'light' }))
+  })
+
   it('builds all five knowledge-level courses with automatic Global publication', async () => {
     render(
       <MemoryRouter>

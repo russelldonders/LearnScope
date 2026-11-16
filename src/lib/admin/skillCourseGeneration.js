@@ -28,6 +28,8 @@ export function buildSkillCourseBrief(skill, level, settings) {
     sectionCount: String(settings.sectionCount),
     pagesPerSection: String(settings.pagesPerSection),
     tone: settings.tone,
+    elements: settings.elements,
+    elementAmount: settings.elementAmount,
     sourceMaterial: [
       `Skill: ${skill.name}`,
       skill.category ? `Category: ${skill.category}` : null,

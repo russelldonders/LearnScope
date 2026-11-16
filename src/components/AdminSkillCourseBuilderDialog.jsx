@@ -2,6 +2,8 @@ import { useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AccessibleDialog from './AccessibleDialog'
 import { KNOWLEDGE_LEVEL_LABELS, LEVELS } from '../lib/levels'
+import { INTERACTIVE_BLOCKS } from '../lib/pageBuilder'
+import CourseElementsPicker from './CourseElementsPicker'
 import {
   buildSkillCourseBrief,
   abortSkillCourseGeneration,
@@ -16,6 +18,9 @@ const DEFAULT_SETTINGS = {
   sectionCount: 3,
   pagesPerSection: 2,
   tone: 'Practical and encouraging',
+  // Every interactive and visual element, used in balance, unless chosen otherwise.
+  elements: Object.keys(INTERACTIVE_BLOCKS),
+  elementAmount: 'balanced',
 }
 
 // The number fields hold what was typed (a string) while editing: turning it
@@ -257,6 +262,16 @@ export default function AdminSkillCourseBuilderDialog({ skills, onClose, onFinis
                 ))}
               </div>
             </fieldset>
+
+            <CourseElementsPicker
+              elements={settings.elements}
+              amount={settings.elementAmount}
+              onChange={(change) => setSettings((current) => ({
+                ...current,
+                ...(change.elements ? { elements: change.elements } : {}),
+                ...(change.amount ? { elementAmount: change.amount } : {}),
+              }))}
+            />
 
             <label className="flex items-start gap-3 border-y border-hairline py-4">
               <input

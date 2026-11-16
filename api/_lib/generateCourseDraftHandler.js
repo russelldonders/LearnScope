@@ -1,6 +1,6 @@
 import { verifySupabaseUser } from './auth.js'
 import { consumeQuota, sendQuotaExceeded } from './quota.js'
-import { COURSE_DRAFT_SCHEMA, buildCourseDraftRequest, checkGeneratedCourseDraft } from './courseDraft.js'
+import { buildCourseDraftRequest, checkGeneratedCourseDraft } from './courseDraft.js'
 import { supabaseAdmin } from './supabaseAdmin.js'
 import { createTrackedMessage } from './trackedAnthropic.js'
 
@@ -96,7 +96,7 @@ export default async function generateCourseDraftHandler(req, res, options = {})
       params: {
         model: 'claude-haiku-4-5-20251001',
         max_tokens: request.maxTokens,
-        output_config: { format: { type: 'json_schema', schema: COURSE_DRAFT_SCHEMA } },
+        output_config: { format: { type: 'json_schema', schema: request.schema } },
         messages: [{ role: 'user', content: request.prompt }],
       },
     })
