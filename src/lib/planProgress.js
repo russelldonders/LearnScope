@@ -40,6 +40,10 @@ export function planItemStatus(item, context) {
 }
 
 function baseState(item, context) {
+  // On a shared plan, an item someone else added that the viewer hasn't yet
+  // added to their own records (get_my_learner_plans' needs_link): nothing of
+  // theirs to measure yet, but it's still part of the plan.
+  if (item.needs_link && ['course', 'skill', 'skill_goal'].includes(item.item_type)) return 'not_started'
   switch (item.item_type) {
     case 'course': {
       const course = item.courses

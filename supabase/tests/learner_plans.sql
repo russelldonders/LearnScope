@@ -24,7 +24,7 @@ insert into public.xapi_statements (id, user_id, statement, recorded_at) values
   ('80000000-0000-0000-0000-0000000000e1', '80000000-0000-0000-0000-00000000000a', '{}'::jsonb, now()),
   ('80000000-0000-0000-0000-0000000000e2', '80000000-0000-0000-0000-00000000000b', '{}'::jsonb, now());
 
-grant all on table public.learner_plans, public.learner_plan_sections, public.learner_plan_items,
+grant all on table public.learner_plans, public.learner_plan_sections, public.learner_plan_items, public.learner_plan_item_progress,
   public.skills, public.courses, public.skill_resources, public.xapi_statements to authenticated;
 
 select set_config('request.jwt.claim.sub', '80000000-0000-0000-0000-00000000000a', true);
@@ -73,11 +73,15 @@ select throws_ok(
 -- A step can name one of the learner's own skills, and a tick can point at
 -- one of their own activities -- never someone else's.
 update public.learner_plan_items
-set step_skill_id = '80000000-0000-0000-0000-0000000000a1', completed_on = current_date,
-    completion_statement_id = '80000000-0000-0000-0000-0000000000e1'
+set step_skill_id = '80000000-0000-0000-0000-0000000000a1'
 where id = '80000000-0000-0000-0000-000000000124';
+insert into public.learner_plan_item_progress (item_id, user_id, completed_on, completion_statement_id)
+values ('80000000-0000-0000-0000-000000000124', '80000000-0000-0000-0000-00000000000a', current_date, '80000000-0000-0000-0000-0000000000e1');
 select results_eq(
-  $$select step_skill_id, completion_statement_id from public.learner_plan_items where id = '80000000-0000-0000-0000-000000000124'$$,
+  $$select item.step_skill_id, progress.completion_statement_id
+    from public.learner_plan_items item
+    join public.learner_plan_item_progress progress on progress.item_id = item.id
+    where item.id = '80000000-0000-0000-0000-000000000124'$$,
   $$values ('80000000-0000-0000-0000-0000000000a1'::uuid, '80000000-0000-0000-0000-0000000000e1'::uuid)$$,
   'a ticked step keeps its skill and the activity it recorded'
 );
@@ -86,7 +90,7 @@ select throws_ok(
   '23514', 'You can only add your own skills to a plan', 'a step cannot name someone else''s skill'
 );
 select throws_ok(
-  $$update public.learner_plan_items set completion_statement_id = '80000000-0000-0000-0000-0000000000e2' where id = '80000000-0000-0000-0000-000000000124'$$,
+  $$update public.learner_plan_item_progress set completion_statement_id = '80000000-0000-0000-0000-0000000000e2' where item_id = '80000000-0000-0000-0000-000000000124'$$,
   '23514', 'You can only link your own activities to a plan', 'a tick cannot point at someone else''s activity'
 );
 select throws_ok(
@@ -110,12 +114,12 @@ select throws_ok(
   '23514', null, 'an item points at one record of its own type'
 );
 select throws_ok(
-  $$update public.learner_plan_items set completed_on = current_date where id = '80000000-0000-0000-0000-000000000121'$$,
-  '23514', null, 'a course is never ticked off on the plan: its own completion counts'
+  $$insert into public.learner_plan_item_progress (item_id, user_id, completed_on)
+    values ('80000000-0000-0000-0000-000000000121', '80000000-0000-0000-0000-00000000000a', current_date)$$,
+  '23514', 'Only steps and resources on a plan you are on can be ticked off', 'a course is never ticked off on the plan: its own completion counts'
 );
 
-update public.learner_plan_items set completed_on = current_date where id = '80000000-0000-0000-0000-000000000124';
-select isnt((select completed_on from public.learner_plan_items where id = '80000000-0000-0000-0000-000000000124'), null, 'a step can be ticked off');
+select isnt((select completed_on from public.learner_plan_item_progress where item_id = '80000000-0000-0000-0000-000000000124'), null, 'a step can be ticked off');
 
 select throws_ok(
   $$update public.learner_plans set status = 'completed' where id = '80000000-0000-0000-0000-000000000100'$$,
@@ -183,7 +187,7 @@ select results_eq(
 -- Deleting the activity a tick recorded keeps the tick, without the link.
 delete from public.xapi_statements where id = '80000000-0000-0000-0000-0000000000e1';
 select results_eq(
-  $$select completed_on is not null, completion_statement_id is null from public.learner_plan_items where id = '80000000-0000-0000-0000-000000000124'$$,
+  $$select completed_on is not null, completion_statement_id is null from public.learner_plan_item_progress where item_id = '80000000-0000-0000-0000-000000000124'$$,
   $$values (true, true)$$,
   'deleting a recorded activity keeps the step ticked'
 );

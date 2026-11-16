@@ -426,9 +426,9 @@ export default function Actions() {
     setPlanInviteError(null)
     setPlanInviteDecidingId(invitation.id)
     try {
-      const copiedPlanId = await respondToPlanInvitation(invitation.id, accept)
+      const joinedPlanId = await respondToPlanInvitation(invitation.id, accept)
       setPlanInvites((current) => current.filter((item) => item.id !== invitation.id))
-      if (accept && copiedPlanId) setAcceptedPlan({ id: copiedPlanId, title: invitation.plan_title })
+      if (accept && joinedPlanId) setAcceptedPlan({ id: joinedPlanId, title: invitation.plan_title })
       refreshPendingActionCount()
     } catch (err) {
       setPlanInviteError({ id: invitation.id, message: err.message })

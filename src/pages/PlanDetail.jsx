@@ -26,8 +26,11 @@ import {
   getItemActivity,
   getPlan,
   inviteConnectionsToPlan,
-  listPlanInvitations,
+  leavePlan,
+  linkPlanItemsForMe,
   listPlanMembers,
+  removePlanMember,
+  setPlanMemberRole,
   listPlannableRecords,
   loadPlanContext,
   recordPlanProgress,
@@ -99,7 +102,7 @@ export default function PlanDetail() {
   const [members, setMembers] = useState([])
   const [membersLoading, setMembersLoading] = useState(false)
   const [membersError, setMembersError] = useState(null)
-  // This plan was copied from an invitation, so its progress is shared.
+  // The viewer follows this plan, so their progress is shared with its owners.
   const [progressShared, setProgressShared] = useState(false)
   // Who the activities recorded by ticking are by (xAPI actor).
   const [actorName, setActorName] = useState('')
@@ -117,8 +120,8 @@ export default function PlanDetail() {
     setPlan(loaded)
     const nextContext = await loadPlanContext(user.id, loaded.items)
     setContext(nextContext)
-    // A plan copied from an invitation shares its progress with the inviter;
-    // keep that up to date, and say so on the page. Best effort.
+    // Everyone's progress on a shared plan is shared with its owners; keep
+    // the viewer's up to date, and say so to a follower. Best effort.
     const { done, total } = summariseProgress(loaded.items.map((item) => planItemStatus(item, nextContext)))
     recordPlanProgress([{ planId: loaded.id, done, total }])
       .then((shared) => setProgressShared(shared.has(loaded.id)))
@@ -153,12 +156,12 @@ export default function PlanDetail() {
     setInviteOpen(true)
     setInviteBusy(true)
     try {
-      const [connections, invitations] = await Promise.all([
+      const [connections, everyone] = await Promise.all([
         listConnections(user.id),
-        listPlanInvitations(plan.id),
+        listPlanMembers(plan.id),
       ])
       setInviteConnections(connections)
-      setPlanInvitations(invitations)
+      setPlanInvitations(invitationStatuses(everyone))
     } catch (err) {
       setInviteError(err.message)
     } finally {
@@ -189,7 +192,7 @@ export default function PlanDetail() {
     setInviteBusy(true)
     try {
       const sent = await inviteConnectionsToPlan(plan.id, recipientIds)
-      setPlanInvitations(await listPlanInvitations(plan.id))
+      setPlanInvitations(invitationStatuses(await listPlanMembers(plan.id)))
       setInviteOpen(false)
       if (membersOpen) loadMembers()
       setInviteNotice(t('plans.inviteSent', { count: sent.filter((row) => row.created).length }))
@@ -218,11 +221,18 @@ export default function PlanDetail() {
   }
 
   const planning = plan.status === 'planning'
+  // Owners (the creator and co-owners) change the plan and invite people;
+  // followers work through it. Only the creator deletes it; anyone else can
+  // leave it.
+  const canManage = plan.my_role === 'owner'
+  const isCreator = Boolean(plan.is_creator)
   // Where a page opened from this plan should lead back to: here, in the same
   // mode. Course pages read backTo/backLabel, skill pages from/fromLabel.
   const here = `/plans/${plan.id}${searchParams.toString() ? `?${searchParams}` : ''}`
   const backState = { backTo: here, backLabel: plan.title, from: here, fromLabel: plan.title }
-  const editing = planning || searchParams.get('mode') === 'edit'
+  const editing = canManage && (planning || searchParams.get('mode') === 'edit')
+  // Items someone else added that the viewer hasn't added to their own records.
+  const unlinkedCount = plan.items.filter((item) => item.needs_link).length
   const progress = summariseProgress([...statusById.values()])
   const remaining = Math.max(0, progress.total - progress.done)
   const elapsed = timeElapsedPercent(plan, context?.today)
@@ -325,10 +335,6 @@ export default function PlanDetail() {
             onLoadActivity={() => getItemActivity(item)}
             onEdit={() => setEditingItemId(item.id)}
             onRemove={() => setConfirm({ kind: 'item', item })}
-            onSetTarget={() => {
-              setEditing(true)
-              setEditingItemId(item.id)
-            }}
             onOpenGoal={setOpenGoalId}
           />
         )}
@@ -391,6 +397,13 @@ export default function PlanDetail() {
               <button type="button" onClick={() => setEditingDetails(true)} className="rounded-md border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:border-moss">
                 {t('plans.editDetails')}
               </button>
+            ) : !canManage ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span data-role="follower" className="rounded-full border border-hairline px-2.5 py-1 text-xs text-secondary">{t('plans.youFollowThisPlan')}</span>
+                <button type="button" disabled={busy} onClick={() => setConfirm({ kind: 'leave' })} className="rounded-md border border-hairline px-3 py-1.5 text-xs font-medium text-secondary hover:text-ink disabled:opacity-60">
+                  {t('plans.leavePlan')}
+                </button>
+              </div>
             ) : (
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={openMembers} className="rounded-md border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:border-moss">
@@ -413,12 +426,28 @@ export default function PlanDetail() {
                   {t('plans.archive')}
                 </button>
               )}
+              {!isCreator && (
+                <button type="button" disabled={busy} onClick={() => setConfirm({ kind: 'leave' })} className="rounded-md border border-hairline px-3 py-1.5 text-xs font-medium text-secondary hover:text-ink disabled:opacity-60">
+                  {t('plans.leavePlan')}
+                </button>
+              )}
             </div>
             )}
           </div>
           {plan.description && <p className="mt-2 text-sm text-ink whitespace-pre-wrap break-words max-w-2xl">{plan.description}</p>}
           {progressShared && <p data-progress-shared="" className="mt-2 text-xs text-secondary">{t('plans.progressSharedNote')}</p>}
           {inviteNotice && <p role="status" className="mt-3 text-sm text-moss">{inviteNotice}</p>}
+        </div>
+      )}
+
+      {/* Items added since the viewer joined (or by a co-owner) point at
+          someone else's records; nothing is made in theirs until they ask. */}
+      {unlinkedCount > 0 && (
+        <div data-unlinked="" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hairline bg-card px-4 py-3">
+          <p className="min-w-0 text-sm text-ink">{t('plans.unlinkedItems', { count: unlinkedCount })}</p>
+          <button type="button" disabled={busy} onClick={() => run(() => linkPlanItemsForMe(plan.id))} className="shrink-0 rounded-md border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:border-moss disabled:opacity-60">
+            {t('plans.addToMyRecords')}
+          </button>
         </div>
       )}
 
@@ -456,7 +485,7 @@ export default function PlanDetail() {
       {!editing && plan.items.length === 0 && (
         <div className="mt-6 text-center py-12 border border-dashed border-hairline rounded-lg">
           <p className="text-secondary">{t('plans.emptyPlan')}</p>
-          <button type="button" onClick={() => setEditing(true)} className="mt-3 text-sm text-moss font-medium hover:underline">{t('plans.editPlan')}</button>
+          {canManage && <button type="button" onClick={() => setEditing(true)} className="mt-3 text-sm text-moss font-medium hover:underline">{t('plans.editPlan')}</button>}
         </div>
       )}
 
@@ -469,7 +498,26 @@ export default function PlanDetail() {
           loading={membersLoading}
           error={membersError}
           onClose={() => setMembersOpen(false)}
+          currentUserId={user.id}
           onInvite={openInvites}
+          onRemove={async (member) => {
+            setMembersError(null)
+            try {
+              await removePlanMember(plan.id, member.user_id)
+            } catch (err) {
+              setMembersError(err.message)
+            }
+            await loadMembers()
+          }}
+          onSetRole={async (member, role) => {
+            setMembersError(null)
+            try {
+              await setPlanMemberRole(plan.id, member.user_id, role)
+            } catch (err) {
+              setMembersError(err.message)
+            }
+            await loadMembers()
+          }}
           onWithdraw={async (member) => {
             setMembersError(null)
             try {
@@ -655,11 +703,13 @@ export default function PlanDetail() {
             {t('plans.addSection')}
           </button>
         )}
+        {isCreator && (
         <p className="mt-6">
           <button type="button" onClick={() => setConfirm({ kind: 'plan' })} className="text-sm text-red-700 font-medium hover:underline">
             {t('plans.deletePlan')}
           </button>
         </p>
+        )}
       </div>
       )}
 
@@ -668,18 +718,20 @@ export default function PlanDetail() {
           message={
             confirm.kind === 'plan'
               ? t('plans.confirmDeletePlan', { title: plan.title })
-              : confirm.kind === 'section'
-                ? t('plans.confirmDeleteSection', { title: confirm.section.title })
-                : t('plans.confirmRemoveItem')
+              : confirm.kind === 'leave'
+                ? t('plans.confirmLeavePlan', { title: plan.title })
+                : confirm.kind === 'section'
+                  ? t('plans.confirmDeleteSection', { title: confirm.section.title })
+                  : t('plans.confirmRemoveItem')
           }
-          confirmLabel={confirm.kind === 'item' ? t('plans.remove') : t('plans.delete')}
+          confirmLabel={confirm.kind === 'item' ? t('plans.remove') : confirm.kind === 'leave' ? t('plans.leavePlan') : t('plans.delete')}
           confirming={busy}
           onCancel={() => setConfirm(null)}
           onConfirm={async () => {
-            if (confirm.kind === 'plan') {
+            if (confirm.kind === 'plan' || confirm.kind === 'leave') {
               setBusy(true)
               try {
-                await deletePlan(plan.id)
+                await (confirm.kind === 'plan' ? deletePlan(plan.id) : leavePlan(plan.id))
                 navigate('/plans')
               } catch (err) {
                 setError(err.message)
@@ -733,6 +785,14 @@ function GoalTileDialog({ item, user, actor, onClose, onChanged }) {
   )
 }
 
+// Who the invite dialog should show as already invited or on the plan: by
+// person, 'accepted' for anyone on it, else their invitation's status.
+function invitationStatuses(everyone) {
+  return everyone
+    .filter((row) => row.user_id)
+    .map((row) => ({ recipient_id: row.user_id, status: row.status === 'member' ? 'accepted' : row.status }))
+}
+
 function Shell({ children }) {
   return (
     <div className="min-h-screen bg-paper">
@@ -777,10 +837,12 @@ function DragHandle({ label, disabled, onDragStart, onDragEnd }) {
 }
 
 // What an item is, where it leads, and the one line that says how it's going.
+// On a shared plan, an item the viewer hasn't added to their records yet has
+// no record of theirs: it's named by source_title, and leads nowhere.
 function describeItem(item, status, context, t) {
   switch (item.item_type) {
     case 'course':
-      return { title: item.courses?.name, href: item.courses ? `/courses/${item.courses.id}/learn` : null, detail: item.courses?.provider }
+      return { title: item.courses?.name ?? item.source_title, href: item.courses ? `/courses/${item.courses.id}/learn` : null, detail: item.courses?.provider }
     case 'skill': {
       const skill = item.skills
       const currentLevels = skill ? [
@@ -792,14 +854,14 @@ function describeItem(item, status, context, t) {
         item.plan_practical_level && t('plans.abilityLevelValue', { level: LEVEL_LABELS[item.plan_practical_level] ?? item.plan_practical_level }),
       ].filter(Boolean)
       return {
-        title: skill?.name,
+        title: skill?.name ?? item.source_title,
         href: skill ? `/skills/${skill.id}` : null,
-        skillLevels: skill ? { currentLevels, planLevels } : null,
+        skillLevels: skill || item.needs_link ? { currentLevels, planLevels } : null,
       }
     }
     case 'skill_goal': {
       const goal = context ? currentGoal(item.skill_goal_id, context.goalsById, context.replacedBy) : null
-      const title = goal?.title ?? item.skill_goals?.title
+      const title = goal?.title ?? item.skill_goals?.title ?? item.source_title
       // An active goal opens as its own tile in a pop-up; one that has ended
       // has no tile, so it still leads to its skill's page.
       const goalTileId = goal && context.goalItemsById?.has(goal.id) ? goal.id : null
@@ -822,7 +884,7 @@ function describeItem(item, status, context, t) {
   }
 }
 
-function PlanItem({ item, status, context, busy, editing, backState = null, canMoveUp, canMoveDown, onDragStart, onDragEnd, onMoveUp, onMoveDown, onComplete, onUntick, onLoadActivity, onEdit, onRemove, onSetTarget, onOpenGoal }) {
+function PlanItem({ item, status, context, busy, editing, backState = null, canMoveUp, canMoveDown, onDragStart, onDragEnd, onMoveUp, onMoveDown, onComplete, onUntick, onLoadActivity, onEdit, onRemove, onOpenGoal }) {
   const { t } = useLanguage()
   const state = status?.state ?? 'not_started'
   // Marking a step done asks for a date, comment and evidence first; a
@@ -975,11 +1037,6 @@ function PlanItem({ item, status, context, busy, editing, backState = null, canM
                 {t('plans.cancel')}
               </button>
             </div>
-          </div>
-        )}
-        {!editing && state === 'needs_target' && (
-          <div className="mt-2 text-xs">
-            <button type="button" onClick={onSetTarget} className="text-gold font-medium hover:underline">{t('plans.setPlanTarget')}</button>
           </div>
         )}
         {editing && (
@@ -1319,6 +1376,8 @@ function ItemEditForm({ item, sections, busy, onSubmit, onCancel }) {
   const { user } = useAuth()
   const isStep = item.item_type === 'step'
   const isSkill = item.item_type === 'skill'
+  // A step's skill is a record of whoever added it, so only they change it.
+  const canChangeStepSkill = isStep && item.is_author !== false
   const [stepTitle, setStepTitle] = useState(item.step_title ?? '')
   const [stepSkillId, setStepSkillId] = useState(item.step_skill_id ?? '')
   const [skills, setSkills] = useState([])
@@ -1331,9 +1390,9 @@ function ItemEditForm({ item, sections, busy, onSubmit, onCancel }) {
   const idPrefix = `plan-item-${item.id}`
 
   useEffect(() => {
-    if (!isStep) return
+    if (!canChangeStepSkill) return
     listPlannableRecords(user.id).then((records) => setSkills(records.skill)).catch(() => {})
-  }, [isStep, user.id])
+  }, [canChangeStepSkill, user.id])
 
   return (
     <form
@@ -1349,7 +1408,7 @@ function ItemEditForm({ item, sections, busy, onSubmit, onCancel }) {
           note,
           sectionId,
           stepTitle: isStep ? stepTitle : undefined,
-          stepSkillId: isStep ? stepSkillId : undefined,
+          stepSkillId: canChangeStepSkill ? stepSkillId : undefined,
           planKnowledgeLevel: isSkill ? planKnowledgeLevel : undefined,
           planPracticalLevel: isSkill ? planPracticalLevel : undefined,
         })
@@ -1361,7 +1420,7 @@ function ItemEditForm({ item, sections, busy, onSubmit, onCancel }) {
             <label htmlFor={`${idPrefix}-step`} className="text-xs text-secondary">{t('plans.stepLabel')}</label>
             <input id={`${idPrefix}-step`} value={stepTitle} onChange={(e) => setStepTitle(e.target.value)} maxLength={200} className={inputClass} />
           </div>
-          <div>
+          {canChangeStepSkill && <div>
             <label htmlFor={`${idPrefix}-step-skill`} className="text-xs text-secondary">{t('plans.stepSkillLabel')}</label>
             <select id={`${idPrefix}-step-skill`} value={stepSkillId} onChange={(e) => setStepSkillId(e.target.value)} className={inputClass}>
               <option value="">{t('plans.noSkill')}</option>
@@ -1371,7 +1430,7 @@ function ItemEditForm({ item, sections, busy, onSubmit, onCancel }) {
               )}
               {skills.map((skill) => <option key={skill.id} value={skill.id}>{skill.name}</option>)}
             </select>
-          </div>
+          </div>}
         </div>
       )}
       {isSkill && (

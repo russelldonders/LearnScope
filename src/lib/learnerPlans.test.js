@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   deleteActivity: vi.fn(),
   calls: [],
   statementRow: null,
-  updateError: null,
+  writeError: null,
 }))
 
 vi.mock('./activitySkillLinks', () => ({ saveActivity: mocks.saveActivity }))
@@ -14,12 +14,25 @@ vi.mock('./skillGoals', () => ({ listActiveGoalsWithActivities: vi.fn() }))
 vi.mock('./supabaseClient', () => ({
   supabase: {
     from: (table) => ({
-      update: (values) => ({
-        eq: (_column, id) => {
-          mocks.calls.push(['update', table, values, id])
-          return Promise.resolve({ error: mocks.updateError })
-        },
-      }),
+      // A tick is the learner's own row in learner_plan_item_progress (0303).
+      insert: (values) => {
+        mocks.calls.push(['insert', table, values])
+        return Promise.resolve({ error: mocks.writeError })
+      },
+      delete: () => {
+        const filters = {}
+        const chain = {
+          eq: (column, value) => {
+            filters[column] = value
+            if (Object.keys(filters).length === 2) {
+              mocks.calls.push(['delete', table, filters])
+              return Promise.resolve({ error: mocks.writeError })
+            }
+            return chain
+          },
+        }
+        return chain
+      },
       select: () => ({
         eq: () => ({ maybeSingle: () => Promise.resolve({ data: mocks.statementRow, error: null }) }),
       }),
@@ -39,13 +52,13 @@ const recorded = { id: 'statement-1', statement: { object: { definition: { name:
 beforeEach(() => {
   mocks.calls = []
   mocks.statementRow = null
-  mocks.updateError = null
+  mocks.writeError = null
   mocks.saveActivity.mockReset().mockResolvedValue({ id: 'statement-1' })
   mocks.deleteActivity.mockReset().mockImplementation(async () => { mocks.calls.push(['deleteActivity']) })
 })
 
 describe('setItemDone', () => {
-  it('records a ticked step as an ordinary completed activity on its skill, and links the item to it', async () => {
+  it('records a ticked step as an ordinary completed activity on its skill, and the learner\'s own tick linked to it', async () => {
     await setItemDone(step, true, { userId: 'me', actor })
     const { userId, statement, skillIds } = mocks.saveActivity.mock.calls[0][0]
     expect(userId).toBe('me')
@@ -55,9 +68,11 @@ describe('setItemDone', () => {
     expect(statement.context.extensions[SKILL_EXTENSION_IRI]).toEqual([{ id: 's1', name: 'Coaching' }])
     // No import tag: the learner can edit it like any activity they logged.
     expect(statement.context.extensions[PROVENANCE_EXTENSION_IRI]).toBeUndefined()
-    const [, table, values, id] = mocks.calls[0]
-    expect(table).toBe('learner_plan_items')
-    expect(id).toBe('item-1')
+    const [kind, table, values] = mocks.calls[0]
+    expect(kind).toBe('insert')
+    expect(table).toBe('learner_plan_item_progress')
+    expect(values.item_id).toBe('item-1')
+    expect(values.user_id).toBe('me')
     expect(values.completion_statement_id).toBe('statement-1')
     expect(values.completed_on).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
@@ -81,7 +96,7 @@ describe('setItemDone', () => {
   })
 
   it('takes the activity away again if the tick itself could not be saved', async () => {
-    mocks.updateError = new Error('denied')
+    mocks.writeError = new Error('denied')
     await expect(setItemDone(step, true, { userId: 'me', actor })).rejects.toThrow('denied')
     expect(mocks.deleteActivity).toHaveBeenCalledWith({ id: 'statement-1' })
   })
@@ -89,15 +104,15 @@ describe('setItemDone', () => {
   it('on untick, removes the recorded activity first and then clears the tick', async () => {
     mocks.statementRow = recorded
     await setItemDone(ticked, false, { userId: 'me', actor })
-    expect(mocks.calls.map((call) => call[0])).toEqual(['deleteActivity', 'update'])
-    expect(mocks.calls[1][2]).toEqual({ completed_on: null, completion_statement_id: null })
+    expect(mocks.calls.map((call) => call[0])).toEqual(['deleteActivity', 'delete'])
+    expect(mocks.calls[1].slice(1)).toEqual(['learner_plan_item_progress', { item_id: 'item-1', user_id: 'me' }])
   })
 
   it('keeps an activity the learner has since edited', async () => {
     mocks.statementRow = { ...recorded, evidence_paths: ['me/x.png'] }
     await setItemDone(ticked, false, { userId: 'me', actor })
     expect(mocks.deleteActivity).not.toHaveBeenCalled()
-    expect(mocks.calls[0][2]).toEqual({ completed_on: null, completion_statement_id: null })
+    expect(mocks.calls[0].slice(1)).toEqual(['learner_plan_item_progress', { item_id: 'item-1', user_id: 'me' }])
   })
 
   it('leaves the item ticked if its activity could not be removed', async () => {
@@ -141,7 +156,7 @@ describe('marking a step done with a date, comment and evidence', () => {
     mocks.calls = []
     await setItemDone(ticked, false, { userId: 'me', actor, removeActivity: false })
     expect(mocks.deleteActivity).not.toHaveBeenCalled()
-    expect(mocks.calls[0][2]).toEqual({ completed_on: null, completion_statement_id: null })
+    expect(mocks.calls[0].slice(1)).toEqual(['learner_plan_item_progress', { item_id: 'item-1', user_id: 'me' }])
   })
 
   it('never removes an activity the item does not point at, even when asked', async () => {

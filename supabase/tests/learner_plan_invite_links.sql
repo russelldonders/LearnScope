@@ -105,25 +105,25 @@ reset role;
 select set_config('request.jwt.claim.sub', '83000000-0000-0000-0000-00000000000b', true);
 set local role authenticated;
 insert into codes values ('b_copy', public.accept_learner_plan_invite((select code from codes where name = 'link'))::text);
-select results_eq(
-  $$select user_id, title from public.learner_plans where id = (select code::uuid from codes where name = 'b_copy')$$,
-  $$values ('83000000-0000-0000-0000-00000000000b'::uuid, 'Learn to present'::text)$$,
-  'joining with the link copies the plan for someone who is not a connection'
-);
 select is(
-  (select count(*)::int from public.learner_plan_items where plan_id = (select code::uuid from codes where name = 'b_copy')),
-  2,
-  'the copy has the plan''s items'
+  (select code from codes where name = 'b_copy'),
+  '83000000-0000-0000-0000-000000000100',
+  'joining with the link joins the plan itself, for someone who is not a connection'
+);
+select results_eq(
+  $$select role from public.learner_plan_members where plan_id = '83000000-0000-0000-0000-000000000100' and user_id = '83000000-0000-0000-0000-00000000000b'$$,
+  $$values ('follower'::text)$$,
+  'they follow the plan'
 );
 select is(
   public.accept_learner_plan_invite((select code from codes where name = 'link'))::text,
   (select code from codes where name = 'b_copy'),
-  'joining again returns the same copy'
+  'joining again changes nothing'
 );
 select results_eq(
   format($$select status, joined_plan_id::text from public.get_learner_plan_invite_preview(%L)$$, (select code from codes where name = 'link')),
   $$select 'joined'::text, code from codes where name = 'b_copy'$$,
-  'the preview tells someone who joined where their copy is'
+  'the preview tells someone who joined where the plan is'
 );
 select is(
   (select count(*)::int from public.record_learner_plan_progress(
@@ -170,12 +170,13 @@ select isnt(
 );
 select invite_emails_to_learner_plan('83000000-0000-0000-0000-000000000100', array['pending@example.com']);
 select results_eq(
-  $$select recipient_name, via, status, progress_done
+  $$select name, via, status, progress_done
     from public.list_learner_plan_members('83000000-0000-0000-0000-000000000100')
-    order by recipient_name$$,
+    order by name$$,
   $$values
-    ('Ben Joiner'::text, 'link'::text, 'accepted'::text, 1),
-    ('Cat Emailed'::text, 'email'::text, 'accepted'::text, null::integer),
+    ('Ada Owner'::text, 'creator'::text, 'member'::text, null::integer),
+    ('Ben Joiner'::text, 'link'::text, 'member'::text, 1),
+    ('Cat Emailed'::text, 'email'::text, 'member'::text, null::integer),
     ('pending@example.com'::text, 'email'::text, 'pending'::text, null::integer)$$,
   'the owner sees everyone who joined, however they were invited'
 );
@@ -203,10 +204,10 @@ select results_eq(
 );
 reset role;
 select is(
-  (select copied_plan_id is not null from public.learner_plan_invitations
-    where recipient_id = '83000000-0000-0000-0000-00000000000b'),
-  true,
-  'people who joined with the old link keep their copies'
+  (select count(*)::int from public.learner_plan_members
+    where plan_id = '83000000-0000-0000-0000-000000000100' and user_id = '83000000-0000-0000-0000-00000000000b'),
+  1,
+  'people who joined with the old link stay on the plan'
 );
 
 -- C accepted an emailed invitation: C can read their own row, but not the

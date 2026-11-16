@@ -31,6 +31,10 @@ const lib = vi.hoisted(() => ({
   replacePlanShareLink: vi.fn(),
   inviteEmailsToPlan: vi.fn(),
   withdrawPlanInvitation: vi.fn(),
+  leavePlan: vi.fn(),
+  linkPlanItemsForMe: vi.fn(),
+  setPlanMemberRole: vi.fn(),
+  removePlanMember: vi.fn(),
 }))
 
 vi.mock('../lib/learnerPlans', () => lib)
@@ -84,7 +88,7 @@ const context = {
 }
 
 const plan = {
-  id: 'p1', title: 'Become a team lead', description: 'Within a year', status: 'active',
+  id: 'p1', title: 'Become a team lead', description: 'Within a year', status: 'active', my_role: 'owner', is_creator: true,
   starts_on: '2026-11-01', target_on: '2027-11-01', completed_on: null,
   sections: [{ id: 'sec1', title: 'Foundations', position: 0, target_on: null }],
   items: [
@@ -193,14 +197,15 @@ describe('PlanDetail', () => {
     expect(lib.listPlanMembers).toHaveBeenCalledWith('p1')
   })
 
-  it('lists the people invited to the plan with their status and progress', async () => {
+  it('lists everyone on the plan with their role and progress, and the invitations', async () => {
     lib.listPlanMembers.mockResolvedValue([
-      { invitation_id: 'v1', recipient_id: 'u1', recipient_name: 'Ari Friend', status: 'accepted', plan_removed: false, progress_done: 3, progress_total: 4, progress_updated_at: '2026-11-15T10:00:00Z', invited_at: '2026-11-10T10:00:00Z' },
-      { invitation_id: 'v2', recipient_id: 'u2', recipient_name: 'Bo Friend', status: 'pending', plan_removed: false, progress_done: null, progress_total: null, progress_updated_at: null, invited_at: '2026-11-12T10:00:00Z' },
-      { invitation_id: 'v3', recipient_id: 'u3', recipient_name: 'Cy Friend', status: 'accepted', plan_removed: false, progress_done: null, progress_total: null, progress_updated_at: null, invited_at: '2026-11-11T10:00:00Z' },
-      { invitation_id: 'v4', recipient_id: 'u4', recipient_name: 'Di Friend', status: 'accepted', plan_removed: true, progress_done: 1, progress_total: 4, progress_updated_at: '2026-11-13T10:00:00Z', invited_at: '2026-11-11T10:00:00Z' },
-      { invitation_id: 'v5', recipient_id: null, recipient_name: 'ed@example.com', via: 'email', status: 'pending', plan_removed: false, progress_done: null, progress_total: null, progress_updated_at: null, invited_at: '2026-11-11T10:00:00Z' },
-      { invitation_id: 'v6', recipient_id: 'u6', recipient_name: 'Fay Friend', via: 'link', status: 'accepted', plan_removed: false, progress_done: 0, progress_total: 4, progress_updated_at: '2026-11-14T10:00:00Z', invited_at: '2026-11-14T10:00:00Z' },
+      { user_id: 'me', invitation_id: null, name: 'Sam Owner', role: 'owner', is_creator: true, status: 'member', via: 'creator', progress_done: 2, progress_total: 5, progress_updated_at: '2026-11-15T10:00:00Z' },
+      { user_id: 'u1', invitation_id: 'v1', name: 'Ari Friend', role: 'follower', is_creator: false, status: 'member', via: 'connection', progress_done: 3, progress_total: 4, progress_updated_at: '2026-11-15T10:00:00Z' },
+      { user_id: 'u3', invitation_id: 'v3', name: 'Cy Friend', role: 'owner', is_creator: false, status: 'member', via: 'connection', progress_done: null, progress_total: null, progress_updated_at: null },
+      { user_id: 'u6', invitation_id: 'v6', name: 'Fay Friend', role: 'follower', is_creator: false, status: 'member', via: 'link', progress_done: 0, progress_total: 4, progress_updated_at: '2026-11-14T10:00:00Z' },
+      { user_id: 'u2', invitation_id: 'v2', name: 'Bo Friend', role: null, is_creator: false, status: 'pending', via: 'connection', invited_at: '2026-11-12T10:00:00Z' },
+      { user_id: 'u4', invitation_id: 'v4', name: 'Di Friend', role: null, is_creator: false, status: 'left', via: 'connection', invited_at: '2026-11-11T10:00:00Z' },
+      { user_id: null, invitation_id: 'v5', name: 'ed@example.com', role: null, is_creator: false, status: 'pending', via: 'email', invited_at: '2026-11-11T10:00:00Z' },
     ])
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'Manage users' }))
@@ -208,33 +213,96 @@ describe('PlanDetail', () => {
     const row = (name) => within(dialog).getByText(name).closest('li')
 
     expect(await within(dialog).findByText('Ari Friend')).toBeInTheDocument()
+    expect(within(row('Sam Owner')).getByText('Owner (created it)')).toBeInTheDocument()
+    expect(within(row('Sam Owner')).queryByRole('button', { name: /co-owner|follower/ })).not.toBeInTheDocument()
+    expect(within(row('Ari Friend')).getByText('Following')).toBeInTheDocument()
     expect(within(row('Ari Friend')).getByRole('progressbar', { name: 'Ari Friend’s progress' })).toHaveAttribute('aria-valuenow', '75')
     expect(within(row('Ari Friend')).getByText('3 of 4 done (75%)')).toBeInTheDocument()
-    expect(within(row('Ari Friend')).getByText(/^Updated /)).toBeInTheDocument()
+    expect(within(row('Cy Friend')).getByText('Co-owner')).toBeInTheDocument()
+    expect(within(row('Cy Friend')).getByText('No progress shared yet. It appears once they open the plan.')).toBeInTheDocument()
+    expect(within(row('Fay Friend')).getByText('Joined with the share link')).toBeInTheDocument()
     expect(within(row('Bo Friend')).getByText('Invited')).toBeInTheDocument()
     expect(within(row('Bo Friend')).queryByRole('progressbar')).not.toBeInTheDocument()
-    expect(within(row('Cy Friend')).getByText('No progress shared yet. It appears once they open the plan.')).toBeInTheDocument()
-    expect(within(row('Di Friend')).getByText('Removed their copy')).toBeInTheDocument()
-    expect(within(row('Di Friend')).queryByRole('progressbar')).not.toBeInTheDocument()
-    expect(within(row('ed@example.com')).getByText('Invited')).toBeInTheDocument()
+    expect(within(row('Di Friend')).getByText('Left the plan')).toBeInTheDocument()
     expect(within(row('ed@example.com')).getByText(/^Emailed /)).toBeInTheDocument()
-    expect(within(row('Fay Friend')).getByText('Joined with the share link')).toBeInTheDocument()
-    expect(within(row('Fay Friend')).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0')
+
+    // Owners make followers co-owners, and co-owners followers again.
+    lib.setPlanMemberRole.mockResolvedValue()
+    lib.listPlanMembers.mockClear()
+    fireEvent.click(within(row('Ari Friend')).getByRole('button', { name: 'Make Ari Friend a co-owner' }))
+    await waitFor(() => expect(lib.setPlanMemberRole).toHaveBeenCalledWith('p1', 'u1', 'owner'))
+    await waitFor(() => expect(lib.listPlanMembers).toHaveBeenCalledWith('p1'))
+    fireEvent.click(within(row('Cy Friend')).getByRole('button', { name: 'Make Cy Friend a follower' }))
+    await waitFor(() => expect(lib.setPlanMemberRole).toHaveBeenCalledWith('p1', 'u3', 'follower'))
+
+    // Removing someone asks first, and never offers to remove the creator.
+    expect(within(row('Sam Owner')).queryByRole('button', { name: /Remove/ })).not.toBeInTheDocument()
+    lib.removePlanMember.mockResolvedValue()
+    fireEvent.click(within(row('Fay Friend')).getByRole('button', { name: 'Remove Fay Friend from the plan' }))
+    expect(within(row('Fay Friend')).getByText(/They stop seeing it/)).toBeInTheDocument()
+    expect(lib.removePlanMember).not.toHaveBeenCalled()
+    fireEvent.click(within(row('Fay Friend')).getByRole('button', { name: 'Remove from plan' }))
+    await waitFor(() => expect(lib.removePlanMember).toHaveBeenCalledWith('p1', 'u6'))
 
     // Only invitations still waiting can be withdrawn.
     expect(within(row('Ari Friend')).queryByRole('button', { name: /Withdraw/ })).not.toBeInTheDocument()
-    lib.listPlanMembers.mockClear()
     lib.withdrawPlanInvitation.mockResolvedValue()
     fireEvent.click(within(row('ed@example.com')).getByRole('button', { name: 'Withdraw the invitation to ed@example.com' }))
     await waitFor(() => expect(lib.withdrawPlanInvitation).toHaveBeenCalledWith('v5'))
-    await waitFor(() => expect(lib.listPlanMembers).toHaveBeenCalledWith('p1'))
   })
 
-  it('records its progress and says when it is shared with the inviter', async () => {
+  it('records its progress and, for a follower, says it is shared with the owners', async () => {
     lib.recordPlanProgress.mockResolvedValue(new Set(['p1']))
     renderPage()
-    expect(await screen.findByText('How many items you’ve done on this plan is shared with the person who invited you.')).toBeInTheDocument()
+    expect(await screen.findByText('How many items you’ve done on this plan is shared with its owners.')).toBeInTheDocument()
     expect(lib.recordPlanProgress).toHaveBeenCalledWith([{ planId: 'p1', done: 2, total: 5 }])
+  })
+
+  it('lets a follower work through the plan but not change it, invite people or manage it', async () => {
+    lib.getPlan.mockResolvedValue({ ...plan, my_role: 'follower', is_creator: false })
+    renderPage('/plans/p1?mode=edit')
+    expect(await screen.findByText('You follow this plan')).toBeInTheDocument()
+    for (const name of ['Edit plan', 'Manage users', 'Mark complete', 'Archive', 'Edit details', 'Add section']) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+    }
+    expect(screen.queryByText('Editing this plan')).not.toBeInTheDocument()
+    // Ticking off is still theirs to do.
+    expect(screen.getByRole('button', { name: 'Mark “Shadow a senior lead” done' })).toBeInTheDocument()
+
+    lib.leavePlan.mockResolvedValue()
+    fireEvent.click(screen.getByRole('button', { name: 'Leave plan' }))
+    const confirm = await screen.findByRole('dialog')
+    expect(within(confirm).getByText(/Your own courses, skills, goals and activities stay yours/)).toBeInTheDocument()
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Leave plan' }))
+    await waitFor(() => expect(lib.leavePlan).toHaveBeenCalledWith('p1'))
+    expect(await screen.findByText('All plans')).toBeInTheDocument()
+  })
+
+  it('lets a co-owner manage the plan and leave it, but not delete it', async () => {
+    lib.getPlan.mockResolvedValue({ ...plan, my_role: 'owner', is_creator: false })
+    renderPage()
+    expect(await screen.findByRole('button', { name: 'Manage users' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Leave plan' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit plan' }))
+    expect(await screen.findByText('Editing this plan')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete plan' })).not.toBeInTheDocument()
+  })
+
+  it('names an item it hasn’t added to the viewer’s records yet, and adds them when asked', async () => {
+    lib.getPlan.mockResolvedValue({
+      ...plan,
+      my_role: 'follower',
+      is_creator: false,
+      items: [...plan.items, { id: 'i7', section_id: null, item_type: 'course', course_id: null, courses: null, needs_link: true, source_title: 'Public speaking' }],
+    })
+    lib.linkPlanItemsForMe.mockResolvedValue(1)
+    renderPage()
+    expect(await screen.findByText('Items added to this plan that aren’t in your own records yet: 1')).toBeInTheDocument()
+    expect(stateOf('Public speaking')).toBe('not_started')
+    lib.getPlan.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Add them to my records' }))
+    await waitFor(() => expect(lib.linkPlanItemsForMe).toHaveBeenCalledWith('p1'))
+    await waitFor(() => expect(lib.getPlan).toHaveBeenCalled())
   })
 
   it('does not mention sharing on a plan that was not copied from an invitation', async () => {
@@ -304,11 +372,16 @@ describe('PlanDetail', () => {
     expect(screen.queryByRole('group', { name: 'Untick this step' })).not.toBeInTheDocument()
   })
 
-  it('sets plan-specific skill levels without opening the learner skill target flow', async () => {
+  it('sets a plan’s skill levels only in edit mode, without opening the learner skill target flow', async () => {
     renderPage()
+    const inUse = (await screen.findByText('Coaching')).closest('li')
+    expect(within(inUse).getByText('Needs a target')).toBeInTheDocument()
+    expect(within(inUse).queryByRole('button', { name: 'Set plan target' })).not.toBeInTheDocument()
+    cleanup()
+
+    renderPage('/plans/p1?mode=edit')
     const coaching = (await screen.findByText('Coaching')).closest('li')
-    fireEvent.click(within(coaching).getByRole('button', { name: 'Set plan target' }))
-    expect(screen.getByText('Editing this plan')).toBeInTheDocument()
+    fireEvent.click(within(coaching).getByRole('button', { name: 'Edit' }))
     fireEvent.change(within(coaching).getByLabelText('Knowledge target (optional)'), { target: { value: '3' } })
     fireEvent.click(within(coaching).getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(lib.updateItem).toHaveBeenCalledWith('i2', expect.objectContaining({ planKnowledgeLevel: '3', planPracticalLevel: '' })))

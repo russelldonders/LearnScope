@@ -6,7 +6,7 @@ import { getPlanShareLink, inviteEmailsToPlan, replacePlanShareLink } from '../l
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-// Inviting people to follow their own copy of a plan, the ways a skill can
+// Inviting people to follow a plan, the ways a skill can
 // be shared: connections, email, or a link (copied, or sent via WhatsApp).
 // Whoever accepts by email or link needn't be a connection.
 export default function PlanInviteDialog({

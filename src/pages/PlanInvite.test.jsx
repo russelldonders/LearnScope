@@ -28,7 +28,7 @@ function renderPage() {
     <MemoryRouter initialEntries={['/plan-invite/abc123']}>
       <Routes>
         <Route path="/plan-invite/:code" element={<PlanInvite />} />
-        <Route path="/plans/:planId" element={<p>Your copy</p>} />
+        <Route path="/plans/:planId" element={<p>The plan</p>} />
         <Route path="/signup" element={<p>Sign up page</p>} />
         <Route path="/login" element={<p>Log in page</p>} />
       </Routes>
@@ -40,7 +40,7 @@ beforeEach(() => {
   auth.user = null
   localStorage.clear()
   lib.getPlanInvitePreview.mockResolvedValue(openPreview)
-  lib.acceptPlanInvite.mockResolvedValue('copy-1')
+  lib.acceptPlanInvite.mockResolvedValue('p-1')
 })
 afterEach(() => {
   cleanup()
@@ -52,34 +52,34 @@ describe('PlanInvite', () => {
     renderPage()
     expect(await screen.findByRole('heading', { name: 'Learn to present' })).toBeInTheDocument()
     expect(screen.getByText('Ada Owner has shared a plan with you')).toBeInTheDocument()
-    expect(screen.getByText(/Ada Owner will see how many of its items you’ve done/)).toBeInTheDocument()
+    expect(screen.getByText(/Its owners will see how many of its items you’ve done/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Sign up to join' }))
     expect(await screen.findByText('Sign up page')).toBeInTheDocument()
     expect(pendingInvitePath(getPendingInviteCode())).toBe('/plan-invite/abc123')
   })
 
-  it('lets a signed-in visitor join and opens their copy', async () => {
+  it('lets a signed-in visitor join and opens the plan', async () => {
     auth.user = { id: 'me' }
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Join and copy the plan' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Join the plan' }))
     await waitFor(() => expect(lib.acceptPlanInvite).toHaveBeenCalledWith('abc123'))
-    expect(await screen.findByText('Your copy')).toBeInTheDocument()
+    expect(await screen.findByText('The plan')).toBeInTheDocument()
   })
 
   it('shows why joining failed', async () => {
     auth.user = { id: 'me' }
     lib.acceptPlanInvite.mockRejectedValue(new Error('This link has been replaced and no longer works'))
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Join and copy the plan' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Join the plan' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('This link has been replaced')
   })
 
-  it('points someone who already joined to their copy', async () => {
+  it('points someone who already follows it to the plan', async () => {
     auth.user = { id: 'me' }
-    lib.getPlanInvitePreview.mockResolvedValue({ ...openPreview, status: 'joined', joined_plan_id: 'copy-9' })
+    lib.getPlanInvitePreview.mockResolvedValue({ ...openPreview, status: 'joined', joined_plan_id: 'p-9' })
     renderPage()
-    expect(await screen.findByRole('link', { name: 'Open your copy' })).toHaveAttribute('href', '/plans/copy-9')
-    expect(screen.queryByRole('button', { name: 'Join and copy the plan' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'Open the plan' })).toHaveAttribute('href', '/plans/p-9')
+    expect(screen.queryByRole('button', { name: 'Join the plan' })).not.toBeInTheDocument()
   })
 
   it('says when an emailed invitation has been used or a link replaced', async () => {

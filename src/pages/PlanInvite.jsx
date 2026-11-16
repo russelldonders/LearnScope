@@ -8,7 +8,8 @@ import { acceptPlanInvite, getPlanInvitePreview } from '../lib/learnerPlans'
 // Where a plan's share link (or an emailed plan invitation) lands. Shows what
 // the plan is and who shared it, and lets the visitor join -- signing up or
 // logging in first if need be, then coming back here (see pendingInvitePath).
-// Joining gives them their own copy; they needn't be a connection.
+// Joining makes them a follower of the plan, with their own records for its
+// items; they needn't be a connection.
 export default function PlanInvite() {
   const { code } = useParams()
   const { user, loading: authLoading } = useAuth()

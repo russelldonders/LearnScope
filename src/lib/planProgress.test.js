@@ -23,6 +23,8 @@ describe('planItemStatus', () => {
   it('measures both plan-specific skill axes without changing the learner\'s own targets', () => {
     const item = { item_type: 'skill', skill_id: 's', skills: { id: 's', level: 3, knowledge_level: 2 } }
     expect(planItemStatus(item, context()).state).toBe('needs_target')
+    // Someone else's item not yet in the viewer's records: not started, not removed.
+    expect(planItemStatus({ item_type: 'course', course_id: null, courses: null, needs_link: true }, context()).state).toBe('not_started')
     expect(planItemStatus({ ...item, plan_practical_level: 4 }, context()).state).toBe('in_progress')
     expect(planItemStatus({ ...item, plan_practical_level: 3 }, context()).state).toBe('done')
     expect(planItemStatus({ ...item, plan_knowledge_level: 3, plan_practical_level: 3 }, context()).state).toBe('in_progress')

@@ -109,6 +109,9 @@ export default function Plans() {
                       >
                         <div className="flex items-start justify-between gap-2">
                           <h3 className="font-medium text-ink line-clamp-2">{plan.title}</h3>
+                          {plan.my_role === 'follower' && (
+                            <span className="shrink-0 rounded-full border border-hairline px-2 py-0.5 text-[11px] text-secondary">{t('plans.roleFollower')}</span>
+                          )}
                         </div>
                         <p className="mt-1 text-xs text-secondary">
                           {plan.target_on ? t('plans.byDate', { date: formatFullDate(plan.target_on) }) : t('plans.noEndDate')}

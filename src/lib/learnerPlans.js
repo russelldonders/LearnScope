@@ -5,51 +5,59 @@ import { saveActivity } from './activitySkillLinks'
 import { deleteActivity } from './activityEdits'
 import { buildStatement } from './xapiStatement'
 
-// A learner's own plans (20261116100000_0295_learner_plans.sql): ordered
-// sections of items, each pointing at one of their records or a free-text
-// step. Progress is worked out in planProgress.js from those records.
-
-// Items point at skills twice (a skill item, and the skill a step develops),
-// so both are named by their foreign key.
-const ITEM_COLUMNS = `id, plan_id, section_id, position, item_type, course_id, skill_id, skill_goal_id, skill_resource_id,
-  step_title, step_skill_id, completion_statement_id, note, target_on, completed_on, plan_knowledge_level, plan_practical_level, created_at,
-  courses(id, name, provider, completed_date, status, cancelled_at, catalogue_course_id),
-  skills:skills!learner_plan_items_skill_id_fkey(id, name, level, knowledge_level, lifecycle_stage, library_skill_id, practical_level_guide),
-  step_skill:skills!learner_plan_items_step_skill_id_fkey(id, name),
-  skill_goals(id, title, status, skill_id),
-  skill_resources(id, title, kind, url, file_path, skill_id, skills(id, name))`
+// Plans (20261116100000_0295_learner_plans.sql) are shared (0303): their
+// owners -- whoever created the plan, and anyone they've made an owner --
+// edit them and invite people; followers work through them. Ordered sections
+// of items each point at a record (a course, skill, goal or resource) of
+// whoever added it, or are a free-text step.
+//
+// Plans are read through get_my_learner_plans, which gives every item as the
+// viewer sees it: their own linked course, skill and goal in place of the
+// owner's, and their own ticks. Each plan carries my_role ('owner' |
+// 'follower') and is_creator; each item is_author, and needs_link when it
+// points at someone else's record the viewer hasn't added to their own yet
+// (source_title says what it is meanwhile). Progress is worked out in
+// planProgress.js from those records, exactly as before.
+async function readMyPlans(planId = null) {
+  const { data, error } = await supabase.rpc('get_my_learner_plans', { p_plan_id: planId })
+  if (error) throw error
+  return data ?? []
+}
 
 export async function listPlans() {
-  const { data, error } = await supabase
-    .from('learner_plans')
-    .select(`*, learner_plan_items(${ITEM_COLUMNS})`)
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  return (data ?? []).map(({ learner_plan_items: items, ...plan }) => ({ ...plan, items: items ?? [] }))
+  return readMyPlans()
 }
 
 export async function getPlan(planId) {
-  const [plan, sections, items] = await Promise.all([
-    supabase.from('learner_plans').select('*').eq('id', planId).maybeSingle(),
-    supabase.from('learner_plan_sections').select('*').eq('plan_id', planId).order('position').order('created_at'),
-    supabase.from('learner_plan_items').select(ITEM_COLUMNS).eq('plan_id', planId).order('position').order('created_at'),
-  ])
-  for (const result of [plan, sections, items]) if (result.error) throw result.error
-  if (!plan.data) return null
-  return { ...plan.data, sections: sections.data ?? [], items: items.data ?? [] }
+  return (await readMyPlans(planId))[0] ?? null
 }
 
-// A plan invitation never grants access to the source plan. The recipient
-// sees only the deliberately small preview returned by the RPC; accepting
-// creates a separate private plan owned by them.
-export async function listPlanInvitations(planId) {
-  const { data, error } = await supabase
-    .from('learner_plan_invitations')
-    .select('id, recipient_id, status, created_at')
-    .eq('source_plan_id', planId)
-    .order('created_at', { ascending: false })
+// Adds the viewer's own records for every item that needs one (items added
+// since they joined). Resolves to how many were added.
+export async function linkPlanItemsForMe(planId) {
+  const { data, error } = await supabase.rpc('link_learner_plan_items_for_me', { p_plan_id: planId })
   if (error) throw error
-  return data ?? []
+  return data
+}
+
+// Anyone but the creator can leave a plan. Their own records, and the
+// activities their ticks recorded, stay theirs.
+export async function leavePlan(planId) {
+  const { error } = await supabase.rpc('leave_learner_plan', { p_plan_id: planId })
+  if (error) throw error
+}
+
+// An owner takes someone else off the plan (never its creator). Their own
+// records stay theirs; items they added stop pointing at them.
+export async function removePlanMember(planId, userId) {
+  const { error } = await supabase.rpc('remove_learner_plan_member', { p_plan_id: planId, p_user_id: userId })
+  if (error) throw error
+}
+
+// An owner makes someone on the plan an owner ('owner') or a follower.
+export async function setPlanMemberRole(planId, userId, role) {
+  const { error } = await supabase.rpc('set_learner_plan_member_role', { p_plan_id: planId, p_user_id: userId, p_role: role })
+  if (error) throw error
 }
 
 export async function inviteConnectionsToPlan(planId, recipientIds) {
@@ -61,19 +69,20 @@ export async function inviteConnectionsToPlan(planId, recipientIds) {
   return data ?? []
 }
 
-// Everyone invited to a plan, for its owner: the latest invitation per
-// person, where it stands, and the progress shared by those who accepted.
+// For owners: everyone on the plan (user_id, name, role, is_creator, via,
+// joined_at and their progress; status 'member') and every invitation not
+// matched by someone on it (status 'pending' | 'declined' | 'revoked', or
+// 'left' for someone who joined and left).
 export async function listPlanMembers(planId) {
   const { data, error } = await supabase.rpc('list_learner_plan_members', { p_plan_id: planId })
   if (error) throw error
   return data ?? []
 }
 
-// Accepting an invitation shares progress with the inviter. Progress is
-// worked out here, from the learner's own records, so each time a page works
-// it out it records the counts (only done / total) on any accepted
-// invitation the plan was copied from. Resolves to the set of these plans
-// whose progress is shared; plans not copied from an invitation are ignored.
+// Each member's progress on a plan (only done / total) is shared with its
+// owners. It's worked out here, from the member's own records, so each time
+// a page works it out it records it. Resolves to the set of these plans the
+// viewer follows, whose progress is therefore shared with someone else.
 export async function recordPlanProgress(entries) {
   if (entries.length === 0) return new Set()
   const { data, error } = await supabase.rpc('record_learner_plan_progress', {
@@ -83,8 +92,8 @@ export async function recordPlanProgress(entries) {
   return new Set((data ?? []).map((row) => (typeof row === 'string' ? row : row.record_learner_plan_progress)))
 }
 
-// Inviting by link or email (see 0302): anyone who accepts gets their own
-// copy, connection or not. The share link is reusable until replaced; each
+// Inviting by link or email (see 0302): anyone who accepts follows the plan,
+// connection or not. The share link is reusable until replaced; each
 // emailed invitation has its own single-use link.
 export function planInviteUrl(code) {
   return `${window.location.origin}/plan-invite/${code}`
@@ -147,7 +156,7 @@ export async function withdrawPlanInvitation(invitationId) {
   if (error) throw error
 }
 
-// Joins the plan: resolves to the caller's own copy's id.
+// Joins the plan as a follower: resolves to the plan's id.
 export async function acceptPlanInvite(code) {
   const { data, error } = await supabase.rpc('accept_learner_plan_invite', { p_code: code })
   if (error) throw error
@@ -381,8 +390,8 @@ export function activityHasLearnerContent(row) {
   )
 }
 
-// Ticking a step or resource records it as an activity in the learner's
-// activity log, through saveActivity like every other activity, and links
+// Ticking a step or resource (each member's own tick, 0303) records it as an
+// activity in the learner's activity log, through saveActivity like every other activity, and links
 // the item to it. A step can be marked done on an earlier day, with a
 // comment (the activity's description) and evidence (a link and files).
 //
@@ -412,9 +421,8 @@ export async function setItemDone(item, done, { userId, actor, completedOn = nul
       skillIds: skill ? [skill.id] : [],
     })
     const { error } = await supabase
-      .from('learner_plan_items')
-      .update({ completed_on: day, completion_statement_id: row.id })
-      .eq('id', item.id)
+      .from('learner_plan_item_progress')
+      .insert({ item_id: item.id, user_id: userId, completed_on: day, completion_statement_id: row.id })
     if (error) {
       // Don't leave an activity behind for a tick that didn't save.
       await deleteActivity(row).catch(() => {})
@@ -432,9 +440,10 @@ export async function setItemDone(item, done, { userId, actor, completedOn = nul
     if (removeActivity === true ? isItsActivity : isUneditedPlanActivity(row, item)) await deleteActivity(row)
   }
   const { error } = await supabase
-    .from('learner_plan_items')
-    .update({ completed_on: null, completion_statement_id: null })
-    .eq('id', item.id)
+    .from('learner_plan_item_progress')
+    .delete()
+    .eq('item_id', item.id)
+    .eq('user_id', userId)
   if (error) throw error
 }
 
