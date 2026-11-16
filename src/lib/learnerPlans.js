@@ -1,17 +1,23 @@
 import { supabase } from './supabaseClient'
 import { computeGoalProgress, localDateString } from './skillGoalProgress'
 import { listActiveGoalsWithActivities } from './skillGoals'
+import { saveActivity } from './activitySkillLinks'
+import { deleteActivity } from './activityEdits'
+import { buildStatement } from './xapiStatement'
 
 // A learner's own plans (20261116100000_0295_learner_plans.sql): ordered
 // sections of items, each pointing at one of their records or a free-text
 // step. Progress is worked out in planProgress.js from those records.
 
+// Items point at skills twice (a skill item, and the skill a step develops),
+// so both are named by their foreign key.
 const ITEM_COLUMNS = `id, plan_id, section_id, position, item_type, course_id, skill_id, skill_goal_id, skill_resource_id,
-  step_title, note, target_on, completed_on, created_at,
+  step_title, step_skill_id, completion_statement_id, note, target_on, completed_on, created_at,
   courses(id, name, provider, completed_date, status, cancelled_at, catalogue_course_id),
-  skills(id, name, level, lifecycle_stage, library_skill_id, practical_level_guide),
+  skills:skills!learner_plan_items_skill_id_fkey(id, name, level, lifecycle_stage, library_skill_id, practical_level_guide),
+  step_skill:skills!learner_plan_items_step_skill_id_fkey(id, name),
   skill_goals(id, title, status, skill_id),
-  skill_resources(id, title, kind, url, file_path, skill_id)`
+  skill_resources(id, title, kind, url, file_path, skill_id, skills(id, name))`
 
 export async function listPlans() {
   const { data, error } = await supabase
@@ -67,7 +73,7 @@ export async function loadPlanContext(userId, items) {
 export async function listPlannableRecords(userId) {
   const [courses, skills, goals, resources] = await Promise.all([
     supabase.from('courses').select('id, name, provider, status, completed_date').eq('user_id', userId).order('created_at', { ascending: false }),
-    supabase.from('skills').select('id, name').eq('user_id', userId).or('lifecycle_stage.is.null,lifecycle_stage.neq.archived').order('name'),
+    supabase.from('skills').select('id, name, library_skill_id').eq('user_id', userId).or('lifecycle_stage.is.null,lifecycle_stage.neq.archived').order('name'),
     supabase.from('skill_goals').select('id, title, status, skill_id, skills!inner(name, user_id)').eq('skills.user_id', userId).in('status', ['active', 'achieved']).order('created_at', { ascending: false }),
     supabase.from('skill_resources').select('id, title, kind, skill_id').eq('user_id', userId).order('created_at', { ascending: false }),
   ])
@@ -159,7 +165,7 @@ const REFERENCE_COLUMN = {
   skill_resource: 'skill_resource_id',
 }
 
-export async function addItem(planId, { itemType, recordId, stepTitle, sectionId, note, targetOn, position }) {
+export async function addItem(planId, { itemType, recordId, stepTitle, stepSkillId, sectionId, note, targetOn, position }) {
   const row = {
     plan_id: planId,
     section_id: sectionId || null,
@@ -168,24 +174,97 @@ export async function addItem(planId, { itemType, recordId, stepTitle, sectionId
     target_on: targetOn || null,
     position,
   }
-  if (itemType === 'step') row.step_title = stepTitle.trim()
-  else row[REFERENCE_COLUMN[itemType]] = recordId
+  if (itemType === 'step') {
+    row.step_title = stepTitle.trim()
+    row.step_skill_id = stepSkillId || null
+  } else {
+    row[REFERENCE_COLUMN[itemType]] = recordId
+  }
   const { error } = await supabase.from('learner_plan_items').insert(row)
   if (error) throw error
 }
 
-export async function updateItem(itemId, { note, targetOn, sectionId, stepTitle }) {
+export async function updateItem(itemId, { note, targetOn, sectionId, stepTitle, stepSkillId }) {
   const changes = { note: blankToNull(note), target_on: targetOn || null, section_id: sectionId || null }
   if (stepTitle !== undefined) changes.step_title = stepTitle.trim()
+  if (stepSkillId !== undefined) changes.step_skill_id = stepSkillId || null
   const { error } = await supabase.from('learner_plan_items').update(changes).eq('id', itemId)
   if (error) throw error
 }
 
-export async function setItemDone(itemId, done) {
+// What a ticked item records: its title, and the skill it's linked to (a
+// step's chosen skill, or the skill a resource belongs to).
+function itemActivity(item) {
+  if (item.item_type === 'step') {
+    return { name: item.step_title, skill: item.step_skill ?? null }
+  }
+  const resource = item.skill_resources
+  return { name: resource?.title, skill: resource?.skills ?? null }
+}
+
+// The activity a tick recorded, still as recorded: the one the item points
+// at, under the same name, with nothing added since (a description, a
+// duration or measurements, evidence). Only then does unticking take it
+// away. The activity is an ordinary one -- the learner can edit it like any
+// other -- so a change they've made is what keeps it.
+export function isUneditedPlanActivity(row, item) {
+  const definition = row?.statement?.object?.definition
+  return Boolean(
+    row
+    && item.completion_statement_id
+    && row.id === item.completion_statement_id
+    && definition?.name?.['en-US'] === itemActivity(item).name
+    && !definition?.description
+    && !row.statement.result
+    && !(row.evidence_paths?.length)
+    && !row.evidence_url,
+  )
+}
+
+// Ticking a step or resource records it as an activity in the learner's
+// activity log, through saveActivity like every other activity, and links
+// the item to it. Unticking removes that activity -- unless the learner has
+// since edited it, in which case it's theirs to keep -- and clears the tick.
+export async function setItemDone(item, done, { userId, actor }) {
+  if (done) {
+    // Already ticked (a second click, or another tab): nothing to record.
+    if (item.completion_statement_id || item.completed_on) return
+    const { name, skill } = itemActivity(item)
+    const statement = buildStatement({
+      actor,
+      verbValue: 'completed',
+      activityName: name,
+      timestamp: new Date().toISOString(),
+      relatedSkills: skill ? [{ id: skill.id, name: skill.name }] : [],
+    })
+    const row = await saveActivity({ userId, statement, evidence: null, skillIds: skill ? [skill.id] : [] })
+    const { error } = await supabase
+      .from('learner_plan_items')
+      .update({ completed_on: localDateString(), completion_statement_id: row.id })
+      .eq('id', item.id)
+    if (error) {
+      // Don't leave an activity behind for a tick that didn't save.
+      await deleteActivity(row).catch(() => {})
+      throw error
+    }
+    return
+  }
+
+  // The activity first: if removing it fails, the item stays ticked and the
+  // learner sees why, rather than a stray activity being left behind.
+  if (item.completion_statement_id) {
+    const { data: row, error: readError } = await supabase
+      .from('xapi_statements')
+      .select('id, statement, evidence_paths, evidence_url')
+      .eq('id', item.completion_statement_id)
+      .maybeSingle()
+    if (readError) throw readError
+    if (isUneditedPlanActivity(row, item)) await deleteActivity(row)
+  }
   const { error } = await supabase
     .from('learner_plan_items')
-    .update({ completed_on: done ? localDateString() : null })
-    .eq('id', itemId)
+    .update({ completed_on: null, completion_statement_id: null })
+    .eq('id', item.id)
   if (error) throw error
 }
 
@@ -202,4 +281,10 @@ export async function savePositions(table, rows) {
   )
   const failed = results.find((result) => result.error)
   if (failed) throw failed.error
+}
+
+// The learner's name, for the activities their ticks record (xAPI actor).
+export async function getActorName(userId) {
+  const { data } = await supabase.from('profiles').select('full_name').eq('id', userId).maybeSingle()
+  return data?.full_name ?? ''
 }

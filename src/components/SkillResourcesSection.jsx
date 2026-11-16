@@ -453,7 +453,7 @@ function AudienceText({ resource, connections }) {
     : t('skillDetail.resources.sharedWithCount', { count: resource.recipientIds.length })
 }
 
-function ResourceForm({ resource = null, hasLibrarySkill, connections, onNeedConnections, busy, submitLabel, onCancel, onSubmit }) {
+export function ResourceForm({ resource = null, hasLibrarySkill, connections, onNeedConnections, busy, submitLabel, onCancel, onSubmit }) {
   const { t } = useLanguage()
   const editing = Boolean(resource)
   const [kind, setKind] = useState(resource?.kind ?? 'link')

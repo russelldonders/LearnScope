@@ -226,6 +226,17 @@ export default {
   },
   plans: {
     heading: 'Planes',
+    newResourceTitle: 'Nuevo recurso',
+    newResourceSkill: '¿Para qué habilidad es?',
+    createAndAdd: 'Crear y añadir al plan',
+    stepSkillLabel: 'Habilidad que desarrolla (opcional)',
+    noSkill: 'Ninguna habilidad',
+    createGoal: '+ Crear una meta nueva',
+    createResource: '+ Crear un recurso nuevo',
+    activityHint: 'Al marcarlo como hecho en el plan, también se registra en tu historial de actividades.',
+    developsSkill: 'Desarrolla {skill}',
+    loggedActivity: 'Registrado en tu historial de actividades.',
+    viewActivityLog: 'Ver',
     groups: {
       active: 'En uso',
       planning: 'En preparación',

@@ -226,6 +226,17 @@ export default {
   },
   plans: {
     heading: '计划',
+    newResourceTitle: '新资源',
+    newResourceSkill: '这是哪项技能的资源？',
+    createAndAdd: '创建并添加到计划',
+    stepSkillLabel: '培养的技能（可选）',
+    noSkill: '无技能',
+    createGoal: '+ 新建目标',
+    createResource: '+ 新建资源',
+    activityHint: '在计划中勾选完成后，也会记录到你的活动日志中。',
+    developsSkill: '培养 {skill}',
+    loggedActivity: '已记录到你的活动日志。',
+    viewActivityLog: '查看',
     groups: {
       active: '使用中',
       planning: '准备中',

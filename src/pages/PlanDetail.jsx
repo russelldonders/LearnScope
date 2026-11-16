@@ -6,12 +6,17 @@ import AppHeader from '../components/AppHeader'
 import ConfirmDialog from '../components/ConfirmDialog'
 import PlanProgressBar from '../components/PlanProgressBar'
 import SetTargetModal from '../components/SetTargetModal'
+import SkillGoalModal from '../components/SkillGoalModal'
+import { ResourceForm } from '../components/SkillResourcesSection'
+import { listConnections } from '../lib/connections'
+import { addResource } from '../lib/skillResources'
 import { PlanDetailsForm } from './Plans'
 import {
   addItem,
   addSection,
   deletePlan,
   deleteSection,
+  getActorName,
   getPlan,
   listPlannableRecords,
   loadPlanContext,
@@ -68,6 +73,12 @@ export default function PlanDetail() {
   const [editingSectionId, setEditingSectionId] = useState(null)
   const [confirm, setConfirm] = useState(null)
   const [targetFor, setTargetFor] = useState(null)
+  // Who the activities recorded by ticking are by (xAPI actor).
+  const [actorName, setActorName] = useState('')
+
+  useEffect(() => {
+    getActorName(user.id).then(setActorName).catch(() => {})
+  }, [user.id])
 
   const load = useCallback(async () => {
     const loaded = await getPlan(planId)
@@ -326,7 +337,7 @@ export default function PlanDetail() {
                         canMoveDown={index < items.length - 1}
                         onMoveUp={() => move(items, index, -1, 'learner_plan_items')}
                         onMoveDown={() => move(items, index, 1, 'learner_plan_items')}
-                        onToggleDone={(done) => run(() => setItemDone(item.id, done))}
+                        onToggleDone={(done) => run(() => setItemDone(item, done, { userId: user.id, actor: { name: actorName, email: user.email } }))}
                         onEdit={() => setEditingItemId(item.id)}
                         onRemove={() => setConfirm({ kind: 'item', item })}
                         onSetTarget={() => setTargetFor(item)}
@@ -487,7 +498,11 @@ function describeItem(item, status, context, t) {
         detail: null,
       }
     default:
-      return { title: item.step_title, href: null, detail: null }
+      return {
+        title: item.step_title,
+        href: null,
+        detail: item.step_skill ? t('plans.developsSkill', { skill: item.step_skill.name }) : null,
+      }
   }
 }
 
@@ -536,6 +551,12 @@ function PlanItem({ item, status, context, busy, editing, canMoveUp, canMoveDown
         {detail && <p className="mt-0.5 text-xs text-secondary">{detail}</p>}
         {item.target_on && <p className="mt-0.5 text-xs text-secondary">{t('plans.byDate', { date: formatFullDate(item.target_on) })}</p>}
         {item.note && <p className="mt-1 text-sm text-secondary whitespace-pre-wrap break-words">{item.note}</p>}
+        {!editing && state === 'done' && item.completion_statement_id && (
+          <p className="mt-0.5 text-xs text-secondary">
+            {t('plans.loggedActivity')}{' '}
+            <Link to="/activity" className="text-moss font-medium hover:underline">{t('plans.viewActivityLog')}</Link>
+          </p>
+        )}
         {!editing && state === 'needs_target' && (
           <div className="mt-2 text-xs">
             <button type="button" onClick={onSetTarget} className="text-gold font-medium hover:underline">{t('plans.setTarget')}</button>
@@ -611,106 +632,231 @@ function AddItemForm({ userId, busy, onSubmit, onCancel }) {
   const [itemType, setItemType] = useState('course')
   const [recordId, setRecordId] = useState('')
   const [stepTitle, setStepTitle] = useState('')
+  const [stepSkillId, setStepSkillId] = useState('')
   const [targetOn, setTargetOn] = useState('')
   const [note, setNote] = useState('')
   const [error, setError] = useState(null)
+  // Making a new goal or resource here, rather than picking an existing one.
+  const [creatingGoal, setCreatingGoal] = useState(false)
+  const [creatingResource, setCreatingResource] = useState(false)
+  const [resourceSkillId, setResourceSkillId] = useState('')
+  const [connections, setConnections] = useState(null)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     listPlannableRecords(userId).then(setRecords).catch((err) => setLoadError(err.message))
   }, [userId])
 
+  const ensureConnections = useCallback(() => {
+    if (connections !== null) return
+    listConnections(userId).then(setConnections).catch(() => setConnections([]))
+  }, [connections, userId])
+
   const options = itemType === 'step' ? [] : records?.[itemType] ?? []
+  const skills = records?.skill ?? []
+  const resourceSkill = skills.find((skill) => skill.id === resourceSkillId) ?? null
 
   return (
-    <form
-      noValidate
-      className="mt-2 space-y-3 rounded-md border border-hairline bg-card p-3"
-      onSubmit={(event) => {
-        event.preventDefault()
-        if (itemType === 'step' ? !stepTitle.trim() : !recordId) return setError(t(itemType === 'step' ? 'plans.errorStepTitle' : 'plans.errorChooseRecord'))
-        setError(null)
-        onSubmit({ itemType, recordId, stepTitle, targetOn, note })
-      }}
-    >
-      <fieldset>
-        <legend className="text-xs text-secondary">{t('plans.itemTypeLabel')}</legend>
-        <div className="mt-1 flex flex-wrap gap-2">
-          {ITEM_TYPES.map((type) => (
-            <label key={type} className={`cursor-pointer rounded-md border px-3 py-1.5 text-xs font-medium ${itemType === type ? 'border-moss text-moss' : 'border-hairline text-ink'}`}>
-              <input type="radio" name="plan-item-type" value={type} checked={itemType === type} onChange={() => { setItemType(type); setRecordId('') }} className="sr-only" />
-              {t(`plans.itemTypes.${type}`)}
-            </label>
-          ))}
-        </div>
-      </fieldset>
-
-      {itemType === 'step' ? (
-        <div>
-          <label htmlFor="plan-item-step" className="text-xs text-secondary">{t('plans.stepLabel')}</label>
-          <input id="plan-item-step" value={stepTitle} onChange={(e) => setStepTitle(e.target.value)} maxLength={200} placeholder={t('plans.stepPlaceholder')} className={inputClass} />
-        </div>
-      ) : (
-        <div>
-          <label htmlFor="plan-item-record" className="text-xs text-secondary">{t(`plans.choose.${itemType}`)}</label>
-          {loadError ? (
-            <p role="alert" className="text-sm text-red-700">{loadError}</p>
-          ) : records === null ? (
-            <p className="text-sm text-secondary">{t('plans.loading')}</p>
-          ) : options.length === 0 ? (
-            <p className="text-sm text-secondary">{t(`plans.noneYet.${itemType}`)}</p>
+    <>
+      {creatingResource ? (
+        <div className="mt-2 space-y-3 rounded-md border border-hairline bg-card p-3">
+          <p className="text-sm font-medium text-ink">{t('plans.newResourceTitle')}</p>
+          <div>
+            <label htmlFor="plan-new-resource-skill" className="text-xs text-secondary">{t('plans.newResourceSkill')}</label>
+            {skills.length === 0 ? (
+              <p className="text-sm text-secondary">{t('plans.noneYet.skill')}</p>
+            ) : (
+              <select id="plan-new-resource-skill" value={resourceSkillId} onChange={(e) => setResourceSkillId(e.target.value)} className={inputClass}>
+                <option value="">{t('plans.choosePrompt')}</option>
+                {skills.map((skill) => <option key={skill.id} value={skill.id}>{skill.name}</option>)}
+              </select>
+            )}
+          </div>
+          {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+          {resourceSkill ? (
+            <ResourceForm
+              key={resourceSkill.id}
+              hasLibrarySkill={Boolean(resourceSkill.library_skill_id)}
+              connections={connections}
+              onNeedConnections={ensureConnections}
+              busy={busy || saving}
+              submitLabel={t('plans.createAndAdd')}
+              onCancel={() => setCreatingResource(false)}
+              onSubmit={async (values) => {
+                setSaving(true)
+                setError(null)
+                try {
+                  const id = await addResource({ userId, skillId: resourceSkill.id, ...values })
+                  await onSubmit({ itemType: 'skill_resource', recordId: id, targetOn, note })
+                } catch (err) {
+                  setError(err.message)
+                } finally {
+                  setSaving(false)
+                }
+              }}
+            />
           ) : (
-            <select id="plan-item-record" value={recordId} onChange={(e) => setRecordId(e.target.value)} className={inputClass}>
-              <option value="">{t('plans.choosePrompt')}</option>
-              {options.map((record) => (
-                <option key={record.id} value={record.id}>{recordLabel(itemType, record, t)}</option>
-              ))}
-            </select>
+            <button type="button" onClick={() => setCreatingResource(false)} className="text-xs text-secondary hover:text-ink">{t('plans.cancel')}</button>
           )}
         </div>
+      ) : (
+        <form
+          noValidate
+          className="mt-2 space-y-3 rounded-md border border-hairline bg-card p-3"
+          onSubmit={(event) => {
+            event.preventDefault()
+            if (itemType === 'step' ? !stepTitle.trim() : !recordId) return setError(t(itemType === 'step' ? 'plans.errorStepTitle' : 'plans.errorChooseRecord'))
+            setError(null)
+            onSubmit({ itemType, recordId, stepTitle, stepSkillId, targetOn, note })
+          }}
+        >
+          <fieldset>
+            <legend className="text-xs text-secondary">{t('plans.itemTypeLabel')}</legend>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {ITEM_TYPES.map((type) => (
+                <label key={type} className={`cursor-pointer rounded-md border px-3 py-1.5 text-xs font-medium ${itemType === type ? 'border-moss text-moss' : 'border-hairline text-ink'}`}>
+                  <input type="radio" name="plan-item-type" value={type} checked={itemType === type} onChange={() => { setItemType(type); setRecordId(''); setError(null) }} className="sr-only" />
+                  {t(`plans.itemTypes.${type}`)}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          {itemType === 'step' ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor="plan-item-step" className="text-xs text-secondary">{t('plans.stepLabel')}</label>
+                <input id="plan-item-step" value={stepTitle} onChange={(e) => setStepTitle(e.target.value)} maxLength={200} placeholder={t('plans.stepPlaceholder')} className={inputClass} />
+              </div>
+              <div>
+                <label htmlFor="plan-item-step-skill" className="text-xs text-secondary">{t('plans.stepSkillLabel')}</label>
+                <select id="plan-item-step-skill" value={stepSkillId} onChange={(e) => setStepSkillId(e.target.value)} className={inputClass}>
+                  <option value="">{t('plans.noSkill')}</option>
+                  {skills.map((skill) => <option key={skill.id} value={skill.id}>{skill.name}</option>)}
+                </select>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label htmlFor="plan-item-record" className="text-xs text-secondary">{t(`plans.choose.${itemType}`)}</label>
+              {loadError ? (
+                <p role="alert" className="text-sm text-red-700">{loadError}</p>
+              ) : records === null ? (
+                <p className="text-sm text-secondary">{t('plans.loading')}</p>
+              ) : options.length === 0 ? (
+                <p className="text-sm text-secondary">{t(`plans.noneYet.${itemType}`)}</p>
+              ) : (
+                <select id="plan-item-record" value={recordId} onChange={(e) => setRecordId(e.target.value)} className={inputClass}>
+                  <option value="">{t('plans.choosePrompt')}</option>
+                  {options.map((record) => (
+                    <option key={record.id} value={record.id}>{recordLabel(itemType, record, t)}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+
+          {itemType === 'skill_goal' && (
+            <button type="button" onClick={() => setCreatingGoal(true)} className="text-xs text-moss font-medium hover:underline">
+              {t('plans.createGoal')}
+            </button>
+          )}
+          {itemType === 'skill_resource' && (
+            <button type="button" onClick={() => { setError(null); setCreatingResource(true) }} className="text-xs text-moss font-medium hover:underline">
+              {t('plans.createResource')}
+            </button>
+          )}
+          {(itemType === 'step' || itemType === 'skill_resource') && (
+            <p className="text-xs text-secondary">{t('plans.activityHint')}</p>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label htmlFor="plan-item-target" className="text-xs text-secondary">{t('plans.itemTargetLabel')}</label>
+              <input id="plan-item-target" type="date" value={targetOn} onChange={(e) => setTargetOn(e.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label htmlFor="plan-item-note" className="text-xs text-secondary">{t('plans.noteLabel')}</label>
+              <input id="plan-item-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} className={inputClass} />
+            </div>
+          </div>
+          {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+          <div className="flex gap-3">
+            <button type="submit" disabled={busy} className="rounded-md bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90 disabled:opacity-60">{t('plans.addToPlan')}</button>
+            <button type="button" onClick={onCancel} disabled={busy} className="text-xs text-secondary hover:text-ink">{t('plans.cancel')}</button>
+          </div>
+        </form>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <label htmlFor="plan-item-target" className="text-xs text-secondary">{t('plans.itemTargetLabel')}</label>
-          <input id="plan-item-target" type="date" value={targetOn} onChange={(e) => setTargetOn(e.target.value)} className={inputClass} />
-        </div>
-        <div>
-          <label htmlFor="plan-item-note" className="text-xs text-secondary">{t('plans.noteLabel')}</label>
-          <input id="plan-item-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} className={inputClass} />
-        </div>
-      </div>
-      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-      <div className="flex gap-3">
-        <button type="submit" disabled={busy} className="rounded-md bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90 disabled:opacity-60">{t('plans.addToPlan')}</button>
-        <button type="button" onClick={onCancel} disabled={busy} className="text-xs text-secondary hover:text-ink">{t('plans.cancel')}</button>
-      </div>
-    </form>
+      {/* The same goal dialog as on Home: the learner describes the goal (AI
+          drafts it) and picks or names its skill. The new goal goes straight
+          into the plan. */}
+      {creatingGoal && (
+        <SkillGoalModal
+          userId={userId}
+          onClose={() => setCreatingGoal(false)}
+          onSaved={async (created) => {
+            setCreatingGoal(false)
+            if (created) await onSubmit({ itemType: 'skill_goal', recordId: created.id, targetOn, note })
+          }}
+        />
+      )}
+    </>
   )
 }
 
 function ItemEditForm({ item, sections, busy, onSubmit, onCancel }) {
   const { t } = useLanguage()
+  const { user } = useAuth()
+  const isStep = item.item_type === 'step'
   const [stepTitle, setStepTitle] = useState(item.step_title ?? '')
+  const [stepSkillId, setStepSkillId] = useState(item.step_skill_id ?? '')
+  const [skills, setSkills] = useState([])
   const [targetOn, setTargetOn] = useState(item.target_on ?? '')
   const [note, setNote] = useState(item.note ?? '')
   const [sectionId, setSectionId] = useState(item.section_id ?? '')
   const [error, setError] = useState(null)
   const idPrefix = `plan-item-${item.id}`
+
+  useEffect(() => {
+    if (!isStep) return
+    listPlannableRecords(user.id).then((records) => setSkills(records.skill)).catch(() => {})
+  }, [isStep, user.id])
+
   return (
     <form
       noValidate
       className="space-y-3"
       onSubmit={(event) => {
         event.preventDefault()
-        if (item.item_type === 'step' && !stepTitle.trim()) return setError(t('plans.errorStepTitle'))
+        if (isStep && !stepTitle.trim()) return setError(t('plans.errorStepTitle'))
         setError(null)
-        onSubmit({ targetOn, note, sectionId, stepTitle: item.item_type === 'step' ? stepTitle : undefined })
+        onSubmit({
+          targetOn,
+          note,
+          sectionId,
+          stepTitle: isStep ? stepTitle : undefined,
+          stepSkillId: isStep ? stepSkillId : undefined,
+        })
       }}
     >
-      {item.item_type === 'step' && (
-        <div>
-          <label htmlFor={`${idPrefix}-step`} className="text-xs text-secondary">{t('plans.stepLabel')}</label>
-          <input id={`${idPrefix}-step`} value={stepTitle} onChange={(e) => setStepTitle(e.target.value)} maxLength={200} className={inputClass} />
+      {isStep && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label htmlFor={`${idPrefix}-step`} className="text-xs text-secondary">{t('plans.stepLabel')}</label>
+            <input id={`${idPrefix}-step`} value={stepTitle} onChange={(e) => setStepTitle(e.target.value)} maxLength={200} className={inputClass} />
+          </div>
+          <div>
+            <label htmlFor={`${idPrefix}-step-skill`} className="text-xs text-secondary">{t('plans.stepSkillLabel')}</label>
+            <select id={`${idPrefix}-step-skill`} value={stepSkillId} onChange={(e) => setStepSkillId(e.target.value)} className={inputClass}>
+              <option value="">{t('plans.noSkill')}</option>
+              {/* The current skill stays listed even before the list loads. */}
+              {item.step_skill && !skills.some((s) => s.id === item.step_skill.id) && (
+                <option value={item.step_skill.id}>{item.step_skill.name}</option>
+              )}
+              {skills.map((skill) => <option key={skill.id} value={skill.id}>{skill.name}</option>)}
+            </select>
+          </div>
         </div>
       )}
       <div className="grid gap-3 sm:grid-cols-2">

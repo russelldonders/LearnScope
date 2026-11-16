@@ -226,6 +226,17 @@ export default {
   },
   plans: {
     heading: 'Pläne',
+    newResourceTitle: 'Neue Ressource',
+    newResourceSkill: 'Für welche Fähigkeit ist sie?',
+    createAndAdd: 'Erstellen und zum Plan hinzufügen',
+    stepSkillLabel: 'Fähigkeit, die er entwickelt (optional)',
+    noSkill: 'Keine Fähigkeit',
+    createGoal: '+ Neues Ziel erstellen',
+    createResource: '+ Neue Ressource erstellen',
+    activityHint: 'Wenn du das im Plan abhakst, wird es auch in deinem Aktivitätsprotokoll festgehalten.',
+    developsSkill: 'Entwickelt {skill}',
+    loggedActivity: 'In deinem Aktivitätsprotokoll festgehalten.',
+    viewActivityLog: 'Ansehen',
     groups: {
       active: 'In Verwendung',
       planning: 'In Vorbereitung',

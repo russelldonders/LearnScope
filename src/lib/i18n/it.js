@@ -226,6 +226,17 @@ export default {
   },
   plans: {
     heading: 'Piani',
+    newResourceTitle: 'Nuova risorsa',
+    newResourceSkill: 'Per quale competenza è?',
+    createAndAdd: 'Crea e aggiungi al piano',
+    stepSkillLabel: 'Competenza che sviluppa (facoltativa)',
+    noSkill: 'Nessuna competenza',
+    createGoal: '+ Crea un nuovo obiettivo',
+    createResource: '+ Crea una nuova risorsa',
+    activityHint: 'Spuntandolo nel piano viene registrato anche nel tuo registro attività.',
+    developsSkill: 'Sviluppa {skill}',
+    loggedActivity: 'Registrato nel tuo registro attività.',
+    viewActivityLog: 'Vedi',
     groups: {
       active: 'In uso',
       planning: 'In preparazione',

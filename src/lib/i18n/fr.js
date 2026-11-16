@@ -226,6 +226,17 @@ export default {
   },
   plans: {
     heading: 'Plans',
+    newResourceTitle: 'Nouvelle ressource',
+    newResourceSkill: 'Pour quelle compétence ?',
+    createAndAdd: 'Créer et ajouter au plan',
+    stepSkillLabel: 'Compétence développée (facultatif)',
+    noSkill: 'Aucune compétence',
+    createGoal: '+ Créer un nouvel objectif',
+    createResource: '+ Créer une nouvelle ressource',
+    activityHint: 'Le cocher dans le plan l’enregistre aussi dans votre journal d’activités.',
+    developsSkill: 'Développe {skill}',
+    loggedActivity: 'Enregistré dans votre journal d’activités.',
+    viewActivityLog: 'Voir',
     groups: {
       active: 'En cours',
       planning: 'En préparation',

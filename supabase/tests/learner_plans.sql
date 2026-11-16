@@ -2,7 +2,7 @@
 
 begin;
 
-select plan(17);
+select plan(22);
 
 insert into auth.users (id, email, email_confirmed_at) values
   ('80000000-0000-0000-0000-00000000000a', 'plan-a@example.com', now()),
@@ -19,8 +19,13 @@ insert into public.courses (id, user_id, name) values
 insert into public.skill_resources (id, user_id, skill_id, kind, title, url) values
   ('80000000-0000-0000-0000-0000000000d1', '80000000-0000-0000-0000-00000000000a', '80000000-0000-0000-0000-0000000000a1', 'link', 'Guide', 'https://example.com');
 
+-- An activity each, for ticks to point at.
+insert into public.xapi_statements (id, user_id, statement, recorded_at) values
+  ('80000000-0000-0000-0000-0000000000e1', '80000000-0000-0000-0000-00000000000a', '{}'::jsonb, now()),
+  ('80000000-0000-0000-0000-0000000000e2', '80000000-0000-0000-0000-00000000000b', '{}'::jsonb, now());
+
 grant all on table public.learner_plans, public.learner_plan_sections, public.learner_plan_items,
-  public.skills, public.courses, public.skill_resources to authenticated;
+  public.skills, public.courses, public.skill_resources, public.xapi_statements to authenticated;
 
 select set_config('request.jwt.claim.sub', '80000000-0000-0000-0000-00000000000a', true);
 set local role authenticated;
@@ -41,6 +46,30 @@ insert into public.learner_plan_items (id, plan_id, position, item_type, step_ti
 
 select is((select count(*)::int from public.learner_plan_items), 4, 'a learner builds a plan from their own records and a step');
 select is((select status from public.learner_plans where id = '80000000-0000-0000-0000-000000000100'), 'planning', 'a new plan starts out being prepared');
+
+-- A step can name one of the learner's own skills, and a tick can point at
+-- one of their own activities -- never someone else's.
+update public.learner_plan_items
+set step_skill_id = '80000000-0000-0000-0000-0000000000a1', completed_on = current_date,
+    completion_statement_id = '80000000-0000-0000-0000-0000000000e1'
+where id = '80000000-0000-0000-0000-000000000124';
+select results_eq(
+  $$select step_skill_id, completion_statement_id from public.learner_plan_items where id = '80000000-0000-0000-0000-000000000124'$$,
+  $$values ('80000000-0000-0000-0000-0000000000a1'::uuid, '80000000-0000-0000-0000-0000000000e1'::uuid)$$,
+  'a ticked step keeps its skill and the activity it recorded'
+);
+select throws_ok(
+  $$update public.learner_plan_items set step_skill_id = '80000000-0000-0000-0000-0000000000b1' where id = '80000000-0000-0000-0000-000000000124'$$,
+  '23514', 'You can only add your own skills to a plan', 'a step cannot name someone else''s skill'
+);
+select throws_ok(
+  $$update public.learner_plan_items set completion_statement_id = '80000000-0000-0000-0000-0000000000e2' where id = '80000000-0000-0000-0000-000000000124'$$,
+  '23514', 'You can only link your own activities to a plan', 'a tick cannot point at someone else''s activity'
+);
+select throws_ok(
+  $$update public.learner_plan_items set step_skill_id = '80000000-0000-0000-0000-0000000000a1' where id = '80000000-0000-0000-0000-000000000122'$$,
+  '23514', null, 'only steps name a skill they develop'
+);
 
 select throws_ok(
   $$insert into public.learner_plan_items (plan_id, item_type, course_id)
@@ -126,6 +155,14 @@ select results_eq(
   $$select item_type, course_id is null from public.learner_plan_items where id = '80000000-0000-0000-0000-000000000121'$$,
   $$values ('course'::text, true)$$,
   'deleting a course leaves its item, shown as removed'
+);
+
+-- Deleting the activity a tick recorded keeps the tick, without the link.
+delete from public.xapi_statements where id = '80000000-0000-0000-0000-0000000000e1';
+select results_eq(
+  $$select completed_on is not null, completion_statement_id is null from public.learner_plan_items where id = '80000000-0000-0000-0000-000000000124'$$,
+  $$values (true, true)$$,
+  'deleting a recorded activity keeps the step ticked'
 );
 
 -- Deleting the plan removes its items but none of the records.

@@ -226,6 +226,17 @@ export default {
   },
   plans: {
     heading: 'Plannen',
+    newResourceTitle: 'Nieuwe bron',
+    newResourceSkill: 'Voor welke vaardigheid is hij?',
+    createAndAdd: 'Maken en aan plan toevoegen',
+    stepSkillLabel: 'Vaardigheid die het ontwikkelt (optioneel)',
+    noSkill: 'Geen vaardigheid',
+    createGoal: '+ Nieuw doel maken',
+    createResource: '+ Nieuwe bron maken',
+    activityHint: 'Als je dit in het plan afvinkt, wordt het ook in je activiteitenlog vastgelegd.',
+    developsSkill: 'Ontwikkelt {skill}',
+    loggedActivity: 'Vastgelegd in je activiteitenlog.',
+    viewActivityLog: 'Bekijken',
     groups: {
       active: 'In gebruik',
       planning: 'In voorbereiding',

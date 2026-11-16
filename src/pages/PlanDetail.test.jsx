@@ -15,6 +15,7 @@ const lib = vi.hoisted(() => ({
   setItemDone: vi.fn(),
   setPlanStatus: vi.fn(),
   startPlan: vi.fn(),
+  getActorName: vi.fn(),
   updateItem: vi.fn(),
   updatePlan: vi.fn(),
   updateSection: vi.fn(),
@@ -23,9 +24,27 @@ const lib = vi.hoisted(() => ({
 }))
 
 vi.mock('../lib/learnerPlans', () => lib)
-vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'me' } }) }))
+vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'me', email: 'me@example.com' } }) }))
 vi.mock('../components/AppHeader', () => ({ default: () => <header>Header</header> }))
 vi.mock('../components/SetTargetModal', () => ({ default: ({ skill }) => <div role="dialog">Set target for {skill.name}</div> }))
+const extra = vi.hoisted(() => ({ addResource: vi.fn() }))
+vi.mock('../lib/skillResources', () => ({ addResource: extra.addResource }))
+vi.mock('../lib/connections', () => ({ listConnections: vi.fn().mockResolvedValue([]) }))
+vi.mock('../components/SkillGoalModal', () => ({
+  default: ({ onSaved }) => (
+    <div role="dialog" aria-label="Add a goal">
+      <button type="button" onClick={() => onSaved({ id: 'g-new' })}>Save goal</button>
+    </div>
+  ),
+}))
+vi.mock('../components/SkillResourcesSection', () => ({
+  ResourceForm: ({ hasLibrarySkill, submitLabel, onSubmit }) => (
+    <div>
+      <span>{hasLibrarySkill ? 'library skill' : 'own skill'}</span>
+      <button type="button" onClick={() => onSubmit({ kind: 'link', title: 'Guide', url: 'https://example.com', audience: 'private' })}>{submitLabel}</button>
+    </div>
+  ),
+}))
 vi.mock('../context/LanguageContext', async () => {
   const { english } = await import('../lib/i18n/translations')
   const t = (key, params) => {
@@ -73,7 +92,9 @@ function renderPage(path = '/plans/p1') {
 beforeEach(() => {
   lib.getPlan.mockResolvedValue(plan)
   lib.loadPlanContext.mockResolvedValue(context)
-  lib.listPlannableRecords.mockResolvedValue({ course: [{ id: 'c9', name: 'Public speaking', provider: 'Acme' }], skill: [], skill_goal: [], skill_resource: [] })
+  lib.listPlannableRecords.mockResolvedValue({ course: [{ id: 'c9', name: 'Public speaking', provider: 'Acme' }], skill: [{ id: 's1', name: 'Coaching', library_skill_id: 'lib-1' }], skill_goal: [], skill_resource: [] })
+  lib.getActorName.mockResolvedValue('Sam')
+  extra.addResource.mockResolvedValue('r-new')
   for (const fn of ['addItem', 'addSection', 'deletePlan', 'removeItem', 'savePositions', 'setItemDone', 'setPlanStatus', 'startPlan', 'updateItem']) lib[fn].mockResolvedValue()
 })
 afterEach(() => {
@@ -102,7 +123,7 @@ describe('PlanDetail', () => {
   it('ticks off a step', async () => {
     renderPage()
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Mark “Shadow a senior lead” done' }))
-    await waitFor(() => expect(lib.setItemDone).toHaveBeenCalledWith('i5', true))
+    await waitFor(() => expect(lib.setItemDone).toHaveBeenCalledWith(expect.objectContaining({ id: 'i5' }), true, { userId: 'me', actor: { name: 'Sam', email: 'me@example.com' } }))
   })
 
   it('opens the skill target dialog for a skill with no target', async () => {
@@ -143,6 +164,38 @@ describe('PlanDetail', () => {
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'Mark plan complete' }))
     await waitFor(() => expect(lib.setPlanStatus).toHaveBeenCalledWith('p1', 'completed'))
+  })
+
+  it('creates a new goal from edit mode and adds it to the plan', async () => {
+    renderPage('/plans/p1?mode=edit')
+    fireEvent.click(await screen.findByRole('button', { name: 'Add to Foundations' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Goal' }))
+    fireEvent.click(screen.getByRole('button', { name: '+ Create a new goal' }))
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Add a goal' })).getByRole('button', { name: 'Save goal' }))
+    await waitFor(() => expect(lib.addItem).toHaveBeenCalledWith('p1', expect.objectContaining({ itemType: 'skill_goal', recordId: 'g-new', sectionId: 'sec1' })))
+  })
+
+  it('creates a new resource on a chosen skill and adds it to the plan', async () => {
+    renderPage('/plans/p1?mode=edit')
+    fireEvent.click(await screen.findByRole('button', { name: 'Add to Foundations' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Resource' }))
+    fireEvent.click(await screen.findByRole('button', { name: '+ Create a new resource' }))
+    fireEvent.change(screen.getByLabelText('Which skill is it for?'), { target: { value: 's1' } })
+    expect(screen.getByText('library skill')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create and add to plan' }))
+    await waitFor(() => expect(extra.addResource).toHaveBeenCalledWith(expect.objectContaining({ userId: 'me', skillId: 's1', title: 'Guide' })))
+    await waitFor(() => expect(lib.addItem).toHaveBeenCalledWith('p1', expect.objectContaining({ itemType: 'skill_resource', recordId: 'r-new' })))
+  })
+
+  it('lets a step name the skill it develops, and says ticking it is recorded', async () => {
+    renderPage('/plans/p1?mode=edit')
+    fireEvent.click(await screen.findByRole('button', { name: 'Add to Foundations' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Step' }))
+    expect(screen.getByText(/also records it in your activity log/)).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Step' }), { target: { value: 'Run a team meeting' } })
+    fireEvent.change(await screen.findByLabelText('Skill it develops (optional)'), { target: { value: 's1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(lib.addItem).toHaveBeenCalledWith('p1', expect.objectContaining({ itemType: 'step', stepTitle: 'Run a team meeting', stepSkillId: 's1' })))
   })
 
   it('keeps use mode free of anything that changes the plan', async () => {

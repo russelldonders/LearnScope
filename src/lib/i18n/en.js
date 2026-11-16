@@ -226,6 +226,17 @@ export default {
   },
   plans: {
     heading: 'Plans',
+    newResourceTitle: 'New resource',
+    newResourceSkill: 'Which skill is it for?',
+    createAndAdd: 'Create and add to plan',
+    stepSkillLabel: 'Skill it develops (optional)',
+    noSkill: 'No skill',
+    createGoal: '+ Create a new goal',
+    createResource: '+ Create a new resource',
+    activityHint: 'Ticking this off in the plan also records it in your activity log.',
+    developsSkill: 'Develops {skill}',
+    loggedActivity: 'Recorded in your activity log.',
+    viewActivityLog: 'View',
     groups: {
       active: 'In use',
       planning: 'Being prepared',
