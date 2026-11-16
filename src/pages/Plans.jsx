@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import AppHeader from '../components/AppHeader'
 import PlanProgressBar from '../components/PlanProgressBar'
-import { createPlan, listPlans, loadPlanContext } from '../lib/learnerPlans'
+import { createPlan, listPlans, loadPlanContext, recordPlanProgress } from '../lib/learnerPlans'
 import { planItemStatus, summariseProgress, timeElapsedPercent } from '../lib/planProgress'
 import { formatFullDate } from '../lib/dates'
 
@@ -29,7 +29,14 @@ export default function Plans() {
         setPlans(loaded)
         // One load for every plan's skills and goals, so the list shows the
         // same progress as each plan's own page.
-        setContext(await loadPlanContext(user.id, loaded.flatMap((plan) => plan.items)))
+        const nextContext = await loadPlanContext(user.id, loaded.flatMap((plan) => plan.items))
+        setContext(nextContext)
+        // Keeps the progress shared with whoever invited the learner to a
+        // plan up to date. Best effort: the list works without it.
+        recordPlanProgress(loaded.map((plan) => {
+          const { done, total } = summariseProgress(plan.items.map((item) => planItemStatus(item, nextContext)))
+          return { planId: plan.id, done, total }
+        })).catch(() => {})
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))

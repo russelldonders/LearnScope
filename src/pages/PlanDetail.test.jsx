@@ -25,6 +25,8 @@ const lib = vi.hoisted(() => ({
   createPlan: vi.fn(),
   listPlanInvitations: vi.fn(),
   inviteConnectionsToPlan: vi.fn(),
+  listPlanMembers: vi.fn(),
+  recordPlanProgress: vi.fn(),
 }))
 
 vi.mock('../lib/learnerPlans', () => lib)
@@ -120,6 +122,8 @@ beforeEach(() => {
   extra.listConnections.mockResolvedValue([])
   lib.listPlanInvitations.mockResolvedValue([])
   lib.inviteConnectionsToPlan.mockResolvedValue([])
+  lib.listPlanMembers.mockResolvedValue([])
+  lib.recordPlanProgress.mockResolvedValue(new Set())
   for (const fn of ['addItem', 'addSection', 'deletePlan', 'removeItem', 'savePositions', 'setItemDone', 'setPlanStatus', 'startPlan', 'updateItem']) lib[fn].mockResolvedValue()
 })
 afterEach(() => {
@@ -165,14 +169,63 @@ describe('PlanDetail', () => {
     ])
     renderPage()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Invite connections' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage users' }))
+    const members = await screen.findByRole('dialog', { name: 'People following this plan' })
+    expect(await within(members).findByText('You haven’t invited anyone to this plan yet.')).toBeInTheDocument()
+    fireEvent.click(within(members).getByRole('button', { name: 'Invite people' }))
     const dialog = await screen.findByRole('dialog', { name: 'Invite people to follow this plan' })
+    expect(within(dialog).getByText(/You’ll see how many items they’ve done/)).toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('checkbox', { name: /Ari Friend/ }))
     fireEvent.click(within(dialog).getByRole('checkbox', { name: /Bo Friend/ }))
+    lib.listPlanMembers.mockClear()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Send invitations' }))
 
     await waitFor(() => expect(lib.inviteConnectionsToPlan).toHaveBeenCalledWith('p1', ['friend-1', 'friend-2']))
     expect(await screen.findByText('Invitations sent: 2')).toBeInTheDocument()
+    // Back on the list of people, which reloads to include them.
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Invite people to follow this plan' })).not.toBeInTheDocument())
+    expect(screen.getByRole('dialog', { name: 'People following this plan' })).toBeInTheDocument()
+    expect(lib.listPlanMembers).toHaveBeenCalledWith('p1')
+  })
+
+  it('lists the people invited to the plan with their status and progress', async () => {
+    lib.listPlanMembers.mockResolvedValue([
+      { invitation_id: 'v1', recipient_id: 'u1', recipient_name: 'Ari Friend', status: 'accepted', plan_removed: false, progress_done: 3, progress_total: 4, progress_updated_at: '2026-11-15T10:00:00Z', invited_at: '2026-11-10T10:00:00Z' },
+      { invitation_id: 'v2', recipient_id: 'u2', recipient_name: 'Bo Friend', status: 'pending', plan_removed: false, progress_done: null, progress_total: null, progress_updated_at: null, invited_at: '2026-11-12T10:00:00Z' },
+      { invitation_id: 'v3', recipient_id: 'u3', recipient_name: 'Cy Friend', status: 'accepted', plan_removed: false, progress_done: null, progress_total: null, progress_updated_at: null, invited_at: '2026-11-11T10:00:00Z' },
+      { invitation_id: 'v4', recipient_id: 'u4', recipient_name: 'Di Friend', status: 'accepted', plan_removed: true, progress_done: 1, progress_total: 4, progress_updated_at: '2026-11-13T10:00:00Z', invited_at: '2026-11-11T10:00:00Z' },
+      { invitation_id: 'v5', recipient_id: 'u5', recipient_name: 'Ed Friend', status: 'accepted', plan_removed: false, connected: false, progress_done: null, progress_total: null, progress_updated_at: null, invited_at: '2026-11-11T10:00:00Z' },
+    ])
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage users' }))
+    const dialog = await screen.findByRole('dialog', { name: 'People following this plan' })
+    const row = (name) => within(dialog).getByText(name).closest('li')
+
+    expect(await within(dialog).findByText('Ari Friend')).toBeInTheDocument()
+    expect(within(row('Ari Friend')).getByRole('progressbar', { name: 'Ari Friend’s progress' })).toHaveAttribute('aria-valuenow', '75')
+    expect(within(row('Ari Friend')).getByText('3 of 4 done (75%)')).toBeInTheDocument()
+    expect(within(row('Ari Friend')).getByText(/^Updated /)).toBeInTheDocument()
+    expect(within(row('Bo Friend')).getByText('Invited')).toBeInTheDocument()
+    expect(within(row('Bo Friend')).queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(within(row('Cy Friend')).getByText('No progress shared yet. It appears once they open the plan.')).toBeInTheDocument()
+    expect(within(row('Di Friend')).getByText('Removed their copy')).toBeInTheDocument()
+    expect(within(row('Di Friend')).queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(within(row('Ed Friend')).getByText('No longer connected')).toBeInTheDocument()
+    expect(within(row('Ed Friend')).queryByText(/No progress shared yet/)).not.toBeInTheDocument()
+  })
+
+  it('records its progress and says when it is shared with the inviter', async () => {
+    lib.recordPlanProgress.mockResolvedValue(new Set(['p1']))
+    renderPage()
+    expect(await screen.findByText('How many items you’ve done on this plan is shared with the person who invited you.')).toBeInTheDocument()
+    expect(lib.recordPlanProgress).toHaveBeenCalledWith([{ planId: 'p1', done: 2, total: 5 }])
+  })
+
+  it('does not mention sharing on a plan that was not copied from an invitation', async () => {
+    renderPage()
+    expect(await screen.findByRole('heading', { name: 'Become a team lead' })).toBeInTheDocument()
+    await waitFor(() => expect(lib.recordPlanProgress).toHaveBeenCalled())
+    expect(screen.queryByText(/shared with the person who invited you/)).not.toBeInTheDocument()
   })
 
   it('marks a step done with a date and a comment', async () => {

@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import { SkillGoalTile } from '../components/SkillGoalsDashboardPanel'
 import PlanProgressBar from '../components/PlanProgressBar'
 import PlanInviteDialog from '../components/PlanInviteDialog'
+import PlanMembersDialog from '../components/PlanMembersDialog'
 import SkillGoalModal from '../components/SkillGoalModal'
 import EvidenceFields from '../components/EvidenceFields'
 import { localDateString } from '../lib/skillGoalProgress'
@@ -26,8 +27,10 @@ import {
   getPlan,
   inviteConnectionsToPlan,
   listPlanInvitations,
+  listPlanMembers,
   listPlannableRecords,
   loadPlanContext,
+  recordPlanProgress,
   removeItem,
   savePositions,
   setItemDone,
@@ -90,6 +93,13 @@ export default function PlanDetail() {
   const [inviteNotice, setInviteNotice] = useState(null)
   // A goal in the plan, shown as its own tile in a pop-up.
   const [openGoalId, setOpenGoalId] = useState(null)
+  // "Manage users": the people invited to this plan and their progress.
+  const [membersOpen, setMembersOpen] = useState(false)
+  const [members, setMembers] = useState([])
+  const [membersLoading, setMembersLoading] = useState(false)
+  const [membersError, setMembersError] = useState(null)
+  // This plan was copied from an invitation, so its progress is shared.
+  const [progressShared, setProgressShared] = useState(false)
   // Who the activities recorded by ticking are by (xAPI actor).
   const [actorName, setActorName] = useState('')
 
@@ -106,6 +116,12 @@ export default function PlanDetail() {
     setPlan(loaded)
     const nextContext = await loadPlanContext(user.id, loaded.items)
     setContext(nextContext)
+    // A plan copied from an invitation shares its progress with the inviter;
+    // keep that up to date, and say so on the page. Best effort.
+    const { done, total } = summariseProgress(loaded.items.map((item) => planItemStatus(item, nextContext)))
+    recordPlanProgress([{ planId: loaded.id, done, total }])
+      .then((shared) => setProgressShared(shared.has(loaded.id)))
+      .catch(() => {})
     return nextContext
   }, [planId, user.id])
 
@@ -149,6 +165,24 @@ export default function PlanDetail() {
     }
   }
 
+  async function loadMembers() {
+    setMembersError(null)
+    setMembersLoading(true)
+    try {
+      setMembers(await listPlanMembers(plan.id))
+    } catch (err) {
+      setMembersError(err.message)
+    } finally {
+      setMembersLoading(false)
+    }
+  }
+
+  function openMembers() {
+    setInviteNotice(null)
+    setMembersOpen(true)
+    loadMembers()
+  }
+
   async function sendInvites(recipientIds) {
     setInviteError(null)
     setInviteBusy(true)
@@ -156,6 +190,7 @@ export default function PlanDetail() {
       const sent = await inviteConnectionsToPlan(plan.id, recipientIds)
       setPlanInvitations(await listPlanInvitations(plan.id))
       setInviteOpen(false)
+      if (membersOpen) loadMembers()
       setInviteNotice(t('plans.inviteSent', { count: sent.filter((row) => row.created).length }))
     } catch (err) {
       setInviteError(err.message)
@@ -357,8 +392,8 @@ export default function PlanDetail() {
               </button>
             ) : (
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={openInvites} className="rounded-md border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:border-moss">
-                {t('plans.inviteConnections')}
+              <button type="button" onClick={openMembers} className="rounded-md border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:border-moss">
+                {t('plans.manageUsers')}
               </button>
               <button type="button" onClick={() => setEditing(true)} className="rounded-md bg-moss text-paper px-3 py-1.5 text-xs font-medium hover:opacity-90">
                 {t('plans.editPlan')}
@@ -381,6 +416,7 @@ export default function PlanDetail() {
             )}
           </div>
           {plan.description && <p className="mt-2 text-sm text-ink whitespace-pre-wrap break-words max-w-2xl">{plan.description}</p>}
+          {progressShared && <p data-progress-shared="" className="mt-2 text-xs text-secondary">{t('plans.progressSharedNote')}</p>}
           {inviteNotice && <p role="status" className="mt-3 text-sm text-moss">{inviteNotice}</p>}
         </div>
       )}
@@ -424,6 +460,18 @@ export default function PlanDetail() {
       )}
 
       {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
+
+      {membersOpen && (
+        <PlanMembersDialog
+          planTitle={plan.title}
+          members={members}
+          loading={membersLoading}
+          error={membersError}
+          onClose={() => setMembersOpen(false)}
+          onInvite={openInvites}
+          t={t}
+        />
+      )}
 
       {inviteOpen && (
         <PlanInviteDialog

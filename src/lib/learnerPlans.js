@@ -61,6 +61,28 @@ export async function inviteConnectionsToPlan(planId, recipientIds) {
   return data ?? []
 }
 
+// Everyone invited to a plan, for its owner: the latest invitation per
+// person, where it stands, and the progress shared by those who accepted.
+export async function listPlanMembers(planId) {
+  const { data, error } = await supabase.rpc('list_learner_plan_members', { p_plan_id: planId })
+  if (error) throw error
+  return data ?? []
+}
+
+// Accepting an invitation shares progress with the inviter. Progress is
+// worked out here, from the learner's own records, so each time a page works
+// it out it records the counts (only done / total) on any accepted
+// invitation the plan was copied from. Resolves to the set of these plans
+// whose progress is shared; plans not copied from an invitation are ignored.
+export async function recordPlanProgress(entries) {
+  if (entries.length === 0) return new Set()
+  const { data, error } = await supabase.rpc('record_learner_plan_progress', {
+    p_progress: entries.map(({ planId, done, total }) => ({ plan_id: planId, done, total })),
+  })
+  if (error) throw error
+  return new Set((data ?? []).map((row) => (typeof row === 'string' ? row : row.record_learner_plan_progress)))
+}
+
 export async function listIncomingPlanInvitations() {
   const { data, error } = await supabase.rpc('list_incoming_learner_plan_invitations')
   if (error) throw error

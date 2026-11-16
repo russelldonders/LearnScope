@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const lib = vi.hoisted(() => ({ listPlans: vi.fn(), loadPlanContext: vi.fn(), createPlan: vi.fn() }))
+const lib = vi.hoisted(() => ({ listPlans: vi.fn(), loadPlanContext: vi.fn(), createPlan: vi.fn(), recordPlanProgress: vi.fn() }))
 
 vi.mock('../lib/learnerPlans', () => lib)
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'me' } }) }))
@@ -35,6 +35,7 @@ beforeEach(() => {
   lib.listPlans.mockResolvedValue([])
   lib.loadPlanContext.mockResolvedValue(emptyContext)
   lib.createPlan.mockResolvedValue('plan-1')
+  lib.recordPlanProgress.mockResolvedValue(new Set())
 })
 afterEach(() => {
   cleanup()
@@ -45,6 +46,26 @@ describe('Plans', () => {
   it('invites the learner to create a first plan', async () => {
     renderPage()
     expect(await screen.findByText(/No plans yet/)).toBeInTheDocument()
+  })
+
+  it('records each plan\'s progress so it can be shared with whoever invited the learner', async () => {
+    lib.listPlans.mockResolvedValue([
+      { id: 'p1', title: 'Copied plan', status: 'active', items: [{ id: 'i1', item_type: 'step', completed_on: '2026-11-10' }, { id: 'i2', item_type: 'step', completed_on: null }] },
+      { id: 'p2', title: 'Empty plan', status: 'planning', items: [] },
+    ])
+    renderPage()
+    await waitFor(() => expect(lib.recordPlanProgress).toHaveBeenCalledWith([
+      { planId: 'p1', done: 1, total: 2 },
+      { planId: 'p2', done: 0, total: 0 },
+    ]))
+  })
+
+  it('still lists plans when progress cannot be recorded', async () => {
+    lib.recordPlanProgress.mockRejectedValue(new Error('offline'))
+    lib.listPlans.mockResolvedValue([{ id: 'p1', title: 'Copied plan', status: 'active', items: [] }])
+    renderPage()
+    expect(await screen.findByText('Copied plan')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('lists plans with their progress worked out from their items', async () => {
