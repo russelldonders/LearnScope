@@ -221,26 +221,61 @@ export function isUneditedPlanActivity(row, item) {
   )
 }
 
+// A done item's recorded activity, to see whether it carries anything the
+// learner added (a comment or evidence) before unticking it.
+export async function getItemActivity(item) {
+  if (!item.completion_statement_id) return null
+  const { data, error } = await supabase
+    .from('xapi_statements')
+    .select('id, statement, evidence_paths, evidence_url')
+    .eq('id', item.completion_statement_id)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
+// Whether an activity holds something the learner wrote or attached.
+export function activityHasLearnerContent(row) {
+  return Boolean(
+    row?.statement?.object?.definition?.description
+    || row?.evidence_paths?.length
+    || row?.evidence_url,
+  )
+}
+
 // Ticking a step or resource records it as an activity in the learner's
 // activity log, through saveActivity like every other activity, and links
-// the item to it. Unticking removes that activity -- unless the learner has
-// since edited it, in which case it's theirs to keep -- and clears the tick.
-export async function setItemDone(item, done, { userId, actor }) {
+// the item to it. A step can be marked done on an earlier day, with a
+// comment (the activity's description) and evidence (a link and files).
+//
+// Unticking clears the tick and, by default, removes that activity unless
+// it has anything of the learner's in it. removeActivity true or false
+// overrides that, for when the learner has been asked.
+export async function setItemDone(item, done, { userId, actor, completedOn = null, comment = '', evidence = null, removeActivity } = {}) {
   if (done) {
     // Already ticked (a second click, or another tab): nothing to record.
     if (item.completion_statement_id || item.completed_on) return
+    const day = completedOn || localDateString()
     const { name, skill } = itemActivity(item)
     const statement = buildStatement({
       actor,
       verbValue: 'completed',
       activityName: name,
-      timestamp: new Date().toISOString(),
+      description: comment?.trim() || undefined,
+      // Midday on the day, so it stays on that day wherever it's read.
+      timestamp: day === localDateString() ? new Date().toISOString() : new Date(`${day}T12:00:00`).toISOString(),
       relatedSkills: skill ? [{ id: skill.id, name: skill.name }] : [],
     })
-    const row = await saveActivity({ userId, statement, evidence: null, skillIds: skill ? [skill.id] : [] })
+    const hasEvidence = Boolean(evidence?.evidenceUrl?.trim() || evidence?.files?.length)
+    const row = await saveActivity({
+      userId,
+      statement,
+      evidence: hasEvidence ? { evidenceUrl: evidence.evidenceUrl?.trim() || null, files: evidence.files ?? [] } : null,
+      skillIds: skill ? [skill.id] : [],
+    })
     const { error } = await supabase
       .from('learner_plan_items')
-      .update({ completed_on: localDateString(), completion_statement_id: row.id })
+      .update({ completed_on: day, completion_statement_id: row.id })
       .eq('id', item.id)
     if (error) {
       // Don't leave an activity behind for a tick that didn't save.
@@ -252,14 +287,11 @@ export async function setItemDone(item, done, { userId, actor }) {
 
   // The activity first: if removing it fails, the item stays ticked and the
   // learner sees why, rather than a stray activity being left behind.
-  if (item.completion_statement_id) {
-    const { data: row, error: readError } = await supabase
-      .from('xapi_statements')
-      .select('id, statement, evidence_paths, evidence_url')
-      .eq('id', item.completion_statement_id)
-      .maybeSingle()
-    if (readError) throw readError
-    if (isUneditedPlanActivity(row, item)) await deleteActivity(row)
+  if (item.completion_statement_id && removeActivity !== false) {
+    const row = await getItemActivity(item)
+    // Only ever the activity this item recorded.
+    const isItsActivity = row && row.id === item.completion_statement_id
+    if (removeActivity === true ? isItsActivity : isUneditedPlanActivity(row, item)) await deleteActivity(row)
   }
   const { error } = await supabase
     .from('learner_plan_items')

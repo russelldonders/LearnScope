@@ -16,6 +16,8 @@ const lib = vi.hoisted(() => ({
   setPlanStatus: vi.fn(),
   startPlan: vi.fn(),
   getActorName: vi.fn(),
+  getItemActivity: vi.fn(),
+  activityHasLearnerContent: (row) => Boolean(row?.statement?.object?.definition?.description || row?.evidence_paths?.length || row?.evidence_url),
   updateItem: vi.fn(),
   updatePlan: vi.fn(),
   updateSection: vi.fn(),
@@ -120,10 +122,62 @@ describe('PlanDetail', () => {
     expect(screen.getByText('Now Developing · set a target to measure progress')).toBeInTheDocument()
   })
 
-  it('ticks off a step', async () => {
+  it('marks a step done with a date and a comment', async () => {
     renderPage()
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Mark “Shadow a senior lead” done' }))
-    await waitFor(() => expect(lib.setItemDone).toHaveBeenCalledWith(expect.objectContaining({ id: 'i5' }), true, { userId: 'me', actor: { name: 'Sam', email: 'me@example.com' } }))
+    expect(lib.setItemDone).not.toHaveBeenCalled()
+    const form = screen.getByRole('form', { name: 'Mark this step done' })
+    fireEvent.change(within(form).getByLabelText('Done on'), { target: { value: '2026-11-10' } })
+    fireEvent.change(within(form).getByLabelText('Comment (optional)'), { target: { value: 'Sat in on two 1:1s' } })
+    fireEvent.click(within(form).getByRole('button', { name: '+ Add evidence' }))
+    fireEvent.click(within(form).getByRole('button', { name: 'Mark done' }))
+    await waitFor(() => expect(lib.setItemDone).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'i5' }),
+      true,
+      expect.objectContaining({
+        userId: 'me',
+        actor: { name: 'Sam', email: 'me@example.com' },
+        completedOn: '2026-11-10',
+        comment: 'Sat in on two 1:1s',
+        evidence: { evidenceUrl: '', files: [] },
+      }),
+    ))
+  })
+
+  it('refuses a done date in the future', async () => {
+    renderPage()
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Mark “Shadow a senior lead” done' }))
+    const form = screen.getByRole('form', { name: 'Mark this step done' })
+    fireEvent.change(within(form).getByLabelText('Done on'), { target: { value: '2999-01-01' } })
+    fireEvent.click(within(form).getByRole('button', { name: 'Mark done' }))
+    expect(await within(form).findByRole('alert')).toHaveTextContent('Choose today or an earlier day.')
+    expect(lib.setItemDone).not.toHaveBeenCalled()
+  })
+
+  it('asks before unticking a step whose activity has the learner\'s comment or evidence', async () => {
+    lib.getPlan.mockResolvedValue({
+      ...plan,
+      items: plan.items.map((item) => (item.id === 'i5' ? { ...item, completed_on: '2026-11-10', completion_statement_id: 'st1' } : item)),
+    })
+    lib.getItemActivity.mockResolvedValue({ id: 'st1', evidence_url: 'https://example.com' })
+    renderPage()
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Mark “Shadow a senior lead” done' }))
+    const choice = await screen.findByRole('group', { name: 'Untick this step' })
+    expect(lib.setItemDone).not.toHaveBeenCalled()
+    fireEvent.click(within(choice).getByRole('button', { name: 'Untick and keep the activity' }))
+    await waitFor(() => expect(lib.setItemDone).toHaveBeenCalledWith(expect.objectContaining({ id: 'i5' }), false, expect.objectContaining({ removeActivity: false })))
+  })
+
+  it('unticks straight away when the activity has nothing of the learner\'s in it', async () => {
+    lib.getPlan.mockResolvedValue({
+      ...plan,
+      items: plan.items.map((item) => (item.id === 'i5' ? { ...item, completed_on: '2026-11-10', completion_statement_id: 'st1' } : item)),
+    })
+    lib.getItemActivity.mockResolvedValue({ id: 'st1' })
+    renderPage()
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Mark “Shadow a senior lead” done' }))
+    await waitFor(() => expect(lib.setItemDone).toHaveBeenCalledWith(expect.objectContaining({ id: 'i5' }), false, expect.objectContaining({ removeActivity: undefined })))
+    expect(screen.queryByRole('group', { name: 'Untick this step' })).not.toBeInTheDocument()
   })
 
   it('opens the skill target dialog for a skill with no target', async () => {

@@ -27,7 +27,7 @@ vi.mock('./supabaseClient', () => ({
   },
 }))
 
-const { isUneditedPlanActivity, setItemDone } = await import('./learnerPlans')
+const { activityHasLearnerContent, isUneditedPlanActivity, setItemDone } = await import('./learnerPlans')
 const { PROVENANCE_EXTENSION_IRI, SKILL_EXTENSION_IRI } = await import('./xapiStatement')
 
 const step = { id: 'item-1', item_type: 'step', step_title: 'Shadow a senior lead', step_skill: { id: 's1', name: 'Coaching' }, completion_statement_id: null, completed_on: null }
@@ -105,6 +105,59 @@ describe('setItemDone', () => {
     mocks.deleteActivity.mockRejectedValue(new Error('offline'))
     await expect(setItemDone(ticked, false, { userId: 'me', actor })).rejects.toThrow('offline')
     expect(mocks.calls).toEqual([])
+  })
+})
+
+describe('marking a step done with a date, comment and evidence', () => {
+  it('records them on the activity', async () => {
+    const file = new File(['x'], 'photo.png', { type: 'image/png' })
+    await setItemDone(step, true, {
+      userId: 'me',
+      actor,
+      completedOn: '2026-11-10',
+      comment: '  Sat in on two 1:1s  ',
+      evidence: { evidenceUrl: ' https://example.com/notes ', files: [file] },
+    })
+    const { statement, evidence } = mocks.saveActivity.mock.calls[0][0]
+    expect(statement.object.definition.description['en-US']).toBe('Sat in on two 1:1s')
+    expect(statement.timestamp.slice(0, 10)).toBe(new Date('2026-11-10T12:00:00').toISOString().slice(0, 10))
+    expect(evidence).toEqual({ evidenceUrl: 'https://example.com/notes', files: [file] })
+    expect(mocks.calls[0][2].completed_on).toBe('2026-11-10')
+  })
+
+  it('sends no evidence when none was given', async () => {
+    await setItemDone(step, true, { userId: 'me', actor, comment: '', evidence: { evidenceUrl: '  ', files: [] } })
+    const { statement, evidence } = mocks.saveActivity.mock.calls[0][0]
+    expect(evidence).toBeNull()
+    expect(statement.object.definition.description).toBeUndefined()
+  })
+
+  it('removes an activity with the learner\'s comment only when they choose to', async () => {
+    mocks.statementRow = { ...recorded, evidence_url: 'https://example.com/notes' }
+    await setItemDone(ticked, false, { userId: 'me', actor, removeActivity: true })
+    expect(mocks.deleteActivity).toHaveBeenCalledWith(mocks.statementRow)
+
+    mocks.deleteActivity.mockClear()
+    mocks.calls = []
+    await setItemDone(ticked, false, { userId: 'me', actor, removeActivity: false })
+    expect(mocks.deleteActivity).not.toHaveBeenCalled()
+    expect(mocks.calls[0][2]).toEqual({ completed_on: null, completion_statement_id: null })
+  })
+
+  it('never removes an activity the item does not point at, even when asked', async () => {
+    mocks.statementRow = { ...recorded, id: 'someone-else' }
+    await setItemDone(ticked, false, { userId: 'me', actor, removeActivity: true })
+    expect(mocks.deleteActivity).not.toHaveBeenCalled()
+  })
+})
+
+describe('activityHasLearnerContent', () => {
+  it('spots a comment or evidence', () => {
+    expect(activityHasLearnerContent(recorded)).toBe(false)
+    expect(activityHasLearnerContent(null)).toBe(false)
+    expect(activityHasLearnerContent({ ...recorded, evidence_paths: ['me/x.png'] })).toBe(true)
+    expect(activityHasLearnerContent({ ...recorded, evidence_url: 'https://example.com' })).toBe(true)
+    expect(activityHasLearnerContent({ statement: { object: { definition: { name: { 'en-US': 'x' }, description: { 'en-US': 'Went well' } } } } })).toBe(true)
   })
 })
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
@@ -7,6 +7,8 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import PlanProgressBar from '../components/PlanProgressBar'
 import SetTargetModal from '../components/SetTargetModal'
 import SkillGoalModal from '../components/SkillGoalModal'
+import EvidenceFields from '../components/EvidenceFields'
+import { localDateString } from '../lib/skillGoalProgress'
 import { ResourceForm } from '../components/SkillResourcesSection'
 import { listConnections } from '../lib/connections'
 import { addResource } from '../lib/skillResources'
@@ -16,7 +18,9 @@ import {
   addSection,
   deletePlan,
   deleteSection,
+  activityHasLearnerContent,
   getActorName,
+  getItemActivity,
   getPlan,
   listPlannableRecords,
   loadPlanContext,
@@ -337,7 +341,9 @@ export default function PlanDetail() {
                         canMoveDown={index < items.length - 1}
                         onMoveUp={() => move(items, index, -1, 'learner_plan_items')}
                         onMoveDown={() => move(items, index, 1, 'learner_plan_items')}
-                        onToggleDone={(done) => run(() => setItemDone(item, done, { userId: user.id, actor: { name: actorName, email: user.email } }))}
+                        onComplete={(values) => run(() => setItemDone(item, true, { userId: user.id, actor: { name: actorName, email: user.email }, ...values }))}
+                        onUntick={(removeActivity) => run(() => setItemDone(item, false, { userId: user.id, actor: { name: actorName, email: user.email }, removeActivity }))}
+                        onLoadActivity={() => getItemActivity(item)}
                         onEdit={() => setEditingItemId(item.id)}
                         onRemove={() => setConfirm({ kind: 'item', item })}
                         onSetTarget={() => setTargetFor(item)}
@@ -506,9 +512,38 @@ function describeItem(item, status, context, t) {
   }
 }
 
-function PlanItem({ item, status, context, busy, editing, canMoveUp, canMoveDown, onMoveUp, onMoveDown, onToggleDone, onEdit, onRemove, onSetTarget }) {
+function PlanItem({ item, status, context, busy, editing, canMoveUp, canMoveDown, onMoveUp, onMoveDown, onComplete, onUntick, onLoadActivity, onEdit, onRemove, onSetTarget }) {
   const { t } = useLanguage()
   const state = status?.state ?? 'not_started'
+  // Marking a step done asks for a date, comment and evidence first; a
+  // resource is ticked straight away.
+  const [completing, setCompleting] = useState(false)
+  // Unticking a step whose activity holds the learner's comment or evidence
+  // asks what to do with it rather than deciding for them.
+  const [untickChoice, setUntickChoice] = useState(false)
+  const [checking, setChecking] = useState(false)
+
+  async function handleToggle(checked) {
+    if (checked) {
+      if (item.item_type === 'step') setCompleting(true)
+      else onComplete({})
+      return
+    }
+    setChecking(true)
+    try {
+      let activity = null
+      try {
+        activity = await onLoadActivity()
+      } catch {
+        // Couldn't look: untick the usual way, which only removes an
+        // activity it can confirm is untouched, and reports any error.
+      }
+      if (activityHasLearnerContent(activity)) setUntickChoice(true)
+      else await onUntick(undefined)
+    } finally {
+      setChecking(false)
+    }
+  }
   const { title, href, external, detail } = describeItem(item, status, context, t)
   // Ticking off is part of working through the plan, so only in use mode.
   const tickable = !editing && (item.item_type === 'step' || (item.item_type === 'skill_resource' && state !== 'removed'))
@@ -520,9 +555,9 @@ function PlanItem({ item, status, context, busy, editing, canMoveUp, canMoveDown
       {tickable ? (
         <input
           type="checkbox"
-          checked={state === 'done'}
-          disabled={busy}
-          onChange={(e) => onToggleDone(e.target.checked)}
+          checked={state === 'done' || completing}
+          disabled={busy || checking || untickChoice}
+          onChange={(e) => handleToggle(e.target.checked)}
           aria-label={t('plans.markDone', { title: shownTitle })}
           className="mt-1 h-4 w-4 accent-moss shrink-0"
         />
@@ -557,6 +592,32 @@ function PlanItem({ item, status, context, busy, editing, canMoveUp, canMoveDown
             <Link to="/activity" className="text-moss font-medium hover:underline">{t('plans.viewActivityLog')}</Link>
           </p>
         )}
+        {completing && (
+          <CompleteStepForm
+            busy={busy}
+            onCancel={() => setCompleting(false)}
+            onSubmit={async (values) => {
+              const ok = await onComplete(values)
+              if (ok) setCompleting(false)
+            }}
+          />
+        )}
+        {untickChoice && (
+          <div role="group" aria-label={t('plans.untickTitle')} className="mt-2 rounded-md border border-hairline bg-paper p-3">
+            <p className="text-sm text-ink">{t('plans.untickHasContent')}</p>
+            <div className="mt-2 flex flex-wrap gap-3 text-xs">
+              <button type="button" disabled={busy} onClick={async () => { await onUntick(false); setUntickChoice(false) }} className="rounded-md border border-hairline px-3 py-1.5 font-medium text-ink hover:border-moss disabled:opacity-60">
+                {t('plans.untickKeep')}
+              </button>
+              <button type="button" disabled={busy} onClick={async () => { await onUntick(true); setUntickChoice(false) }} className="rounded-md border border-hairline px-3 py-1.5 font-medium text-red-700 hover:border-red-700 disabled:opacity-60">
+                {t('plans.untickRemove')}
+              </button>
+              <button type="button" disabled={busy} onClick={() => setUntickChoice(false)} className="text-secondary hover:text-ink">
+                {t('plans.cancel')}
+              </button>
+            </div>
+          </div>
+        )}
         {!editing && state === 'needs_target' && (
           <div className="mt-2 text-xs">
             <button type="button" onClick={onSetTarget} className="text-gold font-medium hover:underline">{t('plans.setTarget')}</button>
@@ -576,6 +637,67 @@ function PlanItem({ item, status, context, busy, editing, canMoveUp, canMoveDown
 }
 
 const inputClass = 'mt-1 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:border-moss'
+
+// Marking a step done: when (today, or an earlier day), what happened, and
+// anything that shows it -- recorded on the activity the tick creates.
+function CompleteStepForm({ busy, onSubmit, onCancel }) {
+  const { t } = useLanguage()
+  const today = localDateString()
+  const [completedOn, setCompletedOn] = useState(today)
+  const [comment, setComment] = useState('')
+  const [showEvidence, setShowEvidence] = useState(false)
+  const [evidenceUrl, setEvidenceUrl] = useState('')
+  const [files, setFiles] = useState([])
+  const [error, setError] = useState(null)
+  const idPrefix = `complete-step-${useId()}`
+
+  return (
+    <form
+      noValidate
+      aria-label={t('plans.completeStepTitle')}
+      className="mt-2 space-y-3 rounded-md border border-hairline bg-paper p-3"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (!completedOn || completedOn > today) return setError(t('plans.errorFutureDate'))
+        setError(null)
+        onSubmit({ completedOn, comment, evidence: { evidenceUrl, files } })
+      }}
+    >
+      <p className="text-sm font-medium text-ink">{t('plans.completeStepTitle')}</p>
+      <div className="grid gap-3 sm:grid-cols-[auto_1fr]">
+        <div>
+          <label htmlFor={`${idPrefix}-date`} className="text-xs text-secondary">{t('plans.completedOnLabel')}</label>
+          <input id={`${idPrefix}-date`} type="date" max={today} value={completedOn} onChange={(e) => setCompletedOn(e.target.value)} className={inputClass} />
+        </div>
+        <div>
+          <label htmlFor={`${idPrefix}-comment`} className="text-xs text-secondary">{t('plans.commentLabel')}</label>
+          <textarea id={`${idPrefix}-comment`} rows={2} maxLength={2000} value={comment} onChange={(e) => setComment(e.target.value)} placeholder={t('plans.commentPlaceholder')} className={inputClass} />
+        </div>
+      </div>
+      {showEvidence ? (
+        <EvidenceFields
+          evidenceUrl={evidenceUrl}
+          onEvidenceUrlChange={setEvidenceUrl}
+          files={files}
+          onFilesChange={setFiles}
+          onHide={() => setShowEvidence(false)}
+        />
+      ) : (
+        <button type="button" onClick={() => setShowEvidence(true)} className="text-xs text-moss font-medium hover:underline">
+          {t('plans.addEvidence')}
+        </button>
+      )}
+      <p className="text-xs text-secondary">{t('plans.activityHint')}</p>
+      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+      <div className="flex gap-3">
+        <button type="submit" disabled={busy} className="rounded-md bg-moss text-paper text-xs font-medium px-3 py-1.5 hover:opacity-90 disabled:opacity-60">
+          {busy ? t('plans.saving') : t('plans.markDoneButton')}
+        </button>
+        <button type="button" onClick={onCancel} disabled={busy} className="text-xs text-secondary hover:text-ink">{t('plans.cancel')}</button>
+      </div>
+    </form>
+  )
+}
 
 function SectionForm({ section = null, busy, onSubmit, onCancel }) {
   const { t } = useLanguage()
