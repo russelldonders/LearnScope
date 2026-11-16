@@ -922,6 +922,8 @@ export default {
     endDateAfterParentEnd: 'Einddatum kan niet na {date} liggen, toen "{title}" eindigde.',
     endDateBeforeParentStart: 'Einddatum kan niet vóór {date} liggen, toen "{title}" begon.',
     endDateBeforeStartDate: 'Einddatum kan niet vóór de startdatum liggen.',
+    datesReversedNotice: 'Deze ervaring eindigt ({end}) voordat ze begint ({start}).',
+    datesReversedFix: 'Datums corrigeren',
   },
   skillDetail: {
     knowledge: 'Kennis',
@@ -1558,6 +1560,7 @@ export default {
       levelLabel: 'Niveau {level}',
       currentRoleSuffix: ' · Huidige rol',
       alreadyInProfileSuffix: ' · Al in je profiel',
+      datesReversed: 'Controleer deze datums: het einde ligt vóór het begin. Je kunt ze na het importeren corrigeren.',
       sinceLabel: 'Sinds',
       whyTrackingLabel: 'Waarom bijgehouden',
       matchesLibrarySkill:

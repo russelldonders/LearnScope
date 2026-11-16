@@ -46,7 +46,7 @@ export default function ValidateRequest() {
     setNotFound(false)
     const { data: req, error: reqError } = await supabase
       .from('skill_validation_requests')
-      .select('*')
+      .select('id, skill_id, requester_id, validator_id, target_level, status, decision_comments, created_at, decided_at')
       .eq('id', requestId)
       .single()
     if (reqError || !req) {
@@ -65,14 +65,22 @@ export default function ValidateRequest() {
 
     const isValidator = req.validator_id === user.id
     if (isValidator) {
+      // A validator sees someone else's record, so fetch only the columns
+      // this page shows -- not the learner's private skill notes or check-in
+      // schedule, nor the names and email addresses other raters were
+      // invited with (rater names come from profiles below instead).
       const [{ data: sk }, { data: ass }, { data: ratings }, { data: courses }, st] = await Promise.all([
-        supabase.from('skills').select('*').eq('id', req.skill_id).single(),
+        supabase.from('skills').select('id, name, level').eq('id', req.skill_id).single(),
         supabase
           .from('skill_assessments')
-          .select('*')
+          .select('id, level, source, assessed_at, comments, evidence_url, evidence_path, evidence_paths')
           .eq('skill_id', req.skill_id)
           .order('assessed_at', { ascending: false }),
-        supabase.from('skill_peer_ratings').select('*').eq('skill_id', req.skill_id).order('rated_at', { ascending: false }),
+        supabase
+          .from('skill_peer_ratings')
+          .select('id, rater_id, level, comments, rated_at')
+          .eq('skill_id', req.skill_id)
+          .order('rated_at', { ascending: false }),
         supabase
           .from('skill_course_links')
           .select('id, courses(name, completed_date, status)')

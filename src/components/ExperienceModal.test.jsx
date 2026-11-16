@@ -59,3 +59,40 @@ describe('ExperienceModal subject timing', () => {
     expect(onSave).not.toHaveBeenCalled()
   })
 })
+
+describe('ExperienceModal dates', () => {
+  afterEach(cleanup)
+
+  function fillJob() {
+    fireEvent.change(screen.getByLabelText('Role title'), { target: { value: 'Analyst' } })
+    fireEvent.change(screen.getByLabelText('Company'), { target: { value: 'Acme' } })
+  }
+
+  it('refuses an end date before the start date', async () => {
+    const onSave = vi.fn()
+    renderModal({ type: 'employment', onSave, onClose: vi.fn() })
+    fillJob()
+    fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2015-06-01' } })
+    fireEvent.change(screen.getByLabelText('End date'), { target: { value: '2015-01-31' } })
+
+    expect(screen.getByLabelText('End date')).toHaveAttribute('min', '2015-06-01')
+    // Submit the form directly so the component's own check runs even where
+    // the browser's date-range validation would have stopped it first.
+    fireEvent.submit(screen.getByRole('button', { name: 'Save' }).closest('form'))
+
+    expect(await screen.findByText("End date can't be before the start date.")).toBeInTheDocument()
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it('saves a backdated job with the dates the learner entered', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    renderModal({ type: 'employment', onSave, onClose: vi.fn() })
+    fillJob()
+    fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2015-06-01' } })
+    fireEvent.change(screen.getByLabelText('End date'), { target: { value: '2016-03-31' } })
+    fireEvent.submit(screen.getByRole('button', { name: 'Save' }).closest('form'))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ start_date: '2015-06-01', end_date: '2016-03-31' }))
+  })
+})

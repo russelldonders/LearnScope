@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { uploadAvatar, base64ToBlob } from '../lib/avatar'
 import { findOrCreateLibrarySkill, listLibrarySkills } from '../lib/skillLibrary'
 import { addTagToSkill } from '../lib/skillTags'
-import { formatMonthYear } from '../lib/dates'
+import { formatMonthYear, isEndBeforeStart } from '../lib/dates'
 import { TRACKING_REASONS } from '../lib/trackingReasons'
 import { markCvImported } from '../lib/profileImport'
 import AccessibleDialog from './AccessibleDialog'
@@ -569,6 +569,9 @@ function ExperienceRow({ item, checked, alreadyExists, onToggle, onChange }) {
         {item.end_date ? formatMonthYear(item.end_date) : t('modals.resumeImportReview.present')}
         {alreadyExists ? t('modals.resumeImportReview.alreadyInProfileSuffix') : ''}
       </p>
+      {!alreadyExists && isEndBeforeStart(item.start_date, item.end_date) && (
+        <p className="text-xs text-amber-700 mt-0.5">{t('modals.resumeImportReview.datesReversed')}</p>
+      )}
     </Row>
   )
 }

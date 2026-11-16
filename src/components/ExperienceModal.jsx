@@ -3,6 +3,7 @@ import { EXPERIENCE_TYPE_CONFIG } from '../lib/experienceTypes'
 import OrganizationUrlField from './OrganizationUrlField'
 import AccessibleDialog from './AccessibleDialog'
 import { useLanguage } from '../context/LanguageContext'
+import { isEndBeforeStart } from '../lib/dates'
 
 export default function ExperienceModal({
   type = 'employment',
@@ -44,6 +45,10 @@ export default function ExperienceModal({
     }
     if (endDate && !startDate) {
       setError(t('modals.experienceModal.endDateNeedsStartDate'))
+      return
+    }
+    if (!current && isEndBeforeStart(startDate, endDate)) {
+      setError(t('experience.endDateBeforeStartDate'))
       return
     }
     setError(null)
@@ -163,7 +168,7 @@ export default function ExperienceModal({
               <input
                 id="endDate"
                 type="date"
-                min={minimumDate}
+                min={startDate || minimumDate}
                 max={maximumDate}
                 disabled={current}
                 value={endDate}

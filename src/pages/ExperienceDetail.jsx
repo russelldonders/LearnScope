@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
-import { formatMonthYear, formatFullDate } from '../lib/dates'
+import { formatMonthYear, formatFullDate, isEndBeforeStart } from '../lib/dates'
 import { LEVEL_LABELS } from '../lib/levels'
 import { english } from '../lib/i18n/translations'
 import { EXPERIENCE_TYPE_CONFIG, experienceTypeLabel, formatStudyDuration, nestedExperienceTypesFor } from '../lib/experienceTypes'
@@ -432,6 +432,14 @@ export default function ExperienceDetail() {
                     </Link>
                   </p>
                 )}
+                {isEndBeforeStart(item.start_date, item.end_date) && (
+                  <p role="status" className="text-xs text-amber-700 mt-2">
+                    {t('experience.datesReversedNotice', { start: formatFullDate(item.start_date), end: formatFullDate(item.end_date) })}{' '}
+                    <button type="button" onClick={() => setSettingsOpen(true)} className="underline hover:opacity-75">
+                      {t('experience.datesReversedFix')}
+                    </button>
+                  </p>
+                )}
               </div>
               <button
                 type="button"
@@ -632,6 +640,10 @@ function DetailsTab({ item, parentExperience, onSave, onDelete }) {
       setError(t('modals.experienceModal.endDateNeedsStartDate'))
       return
     }
+    if (!current && isEndBeforeStart(startDate, endDate)) {
+      setError(t('experience.endDateBeforeStartDate'))
+      return
+    }
     setError(null)
     setSaving(true)
     try {
@@ -751,7 +763,7 @@ function DetailsTab({ item, parentExperience, onSave, onDelete }) {
           <input
             id="endDate"
             type="date"
-            min={parentExperience?.start_date}
+            min={startDate || parentExperience?.start_date}
             max={parentExperience?.end_date ?? undefined}
             disabled={current}
             value={endDate}

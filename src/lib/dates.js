@@ -65,3 +65,12 @@ export function formatDateRange(startDate, endDate) {
   const endMonth = formatMonthYear(endDate)
   return startMonth === endMonth ? startMonth : `${startMonth} – ${endMonth}`
 }
+
+// True when both dates are set and the end falls before the start -- an
+// experience that ends before it begins. ISO `YYYY-MM-DD` strings compare
+// correctly as text, so no timezone parsing is involved. Used to block new
+// saves and to flag existing records for the learner to correct (never to
+// rewrite them silently).
+export function isEndBeforeStart(startDate, endDate) {
+  return Boolean(startDate && endDate && endDate < startDate)
+}

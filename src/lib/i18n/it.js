@@ -922,6 +922,8 @@ export default {
     endDateAfterParentEnd: 'La data di fine non può essere successiva al {date}, quando è terminato "{title}".',
     endDateBeforeParentStart: 'La data di fine non può essere precedente al {date}, quando è iniziato "{title}".',
     endDateBeforeStartDate: 'La data di fine non può essere precedente alla data di inizio.',
+    datesReversedNotice: 'Questa esperienza termina ({end}) prima di iniziare ({start}).',
+    datesReversedFix: 'Correggi le date',
   },
   skillDetail: {
     knowledge: 'Conoscenza',
@@ -1560,6 +1562,7 @@ export default {
       levelLabel: 'Livello {level}',
       currentRoleSuffix: ' · Ruolo attuale',
       alreadyInProfileSuffix: ' · Già nel tuo profilo',
+      datesReversed: 'Controlla queste date: la fine è precedente all’inizio. Potrai correggerle dopo l’importazione.',
       sinceLabel: 'Da',
       whyTrackingLabel: 'Perché monitorato',
       matchesLibrarySkill:

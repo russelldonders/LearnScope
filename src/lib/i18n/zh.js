@@ -922,6 +922,8 @@ export default {
     endDateAfterParentEnd: '结束日期不能晚于 {date}，即"{title}"结束的时间。',
     endDateBeforeParentStart: '结束日期不能早于 {date}，即"{title}"开始的时间。',
     endDateBeforeStartDate: '结束日期不能早于开始日期。',
+    datesReversedNotice: '此经历的结束日期（{end}）早于开始日期（{start}）。',
+    datesReversedFix: '更正日期',
   },
   skillDetail: {
     knowledge: '知识',
@@ -1545,6 +1547,7 @@ export default {
       levelLabel: '等级 {level}',
       currentRoleSuffix: ' · 当前职位',
       alreadyInProfileSuffix: ' · 已在你的个人资料中',
+      datesReversed: '请检查这些日期：结束日期早于开始日期。导入后可以更正。',
       sinceLabel: '起始于',
       whyTrackingLabel: '追踪原因',
       matchesLibrarySkill: '与库中技能"{name}"匹配——导入后名称和标签将保持固定。',

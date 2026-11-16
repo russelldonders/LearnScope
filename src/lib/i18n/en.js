@@ -922,6 +922,8 @@ export default {
     endDateAfterParentEnd: 'End date can\'t be after {date}, when "{title}" ended.',
     endDateBeforeParentStart: 'End date can\'t be before {date}, when "{title}" started.',
     endDateBeforeStartDate: 'End date can\'t be before the start date.',
+    datesReversedNotice: 'This experience ends ({end}) before it starts ({start}).',
+    datesReversedFix: 'Correct the dates',
   },
   skillDetail: {
     knowledge: 'Knowledge',
@@ -1558,6 +1560,7 @@ export default {
       levelLabel: 'Level {level}',
       currentRoleSuffix: ' · Current role',
       alreadyInProfileSuffix: ' · Already in your profile',
+      datesReversed: 'Check these dates: the end is before the start. You can correct them after importing.',
       sinceLabel: 'Since',
       whyTrackingLabel: 'Why tracking',
       matchesLibrarySkill:

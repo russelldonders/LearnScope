@@ -692,6 +692,7 @@ export default function ProfilePrivacy() {
                   <div className="flex items-center gap-2">
                     <input
                       readOnly
+                      aria-label={t('profile.privacy.shareLink.shareThisLink')}
                       value={createdLinkUrl}
                       onFocus={(e) => e.target.select()}
                       className="flex-1 min-w-0 rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink"

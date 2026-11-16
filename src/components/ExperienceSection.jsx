@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import { EXPERIENCE_TYPES } from '../lib/experienceTypes'
+import { isEndBeforeStart } from '../lib/dates'
 import { useMyRoleAssignments } from '../pages/roles/useMyRoleAssignments'
 import TimelineItem from './TimelineItem'
 import PendingRoleTimelineCard from './PendingRoleTimelineCard'
@@ -301,6 +302,10 @@ function CurrentJobPrompt({ existingJob, onEndAndContinue, onKeepBoth, onCancel 
   const [error, setError] = useState(null)
 
   async function handleEnd() {
+    if (isEndBeforeStart(existingJob.start_date, endDate)) {
+      setError(t('experience.endDateBeforeStartDate'))
+      return
+    }
     setError(null)
     setSaving(true)
     try {
@@ -342,6 +347,7 @@ function CurrentJobPrompt({ existingJob, onEndAndContinue, onKeepBoth, onCancel 
           <input
             id="oldJobEndDate"
             type="date"
+            min={existingJob.start_date ?? undefined}
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
             className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"

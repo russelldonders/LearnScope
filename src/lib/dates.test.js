@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { formatDateRange, formatRelativeDate, formatAbsoluteDate, formatFullDate } from './dates'
+import { formatDateRange, formatRelativeDate, formatAbsoluteDate, formatFullDate, isEndBeforeStart } from './dates'
 
 describe('formatFullDate', () => {
   it('formats a full assessment timestamp without producing Invalid Date', () => {
@@ -83,5 +83,22 @@ describe('formatAbsoluteDate', () => {
   it('formats a full timestamp', () => {
     const timestamp = '2024-03-01T09:15:00Z'
     expect(formatAbsoluteDate(timestamp)).toBe(new Date(timestamp).toLocaleDateString())
+  })
+})
+
+describe('isEndBeforeStart', () => {
+  it('flags an end date earlier than the start date', () => {
+    expect(isEndBeforeStart('2024-05-01', '2024-04-30')).toBe(true)
+  })
+
+  it('accepts a same-day or later end date', () => {
+    expect(isEndBeforeStart('2024-05-01', '2024-05-01')).toBe(false)
+    expect(isEndBeforeStart('2024-05-01', '2025-01-01')).toBe(false)
+  })
+
+  it('ignores records missing either date', () => {
+    expect(isEndBeforeStart(null, '2024-01-01')).toBe(false)
+    expect(isEndBeforeStart('2024-01-01', null)).toBe(false)
+    expect(isEndBeforeStart('', '')).toBe(false)
   })
 })
