@@ -2,7 +2,7 @@
 
 begin;
 
-select plan(21);
+select plan(20);
 
 insert into auth.users (id, email, email_confirmed_at) values
   ('82000000-0000-0000-0000-00000000000a', 'share-a@example.com', now()),
@@ -87,19 +87,13 @@ select results_eq(
     from public.list_learner_plan_members('82000000-0000-0000-0000-000000000100')
     order by recipient_name, status$$,
   $$values
-    ('A connection'::text, 'pending'::text, false, null::integer, null::integer),
+    ('A LearnScope user'::text, 'pending'::text, false, null::integer, null::integer),
     ('Bo Follower'::text, 'accepted'::text, false, 1, 4)$$,
   'the owner sees everyone invited, with progress shared by those who accepted'
 );
 select ok(
   (select progress_updated_at is not null from public.list_learner_plan_members('82000000-0000-0000-0000-000000000100') where status = 'accepted'),
   'the owner sees when progress was last updated'
-);
-
-select is(
-  (select connected from public.list_learner_plan_members('82000000-0000-0000-0000-000000000100') where recipient_name = 'Bo Follower'),
-  true,
-  'the owner sees the recipient is still connected'
 );
 
 -- Opening the plan again with nothing changed doesn't move the time on.
@@ -195,15 +189,17 @@ delete from public.connections
 where user_a_id = least('82000000-0000-0000-0000-00000000000a'::uuid, '82000000-0000-0000-0000-00000000000c'::uuid)
   and user_b_id = greatest('82000000-0000-0000-0000-00000000000a'::uuid, '82000000-0000-0000-0000-00000000000c'::uuid);
 
+-- Plan sharing doesn't depend on being connected (0302): disconnecting
+-- leaves shared progress and waiting invitations as they were.
 select is(
   (select progress_done from public.learner_plan_invitations where copied_plan_id = (select copied_plan_id from c_copy)),
-  null,
-  'disconnecting clears progress already shared'
+  2,
+  'disconnecting leaves progress already shared'
 );
 select is(
   (select status from public.learner_plan_invitations where source_plan_id = '82000000-0000-0000-0000-000000000300'),
-  'revoked',
-  'disconnecting withdraws an invitation still waiting'
+  'pending',
+  'disconnecting leaves an invitation still waiting'
 );
 
 select set_config('request.jwt.claim.sub', '82000000-0000-0000-0000-00000000000c', true);
@@ -212,24 +208,24 @@ select is(
   (select count(*)::int from public.record_learner_plan_progress(
     jsonb_build_array(jsonb_build_object('plan_id', (select copied_plan_id from c_copy), 'done', 3, 'total', 3))
   )),
-  0,
-  'progress is no longer shared after disconnecting'
+  1,
+  'progress is still shared after disconnecting'
 );
-select throws_ok(
-  $$select public.respond_to_learner_plan_invitation(
+select isnt(
+  public.respond_to_learner_plan_invitation(
     (select id from public.learner_plan_invitations where source_plan_id = '82000000-0000-0000-0000-000000000300'), true
-  )$$,
-  '23514', 'Invitation has already been decided',
-  'a withdrawn invitation cannot be accepted after disconnecting'
+  ),
+  null,
+  'an invitation can still be accepted after disconnecting'
 );
 reset role;
 select set_config('request.jwt.claim.sub', '82000000-0000-0000-0000-00000000000a', true);
 set local role authenticated;
 select results_eq(
-  $$select status, connected, progress_done from public.list_learner_plan_members('82000000-0000-0000-0000-000000000100')
+  $$select status, progress_done from public.list_learner_plan_members('82000000-0000-0000-0000-000000000100')
     where recipient_id = '82000000-0000-0000-0000-00000000000c'$$,
-  $$values ('accepted'::text, false, null::integer)$$,
-  'the owner sees a disconnected follower without progress'
+  $$values ('accepted'::text, 3)$$,
+  'the owner still sees a former connection''s progress'
 );
 reset role;
 

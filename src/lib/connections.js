@@ -24,6 +24,23 @@ export function clearPendingInviteCode() {
   localStorage.removeItem(PENDING_INVITE_KEY)
 }
 
+// A plan invitation's code is stored with this prefix (a character skill
+// invite codes never contain), so signing up or logging in can return to
+// the plan invitation rather than the skill invite page.
+const PLAN_INVITE_PREFIX = 'plan:'
+
+export function planPendingInviteCode(code) {
+  return `${PLAN_INVITE_PREFIX}${code}`
+}
+
+// Where a stored invite code (from the ?invite= query or localStorage)
+// should take someone once they're signed in.
+export function pendingInvitePath(pendingCode) {
+  return pendingCode.startsWith(PLAN_INVITE_PREFIX)
+    ? `/plan-invite/${encodeURIComponent(pendingCode.slice(PLAN_INVITE_PREFIX.length))}`
+    : `/rate/${pendingCode}`
+}
+
 // Opens WhatsApp (the app on mobile, web/desktop WhatsApp otherwise) with a
 // pre-filled message -- just a wa.me deep link, no API key or auth needed.
 export function whatsappShareUrl(text) {

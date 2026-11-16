@@ -83,6 +83,77 @@ export async function recordPlanProgress(entries) {
   return new Set((data ?? []).map((row) => (typeof row === 'string' ? row : row.record_learner_plan_progress)))
 }
 
+// Inviting by link or email (see 0302): anyone who accepts gets their own
+// copy, connection or not. The share link is reusable until replaced; each
+// emailed invitation has its own single-use link.
+export function planInviteUrl(code) {
+  return `${window.location.origin}/plan-invite/${code}`
+}
+
+export async function getPlanShareLink(planId) {
+  const { data, error } = await supabase.rpc('get_learner_plan_share_link', { p_plan_id: planId })
+  if (error) throw error
+  return planInviteUrl(data)
+}
+
+// A new link in place of the old one, which stops letting people join.
+export async function replacePlanShareLink(planId) {
+  const { data, error } = await supabase.rpc('replace_learner_plan_share_link', { p_plan_id: planId })
+  if (error) throw error
+  return planInviteUrl(data)
+}
+
+// Creates (or reuses) one invitation per address and emails each its link.
+// Resolves to { email, ok, error } per address, so one failure doesn't hide
+// the rest.
+export async function inviteEmailsToPlan(planId, planTitle, emails) {
+  const { data, error } = await supabase.rpc('invite_emails_to_learner_plan', {
+    p_plan_id: planId,
+    p_emails: emails,
+  })
+  if (error) throw error
+  const { data: { session } } = await supabase.auth.getSession()
+  return Promise.all((data ?? []).map(async (row) => {
+    try {
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ type: 'plan_invite', toEmail: row.email, skillName: planTitle, shareUrl: planInviteUrl(row.share_code) }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || 'Failed to send invite email.')
+      }
+      return { email: row.email, ok: true }
+    } catch (err) {
+      return { email: row.email, ok: false, error: err.message }
+    }
+  }))
+}
+
+// What an invitation link is for, before signing in: kind ('link' |
+// 'email'), status ('open' | 'used' | 'revoked' | 'own_plan' | 'joined'),
+// the plan's title, description and size, who shared it, and the caller's
+// copy if they've already joined. Null for an unknown code.
+export async function getPlanInvitePreview(code) {
+  const { data, error } = await supabase.rpc('get_learner_plan_invite_preview', { p_code: code })
+  if (error) throw error
+  return data?.[0] ?? null
+}
+
+// The owner withdraws an invitation still waiting, so it can't be accepted.
+export async function withdrawPlanInvitation(invitationId) {
+  const { error } = await supabase.rpc('withdraw_learner_plan_invitation', { p_invitation_id: invitationId })
+  if (error) throw error
+}
+
+// Joins the plan: resolves to the caller's own copy's id.
+export async function acceptPlanInvite(code) {
+  const { data, error } = await supabase.rpc('accept_learner_plan_invite', { p_code: code })
+  if (error) throw error
+  return data
+}
+
 export async function listIncomingPlanInvitations() {
   const { data, error } = await supabase.rpc('list_incoming_learner_plan_invitations')
   if (error) throw error

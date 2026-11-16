@@ -27,6 +27,7 @@ const TITLES = [
   [/^\/learning$/, { key: 'learning' }],
   [/^\/plans$/, { key: 'plans' }],
   [/^\/plans\/[^/]+$/, { key: 'planDetails' }],
+  [/^\/plan-invite\/[^/]+$/, { key: 'planInvite' }],
   [/^\/team$/, { key: 'myTeam' }],
   [/^\/team\/[^/]+$/, { key: 'teamMember' }],
   [/^\/courses\/[^/]+\/learn$/, { key: 'coursePlayer' }],

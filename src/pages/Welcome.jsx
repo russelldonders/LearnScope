@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { getPendingInviteCode, clearPendingInviteCode } from '../lib/connections'
+import { getPendingInviteCode, clearPendingInviteCode, pendingInvitePath } from '../lib/connections'
 import { getPendingEnrolCourseId, resumePendingEnrolment } from '../lib/courseCatalogue'
 import { useLanguage } from '../context/LanguageContext'
 
@@ -20,7 +20,7 @@ export default function Welcome() {
     const pendingCode = searchParams.get('invite') || getPendingInviteCode()
     if (pendingCode) {
       clearPendingInviteCode()
-      navigate(`/rate/${pendingCode}`)
+      navigate(pendingInvitePath(pendingCode))
       return
     }
     const pendingEnrolId = searchParams.get('enrol') || getPendingEnrolCourseId()

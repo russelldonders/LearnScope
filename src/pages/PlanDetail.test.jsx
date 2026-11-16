@@ -27,6 +27,10 @@ const lib = vi.hoisted(() => ({
   inviteConnectionsToPlan: vi.fn(),
   listPlanMembers: vi.fn(),
   recordPlanProgress: vi.fn(),
+  getPlanShareLink: vi.fn(),
+  replacePlanShareLink: vi.fn(),
+  inviteEmailsToPlan: vi.fn(),
+  withdrawPlanInvitation: vi.fn(),
 }))
 
 vi.mock('../lib/learnerPlans', () => lib)
@@ -35,7 +39,7 @@ vi.mock('../components/AppHeader', () => ({ default: () => <header>Header</heade
 vi.mock('../components/SetTargetModal', () => ({ default: ({ skill }) => <div role="dialog">Set target for {skill.name}</div> }))
 const extra = vi.hoisted(() => ({ addResource: vi.fn(), listConnections: vi.fn() }))
 vi.mock('../lib/skillResources', () => ({ addResource: extra.addResource }))
-vi.mock('../lib/connections', () => ({ listConnections: extra.listConnections }))
+vi.mock('../lib/connections', () => ({ listConnections: extra.listConnections, whatsappShareUrl: (text) => `https://wa.me/?text=${encodeURIComponent(text)}` }))
 vi.mock('../components/SkillGoalModal', () => ({
   default: ({ onSaved }) => (
     <div role="dialog" aria-label="Add a goal">
@@ -124,6 +128,7 @@ beforeEach(() => {
   lib.inviteConnectionsToPlan.mockResolvedValue([])
   lib.listPlanMembers.mockResolvedValue([])
   lib.recordPlanProgress.mockResolvedValue(new Set())
+  lib.getPlanShareLink.mockResolvedValue('http://localhost/plan-invite/abc')
   for (const fn of ['addItem', 'addSection', 'deletePlan', 'removeItem', 'savePositions', 'setItemDone', 'setPlanStatus', 'startPlan', 'updateItem']) lib[fn].mockResolvedValue()
 })
 afterEach(() => {
@@ -194,7 +199,8 @@ describe('PlanDetail', () => {
       { invitation_id: 'v2', recipient_id: 'u2', recipient_name: 'Bo Friend', status: 'pending', plan_removed: false, progress_done: null, progress_total: null, progress_updated_at: null, invited_at: '2026-11-12T10:00:00Z' },
       { invitation_id: 'v3', recipient_id: 'u3', recipient_name: 'Cy Friend', status: 'accepted', plan_removed: false, progress_done: null, progress_total: null, progress_updated_at: null, invited_at: '2026-11-11T10:00:00Z' },
       { invitation_id: 'v4', recipient_id: 'u4', recipient_name: 'Di Friend', status: 'accepted', plan_removed: true, progress_done: 1, progress_total: 4, progress_updated_at: '2026-11-13T10:00:00Z', invited_at: '2026-11-11T10:00:00Z' },
-      { invitation_id: 'v5', recipient_id: 'u5', recipient_name: 'Ed Friend', status: 'accepted', plan_removed: false, connected: false, progress_done: null, progress_total: null, progress_updated_at: null, invited_at: '2026-11-11T10:00:00Z' },
+      { invitation_id: 'v5', recipient_id: null, recipient_name: 'ed@example.com', via: 'email', status: 'pending', plan_removed: false, progress_done: null, progress_total: null, progress_updated_at: null, invited_at: '2026-11-11T10:00:00Z' },
+      { invitation_id: 'v6', recipient_id: 'u6', recipient_name: 'Fay Friend', via: 'link', status: 'accepted', plan_removed: false, progress_done: 0, progress_total: 4, progress_updated_at: '2026-11-14T10:00:00Z', invited_at: '2026-11-14T10:00:00Z' },
     ])
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: 'Manage users' }))
@@ -210,8 +216,18 @@ describe('PlanDetail', () => {
     expect(within(row('Cy Friend')).getByText('No progress shared yet. It appears once they open the plan.')).toBeInTheDocument()
     expect(within(row('Di Friend')).getByText('Removed their copy')).toBeInTheDocument()
     expect(within(row('Di Friend')).queryByRole('progressbar')).not.toBeInTheDocument()
-    expect(within(row('Ed Friend')).getByText('No longer connected')).toBeInTheDocument()
-    expect(within(row('Ed Friend')).queryByText(/No progress shared yet/)).not.toBeInTheDocument()
+    expect(within(row('ed@example.com')).getByText('Invited')).toBeInTheDocument()
+    expect(within(row('ed@example.com')).getByText(/^Emailed /)).toBeInTheDocument()
+    expect(within(row('Fay Friend')).getByText('Joined with the share link')).toBeInTheDocument()
+    expect(within(row('Fay Friend')).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0')
+
+    // Only invitations still waiting can be withdrawn.
+    expect(within(row('Ari Friend')).queryByRole('button', { name: /Withdraw/ })).not.toBeInTheDocument()
+    lib.listPlanMembers.mockClear()
+    lib.withdrawPlanInvitation.mockResolvedValue()
+    fireEvent.click(within(row('ed@example.com')).getByRole('button', { name: 'Withdraw the invitation to ed@example.com' }))
+    await waitFor(() => expect(lib.withdrawPlanInvitation).toHaveBeenCalledWith('v5'))
+    await waitFor(() => expect(lib.listPlanMembers).toHaveBeenCalledWith('p1'))
   })
 
   it('records its progress and says when it is shared with the inviter', async () => {

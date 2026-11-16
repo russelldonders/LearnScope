@@ -38,6 +38,15 @@ const DEFAULT_TEMPLATES = {
     <p style="color:#666;font-size:13px">If you don't recognize this, you can safely ignore this email.</p>
   `,
   },
+  plan_invite: {
+    subject_template: '{{fromName}} invited you to follow the plan "{{planTitle}}"',
+    body_template: `
+    <p>{{fromName}} has invited you to follow their plan <strong>{{planTitle}}</strong> on LearnScope.</p>
+    <p>Accepting gives you your own copy of the plan to work through. {{fromName}} will see how many of its items you've done, but not your notes or evidence.</p>
+    <p><a href="{{url}}">View the plan</a></p>
+    <p style="color:#666;font-size:13px">If you don't recognize this, you can safely ignore this email.</p>
+  `,
+  },
   skill_validation_request: {
     subject_template: '{{fromName}} asked you to validate "{{skillName}}"',
     body_template: `
@@ -96,6 +105,7 @@ const LINK_PATHS = {
   invite: /^\/rate\/[A-Za-z0-9_-]+$/,
   recommend: /^\/recommend\/[A-Za-z0-9_-]+$/,
   validation_request: /^\/validate-request\/[0-9a-f-]{36}$/i,
+  plan_invite: /^\/plan-invite\/[A-Za-z0-9_-]+$/,
 }
 
 // The client builds links from window.location.origin, and the API is only
@@ -141,7 +151,9 @@ async function senderName(user) {
 }
 
 async function sendTemplatedEmail(res, { templateKey, toEmail, fromName, skillName, url }) {
-  const vars = { fromName, skillName, url }
+  // A plan invitation's title arrives as skillName too (see handler); its
+  // template calls it planTitle.
+  const vars = { fromName, skillName, planTitle: skillName, url }
   const template = await getTemplate(templateKey)
   const subject = renderTemplate(template.subject_template, vars)
   const html = renderTemplate(template.body_template, vars)
@@ -150,10 +162,30 @@ async function sendTemplatedEmail(res, { templateKey, toEmail, fromName, skillNa
   }
 }
 
+// A plan invitation email goes only to the address the sender invited, for
+// a waiting invitation they sent, with the plan's real title -- never the
+// address or title the request names -- so the endpoint can't be used to
+// mail arbitrary text to arbitrary people. Returns null if it doesn't check out.
+export async function planInviteEmail(admin, userId, url) {
+  const code = new URL(url).pathname.split('/').pop()
+  const { data: invitation } = await admin
+    .from('learner_plan_invitations')
+    .select('invitee_email, inviter_id, via, status, source_plan_id')
+    .eq('share_code', code)
+    .maybeSingle()
+  if (!invitation || invitation.inviter_id !== userId || invitation.via !== 'email' || invitation.status !== 'pending') {
+    return null
+  }
+  const { data: plan } = await admin.from('learner_plans').select('title').eq('id', invitation.source_plan_id).maybeSingle()
+  if (!plan) return null
+  return { toEmail: invitation.invitee_email, title: plan.title }
+}
+
 const EMAIL_TYPES = {
   invite: { templateKey: 'peer_rating_invite', urlField: 'shareUrl' },
   recommend: { templateKey: 'skill_recommend', urlField: 'shareUrl' },
   validation_request: { templateKey: 'skill_validation_request', urlField: 'reviewUrl' },
+  plan_invite: { templateKey: 'plan_invite', urlField: 'shareUrl' },
 }
 
 export default async function handler(req, res) {
@@ -201,6 +233,17 @@ export default async function handler(req, res) {
     res.status(400).json({ error: `Invalid ${emailType.urlField}` })
     return
   }
+  let recipient = toEmail
+  let subjectName = skillName
+  if (type === 'plan_invite') {
+    const invite = await planInviteEmail(supabaseAdmin(), user.id, url).catch(() => null)
+    if (!invite) {
+      res.status(400).json({ error: 'That invitation isn’t waiting to be sent.' })
+      return
+    }
+    recipient = invite.toEmail
+    subjectName = invite.title
+  }
   if (!(await consumeQuota(user.id, 'email'))) {
     sendQuotaExceeded(res)
     return
@@ -209,9 +252,9 @@ export default async function handler(req, res) {
   try {
     await sendTemplatedEmail(res, {
       templateKey: emailType.templateKey,
-      toEmail,
+      toEmail: recipient,
       fromName: await senderName(user),
-      skillName: skillName.slice(0, MAX_SKILL_NAME_LENGTH),
+      skillName: subjectName.slice(0, MAX_SKILL_NAME_LENGTH),
       url,
     })
   } catch (err) {

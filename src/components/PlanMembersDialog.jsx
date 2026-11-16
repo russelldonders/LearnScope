@@ -1,4 +1,4 @@
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import AccessibleDialog from './AccessibleDialog'
 import PlanProgressBar from './PlanProgressBar'
 import { formatFullDate } from '../lib/dates'
@@ -8,7 +8,7 @@ const STATUS_ORDER = { accepted: 0, pending: 1, declined: 2, revoked: 3 }
 // The people a plan's owner has invited, each with where their invitation
 // stands and, once they've accepted, how far through their own copy they are.
 // Inviting more people starts from here.
-export default function PlanMembersDialog({ planTitle, members, loading, error, onClose, onInvite, t }) {
+export default function PlanMembersDialog({ planTitle, members, loading, error, onClose, onInvite, onWithdraw, t }) {
   const titleId = useId()
   const descriptionId = useId()
   const sorted = [...members].sort((a, b) =>
@@ -41,7 +41,7 @@ export default function PlanMembersDialog({ planTitle, members, loading, error, 
             <p className="rounded-lg border border-dashed border-hairline px-4 py-8 text-center text-sm text-secondary">{t('plans.noMembers')}</p>
           ) : (
             <ul className="space-y-2" aria-label={t('plans.membersTitle')}>
-              {sorted.map((member) => <MemberRow key={member.invitation_id} member={member} t={t} />)}
+              {sorted.map((member) => <MemberRow key={member.invitation_id} member={member} onWithdraw={onWithdraw} t={t} />)}
             </ul>
           )}
           {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
@@ -58,15 +58,15 @@ export default function PlanMembersDialog({ planTitle, members, loading, error, 
   )
 }
 
-function MemberRow({ member, t }) {
-  // Progress is only shared while they're connected and still have the plan.
-  const disconnected = member.status === 'accepted' && !member.plan_removed && member.connected === false
-  const following = member.status === 'accepted' && !member.plan_removed && !disconnected
+function MemberRow({ member, onWithdraw, t }) {
+  const [withdrawing, setWithdrawing] = useState(false)
+  // Progress is shared for as long as they keep their copy of the plan.
+  const following = member.status === 'accepted' && !member.plan_removed
   const hasProgress = following && member.progress_total != null
   const percent = hasProgress && member.progress_total > 0
     ? Math.round((member.progress_done / member.progress_total) * 100)
     : 0
-  const statusKey = member.plan_removed ? 'removed' : disconnected ? 'disconnected' : member.status
+  const statusKey = member.plan_removed ? 'removed' : member.status
   const statusLabel = t(`plans.memberStatus.${statusKey}`)
 
   return (
@@ -89,7 +89,28 @@ function MemberRow({ member, t }) {
         <p className="mt-1 text-xs text-secondary">{t('plans.memberNoProgressYet')}</p>
       ))}
       {member.status === 'pending' && (
-        <p className="mt-1 text-xs text-secondary">{t('plans.memberInvitedOn', { date: formatFullDate(member.invited_at) })}</p>
+        <div className="mt-1 flex items-center justify-between gap-3 text-xs">
+          <p className="text-secondary">
+            {t(member.via === 'email' ? 'plans.memberEmailedOn' : 'plans.memberInvitedOn', { date: formatFullDate(member.invited_at) })}
+          </p>
+          {onWithdraw && (
+            <button
+              type="button"
+              disabled={withdrawing}
+              aria-label={t('plans.withdrawInvitationFor', { name: member.recipient_name })}
+              onClick={async () => {
+                setWithdrawing(true)
+                try { await onWithdraw(member) } finally { setWithdrawing(false) }
+              }}
+              className="shrink-0 font-medium text-red-700 hover:underline disabled:opacity-50"
+            >
+              {t('plans.withdrawInvitation')}
+            </button>
+          )}
+        </div>
+      )}
+      {following && member.via === 'link' && (
+        <p className="mt-1 text-xs text-secondary">{t('plans.memberJoinedWithLink')}</p>
       )}
     </li>
   )

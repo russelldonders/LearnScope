@@ -39,6 +39,7 @@ import {
   updateItem,
   updatePlan,
   updateSection,
+  withdrawPlanInvitation,
 } from '../lib/learnerPlans'
 import { currentGoal, paceOf, planItemStatus, summariseProgress, timeElapsedPercent } from '../lib/planProgress'
 import { KNOWLEDGE_LEVEL_LABELS, LEVEL_LABELS, LEVELS } from '../lib/levels'
@@ -469,13 +470,24 @@ export default function PlanDetail() {
           error={membersError}
           onClose={() => setMembersOpen(false)}
           onInvite={openInvites}
+          onWithdraw={async (member) => {
+            setMembersError(null)
+            try {
+              await withdrawPlanInvitation(member.invitation_id)
+            } catch (err) {
+              setMembersError(err.message)
+            }
+            await loadMembers()
+          }}
           t={t}
         />
       )}
 
       {inviteOpen && (
         <PlanInviteDialog
+          planId={plan.id}
           planTitle={plan.title}
+          onInvited={() => { if (membersOpen) loadMembers() }}
           connections={inviteConnections}
           invitations={planInvitations}
           busy={inviteBusy}

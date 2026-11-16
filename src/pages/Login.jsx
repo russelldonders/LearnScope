@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { getPendingInviteCode, clearPendingInviteCode } from '../lib/connections'
+import { getPendingInviteCode, clearPendingInviteCode, pendingInvitePath } from '../lib/connections'
 import { getPendingEnrolCourseId, clearPendingEnrolCourseId, resumePendingEnrolment } from '../lib/courseCatalogue'
 import { getOrganisationBranding, orgBrandStyle } from '../lib/orgBranding'
 import { getEmployerLoginContext, getMyActiveEmployerMembership } from '../lib/employerRoleProfiles'
@@ -97,7 +97,7 @@ export default function Login() {
     const pendingCode = getPendingInviteCode()
     if (pendingCode) {
       clearPendingInviteCode()
-      navigate(`/rate/${pendingCode}`)
+      navigate(pendingInvitePath(pendingCode))
       return
     }
     const enrolled = await resumePendingEnrolment(data.user.id).catch(() => null)
@@ -116,7 +116,7 @@ export default function Login() {
     // resumePendingEnrolment the same way it does for email confirmation.
     let redirectTo = `${window.location.origin}/dashboard`
     if (pendingCode) {
-      redirectTo = `${window.location.origin}/rate/${pendingCode}`
+      redirectTo = `${window.location.origin}${pendingInvitePath(pendingCode)}`
       clearPendingInviteCode()
     } else if (pendingEnrolId) {
       redirectTo = `${window.location.origin}/welcome?enrol=${pendingEnrolId}`

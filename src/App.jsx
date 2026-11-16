@@ -42,6 +42,7 @@ const ProfileExport = lazyRoute(() => import('./pages/ProfileExport'))
 const Help = lazyRoute(() => import('./pages/Help'))
 const Rate = lazyRoute(() => import('./pages/Rate'))
 const Recommend = lazyRoute(() => import('./pages/Recommend'))
+const PlanInvite = lazyRoute(() => import('./pages/PlanInvite'))
 const SharedProfile = lazyRoute(() => import('./pages/SharedProfile'))
 const ProviderProfile = lazyRoute(() => import('./pages/ProviderProfile'))
 const Connections = lazyRoute(() => import('./pages/Connections'))
@@ -102,6 +103,7 @@ function App() {
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/rate/:code" element={<Rate />} />
           <Route path="/recommend/:code" element={<Recommend />} />
+          <Route path="/plan-invite/:code" element={<PlanInvite />} />
           <Route path="/shared/:token" element={<SharedProfile />} />
           <Route path="/organisations/:slug" element={<ProviderProfile />} />
           <Route
