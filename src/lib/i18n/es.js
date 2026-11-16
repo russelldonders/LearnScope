@@ -1773,6 +1773,7 @@ export default {
     },
   },
   common: {
+    goBack: '← Volver',
     levelReassessedSame: 'Reevaluado: sigue en {level}',
     levelReassessedDown: 'Reevaluado en {level} (antes {previous})',
     loading: 'Cargando…',

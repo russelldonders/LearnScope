@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { useIsDesktop } from '../lib/device'
@@ -18,6 +18,7 @@ import Cmi5Player from '../components/Cmi5Player'
 import LtiPlayer from '../components/LtiPlayer'
 import EditedVideoPlayer from '../components/EditedVideoPlayer'
 import AppHeader from '../components/AppHeader'
+import BackLink from '../components/BackLink'
 import ProgressBar from '../components/ProgressBar'
 import CourseModal from '../components/CourseModal'
 import PageContent from '../components/PageContent'
@@ -392,9 +393,15 @@ export default function CourseLearn() {
     <div className="min-h-screen bg-paper">
       <AppHeader />
       <main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 py-8">
-        <Link to={backTo} className="text-sm text-secondary hover:text-ink mb-4 inline-block">
-          {backLabel}
-        </Link>
+        {/* Back to whatever opened this course: a page that said so, else
+            the previous page in the app, else Learning. */}
+        <BackLink
+          to={location.state?.backTo ?? null}
+          label={backLabel}
+          fallbackTo={backTo}
+          fallbackLabel={backLabel}
+          className="text-sm text-secondary hover:text-ink mb-4 inline-block"
+        />
 
         {loading && <p className="text-secondary">{t('common.loading')}</p>}
         {notFound && <p className="text-secondary">{t('courseLearn.notFound')}</p>}

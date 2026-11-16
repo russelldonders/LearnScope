@@ -1774,6 +1774,7 @@ export default {
     },
   },
   common: {
+    goBack: '← Indietro',
     levelReassessedSame: 'Rivalutato: ancora {level}',
     levelReassessedDown: 'Rivalutato a {level} (prima {previous})',
     loading: 'Caricamento…',

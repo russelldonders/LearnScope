@@ -1774,6 +1774,7 @@ export default {
     },
   },
   common: {
+    goBack: '← Zurück',
     levelReassessedSame: 'Neu eingeschätzt: weiterhin {level}',
     levelReassessedDown: 'Neu eingeschätzt als {level} (vorher {previous})',
     loading: 'Wird geladen…',

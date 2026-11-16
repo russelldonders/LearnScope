@@ -1771,6 +1771,7 @@ export default {
     },
   },
   common: {
+    goBack: '← Back',
     levelReassessedSame: 'Reassessed: still {level}',
     levelReassessedDown: 'Reassessed at {level} (was {previous})',
     loading: 'Loading…',

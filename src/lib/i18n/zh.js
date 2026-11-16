@@ -1753,6 +1753,7 @@ export default {
     },
   },
   common: {
+    goBack: '← 返回',
     levelReassessedSame: '重新评估：仍为{level}',
     levelReassessedDown: '重新评估为{level}（之前为{previous}）',
     loading: '加载中…',

@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import { isSelfAssessmentDue } from '../lib/checkin'
 import AppHeader from '../components/AppHeader'
+import BackLink from '../components/BackLink'
 import GrowthRing from '../components/GrowthRing'
 import SkillNetworkSection, { RatingsFromOthers } from '../components/SkillNetworkSection'
 import SkillLearningSection from '../components/SkillLearningSection'
@@ -708,13 +709,16 @@ export default function SkillDetail({ skillId, embedded = false }) {
     <div className="min-h-screen bg-paper">
       {!embedded && <AppHeader />}
       <main id={embedded ? "lti-skill-content" : "main-content"} tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8">
-        <Link
-          to={backTo}
+        {/* Back to whatever opened this skill: a page that said so, else
+            the previous page in the app, else the skills list. */}
+        <BackLink
+          to={location.state?.from ?? null}
+          label={backLabel}
           state={{ tab: 'skills' }}
+          fallbackTo="/skills"
+          fallbackLabel={t('skillDetail.backToSkills')}
           className="text-sm text-secondary hover:text-ink mb-6 inline-block"
-        >
-          {backLabel}
-        </Link>
+        />
 
         {loadingSkill && <p className="text-secondary">{t('skillDetail.loading')}</p>}
         {notFound && <p className="text-secondary">{t('skillDetail.skillNotFound')}</p>}

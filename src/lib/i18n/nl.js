@@ -1772,6 +1772,7 @@ export default {
     },
   },
   common: {
+    goBack: '← Terug',
     levelReassessedSame: 'Opnieuw beoordeeld: nog steeds {level}',
     levelReassessedDown: 'Opnieuw beoordeeld als {level} (was {previous})',
     loading: 'Laden…',
