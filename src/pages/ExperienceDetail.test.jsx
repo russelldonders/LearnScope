@@ -31,12 +31,11 @@ vi.mock('../lib/experienceSkillRecommendations', () => ({
 import {
   buildExperienceSkillProgress,
   buildExperienceTimelineEvents,
-  ExperienceActionButtons,
   getDevelopedSkills,
   getExperienceTabs,
-  SkillsSubsection,
   validateWithinParent,
-} from './ExperienceDetail'
+} from '../lib/experienceDetail'
+import { ExperienceActionButtons, SkillsSubsection } from './ExperienceLearningSections'
 import { nestedExperienceTypesFor } from '../lib/experienceTypes'
 
 const item = {
