@@ -9,6 +9,8 @@ import { SkillGoalTile } from '../components/SkillGoalsDashboardPanel'
 import PlanProgressBar from '../components/PlanProgressBar'
 import PlanInviteDialog from '../components/PlanInviteDialog'
 import PlanMembersDialog from '../components/PlanMembersDialog'
+import PlanSettingsDialog from '../components/PlanSettingsDialog'
+import { prerequisiteLabel, summarisePrerequisites } from '../lib/planSettings'
 import { PlanDetailsForm } from './Plans'
 import {
   addItem,
@@ -29,7 +31,7 @@ import {
   updateSection,
   withdrawPlanInvitation,
 } from '../lib/learnerPlans'
-import { paceOf, planItemStatus, summariseProgress, timeElapsedPercent } from '../lib/planProgress'
+import { formatPlanTimeframe, paceOf, planItemStatus, sequenceLocks, summariseProgress, timeElapsedPercent } from '../lib/planProgress'
 import { formatFullDate } from '../lib/dates'
 import { DragHandle, IconButton, PlanItem } from './PlanItem'
 import { AddItemForm, ItemEditForm, SectionForm } from './PlanItemForms'
@@ -54,6 +56,7 @@ export default function PlanDetail() {
   const {
     plan,
     context,
+    prerequisites,
     loading,
     notFound,
     error,
@@ -71,6 +74,8 @@ export default function PlanDetail() {
   const [editingItemId, setEditingItemId] = useState(null)
   const [editingSectionId, setEditingSectionId] = useState(null)
   const [confirm, setConfirm] = useState(null)
+  // The plan's order and prerequisites, behind the cog in edit mode.
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const {
     dragging,
     dragOver,
@@ -152,6 +157,15 @@ export default function PlanDetail() {
     { section: null, items: contentItems.filter((item) => !item.section_id) },
     ...plan.sections.map((section) => ({ section, items: contentItems.filter((item) => item.section_id === section.id) })),
   ]
+  // Working through the plan, an activity is locked while the plan's
+  // required prerequisites aren't met, or (in a plan done in order) while
+  // something before it isn't finished. Editing never locks anything.
+  const prereqs = summarisePrerequisites(prerequisites)
+  const lockedIds = editing
+    ? new Set()
+    : prereqs.blocked
+      ? new Set(contentItems.map((item) => item.id))
+      : sequenceLocks(plan.sequence, groups.map(({ items }) => items), statusById)
 
   function renderItem(item, index, items, listKey) {
     const isDropTarget = dragOver?.kind === 'item' && dragOver.id === item.id && dragging?.id !== item.id
@@ -162,7 +176,7 @@ export default function PlanDetail() {
         data-drop-kind="item"
         data-drop-id={item.id}
         data-drop-list={listKey}
-        className={`relative rounded-md border bg-card p-3 transition-[border-color,background-color,opacity,box-shadow] ${isDropTarget ? 'border-moss bg-moss/5 ring-2 ring-moss/40' : 'border-hairline'} ${isDraggingItem ? 'opacity-60 shadow-lg' : ''} ${!editing && item.item_type === 'step' ? 'hover:border-moss/50' : ''}`}
+        className={`relative rounded-md border bg-card p-3 transition-[border-color,background-color,opacity,box-shadow] ${isDropTarget ? 'border-moss bg-moss/5 ring-2 ring-moss/40' : 'border-hairline'} ${isDraggingItem ? 'opacity-60 shadow-lg' : ''} ${!editing && item.item_type === 'step' && !lockedIds.has(item.id) ? 'hover:border-moss/50' : ''}`}
       >
         {editingItemId === item.id ? (
           <ItemEditForm
@@ -182,6 +196,7 @@ export default function PlanDetail() {
             context={context}
             busy={busy}
             editing={editing}
+            locked={lockedIds.has(item.id) ? (prereqs.blocked ? 'prerequisites' : 'sequence') : null}
             backState={backState}
             canMoveUp={index > 0}
             canMoveDown={index < items.length - 1}
@@ -242,19 +257,33 @@ export default function PlanDetail() {
             <div className="min-w-0">
               <h1 className="font-display text-3xl text-ink break-words">{plan.title}</h1>
               <p className="mt-1 text-sm text-secondary">
-                {plan.starts_on && plan.target_on
-                  ? t('plans.timeframe', { start: formatFullDate(plan.starts_on), end: formatFullDate(plan.target_on) })
-                  : plan.target_on
-                    ? t('plans.byDate', { date: formatFullDate(plan.target_on) })
-                    : t('plans.noEndDate')}
+                {formatPlanTimeframe(plan, t)}
                 {plan.status !== 'active' && ` · ${t(`plans.status.${plan.status}`)}`}
                 {plan.status === 'completed' && plan.completed_on && ` ${formatFullDate(plan.completed_on)}`}
               </p>
             </div>
             {editing ? (
-              <button type="button" onClick={() => setEditingDetails(true)} className="rounded-md border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:border-moss">
-                {t('plans.editDetails')}
-              </button>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => setEditingDetails(true)} className="rounded-md border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:border-moss">
+                  {t('plans.editDetails')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen(true)}
+                  aria-label={t('plans.settings.open')}
+                  title={t('plans.settings.open')}
+                  className="relative grid h-8 w-8 place-items-center rounded-md text-secondary hover:bg-card hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-moss"
+                >
+                  <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  </svg>
+                  {/* A quiet dot says some settings are on. */}
+                  {(prereqs.any || (plan.sequence && plan.sequence !== 'none')) && (
+                    <span aria-hidden="true" className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-moss" />
+                  )}
+                </button>
+              </div>
             ) : !canManage ? (
               <div className="flex flex-wrap items-center gap-2">
                 <span data-role="follower" className="rounded-full border border-hairline px-2.5 py-1 text-xs text-secondary">{t('plans.youFollowThisPlan')}</span>
@@ -307,6 +336,12 @@ export default function PlanDetail() {
             {t('plans.addToMyRecords')}
           </button>
         </div>
+      )}
+
+      {/* What the plan asks for before starting, met or not from the
+          viewer's own records. Only shown when it asks for something. */}
+      {!editing && prereqs.any && (
+        <PrerequisitesPanel summary={prereqs} t={t} />
       )}
 
       {!editing && (
@@ -389,6 +424,17 @@ export default function PlanDetail() {
         />
       )}
 
+      {settingsOpen && editing && (
+        <PlanSettingsDialog
+          plan={plan}
+          prerequisites={prerequisites}
+          busy={busy}
+          run={run}
+          onClose={() => setSettingsOpen(false)}
+          t={t}
+        />
+      )}
+
       {inviteOpen && (
         <PlanInviteDialog
           planId={plan.id}
@@ -425,6 +471,9 @@ export default function PlanDetail() {
             <div className="border-b border-hairline pb-2">
               <h2 id="plan-activities-heading" className="font-display text-xl text-ink">{t('plans.activitiesSectionTitle')}</h2>
               <p className="text-xs text-secondary">{t('plans.activitiesSectionHint')}</p>
+              {plan.sequence && plan.sequence !== 'none' && (
+                <p data-sequence={plan.sequence} className="mt-0.5 text-xs text-secondary">{t(`plans.sequenceNote.${plan.sequence}`)}</p>
+              )}
             </div>
           </div>
         )}
@@ -607,6 +656,50 @@ export default function PlanDetail() {
       )}
 
     </Shell>
+  )
+}
+
+// "Before you start": each group of prerequisites, met or not. Folded away
+// once everything is met; open while something isn't.
+function PrerequisitesPanel({ summary, t }) {
+  const [open, setOpen] = useState(!summary.allMet)
+  return (
+    <section
+      aria-labelledby="plan-prerequisites-heading"
+      data-prerequisites={summary.blocked ? 'blocked' : summary.allMet ? 'met' : 'unmet'}
+      className={`mt-6 rounded-xl border px-5 py-3 ${summary.blocked ? 'border-gold/50 bg-gold/10' : 'border-hairline bg-card'}`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="plan-prerequisites-heading" className="text-xs font-medium uppercase tracking-wide text-secondary">{t('plans.prerequisites.heading')}</h2>
+        <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className="text-xs font-medium text-moss hover:underline">
+          {summary.allMet ? t('plans.prerequisites.allMet') : open ? t('plans.prerequisites.hide') : t('plans.prerequisites.show')}
+        </button>
+      </div>
+      {summary.blocked && <p className="mt-1 text-sm text-ink">{t('plans.prerequisites.blocked')}</p>}
+      {open && (
+        <ul className="mt-2 space-y-2">
+          {summary.groups.map((group) => (
+            <li key={group.id} className="text-sm">
+              <p className="flex flex-wrap items-center gap-2 text-xs text-secondary">
+                <span>{group.options.length > 1 ? t('plans.settings.anyOneOf') : t('plans.settings.needs')}</span>
+                <span className="rounded-full border border-hairline px-1.5 py-px text-[10px]">{t(`plans.settings.enforcement.${group.enforcement}`)}</span>
+              </p>
+              <ul className="mt-1 space-y-0.5">
+                {group.options.map((option) => (
+                  <li key={option.id} data-met={option.met ? 'true' : 'false'} className="flex items-start gap-2">
+                    <span aria-hidden="true" className={`mt-0.5 shrink-0 text-xs ${option.met ? 'text-moss' : 'text-secondary'}`}>{option.met ? '✓' : '○'}</span>
+                    <span className="min-w-0 break-words text-ink">
+                      {prerequisiteLabel(option, t)}
+                      <span className="sr-only"> — {option.met ? t('plans.prerequisites.met') : t('plans.prerequisites.notMet')}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }
 

@@ -42,8 +42,20 @@ vi.mock('../lib/learnerPlans', () => lib)
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'me', email: 'me@example.com' } }) }))
 vi.mock('../components/AppHeader', () => ({ default: () => <header>Header</header> }))
 vi.mock('../components/SetTargetModal', () => ({ default: ({ skill }) => <div role="dialog">Set target for {skill.name}</div> }))
-const extra = vi.hoisted(() => ({ addResource: vi.fn(), listConnections: vi.fn() }))
-vi.mock('../lib/skillResources', () => ({ addResource: extra.addResource }))
+const extra = vi.hoisted(() => ({ addResource: vi.fn(), listConnections: vi.fn(), getResourceFileUrl: vi.fn() }))
+vi.mock('../lib/skillResources', () => ({ addResource: extra.addResource, getResourceFileUrl: extra.getResourceFileUrl }))
+const settings = vi.hoisted(() => ({
+  getPlanPrerequisites: vi.fn(),
+  setPlanSequence: vi.fn(),
+  addPrerequisiteGroup: vi.fn(),
+  addPrerequisite: vi.fn(),
+  removePrerequisite: vi.fn(),
+  removePrerequisiteGroup: vi.fn(),
+  setPrerequisiteGroupEnforcement: vi.fn(),
+}))
+vi.mock('../lib/planSettings', async (importOriginal) => ({ ...(await importOriginal()), ...settings }))
+vi.mock('../lib/skillLibrary', () => ({ listLibrarySkills: vi.fn().mockResolvedValue([{ id: 'lib-9', name: 'Facilitation' }]) }))
+vi.mock('../lib/courseCatalogue', () => ({ listCatalogueCourses: vi.fn().mockResolvedValue([{ id: 'cat-1', name: 'Safety basics', provider: 'Acme' }]) }))
 vi.mock('../lib/connections', () => ({ listConnections: extra.listConnections, whatsappShareUrl: (text) => `https://wa.me/?text=${encodeURIComponent(text)}` }))
 vi.mock('../components/SkillGoalModal', () => ({
   default: ({ onSaved }) => (
@@ -128,6 +140,9 @@ beforeEach(() => {
   lib.loadPlanContext.mockResolvedValue(context)
   lib.listPlannableRecords.mockResolvedValue({ course: [{ id: 'c9', name: 'Public speaking', provider: 'Acme' }], skill: [{ id: 's1', name: 'Coaching', library_skill_id: 'lib-1' }], skill_goal: [], skill_resource: [] })
   lib.getActorName.mockResolvedValue('Sam')
+  settings.getPlanPrerequisites.mockResolvedValue([])
+  for (const fn of ['setPlanSequence', 'addPrerequisite', 'removePrerequisite', 'removePrerequisiteGroup', 'setPrerequisiteGroupEnforcement']) settings[fn].mockResolvedValue()
+  settings.addPrerequisiteGroup.mockResolvedValue('grp-new')
   extra.addResource.mockResolvedValue('r-new')
   extra.listConnections.mockResolvedValue([])
   lib.listPlanInvitations.mockResolvedValue([])
@@ -610,5 +625,70 @@ describe('PlanDetail', () => {
     lib.getPlan.mockResolvedValue(null)
     renderPage()
     expect(await screen.findByText(/doesn’t exist, or isn’t yours/)).toBeInTheDocument()
+  })
+
+  it('locks activities after the first unfinished one in a plan done in order', async () => {
+    lib.getPlan.mockResolvedValue({ ...plan, sequence: 'plan' })
+    renderPage()
+    expect(await screen.findByRole('button', { name: 'Mark “Shadow a senior lead” done' })).toBeInTheDocument()
+    expect(screen.getByText(/Worked through in order/)).toBeInTheDocument()
+    // The course comes after the unfinished step: no link, marked locked.
+    expect(screen.queryByRole('link', { name: 'Leading teams' })).not.toBeInTheDocument()
+    expect(screen.getByText('Leading teams').closest('li').querySelector('[data-locked="sequence"]')).not.toBeNull()
+  })
+
+  it('shows prerequisites and locks the plan until required ones are met', async () => {
+    settings.getPlanPrerequisites.mockResolvedValue([
+      { id: 'grp1', position: 0, enforcement: 'required', options: [
+        { id: 'o1', kind: 'skill', name: 'Facilitation', min_practical_level: 3, min_knowledge_level: null, met: false },
+        { id: 'o2', kind: 'course', name: 'Safety basics', met: false },
+      ] },
+    ])
+    renderPage()
+    const panel = await screen.findByRole('region', { name: 'Before you start' })
+    expect(panel).toHaveAttribute('data-prerequisites', 'blocked')
+    expect(within(panel).getByText('Facilitation — Ability: Capable')).toBeInTheDocument()
+    expect(within(panel).getByText('Completed Safety basics')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Mark “Shadow a senior lead” done' })).not.toBeInTheDocument()
+    expect(screen.getByText('Shadow a senior lead').closest('li').querySelector('[data-locked="prerequisites"]')).not.toBeNull()
+  })
+
+  it('keeps the order and prerequisites behind a cog in edit mode', async () => {
+    renderPage('/plans/p1?mode=edit')
+    fireEvent.click(await screen.findByRole('button', { name: 'Plan settings' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Plan settings' })
+    fireEvent.click(within(dialog).getByRole('radio', { name: /In order, within each section/ }))
+    await waitFor(() => expect(settings.setPlanSequence).toHaveBeenCalledWith('p1', 'sections'))
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add a prerequisite' }))
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Facilitation' }))
+    fireEvent.change(within(dialog).getByLabelText('When not met'), { target: { value: 'required' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(settings.addPrerequisite).toHaveBeenCalledWith('p1', 'grp-new', expect.objectContaining({ kind: 'skill', librarySkillId: 'lib-9', minPracticalLevel: '3' })))
+    expect(settings.addPrerequisiteGroup).toHaveBeenCalledWith('p1', { enforcement: 'required', position: 0 })
+  })
+
+  it('has no cog outside edit mode', async () => {
+    renderPage()
+    await screen.findByRole('heading', { name: 'Become a team lead' })
+    expect(screen.queryByRole('button', { name: 'Plan settings' })).not.toBeInTheDocument()
+  })
+
+  it('opens a resource in a new window and ticks it with the same dot as a step', async () => {
+    lib.getPlan.mockResolvedValue({ ...plan, items: [
+      { id: 'r1', section_id: null, item_type: 'skill_resource', skill_resource_id: 'sr1', completed_on: null, skill_resources: { id: 'sr1', title: 'Guide', url: 'https://example.com/guide', skill_id: 's1' } },
+      { id: 'r2', section_id: null, item_type: 'skill_resource', skill_resource_id: 'sr2', completed_on: null, skill_resources: { id: 'sr2', title: 'Notes', url: null, skill_id: 's1' } },
+    ] })
+    renderPage()
+    expect(await screen.findByRole('link', { name: 'Guide' })).toHaveAttribute('target', '_blank')
+    expect(screen.getByRole('link', { name: 'Notes' })).toHaveAttribute('target', '_blank')
+    expect(screen.getByRole('button', { name: 'Mark “Guide” done' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+  })
+
+  it('shows a plan timed as a period from the viewer’s own start', async () => {
+    lib.getPlan.mockResolvedValue({ ...plan, target_on: null, duration_amount: 6, duration_unit: 'months', starts_on: '2026-11-01', my_joined_on: '2026-11-05' })
+    renderPage()
+    expect(await screen.findByText(/6 months from when you start · by/)).toBeInTheDocument()
   })
 })

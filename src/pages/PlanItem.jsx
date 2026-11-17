@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLanguage } from '../context/LanguageContext'
 import { activityHasLearnerContent } from '../lib/learnerPlans'
+import { getResourceFileUrl } from '../lib/skillResources'
 import { currentGoal } from '../lib/planProgress'
 import { KNOWLEDGE_LEVEL_LABELS, LEVEL_LABELS } from '../lib/levels'
 import { formatFullDate } from '../lib/dates'
@@ -96,13 +97,20 @@ function describeItem(item, status, context, t) {
       const skillId = goal?.skill_id ?? item.skill_goals?.skill_id
       return { title, goalTileId, href: !goalTileId && skillId ? `/skills/${skillId}` : null, detail: null }
     }
-    case 'skill_resource':
+    case 'skill_resource': {
+      // A resource always opens in a new window, leaving the plan where it
+      // is: its web address, its file (for whoever added it), or else the
+      // skill it belongs to.
+      const resource = item.skill_resources
       return {
-        title: item.skill_resources?.title,
-        href: item.skill_resources?.url ?? (item.skill_resources ? `/skills/${item.skill_resources.skill_id}` : null),
-        external: Boolean(item.skill_resources?.url),
+        title: resource?.title,
+        href: resource?.url ?? (resource?.skill_id ? `/skills/${resource.skill_id}` : null),
+        external: Boolean(resource?.url),
+        filePath: !resource?.url ? resource?.file_path ?? null : null,
+        newWindow: Boolean(resource),
         detail: null,
       }
+    }
     default:
       return {
         title: item.step_title,
@@ -112,7 +120,25 @@ function describeItem(item, status, context, t) {
   }
 }
 
-export function PlanItem({ item, status, context, busy, editing, backState = null, canMoveUp, canMoveDown, dragHandlers, onMoveUp, onMoveDown, onComplete, onUntick, onLoadActivity, onEdit, onRemove, onOpenGoal }) {
+// A resource's file, in a new window. The window opens straight away, while
+// the click still counts as one, and is pointed at the file once its
+// short-lived link is ready.
+async function openResourceFile(path) {
+  const opened = window.open('', '_blank')
+  try {
+    const url = await getResourceFileUrl(path)
+    if (opened) {
+      opened.opener = null
+      opened.location.href = url
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
+  } catch {
+    opened?.close()
+  }
+}
+
+export function PlanItem({ item, status, context, busy, editing, locked = null, backState = null, canMoveUp, canMoveDown, dragHandlers, onMoveUp, onMoveDown, onComplete, onUntick, onLoadActivity, onEdit, onRemove, onOpenGoal }) {
   const { t } = useLanguage()
   const state = status?.state ?? 'not_started'
   // Marking a step done asks for a date, comment and evidence first; a
@@ -144,13 +170,14 @@ export function PlanItem({ item, status, context, busy, editing, backState = nul
       setChecking(false)
     }
   }
-  const { title, href, external, detail, skillLevels, goalTileId } = describeItem(item, status, context, t)
-  // Ticking off is part of working through the plan, so only in use mode.
-  const tickable = !editing && (item.item_type === 'step' || (item.item_type === 'skill_resource' && state !== 'removed'))
+  const { title, href, external, filePath, newWindow, detail, skillLevels, goalTileId } = describeItem(item, status, context, t)
+  // Ticking off is part of working through the plan, so only in use mode,
+  // and never while the item is locked (prerequisites or order).
+  const tickable = !editing && !locked && (item.item_type === 'step' || (item.item_type === 'skill_resource' && state !== 'removed'))
   const typeLabel = t(`plans.itemTypes.${item.item_type}`)
   const shownTitle = state === 'removed' ? t('plans.removedRecord', { type: typeLabel }) : title
   const stepComplete = state === 'done' || completing
-  const stepTileClickable = !editing && item.item_type === 'step' && !completing && !untickChoice
+  const stepTileClickable = !editing && !locked && item.item_type === 'step' && !completing && !untickChoice
   const statusDotClass = editing
     ? 'border border-hairline'
     : stepComplete
@@ -182,7 +209,8 @@ export function PlanItem({ item, status, context, busy, editing, backState = nul
           />
         ) : stepTileClickable ? (
           <span aria-hidden="true" className={`mt-1.5 h-3 w-3 shrink-0 rounded-full ${statusDotClass}`} />
-        ) : tickable && item.item_type === 'step' ? (
+        ) : tickable ? (
+          // Steps and resources are ticked off with the same dot.
           <button
             type="button"
             aria-label={t('plans.markDone', { title: shownTitle })}
@@ -191,25 +219,26 @@ export function PlanItem({ item, status, context, busy, editing, backState = nul
             onClick={() => handleToggle(!stepComplete)}
             className={`relative mt-1.5 h-3 w-3 shrink-0 rounded-full transition-[background-color,border-color,box-shadow] after:absolute after:-inset-3 after:rounded-full hover:ring-4 hover:ring-moss/15 disabled:cursor-wait disabled:opacity-50 ${statusDotClass}`}
           />
-        ) : tickable ? (
-          <input
-            type="checkbox"
-            checked={state === 'done' || completing}
-            disabled={busy || checking || untickChoice}
-            onChange={(e) => handleToggle(e.target.checked)}
-            aria-label={t('plans.markDone', { title: shownTitle })}
-            className="mt-1 h-4 w-4 accent-moss shrink-0"
-          />
+        ) : locked ? (
+          <svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" className="mt-1 shrink-0 text-secondary">
+            <rect x="3" y="7" width="10" height="7" rx="1.5" /><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+          </svg>
         ) : (
           <span aria-hidden="true" className={`mt-1.5 h-3 w-3 shrink-0 rounded-full ${statusDotClass}`} />
         )}
         <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-            {goalTileId && state !== 'removed' ? (
+            {locked ? (
+              <span className="text-sm font-medium break-words text-secondary">{shownTitle}</span>
+            ) : goalTileId && state !== 'removed' ? (
               <button type="button" onClick={() => onOpenGoal(goalTileId)} className="text-left text-sm font-medium text-moss hover:underline break-words">{shownTitle}</button>
+            ) : filePath && state !== 'removed' ? (
+              <button type="button" onClick={() => openResourceFile(filePath)} className="text-left text-sm font-medium text-moss hover:underline break-words">{shownTitle}</button>
             ) : href && state !== 'removed' ? (
-              external ? (
+              newWindow && !external ? (
+                <Link to={href} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-moss hover:underline break-words">{shownTitle}</Link>
+              ) : external ? (
                 <a href={href} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-moss hover:underline break-words">{shownTitle}</a>
               ) : (
                 <Link to={href} state={backState} className="text-sm font-medium text-moss hover:underline break-words">{shownTitle}</Link>
@@ -228,6 +257,11 @@ export function PlanItem({ item, status, context, busy, editing, backState = nul
             {(!editing || state === 'removed') && (
               <span data-state={state} className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATE_TONES[state]}`}>
                 {t(`plans.states.${state}`)}
+              </span>
+            )}
+            {locked && (
+              <span data-locked={locked} title={t(`plans.locked.${locked}`)} className="rounded-full border border-hairline px-2 py-0.5 text-[11px] font-medium text-secondary">
+                {t('plans.locked.badge')}
               </span>
             )}
             {!editing && status?.overdue && <span className="rounded-full bg-red-700/15 text-red-700 px-2 py-0.5 text-[11px] font-medium">{t('plans.overdue')}</span>}

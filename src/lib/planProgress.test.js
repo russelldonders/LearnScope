@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { currentGoal, paceOf, planItemStatus, summariseProgress, timeElapsedPercent } from './planProgress'
+import { addPeriod, currentGoal, paceOf, planItemStatus, planTimeframe, sequenceLocks, summariseProgress, timeElapsedPercent } from './planProgress'
 
 const today = '2026-11-16'
 const context = (extra = {}) => ({
@@ -88,5 +88,43 @@ describe('timeframe', () => {
     expect(paceOf({ percent: 20, total: 4 }, 50)).toBe('behind')
     expect(paceOf({ percent: 0, total: 0 }, 50)).toBeNull()
     expect(paceOf({ percent: 20, total: 4 }, null)).toBeNull()
+  })
+})
+
+describe('sequenceLocks', () => {
+  const statuses = new Map([['a', { state: 'done' }], ['b', { state: 'not_started' }], ['c', { state: 'not_started' }], ['d', { state: 'removed' }], ['e', { state: 'not_started' }]])
+  const lists = [[{ id: 'a' }, { id: 'b' }, { id: 'c' }], [{ id: 'd' }, { id: 'e' }]]
+
+  it('locks nothing in a plan done in any order', () => {
+    expect(sequenceLocks('none', lists, statuses).size).toBe(0)
+  })
+
+  it('locks everything after the first unfinished item, across the plan', () => {
+    expect([...sequenceLocks('plan', lists, statuses)]).toEqual(['c', 'd', 'e'])
+  })
+
+  it('locks within each section on its own, and never on a removed item', () => {
+    expect([...sequenceLocks('sections', lists, statuses)]).toEqual(['c'])
+  })
+})
+
+describe('plan timeframes', () => {
+  it('adds days, weeks and months, keeping a month-end in its month', () => {
+    expect(addPeriod('2026-11-16', 30, 'days')).toBe('2026-12-16')
+    expect(addPeriod('2026-11-16', 2, 'weeks')).toBe('2026-11-30')
+    expect(addPeriod('2026-11-16', 6, 'months')).toBe('2027-05-16')
+    expect(addPeriod('2027-01-31', 1, 'months')).toBe('2027-02-28')
+  })
+
+  it('keeps a fixed timeframe as it is', () => {
+    expect(planTimeframe({ starts_on: '2026-11-01', target_on: '2027-01-01' })).toEqual({ startsOn: '2026-11-01', targetOn: '2027-01-01', period: null })
+  })
+
+  it('counts a period from the later of the plan starting and the viewer joining', () => {
+    const plan = { status: 'active', starts_on: '2026-11-01', duration_amount: 30, duration_unit: 'days' }
+    expect(planTimeframe({ ...plan, my_joined_on: '2026-10-20' })).toEqual({ startsOn: '2026-11-01', targetOn: '2026-12-01', period: { amount: 30, unit: 'days' } })
+    expect(planTimeframe({ ...plan, my_joined_on: '2026-11-10' }).targetOn).toBe('2026-12-10')
+    expect(planTimeframe({ ...plan, status: 'planning' }).targetOn).toBeNull()
+    expect(timeElapsedPercent({ ...plan, my_joined_on: '2026-11-10' }, '2026-11-25')).toBe(50)
   })
 })

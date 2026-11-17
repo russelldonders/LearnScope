@@ -12,6 +12,7 @@ import {
   savePositions,
 } from '../lib/learnerPlans'
 import { planItemStatus, summariseProgress } from '../lib/planProgress'
+import { getPlanPrerequisites } from '../lib/planSettings'
 
 // A plan and the records its items point at. `run` wraps a change to the
 // plan: it shows the change as busy, reloads afterwards and reports any
@@ -20,6 +21,8 @@ export function usePlanData(planId) {
   const { user } = useAuth()
   const [plan, setPlan] = useState(null)
   const [context, setContext] = useState(null)
+  // The plan's prerequisites, each marked met or not for the viewer.
+  const [prerequisites, setPrerequisites] = useState([])
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [error, setError] = useState(null)
@@ -40,8 +43,12 @@ export function usePlanData(planId) {
       return
     }
     setPlan(loaded)
-    const nextContext = await loadPlanContext(user.id, loaded.items)
+    const [nextContext, nextPrerequisites] = await Promise.all([
+      loadPlanContext(user.id, loaded.items),
+      getPlanPrerequisites(loaded.id),
+    ])
     setContext(nextContext)
+    setPrerequisites(nextPrerequisites)
     // Everyone's progress on a shared plan is shared with its owners; keep
     // the viewer's up to date, and say so to a follower. Best effort.
     const { done, total } = summariseProgress(loaded.items.map((item) => planItemStatus(item, nextContext)))
@@ -75,6 +82,7 @@ export function usePlanData(planId) {
   return {
     plan,
     context,
+    prerequisites,
     loading,
     notFound,
     error,

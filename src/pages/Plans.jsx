@@ -4,9 +4,8 @@ import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
 import AppHeader from '../components/AppHeader'
 import PlanProgressBar from '../components/PlanProgressBar'
-import { createPlan, listPlans, loadPlanContext, recordPlanProgress } from '../lib/learnerPlans'
-import { planItemStatus, summariseProgress, timeElapsedPercent } from '../lib/planProgress'
-import { formatFullDate } from '../lib/dates'
+import { createPlan, listPlans, loadPlanContext, PLAN_DURATION_UNITS, recordPlanProgress } from '../lib/learnerPlans'
+import { formatPlanTimeframe, planItemStatus, summariseProgress, timeElapsedPercent } from '../lib/planProgress'
 
 // Plans by where they are: in use, still being prepared, done, and (on
 // request) archived.
@@ -114,7 +113,7 @@ export default function Plans() {
                           )}
                         </div>
                         <p className="mt-1 text-xs text-secondary">
-                          {plan.target_on ? t('plans.byDate', { date: formatFullDate(plan.target_on) }) : t('plans.noEndDate')}
+                          {formatPlanTimeframe(plan, t, { short: true })}
                           {' · '}
                           {t('plans.itemCount', { count: plan.items.length })}
                         </p>
@@ -153,6 +152,10 @@ export function PlanDetailsForm({ plan = null, submitLabel, onSubmit, onCancel }
   const [description, setDescription] = useState(plan?.description ?? '')
   const [startsOn, setStartsOn] = useState(plan?.starts_on ?? '')
   const [targetOn, setTargetOn] = useState(plan?.target_on ?? '')
+  // A fixed end date, or a period from when each person starts.
+  const [timeframeMode, setTimeframeMode] = useState(plan?.duration_amount ? 'period' : 'fixed')
+  const [durationAmount, setDurationAmount] = useState(plan?.duration_amount ? String(plan.duration_amount) : '')
+  const [durationUnit, setDurationUnit] = useState(plan?.duration_unit ?? 'months')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const inputClass = 'mt-1 w-full rounded-md border border-hairline bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:border-moss'
@@ -160,11 +163,16 @@ export function PlanDetailsForm({ plan = null, submitLabel, onSubmit, onCancel }
   async function handleSubmit(event) {
     event.preventDefault()
     if (!title.trim()) return setError(t('plans.errorTitle'))
-    if (startsOn && targetOn && targetOn < startsOn) return setError(t('plans.errorDates'))
+    const isPeriod = timeframeMode === 'period'
+    const amount = Number(durationAmount)
+    if (isPeriod && !(Number.isInteger(amount) && amount >= 1 && amount <= 999)) return setError(t('plans.period.errorAmount'))
+    if (!isPeriod && startsOn && targetOn && targetOn < startsOn) return setError(t('plans.errorDates'))
     setError(null)
     setSaving(true)
     try {
-      await onSubmit({ title, description, startsOn, targetOn })
+      await onSubmit(isPeriod
+        ? { title, description, startsOn, targetOn: '', durationAmount: amount, durationUnit }
+        : { title, description, startsOn, targetOn, durationAmount: null, durationUnit: null })
     } catch (err) {
       setError(err.message)
       setSaving(false)
@@ -181,16 +189,43 @@ export function PlanDetailsForm({ plan = null, submitLabel, onSubmit, onCancel }
         <label htmlFor="plan-description" className="text-xs text-secondary">{t('plans.descriptionLabel')}</label>
         <textarea id="plan-description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={2000} rows={2} className={inputClass} />
       </div>
+      <fieldset>
+        <legend className="text-xs text-secondary">{t('plans.period.modeLabel')}</legend>
+        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+          {['fixed', 'period'].map((mode) => (
+            <label key={mode} className="flex items-center gap-2 text-sm text-ink">
+              <input type="radio" name="plan-timeframe" value={mode} checked={timeframeMode === mode} onChange={() => setTimeframeMode(mode)} className="accent-moss" />
+              {t(mode === 'fixed' ? 'plans.period.fixed' : 'plans.period.relative')}
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label htmlFor="plan-starts" className="text-xs text-secondary">{t('plans.startsLabel')}</label>
           <input id="plan-starts" type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} className={inputClass} />
         </div>
-        <div>
-          <label htmlFor="plan-target" className="text-xs text-secondary">{t('plans.targetLabel')}</label>
-          <input id="plan-target" type="date" value={targetOn} onChange={(e) => setTargetOn(e.target.value)} className={inputClass} />
-        </div>
+        {timeframeMode === 'fixed' ? (
+          <div>
+            <label htmlFor="plan-target" className="text-xs text-secondary">{t('plans.targetLabel')}</label>
+            <input id="plan-target" type="date" value={targetOn} onChange={(e) => setTargetOn(e.target.value)} className={inputClass} />
+          </div>
+        ) : (
+          <div className="grid grid-cols-[5rem_1fr] gap-2">
+            <div>
+              <label htmlFor="plan-duration-amount" className="text-xs text-secondary">{t('plans.period.amountLabel')}</label>
+              <input id="plan-duration-amount" type="number" inputMode="numeric" min={1} max={999} value={durationAmount} onChange={(e) => setDurationAmount(e.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label htmlFor="plan-duration-unit" className="text-xs text-secondary">{t('plans.period.unitLabel')}</label>
+              <select id="plan-duration-unit" value={durationUnit} onChange={(e) => setDurationUnit(e.target.value)} className={inputClass}>
+                {PLAN_DURATION_UNITS.map((unit) => <option key={unit} value={unit}>{t(`plans.period.unitNames.${unit}`)}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
       </div>
+      {timeframeMode === 'period' && <p className="text-xs text-secondary">{t('plans.period.hint')}</p>}
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       <div className="flex gap-3">
         <button type="submit" disabled={saving} className="rounded-md bg-moss text-paper text-sm font-medium px-4 py-2 hover:opacity-90 disabled:opacity-60">

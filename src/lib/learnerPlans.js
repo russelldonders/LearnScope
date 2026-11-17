@@ -18,10 +18,22 @@ import { buildStatement } from './xapiStatement'
 // points at someone else's record the viewer hasn't added to their own yet
 // (source_title says what it is meanwhile). Progress is worked out in
 // planProgress.js from those records, exactly as before.
+//
+// Each plan also carries my_joined_on: the day the viewer joined it, which
+// a plan timed as a period from each person's start counts from
+// (planTimeframe in planProgress.js). Members can always see their own row.
 async function readMyPlans(planId = null) {
-  const { data, error } = await supabase.rpc('get_my_learner_plans', { p_plan_id: planId })
-  if (error) throw error
-  return data ?? []
+  const { data: { session } } = await supabase.auth.getSession()
+  let memberships = supabase.from('learner_plan_members').select('plan_id, joined_at').eq('user_id', session?.user?.id)
+  if (planId) memberships = memberships.eq('plan_id', planId)
+  const [plans, members] = await Promise.all([
+    supabase.rpc('get_my_learner_plans', { p_plan_id: planId }),
+    memberships,
+  ])
+  if (plans.error) throw plans.error
+  if (members.error) throw members.error
+  const joinedOn = new Map((members.data ?? []).map((row) => [row.plan_id, row.joined_at ? localDateString(new Date(row.joined_at)) : null]))
+  return (plans.data ?? []).map((plan) => ({ ...plan, my_joined_on: joinedOn.get(plan.id) ?? null }))
 }
 
 export async function listPlans() {
@@ -225,15 +237,29 @@ export async function listPlannableRecords(userId) {
 
 const blankToNull = (value) => (typeof value === 'string' ? value.trim() || null : value ?? null)
 
-export async function createPlan(userId, { title, description, startsOn, targetOn }) {
+export const PLAN_DURATION_UNITS = ['days', 'weeks', 'months']
+
+// A plan's timeframe: a fixed end date, or (durationAmount and
+// durationUnit) a period from when each person starts -- one or the other.
+function timeframeColumns({ startsOn, targetOn, durationAmount, durationUnit }) {
+  const amount = Number(durationAmount)
+  const isPeriod = Number.isInteger(amount) && amount > 0 && PLAN_DURATION_UNITS.includes(durationUnit)
+  return {
+    starts_on: startsOn || null,
+    target_on: isPeriod ? null : targetOn || null,
+    duration_amount: isPeriod ? amount : null,
+    duration_unit: isPeriod ? durationUnit : null,
+  }
+}
+
+export async function createPlan(userId, { title, description, ...timeframe }) {
   const { data, error } = await supabase
     .from('learner_plans')
     .insert({
       user_id: userId,
       title: title.trim(),
       description: blankToNull(description),
-      starts_on: startsOn || null,
-      target_on: targetOn || null,
+      ...timeframeColumns(timeframe),
     })
     .select('id')
     .single()
@@ -241,10 +267,10 @@ export async function createPlan(userId, { title, description, startsOn, targetO
   return data.id
 }
 
-export async function updatePlan(planId, { title, description, startsOn, targetOn }) {
+export async function updatePlan(planId, { title, description, ...timeframe }) {
   const { error } = await supabase
     .from('learner_plans')
-    .update({ title: title.trim(), description: blankToNull(description), starts_on: startsOn || null, target_on: targetOn || null })
+    .update({ title: title.trim(), description: blankToNull(description), ...timeframeColumns(timeframe) })
     .eq('id', planId)
   if (error) throw error
 }

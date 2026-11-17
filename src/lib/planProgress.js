@@ -13,6 +13,7 @@
 //   removed     -- its record was deleted; not counted
 
 import { localDateString } from './skillGoalProgress'
+import { formatFullDate } from './dates'
 
 // A goal whose target changed was replaced by a new goal (replaces_goal_id).
 // A plan item keeps pointing at the goal it was given, so follow the chain to
@@ -97,12 +98,65 @@ export function summariseProgress(statuses) {
   }
 }
 
+// Which items are locked in a plan worked through in order
+// (learner_plans.sequence). `lists` are the plan's activity lists in the
+// order shown -- the top of the plan, then each section. In 'plan' order
+// they run on from one to the next; in 'sections' order each is its own.
+// An item is locked while anything before it isn't finished; stopped and
+// removed items count as finished, so they never hold the rest up.
+export function sequenceLocks(sequence, lists, statusById) {
+  const locked = new Set()
+  if (sequence !== 'plan' && sequence !== 'sections') return locked
+  const runs = sequence === 'plan' ? [lists.flat()] : lists
+  for (const items of runs) {
+    let open = true
+    for (const item of items) {
+      if (!open) locked.add(item.id)
+      const state = statusById.get(item.id)?.state ?? 'not_started'
+      if (!['done', 'stopped', 'removed'].includes(state)) open = false
+    }
+  }
+  return locked
+}
+
+// 'YYYY-MM-DD' plus a period. A month on from the 31st lands on the last
+// day of a shorter month rather than spilling into the next.
+export function addPeriod(day, amount, unit) {
+  const [year, month, date] = day.split('-').map(Number)
+  const result = new Date(Date.UTC(year, month - 1, date))
+  if (unit === 'months') {
+    const target = new Date(Date.UTC(year, month - 1 + amount, 1))
+    const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate()
+    target.setUTCDate(Math.min(date, lastDay))
+    return target.toISOString().slice(0, 10)
+  }
+  result.setUTCDate(result.getUTCDate() + amount * (unit === 'weeks' ? 7 : 1))
+  return result.toISOString().slice(0, 10)
+}
+
+// The viewer's own timeframe on a plan: its fixed dates, or, for a plan
+// given as a period from when each person starts (duration_amount and
+// duration_unit), from the later of the plan's start and the day they
+// joined it to that period on. A plan still being prepared hasn't started.
+//   { startsOn, targetOn, period: { amount, unit } | null }
+export function planTimeframe(plan) {
+  if (!plan.duration_amount || !plan.duration_unit) {
+    return { startsOn: plan.starts_on ?? null, targetOn: plan.target_on ?? null, period: null }
+  }
+  const period = { amount: Number(plan.duration_amount), unit: plan.duration_unit }
+  if (plan.status === 'planning') return { startsOn: null, targetOn: null, period }
+  const startsOn = [plan.starts_on, plan.my_joined_on].filter(Boolean).sort().at(-1) ?? null
+  return { startsOn, targetOn: startsOn ? addPeriod(startsOn, period.amount, period.unit) : null, period }
+}
+
 // How much of the plan's timeframe has passed, 0-100, or null without both
 // dates. Compared with percent done, it says whether the learner is on track.
 export function timeElapsedPercent(plan, today = localDateString()) {
-  if (!plan.starts_on || !plan.target_on) return null
-  const start = Date.parse(`${plan.starts_on}T00:00:00`)
-  const end = Date.parse(`${plan.target_on}T00:00:00`)
+  // The viewer's own timeframe, for a plan given as a period.
+  const { startsOn, targetOn } = planTimeframe(plan)
+  if (!startsOn || !targetOn) return null
+  const start = Date.parse(`${startsOn}T00:00:00`)
+  const end = Date.parse(`${targetOn}T00:00:00`)
   const now = Date.parse(`${today}T00:00:00`)
   if (end <= start) return now >= end ? 100 : 0
   return Math.max(0, Math.min(100, Math.round(((now - start) / (end - start)) * 100)))
@@ -117,4 +171,21 @@ export function paceOf(progress, elapsed) {
   if (gap >= 10) return 'ahead'
   if (gap <= -15) return 'behind'
   return 'on_track'
+}
+
+// "6 months", "1 week": a plan's period in words.
+export function formatPlanPeriod(period, t) {
+  return t(`plans.period.units.${period.unit}.${period.amount === 1 ? 'one' : 'other'}`, { count: period.amount })
+}
+
+// A plan's timeframe in a line, as the viewer sees it: its fixed dates, or
+// its period from when they start, with their own end date once they have.
+export function formatPlanTimeframe(plan, t, { short = false } = {}) {
+  const { startsOn, targetOn, period } = planTimeframe(plan)
+  if (period) {
+    const text = formatPlanPeriod(period, t)
+    return targetOn ? t('plans.period.yours', { period: text, date: formatFullDate(targetOn) }) : t('plans.period.summary', { period: text })
+  }
+  if (!short && startsOn && targetOn) return t('plans.timeframe', { start: formatFullDate(startsOn), end: formatFullDate(targetOn) })
+  return targetOn ? t('plans.byDate', { date: formatFullDate(targetOn) }) : t('plans.noEndDate')
 }
