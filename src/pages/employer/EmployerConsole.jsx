@@ -347,19 +347,18 @@ export default function EmployerConsole() {
             {selectedEmployer && (
               <div>
                 {/* One row on every screen size, so every item sits on the
-                    same underline: the tabs scroll sideways on a phone and
-                    Settings stays pinned at the end. The underline is an inset
+                    same underline: on a phone the whole row -- tabs and the
+                    Settings menu after them, alike -- scrolls sideways, with
+                    faded edges where more is out of view. The underline is an inset
                     shadow rather than a border so the selected tab's own
                     border can sit on top of it inside the scrolling list
                     (which would clip the usual -mb-px overlap). */}
-                <div className="flex items-end gap-x-1 mb-6 shadow-[inset_0_-1px_0_var(--color-hairline)]">
-                  <div
-                    ref={sectionTabListRef}
-                    role="tablist"
-                    aria-label="Console section"
-                    style={tabListMask ? { maskImage: tabListMask, WebkitMaskImage: tabListMask } : undefined}
-                    className="flex items-end gap-x-1 flex-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                  >
+                <div
+                  ref={sectionTabListRef}
+                  style={tabListMask ? { maskImage: tabListMask, WebkitMaskImage: tabListMask } : undefined}
+                  className="flex items-end gap-x-1 mb-6 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden shadow-[inset_0_-1px_0_var(--color-hairline)]"
+                >
+                  <div role="tablist" aria-label="Console section" className="flex items-end gap-x-1 shrink-0">
                     {tabSections.map((section, index) => {
                       if (section.providerTab) {
                         // Renders once for the whole consecutive run of
@@ -425,12 +424,6 @@ export default function EmployerConsole() {
                       )
                     })}
                   </div>
-                  {/* When the tabs overflow (on a phone), a divider separates
-                      the faded, scrolling tabs from the pinned Settings menu so
-                      the cut-off tab doesn't read as overlapping it. */}
-                  {(tabOverflow.start || tabOverflow.end) && (
-                    <span aria-hidden="true" className="self-center mb-1 h-5 w-px shrink-0 bg-hairline" />
-                  )}
                   <EmployerSettingsMenu items={settingsItems} active={!currentSectionIsTab} />
                 </div>
 
