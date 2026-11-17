@@ -9,6 +9,7 @@ import {
   newInteractiveBlock,
   normalisePageDocument,
   pageDocumentWordCount,
+  pageHasScoredTest,
   sanitiseRichText,
 } from '../lib/pageBuilder'
 import PageContent, { PageMedia } from './PageContent'
@@ -617,6 +618,7 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
           <span className="hidden text-xs text-secondary sm:inline" aria-hidden="true">
             {wordCount} word{wordCount === 1 ? '' : 's'} · ~{readingMinutes} min read
           </span>
+          {pageHasScoredTest(pageDocument) && <label className="flex items-center gap-1 text-xs text-secondary">Pass mark <input type="number" min="0" max="100" value={pageDocument.test?.passMark ?? 70} onChange={(event) => setPageDocument((current) => ({ ...current, test: { passMark: Number(event.target.value) } }))} className="w-16 rounded-md border border-hairline bg-paper px-2 py-1 text-ink" />%</label>}
           <span className="text-xs text-secondary" aria-live="polite">{saving ? 'Saving…' : 'Editing live'}</span>
           <button type="button" onClick={save} disabled={saving || !isDirty} title="Save (Ctrl+S)"
             className="rounded-md bg-moss px-4 py-2 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-60">

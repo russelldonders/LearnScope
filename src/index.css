@@ -332,6 +332,20 @@ body {
   .page-content .page-interactive__result.is-correct { color: var(--color-moss); }
   .page-content .page-interactive__result.is-wrong { color: #b5523b; }
 
+  .page-content .page-test-question { border-left: 4px solid var(--color-moss); }
+  .page-content .page-test-question__input { width: 100%; border: 1px solid var(--color-hairline); border-radius: 8px; background: var(--color-paper); padding: 0.7rem 0.8rem; color: var(--color-ink); }
+  .page-content .page-test-question__input:focus, .page-content .page-matching select:focus { outline: 2px solid var(--color-moss); outline-offset: 2px; }
+  .page-content .page-matching { display: grid; gap: 0.65rem; }
+  .page-content .page-matching label { display: grid; gap: 0.35rem; grid-template-columns: minmax(0, 1fr); align-items: center; }
+  .page-content .page-matching select { min-width: 0; border: 1px solid var(--color-hairline); border-radius: 8px; background: var(--color-paper); padding: 0.55rem 0.65rem; color: var(--color-ink); }
+  .page-content .page-test-summary { display: grid; gap: 0.25rem; border: 1px solid var(--color-hairline); border-left: 4px solid var(--color-moss); border-radius: 12px; background: color-mix(in srgb, var(--color-moss) 8%, var(--color-card)); padding: 1rem 1.15rem; }
+  .page-content .page-test-summary p { font-size: 0.8rem; color: var(--color-secondary); }
+  .page-content .page-test-summary strong { font-family: var(--font-display); font-size: 2rem; line-height: 1; }
+  .page-content .page-test-summary span { font-size: 0.85rem; color: var(--color-secondary); }
+  .page-content .page-test-summary b.is-passed { color: var(--color-moss); }
+  .page-content .page-test-summary b.is-failed { color: #b5523b; }
+  @media (min-width: 640px) { .page-content .page-matching label { grid-template-columns: minmax(0, 1fr) minmax(10rem, 0.8fr); } }
+
   .page-content .page-check__options { display: grid; gap: 0.5rem; }
   .page-content .page-check__option { display: flex; align-items: flex-start; gap: 0.65rem; border: 1px solid var(--color-hairline); border-radius: 10px; padding: 0.7rem 0.85rem; cursor: pointer; line-height: 1.5; }
   .page-content .page-check__option input { margin-top: 0.3rem; accent-color: var(--color-moss); width: 1rem; height: 1rem; flex-shrink: 0; }

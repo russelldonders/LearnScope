@@ -403,6 +403,15 @@ export async function markContentComplete(resourceId, userId) {
   if (error) throw error
 }
 
+export async function saveContentScore(resourceId, userId, score, passed) {
+  const numericScore = Math.max(0, Math.min(100, Math.round(Number(score) || 0)))
+  const { error } = await supabase.from('course_content_progress').upsert(
+    { content_item_id: resourceId, user_id: userId, status: passed ? 'passed' : 'failed', score: numericScore, updated_at: new Date().toISOString() },
+    { onConflict: 'content_item_id,user_id' }
+  )
+  if (error) throw error
+}
+
 export async function uploadVideoResource(organisationId, userId, file, title) {
   return uploadSingleFileResource(organisationId, userId, file, title, 'video')
 }

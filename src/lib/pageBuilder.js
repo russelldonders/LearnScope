@@ -18,6 +18,7 @@ export const EMPTY_PAGE_DOCUMENT = {
 //   unit     a chart's unit
 export const INTERACTIVE_BLOCKS = {
   knowledge_check: { label: 'Knowledge check', minItems: 2, maxItems: 6 },
+  test_question: { label: 'Scored question', minItems: 1, maxItems: 12 },
   flip_cards: { label: 'Flip cards', minItems: 1, maxItems: 8 },
   hotspots: { label: 'Hotspots', minItems: 2, maxItems: 8 },
   accordion: { label: 'Reveal sections', minItems: 1, maxItems: 8 },
@@ -28,6 +29,7 @@ export const INTERACTIVE_BLOCKS = {
 }
 export const BLOCK_LAYOUTS = {
   knowledge_check: ['single', 'multiple'],
+  test_question: ['single', 'multiple', 'true_false', 'short_text', 'number', 'ordering', 'matching'],
   chart: ['bar', 'line', 'pie'],
   diagram: ['flow', 'cycle', 'hub', 'comparison'],
   hotspots: ['flow', 'cycle', 'hub', 'grid'],
@@ -65,6 +67,10 @@ function normaliseInteractive(block) {
     ...(layouts ? { layout: layouts.includes(block.layout) ? block.layout : layouts[0] } : {}),
     items,
     caption: plainText(block.caption, PLAIN_TEXT_LIMITS.caption),
+    ...(block.type === 'test_question' ? {
+      points: Math.max(1, Math.min(100, Number.isFinite(Number(block.points)) ? Number(block.points) : 1)),
+      tolerance: Math.max(0, Math.min(1000000, Number.isFinite(Number(block.tolerance)) ? Number(block.tolerance) : 0)),
+    } : {}),
     ...(block.type === 'chart' ? { unit: plainText(block.unit, PLAIN_TEXT_LIMITS.unit) } : {}),
   }
 }
@@ -159,7 +165,7 @@ export function normaliseMediaUrl(value = '', type = 'image') {
 
 export function normalisePageDocument(document) {
   const blocks = Array.isArray(document?.blocks) ? document.blocks : []
-  return {
+  const normalised = {
     version: 1,
     blocks: blocks.slice(0, 100).map((block) => INTERACTIVE_BLOCKS[block.type] ? {
       id: String(block.id || crypto.randomUUID()),
@@ -182,6 +188,46 @@ export function normalisePageDocument(document) {
       } : {}),
     }),
   }
+  if (normalised.blocks.some((block) => block.type === 'test_question')) {
+    normalised.test = {
+      passMark: Math.max(0, Math.min(100, Number.isFinite(Number(document?.test?.passMark)) ? Number(document.test.passMark) : 70)),
+    }
+  }
+  return normalised
+}
+
+export function pageHasScoredTest(document) {
+  return normalisePageDocument(document).blocks.some((block) => block.type === 'test_question')
+}
+
+function sameValues(actual, expected) {
+  return actual.length === expected.length && actual.every((value, index) => value === expected[index])
+}
+
+// Pure scoring keeps the learner UI and its tests honest. A question earns
+// all of its points or none; the page-level test combines weighted results.
+export function scoreTestQuestion(block, answer) {
+  const question = normalisePageDocument({ blocks: [block] }).blocks[0]
+  if (question?.type !== 'test_question') return { earned: 0, possible: 0, correct: false }
+  const points = question.points
+  const correctIds = question.items.filter((item) => item.correct).map((item) => item.id).sort()
+  let correct = false
+  if (question.layout === 'single' || question.layout === 'multiple' || question.layout === 'true_false') {
+    const chosen = (Array.isArray(answer) ? answer : [answer]).filter(Boolean).map(String).sort()
+    correct = sameValues(chosen, correctIds)
+  } else if (question.layout === 'short_text') {
+    const accepted = question.items.map((item) => item.label.trim().toLocaleLowerCase()).filter(Boolean)
+    correct = accepted.includes(String(answer ?? '').trim().toLocaleLowerCase())
+  } else if (question.layout === 'number') {
+    const expected = Number(question.items[0]?.value)
+    const actual = Number(answer)
+    correct = Number.isFinite(actual) && Math.abs(actual - expected) <= question.tolerance
+  } else if (question.layout === 'ordering') {
+    correct = sameValues(Array.isArray(answer) ? answer.map(String) : [], question.items.map((item) => item.id))
+  } else if (question.layout === 'matching') {
+    correct = question.items.every((item) => String(answer?.[item.id] ?? '') === item.detail)
+  }
+  return { earned: correct ? points : 0, possible: points, correct }
 }
 
 // Plain-text length of every block's rich text, used for the editor's word
@@ -209,6 +255,8 @@ export function newInteractiveBlock(type) {
   switch (type) {
     case 'knowledge_check':
       return { ...base, title: 'Your question', layout: 'single', items: [item('Right answer', 'Why this is right.', { correct: true }), item('Another answer', 'Why this isn’t right.')] }
+    case 'test_question':
+      return { ...base, title: 'Your scored question', layout: 'single', points: 1, tolerance: 0, items: [item('Right answer', '', { correct: true }), item('Another answer')] }
     case 'flip_cards':
       return { ...base, items: [item('Term', 'What it means.'), item('Another term', 'What it means.')] }
     case 'hotspots':

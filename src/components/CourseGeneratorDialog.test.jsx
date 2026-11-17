@@ -74,6 +74,6 @@ describe('CourseGeneratorDialog', () => {
     await waitFor(() => expect(generateCourseDraft).toHaveBeenCalled())
     const brief = generateCourseDraft.mock.calls[0][0]
     expect(brief.elementAmount).toBe('rich')
-    expect(brief.elements).toEqual(['knowledge_check', 'hotspots', 'accordion', 'ordering', 'diagram', 'animation'])
+    expect(brief.elements).toEqual(['knowledge_check', 'test_question', 'hotspots', 'accordion', 'ordering', 'diagram', 'animation'])
   })
 })

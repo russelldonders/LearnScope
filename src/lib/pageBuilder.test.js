@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normaliseMediaUrl, normalisePageDocument, pageDocumentWordCount, sanitiseRichText } from './pageBuilder'
+import { normaliseMediaUrl, normalisePageDocument, pageDocumentWordCount, sanitiseRichText, scoreTestQuestion } from './pageBuilder'
 
 describe('page builder content', () => {
   it('keeps supported formatting and removes executable markup', () => {
@@ -78,5 +78,17 @@ describe('page builder content', () => {
       ],
     })
     expect(count).toBe(3 + 4 + 5)
+  })
+
+  it('normalises scored questions and marks the supported answer shapes', () => {
+    const question = normalisePageDocument({ test: { passMark: 75 }, blocks: [{
+      id: 'q', type: 'test_question', title: 'Select both', layout: 'multiple', points: 4,
+      items: [{ id: 'a', label: 'A', correct: true }, { id: 'b', label: 'B', correct: false }, { id: 'c', label: 'C', correct: true }],
+    }] })
+    expect(question.test.passMark).toBe(75)
+    expect(scoreTestQuestion(question.blocks[0], ['c', 'a'])).toEqual({ earned: 4, possible: 4, correct: true })
+    expect(scoreTestQuestion(question.blocks[0], ['a'])).toEqual({ earned: 0, possible: 4, correct: false })
+    expect(scoreTestQuestion({ id: 'n', type: 'test_question', title: 'Number', layout: 'number', points: 2, tolerance: 0.5, items: [{ id: 'value', label: '', value: 10 }] }, '10.4').correct).toBe(true)
+    expect(scoreTestQuestion({ id: 'm', type: 'test_question', title: 'Match', layout: 'matching', points: 3, items: [{ id: 'x', label: 'X', detail: 'One' }] }, { x: 'One' }).earned).toBe(3)
   })
 })

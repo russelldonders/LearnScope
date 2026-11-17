@@ -149,3 +149,18 @@ describe('normalisePageDocument for interactive blocks', () => {
     expect(page.blocks[1]).toMatchObject({ layout: 'bar', unit: 'hrs', items: [{ label: 'A', value: 3 }] })
   })
 })
+
+it('marks scored questions and reports an aggregate page test percentage', () => {
+  const onScore = vi.fn()
+  render(<PageContent onScore={onScore} document={{ version: 1, test: { passMark: 60 }, blocks: [
+    { id: 'q1', type: 'test_question', title: 'Pick B', layout: 'single', points: 2, items: [item('a', 'A'), item('b', 'B', '', { correct: true })] },
+    { id: 'q2', type: 'test_question', title: 'Type blue', layout: 'short_text', points: 3, items: [item('blue', 'Blue', '', { correct: true })] },
+  ] }} />)
+  fireEvent.click(screen.getByRole('radio', { name: 'B' }))
+  fireEvent.click(screen.getAllByRole('button', { name: 'Mark question' })[0])
+  fireEvent.change(screen.getByRole('textbox', { name: 'Your answer' }), { target: { value: 'blue' } })
+  fireEvent.click(screen.getAllByRole('button', { name: 'Mark question' })[0])
+  expect(screen.getByText('100%')).toBeInTheDocument()
+  expect(screen.getByText('Passed')).toBeInTheDocument()
+  expect(onScore).toHaveBeenCalledWith({ score: 100, passed: true })
+})

@@ -8,6 +8,7 @@ import {
   listCourseResources,
   listContentProgress,
   markContentComplete,
+  saveContentScore,
   contentFileUrl,
 } from '../lib/courseContent'
 import {
@@ -28,6 +29,7 @@ import BackLink from '../components/BackLink'
 import ProgressBar from '../components/ProgressBar'
 import CourseModal from '../components/CourseModal'
 import PageContent from '../components/PageContent'
+import { pageHasScoredTest } from '../lib/pageBuilder'
 import Chevron from '../components/Chevron'
 import { useLanguage } from '../context/LanguageContext'
 
@@ -75,6 +77,7 @@ export function CourseItemPlayer({
 }) {
   const { t } = useLanguage()
   const isPageCourse = pageCount > 0
+  const isScoredPage = item.type === 'page' && pageHasScoredTest(item.page_content)
   return (
     <>
       {(item.type === 'video' || item.type === 'screen_recording') && (
@@ -132,7 +135,7 @@ export function CourseItemPlayer({
         </a>
       )}
 
-      {item.type === 'page' && <PageContent document={item.page_content} />}
+      {item.type === 'page' && <PageContent document={item.page_content} onScore={async ({ score, passed }) => { await saveContentScore(item.id, userId, score, passed); await onProgress() }} />}
 
       {isPageCourse && (
         <p className="mt-6 text-center font-mono text-xs text-secondary">
@@ -151,7 +154,7 @@ export function CourseItemPlayer({
         ) : (
           <span />
         )}
-        {item.type !== 'scorm' && (
+        {item.type !== 'scorm' && (!isScoredPage || isComplete) && (
           <button
             type="button"
             onClick={onMarkComplete}
@@ -166,6 +169,7 @@ export function CourseItemPlayer({
                 : hasNext ? t('courseLearn.markCompleteContinue') : t('courseLearn.markComplete')}
           </button>
         )}
+        {isScoredPage && !isComplete && <p className="text-sm text-secondary">Pass the test above to complete this page.</p>}
       </div>
 
       {progress === 100 && (

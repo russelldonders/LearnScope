@@ -12,6 +12,7 @@ const TEXT_BLOCK_TYPES = ['heading', 'text', 'callout', 'quote', 'columns', 'div
 // writes their text and numbers, never markup or graphics.
 const INTERACTIVE_RULES = {
   knowledge_check: { min: 2, max: 6, layouts: ['single', 'multiple'] },
+  test_question: { min: 1, max: 12, layouts: ['single', 'multiple', 'true_false', 'short_text', 'number', 'ordering', 'matching'] },
   flip_cards: { min: 1, max: 8 },
   hotspots: { min: 2, max: 8, layouts: ['flow', 'cycle', 'hub', 'grid'] },
   accordion: { min: 1, max: 8 },
@@ -28,6 +29,7 @@ export const ELEMENT_AMOUNTS = ['light', 'balanced', 'rich']
 
 const ELEMENT_GUIDANCE = {
   knowledge_check: '- knowledge_check: a formative question. content = the question; layout "single" (exactly one item with correct true) or "multiple" (two or more correct); 3 to 5 items, each a plausible answer, with detail = feedback explaining why it is right or wrong. At least one answer must be wrong.',
+  test_question: '- test_question: a summative, scored question. points is the available score. Use layout "single", "multiple", "true_false", "short_text", "number", "ordering" or "matching". For choices, mark correct items. For short_text, item labels are accepted answers. For number, the first item value is the answer and tolerance is accepted variation. For ordering, list items in the right order. For matching, each item label is a prompt and detail is its correct match. secondaryContent is post-marking feedback.',
   flip_cards: '- flip_cards: key terms or prompts to recall. Each item: label = the term or prompt (short), detail = its explanation. 3 to 6 cards. content = an optional heading.',
   hotspots: '- hotspots: the parts of a system or model. layout "hub" (item 1 is the centre), "flow", "cycle" or "grid"; each item: label = the part, detail = what learners discover when they select it. 3 to 6 items.',
   accordion: '- accordion: optional depth a learner can open. Each item: label = section heading, detail = its content. 2 to 5 items.',
@@ -78,6 +80,8 @@ function blockSchema(types) {
     align: { type: 'string', enum: TEXT_ALIGNMENTS },
     layout: { type: 'string', enum: LAYOUTS },
     unit: { type: 'string' },
+    points: { type: 'number' },
+    tolerance: { type: 'number' },
     items: {
       type: 'array',
       items: {
@@ -93,7 +97,7 @@ function blockSchema(types) {
       },
     },
   },
-  required: ['type', 'content', 'secondaryContent', 'level', 'variant', 'align', 'layout', 'unit', 'items'],
+  required: ['type', 'content', 'secondaryContent', 'level', 'variant', 'align', 'layout', 'unit', 'points', 'tolerance', 'items'],
   additionalProperties: false,
   }
 }
@@ -209,9 +213,9 @@ Write a concise course title and synopsis. Organise the material so concepts bui
 
 ${elementInstructions(elements, elementAmount)}
 
-For interactive and visual blocks, content holds the title or question and every item is plain text. For blocks that don't use a field, use an empty string, level 2, variant "info", align "left", layout "none", unit "" and an empty items list. For an item field that doesn't apply, use an empty string, value 0 and correct false.
+For interactive and visual blocks, content holds the title or question and every item is plain text. For blocks that don't use a field, use an empty string, level 2, variant "info", align "left", layout "none", unit "", points 1, tolerance 0 and an empty items list. For an item field that doesn't apply, use an empty string, value 0 and correct false.
 
-All block content must be plain text, not HTML or Markdown. Do not create images, videos, links, citations, summative assessments or claims about certification. Return exactly the requested number of sections and pages.`,
+All block content must be plain text, not HTML or Markdown. Do not create images, videos, links, citations or claims about certification. Return exactly the requested number of sections and pages.`,
   }
 }
 
@@ -233,7 +237,7 @@ function normalizeInteractiveBlock(block) {
       value: Number.isFinite(Number(item?.value)) ? Number(item.value) : 0,
       correct: item?.correct === true,
     }))
-    .filter((item) => item.label)
+    .filter((item) => item.label || (block.type === 'test_question' && block.layout === 'number'))
     .slice(0, rule.max)
   if (items.length < rule.min) return null
   let layout = rule.layouts?.includes(block.layout) ? block.layout : rule.layouts?.[0]
@@ -241,6 +245,14 @@ function normalizeInteractiveBlock(block) {
     const correctCount = items.filter((item) => item.correct).length
     if (correctCount === 0 || correctCount === items.length) return null
     layout = correctCount > 1 ? 'multiple' : 'single'
+  }
+  if (block.type === 'test_question') {
+    if (['single', 'multiple', 'true_false'].includes(layout)) {
+      const correctCount = items.filter((item) => item.correct).length
+      if (correctCount === 0 || correctCount === items.length) return null
+    }
+    if (layout === 'short_text' && !items.some((item) => item.label)) return null
+    if (layout === 'matching' && items.some((item) => !item.detail)) return null
   }
   if (block.type === 'chart') {
     items = items.filter((item) => item.value >= 0 || block.layout !== 'pie')
@@ -253,6 +265,10 @@ function normalizeInteractiveBlock(block) {
     ...(layout ? { layout } : {}),
     items,
     caption: plain(block.secondaryContent, 500),
+    ...(block.type === 'test_question' ? {
+      points: Math.max(1, Math.min(100, Number(block.points) || 1)),
+      tolerance: Math.max(0, Math.min(1000000, Number(block.tolerance) || 0)),
+    } : {}),
     ...(block.type === 'chart' ? { unit: plain(block.unit, 30) } : {}),
   }
 }

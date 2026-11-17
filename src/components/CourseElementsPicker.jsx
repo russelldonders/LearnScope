@@ -10,6 +10,7 @@ const COURSE_ELEMENTS = Object.keys(INTERACTIVE_BLOCKS)
 
 const ELEMENT_HINTS = {
   knowledge_check: 'Practice questions with feedback',
+  test_question: 'Auto-marked questions with points',
   flip_cards: 'Terms to recall',
   hotspots: 'Explore the parts of a model',
   accordion: 'Optional depth to open',

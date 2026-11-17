@@ -7,12 +7,14 @@ import { BLOCK_LAYOUTS, INTERACTIVE_BLOCKS } from '../lib/pageBuilder'
 
 const LAYOUT_LABELS = {
   single: 'One right answer', multiple: 'Several right answers',
+  true_false: 'True or false', short_text: 'Short answer', number: 'Number', ordering: 'Ordering', matching: 'Matching',
   bar: 'Bar', line: 'Line', pie: 'Pie',
   flow: 'Flow', cycle: 'Cycle', hub: 'Hub and spokes', comparison: 'Side by side', grid: 'Grid', build: 'Build up',
 }
 
 const FIELDS = {
   knowledge_check: { title: 'Question', label: 'Answer', detail: 'Feedback for this answer', correct: true, hint: 'Tick every right answer. Learners see the feedback for what they chose.' },
+  test_question: { title: 'Question', label: 'Answer', detail: 'Match', correct: true, caption: 'Feedback shown after marking (optional)', hint: 'This question contributes to the page test score.' },
   flip_cards: { title: 'Heading (optional)', label: 'Front', detail: 'Back', hint: 'A term or prompt on the front, the explanation on the back.' },
   hotspots: { title: 'Heading', label: 'Point', detail: 'What it reveals', hint: 'Each point is numbered on the diagram; selecting it reveals its text.' },
   accordion: { title: 'Heading (optional)', label: 'Section heading', detail: 'Section content', hint: 'Learners open each section to read it.' },
@@ -34,6 +36,12 @@ export default function PageInteractiveEditor({ block, onChange, onChangeWithHis
   const layouts = BLOCK_LAYOUTS[block.type]
   const idPrefix = useId()
   const items = block.items ?? []
+  const scored = block.type === 'test_question'
+  const choice = scored && ['single', 'multiple', 'true_false'].includes(block.layout)
+  const ordering = scored && block.layout === 'ordering'
+  const matching = scored && block.layout === 'matching'
+  const shortText = scored && block.layout === 'short_text'
+  const number = scored && block.layout === 'number'
 
   function updateItem(id, changes) {
     onChange({ items: items.map((item) => item.id === id ? { ...item, ...changes } : item) })
@@ -44,6 +52,19 @@ export default function PageInteractiveEditor({ block, onChange, onChangeWithHis
     if (target < 0 || target >= next.length) return
     ;[next[index], next[target]] = [next[target], next[index]]
     onChangeWithHistory({ items: next })
+  }
+
+  function changeLayout(layout) {
+    if (!scored) return onChangeWithHistory({ layout })
+    let nextItems = items
+    if (layout === 'true_false') nextItems = [
+      { id: crypto.randomUUID(), label: 'True', detail: '', value: 0, correct: true },
+      { id: crypto.randomUUID(), label: 'False', detail: '', value: 0, correct: false },
+    ]
+    else if (layout === 'number') nextItems = [{ id: crypto.randomUUID(), label: 'Correct number', detail: '', value: 0, correct: true }]
+    else if (layout === 'short_text') nextItems = [{ id: crypto.randomUUID(), label: '', detail: '', value: 0, correct: true }]
+    else if (nextItems.length < 2 && ['single', 'multiple', 'ordering', 'matching'].includes(layout)) nextItems = [newItem(), newItem()]
+    onChangeWithHistory({ layout, items: nextItems })
   }
 
   return (
@@ -59,11 +80,20 @@ export default function PageInteractiveEditor({ block, onChange, onChangeWithHis
             <span className="mb-1 block text-xs text-secondary">Layout</span>
             <div className="page-block-options">
               {layouts.map((layout) => (
-                <button key={layout} type="button" aria-pressed={block.layout === layout} className={block.layout === layout ? 'is-selected' : ''} onClick={() => onChangeWithHistory({ layout })}>
+                <button key={layout} type="button" aria-pressed={block.layout === layout} className={block.layout === layout ? 'is-selected' : ''} onClick={() => changeLayout(layout)}>
                   {LAYOUT_LABELS[layout]}
                 </button>
               ))}
             </div>
+          </div>
+        )}
+        {scored && (
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-xs text-secondary">Points</span>
+              <input type="number" min="1" max="100" value={block.points ?? 1} onChange={(event) => onChange({ points: Number(event.target.value) })} className={inputClass} />
+            </label>
+            {number && <label className="block"><span className="mb-1 block text-xs text-secondary">Accepted tolerance</span><input type="number" min="0" value={block.tolerance ?? 0} onChange={(event) => onChange({ tolerance: Number(event.target.value) })} className={inputClass} /></label>}
           </div>
         )}
         {fields.unit && (
@@ -82,15 +112,16 @@ export default function PageInteractiveEditor({ block, onChange, onChangeWithHis
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <input
                     aria-label={`${fields.label} ${index + 1}`}
-                    placeholder={fields.label}
-                    value={item.label}
-                    onChange={(event) => updateItem(item.id, { label: event.target.value })}
+                    placeholder={number ? 'Correct number' : matching ? 'Prompt' : shortText ? 'Accepted answer' : fields.label}
+                    value={number ? item.value : item.label}
+                    type={number ? 'number' : 'text'}
+                    onChange={(event) => number ? updateItem(item.id, { value: Number(event.target.value) }) : updateItem(item.id, { label: event.target.value })}
                     className={inputClass}
                   />
-                  {fields.detail && (
+                  {fields.detail && (!scored || matching) && (
                     <textarea
                       aria-label={`${fields.detail} ${index + 1}`}
-                      placeholder={fields.detail}
+                      placeholder={matching ? 'Correct match' : fields.detail}
                       value={item.detail}
                       rows={2}
                       onChange={(event) => updateItem(item.id, { detail: event.target.value })}
@@ -107,10 +138,10 @@ export default function PageInteractiveEditor({ block, onChange, onChangeWithHis
                       className={`${inputClass} max-w-[10rem]`}
                     />
                   )}
-                  {fields.correct && (
+                  {fields.correct && (!scored || choice) && (
                     <label className="flex items-center gap-2 text-xs text-ink">
                       <input type="checkbox" checked={item.correct} onChange={(event) => onChangeWithHistory({ items: items.map((other) => other.id === item.id ? { ...other, correct: event.target.checked } : (block.layout === 'single' && event.target.checked ? { ...other, correct: false } : other)) })} className="accent-moss" />
-                      Right answer
+                      {block.layout === 'true_false' ? 'Correct choice' : 'Right answer'}
                     </label>
                   )}
                 </div>
@@ -123,9 +154,9 @@ export default function PageInteractiveEditor({ block, onChange, onChangeWithHis
             </li>
           ))}
         </ol>
-        {items.length < spec.maxItems && (
+        {items.length < spec.maxItems && block.layout !== 'true_false' && !number && (
           <button type="button" onClick={() => onChangeWithHistory({ items: [...items, newItem()] })} className="text-xs font-medium text-moss hover:underline">
-            + Add {fields.label.toLowerCase()}
+            + Add {shortText ? 'accepted answer' : matching ? 'pair' : ordering ? 'item' : fields.label.toLowerCase()}
           </button>
         )}
         {items.length < spec.minItems && (

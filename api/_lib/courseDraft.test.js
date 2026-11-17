@@ -113,7 +113,7 @@ describe('interactive and visual blocks from the AI', () => {
 
   it('lets the AI use every interactive and visual block', () => {
     const types = COURSE_DRAFT_SCHEMA.properties.sections.items.properties.pages.items.properties.blocks.items.properties.type.enum
-    expect(types).toEqual(expect.arrayContaining(['knowledge_check', 'flip_cards', 'hotspots', 'accordion', 'ordering', 'chart', 'diagram', 'animation']))
+    expect(types).toEqual(expect.arrayContaining(['knowledge_check', 'test_question', 'flip_cards', 'hotspots', 'accordion', 'ordering', 'chart', 'diagram', 'animation']))
     expect(buildCourseDraftRequest({ topic: 'Coaching', audience: 'Leads', outcomes: 'Coach' }).prompt).toMatch(/Every section must include at least one knowledge_check/)
   })
 
