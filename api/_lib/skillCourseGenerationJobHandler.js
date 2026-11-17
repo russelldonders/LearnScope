@@ -75,6 +75,21 @@ function unusableCourse(message) {
   return Object.assign(new Error(message), { userMessage: message })
 }
 
+const MAX_ASSESSMENT_GENERATION_ATTEMPTS = 3
+
+export function isRepairableAssessmentProblem(problem) {
+  return /scored questions|scored question type|outside the final test section|required Final test section/i.test(problem ?? '')
+}
+
+export function assessmentRepairPrompt(originalPrompt, problem, assessment) {
+  return `${originalPrompt}
+
+<assessment_correction>
+Your previous course was rejected: ${problem}
+Regenerate the entire course. The final section must be named "Final test", contain one page, and contain exactly ${assessment.questionCount} test_question blocks. Use only these layouts: ${assessment.questionTypes.join(', ')}. Check the number of test_question blocks before returning the JSON. Do not shorten or omit the learning sections.
+</assessment_correction>`
+}
+
 async function runGenerationJob({ jobId, request, userId, organisationId }) {
   const admin = supabaseAdmin()
   const { data: claimed, error: claimError } = await admin
@@ -88,25 +103,33 @@ async function runGenerationJob({ jobId, request, userId, organisationId }) {
   if (!claimed) return
 
   try {
-    const response = await createTrackedMessage({
-      feature: 'skill_level_course_generation',
-      userId,
-      organisationId,
-      params: {
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: request.maxTokens,
-        output_config: { format: { type: 'json_schema', schema: request.schema } },
-        messages: [{ role: 'user', content: request.prompt }],
-      },
-    })
-    if (response.stop_reason === 'refusal') throw Object.assign(new Error('AI refusal'), { status: 422 })
-    if (response.stop_reason === 'max_tokens') {
-      throw unusableCourse('The course was too long to write in one go. Try again with fewer sections or pages.')
+    let draft = null
+    let problem = null
+    let prompt = request.prompt
+    for (let attempt = 1; attempt <= MAX_ASSESSMENT_GENERATION_ATTEMPTS; attempt += 1) {
+      const response = await createTrackedMessage({
+        feature: 'skill_level_course_generation',
+        userId,
+        organisationId,
+        params: {
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: request.maxTokens,
+          output_config: { format: { type: 'json_schema', schema: request.schema } },
+          messages: [{ role: 'user', content: prompt }],
+        },
+      })
+      if (response.stop_reason === 'refusal') throw Object.assign(new Error('AI refusal'), { status: 422 })
+      if (response.stop_reason === 'max_tokens') {
+        throw unusableCourse('The course was too long to write in one go. Try again with fewer sections or pages.')
+      }
+      const textBlock = response.content.find((block) => block.type === 'text')
+      if (!textBlock) throw unusableCourse('The AI’s reply had no course in it. Try again.')
+      ;({ draft, problem } = checkGeneratedCourseDraft(JSON.parse(textBlock.text), request.values))
+      if (draft) break
+      if (!request.values.assessment || !isRepairableAssessmentProblem(problem) || attempt === MAX_ASSESSMENT_GENERATION_ATTEMPTS) break
+      prompt = assessmentRepairPrompt(request.prompt, problem, request.values.assessment)
     }
-    const textBlock = response.content.find((block) => block.type === 'text')
-    if (!textBlock) throw unusableCourse('The AI’s reply had no course in it. Try again.')
-    const { draft, problem } = checkGeneratedCourseDraft(JSON.parse(textBlock.text), request.values)
-    if (!draft) throw unusableCourse(`${problem} The course wasn’t saved. Try again.`)
+    if (!draft) throw unusableCourse(`${problem} The course wasn’t saved after automatic correction attempts. Try again.`)
 
     // A cancellation update and this completion update race safely: only a
     // job still marked running may receive and expose the generated draft.

@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   waitUntil: vi.fn(),
   rpc: vi.fn(),
   insertUsage: vi.fn(),
+  claimJob: false,
 }))
 
 vi.mock('@vercel/functions', () => ({ waitUntil: mocks.waitUntil }))
@@ -20,10 +21,11 @@ vi.mock('@anthropic-ai/sdk', () => ({
 
 function builder(table) {
   let operation = 'select'
+  let wasUpdated = false
   return {
     select() { operation = 'select'; return this },
     insert() { operation = 'insert'; return this },
-    update() { operation = 'update'; return this },
+    update() { operation = 'update'; wasUpdated = true; return this },
     delete() { operation = 'delete'; return this },
     eq() { return this },
     in() { return this },
@@ -32,7 +34,7 @@ function builder(table) {
     maybeSingle() {
       if (table === 'organisations') return Promise.resolve({ data: { id: '79000000-0000-4000-8000-000000000010' }, error: null })
       if (table === 'skill_library') return Promise.resolve({ data: { id: '79000000-0000-4000-8000-000000000020' }, error: null })
-      if (table === 'skill_course_generation_jobs' && operation === 'update') return Promise.resolve({ data: { id: '79000000-0000-4000-8000-000000000030' }, error: null })
+      if (table === 'skill_course_generation_jobs' && wasUpdated && mocks.claimJob) return Promise.resolve({ data: { id: '79000000-0000-4000-8000-000000000030' }, error: null })
       return Promise.resolve({ data: null, error: null })
     },
     single() {
@@ -54,7 +56,8 @@ vi.mock('./supabaseAdmin.js', () => ({
   }),
 }))
 
-import skillCourseGenerationJobHandler, { failStalledJobs, generationErrorMessage } from './skillCourseGenerationJobHandler.js'
+import { buildCourseDraftRequest } from './courseDraft.js'
+import skillCourseGenerationJobHandler, { failStalledJobs, generationErrorMessage, runGenerationJob } from './skillCourseGenerationJobHandler.js'
 
 function response() {
   return {
@@ -76,6 +79,7 @@ describe('skillCourseGenerationJobHandler', () => {
     mocks.waitUntil.mockReset()
     mocks.createMessage.mockReset().mockReturnValue(new Promise(() => {}))
     mocks.insertUsage.mockReset().mockResolvedValue({ error: null })
+    mocks.claimJob = false
   })
 
   afterEach(() => {
@@ -150,5 +154,47 @@ describe('generationErrorMessage', () => {
     expect(generationErrorMessage({ status: 500 })).toBe('The AI service had an error. Try again.')
     expect(generationErrorMessage(new SyntaxError('Unexpected end of JSON'))).toBe('The AI’s reply couldn’t be read as a course. Try again.')
     expect(generationErrorMessage({ status: 429 })).toMatch(/busy/)
+  })
+})
+
+describe('assessment correction', () => {
+  function generatedCourse(questionCount) {
+    const question = (index) => ({
+      type: 'test_question', content: `Question ${index + 1}?`, secondaryContent: 'Review the course material.',
+      level: 2, variant: 'info', align: 'left', layout: 'single', unit: '', points: 1, tolerance: 0,
+      items: [
+        { label: 'Correct', detail: '', value: 0, correct: true },
+        { label: 'Incorrect', detail: '', value: 0, correct: false },
+      ],
+    })
+    return {
+      name: 'Coaching', synopsis: 'Learn coaching.',
+      sections: [
+        { title: 'Learning', instructions: '', pages: [{ title: 'Introduction', blocks: [{ type: 'text', content: 'Learn the essentials.', secondaryContent: '', level: 2, variant: 'info', align: 'left', layout: 'none', unit: '', points: 1, tolerance: 0, items: [] }] }] },
+        { title: 'Final test', instructions: '', pages: [{ title: 'Final test', blocks: Array.from({ length: questionCount }, (_, index) => question(index)) }] },
+      ],
+    }
+  }
+
+  it('automatically regenerates a course when the test has too few questions', async () => {
+    mocks.claimJob = true
+    const request = buildCourseDraftRequest({
+      topic: 'Coaching', audience: 'New coaches', outcomes: 'Understand coaching',
+      sectionCount: 2, pagesPerSection: 1, elements: ['knowledge_check'],
+      assessmentEnabled: true, assessmentQuestionCount: 10, assessmentPassMark: 70,
+      assessmentPointsPerQuestion: 1, assessmentQuestionTypes: ['single'],
+    })
+    mocks.createMessage
+      .mockResolvedValueOnce({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(generatedCourse(6)) }], usage: {} })
+      .mockResolvedValueOnce({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(generatedCourse(10)) }], usage: {} })
+
+    await runGenerationJob({
+      jobId: '79000000-0000-4000-8000-000000000030', request,
+      userId: '79000000-0000-4000-8000-000000000001', organisationId: '79000000-0000-4000-8000-000000000010',
+    })
+
+    expect(mocks.createMessage).toHaveBeenCalledTimes(2)
+    expect(mocks.createMessage.mock.calls[1][0].messages[0].content).toContain('previous course was rejected')
+    expect(mocks.createMessage.mock.calls[1][0].messages[0].content).toContain('exactly 10 test_question blocks')
   })
 })
