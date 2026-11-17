@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import useAnchoredMenuPosition from '../../lib/useAnchoredMenuPosition'
 
 // Text "Settings" dropdown in the organisation workspace's section bar,
 // styled like the "Learning content" section menu, replacing the former cog
@@ -14,6 +15,14 @@ export default function EmployerSettingsMenu({ items, active = false }) {
   const containerRef = useRef(null)
   const buttonRef = useRef(null)
   const itemRefs = useRef([])
+  const menuRef = useRef(null)
+  const menuStyle = useAnchoredMenuPosition({
+    open,
+    buttonRef,
+    menuRef,
+    align: 'right',
+    onClose: () => setOpen(false),
+  })
 
   useEffect(() => {
     if (!open) return undefined
@@ -59,7 +68,7 @@ export default function EmployerSettingsMenu({ items, active = false }) {
   const itemClass = 'block w-full px-4 py-2.5 text-left hover:bg-paper focus:bg-paper focus:outline-none'
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div className="relative shrink-0" ref={containerRef}>
       <button
         type="button"
         ref={buttonRef}
@@ -72,7 +81,7 @@ export default function EmployerSettingsMenu({ items, active = false }) {
             setOpen(true)
           }
         }}
-        className={`flex items-center gap-1 text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
+        className={`flex items-center gap-1 text-sm px-3 py-2 border-b-2 whitespace-nowrap ${
           active ? 'border-moss text-ink font-medium' : 'border-transparent text-secondary hover:text-ink'
         }`}
       >
@@ -83,10 +92,12 @@ export default function EmployerSettingsMenu({ items, active = false }) {
       </button>
       {open && (
         <div
+          ref={menuRef}
           role="menu"
           aria-label="Settings"
           onKeyDown={handleMenuKeyDown}
-          className="absolute right-0 z-20 mt-1 w-72 max-w-[calc(100vw-2rem)] bg-card border border-hairline rounded-md shadow-lg py-1"
+          style={menuStyle}
+          className="z-40 w-72 bg-card border border-hairline rounded-md shadow-lg py-1"
         >
           {items.map((item, index) => {
             const content = (

@@ -9,6 +9,7 @@ import ProviderLtiToolsSection from '../../components/ProviderLtiToolsSection'
 import { ProviderTrainingSection, ProviderCataloguesSection } from '../provider/ProviderConsole'
 import EmployerMemberFieldsDialog from './EmployerMemberFieldsDialog'
 import EmployerSettingsMenu from './EmployerSettingsMenu'
+import useAnchoredMenuPosition from '../../lib/useAnchoredMenuPosition'
 import { listOrganisations } from '../../lib/admin/organisations'
 import { handleTabListKeyDown } from '../../lib/tabsKeyboard'
 import MutationFeedback from '../../components/MutationFeedback'
@@ -248,6 +249,33 @@ export default function EmployerConsole() {
   // On a section opened from Settings (no tab of its own), Overview keeps the
   // tablist's single Tab stop so keyboard users can still reach the tabs.
   const rovingActiveKey = activeSectionIsProvider ? 'provider-group' : currentSectionIsTab ? currentSection : 'overview'
+  // Keeps the selected tab visible in the sideways-scrolling tab bar.
+  useEffect(() => {
+    sectionTabRefs.current[rovingActiveKey]?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+  }, [rovingActiveKey])
+  // Which ends of the tab bar have more tabs scrolled out of view, so each can
+  // fade out rather than cutting a tab off mid-word.
+  const sectionTabListRef = useRef(null)
+  const [tabOverflow, setTabOverflow] = useState({ start: false, end: false })
+  useEffect(() => {
+    const list = sectionTabListRef.current
+    if (!list) return undefined
+    function update() {
+      const start = list.scrollLeft > 1
+      const end = list.scrollLeft + list.clientWidth < list.scrollWidth - 1
+      setTabOverflow((current) => (current.start === start && current.end === end ? current : { start, end }))
+    }
+    update()
+    list.addEventListener('scroll', update, { passive: true })
+    window.addEventListener('resize', update)
+    return () => {
+      list.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
+    }
+  })
+  const tabListMask = tabOverflow.start || tabOverflow.end
+    ? `linear-gradient(to right, ${tabOverflow.start ? 'transparent, black 1.5rem' : 'black'}, ${tabOverflow.end ? 'black calc(100% - 1.5rem), transparent' : 'black'})`
+    : undefined
   // Arrow-key navigation onto the dropdown trigger activates whichever
   // provider sub-section is already open, or the first one otherwise --
   // it doesn't itself open the menu (that still needs a click/Enter).
@@ -318,8 +346,20 @@ export default function EmployerConsole() {
 
             {selectedEmployer && (
               <div>
-                <div className="flex items-center justify-between flex-wrap gap-x-1 gap-y-2 mb-6 border-b border-hairline">
-                  <div role="tablist" aria-label="Console section" className="flex items-center flex-wrap gap-x-1 gap-y-2">
+                {/* One row on every screen size, so every item sits on the
+                    same underline: the tabs scroll sideways on a phone and
+                    Settings stays pinned at the end. The underline is an inset
+                    shadow rather than a border so the selected tab's own
+                    border can sit on top of it inside the scrolling list
+                    (which would clip the usual -mb-px overlap). */}
+                <div className="flex items-end gap-x-1 mb-6 shadow-[inset_0_-1px_0_var(--color-hairline)]">
+                  <div
+                    ref={sectionTabListRef}
+                    role="tablist"
+                    aria-label="Console section"
+                    style={tabListMask ? { maskImage: tabListMask, WebkitMaskImage: tabListMask } : undefined}
+                    className="flex items-end gap-x-1 flex-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  >
                     {tabSections.map((section, index) => {
                       if (section.providerTab) {
                         // Renders once for the whole consecutive run of
@@ -374,7 +414,7 @@ export default function EmployerConsole() {
                               onChange: handleSectionRovingChange,
                             })
                           }
-                          className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
+                          className={`shrink-0 text-sm px-3 py-2 border-b-2 whitespace-nowrap ${
                             currentSection === section.key
                               ? 'border-moss text-ink font-medium'
                               : 'border-transparent text-secondary hover:text-ink'
@@ -544,6 +584,15 @@ export default function EmployerConsole() {
 // selecting a section, which only happens by choosing one of its menu items.
 function ProviderSectionMenu({ items, currentSection, isActive, buttonRef, hrefFor, onKeyDown }) {
   const [open, setOpen] = useState(false)
+  const localButtonRef = useRef(null)
+  const menuRef = useRef(null)
+  const menuStyle = useAnchoredMenuPosition({
+    open,
+    buttonRef: localButtonRef,
+    menuRef,
+    align: 'left',
+    onClose: () => setOpen(false),
+  })
   const containerRef = useRef(null)
 
   useEffect(() => {
@@ -565,10 +614,13 @@ function ProviderSectionMenu({ items, currentSection, isActive, buttonRef, hrefF
   const activeItem = items.find((item) => item.key === currentSection)
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div className="relative shrink-0" ref={containerRef}>
       <button
         type="button"
-        ref={buttonRef}
+        ref={(el) => {
+          localButtonRef.current = el
+          buttonRef?.(el)
+        }}
         id="employer-section-tab-provider-group"
         role="tab"
         aria-selected={isActive}
@@ -578,7 +630,7 @@ function ProviderSectionMenu({ items, currentSection, isActive, buttonRef, hrefF
         tabIndex={isActive ? 0 : -1}
         onClick={() => setOpen((v) => !v)}
         onKeyDown={onKeyDown}
-        className={`flex items-center gap-1 text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
+        className={`flex items-center gap-1 text-sm px-3 py-2 border-b-2 whitespace-nowrap ${
           isActive ? 'border-moss text-ink font-medium' : 'border-transparent text-secondary hover:text-ink'
         }`}
       >
@@ -588,7 +640,7 @@ function ProviderSectionMenu({ items, currentSection, isActive, buttonRef, hrefF
         </svg>
       </button>
       {open && (
-        <div role="menu" aria-label="Learning content" className="absolute z-10 mt-1 min-w-[10rem] bg-card border border-hairline rounded-md shadow-lg py-1">
+        <div ref={menuRef} role="menu" aria-label="Learning content" style={menuStyle} className="z-40 min-w-[10rem] bg-card border border-hairline rounded-md shadow-lg py-1">
           {items.map((item) => (
             <Link
               key={item.key}
