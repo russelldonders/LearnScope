@@ -215,7 +215,7 @@ Required structure: ${assessment ? `exactly ${sectionCount} sections. The first 
 ${sourceMaterial || 'No source material was supplied. Use stable, broadly accepted knowledge and avoid unsupported claims.'}
 </source_material>
 
-Write a concise course title and synopsis. Organise the material so concepts build progressively and every stated learning outcome is covered. Each page must stand on its own in a visual page builder and contain 4 to 8 blocks. Use:
+Write a concise course title and synopsis. Organise the material so concepts build progressively and every stated learning outcome is covered. Each ${assessment ? 'learning page' : 'page'} must stand on its own in a visual page builder and contain 4 to 8 blocks.${assessment ? ' The final test page is exempt from this block limit and must use the exact question count below.' : ''} Use:
 - heading for the page title and useful subheadings
 - text for explanations and worked examples
 - callout for important tips, cautions, checks or takeaways
