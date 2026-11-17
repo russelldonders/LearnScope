@@ -15,6 +15,7 @@ const FEATURE_LABELS = {
   interview_plan: 'Interview preparation',
   interview_turn: 'Interview turns',
   level_guide_generation: 'Level guidance',
+  role_profile_skill_suggestions: 'Role profile skill suggestions',
   skill_validation: 'Skill validation',
   tag_suggestions: 'Tag suggestions',
 }

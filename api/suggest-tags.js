@@ -3,6 +3,10 @@ import { consumeQuota, sendQuotaExceeded } from './_lib/quota.js'
 import { buildGoalDraftRequest, normalizeGoalDraft } from './_lib/skillGoalDraft.js'
 import { buildActivityDraftRequest, normalizeActivityDraft } from './_lib/activityDraft.js'
 import { createTrackedMessage } from './_lib/trackedAnthropic.js'
+import {
+  buildRoleProfileSkillSuggestionRequest,
+  normalizeRoleProfileSkillSuggestions,
+} from './_lib/roleProfileSkillSuggestions.js'
 
 const SUGGESTION_SCHEMA = {
   type: 'object',
@@ -149,7 +153,9 @@ export default async function handler(req, res) {
       ? buildExperienceRecommendationRequest(body)
       : body.operation === 'activity-skills'
         ? buildActivitySkillSuggestionRequest(body)
-        : buildTagSuggestionRequest(body)
+        : body.operation === 'role-profile-skills'
+          ? buildRoleProfileSkillSuggestionRequest(body)
+          : buildTagSuggestionRequest(body)
   const feature = body.operation === 'skill-goal'
     ? 'goal_drafting'
     : body.operation === 'log-activity'
@@ -158,7 +164,9 @@ export default async function handler(req, res) {
         ? 'experience_skill_recommendations'
         : body.operation === 'activity-skills'
           ? 'activity_skill_suggestions'
-          : 'tag_suggestions'
+          : body.operation === 'role-profile-skills'
+            ? 'role_profile_skill_suggestions'
+            : 'tag_suggestions'
   if (request.error) {
     res.status(400).json({ error: request.error })
     return
@@ -200,6 +208,10 @@ export default async function handler(req, res) {
       const draft = normalizeActivityDraft(data, request.context)
       if (draft) res.status(200).json(draft)
       else res.status(422).json({ error: request.refusalError })
+      return
+    }
+    if (body.operation === 'role-profile-skills') {
+      res.status(200).json({ recommendations: normalizeRoleProfileSkillSuggestions(data, request) })
       return
     }
     if (body.operation !== 'experience-skills' && body.operation !== 'activity-skills') {

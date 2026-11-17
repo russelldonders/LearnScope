@@ -16,9 +16,12 @@ import {
 import { listEmployerSkillConfirmations, confirmEmployerSkillLevel } from '../../lib/employerSkillTargets'
 import { listEmployerCatalogueCourses, listEmployerCatalogueSkills, listEmployerMembers } from '../../lib/admin/employers'
 import { getOrganisation } from '../../lib/admin/organisations'
-import { listLibrarySkills } from '../../lib/skillLibrary'
+import { findOrCreateLibrarySkill, listLibrarySkills } from '../../lib/skillLibrary'
+import { suggestRoleProfileSkills } from '../../lib/roleProfileSkillSuggestions'
+import { useAuth } from '../../context/AuthContext'
 import RoleProfileDetailsForm from './roles/RoleProfileDetailsForm'
 import RoleProfileSkillsPanel from './roles/RoleProfileSkillsPanel'
+import RoleProfileSkillSuggestions from './roles/RoleProfileSkillSuggestions'
 import RoleProfileTrainingPanel from './roles/RoleProfileTrainingPanel'
 import RoleProfileLinkedEmployeesPanel from './roles/RoleProfileLinkedEmployeesPanel'
 
@@ -39,6 +42,7 @@ const TABS = [
 // concepts the table's own summary counts are drawn from.
 export default function EmployerRoleProfileDetail() {
   const { roleProfileId } = useParams()
+  const { user } = useAuth()
   const [profile, setProfile] = useState(null)
   const [employer, setEmployer] = useState(null)
   const [members, setMembers] = useState([])
@@ -120,11 +124,36 @@ export default function EmployerRoleProfileDetail() {
     try {
       await action()
       await load()
+      return true
     } catch (err) {
       setError(err.message)
+      return false
     } finally {
       setSaving(false)
     }
+  }
+
+  function handleRequestSkillSuggestions(excludedSkillNames) {
+    return suggestRoleProfileSkills(
+      { roleName: profile.name, roleDescription: profile.description },
+      availableSkills.map((s) => s.name),
+      excludedSkillNames
+    )
+  }
+
+  // An existing skill is linked by its id; a new one is created in the shared
+  // skill library first (findOrCreateLibrarySkill reuses any active entry with
+  // the same name instead of duplicating it). Only runs when the role's
+  // creator explicitly chooses to add the suggestion.
+  function handleAcceptSuggestion({ name, isExisting, targetLevel }) {
+    return mutate(async () => {
+      const known = isExisting
+        ? availableSkills.find((s) => s.name.toLowerCase() === name.toLowerCase())
+        : null
+      const skillId = known?.id ?? await findOrCreateLibrarySkill(name, null, user.id)
+      if (profile.requiredSkills.some((s) => s.skillId === skillId)) return
+      await replaceEmployerRoleSkillRequirements(roleProfileId, [...profile.requiredSkills, { skillId, targetLevel }])
+    })
   }
 
   function handleSaveDetails(values) {
@@ -255,14 +284,23 @@ export default function EmployerRoleProfileDetail() {
                 </div>
 
                 {tab === 'skills' && (
-                  <RoleProfileSkillsPanel
-                    requiredSkills={profile.requiredSkills}
-                    availableSkills={availableSkills}
-                    saving={saving}
-                    onAddSkill={handleAddSkill}
-                    onUpdateTargetLevel={handleUpdateTargetLevel}
-                    onRemoveSkill={handleRemoveSkill}
-                  />
+                  <>
+                    <RoleProfileSkillsPanel
+                      requiredSkills={profile.requiredSkills}
+                      availableSkills={availableSkills}
+                      saving={saving}
+                      onAddSkill={handleAddSkill}
+                      onUpdateTargetLevel={handleUpdateTargetLevel}
+                      onRemoveSkill={handleRemoveSkill}
+                    />
+                    <RoleProfileSkillSuggestions
+                      roleName={profile.name}
+                      requiredSkillNames={profile.requiredSkills.map((s) => s.name)}
+                      saving={saving}
+                      onRequestSuggestions={handleRequestSkillSuggestions}
+                      onAcceptSuggestion={handleAcceptSuggestion}
+                    />
+                  </>
                 )}
                 {tab === 'courses' && (
                   <RoleProfileTrainingPanel
