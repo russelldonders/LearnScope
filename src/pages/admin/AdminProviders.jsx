@@ -16,6 +16,7 @@ import {
 import { useColumnPreferences, useRowSelection, useSortedPage, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
 import { BulkActionBar, ColumnCustomizer, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 import MutationFeedback from '../../components/MutationFeedback'
+import OrganisationCapabilityFields from './OrganisationCapabilityFields'
 
 // organisations.status is a plain 'active'/'inactive' toggle (0065_platform_
 // roles_and_organisations.sql) -- same shape as AdminUsers.jsx's account
@@ -26,12 +27,6 @@ const STATUS_FILTERS = [
   { value: 'inactive', label: 'Inactive' },
 ]
 
-const CAPABILITY_OPTIONS = [
-  ['employs_people', 'Employs people'],
-  ['manages_workforce_development', 'Develops its workforce'],
-  ['authors_learning', 'Authors learning'],
-  ['supplies_learning_externally', 'Supplies learning externally'],
-]
 
 const ORG_SORT_ACCESSORS = {
   name: (o) => o.name?.toLowerCase() ?? '',
@@ -315,23 +310,9 @@ export default function AdminProviders() {
                 className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
               />
             </div>
-            <fieldset className="min-w-[260px]">
-              <legend className="mb-1 text-sm text-secondary">Capabilities</legend>
-              <div className="grid gap-1 text-sm text-ink sm:grid-cols-2">
-                {CAPABILITY_OPTIONS.map(([value, label]) => (
-                  <label key={value} className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={newCapabilities.includes(value)}
-                      onChange={(event) => setNewCapabilities((current) =>
-                        event.target.checked ? [...current, value] : current.filter((item) => item !== value)
-                      )}
-                    />
-                    {label}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
+            <div className="basis-full">
+              <OrganisationCapabilityFields idPrefix="orgNewCapability" value={newCapabilities} onChange={setNewCapabilities} />
+            </div>
             <button
               type="submit"
               disabled={creating}
@@ -550,26 +531,14 @@ function OrganisationRow({
                   className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
                 />
               </div>
-              <fieldset>
-                <legend className="mb-1 text-sm text-secondary">Capabilities</legend>
-                <div className="grid gap-2 text-sm text-ink sm:grid-cols-2">
-                  {CAPABILITY_OPTIONS.map(([value, label]) => (
-                    <label key={value} className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={editForm.capabilities.includes(value)}
-                        onChange={(event) => onEditFormChange((form) => ({
-                          ...form,
-                          capabilities: event.target.checked
-                            ? [...form.capabilities, value]
-                            : form.capabilities.filter((item) => item !== value),
-                        }))}
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
+              <OrganisationCapabilityFields
+                idPrefix={`orgEditCapability-${org.id}`}
+                value={editForm.capabilities}
+                initialValue={(org.organisation_capabilities ?? [])
+                  .filter((item) => item.status === 'active')
+                  .map((item) => item.capability)}
+                onChange={(capabilities) => onEditFormChange((form) => ({ ...form, capabilities }))}
+              />
               <div>
                 <label className="block text-sm text-secondary mb-1" htmlFor={`orgEditUrl-${org.id}`}>
                   Website URL
