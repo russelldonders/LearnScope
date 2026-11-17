@@ -15,10 +15,11 @@ describe('RoleProfileList', () => {
   it('lists each role profile with its skill/training/linked-employee counts', () => {
     render(<RoleProfileList roleProfiles={FIXTURE_ROLE_PROFILES} />)
     const cells = getRow('Senior Support Engineer').querySelectorAll('td')
-    // Name, description, skills, training, employees, updated
-    expect(cells[2]).toHaveTextContent('3')
-    expect(cells[3]).toHaveTextContent('2')
+    // Name, description, status, skills, training, employees, updated
+    expect(cells[2]).toHaveTextContent('Active')
+    expect(cells[3]).toHaveTextContent('3')
     expect(cells[4]).toHaveTextContent('2')
+    expect(cells[5]).toHaveTextContent('2')
   })
 
   it('calls onOpenProfile with the role profile id when its name is clicked', () => {

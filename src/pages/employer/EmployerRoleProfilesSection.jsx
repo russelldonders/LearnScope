@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import EmployerRoleProfilesConsole from './roles/EmployerRoleProfilesConsole'
 import {
+  assignEmployerRoleProfile,
   createEmployerRoleProfile,
+  deleteEmployerRoleProfiles,
+  setEmployerRoleProfilesStatus,
   listEmployerRoleAssignments,
   listEmployerRoleProfiles,
   toRoleProfileViewModel,
@@ -68,8 +71,51 @@ export default function EmployerRoleProfilesSection({ employer, user, searchPara
     }
   }
 
+  // One assign_employer_role_profile call per role/employee pair (there's no
+  // bulk RPC), skipping pairs where that employee already has the role
+  // proposed or linked. Promise.allSettled so one failure (e.g. an employer
+  // admin, whom the RPC refuses) doesn't stop the rest.
+  async function handleAssignRoleProfiles(profileIds, memberIds, { startDate = null, endDate = null } = {}) {
+    const pairs = []
+    let skipped = 0
+    for (const profileId of profileIds) {
+      const profile = roleProfiles.find((p) => p.id === profileId)
+      const existing = new Set((profile?.linkedEmployees ?? []).map((e) => e.memberId))
+      for (const memberId of memberIds) {
+        if (existing.has(memberId)) skipped += 1
+        else pairs.push([profileId, memberId])
+      }
+    }
+    const results = await Promise.allSettled(
+      pairs.map(([profileId, memberId]) => assignEmployerRoleProfile(profileId, memberId, startDate, endDate))
+    )
+    const failed = results.filter((r) => r.status === 'rejected')
+    if (pairs.length > 0 && failed.length === pairs.length) {
+      throw new Error(failed[0].reason?.message || 'Failed to assign the selected role profiles.')
+    }
+    await load()
+    return { proposed: pairs.length - failed.length, skipped: skipped + failed.length }
+  }
+
+  async function handleSetStatus(profileIds, status) {
+    await setEmployerRoleProfilesStatus(profileIds, status)
+    await load()
+  }
+
+  async function handleDelete(profileIds) {
+    try {
+      await deleteEmployerRoleProfiles(profileIds)
+    } finally {
+      await load()
+    }
+  }
+
   return (
     <EmployerRoleProfilesConsole
+      members={members}
+      onAssignRoleProfiles={handleAssignRoleProfiles}
+      onSetRoleProfilesStatus={handleSetStatus}
+      onDeleteRoleProfiles={handleDelete}
       roleProfiles={roleProfiles}
       searchParams={searchParams}
       setSearchParams={setSearchParams}

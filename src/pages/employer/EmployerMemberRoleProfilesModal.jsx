@@ -9,6 +9,7 @@ import {
   assignEmployerRoleProfile,
   withdrawEmployerRoleAssignment,
   setEmployerRoleAssignmentDates,
+  isRoleProfileActive,
 } from '../../lib/employerRoleProfiles'
 
 const STATUS_LABELS = {
@@ -76,7 +77,7 @@ export default function EmployerMemberRoleProfilesModal({ employer, member, onCl
   // same role profile later.
   const activeAssignments = assignments.filter((a) => a.status === 'proposed' || a.status === 'linked')
   const assignedProfileIds = new Set(activeAssignments.map((a) => a.roleProfileId))
-  const addableProfiles = allProfiles.filter((p) => !assignedProfileIds.has(p.id))
+  const addableProfiles = allProfiles.filter((p) => isRoleProfileActive(p) && !assignedProfileIds.has(p.id))
 
   function handleAdd(e) {
     e.preventDefault()

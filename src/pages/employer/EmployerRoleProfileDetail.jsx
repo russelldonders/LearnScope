@@ -12,7 +12,9 @@ import {
   listEmployerRoleAssignments,
   toRoleProfileViewModel,
   getEmployerRoleProfileReadiness,
+  isRoleProfileActive,
 } from '../../lib/employerRoleProfiles'
+import StatusBadge from '../../components/StatusBadge'
 import { listEmployerSkillConfirmations, confirmEmployerSkillLevel } from '../../lib/employerSkillTargets'
 import { listEmployerCatalogueCourses, listEmployerCatalogueSkills, listEmployerMembers } from '../../lib/admin/employers'
 import { getOrganisation } from '../../lib/admin/organisations'
@@ -21,7 +23,6 @@ import { suggestRoleProfileSkills } from '../../lib/roleProfileSkillSuggestions'
 import { useAuth } from '../../context/AuthContext'
 import RoleProfileDetailsForm from './roles/RoleProfileDetailsForm'
 import RoleProfileSkillsPanel from './roles/RoleProfileSkillsPanel'
-import RoleProfileSkillSuggestions from './roles/RoleProfileSkillSuggestions'
 import RoleProfileTrainingPanel from './roles/RoleProfileTrainingPanel'
 import RoleProfileLinkedEmployeesPanel from './roles/RoleProfileLinkedEmployeesPanel'
 
@@ -55,6 +56,7 @@ export default function EmployerRoleProfileDetail() {
   const [notFound, setNotFound] = useState(false)
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [editingDetails, setEditingDetails] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -141,35 +143,25 @@ export default function EmployerRoleProfileDetail() {
     )
   }
 
-  // An existing skill is linked by its id; a new one is created in the shared
-  // skill library first (findOrCreateLibrarySkill reuses any active entry with
-  // the same name instead of duplicating it). Only runs when the role's
-  // creator explicitly chooses to add the suggestion.
-  function handleAcceptSuggestion({ name, isExisting, targetLevel }) {
+  // Adds a skill found by search, created from the search text, or accepted
+  // from an AI suggestion. Without a skillId the skill is created in the
+  // shared skill library first (findOrCreateLibrarySkill reuses any active
+  // entry with the same name instead of duplicating it). Resolves true once
+  // added, so the add UI can clear/advance only on success.
+  function handleAddSkill({ skillId, name, targetLevel }) {
     return mutate(async () => {
-      const known = isExisting
-        ? availableSkills.find((s) => s.name.toLowerCase() === name.toLowerCase())
-        : null
-      const skillId = known?.id ?? await findOrCreateLibrarySkill(name, null, user.id)
-      if (profile.requiredSkills.some((s) => s.skillId === skillId)) return
-      await replaceEmployerRoleSkillRequirements(roleProfileId, [...profile.requiredSkills, { skillId, targetLevel }])
+      const resolvedId = skillId ?? await findOrCreateLibrarySkill(name, null, user.id)
+      if (profile.requiredSkills.some((s) => s.skillId === resolvedId)) return
+      await replaceEmployerRoleSkillRequirements(roleProfileId, [...profile.requiredSkills, { skillId: resolvedId, targetLevel }])
     })
   }
 
-  function handleSaveDetails(values) {
-    mutate(() => updateEmployerRoleProfile(roleProfileId, values))
+  async function handleSaveDetails(values) {
+    if (await mutate(() => updateEmployerRoleProfile(roleProfileId, values))) setEditingDetails(false)
   }
 
-  function handleAddSkill({ skillId, targetLevel }) {
-    const skill = availableSkills.find((s) => s.id === skillId)
-    if (!skill) return
-    mutate(() => replaceEmployerRoleSkillRequirements(roleProfileId, [...profile.requiredSkills, {
-      skillId,
-      name: skill.name,
-      targetLevel,
-      isComposite: skill.isComposite,
-      componentCount: skill.componentCount,
-    }]))
+  function handleToggleStatus() {
+    mutate(() => updateEmployerRoleProfile(roleProfileId, { status: isRoleProfileActive(profile) ? 'archived' : 'active' }))
   }
 
   function handleUpdateTargetLevel(skillId, targetLevel) {
@@ -266,7 +258,53 @@ export default function EmployerRoleProfileDetail() {
 
             {profile && (
               <div className="space-y-6">
-                <RoleProfileDetailsForm roleProfile={profile} saving={saving} onSave={handleSaveDetails} />
+                {editingDetails ? (
+                  <RoleProfileDetailsForm
+                    roleProfile={profile}
+                    saving={saving}
+                    onSave={handleSaveDetails}
+                    onCancel={() => setEditingDetails(false)}
+                  />
+                ) : (
+                  <div className="bg-card border border-hairline rounded-lg p-6">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h1 className="font-display text-2xl text-ink break-words">{profile.name}</h1>
+                          {isRoleProfileActive(profile)
+                            ? <StatusBadge label="Active" tone="success" />
+                            : <StatusBadge label="Inactive" tone="neutral" />}
+                        </div>
+                        <p className="text-sm text-secondary mt-2 whitespace-pre-line">
+                          {profile.description || 'No description yet.'}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingDetails(true)}
+                          disabled={saving}
+                          className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+                        >
+                          Edit details
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleToggleStatus}
+                          disabled={saving}
+                          className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper disabled:opacity-60"
+                        >
+                          {isRoleProfileActive(profile) ? 'Deactivate' : 'Reactivate'}
+                        </button>
+                      </div>
+                    </div>
+                    {!isRoleProfileActive(profile) && (
+                      <p className="text-xs text-secondary mt-3">
+                        This role profile is inactive: it can&apos;t be assigned to anyone new. People already linked keep it.
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex items-center flex-wrap gap-1 border-b border-hairline">
                   {TABS.map((t) => (
@@ -284,23 +322,16 @@ export default function EmployerRoleProfileDetail() {
                 </div>
 
                 {tab === 'skills' && (
-                  <>
-                    <RoleProfileSkillsPanel
-                      requiredSkills={profile.requiredSkills}
-                      availableSkills={availableSkills}
-                      saving={saving}
-                      onAddSkill={handleAddSkill}
-                      onUpdateTargetLevel={handleUpdateTargetLevel}
-                      onRemoveSkill={handleRemoveSkill}
-                    />
-                    <RoleProfileSkillSuggestions
-                      roleName={profile.name}
-                      requiredSkillNames={profile.requiredSkills.map((s) => s.name)}
-                      saving={saving}
-                      onRequestSuggestions={handleRequestSkillSuggestions}
-                      onAcceptSuggestion={handleAcceptSuggestion}
-                    />
-                  </>
+                  <RoleProfileSkillsPanel
+                    roleName={profile.name}
+                    requiredSkills={profile.requiredSkills}
+                    availableSkills={availableSkills}
+                    saving={saving}
+                    onAddSkill={handleAddSkill}
+                    onRequestSuggestions={handleRequestSkillSuggestions}
+                    onUpdateTargetLevel={handleUpdateTargetLevel}
+                    onRemoveSkill={handleRemoveSkill}
+                  />
                 )}
                 {tab === 'courses' && (
                   <RoleProfileTrainingPanel

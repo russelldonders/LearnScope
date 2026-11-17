@@ -1,5 +1,6 @@
 import { formatAbsoluteDate } from '../../../lib/dates'
-import { SortableTh, TablePagination } from '../../../components/TableControls'
+import { SortableTh, TablePagination, SelectionTh } from '../../../components/TableControls'
+import StatusBadge from '../../../components/StatusBadge'
 
 // Employer-facing table of this organisation's generic role profiles --
 // full page width, one row per profile, matching the same searchable/
@@ -34,7 +35,16 @@ export default function RoleProfileList({
   pageSize = 20,
   setPageSize,
   totalItems = roleProfiles.length,
+  statusFilter = 'all',
+  onStatusFilterChange,
+  selectedIds = null,
+  onToggleSelected,
+  onToggleAllSelected,
+  bulkActionBar = null,
 }) {
+  const selectable = Boolean(selectedIds)
+  const pageIds = roleProfiles.map((p) => p.id)
+  const selectedOnPage = selectable ? pageIds.filter((id) => selectedIds.has(id)).length : 0
   return (
     <section aria-labelledby="employer-role-profiles-heading">
       <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
@@ -71,6 +81,17 @@ export default function RoleProfileList({
               placeholder="Search by name or description…"
               className="flex-1 min-w-[220px] rounded-md border border-hairline bg-paper px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-moss"
             />
+            <label className="sr-only" htmlFor="employer-role-profiles-status">Status</label>
+            <select
+              id="employer-role-profiles-status"
+              value={statusFilter}
+              onChange={(e) => onStatusFilterChange?.(e.target.value)}
+              className="rounded-md border border-hairline bg-paper px-2 py-2 text-sm text-ink"
+            >
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="archived">Inactive</option>
+            </select>
             {filtersActive && (
               <button
                 type="button"
@@ -82,6 +103,8 @@ export default function RoleProfileList({
             )}
           </div>
 
+          {bulkActionBar && <div className="px-3">{bulkActionBar}</div>}
+
           {roleProfiles.length === 0 ? (
             <p className="text-center text-xs text-secondary py-8">No role profiles match your search.</p>
           ) : (
@@ -90,8 +113,17 @@ export default function RoleProfileList({
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-hairline text-left text-secondary">
+                      {selectable && (
+                        <SelectionTh
+                          idPrefix="employer-role-profiles"
+                          checked={pageIds.length > 0 && selectedOnPage === pageIds.length}
+                          indeterminate={selectedOnPage > 0 && selectedOnPage < pageIds.length}
+                          onChange={() => onToggleAllSelected?.(pageIds)}
+                        />
+                      )}
                       <SortableTh label="Name" columnKey="name" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                       <th className="px-4 py-2 font-medium">Description</th>
+                      <SortableTh label="Status" columnKey="status" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap" />
                       <SortableTh label="Skills" columnKey="skills" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap" />
                       <SortableTh label="Courses" columnKey="training" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap" />
                       <SortableTh label="Users" columnKey="employees" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap" />
@@ -101,6 +133,17 @@ export default function RoleProfileList({
                   <tbody>
                     {roleProfiles.map((profile) => (
                       <tr key={profile.id} className="border-b border-hairline last:border-0">
+                        {selectable && (
+                          <td className="w-8 px-4 py-2">
+                            <input
+                              type="checkbox"
+                              aria-label={`Select ${profile.name}`}
+                              checked={selectedIds.has(profile.id)}
+                              onChange={() => onToggleSelected?.(profile.id)}
+                              className="rounded border-hairline accent-moss"
+                            />
+                          </td>
+                        )}
                         <td className="px-4 py-2 whitespace-nowrap">
                           <button
                             type="button"
@@ -113,6 +156,11 @@ export default function RoleProfileList({
                         </td>
                         <td className="px-4 py-2 text-secondary truncate max-w-xs" title={profile.description || ''}>
                           {profile.description || '—'}
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap">
+                          {profile.status === 'archived'
+                            ? <StatusBadge label="Inactive" tone="neutral" />
+                            : <StatusBadge label="Active" tone="success" />}
                         </td>
                         <td className="px-4 py-2 text-secondary whitespace-nowrap">{profile.requiredSkills.length}</td>
                         <td className="px-4 py-2 text-secondary whitespace-nowrap">{profile.training.length}</td>

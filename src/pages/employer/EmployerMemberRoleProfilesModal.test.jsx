@@ -15,6 +15,7 @@ vi.mock('../../lib/employerRoleProfiles', () => ({
   assignEmployerRoleProfile: vi.fn(),
   withdrawEmployerRoleAssignment: vi.fn(),
   setEmployerRoleAssignmentDates: vi.fn(),
+  isRoleProfileActive: (profile) => profile.status !== 'archived',
 }))
 
 const employer = { id: 'employer-1', name: 'Leeds United' }

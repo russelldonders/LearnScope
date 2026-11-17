@@ -96,6 +96,44 @@ export async function updateEmployerRoleProfile(profileId, changes) {
   if (error) throw error
 }
 
+// 'active' or 'archived' (shown as "Inactive"). An inactive role profile
+// keeps its existing links -- it just can't be newly assigned
+// (assign_employer_role_profile only accepts active profiles).
+export async function setEmployerRoleProfilesStatus(profileIds, status) {
+  if (profileIds.length === 0) return
+  const { error } = await supabase
+    .from('employer_role_profiles')
+    .update({ status, updated_at: new Date().toISOString() })
+    .in('id', profileIds)
+  if (error) throw error
+}
+
+// Deletes the role profile and (by cascade) its required skills, training
+// and the employer's own assignment records -- never a learner's own
+// experience or skills, which only ever reference it loosely. Callers only
+// offer this for profiles with nobody proposed or linked (see
+// canDeleteRoleProfile).
+export async function deleteEmployerRoleProfiles(profileIds) {
+  if (profileIds.length === 0) return
+  const { data, error } = await supabase
+    .from('employer_role_profiles')
+    .delete()
+    .in('id', profileIds)
+    .select('id')
+  if (error) throw error
+  if ((data ?? []).length !== profileIds.length) {
+    throw new Error('Some role profiles could not be deleted.')
+  }
+}
+
+export function canDeleteRoleProfile(profile) {
+  return (profile.linkedEmployeeCount ?? 0) === 0
+}
+
+export function isRoleProfileActive(profile) {
+  return profile.status !== 'archived'
+}
+
 export async function replaceEmployerRoleSkillRequirements(profileId, requirements) {
   const { error } = await supabase.rpc('replace_employer_role_profile_skills', {
     p_role_profile_id: profileId,
@@ -299,6 +337,7 @@ export function toRoleProfileViewModel(profile, assignments, memberByUserId) {
     .filter((assignment) => ['proposed', 'linked'].includes(assignment.status))
     .map((assignment) => ({
       assignmentId: assignment.id,
+      memberId: assignment.memberId,
       userId: assignment.userId,
       name: assignment.name,
       email: memberByUserId.get(assignment.userId)?.email ?? '',

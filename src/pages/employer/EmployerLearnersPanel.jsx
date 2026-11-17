@@ -14,7 +14,7 @@ import EmployerMemberRoleProfilesModal from './EmployerMemberRoleProfilesModal'
 import EmployerRosterUploadPanel from './EmployerRosterUploadPanel'
 import { listOrganisationMembers } from '../../lib/admin/organisations'
 import { listLibrarySkills } from '../../lib/skillLibrary'
-import { listEmployerRoleProfiles, assignEmployerRoleProfile } from '../../lib/employerRoleProfiles'
+import { listEmployerRoleProfiles, assignEmployerRoleProfile, isRoleProfileActive } from '../../lib/employerRoleProfiles'
 import { LEVELS, LEVEL_LABELS } from '../../lib/levels'
 import { useColumnPreferences, useSortedPage, useRowSelection, useUrlParam, writeUrlParams } from '../../lib/useSortedPage'
 import { ColumnCustomizer, SortableTh, TablePagination, SelectionTh, BulkActionBar } from '../../components/TableControls'
@@ -1229,7 +1229,7 @@ function AssignRoleModal({ employer, members, skippedCount = 0, onClose, onAssig
 
   useEffect(() => {
     listEmployerRoleProfiles(employer.id)
-      .then(setProfiles)
+      .then((data) => setProfiles(data.filter(isRoleProfileActive)))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }, [employer.id])
