@@ -93,9 +93,10 @@ describe('ProviderProfile canonical organisation URL', () => {
       skillEntries: [],
       tags: [],
     }])
-    renderProfile()
+    const { container } = renderProfile()
 
     expect(await screen.findByRole('heading', { name: 'Skills offered' })).toBeInTheDocument()
+    expect(container.querySelector('.org-brand-scope')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Training offered' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Public employer course' })).toBeInTheDocument()
     expect(publicEmployerCoursesMock).toHaveBeenCalledWith('acme')

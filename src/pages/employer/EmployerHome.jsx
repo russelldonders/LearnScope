@@ -72,7 +72,7 @@ export default function EmployerHome() {
   const navItems = NAV_IDS.map((id) => ({ id, label: t(`employerHome.nav.${id}`) }))
 
   return (
-    <div className="min-h-screen bg-[var(--org-background,var(--color-paper))]" style={orgBrandStyle(branding)}>
+    <div className="org-brand-scope min-h-screen bg-[var(--org-background,var(--color-paper))]" style={orgBrandStyle(branding)}>
       <AppHeader
         hideNavLinks
         brandLogoUrl={branding?.logoUrl}

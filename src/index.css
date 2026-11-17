@@ -92,6 +92,42 @@ body {
   font-family: var(--font-sans);
 }
 
+/* Organisation branding is a scoped theme, not an accent layered on top of
+   the viewer's light/dark preference. Keep the normal tokens as fallbacks so
+   an unbranded route renders exactly as before, but once an organisation has
+   supplied Text/Background colours those colours also govern nested panels
+   that use the shared text and surface utilities. Action text is deliberately
+   excluded: branded primary buttons keep their separate contrast token. */
+.org-brand-scope {
+  color: var(--org-text, var(--color-ink));
+}
+
+.org-brand-scope :where(.text-ink, .hover\:text-ink:hover) {
+  color: var(--org-text, var(--color-ink));
+}
+
+.org-brand-scope :where(.text-secondary, .hover\:text-secondary:hover) {
+  color: var(--org-text, var(--color-secondary));
+}
+
+.org-brand-scope .text-paper {
+  color: var(--org-primary-contrast, var(--color-paper));
+}
+
+.org-brand-scope .placeholder\:text-secondary::placeholder {
+  color: var(--org-text, var(--color-secondary));
+}
+
+.org-brand-scope.bg-paper,
+.org-brand-scope .bg-paper {
+  background-color: var(--org-background, var(--color-paper));
+}
+
+.org-brand-scope.bg-card,
+.org-brand-scope .bg-card {
+  background-color: var(--org-background, var(--color-card));
+}
+
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
   outline: 3px solid var(--color-gold);
   outline-offset: 3px;

@@ -191,7 +191,7 @@ export default function ProviderProfile() {
   const visibleCourses = employerContext ? (publicEmployerCourses ?? []) : (profile?.courses ?? [])
 
   return (
-    <div className="min-h-screen bg-[var(--org-background,var(--color-paper))]" style={brandStyle}>
+    <div className="org-brand-scope min-h-screen bg-[var(--org-background,var(--color-paper))]" style={brandStyle}>
       {authLoading ? null : user ? (
         <AppHeader
           hideNavLinks

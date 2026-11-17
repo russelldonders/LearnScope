@@ -94,7 +94,7 @@ export default function Signup() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center bg-[var(--org-background,var(--color-paper))] px-4"
+      className="org-brand-scope min-h-screen flex items-center justify-center bg-[var(--org-background,var(--color-paper))] px-4"
       style={orgBrandStyle(branding)}
     >
       <div className="w-full max-w-sm bg-[var(--org-background,var(--color-card))] border border-hairline rounded-lg p-8">

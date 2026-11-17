@@ -21,7 +21,7 @@ const BRAND_COLOR_FIELDS = [
   { key: 'brandSecondaryColor', label: 'Secondary', hint: 'Accents', fallback: '#3d5a73' },
   { key: 'brandHoverColor', label: 'Hover', hint: 'Button hover state', fallback: '#80651d' },
   { key: 'brandBackgroundColor', label: 'Background', hint: 'Page background', fallback: '#eef0e7' },
-  { key: 'brandTextColor', label: 'Text', hint: 'Headings and labels', fallback: '#20301f' },
+  { key: 'brandTextColor', label: 'Text', hint: 'Page text', fallback: '#20301f' },
 ]
 
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/
@@ -335,7 +335,7 @@ export default function OrganisationSettingsModal({ organisation, learnerPortal,
               Used on your public page below, and on Sign up/Log in for visitors arriving from it. Leave any of
               these blank to use LearnScope's default colours. Buttons use white text on your Primary/Hover
               colours, so pick shades dark enough to stay readable. If you pick a dark Background, set a light
-              Text colour too so headings and labels stay readable against it.
+              Text colour too so all page text stays readable against it.
             </p>
             <div className="flex items-center gap-2 flex-wrap mb-3">
               <button

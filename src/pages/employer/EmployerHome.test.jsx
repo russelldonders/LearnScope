@@ -51,9 +51,10 @@ describe('EmployerHome learner LMS navigation', () => {
 
 describe('EmployerHome branding', () => {
   it('uses the members-only branding from the employer context', async () => {
-    render(<MemoryRouter initialEntries={['/organisation/learning?org=acme']}><EmployerHome /></MemoryRouter>)
+    const { container } = render(<MemoryRouter initialEntries={['/organisation/learning?org=acme']}><EmployerHome /></MemoryRouter>)
 
     await screen.findByRole('heading', { name: 'Welcome back' })
+    expect(container.firstChild).toHaveClass('org-brand-scope')
     expect(screen.getByTestId('app-header')).toHaveAttribute('data-logo', '/acme.png')
     expect(screen.getByTestId('app-header')).toHaveAttribute('data-name', 'Acme Ltd')
   })
