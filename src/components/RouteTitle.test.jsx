@@ -18,7 +18,7 @@ describe('RouteTitle', () => {
   })
 
   it('keeps the English title for a staff route', () => {
-    expect(titleAt('/admin/tags')).toBe('Admin tags | LearnScope')
+    expect(titleAt('/admin/tags')).toBe('Admin skill tags | LearnScope')
   })
 
   it('falls back to the app name for an unknown route', () => {

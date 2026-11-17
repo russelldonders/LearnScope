@@ -1,66 +1,84 @@
-import { useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 import AdminLayout from './AdminLayout'
 import { OnboardingSettingsSection } from './AdminOnboarding'
 import { NotificationSettingsSection } from './AdminNotifications'
-import { WhatsNewSettingsSection } from './AdminReleases'
-import { AuditLogSettingsSection } from './AdminActivityLog'
 import AdminMemberFieldSettings from './AdminMemberFieldSettings'
 
+// Platform configuration only -- one section at a time, chosen from a side
+// menu (a stacked list on a phone) and kept in the URL hash so links like
+// /admin/settings#notifications still open the right one. Release history
+// and the audit log are records rather than settings, so they have their own
+// pages under Insights (/admin/whats-new, /admin/audit-log).
 const SETTINGS_SECTIONS = [
-  { id: 'first-login-journey', label: 'First login journey' },
-  { id: 'member-fields', label: 'Member fields' },
-  { id: 'notifications', label: 'Notifications' },
-  { id: 'whats-new', label: "What's new" },
-  { id: 'audit-log', label: 'Audit log' },
+  {
+    id: 'first-login-journey',
+    label: 'First login journey',
+    description: 'The steps a new learner sees the first time they sign in',
+    Component: OnboardingSettingsSection,
+  },
+  {
+    id: 'member-fields',
+    label: 'Member fields',
+    description: 'Details kept on every member record',
+    Component: AdminMemberFieldSettings,
+  },
+  {
+    id: 'notifications',
+    label: 'Notifications',
+    description: 'The emails LearnScope sends',
+    Component: NotificationSettingsSection,
+  },
 ]
+
+// Sections that used to live on this page, now on their own pages.
+const MOVED_SECTIONS = {
+  'whats-new': '/admin/whats-new',
+  'audit-log': '/admin/audit-log',
+}
 
 export default function AdminSettings() {
   const { hash } = useLocation()
+  const requested = hash.slice(1)
 
-  useEffect(() => {
-    if (!hash) return
-    const section = document.getElementById(hash.slice(1))
-    section?.scrollIntoView()
-  }, [hash])
+  if (MOVED_SECTIONS[requested]) return <Navigate to={MOVED_SECTIONS[requested]} replace />
+
+  const current = SETTINGS_SECTIONS.find((section) => section.id === requested) ?? SETTINGS_SECTIONS[0]
+  const { Component } = current
 
   return (
     <AdminLayout>
-      <div className="mb-10">
+      <div className="mb-6">
         <h2 className="font-display text-xl text-ink mb-1">Settings</h2>
         <p className="text-sm text-secondary max-w-2xl">
-          Configure shared learner and employer experiences, manage platform communications, and
-          review releases and administrative changes.
+          Configure the shared learner and employer experience and the emails the platform sends.
         </p>
-        <nav aria-label="Settings sections" className="mt-4">
-          <p className="text-xs font-medium text-secondary mb-2">On this page</p>
-          <ul className="flex flex-wrap gap-x-5 gap-y-2">
-            {SETTINGS_SECTIONS.map((section) => (
-              <li key={section.id}>
-                <a className="text-sm font-medium text-moss hover:underline" href={`#${section.id}`}>
-                  {section.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </nav>
       </div>
 
-      <div className="divide-y divide-hairline">
-        <section id="first-login-journey" className="scroll-mt-6 pb-10">
-          <OnboardingSettingsSection />
-        </section>
-        <section id="member-fields" className="scroll-mt-6 py-10">
-          <AdminMemberFieldSettings />
-        </section>
-        <section id="notifications" className="scroll-mt-6 py-10">
-          <NotificationSettingsSection />
-        </section>
-        <section id="whats-new" className="scroll-mt-6 py-10">
-          <WhatsNewSettingsSection />
-        </section>
-        <section id="audit-log" className="scroll-mt-6 pt-10">
-          <AuditLogSettingsSection />
+      <div className="flex flex-col gap-6 md:flex-row md:items-start">
+        <nav aria-label="Settings sections" className="md:w-56 md:shrink-0">
+          <ul className="space-y-1">
+            {SETTINGS_SECTIONS.map((section) => {
+              const active = section === current
+              return (
+                <li key={section.id}>
+                  <Link
+                    to={`#${section.id}`}
+                    aria-current={active ? 'page' : undefined}
+                    className={`block rounded-md border-l-2 px-3 py-2 ${
+                      active ? 'border-moss bg-card' : 'border-transparent hover:bg-card'
+                    }`}
+                  >
+                    <span className={`block text-sm ${active ? 'font-medium text-ink' : 'text-ink'}`}>{section.label}</span>
+                    <span className="block text-xs text-secondary">{section.description}</span>
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        </nav>
+
+        <section id={current.id} aria-label={current.label} className="min-w-0 flex-1">
+          <Component />
         </section>
       </div>
     </AdminLayout>

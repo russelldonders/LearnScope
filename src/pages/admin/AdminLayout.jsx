@@ -1,23 +1,15 @@
 import { Link, useLocation } from 'react-router-dom'
 import AppHeader from '../../components/AppHeader'
-
-const SECTIONS = [
-  { to: '/admin', label: 'Overview' },
-  { to: '/admin/users', label: 'Users' },
-  { to: '/admin/organisations', label: 'Organisations' },
-  { to: '/admin/catalogue', label: 'Courses' },
-  { to: '/admin/skills', label: 'Skill library' },
-  { to: '/admin/tags', label: 'Tags' },
-  { to: '/admin/ai-usage', label: 'AI usage' },
-  { to: '/admin/resource-reports', label: 'Reports' },
-  { to: '/admin/settings', label: 'Settings' },
-]
+import DropdownNavMenu from '../../components/DropdownNavMenu'
+import ScrollableNavBar from '../../components/ScrollableNavBar'
+import { ADMIN_NAV, currentAdminNavItem, hrefOf } from '../../lib/adminNav'
 
 // Nav shell for the platform-owner console -- each Admin*.jsx page renders
 // itself wrapped in this, the same way every page renders its own AppHeader
 // rather than the app using a nested-route/Outlet layout.
 export default function AdminLayout({ children }) {
   const location = useLocation()
+  const current = currentAdminNavItem(location)
 
   return (
     <div className="min-h-screen bg-paper">
@@ -42,21 +34,40 @@ export default function AdminLayout({ children }) {
           tags.
         </p>
 
-        <nav className="flex items-center flex-wrap gap-1 mb-6 border-b border-hairline">
-          {SECTIONS.map((s) => (
-            <Link
-              key={s.to}
-              to={s.to}
-              aria-current={location.pathname === s.to ? 'page' : undefined}
-              className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
-                location.pathname === s.to
-                  ? 'border-moss text-ink font-medium'
-                  : 'border-transparent text-secondary hover:text-ink'
-              }`}
-            >
-              {s.label}
-            </Link>
-          ))}
+        <nav aria-label="Platform console">
+          <ScrollableNavBar className="mb-6">
+            {ADMIN_NAV.map((entry) => {
+              if (entry.items) {
+                return (
+                  <DropdownNavMenu
+                    key={entry.key}
+                    label={entry.label}
+                    active={entry.items.includes(current)}
+                    menuWidthClass="w-56"
+                    items={entry.items.map((item) => ({
+                      key: item.key,
+                      label: item.label,
+                      to: hrefOf(item),
+                      current: item === current,
+                    }))}
+                  />
+                )
+              }
+              const active = entry === current
+              return (
+                <Link
+                  key={entry.key}
+                  to={entry.to}
+                  aria-current={active ? 'page' : undefined}
+                  className={`shrink-0 text-sm px-3 py-2 border-b-2 whitespace-nowrap ${
+                    active ? 'border-moss text-ink font-medium' : 'border-transparent text-secondary hover:text-ink'
+                  }`}
+                >
+                  {entry.label}
+                </Link>
+              )
+            })}
+          </ScrollableNavBar>
         </nav>
 
         {children}

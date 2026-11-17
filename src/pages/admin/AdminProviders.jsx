@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import AdminLayout from './AdminLayout'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import StatusBadge from '../../components/StatusBadge'
 import {
   listOrganisations,
   createOrganisation,
-  updateOrganisation,
   setOrganisationStatus,
-  setOrganisationCapabilities,
   listOrganisationMembers,
   removeOrganisationMember,
   inviteOrganisationStaff,
@@ -17,6 +15,7 @@ import { useColumnPreferences, useRowSelection, useSortedPage, useUrlParam, writ
 import { BulkActionBar, ColumnCustomizer, SelectionTh, SortableTh, TablePagination } from '../../components/TableControls'
 import MutationFeedback from '../../components/MutationFeedback'
 import OrganisationCapabilityFields from './OrganisationCapabilityFields'
+import { listOrganisationIdsWithPendingInvitations } from '../../lib/admin/overview'
 
 // organisations.status is a plain 'active'/'inactive' toggle (0065_platform_
 // roles_and_organisations.sql) -- same shape as AdminUsers.jsx's account
@@ -55,7 +54,11 @@ const ORG_COLUMNS = [
     label: 'Organisation',
     sortable: true,
     cellClassName: 'px-4 py-3 text-ink font-medium whitespace-nowrap',
-    renderCell: (o) => o.name,
+    renderCell: (o) => (
+      <Link to={`/admin/organisations/${o.id}`} className="font-medium text-ink hover:text-moss hover:underline">
+        {o.name}
+      </Link>
+    ),
   },
   {
     key: 'url',
@@ -117,10 +120,8 @@ export default function AdminProviders() {
   const [newCapabilities, setNewCapabilities] = useState(['authors_learning'])
   const [creating, setCreating] = useState(false)
 
-  const [expandedId, setExpandedId] = useState(null)
-  const [editingId, setEditingId] = useState(null)
-  const [editForm, setEditForm] = useState({ name: '', url: '', capabilities: [] })
-  const [saving, setSaving] = useState(false)
+  const navigate = useNavigate()
+  const [pendingInviteOrgIds, setPendingInviteOrgIds] = useState(() => new Set())
 
   // Search text, status filter, sort, page and pageSize all live in the URL
   // together (?q=&status=&sort=&dir=&page=&pageSize=) via useSortedPage's
@@ -130,21 +131,24 @@ export default function AdminProviders() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useUrlParam(searchParams, setSearchParams, 'q', '', { resetParams: ['page'] })
   const [statusFilter, setStatusFilter] = useUrlParam(searchParams, setSearchParams, 'status', '', { resetParams: ['page'] })
+  // ?invites=pending -- the Overview's "Pending staff invitations" link.
+  const invitesFilter = searchParams.get('invites') === 'pending'
 
   const q = query.trim().toLowerCase()
   const filtered = useMemo(
     () =>
       organisations.filter((o) => {
         if (statusFilter && o.status !== statusFilter) return false
+        if (invitesFilter && !pendingInviteOrgIds.has(o.id)) return false
         if (q && !(o.name?.toLowerCase().includes(q) || o.org_code?.toLowerCase().includes(q))) return false
         return true
       }),
-    [organisations, statusFilter, q]
+    [organisations, statusFilter, q, invitesFilter, pendingInviteOrgIds]
   )
-  const filtersActive = query !== '' || statusFilter !== ''
+  const filtersActive = query !== '' || statusFilter !== '' || invitesFilter
 
   function resetFilters() {
-    writeUrlParams(searchParams, setSearchParams, { q: null, status: null, page: null })
+    writeUrlParams(searchParams, setSearchParams, { q: null, status: null, invites: null, page: null })
   }
 
   const { sortKey, sortDir, toggleSort, page, setPage, pageSize, setPageSize, pageItems, totalItems } =
@@ -171,7 +175,12 @@ export default function AdminProviders() {
     setLoading(true)
     setError(null)
     try {
-      setOrganisations(await listOrganisations())
+      const [orgs, pendingIds] = await Promise.all([
+        listOrganisations(),
+        listOrganisationIdsWithPendingInvitations(),
+      ])
+      setOrganisations(orgs)
+      setPendingInviteOrgIds(new Set(pendingIds))
     } catch (err) {
       setError(`Couldn't load providers: ${err.message}`)
     } finally {
@@ -185,25 +194,17 @@ export default function AdminProviders() {
     setCreating(true)
     setError(null)
     try {
-      await createOrganisation(newName, newCapabilities)
+      const created = await createOrganisation(newName, newCapabilities)
       setNewName('')
       setNewCapabilities(['authors_learning'])
       setShowCreateForm(false)
-      await load()
+      // Straight to its own page to finish setting it up (staff, details).
+      if (created?.id) navigate(`/admin/organisations/${created.id}`)
+      else await load()
     } catch (err) {
       setError(`Couldn't create this organisation: ${err.message}`)
     } finally {
       setCreating(false)
-    }
-  }
-
-  async function handleToggleStatus(org) {
-    setError(null)
-    try {
-      await setOrganisationStatus(org.id, org.status === 'active' ? 'inactive' : 'active')
-      await load()
-    } catch (err) {
-      setError(`Couldn't update this organisation's status: ${err.message}`)
     }
   }
 
@@ -235,37 +236,6 @@ export default function AdminProviders() {
       setError(`Couldn't update organisations: ${err.message}`)
     } finally {
       setBulkActing(false)
-    }
-  }
-
-  function startEdit(org) {
-    setEditingId(org.id)
-    setEditForm({
-      name: org.name,
-      url: org.url ?? '',
-      capabilities: (org.organisation_capabilities ?? [])
-        .filter((item) => item.status === 'active')
-        .map((item) => item.capability),
-    })
-    setError(null)
-  }
-
-  async function handleSaveEdit(e, orgId) {
-    e.preventDefault()
-    if (!editForm.name.trim()) return
-    setSaving(true)
-    setError(null)
-    try {
-      await Promise.all([
-        updateOrganisation(orgId, editForm),
-        setOrganisationCapabilities(orgId, editForm.capabilities),
-      ])
-      setEditingId(null)
-      await load()
-    } catch (err) {
-      setError(`Couldn't save changes to this organisation: ${err.message}`)
-    } finally {
-      setSaving(false)
     }
   }
 
@@ -347,6 +317,19 @@ export default function AdminProviders() {
               </button>
             ))}
           </div>
+          {invitesFilter && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-moss bg-moss/10 px-3 py-1.5 text-xs font-medium text-ink">
+              With pending staff invitations
+              <button
+                type="button"
+                onClick={() => writeUrlParams(searchParams, setSearchParams, { invites: null, page: null })}
+                aria-label="Stop filtering by pending staff invitations"
+                className="text-secondary hover:text-ink"
+              >
+                ×
+              </button>
+            </span>
+          )}
           {filtersActive && (
             <button
               type="button"
@@ -419,16 +402,6 @@ export default function AdminProviders() {
                       visibleColumns={visibleColumns}
                       selected={selection.selected.has(org.id)}
                       onToggleSelected={() => selection.toggle(org.id)}
-                      editing={editingId === org.id}
-                      editForm={editForm}
-                      onEditFormChange={setEditForm}
-                      saving={saving}
-                      expanded={expandedId === org.id}
-                      onStartEdit={() => startEdit(org)}
-                      onCancelEdit={() => setEditingId(null)}
-                      onSaveEdit={(e) => handleSaveEdit(e, org.id)}
-                      onToggleExpanded={() => setExpandedId((id) => (id === org.id ? null : org.id))}
-                      onToggleStatus={() => handleToggleStatus(org)}
                     />
                   ))}
                 </tbody>
@@ -456,133 +429,44 @@ export default function AdminProviders() {
   )
 }
 
-function OrganisationRow({
-  org,
-  visibleColumns,
-  selected,
-  onToggleSelected,
-  editing,
-  editForm,
-  onEditFormChange,
-  saving,
-  expanded,
-  onStartEdit,
-  onCancelEdit,
-  onSaveEdit,
-  onToggleExpanded,
-  onToggleStatus,
-}) {
+// One organisation in the list -- everything about it (details, capabilities,
+// staff, courses, status) is managed on its own page,
+// AdminOrganisationDetail.jsx, the same "table lists, its own page edits"
+// split as Users.
+function OrganisationRow({ org, visibleColumns, selected, onToggleSelected }) {
   return (
-    <>
-      <tr className="border-b border-hairline last:border-0">
-        <td className="px-4 py-3">
-          <label className="sr-only" htmlFor={`select-org-${org.id}`}>Select {org.name}</label>
-          <input
-            id={`select-org-${org.id}`}
-            type="checkbox"
-            checked={selected}
-            onChange={onToggleSelected}
-            disabled={org.is_system}
-            className="rounded border-hairline accent-moss"
-          />
+    <tr className="border-b border-hairline last:border-0">
+      <td className="px-4 py-3">
+        <label className="sr-only" htmlFor={`select-org-${org.id}`}>Select {org.name}</label>
+        <input
+          id={`select-org-${org.id}`}
+          type="checkbox"
+          checked={selected}
+          onChange={onToggleSelected}
+          disabled={org.is_system}
+          className="rounded border-hairline accent-moss"
+        />
+      </td>
+      {visibleColumns.map((col) => (
+        <td key={col.key} className={col.cellClassName}>
+          {col.renderCell(org)}
         </td>
-        {visibleColumns.map((col) => (
-          <td key={col.key} className={col.cellClassName}>
-            {col.renderCell(org)}
-          </td>
-        ))}
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-2 justify-end whitespace-nowrap">
-            <button type="button" onClick={onStartEdit} className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper whitespace-nowrap">
-              Edit
-            </button>
-            <Link
-              to={`/admin/catalogue?org=${org.id}`}
-              className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper whitespace-nowrap"
-            >
-              View courses
-            </Link>
-            <button type="button" onClick={onToggleExpanded} className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper whitespace-nowrap">
-              {expanded ? 'Hide users' : 'Manage users'}
-            </button>
-            {org.is_system ? (
-              <span className="rounded-full bg-moss/10 px-2.5 py-1 text-xs font-medium text-moss">System organisation</span>
-            ) : (
-              <button type="button" onClick={onToggleStatus} className="rounded-md border border-hairline text-ink py-1 px-3 text-xs font-medium hover:bg-paper whitespace-nowrap">
-                {org.status === 'active' ? 'Deactivate' : 'Reactivate'}
-              </button>
-            )}
-          </div>
-        </td>
-      </tr>
-      {editing && (
-        <tr className="border-b border-hairline last:border-0">
-          <td colSpan={visibleColumns.length + 2} className="px-4 pb-4 pt-1">
-            <form onSubmit={onSaveEdit} className="space-y-3 border-t border-hairline pt-3">
-              <div>
-                <label className="block text-sm text-secondary mb-1" htmlFor={`orgEditName-${org.id}`}>
-                  Name
-                </label>
-                <input
-                  id={`orgEditName-${org.id}`}
-                  required
-                  value={editForm.name}
-                  onChange={(e) => onEditFormChange((f) => ({ ...f, name: e.target.value }))}
-                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                />
-              </div>
-              <OrganisationCapabilityFields
-                idPrefix={`orgEditCapability-${org.id}`}
-                value={editForm.capabilities}
-                initialValue={(org.organisation_capabilities ?? [])
-                  .filter((item) => item.status === 'active')
-                  .map((item) => item.capability)}
-                onChange={(capabilities) => onEditFormChange((form) => ({ ...form, capabilities }))}
-              />
-              <div>
-                <label className="block text-sm text-secondary mb-1" htmlFor={`orgEditUrl-${org.id}`}>
-                  Website URL
-                </label>
-                <input
-                  id={`orgEditUrl-${org.id}`}
-                  type="url"
-                  placeholder="https://…"
-                  value={editForm.url}
-                  onChange={(e) => onEditFormChange((f) => ({ ...f, url: e.target.value }))}
-                  className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <button type="submit" disabled={saving} className="rounded-md bg-moss text-paper py-1.5 px-3 text-sm font-medium hover:opacity-90 disabled:opacity-60">
-                  {saving ? 'Saving…' : 'Save'}
-                </button>
-                <button type="button" onClick={onCancelEdit} className="rounded-md border border-hairline text-ink py-1.5 px-3 text-sm font-medium hover:bg-paper">
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </td>
-        </tr>
-      )}
-      {expanded && (
-        <tr className="border-b border-hairline last:border-0">
-          <td colSpan={visibleColumns.length + 2} className="px-4 pb-4 pt-1">
-            <div className="border-t border-hairline pt-3">
-              <OrganisationStaffPanel organisation={org} alwaysShowForm />
-            </div>
-          </td>
-        </tr>
-      )}
-    </>
+      ))}
+      <td className="px-4 py-3 text-right">
+        {org.is_system && (
+          <span className="rounded-full bg-moss/10 px-2.5 py-1 text-xs font-medium text-moss whitespace-nowrap">System organisation</span>
+        )}
+      </td>
+    </tr>
   )
 }
 
 // Exported so the provider-facing console (src/pages/provider/) can reuse
 // the same invite/remove staff UI, scoped to a provider's own organisation.
 // alwaysShowForm keeps this panel's original always-open invite form for
-// its home here (already gated behind AdminProviders' own "Manage users"
-// accordion toggle, so a second toggle inside would just be a redundant
-// extra click) -- ProviderConsole's Users tab instead gets the same
+// its platform-admin home (the Staff tab of AdminOrganisationDetail.jsx,
+// where it's the whole tab, so a toggle to reveal it would just be a
+// redundant extra click) -- ProviderConsole's Users tab instead gets the same
 // "+ Invite user" toggle-to-reveal pattern as its Training/Skills/
 // Resources tabs (see default false below).
 export function OrganisationStaffPanel({

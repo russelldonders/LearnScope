@@ -34,7 +34,7 @@ export default function AdminCourseDetail() {
     <AdminLayout>
       <div className="space-y-6">
         <div className="mb-2">
-          <Link to="/admin/catalogue" className="text-sm text-moss font-medium">
+          <Link to="/admin/courses" className="text-sm text-moss font-medium">
             ← Back to courses
           </Link>
         </div>
@@ -55,7 +55,7 @@ export default function AdminCourseDetail() {
                 </div>
                 <div className="flex items-center gap-2">
                   {course.organisations?.is_system && (
-                    <Link to={`/admin/catalogue/${course.id}/edit`} className="rounded-md border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:bg-paper">
+                    <Link to={`/admin/courses/${course.id}/edit`} className="rounded-md border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:bg-paper">
                       Open course builder
                     </Link>
                   )}
@@ -175,7 +175,7 @@ export default function AdminCourseDetail() {
                         </p>
                       </div>
                       {version.id !== course.id && (
-                        <Link to={`/admin/catalogue/${version.id}`} className="text-xs text-moss font-medium hover:underline">
+                        <Link to={`/admin/courses/${version.id}`} className="text-xs text-moss font-medium hover:underline">
                           View this version
                         </Link>
                       )}

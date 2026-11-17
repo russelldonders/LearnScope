@@ -59,3 +59,38 @@ export async function countRecentCourseSubmissions(days = 7) {
   if (error) throw error
   return count ?? 0
 }
+
+// Courses waiting for a platform admin's decision -- the same set the
+// Courses page shows under ?status=pending_approval (AdminCatalogue's
+// filter): courses submitted for approval, plus already-approved courses
+// with a global-catalogue publication still awaiting approval.
+export async function countCoursesAwaitingApproval() {
+  const { data, error } = await supabase
+    .from('course_catalogue')
+    .select('id, status, course_catalogue_publications(published_at, catalogues(is_global))')
+    .in('status', ['pending_approval', 'approved'])
+  if (error) throw error
+  return (data ?? []).filter((course) =>
+    course.status === 'pending_approval' ||
+    (course.course_catalogue_publications ?? []).some((p) => p.catalogues?.is_global && !p.published_at)
+  ).length
+}
+
+// Shared resources with at least one open report (one row per resource --
+// admin_list_skill_resource_reports groups open reports by resource).
+export async function countOpenResourceReports() {
+  const { data, error } = await supabase.rpc('admin_list_skill_resource_reports')
+  if (error) throw error
+  return (data ?? []).length
+}
+
+// Organisations with at least one staff invitation not yet accepted -- lets
+// the Organisations list filter to them (?invites=pending).
+export async function listOrganisationIdsWithPendingInvitations() {
+  const { data, error } = await supabase
+    .from('organisation_members')
+    .select('organisation_id')
+    .eq('status', 'pending')
+  if (error) throw error
+  return [...new Set((data ?? []).map((row) => row.organisation_id))]
+}

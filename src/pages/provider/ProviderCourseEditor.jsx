@@ -413,7 +413,7 @@ export default function ProviderCourseEditor({ adminMode = false }) {
     try {
       const draftId = await createDraftCourseVersion(course.id)
       navigate(adminMode
-        ? `/admin/catalogue/${draftId}/edit`
+        ? `/admin/courses/${draftId}/edit`
         : `/organisation/training/${draftId}${employerContext ? `?org=${encodeURIComponent(employerContext)}` : ''}`)
     } catch (err) {
       setSaveError(err.message)
@@ -461,7 +461,7 @@ export default function ProviderCourseEditor({ adminMode = false }) {
             the course has loaded. */}
         <Link
           to={adminMode
-            ? (course ? `/admin/catalogue/${course.id}` : '/admin/catalogue')
+            ? (course ? `/admin/courses/${course.id}` : '/admin/courses')
             : employerContext
               ? `/organisation?org=${encodeURIComponent(employerContext)}&section=provider-training`
               : course ? `/organisation?org=${course.organisation_id}&section=training` : '/organisation'}

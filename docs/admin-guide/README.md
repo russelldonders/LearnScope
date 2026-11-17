@@ -72,32 +72,45 @@ flowchart LR
     A["Learner signs in"] --> B{"Row in\nplatform_admins?"}
     B -- "No" --> C["Sees only the\nlearner-facing app"]
     B -- "Yes" --> D["'Platform console'\nappears in account menu"]
-    D --> E["/admin — eight-tab\nconsole shell"]
+    D --> E["/admin — platform\nconsole shell"]
 ```
 
 Every admin page shares the same shell: a **Platform console** header and a
-row of tabs — *Overview, Users, Providers, Employers, Courses, Skill
-library, Tags, Settings*. Notifications, What's new, and the Audit log are
-grouped with the first-login journey as sections on the Settings page. You'll see this tab strip on
-every screenshot in this guide.
+single row of navigation, grouped by what you're doing:
+
+| Menu | Pages |
+|---|---|
+| **Overview** | Your work queue (`/admin`) |
+| **People** | Users (`/admin/users`), Organisations (`/admin/organisations`) |
+| **Content** | Courses (`/admin/courses`), Skill library (`/admin/skills`), Skill tags (`/admin/tags`) |
+| **Moderation** | Course approvals (Courses filtered to awaiting approval), Reported resources (`/admin/reported-resources`) |
+| **Insights** | AI usage (`/admin/ai-usage`), Audit log (`/admin/audit-log`), What's new (`/admin/whats-new`) |
+| **Settings** | First login journey, Member fields, Notifications (`/admin/settings`) |
+
+On a phone the row scrolls sideways. The menu for the page you're on stays
+highlighted, including on detail pages such as a single user or course.
+Older URLs (`/admin/catalogue`, `/admin/resource-reports`, `/admin/releases`,
+`/admin/activity`) redirect to their new homes. Some screenshots in this
+guide predate the grouped navigation.
 
 ---
 
 ## 2. Overview — your daily work queue
 
 `/admin` — the landing page — is deliberately not a vanity dashboard of
-platform-wide metrics. It's a **work queue**: four tiles, each a single
-count of something that needs a decision from you, and each tile links
-straight to the pre-filtered list where you'd act on it.
+platform-wide metrics. It's a **work queue**, grouped by who has to act.
+Every count links straight to the pre-filtered list where it's dealt with.
 
 ![Admin overview page showing four work-queue tiles — rejected courses awaiting revision, blocked users, inactive provider organisations, and pending staff invitations — plus a Settings tile and a recent-activity tile](images/admin-overview.png)
 
-| Tile | What it counts | Where it links |
-|---|---|---|
-| Rejected courses awaiting revision | Rejected courses a provider hasn't resubmitted | Courses, pre-filtered to `rejected` |
-| Blocked users | Accounts currently blocked | Users, pre-filtered to `blocked` |
-| Inactive provider organisations | Organisations marked inactive | Providers, pre-filtered to `inactive` |
-| Pending staff invitations | Provider-staff invites not yet accepted | Providers (no sharper filter exists for this one) |
+| Group | Tile | What it counts | Where it links |
+|---|---|---|---|
+| **Needs your action** | Courses awaiting approval | Courses submitted for approval, or for the global catalogue | Courses, filtered to awaiting approval |
+| | Reported resources | Shared learner resources with open reports | Reported resources |
+| **Waiting on others** | Rejected courses awaiting revision | Rejected courses a provider hasn't resubmitted | Courses, filtered to `rejected` |
+| | Pending staff invitations | Organisation staff invites not yet accepted | Organisations with pending invitations |
+| **Current status** | Blocked users | Accounts currently blocked | Users, filtered to `blocked` |
+| | Inactive organisations | Organisations marked inactive | Organisations, filtered to `inactive` |
 
 Below the tiles, two more panels: a **Settings** summary (how many
 first-login wizard steps are currently enabled — with a red warning if
@@ -105,10 +118,9 @@ you've disabled every step, since that silently skips onboarding for every
 new learner) and **Recent activity** (how many courses were submitted for
 review in the last 7 days).
 
-> **Design note:** when every tile reads zero, the whole panel collapses to
-> a single "Nothing needs your attention right now" message rather than
-> showing four zeroes. If you're staring at four empty tiles instead, check
-> you're not looking at a fresh/test environment with no data in it yet.
+> **Design note:** when both *Needs your action* tiles read zero, that group
+> collapses to a single "Nothing needs your action right now" message. The
+> other two groups always show their counts, since they're for information.
 
 ---
 
@@ -176,22 +188,35 @@ sequenceDiagram
 
 ## 4. Managing provider organisations
 
-`/admin/providers` is where training providers — the organisations whose
-staff author courses in the Provider Console — are created and moderated.
+`/admin/organisations` lists every organisation — training providers,
+employers, or both. Clicking a name opens its own page,
+`/admin/organisations/:id`, with four tabs:
+
+- **Details** — name, website and what the organisation does. Each
+  capability says in plain language what it switches on in the
+  organisation's workspace.
+- **Staff** — invite and remove staff (see below).
+- **Courses** — the courses it has created, each linking to its course page.
+- **Status** — activate or deactivate it, with what that means.
+
+The list itself keeps search, status filters, create, and bulk
+activate/suspend. `?invites=pending` (the Overview's pending-invitations
+link) narrows it to organisations with staff invitations not yet accepted.
 
 ![Admin providers list showing four organisations — Acme Logistics, BrightPath Academy, the system LearnScope provider, and inactive Northfield Skills Institute — each with Edit, View courses, and Manage users actions](images/admin-providers.png)
 
 **Creating an organisation** is a single form (`+ Create organisation`,
-name only) — everything else (website, logo, brand colours, public
-profile) is filled in later, either by you via *Edit* or by the
-organisation's own admin staff once they have access.
+name and capabilities) and takes you straight to the new organisation's
+page. Everything else (website, logo, brand colours, public profile) is
+filled in later, either by you or by the organisation's own admin staff
+once they have access.
 
 **Activate / Suspend**, individually or in bulk via row checkboxes, is how
 you gate an organisation's access without deleting anything: a suspended
 organisation's staff lose console access, but nothing about their data is
 touched, and reactivating restores it instantly.
 
-**Manage users** expands an inline panel — no separate page — where you
+The **Staff** tab is where you
 invite staff by email as either **Admin** (full organisation management)
 or **Trainer** (course authoring only), and see who's active versus still
 pending their invite.
@@ -203,9 +228,8 @@ pending their invite.
 > silently disappear until accepted. If someone says they "never got
 > access," this is the first place to check.
 
-**View courses** is a shortcut into the [course catalogue](#6-moderating-the-course-catalogue),
-pre-filtered to that one organisation — useful when you're already looking
-at a provider and want to see everything they've submitted.
+The **Courses** tab's *Open in Courses* link is a shortcut into the [course catalogue](#6-moderating-the-course-catalogue),
+pre-filtered to that one organisation.
 
 ---
 
@@ -247,7 +271,7 @@ flowchart TD
 
 ## 6. Moderating the course catalogue
 
-`/admin/catalogue` is the shared course catalogue across **every**
+`/admin/courses` is the shared course catalogue across **every**
 provider — this is the platform-wide moderation queue, distinct from a
 single provider's own view of their own courses in the Provider Console.
 
@@ -296,7 +320,7 @@ Two columns worth calling out specifically:
 
 ### Drilling into one course
 
-Clicking a course name opens `/admin/catalogue/:id` — a read-only detail
+Clicking a course name opens `/admin/courses/:id` — a read-only detail
 view: full metadata, the skills it targets, its content structure grouped
 by section, and its complete version history.
 
@@ -380,7 +404,7 @@ much bigger decision than promoting was.
 
 ## 8. Managing tags
 
-`/admin/tags` is the smallest page in the console: a flat list of the tags
+`/admin/tags` (**Skill tags**, under Content) is the smallest page in the console: a flat list of the tags
 learners and providers attach to skills and courses, with one moderation
 action — **blacklist**.
 
@@ -396,7 +420,7 @@ this console.
 
 ## 9. Audit log — the audit trail
 
-The **Audit log** section of `/admin/settings` is a flat, most-recent-first record of every
+The **Audit log** (`/admin/audit-log`, under Insights) is a flat, most-recent-first record of every
 significant moderation action taken across the platform: course
 approvals/rejections, user blocks, tag blacklisting, organisation
 activation/suspension, and staff/membership changes.
@@ -497,7 +521,8 @@ detail page in [§3](#3-managing-users).
 |---|---|
 | Block or delete an account | [Users](#3-managing-users) |
 | See everything on one learner's account | [User detail](#3-managing-users) |
-| Onboard a new training provider | [Providers](#4-managing-provider-organisations) |
+| Onboard a new organisation, or change what it does | [Organisations](#4-managing-provider-organisations) |
+| Deal with content learners reported | Moderation → Reported resources |
 | Set up a company running its own in-house training | [Employers](#5-managing-employers) |
 | Approve, reject, or deactivate a course | [Courses](#6-moderating-the-course-catalogue) |
 | See a course's full content, skills, and version history | [Course detail](#6-moderating-the-course-catalogue) |

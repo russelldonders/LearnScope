@@ -60,7 +60,7 @@ const CATALOGUE_COLUMNS = [
     sortable: true,
     cellClassName: 'px-4 py-3 text-ink font-medium whitespace-nowrap',
     renderCell: (c) => (
-      <Link to={`/admin/catalogue/${c.id}`} className="hover:text-moss hover:underline">
+      <Link to={`/admin/courses/${c.id}`} className="hover:text-moss hover:underline">
         {c.name}
       </Link>
     ),

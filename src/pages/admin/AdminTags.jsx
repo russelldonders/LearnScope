@@ -142,6 +142,13 @@ export default function AdminTags() {
   return (
     <AdminLayout>
       <div className="space-y-4">
+        <div>
+          <h2 className="font-display text-lg text-ink">Skill tags</h2>
+          <p className="text-sm text-secondary mt-1 max-w-2xl">
+            Tags group skills into broad categories in the skill library. Blacklisting a tag hides it from learners, so it
+            can no longer be picked or shown.
+          </p>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <input
             aria-label="Search tags"

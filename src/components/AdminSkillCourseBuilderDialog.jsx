@@ -400,7 +400,7 @@ export default function AdminSkillCourseBuilderDialog({ skills, onClose, onFinis
                   </div>
                   <div className="shrink-0 text-right">
                     {result.status === 'complete' && result.courseId ? (
-                      <Link to={`/admin/catalogue/${result.courseId}/edit`} className="text-xs font-medium text-moss hover:underline">Open course</Link>
+                      <Link to={`/admin/courses/${result.courseId}/edit`} className="text-xs font-medium text-moss hover:underline">Open course</Link>
                     ) : result.status === 'failed' && stage === 'complete' ? (
                       <span className="flex items-center justify-end gap-3">
                         <span className="text-xs text-red-700">Failed</span>

@@ -12,7 +12,11 @@ export async function listOrganisations() {
 }
 
 export async function getOrganisation(id) {
-  const { data, error } = await supabase.from('organisations').select('*').eq('id', id).single()
+  const { data, error } = await supabase
+    .from('organisations')
+    .select('*, organisation_capabilities(capability, status)')
+    .eq('id', id)
+    .single()
   if (error) throw error
   return data
 }

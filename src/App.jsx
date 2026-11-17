@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import LegacyRedirect from './components/LegacyRedirect'
 import { AuthProvider } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { LanguageProvider } from './context/LanguageContext'
@@ -70,6 +71,9 @@ const AdminTags = lazyRoute(() => import('./pages/admin/AdminTags'))
 const AdminAiUsage = lazyRoute(() => import('./pages/admin/AdminAiUsage'))
 const AdminResourceReports = lazyRoute(() => import('./pages/admin/AdminResourceReports'))
 const AdminSettings = lazyRoute(() => import('./pages/admin/AdminSettings'))
+const AdminOrganisationDetail = lazyRoute(() => import('./pages/admin/AdminOrganisationDetail'))
+const AdminActivityLog = lazyRoute(() => import('./pages/admin/AdminActivityLog'))
+const AdminReleases = lazyRoute(() => import('./pages/admin/AdminReleases'))
 const EmployerHome = lazyRoute(() => import('./pages/employer/EmployerHome'))
 const EmployerRoleProfileDetail = lazyRoute(() => import('./pages/employer/EmployerRoleProfileDetail'))
 const ProviderCourseEditor = lazyRoute(() => import('./pages/provider/ProviderCourseEditor'))
@@ -383,6 +387,14 @@ function App() {
             }
           />
           <Route
+            path="/admin/organisations/:organisationId"
+            element={
+              <PlatformAdminRoute>
+                <AdminOrganisationDetail />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
             path="/organisation/learning"
             element={
               <EmployerMemberRoute>
@@ -399,7 +411,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/catalogue"
+            path="/admin/courses"
             element={
               <PlatformAdminRoute>
                 <AdminCatalogue />
@@ -407,7 +419,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/catalogue/:courseId"
+            path="/admin/courses/:courseId"
             element={
               <PlatformAdminRoute>
                 <AdminCourseDetail />
@@ -415,7 +427,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/catalogue/:courseId/edit"
+            path="/admin/courses/:courseId/edit"
             element={
               <PlatformAdminRoute>
                 <ProviderCourseEditor adminMode />
@@ -463,17 +475,38 @@ function App() {
             }
           />
           <Route
-            path="/admin/resource-reports"
+            path="/admin/reported-resources"
             element={
               <PlatformAdminRoute>
                 <AdminResourceReports />
               </PlatformAdminRoute>
             }
           />
+          <Route
+            path="/admin/audit-log"
+            element={
+              <PlatformAdminRoute>
+                <AdminActivityLog />
+              </PlatformAdminRoute>
+            }
+          />
+          <Route
+            path="/admin/whats-new"
+            element={
+              <PlatformAdminRoute>
+                <AdminReleases />
+              </PlatformAdminRoute>
+            }
+          />
+          {/* Older console URLs, kept working for bookmarks and links. */}
           <Route path="/admin/onboarding" element={<Navigate to="/admin/settings#first-login-journey" replace />} />
           <Route path="/admin/notifications" element={<Navigate to="/admin/settings#notifications" replace />} />
-          <Route path="/admin/releases" element={<Navigate to="/admin/settings#whats-new" replace />} />
-          <Route path="/admin/activity" element={<Navigate to="/admin/settings#audit-log" replace />} />
+          <Route path="/admin/releases" element={<Navigate to="/admin/whats-new" replace />} />
+          <Route path="/admin/activity" element={<Navigate to="/admin/audit-log" replace />} />
+          <Route path="/admin/resource-reports" element={<LegacyRedirect to={() => '/admin/reported-resources'} />} />
+          <Route path="/admin/catalogue" element={<LegacyRedirect to={() => '/admin/courses'} />} />
+          <Route path="/admin/catalogue/:courseId" element={<LegacyRedirect to={({ courseId }) => `/admin/courses/${courseId}`} />} />
+          <Route path="/admin/catalogue/:courseId/edit" element={<LegacyRedirect to={({ courseId }) => `/admin/courses/${courseId}/edit`} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </Suspense>

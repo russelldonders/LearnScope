@@ -10,6 +10,7 @@ import ProviderLtiToolsSection from '../../components/ProviderLtiToolsSection'
 import { ProviderTrainingSection, ProviderCataloguesSection } from '../provider/ProviderConsole'
 import EmployerMemberFieldsDialog from './EmployerMemberFieldsDialog'
 import EmployerSettingsMenu from './EmployerSettingsMenu'
+import ScrollableNavBar from '../../components/ScrollableNavBar'
 import useAnchoredMenuPosition from '../../lib/useAnchoredMenuPosition'
 import { listOrganisations } from '../../lib/admin/organisations'
 import { handleTabListKeyDown } from '../../lib/tabsKeyboard'
@@ -254,29 +255,6 @@ export default function EmployerConsole() {
   useEffect(() => {
     sectionTabRefs.current[rovingActiveKey]?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
   }, [rovingActiveKey])
-  // Which ends of the tab bar have more tabs scrolled out of view, so each can
-  // fade out rather than cutting a tab off mid-word.
-  const sectionTabListRef = useRef(null)
-  const [tabOverflow, setTabOverflow] = useState({ start: false, end: false })
-  useEffect(() => {
-    const list = sectionTabListRef.current
-    if (!list) return undefined
-    function update() {
-      const start = list.scrollLeft > 1
-      const end = list.scrollLeft + list.clientWidth < list.scrollWidth - 1
-      setTabOverflow((current) => (current.start === start && current.end === end ? current : { start, end }))
-    }
-    update()
-    list.addEventListener('scroll', update, { passive: true })
-    window.addEventListener('resize', update)
-    return () => {
-      list.removeEventListener('scroll', update)
-      window.removeEventListener('resize', update)
-    }
-  })
-  const tabListMask = tabOverflow.start || tabOverflow.end
-    ? `linear-gradient(to right, ${tabOverflow.start ? 'transparent, black 2rem' : 'black'}, ${tabOverflow.end ? 'black calc(100% - 2rem), transparent' : 'black'})`
-    : undefined
   // Arrow-key navigation onto the dropdown trigger activates whichever
   // provider sub-section is already open, or the first one otherwise --
   // it doesn't itself open the menu (that still needs a click/Enter).
@@ -347,18 +325,8 @@ export default function EmployerConsole() {
 
             {selectedEmployer && (
               <div>
-                {/* One row on every screen size, so every item sits on the
-                    same underline: on a phone the whole row -- tabs and the
-                    Settings menu after them, alike -- scrolls sideways, with
-                    faded edges where more is out of view. The underline is an inset
-                    shadow rather than a border so the selected tab's own
-                    border can sit on top of it inside the scrolling list
-                    (which would clip the usual -mb-px overlap). */}
-                <div
-                  ref={sectionTabListRef}
-                  style={tabListMask ? { maskImage: tabListMask, WebkitMaskImage: tabListMask } : undefined}
-                  className="flex items-end gap-x-1 mb-6 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden shadow-[inset_0_-1px_0_var(--color-hairline)]"
-                >
+                {/* One row on every screen size -- see ScrollableNavBar. */}
+                <ScrollableNavBar className="mb-6">
                   <div role="tablist" aria-label="Console section" className="flex items-end gap-x-1 shrink-0">
                     {tabSections.map((section, index) => {
                       if (section.providerTab) {
@@ -426,7 +394,7 @@ export default function EmployerConsole() {
                     })}
                   </div>
                   <EmployerSettingsMenu items={settingsItems} active={!currentSectionIsTab} />
-                </div>
+                </ScrollableNavBar>
 
                 <div
                   id={`employer-section-panel-${currentSection}`}
