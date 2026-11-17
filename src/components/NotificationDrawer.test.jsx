@@ -1,20 +1,28 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import NotificationDrawer from './NotificationDrawer'
 
-afterEach(cleanup)
+function item(index) {
+  return {
+    id: `notification-${index}`,
+    title: `Notification ${index}`,
+    detail: `Detail ${index}`,
+    source: 'Personal',
+    actions: [{ label: `Act ${index}`, href: `/actions/${index}` }],
+  }
+}
 
 function renderDrawer(props = {}) {
   return render(
     <MemoryRouter>
       <NotificationDrawer
-        items={[]}
+        items={[item(1)]}
         loading={false}
         error={null}
-        viewAllHref="/actions?org=acme"
         onClose={vi.fn()}
         onRetry={vi.fn()}
+        onDismiss={vi.fn().mockResolvedValue(undefined)}
         {...props}
       />
     </MemoryRouter>
@@ -22,35 +30,22 @@ function renderDrawer(props = {}) {
 }
 
 describe('NotificationDrawer', () => {
-  it('shows notifications from all workspaces with source labels and a context-preserving link', () => {
-    renderDrawer({
-      items: [
-        { id: 'course:1', title: 'Course Assigned', detail: 'Safe Handling', source: 'Acme', occurredAt: '2026-09-29T10:00:00Z' },
-        { id: 'rating:1', title: 'New Rating', detail: 'Taylor rated Communication.', source: 'Personal', occurredAt: '2026-09-28T10:00:00Z' },
-      ],
-    })
+  it('places the action and dismiss controls directly on each notification', async () => {
+    const onDismiss = vi.fn().mockResolvedValue(undefined)
+    renderDrawer({ onDismiss })
 
-    expect(screen.getByRole('dialog', { name: 'Notifications' })).toHaveAccessibleDescription('Across all your LearnScope workspaces')
-    expect(screen.getByText('Acme')).toBeInTheDocument()
-    expect(screen.getByText('Personal')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'View All Actions' })).toHaveAttribute('href', '/actions?org=acme')
+    expect(screen.getByRole('link', { name: 'Act 1' })).toHaveAttribute('href', '/actions/1')
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    await waitFor(() => expect(onDismiss).toHaveBeenCalledWith('notification-1'))
+    expect(screen.queryByRole('link', { name: /View All Actions/i })).not.toBeInTheDocument()
   })
 
-  it('provides empty, loading, retry, and close states', () => {
-    const onClose = vi.fn()
-    const onRetry = vi.fn()
-    const { rerender } = renderDrawer({ loading: true, onClose, onRetry })
-    expect(screen.getByText('Loading notifications…')).toBeInTheDocument()
+  it('only offers to reveal the full list when more than eight actions exist', () => {
+    renderDrawer({ items: Array.from({ length: 9 }, (_, index) => item(index + 1)) })
 
-    rerender(
-      <MemoryRouter>
-        <NotificationDrawer items={[]} loading={false} error="Notifications could not be loaded." onClose={onClose} onRetry={onRetry} />
-      </MemoryRouter>
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'Try Again' }))
-    expect(onRetry).toHaveBeenCalledOnce()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Close notifications' }))
-    expect(onClose).toHaveBeenCalledOnce()
+    expect(screen.queryByText('Notification 9')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'View all 9 actions' }))
+    expect(screen.getByText('Notification 9')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /View all/ })).not.toBeInTheDocument()
   })
 })

@@ -42,7 +42,6 @@ export default function AppHeader({
   brandName,
   brandHomeHref = '/dashboard',
   contextExitHref,
-  notificationsHref = '/actions',
 }) {
   const { signOut, user, isPlatformAdmin, organisationMemberships, employerMemberships, managerContexts } = useAuth()
   const userId = user?.id ?? null
@@ -52,6 +51,7 @@ export default function AppHeader({
     pendingActionsLoading = false,
     pendingActionsError = null,
     refreshPendingActionCount,
+    dismissPendingAction,
   } = usePendingActions()
   const { navVisibility } = useNavVisibility()
   const { t } = useLanguage()
@@ -384,9 +384,9 @@ export default function AppHeader({
             items={pendingActionItems}
             loading={pendingActionsLoading}
             error={pendingActionsError}
-            viewAllHref={notificationsHref}
             onClose={() => setNotificationsOpen(false)}
             onRetry={refreshPendingActionCount}
+            onDismiss={dismissPendingAction}
           />
         </div>
       )}

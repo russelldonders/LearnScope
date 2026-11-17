@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
@@ -10,7 +10,13 @@ import {
   markContentComplete,
   contentFileUrl,
 } from '../lib/courseContent'
-import { getCourseCohort, cohortDisplayName, formatCohortDateTime } from '../lib/courseCatalogue'
+import {
+  completeMyCourse,
+  getCourseCohort,
+  getCourseCompletionPolicy,
+  cohortDisplayName,
+  formatCohortDateTime,
+} from '../lib/courseCatalogue'
 import { RESOURCE_TYPE_LABELS } from '../lib/statusLabels'
 import ScormPlayer from '../components/ScormPlayer'
 import XapiPlayer from '../components/XapiPlayer'
@@ -28,6 +34,10 @@ import { useLanguage } from '../context/LanguageContext'
 // The fixed back-link labels callers pass in location.state (everything else
 // they pass is a record's own name, shown as-is).
 const BACK_LABEL_KEYS = { Dashboard: 'dashboard', Learning: 'learning', Training: 'training' }
+
+export function isContentComplete(status) {
+  return status === 'completed' || status === 'passed'
+}
 
 // Items come back ordered by their own `position`, which only resets to 0
 // within each section (see courseContent.js's nextLinkPosition) -- sorting
@@ -49,7 +59,7 @@ function sortBySection(contentItems, sectionRows) {
 // the md+ side pane (which wraps this with a card, type label and title)
 // and the below-md inline accordion in the nav (already under the row
 // showing the title, so it skips repeating it).
-function CourseItemPlayer({
+export function CourseItemPlayer({
   item,
   userId,
   courseId,
@@ -60,8 +70,11 @@ function CourseItemPlayer({
   onMarkComplete,
   onPrevious,
   onProgress,
+  pageNumber,
+  pageCount,
 }) {
   const { t } = useLanguage()
+  const isPageCourse = pageCount > 0
   return (
     <>
       {(item.type === 'video' || item.type === 'screen_recording') && (
@@ -121,6 +134,11 @@ function CourseItemPlayer({
 
       {item.type === 'page' && <PageContent document={item.page_content} />}
 
+      {isPageCourse && (
+        <p className="mt-6 text-center font-mono text-xs text-secondary">
+          {t('courseLearn.pagePosition', { current: pageNumber, total: pageCount })}
+        </p>
+      )}
       <div className="flex items-center justify-between gap-2 mt-6 pt-4 border-t border-hairline">
         {hasPrevious ? (
           <button
@@ -128,7 +146,7 @@ function CourseItemPlayer({
             onClick={onPrevious}
             className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper"
           >
-            {t('courseLearn.previous')}
+            {isPageCourse ? t('courseLearn.previousPage') : t('courseLearn.previous')}
           </button>
         ) : (
           <span />
@@ -139,7 +157,13 @@ function CourseItemPlayer({
             onClick={onMarkComplete}
             className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
           >
-            {isComplete ? (hasNext ? t('courseLearn.next') : t('courseLearn.done')) : hasNext ? t('courseLearn.markCompleteContinue') : t('courseLearn.markComplete')}
+            {isPageCourse
+              ? isComplete
+                ? (hasNext ? t('courseLearn.nextPage') : t('courseLearn.done'))
+                : (hasNext ? t('courseLearn.completePageContinue') : t('courseLearn.completePage'))
+              : isComplete
+                ? (hasNext ? t('courseLearn.next') : t('courseLearn.done'))
+                : hasNext ? t('courseLearn.markCompleteContinue') : t('courseLearn.markComplete')}
           </button>
         )}
       </div>
@@ -153,8 +177,9 @@ function CourseItemPlayer({
   )
 }
 
-export default function CourseLearn() {
-  const { id } = useParams()
+export default function CourseLearn({ courseId: courseIdProp = null, embeddedScorm = false }) {
+  const { id: routeCourseId } = useParams()
+  const id = courseIdProp ?? routeCourseId
   const { user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -179,6 +204,11 @@ export default function CourseLearn() {
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [currentItemId, setCurrentItemId] = useState(null)
+  const [scormResumeItemId, setScormResumeItemId] = useState(null)
+  const [completionPolicy, setCompletionPolicy] = useState('all_content')
+  const [completionError, setCompletionError] = useState(null)
+  const [completingCourse, setCompletingCourse] = useState(false)
+  const completionAttemptedRef = useRef(false)
   // Below md the content opens inline in the nav (an accordion under the
   // clicked item) instead of the side pane used at md+ -- see the provider
   // course editor's own outline for the same pattern. Kept separate from
@@ -203,6 +233,19 @@ export default function CourseLearn() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the listed values change; the loaders are recreated every render
   }, [id])
 
+  useEffect(() => {
+    if (!embeddedScorm) return undefined
+    function receiveScormContext(event) {
+      if (event.source !== window.parent || event.data?.type !== 'learnscope.scorm.context') return
+      let suspend = null
+      try { suspend = JSON.parse(event.data.state?.suspendData || 'null') } catch { /* A host LMS may contain older plain-text state. */ }
+      setScormResumeItemId(suspend?.itemId || event.data.state?.location || null)
+    }
+    window.addEventListener('message', receiveScormContext)
+    window.parent.postMessage({ type: 'learnscope.scorm.ready', version: 1 }, '*')
+    return () => window.removeEventListener('message', receiveScormContext)
+  }, [embeddedScorm])
+
   async function load() {
     setLoading(true)
     setNotFound(false)
@@ -218,12 +261,15 @@ export default function CourseLearn() {
       return
     }
     setCourse(data)
+    completionAttemptedRef.current = false
 
     if (data.catalogue_course_id) {
-      const [sectionRows, contentItems] = await Promise.all([
+      const [sectionRows, contentItems, policy] = await Promise.all([
         listCourseSections(data.catalogue_course_id),
         listCourseResources(data.catalogue_course_id),
+        getCourseCompletionPolicy(data.catalogue_course_id),
       ])
+      setCompletionPolicy(policy)
       setSections(sectionRows)
       setItems(contentItems)
       setProgressByItemId(await listContentProgress(user.id, contentItems.map((i) => i.id)))
@@ -258,6 +304,7 @@ export default function CourseLearn() {
   }
 
   const orderedItems = useMemo(() => sortBySection(items, sections), [items, sections])
+  const isPageCourse = orderedItems.length > 0 && orderedItems.every((item) => item.type === 'page')
 
   // Groups the nav by section, in section order, with anything left
   // ungrouped (no section, or its section was deleted) trailing at the end
@@ -325,10 +372,64 @@ export default function CourseLearn() {
   const currentItem = orderedItems[currentIndex]
   const currentSection = sections.find((section) => section.id === currentItem?.sectionId)
   const completedCount = orderedItems.filter(
-    (i) => progressByItemId[i.id]?.status && progressByItemId[i.id].status !== 'not_attempted'
+    (i) => isContentComplete(progressByItemId[i.id]?.status)
   ).length
   const progress = orderedItems.length ? Math.round((completedCount / orderedItems.length) * 100) : 0
   const isFocused = !isDesktop && expandedItemId !== null
+
+  useEffect(() => {
+    if (
+      completionPolicy !== 'all_content'
+      || course?.completed_date
+      || orderedItems.length === 0
+      || completedCount !== orderedItems.length
+      || completionAttemptedRef.current
+    ) return
+    completionAttemptedRef.current = true
+    setCompletingCourse(true)
+    setCompletionError(null)
+    completeMyCourse(id)
+      .then((completedDate) => setCourse((current) => ({ ...current, completed_date: completedDate })))
+      .catch((err) => {
+        completionAttemptedRef.current = false
+        setCompletionError(err.message)
+      })
+      .finally(() => setCompletingCourse(false))
+  }, [completionPolicy, course?.completed_date, orderedItems.length, completedCount, id])
+
+  async function handleCompleteCourse() {
+    setCompletingCourse(true)
+    setCompletionError(null)
+    try {
+      const completedDate = await completeMyCourse(id)
+      setCourse((current) => ({ ...current, completed_date: completedDate }))
+    } catch (err) {
+      setCompletionError(err.message)
+    } finally {
+      setCompletingCourse(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!embeddedScorm || !scormResumeItemId || !orderedItems.some((item) => item.id === scormResumeItemId)) return
+    selectItem(scormResumeItemId)
+    setScormResumeItemId(null)
+    // selectItem is intentionally local to this screen and recreated each render.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [embeddedScorm, orderedItems, scormResumeItemId])
+
+  useEffect(() => {
+    if (!embeddedScorm || loading || !course) return
+    const status = course.completed_date || progress === 100 ? 'completed' : completedCount > 0 ? 'incomplete' : 'not attempted'
+    window.parent.postMessage({
+      type: 'learnscope.scorm.progress',
+      version: 1,
+      status,
+      score: progress,
+      location: currentItemId ?? '',
+      suspendData: JSON.stringify({ itemId: currentItemId, progress }),
+    }, '*')
+  }, [embeddedScorm, loading, course, progress, completedCount, currentItemId])
 
   useEffect(() => {
     if (!expandedItemId) return
@@ -338,7 +439,7 @@ export default function CourseLearn() {
   function renderItemRow(item) {
     const isCurrent = item.id === currentItem.id
     const status = progressByItemId[item.id]?.status
-    const isDone = Boolean(status) && status !== 'not_attempted'
+    const isDone = isContentComplete(status)
     const isExpanded = !isDesktop && expandedItemId === item.id
     const itemIndex = orderedItems.findIndex((i) => i.id === item.id)
     return (
@@ -377,11 +478,13 @@ export default function CourseLearn() {
               courseId={course.id}
               hasNext={itemIndex + 1 < orderedItems.length}
               hasPrevious={itemIndex > 0}
-              isComplete={Boolean(status)}
+              isComplete={isContentComplete(status)}
               progress={progress}
               onMarkComplete={() => handleMarkComplete(item)}
               onPrevious={() => selectItem(orderedItems[itemIndex - 1].id)}
               onProgress={refreshProgress}
+              pageNumber={isPageCourse ? itemIndex + 1 : 0}
+              pageCount={isPageCourse ? orderedItems.length : 0}
             />
           </div>
         )}
@@ -391,17 +494,19 @@ export default function CourseLearn() {
 
   return (
     <div className="min-h-screen bg-paper">
-      <AppHeader />
-      <main id="main-content" tabIndex={-1} className="max-w-5xl mx-auto px-4 py-8">
+      {!embeddedScorm && <AppHeader />}
+      <main id="main-content" tabIndex={-1} className={`max-w-5xl mx-auto px-4 ${embeddedScorm ? 'py-5' : 'py-8'}`}>
         {/* Back to whatever opened this course: a page that said so, else
             the previous page in the app, else Learning. */}
-        <BackLink
-          to={location.state?.backTo ?? null}
-          label={backLabel}
-          fallbackTo={backTo}
-          fallbackLabel={backLabel}
-          className="text-sm text-secondary hover:text-ink mb-4 inline-block"
-        />
+        {!embeddedScorm && (
+          <BackLink
+            to={location.state?.backTo ?? null}
+            label={backLabel}
+            fallbackTo={backTo}
+            fallbackLabel={backLabel}
+            className="text-sm text-secondary hover:text-ink mb-4 inline-block"
+          />
+        )}
 
         {loading && <p className="text-secondary">{t('common.loading')}</p>}
         {notFound && <p className="text-secondary">{t('courseLearn.notFound')}</p>}
@@ -415,7 +520,7 @@ export default function CourseLearn() {
                   {t('courseLearn.completeCount', { done: completedCount, total: orderedItems.length })}
                 </p>
               )}
-              {canEditBasics && (
+              {canEditBasics && !embeddedScorm && (
                 <button
                   type="button"
                   onClick={() => setEditOpen(true)}
@@ -475,7 +580,36 @@ export default function CourseLearn() {
 
         {course && currentItem && (
           <div>
-            <ProgressBar percent={progress} className="mb-8" />
+            <ProgressBar percent={progress} className="mb-4" />
+            <div className="mb-8 flex items-start justify-between gap-4 border-b border-hairline pb-4 max-sm:flex-col">
+              <div>
+                <p className="text-sm font-medium text-ink">
+                  {course.completed_date
+                    ? t('courseLearn.courseCompleted')
+                    : completionPolicy === 'manual'
+                      ? t('courseLearn.manualCompletion')
+                      : t('courseLearn.allContentCompletion')}
+                </p>
+                <p className="mt-0.5 text-xs text-secondary">
+                  {course.completed_date
+                    ? t('courseLearn.completedOn', { date: new Date(`${course.completed_date}T00:00:00`).toLocaleDateString() })
+                    : completionPolicy === 'manual'
+                      ? t('courseLearn.manualCompletionHint')
+                      : t('courseLearn.allContentCompletionHint')}
+                </p>
+                {completionError && <p role="alert" className="mt-1 text-sm text-red-700">{completionError}</p>}
+              </div>
+              {completionPolicy === 'manual' && !course.completed_date && (
+                <button
+                  type="button"
+                  onClick={handleCompleteCourse}
+                  disabled={completingCourse}
+                  className="shrink-0 rounded-md bg-moss px-4 py-2 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-60"
+                >
+                  {completingCourse ? t('courseLearn.completingCourse') : t('courseLearn.markCourseComplete')}
+                </button>
+              )}
+            </div>
 
             <div className="grid md:grid-cols-[280px_1fr] gap-6">
               <nav>
@@ -530,11 +664,13 @@ export default function CourseLearn() {
                     courseId={course.id}
                     hasNext={currentIndex + 1 < orderedItems.length}
                     hasPrevious={currentIndex > 0}
-                    isComplete={Boolean(progressByItemId[currentItem.id]?.status)}
+                    isComplete={isContentComplete(progressByItemId[currentItem.id]?.status)}
                     progress={progress}
                     onMarkComplete={() => handleMarkComplete(currentItem)}
                     onPrevious={() => selectItem(orderedItems[currentIndex - 1].id)}
                     onProgress={refreshProgress}
+                    pageNumber={isPageCourse ? currentIndex + 1 : 0}
+                    pageCount={isPageCourse ? orderedItems.length : 0}
                   />
                 </div>
               )}

@@ -100,6 +100,38 @@ export async function getCatalogueCourse(id, { currentOnly = true } = {}) {
   return data ? mapCatalogueCourse(data) : null
 }
 
+// A SCORM launcher is handed directly to a third-party LMS by the owning
+// organisation, so the course need not also be listed in the platform-wide
+// Global catalogue. It must still be the organisation's current published
+// version; drafts and superseded versions cannot be launched this way.
+export async function getPublishedCourseForLaunch(id) {
+  const { data, error } = await supabase
+    .from('course_catalogue')
+    .select(CATALOGUE_SELECT)
+    .eq('id', id)
+    .eq('status', 'approved')
+    .eq('is_current_published', true)
+    .maybeSingle()
+  if (error) throw error
+  return data ? mapCatalogueCourse(data) : null
+}
+
+export async function getCourseCompletionPolicy(catalogueCourseId) {
+  const { data, error } = await supabase
+    .from('course_catalogue')
+    .select('completion_policy')
+    .eq('id', catalogueCourseId)
+    .single()
+  if (error) throw error
+  return data.completion_policy ?? 'all_content'
+}
+
+export async function completeMyCourse(courseId) {
+  const { data, error } = await supabase.rpc('complete_my_course', { p_course_id: courseId })
+  if (error) throw error
+  return data
+}
+
 // Which of these catalogue courses the learner has started: at least one of
 // its lessons has progress beyond "not attempted". Enrolled but untouched
 // courses aren't in the set. Read-only, from the progress the course player

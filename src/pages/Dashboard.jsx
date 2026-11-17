@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MoreWaysToProgress, NeedsYourAttention } from '../components/SkillsMomentum'
+import { MoreWaysToProgress } from '../components/SkillsMomentum'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useNavVisibility } from '../context/NavVisibilityContext'
@@ -64,6 +64,11 @@ export default function Dashboard() {
   const [activityRefresh, setActivityRefresh] = useState(0)
   const [repeatRequest, setRepeatRequest] = useState(null)
   const location = useLocation()
+
+  useEffect(() => {
+    const requestedGoalId = new URLSearchParams(location.search).get('goal')
+    if (requestedGoalId) setOpenGoalId(requestedGoalId)
+  }, [location.search])
 
   // "Log again" from the full activity page arrives here, since this is where
   // the "What did you do?" box is. Cleared from history once taken, so going
@@ -160,10 +165,6 @@ export default function Dashboard() {
 
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-4 py-8 space-y-12">
         <h1 className="sr-only">{t('nav.home')}</h1>
-
-        {/* First on the page, and only when something's due, overdue or
-            waiting on the learner. */}
-        {!loading && <NeedsYourAttention onLogGoal={setOpenGoalId} />}
 
         {!loading && (
           <SkillGoalsDashboardPanel

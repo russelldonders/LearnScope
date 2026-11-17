@@ -29,10 +29,12 @@ vi.mock('../context/PendingActionsContext', () => ({
       detail: 'Safe Handling',
       source: 'Acme',
       occurredAt: '2026-09-29T10:00:00Z',
+      actions: [{ label: 'Start course', href: '/actions#assigned-training' }],
     }],
     pendingActionsLoading: false,
     pendingActionsError: null,
     refreshPendingActionCount,
+    dismissPendingAction: vi.fn(),
   }),
 }))
 
@@ -215,13 +217,12 @@ describe('AppHeader organisation branding', () => {
 })
 
 describe('AppHeader notifications', () => {
-  it('opens the account-wide drawer without navigating and keeps the organisation in View All', () => {
+  it('opens the account-wide drawer with the notification action directly available', () => {
     render(
       <MemoryRouter initialEntries={['/organisation/learning?org=acme']}>
         <AppHeader
           brandName="Acme"
           brandHomeHref="/organisation/learning?org=acme"
-          notificationsHref="/actions?org=acme"
         />
       </MemoryRouter>
     )
@@ -233,7 +234,8 @@ describe('AppHeader notifications', () => {
     expect(refreshPendingActionCount).toHaveBeenCalledOnce()
     expect(screen.getByRole('dialog', { name: 'Notifications' })).toBeInTheDocument()
     expect(screen.getAllByText('Acme')).toHaveLength(2)
-    expect(screen.getByRole('link', { name: 'View All Actions' })).toHaveAttribute('href', '/actions?org=acme')
+    expect(screen.getByRole('link', { name: 'Start course' })).toHaveAttribute('href', '/actions#assigned-training')
+    expect(screen.queryByRole('button', { name: /View all/i })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Close notifications' }))
     expect(screen.queryByRole('dialog', { name: 'Notifications' })).not.toBeInTheDocument()

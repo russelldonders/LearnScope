@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { useAuth } from './AuthContext'
-import { loadNotifications } from '../lib/notifications'
+import { dismissNotification, loadNotifications } from '../lib/notifications'
 
 const PendingActionsContext = createContext(undefined)
 
@@ -51,6 +51,21 @@ export function PendingActionsProvider({ children }) {
     refreshPendingActionCount()
   }, [refreshPendingActionCount])
 
+  const dismissPendingAction = useCallback(async (notificationId) => {
+    if (!userId) return
+    const previousItems = pendingActionItems
+    const nextItems = previousItems.filter((item) => item.id !== notificationId)
+    setPendingActionItems(nextItems)
+    setPendingActionCount(nextItems.length)
+    try {
+      await dismissNotification(userId, notificationId)
+    } catch (error) {
+      setPendingActionItems(previousItems)
+      setPendingActionCount(previousItems.length)
+      throw error
+    }
+  }, [pendingActionItems, userId])
+
   return (
     <PendingActionsContext.Provider value={{
       pendingActionCount,
@@ -58,6 +73,7 @@ export function PendingActionsProvider({ children }) {
       pendingActionsLoading,
       pendingActionsError,
       refreshPendingActionCount,
+      dismissPendingAction,
     }}>
       {children}
     </PendingActionsContext.Provider>

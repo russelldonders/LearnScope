@@ -1,12 +1,40 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const supabaseMock = vi.hoisted(() => ({ from: vi.fn() }))
+const supabaseMock = vi.hoisted(() => ({ from: vi.fn(), rpc: vi.fn() }))
 vi.mock('./supabaseClient', () => ({ supabase: supabaseMock }))
 
-const { formatCohortDateRange, listMyAssignedCourseEmployers, respondToCourseAssignment } = await import('./courseCatalogue')
+const {
+  completeMyCourse,
+  formatCohortDateRange,
+  getCourseCompletionPolicy,
+  listMyAssignedCourseEmployers,
+  respondToCourseAssignment,
+} = await import('./courseCatalogue')
 
 beforeEach(() => {
   supabaseMock.from.mockReset()
+  supabaseMock.rpc.mockReset()
+})
+
+describe('course completion', () => {
+  it('reads the selected policy and keeps the all-content default compatible with older data', async () => {
+    const single = vi.fn().mockResolvedValue({ data: { completion_policy: null }, error: null })
+    const chain = { select: vi.fn(), eq: vi.fn(), single }
+    chain.select.mockReturnValue(chain)
+    chain.eq.mockReturnValue(chain)
+    supabaseMock.from.mockReturnValue(chain)
+
+    await expect(getCourseCompletionPolicy('catalogue-1')).resolves.toBe('all_content')
+    expect(supabaseMock.from).toHaveBeenCalledWith('course_catalogue')
+    expect(chain.eq).toHaveBeenCalledWith('id', 'catalogue-1')
+  })
+
+  it('marks a learner course complete through the server-validated RPC', async () => {
+    supabaseMock.rpc.mockResolvedValue({ data: '2026-11-17', error: null })
+
+    await expect(completeMyCourse('course-1')).resolves.toBe('2026-11-17')
+    expect(supabaseMock.rpc).toHaveBeenCalledWith('complete_my_course', { p_course_id: 'course-1' })
+  })
 })
 
 describe('formatCohortDateRange', () => {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePendingActions } from '../context/PendingActionsContext'
 import { useLanguage } from '../context/LanguageContext'
@@ -40,6 +40,7 @@ import { listIncomingPlanInvitations, respondToPlanInvitation } from '../lib/lea
 // a learner already checks; loading them here is also what marks them seen
 // (see markPeerRatingsSeen below), clearing the bell.
 export default function Actions() {
+  const location = useLocation()
   const { user, employerMemberships, refreshOrganisationMemberships, refreshEmployerMemberships } = useAuth()
   const { refreshPendingActionCount } = usePendingActions()
   const { t } = useLanguage()
@@ -88,6 +89,11 @@ export default function Actions() {
   const [planInviteDecidingId, setPlanInviteDecidingId] = useState(null)
   const [planInviteError, setPlanInviteError] = useState(null)
   const [acceptedPlan, setAcceptedPlan] = useState(null)
+
+  useEffect(() => {
+    if (loading || !location.hash) return
+    document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: 'start' })
+  }, [loading, location.hash])
 
   useEffect(() => {
     let cancelled = false
@@ -527,7 +533,7 @@ export default function Actions() {
         <div className="space-y-10">
 
         {planInvites.length > 0 && (
-          <section aria-labelledby="plan-invitations-heading">
+          <section id="plan-invitations" aria-labelledby="plan-invitations-heading">
             <h2 id="plan-invitations-heading" className="mb-6 font-display text-xl text-ink">{t('actions.planInvitations')}</h2>
             <div className="space-y-3">
               {planInvites.map((invite) => (
@@ -614,7 +620,7 @@ export default function Actions() {
         )}
 
         {connectionRequests.length > 0 && (
-          <div>
+          <div id="connection-requests">
             <h2 className="font-display text-xl text-ink mb-6">{t('actions.connectionRequests')}</h2>
             <div className="space-y-3">
               {connectionRequests.map((request) => (
@@ -701,7 +707,7 @@ export default function Actions() {
         )}
 
         {orgInvites.length > 0 && (
-          <div>
+          <div id="provider-invitations">
             <h2 className="font-display text-xl text-ink mb-6">{t('actions.providerInvitations')}</h2>
             <div className="space-y-3">
               {orgInvites.map((invite) => (
@@ -741,7 +747,7 @@ export default function Actions() {
         )}
 
         {employerInvites.length > 0 && (
-          <div>
+          <div id="employer-invitations">
             <h2 className="font-display text-xl text-ink mb-6">{t('actions.employerInvitations')}</h2>
             <div className="space-y-3">
               {employerInvites.map((invite) => (
@@ -781,7 +787,7 @@ export default function Actions() {
         )}
 
         {managerTeamInvites.length > 0 && (
-          <section aria-labelledby="manager-team-invitations-heading">
+          <section id="manager-team-invitations" aria-labelledby="manager-team-invitations-heading">
             <h2 id="manager-team-invitations-heading" className="font-display text-xl text-ink mb-6">
               {t('actions.managerTeamInvitations')}
             </h2>
@@ -801,7 +807,7 @@ export default function Actions() {
         )}
 
         {dataAccessRequests.length > 0 && (
-          <div>
+          <div id="data-access-requests">
             <h2 className="font-display text-xl text-ink mb-6">{t('actions.dataAccessRequests')}</h2>
             <div className="space-y-3">
               {dataAccessRequests.map((request) => (
@@ -842,7 +848,7 @@ export default function Actions() {
         )}
 
         {courseAssignments.length > 0 && (
-          <div>
+          <div id="assigned-training">
             <h2 className="font-display text-xl text-ink mb-6">{t('actions.assignedTraining')}</h2>
             <div className="space-y-3">
               {courseAssignments.map((assignment) => (
@@ -882,7 +888,7 @@ export default function Actions() {
         )}
 
         {skillSuggestions.length > 0 && (
-          <div>
+          <div id="skill-suggestions">
             <h2 className="font-display text-xl text-ink mb-6">{t('actions.skillSuggestions')}</h2>
             <div className="space-y-3">
               {skillSuggestions.map((suggestion) => (

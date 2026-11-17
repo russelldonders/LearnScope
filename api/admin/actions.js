@@ -10,6 +10,7 @@ import { deleteUserEvidenceFiles } from '../_lib/evidenceStorage.js'
 import { getWebsiteBrandColours } from '../_lib/websiteBrandColours.js'
 import { createClient } from '@supabase/supabase-js'
 import { decodeJwt } from 'jose'
+import { buildScormCoursePackage } from '../_lib/scormExport.js'
 
 // Single dispatcher for every service-role action needing the Supabase Auth
 // admin API or otherwise needing to bypass RLS, rather than one serverless
@@ -115,6 +116,9 @@ export default async function handler(req, res) {
       case 'resendManagerTeamInvite':
         await resendManagerTeamInvite(admin, caller, payload, res)
         return
+      case 'exportCourseScorm':
+        await exportCourseScorm(admin, caller, payload, req, res)
+        return
       default:
         res.status(400).json({ error: 'Unknown action' })
     }
@@ -122,6 +126,50 @@ export default async function handler(req, res) {
     console.error(`admin/actions (${action}) error:`, err)
     res.status(500).json({ error: clientErrorMessage(err) })
   }
+}
+
+async function exportCourseScorm(admin, caller, { courseId }, req, res) {
+  if (!courseId) {
+    res.status(400).json({ error: 'Choose a course to export.' })
+    return
+  }
+
+  const { data: course, error: courseError } = await admin
+    .from('course_catalogue')
+    .select('id, name, organisation_id, status, is_current_published, organisations(status)')
+    .eq('id', courseId)
+    .maybeSingle()
+  if (courseError) throw courseError
+  if (!course) {
+    res.status(404).json({ error: 'Course not found.' })
+    return
+  }
+
+  const { data: membership, error: membershipError } = await admin
+    .from('organisation_members')
+    .select('id')
+    .eq('organisation_id', course.organisation_id)
+    .eq('user_id', caller.id)
+    .eq('role', 'admin')
+    .eq('status', 'active')
+    .maybeSingle()
+  if (membershipError) throw membershipError
+  if (!membership) {
+    res.status(403).json({ error: 'Only an admin of the course organisation can export it.' })
+    return
+  }
+  if (course.organisations?.status !== 'active' || course.status !== 'approved' || !course.is_current_published) {
+    res.status(409).json({ error: 'Publish the current course version before exporting it.' })
+    return
+  }
+
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim()
+  const appUrl = process.env.APP_URL || `${forwardedProto}://${req.headers.host}`
+  const { buffer, fileName } = await buildScormCoursePackage(course, appUrl)
+  res.setHeader('Content-Type', 'application/zip')
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`)
+  res.setHeader('Cache-Control', 'private, no-store')
+  res.status(200).send(buffer)
 }
 
 // Messages raised by our own SQL functions (`raise exception`, P0001 or the

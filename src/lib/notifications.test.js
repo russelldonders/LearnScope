@@ -1,9 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { buildNotificationItems } from './notifications'
 
-vi.mock('./supabaseClient', () => ({ supabase: {} }))
-
 const emptyValues = {
+  planInvites: [],
   rateInvites: [],
   recommendInvites: [],
   unseenRatings: [],
@@ -15,53 +14,33 @@ const emptyValues = {
   courseAssignments: [],
   skillSuggestions: [],
   managerTeamInvites: [],
-  managerTeamSkillSuggestions: [],
-  planInvites: [],
+  selfAssessments: [],
+  targets: [],
+  goals: [],
 }
 
 describe('buildNotificationItems', () => {
-  it('combines account-wide sources, labels their origin, and sorts newest first', () => {
-    const values = {
+  it('includes dashboard attention reminders with direct actions and stable dismissal ids', () => {
+    const [notification] = buildNotificationItems({
       ...emptyValues,
-      connectionRequests: [{ id: 'connection-1', requester_id: 'person-1', created_at: '2026-09-27T10:00:00Z' }],
-      courseAssignments: [{
-        id: 'course-1',
-        created_at: '2026-09-29T10:00:00Z',
-        employers: { name: 'Acme' },
-        course_catalogue: { name: 'Safe Handling' },
-      }],
-      managerTeamInvites: [{
-        id: 'team-1',
-        managerName: 'Morgan',
-        teamName: 'Product Team',
-        invitedAt: '2026-09-28T10:00:00Z',
-      }],
-      planInvites: [{
-        id: 'plan-1',
-        inviter_name: 'Jamie',
-        plan_title: 'Lead better meetings',
-        created_at: '2026-09-30T10:00:00Z',
-      }],
-    }
+      selfAssessments: [{ id: 'skill-1', name: 'Facilitation', next_checkin_date: '2026-11-17' }],
+    })
 
-    const items = buildNotificationItems(values, { 'person-1': { name: 'Taylor' } })
-
-    expect(items.map((item) => item.title)).toEqual(['Plan Invitation', 'Course Assigned', 'Team Invitation', 'Connection Request'])
-    expect(items.map((item) => item.source)).toEqual(['Personal', 'Acme', 'Product Team', 'Personal'])
-    expect(items[0].detail).toContain('Jamie invited you to follow Lead better meetings')
-    expect(items[3].detail).toContain('Taylor')
+    expect(notification).toMatchObject({
+      id: 'self-assessment-reminder:skill-1:2026-11-17',
+      title: 'Self-assessment due',
+      actions: [{ label: 'Self-assess now', href: '/skills/skill-1?action=self-assess' }],
+    })
   })
 
-  it('uses resilient labels when joined records or profile names are unavailable', () => {
-    const values = {
+  it('gives every actionable source a control in the notification row', () => {
+    const items = buildNotificationItems({
       ...emptyValues,
-      employerInvites: [{ id: 'invite-1', role: 'member', created_at: null, employers: null }],
-      skillSuggestions: [{ id: 'skill-1', skill_name: '', created_at: null, employers: null }],
-    }
+      rateInvites: [{ id: 'invite-1', share_code: 'abc', skill_name: 'Coaching', created_at: '2026-11-17T10:00:00Z' }],
+      courseAssignments: [{ id: 'course-1', course_catalogue: { name: 'Safety' }, created_at: '2026-11-17T09:00:00Z' }],
+    })
 
-    expect(buildNotificationItems(values)).toEqual(expect.arrayContaining([
-      expect.objectContaining({ title: 'Workspace Invitation', source: 'Employer' }),
-      expect.objectContaining({ title: 'Skill Suggestion', source: 'Employer' }),
-    ]))
+    expect(items.every((item) => item.actions.length > 0)).toBe(true)
+    expect(items.find((item) => item.kind === 'rate-invite').actions[0].href).toBe('/rate/abc')
   })
 })

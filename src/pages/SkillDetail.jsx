@@ -77,6 +77,7 @@ export default function SkillDetail({ skillId, embedded = false }) {
     : location.state?.from ? t('skillDetail.backToExperience') : t('skillDetail.backToSkills')
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedTab = searchParams.get('tab')
+  const requestedAction = searchParams.get('action')
   const tabRefs = useRef({})
 
   function buildTabParams(overrides) {
@@ -151,6 +152,15 @@ export default function SkillDetail({ skillId, embedded = false }) {
   const [quickLogOpen, setQuickLogOpen] = useState(false)
   const [quickLogGoals, setQuickLogGoals] = useState([])
   const [settingsOpen, setSettingsOpen] = useState(false)
+
+  useEffect(() => {
+    if (!skill || !requestedAction) return
+    if (requestedAction === 'self-assess') setSelfAssessOpen(true)
+    if (requestedAction === 'change-target') setTargetOpen(true)
+    setSearchParams(buildTabParams({ action: null }), { replace: true })
+    // The query parameter is consumed once after the skill is available.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skill, requestedAction])
   const [startingComponentId, setStartingComponentId] = useState(null)
   const [startComponentError, setStartComponentError] = useState(null)
   const {

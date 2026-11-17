@@ -93,7 +93,7 @@ export async function createProviderCourse(userId, organisationId, { name, provi
 // exposes an edit affordance for -- pending_approval/approved rows are
 // read-only from here regardless. course_code is immutable and never
 // updated from here.
-export async function updateProviderCourse(id, { name, provider, courseType, durationValue, durationUnit, synopsis, priceAmount, priceCurrency }) {
+export async function updateProviderCourse(id, { name, provider, courseType, durationValue, durationUnit, synopsis, priceAmount, priceCurrency, completionPolicy }) {
   const { error } = await supabase
     .from('course_catalogue')
     .update({
@@ -109,6 +109,7 @@ export async function updateProviderCourse(id, { name, provider, courseType, dur
       // input, so only an actually-blank value should collapse to null.
       price_amount: priceAmount === '' || priceAmount === null || priceAmount === undefined ? null : Number(priceAmount),
       price_currency: priceCurrency?.trim() ? priceCurrency.trim().toUpperCase() : null,
+      completion_policy: completionPolicy || 'all_content',
     })
     .eq('id', id)
   if (error) throw error

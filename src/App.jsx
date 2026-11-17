@@ -52,6 +52,7 @@ const SkillsProfile = lazyRoute(() => import('./pages/SkillsProfile'))
 const CourseCatalogue = lazyRoute(() => import('./pages/CourseCatalogue'))
 const CourseDetail = lazyRoute(() => import('./pages/CourseDetail'))
 const CourseLearn = lazyRoute(() => import('./pages/CourseLearn'))
+const ScormCourseLaunch = lazyRoute(() => import('./pages/ScormCourseLaunch'))
 const Learning = lazyRoute(() => import('./pages/Learning'))
 const Plans = lazyRoute(() => import('./pages/Plans'))
 const PlanDetail = lazyRoute(() => import('./pages/PlanDetail'))
@@ -98,6 +99,7 @@ function App() {
           <Route path="/lti/session" element={<LtiSession />} />
           <Route path="/lti/deep-link" element={<LtiSession />} />
           <Route path="/lti/resources/:objectId" element={<LtiSession />} />
+          <Route path="/scorm/launch/:courseId" element={<ScormCourseLaunch />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />

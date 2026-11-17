@@ -28,6 +28,7 @@ import { CURRENCIES } from '../../lib/currencies'
 import { CourseSections } from './CourseSections'
 import { TrainerPicker, CourseCohorts } from './CourseCohorts'
 import { publishSystemCourseToGlobal } from '../../lib/admin/skillCourseGeneration'
+import { downloadCourseScormPackage } from '../../lib/scormExport'
 
 const MAX_IMAGE_BYTES = COURSE_IMAGE_MAX_INPUT_BYTES
 
@@ -295,6 +296,8 @@ export default function ProviderCourseEditor({ adminMode = false }) {
   const [showCatalogueDialog, setShowCatalogueDialog] = useState(false)
   const [showAdminPublishDialog, setShowAdminPublishDialog] = useState(false)
   const [saveError, setSaveError] = useState(null)
+  const [exportingScorm, setExportingScorm] = useState(false)
+  const [exportError, setExportError] = useState(null)
   // Whichever version is currently live for this course (which may not be
   // the one being edited -- a new draft starts with no publications of its
   // own, 0107) -- surfaced so the publish dialog can warn if publishing
@@ -333,6 +336,7 @@ export default function ProviderCourseEditor({ adminMode = false }) {
             synopsis: data.synopsis ?? '',
             priceAmount: data.price_amount ?? '',
             priceCurrency: data.price_currency ?? '',
+            completionPolicy: data.completion_policy ?? 'all_content',
           })
         }
         if (data.status === 'draft' || data.status === 'rejected') {
@@ -433,6 +437,18 @@ export default function ProviderCourseEditor({ adminMode = false }) {
     }
   }
 
+  async function handleScormExport() {
+    setExportingScorm(true)
+    setExportError(null)
+    try {
+      await downloadCourseScormPackage(course.id)
+    } catch (err) {
+      setExportError(err.message)
+    } finally {
+      setExportingScorm(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-paper">
       <AppHeader hideNavLinks />
@@ -511,6 +527,27 @@ export default function ProviderCourseEditor({ adminMode = false }) {
                     {course.status === 'rejected' ? 'Resubmit to Global catalogue' : 'Submit to Global catalogue'}
                   </button>}
                 </div>
+              </div>
+            )}
+
+            {!adminMode && myRole === 'admin' && course.status === 'approved' && course.is_current_published && (
+              <div className="flex items-start justify-between gap-4 border-y border-hairline py-4 max-sm:flex-col">
+                <div className="max-w-2xl">
+                  <p className="text-sm font-medium text-ink">Use this course in another LMS</p>
+                  <p className="mt-1 text-sm leading-relaxed text-secondary">
+                    Export a SCORM 1.2 launcher for this live version. Completion, score and resume position return
+                    to the receiving LMS; detailed activity remains in LearnScope.
+                  </p>
+                  {exportError && <p role="alert" className="mt-2 text-sm text-red-700">{exportError}</p>}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleScormExport}
+                  disabled={exportingScorm}
+                  className="shrink-0 rounded-md border border-hairline px-3 py-1.5 text-sm font-medium text-ink hover:bg-card disabled:opacity-60"
+                >
+                  {exportingScorm ? 'Creating SCORM package…' : 'Export SCORM 1.2'}
+                </button>
               </div>
             )}
 
@@ -760,6 +797,25 @@ function CourseHeader({ course, canEdit, onSaved, form, setForm, onSubmit, onCre
                 )}
                 {CURRENCIES.map((code) => <option key={code} value={code}>{code}</option>)}
               </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-sm text-secondary mb-1" htmlFor="courseCompletionPolicy">
+                Course completion
+              </label>
+              <select
+                id="courseCompletionPolicy"
+                value={form.completionPolicy}
+                onChange={(e) => setForm((f) => ({ ...f, completionPolicy: e.target.value }))}
+                className="w-full rounded-md border border-hairline bg-paper px-3 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-moss"
+              >
+                <option value="all_content">Complete all content</option>
+                <option value="manual">Learner marks the course complete</option>
+              </select>
+              <p className="mt-1 text-xs leading-relaxed text-secondary">
+                {form.completionPolicy === 'manual'
+                  ? 'Learners can finish the whole course at any point using a single completion action.'
+                  : 'The course completes automatically after every content item is completed or passed.'}
+              </p>
             </div>
             <div className="sm:col-span-2">
               <label className="block text-sm text-secondary mb-1" htmlFor="courseSynopsis">
