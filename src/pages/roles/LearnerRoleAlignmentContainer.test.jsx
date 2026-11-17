@@ -56,4 +56,19 @@ describe('LearnerRoleAlignmentContainer home summary', () => {
     expect(screen.getByText(/Store manager/)).toBeInTheDocument()
     expect(screen.queryByText('Private personal role')).not.toBeInTheDocument()
   })
+
+  it('uses the organisation text colour for its heading on a branded page background', () => {
+    hookMock.value = {
+      currentRoles: [],
+      pendingAssignments: [],
+      linkedAssignments: [],
+      alignmentByAssignmentId: {},
+      loading: false,
+      error: null,
+    }
+
+    render(<MemoryRouter><LearnerRoleAlignmentContainer variant="summary" roleHref="/role" /></MemoryRouter>)
+
+    expect(screen.getByRole('heading', { name: 'Skills for your role' })).toHaveClass('text-[var(--org-text,var(--color-ink))]')
+  })
 })

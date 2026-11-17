@@ -32,7 +32,7 @@ function RoleDevelopmentSummary({ pendingAssignments, linkedAssignments, alignme
       <div className="flex items-end justify-between gap-4 mb-5">
         <div>
           <p className="text-xs font-medium text-secondary uppercase tracking-[0.12em]">{t('roleAlignment.summary.eyebrow')}</p>
-          <h2 id="role-development-heading" className="font-display text-2xl text-ink mt-1">{t('roleAlignment.summary.heading')}</h2>
+          <h2 id="role-development-heading" className="font-display text-2xl text-[var(--org-text,var(--color-ink))] mt-1">{t('roleAlignment.summary.heading')}</h2>
         </div>
         <Link to={roleHref} className="text-sm font-medium text-[var(--org-text,var(--color-ink))] underline underline-offset-4 decoration-hairline hover:decoration-current">
           {t('roleAlignment.summary.viewDetails')}

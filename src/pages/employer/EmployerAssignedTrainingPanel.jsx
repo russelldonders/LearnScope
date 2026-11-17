@@ -146,7 +146,7 @@ export default function EmployerAssignedTrainingPanel({
         <div className="flex items-end justify-between gap-4 mb-5">
           <div>
             <p className="text-xs font-medium text-secondary uppercase tracking-[0.12em]">{t('employerTraining.eyebrow')}</p>
-            <h2 id="continue-learning-heading" className="font-display text-2xl text-ink mt-1">
+            <h2 id="continue-learning-heading" className="font-display text-2xl text-[var(--org-text,var(--color-ink))] mt-1">
               {focus && statusFor(focus).key === 'not-started' && t('employerTraining.headingStart')}
               {focus && statusFor(focus).key === 'in-progress' && t('employerTraining.headingContinue')}
               {focus && statusFor(focus).key === 'completed' && t('employerTraining.headingReview')}
@@ -178,7 +178,7 @@ export default function EmployerAssignedTrainingPanel({
           </div>
         ) : (
           <div className="border-y border-hairline py-6">
-            <p className="font-medium text-ink">{t('employerTraining.caughtUp')}</p>
+            <p className="font-medium text-[var(--org-text,var(--color-ink))]">{t('employerTraining.caughtUp')}</p>
             <p className="text-sm text-secondary mt-1">{t('employerTraining.noneAssigned', { employer: employerName })}</p>
           </div>
         )}

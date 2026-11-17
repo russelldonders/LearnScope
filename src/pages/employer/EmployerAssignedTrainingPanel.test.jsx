@@ -71,6 +71,19 @@ describe('EmployerAssignedTrainingPanel', () => {
     expect(screen.getByRole('link', { name: 'View all' })).toHaveAttribute('href', '/employer/home?org=acme&section=learning')
   })
 
+  it('uses the organisation text colour for headings on the branded page background', async () => {
+    catalogueMock.list.mockResolvedValue([])
+
+    render(
+      <MemoryRouter>
+        <EmployerAssignedTrainingPanel employerId="employer-1" employerName="Acme" variant="home" />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: 'Your learning' })).toHaveClass('text-[var(--org-text,var(--color-ink))]')
+    expect(screen.getByText('You are all caught up.')).toHaveClass('text-[var(--org-text,var(--color-ink))]')
+  })
+
   it('enrols a not-started assignment and opens the real learner course', async () => {
     catalogueMock.list.mockResolvedValue([assignments[1]])
     catalogueMock.respond.mockResolvedValue({ id: 'learner-2', catalogue_course_id: 'catalogue-2' })
