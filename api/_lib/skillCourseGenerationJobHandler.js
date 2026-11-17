@@ -1,7 +1,7 @@
 import { waitUntil } from '@vercel/functions'
 import { verifySupabaseUser } from './auth.js'
 import { consumeQuota, sendQuotaExceeded } from './quota.js'
-import { assessmentQuestionListSchema, buildCourseDraftRequest, checkGeneratedCourseDraft } from './courseDraft.js'
+import { assessmentQuestionListSchema, buildCourseDraftRequest, checkGeneratedCourseDraft, learningSectionListSchema } from './courseDraft.js'
 import { supabaseAdmin } from './supabaseAdmin.js'
 import { createTrackedMessage } from './trackedAnthropic.js'
 
@@ -76,6 +76,7 @@ function unusableCourse(message) {
 }
 
 const MAX_QUESTION_REPAIR_ATTEMPTS = 3
+const MAX_SECTION_REPAIR_ATTEMPTS = 2
 const MAX_GENERATION_TOKENS = 24000
 const QUESTION_REPAIR_TOKENS = 6000
 
@@ -85,16 +86,47 @@ function missingQuestionCount(problem, wanted) {
   return wanted - Number(match[1])
 }
 
-export function assessmentQuestionRepairPrompt(originalPrompt, missing, assessment, existingQuestions = []) {
+function missingSectionCount(problem, wanted) {
+  const match = /^The AI wrote (\d+) (?:section|sections) instead of (\d+)\.$/.exec(problem ?? '')
+  if (!match || Number(match[2]) !== wanted || Number(match[1]) >= wanted) return 0
+  return wanted - Number(match[1])
+}
+
+function reliableQuestionType(questionTypes) {
+  return ['single', 'true_false', 'short_text', 'number', 'ordering', 'matching', 'multiple']
+    .find((type) => questionTypes.includes(type)) ?? questionTypes[0]
+}
+
+function questionTypeRules(type) {
+  if (type === 'single') return 'Use exactly 4 answer items, with exactly one correct: true and three correct: false.'
+  if (type === 'true_false') return 'Use exactly 2 answer items labelled True and False, with exactly one correct: true.'
+  if (type === 'multiple') return 'Use exactly 4 answer items, with two correct: true and two correct: false.'
+  if (type === 'short_text') return 'Use 1 to 3 non-empty item labels containing accepted answers.'
+  if (type === 'number') return 'Use one item whose numeric value is the correct answer; set tolerance to the accepted variation.'
+  if (type === 'matching') return 'Use at least 3 items; every item needs a non-empty label and its non-empty correct match in detail.'
+  return 'Use at least 3 non-empty item labels in the correct order.'
+}
+
+export function assessmentQuestionRepairPrompt(originalPrompt, missing, assessment, questionType, existingQuestions = []) {
   return `${originalPrompt}
 
 <assessment_correction>
 The course is already written. Return exactly ${missing} new test_question ${missing === 1 ? 'block' : 'blocks'} only; do not regenerate the course.
-Use only these layouts: ${assessment.questionTypes.join(', ')}. Every question is worth ${assessment.pointsPerQuestion} ${assessment.pointsPerQuestion === 1 ? 'point' : 'points'}.
+Use layout "${questionType}" for every new question. ${questionTypeRules(questionType)} Every question is worth ${assessment.pointsPerQuestion} ${assessment.pointsPerQuestion === 1 ? 'point' : 'points'}.
 Make every question valid for its layout, unambiguous, and different from these existing questions:
 ${existingQuestions.length ? existingQuestions.map((question) => `- ${question}`).join('\n') : '- None'}
 Check that the questions array contains exactly ${missing} items before returning it.
 </assessment_correction>`
+}
+
+function learningSectionRepairPrompt(originalPrompt, missing, pagesPerSection) {
+  return `${originalPrompt}
+
+<section_correction>
+The rest of the course is already written. Return exactly ${missing} new learning ${missing === 1 ? 'section' : 'sections'} only; do not return the final test or regenerate the course.
+Every new section must contain exactly ${pagesPerSection} ${pagesPerSection === 1 ? 'page' : 'pages'}, and every page must contain 4 to 8 useful blocks.
+Do not use test_question blocks. Check the sections and pages counts before returning the JSON.
+</section_correction>`
 }
 
 function finalTestPage(raw) {
@@ -113,6 +145,17 @@ function mergeAssessmentQuestions(raw, additions, wanted) {
   // the right raw count but some malformed questions, they replace those
   // unusable entries instead of pushing the page beyond its block limit.
   page.blocks = [...otherBlocks, ...additions, ...existingQuestions].slice(0, otherBlocks.length + wanted)
+  return merged
+}
+
+function mergeLearningSections(raw, additions, wanted, hasAssessment) {
+  const merged = structuredClone(raw)
+  if (!Array.isArray(merged?.sections)) return merged
+  const finalSection = hasAssessment ? merged.sections.at(-1) : null
+  const existingLearning = hasAssessment ? merged.sections.slice(0, -1) : merged.sections
+  const learningWanted = hasAssessment ? wanted - 1 : wanted
+  const learning = [...existingLearning, ...additions].slice(0, learningWanted)
+  merged.sections = finalSection ? [...learning, finalSection] : learning
   return merged
 }
 
@@ -158,6 +201,30 @@ async function runGenerationJob({ jobId, request, userId, organisationId }) {
     if (request.values.assessment) raw = mergeAssessmentQuestions(raw, [], request.values.assessment.questionCount)
     let { draft, problem } = checkGeneratedCourseDraft(raw, request.values)
 
+    for (let attempt = 1; !draft && attempt <= MAX_SECTION_REPAIR_ATTEMPTS; attempt += 1) {
+      const missing = missingSectionCount(problem, request.values.sectionCount)
+      if (!missing) break
+      const sectionResponse = await createTrackedMessage({
+        feature: 'skill_level_course_generation',
+        userId,
+        organisationId,
+        params: {
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: Math.min(MAX_GENERATION_TOKENS, 1500 + missing * request.values.pagesPerSection * 1400),
+          output_config: { format: { type: 'json_schema', schema: learningSectionListSchema(request.values.elements) } },
+          messages: [{ role: 'user', content: learningSectionRepairPrompt(request.prompt, missing, request.values.pagesPerSection) }],
+        },
+      })
+      if (sectionResponse.stop_reason === 'refusal') throw Object.assign(new Error('AI refusal'), { status: 422 })
+      if (sectionResponse.stop_reason === 'max_tokens') continue
+      const sectionText = sectionResponse.content.find((block) => block.type === 'text')
+      if (!sectionText) continue
+      const sections = JSON.parse(sectionText.text)?.sections
+      if (!Array.isArray(sections) || sections.length === 0) continue
+      raw = mergeLearningSections(raw, sections.slice(0, missing), request.values.sectionCount, Boolean(request.values.assessment))
+      ;({ draft, problem } = checkGeneratedCourseDraft(raw, request.values))
+    }
+
     for (let attempt = 1; !draft && attempt <= MAX_QUESTION_REPAIR_ATTEMPTS; attempt += 1) {
       const assessment = request.values.assessment
       const missing = assessment ? missingQuestionCount(problem, assessment.questionCount) : 0
@@ -167,6 +234,7 @@ async function runGenerationJob({ jobId, request, userId, organisationId }) {
         .filter((block) => block?.type === 'test_question' && typeof block.content === 'string')
         .map((block) => block.content.trim())
         .filter(Boolean)
+      const questionType = reliableQuestionType(assessment.questionTypes)
       const repairResponse = await createTrackedMessage({
         feature: 'skill_level_course_generation',
         userId,
@@ -174,8 +242,8 @@ async function runGenerationJob({ jobId, request, userId, organisationId }) {
         params: {
           model: 'claude-haiku-4-5-20251001',
           max_tokens: Math.min(QUESTION_REPAIR_TOKENS, 1000 + missing * 500),
-          output_config: { format: { type: 'json_schema', schema: assessmentQuestionListSchema(assessment.questionTypes) } },
-          messages: [{ role: 'user', content: assessmentQuestionRepairPrompt(request.prompt, missing, assessment, existingQuestions) }],
+          output_config: { format: { type: 'json_schema', schema: assessmentQuestionListSchema([questionType]) } },
+          messages: [{ role: 'user', content: assessmentQuestionRepairPrompt(request.prompt, missing, assessment, questionType, existingQuestions) }],
         },
       })
       if (repairResponse.stop_reason === 'refusal') throw Object.assign(new Error('AI refusal'), { status: 422 })

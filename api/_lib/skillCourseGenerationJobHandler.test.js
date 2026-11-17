@@ -187,7 +187,7 @@ describe('assessment correction', () => {
       topic: 'Coaching', audience: 'New coaches', outcomes: 'Understand coaching',
       sectionCount: 2, pagesPerSection: 1, elements: ['knowledge_check'],
       assessmentEnabled: true, assessmentQuestionCount: 10, assessmentPassMark: 70,
-      assessmentPointsPerQuestion: 1, assessmentQuestionTypes: ['single'],
+      assessmentPointsPerQuestion: 1, assessmentQuestionTypes: ['multiple', 'matching', 'single'],
     })
     mocks.createMessage
       .mockResolvedValueOnce({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(generatedCourse(6)) }], usage: {} })
@@ -200,8 +200,39 @@ describe('assessment correction', () => {
 
     expect(mocks.createMessage).toHaveBeenCalledTimes(2)
     expect(mocks.createMessage.mock.calls[1][0].messages[0].content).toContain('Return exactly 4 new test_question blocks only')
+    expect(mocks.createMessage.mock.calls[1][0].messages[0].content).toContain('Use layout "single" for every new question')
     expect(mocks.createMessage.mock.calls[1][0].output_config.format.schema.properties).toHaveProperty('questions')
+    expect(mocks.createMessage.mock.calls[1][0].output_config.format.schema.properties.questions.items.properties.layout.enum).toEqual(['single'])
     expect(mocks.createMessage.mock.calls[1][0].max_tokens).toBeLessThan(request.maxTokens)
+  })
+
+  it('generates only a missing learning section and keeps the final test', async () => {
+    mocks.claimJob = true
+    const request = buildCourseDraftRequest({
+      topic: 'Consulting', audience: 'New consultants', outcomes: 'Understand consulting',
+      sectionCount: 3, pagesPerSection: 1, elements: [],
+      assessmentEnabled: true, assessmentQuestionCount: 10,
+      assessmentPointsPerQuestion: 1, assessmentQuestionTypes: ['single'],
+    })
+    const incomplete = generatedCourse(10)
+    const newSection = {
+      title: 'Consulting in practice', instructions: '', pages: [{ title: 'Apply the process', blocks: [
+        { type: 'heading', content: 'Apply the process', secondaryContent: '', level: 1, variant: 'info', align: 'left', layout: 'none', unit: '', points: 1, tolerance: 0, items: [] },
+        { type: 'text', content: 'Use the process with a client.', secondaryContent: '', level: 2, variant: 'info', align: 'left', layout: 'none', unit: '', points: 1, tolerance: 0, items: [] },
+      ] }],
+    }
+    mocks.createMessage
+      .mockResolvedValueOnce({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(incomplete) }], usage: {} })
+      .mockResolvedValueOnce({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ sections: [newSection] }) }], usage: {} })
+
+    await runGenerationJob({
+      jobId: '79000000-0000-4000-8000-000000000030', request,
+      userId: '79000000-0000-4000-8000-000000000001', organisationId: '79000000-0000-4000-8000-000000000010',
+    })
+
+    expect(mocks.createMessage).toHaveBeenCalledTimes(2)
+    expect(mocks.createMessage.mock.calls[1][0].messages[0].content).toContain('Return exactly 1 new learning section only')
+    expect(mocks.createMessage.mock.calls[1][0].output_config.format.schema.properties).toHaveProperty('sections')
   })
 
   it('retries a truncated course once with the maximum output budget', async () => {

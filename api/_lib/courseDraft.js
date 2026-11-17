@@ -154,6 +154,16 @@ export function assessmentQuestionListSchema(questionTypes = ASSESSMENT_QUESTION
   }
 }
 
+export function learningSectionListSchema(elements = COURSE_ELEMENTS) {
+  const schema = courseDraftSchema(elements.filter((element) => element !== 'test_question'))
+  return {
+    type: 'object',
+    properties: { sections: schema.properties.sections },
+    required: ['sections'],
+    additionalProperties: false,
+  }
+}
+
 export const COURSE_DRAFT_SCHEMA = courseDraftSchema()
 
 function clean(value, maxLength) {
@@ -223,7 +233,7 @@ ${outcomes}
 Delivery type: ${courseType}
 Duration: ${durationValue} ${durationUnit}
 Tone: ${tone}
-Required structure: ${assessment ? `exactly ${sectionCount} sections. The first ${Math.max(0, sectionCount - 1)} learning sections must have exactly ${pagesPerSection} pages each. The final section must be named "Final test" and contain exactly one page.` : `exactly ${sectionCount} sections, with exactly ${pagesPerSection} pages in each section.`}
+Required structure: ${assessment ? `exactly ${sectionCount} sections total: ${Math.max(0, sectionCount - 1)} learning sections followed by 1 final test section. Every learning section must have exactly ${pagesPerSection} pages. The final section must be named "Final test" and contain exactly one page.` : `exactly ${sectionCount} sections, with exactly ${pagesPerSection} pages in each section.`}
 </course_brief>
 
 <source_material>

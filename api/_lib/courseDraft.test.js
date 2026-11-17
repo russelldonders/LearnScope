@@ -50,6 +50,7 @@ describe('buildCourseDraftRequest', () => {
     })
     expect(result.prompt).toContain('Each learning page must stand on its own')
     expect(result.prompt).toContain('The final test page is exempt from this block limit')
+    expect(result.prompt).toContain('exactly 3 sections total: 2 learning sections followed by 1 final test section')
     expect(result.prompt).toContain('exactly 10 test_question blocks')
     expect(result.prompt).not.toContain('Each page must stand on its own')
   })
