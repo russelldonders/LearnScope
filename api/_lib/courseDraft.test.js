@@ -53,6 +53,19 @@ describe('buildCourseDraftRequest', () => {
     expect(result.prompt).toContain('exactly 10 test_question blocks')
     expect(result.prompt).not.toContain('Each page must stand on its own')
   })
+
+  it('reserves extra output space for every scored question', () => {
+    const brief = {
+      topic: 'Lifting', audience: 'New starters', outcomes: 'Lift safely',
+      sectionCount: 2, pagesPerSection: 1, elements: ['knowledge_check'],
+    }
+    const withoutTest = buildCourseDraftRequest({ ...brief, assessmentEnabled: false })
+    const withTest = buildCourseDraftRequest({
+      ...brief, assessmentEnabled: true, assessmentQuestionCount: 10,
+      assessmentQuestionTypes: ['single'],
+    })
+    expect(withTest.maxTokens).toBeGreaterThanOrEqual(withoutTest.maxTokens + 5000)
+  })
 })
 
 describe('normalizeGeneratedCourseDraft', () => {

@@ -1,7 +1,7 @@
 import { waitUntil } from '@vercel/functions'
 import { verifySupabaseUser } from './auth.js'
 import { consumeQuota, sendQuotaExceeded } from './quota.js'
-import { buildCourseDraftRequest, checkGeneratedCourseDraft } from './courseDraft.js'
+import { assessmentQuestionListSchema, buildCourseDraftRequest, checkGeneratedCourseDraft } from './courseDraft.js'
 import { supabaseAdmin } from './supabaseAdmin.js'
 import { createTrackedMessage } from './trackedAnthropic.js'
 
@@ -75,19 +75,59 @@ function unusableCourse(message) {
   return Object.assign(new Error(message), { userMessage: message })
 }
 
-const MAX_ASSESSMENT_GENERATION_ATTEMPTS = 3
+const MAX_QUESTION_REPAIR_ATTEMPTS = 3
+const MAX_GENERATION_TOKENS = 24000
+const QUESTION_REPAIR_TOKENS = 6000
 
-export function isRepairableAssessmentProblem(problem) {
-  return /scored questions|scored question type|outside the final test section|required Final test section/i.test(problem ?? '')
+function missingQuestionCount(problem, wanted) {
+  const match = /^The AI wrote (\d+) scored questions instead of (\d+)\.$/.exec(problem ?? '')
+  if (!match || Number(match[2]) !== wanted || Number(match[1]) >= wanted) return 0
+  return wanted - Number(match[1])
 }
 
-export function assessmentRepairPrompt(originalPrompt, problem, assessment) {
+export function assessmentQuestionRepairPrompt(originalPrompt, missing, assessment, existingQuestions = []) {
   return `${originalPrompt}
 
 <assessment_correction>
-Your previous course was rejected: ${problem}
-Regenerate the entire course. The final section must be named "Final test", contain one page, and contain exactly ${assessment.questionCount} test_question blocks. Use only these layouts: ${assessment.questionTypes.join(', ')}. Check the number of test_question blocks before returning the JSON. Do not shorten or omit the learning sections.
+The course is already written. Return exactly ${missing} new test_question ${missing === 1 ? 'block' : 'blocks'} only; do not regenerate the course.
+Use only these layouts: ${assessment.questionTypes.join(', ')}. Every question is worth ${assessment.pointsPerQuestion} ${assessment.pointsPerQuestion === 1 ? 'point' : 'points'}.
+Make every question valid for its layout, unambiguous, and different from these existing questions:
+${existingQuestions.length ? existingQuestions.map((question) => `- ${question}`).join('\n') : '- None'}
+Check that the questions array contains exactly ${missing} items before returning it.
 </assessment_correction>`
+}
+
+function finalTestPage(raw) {
+  const sections = Array.isArray(raw?.sections) ? raw.sections : []
+  const pages = Array.isArray(sections.at(-1)?.pages) ? sections.at(-1).pages : []
+  return pages[0] ?? null
+}
+
+function mergeAssessmentQuestions(raw, additions, wanted) {
+  const merged = structuredClone(raw)
+  const page = finalTestPage(merged)
+  if (!page || !Array.isArray(page.blocks)) return merged
+  const otherBlocks = page.blocks.filter((block) => block?.type !== 'test_question')
+  const existingQuestions = page.blocks.filter((block) => block?.type === 'test_question')
+  // Put the purpose-built replacements first. If the original response had
+  // the right raw count but some malformed questions, they replace those
+  // unusable entries instead of pushing the page beyond its block limit.
+  page.blocks = [...otherBlocks, ...additions, ...existingQuestions].slice(0, otherBlocks.length + wanted)
+  return merged
+}
+
+async function createCourseMessage({ request, userId, organisationId, maxTokens = request.maxTokens }) {
+  return createTrackedMessage({
+    feature: 'skill_level_course_generation',
+    userId,
+    organisationId,
+    params: {
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: maxTokens,
+      output_config: { format: { type: 'json_schema', schema: request.schema } },
+      messages: [{ role: 'user', content: request.prompt }],
+    },
+  })
 }
 
 async function runGenerationJob({ jobId, request, userId, organisationId }) {
@@ -103,31 +143,49 @@ async function runGenerationJob({ jobId, request, userId, organisationId }) {
   if (!claimed) return
 
   try {
-    let draft = null
-    let problem = null
-    let prompt = request.prompt
-    for (let attempt = 1; attempt <= MAX_ASSESSMENT_GENERATION_ATTEMPTS; attempt += 1) {
-      const response = await createTrackedMessage({
+    let response = await createCourseMessage({ request, userId, organisationId })
+    if (response.stop_reason === 'max_tokens' && request.maxTokens < MAX_GENERATION_TOKENS) {
+      response = await createCourseMessage({ request, userId, organisationId, maxTokens: MAX_GENERATION_TOKENS })
+    }
+    if (response.stop_reason === 'refusal') throw Object.assign(new Error('AI refusal'), { status: 422 })
+    if (response.stop_reason === 'max_tokens') {
+      throw unusableCourse('The course was too long to write in one go. Try again with fewer sections or pages.')
+    }
+    const textBlock = response.content.find((block) => block.type === 'text')
+    if (!textBlock) throw unusableCourse('The AI’s reply had no course in it. Try again.')
+
+    let raw = JSON.parse(textBlock.text)
+    if (request.values.assessment) raw = mergeAssessmentQuestions(raw, [], request.values.assessment.questionCount)
+    let { draft, problem } = checkGeneratedCourseDraft(raw, request.values)
+
+    for (let attempt = 1; !draft && attempt <= MAX_QUESTION_REPAIR_ATTEMPTS; attempt += 1) {
+      const assessment = request.values.assessment
+      const missing = assessment ? missingQuestionCount(problem, assessment.questionCount) : 0
+      if (!missing) break
+      const page = finalTestPage(raw)
+      const existingQuestions = (Array.isArray(page?.blocks) ? page.blocks : [])
+        .filter((block) => block?.type === 'test_question' && typeof block.content === 'string')
+        .map((block) => block.content.trim())
+        .filter(Boolean)
+      const repairResponse = await createTrackedMessage({
         feature: 'skill_level_course_generation',
         userId,
         organisationId,
         params: {
           model: 'claude-haiku-4-5-20251001',
-          max_tokens: request.maxTokens,
-          output_config: { format: { type: 'json_schema', schema: request.schema } },
-          messages: [{ role: 'user', content: prompt }],
+          max_tokens: Math.min(QUESTION_REPAIR_TOKENS, 1000 + missing * 500),
+          output_config: { format: { type: 'json_schema', schema: assessmentQuestionListSchema(assessment.questionTypes) } },
+          messages: [{ role: 'user', content: assessmentQuestionRepairPrompt(request.prompt, missing, assessment, existingQuestions) }],
         },
       })
-      if (response.stop_reason === 'refusal') throw Object.assign(new Error('AI refusal'), { status: 422 })
-      if (response.stop_reason === 'max_tokens') {
-        throw unusableCourse('The course was too long to write in one go. Try again with fewer sections or pages.')
-      }
-      const textBlock = response.content.find((block) => block.type === 'text')
-      if (!textBlock) throw unusableCourse('The AI’s reply had no course in it. Try again.')
-      ;({ draft, problem } = checkGeneratedCourseDraft(JSON.parse(textBlock.text), request.values))
-      if (draft) break
-      if (!request.values.assessment || !isRepairableAssessmentProblem(problem) || attempt === MAX_ASSESSMENT_GENERATION_ATTEMPTS) break
-      prompt = assessmentRepairPrompt(request.prompt, problem, request.values.assessment)
+      if (repairResponse.stop_reason === 'refusal') throw Object.assign(new Error('AI refusal'), { status: 422 })
+      if (repairResponse.stop_reason === 'max_tokens') continue
+      const repairText = repairResponse.content.find((block) => block.type === 'text')
+      if (!repairText) continue
+      const questions = JSON.parse(repairText.text)?.questions
+      if (!Array.isArray(questions) || questions.length === 0) continue
+      raw = mergeAssessmentQuestions(raw, questions.slice(0, missing), assessment.questionCount)
+      ;({ draft, problem } = checkGeneratedCourseDraft(raw, request.values))
     }
     if (!draft) throw unusableCourse(`${problem} The course wasn’t saved after automatic correction attempts. Try again.`)
 

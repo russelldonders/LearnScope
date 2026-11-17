@@ -158,6 +158,11 @@ describe('generationErrorMessage', () => {
 })
 
 describe('assessment correction', () => {
+  beforeEach(() => {
+    mocks.createMessage.mockReset()
+    mocks.claimJob = false
+  })
+
   function generatedCourse(questionCount) {
     const question = (index) => ({
       type: 'test_question', content: `Question ${index + 1}?`, secondaryContent: 'Review the course material.',
@@ -176,7 +181,7 @@ describe('assessment correction', () => {
     }
   }
 
-  it('automatically regenerates a course when the test has too few questions', async () => {
+  it('generates only the missing questions when the test has too few', async () => {
     mocks.claimJob = true
     const request = buildCourseDraftRequest({
       topic: 'Coaching', audience: 'New coaches', outcomes: 'Understand coaching',
@@ -186,7 +191,7 @@ describe('assessment correction', () => {
     })
     mocks.createMessage
       .mockResolvedValueOnce({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(generatedCourse(6)) }], usage: {} })
-      .mockResolvedValueOnce({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(generatedCourse(10)) }], usage: {} })
+      .mockResolvedValueOnce({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ questions: generatedCourse(4).sections[1].pages[0].blocks }) }], usage: {} })
 
     await runGenerationJob({
       jobId: '79000000-0000-4000-8000-000000000030', request,
@@ -194,7 +199,31 @@ describe('assessment correction', () => {
     })
 
     expect(mocks.createMessage).toHaveBeenCalledTimes(2)
-    expect(mocks.createMessage.mock.calls[1][0].messages[0].content).toContain('previous course was rejected')
-    expect(mocks.createMessage.mock.calls[1][0].messages[0].content).toContain('exactly 10 test_question blocks')
+    expect(mocks.createMessage.mock.calls[1][0].messages[0].content).toContain('Return exactly 4 new test_question blocks only')
+    expect(mocks.createMessage.mock.calls[1][0].output_config.format.schema.properties).toHaveProperty('questions')
+    expect(mocks.createMessage.mock.calls[1][0].max_tokens).toBeLessThan(request.maxTokens)
+  })
+
+  it('retries a truncated course once with the maximum output budget', async () => {
+    mocks.claimJob = true
+    const request = buildCourseDraftRequest({
+      topic: 'Coaching', audience: 'New coaches', outcomes: 'Understand coaching',
+      sectionCount: 1, pagesPerSection: 1, elements: [],
+    })
+    mocks.createMessage
+      .mockResolvedValueOnce({ stop_reason: 'max_tokens', content: [], usage: {} })
+      .mockResolvedValueOnce({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({
+        name: 'Coaching', synopsis: 'Learn coaching.', sections: [{ title: 'Learning', instructions: '', pages: [{
+          title: 'Introduction', blocks: [{ type: 'text', content: 'Learn the essentials.', secondaryContent: '', level: 2, variant: 'info', align: 'left', layout: 'none', unit: '', points: 1, tolerance: 0, items: [] }],
+        }] }],
+      }) }], usage: {} })
+
+    await runGenerationJob({
+      jobId: '79000000-0000-4000-8000-000000000030', request,
+      userId: '79000000-0000-4000-8000-000000000001', organisationId: '79000000-0000-4000-8000-000000000010',
+    })
+
+    expect(mocks.createMessage).toHaveBeenCalledTimes(2)
+    expect(mocks.createMessage.mock.calls.map(([params]) => params.max_tokens)).toEqual([request.maxTokens, 24000])
   })
 })
