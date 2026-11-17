@@ -55,7 +55,7 @@ function BreakdownTable({ rows, firstHeading, firstValue }) {
   if (!rows.length) return <p className="py-6 text-sm text-secondary">No usage in this period.</p>
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] text-left text-sm">
+      <table className="w-full min-w-[20rem] text-left text-sm">
         <thead className="border-b border-hairline text-xs text-secondary">
           <tr>
             <th scope="col" className="pb-2 pr-4 font-medium">{firstHeading}</th>
@@ -203,12 +203,16 @@ export default function AdminAiUsage() {
                   </div>
                 </section>
 
-                <div className="grid gap-8 lg:grid-cols-2">
-                  <section aria-labelledby="ai-model-usage">
+                {/* grid-cols-1 (minmax(0, 1fr)) and min-w-0 let each table's own
+                    overflow-x-auto wrapper scroll, instead of the tables'
+                    min-width stretching the grid -- and the whole page --
+                    wider than a phone screen. */}
+                <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+                  <section aria-labelledby="ai-model-usage" className="min-w-0">
                     <h3 id="ai-model-usage" className="font-display text-base text-ink">By model</h3>
                     <BreakdownTable rows={data.byModel} firstHeading="Model" firstValue={(row) => row.model} />
                   </section>
-                  <section aria-labelledby="ai-organisation-usage">
+                  <section aria-labelledby="ai-organisation-usage" className="min-w-0">
                     <h3 id="ai-organisation-usage" className="font-display text-base text-ink">By organisation</h3>
                     <BreakdownTable rows={data.byOrganisation} firstHeading="Organisation" firstValue={(row) => row.organisationName} />
                   </section>
