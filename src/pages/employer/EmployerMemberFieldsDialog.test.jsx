@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import EmployerSettingsDialog from './EmployerSettingsDialog'
+import EmployerMemberFieldsDialog from './EmployerMemberFieldsDialog'
 import { listFieldDefinitionsForEmployer } from '../../lib/admin/employers'
 
 vi.mock('../../lib/supabaseClient', () => ({ supabase: {} }))
@@ -18,16 +18,7 @@ vi.mock('../../components/FieldDefinitionsManager', () => ({
   default: () => <div>Custom field manager</div>,
 }))
 
-vi.mock('../../components/OrganisationSettingsModal', () => ({
-  default: ({ learnerPortal, onClose }) => (
-    <div role="dialog" aria-label="Organisation settings" data-learner-name={learnerPortal?.name}>
-      <button type="button" onClick={onClose}>Back from organisation settings</button>
-    </div>
-  ),
-}))
-
 const employer = { id: 'employer-1', name: 'Acme' }
-const providerOrganisation = { id: 'org-1', name: 'Acme provider' }
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -39,59 +30,17 @@ beforeEach(() => {
 
 afterEach(cleanup)
 
-it('offers member fields from the settings cog menu and opens the existing manager', async () => {
-  render(
-    <EmployerSettingsDialog
-      employer={employer}
-      userId="admin-1"
-      providerOrganisation={providerOrganisation}
-      canManageOrganisation
-      onClose={vi.fn()}
-    />
-  )
-
-  expect(screen.getByRole('button', { name: /Organisation settings/ })).toBeVisible()
-  fireEvent.click(screen.getByRole('button', { name: /Member fields/ }))
-
+it('opens straight onto the member fields manager', async () => {
+  render(<EmployerMemberFieldsDialog employer={employer} userId="admin-1" onClose={vi.fn()} />)
+  expect(screen.getByRole('heading', { name: 'Member fields' })).toBeVisible()
   expect(await screen.findByText('Email')).toBeVisible()
   expect(screen.getByText('Custom field manager')).toBeVisible()
   expect(listFieldDefinitionsForEmployer).toHaveBeenCalledWith(employer.id)
-
-  fireEvent.click(screen.getByRole('button', { name: '← Back to settings' }))
-  expect(screen.getByRole('heading', { name: 'Settings' })).toBeVisible()
 })
 
-it('keeps member fields available when organisation settings require a separate provider-admin role', () => {
-  render(
-    <EmployerSettingsDialog
-      employer={employer}
-      userId="admin-1"
-      providerOrganisation={providerOrganisation}
-      canManageOrganisation={false}
-      onClose={vi.fn()}
-    />
-  )
-
-  expect(screen.queryByRole('button', { name: /Organisation settings/ })).toBeNull()
-  expect(screen.getByRole('button', { name: /Member fields/ })).toBeVisible()
-})
-
-it('returns from organisation settings to the shared settings menu', () => {
-  const onOrganisationUpdated = vi.fn()
-  render(
-    <EmployerSettingsDialog
-      employer={employer}
-      userId="admin-1"
-      providerOrganisation={providerOrganisation}
-      canManageOrganisation
-      onOrganisationUpdated={onOrganisationUpdated}
-      onClose={vi.fn()}
-    />
-  )
-
-  fireEvent.click(screen.getByRole('button', { name: /Organisation settings/ }))
-  expect(screen.getByRole('dialog', { name: 'Organisation settings' })).toHaveAttribute('data-learner-name', 'Acme')
-  fireEvent.click(screen.getByRole('button', { name: 'Back from organisation settings' }))
-  expect(onOrganisationUpdated).toHaveBeenCalledTimes(1)
-  expect(screen.getByRole('heading', { name: 'Settings' })).toBeVisible()
+it('closes from its Close button', () => {
+  const onClose = vi.fn()
+  render(<EmployerMemberFieldsDialog employer={employer} userId="admin-1" onClose={onClose} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+  expect(onClose).toHaveBeenCalled()
 })

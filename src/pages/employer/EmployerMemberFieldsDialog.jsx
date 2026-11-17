@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import AccessibleDialog from '../../components/AccessibleDialog'
 import FieldDefinitionsManager from '../../components/FieldDefinitionsManager'
-import OrganisationSettingsModal from '../../components/OrganisationSettingsModal'
 import {
   createFieldDefinition,
   deleteFieldDefinition,
@@ -9,63 +8,6 @@ import {
   reorderFieldDefinitions,
   updateFieldDefinition,
 } from '../../lib/admin/employers'
-
-function ChevronIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.75" className="h-4 w-4" aria-hidden="true">
-      <path d="m7.5 4.5 5 5.5-5 5.5" />
-    </svg>
-  )
-}
-
-function SettingsMenu({ canManageOrganisation, onChoose, onClose }) {
-  return (
-    <AccessibleDialog
-      labelledBy="employer-settings-title"
-      describedBy="employer-settings-description"
-      onClose={onClose}
-      panelClassName="w-full max-w-lg rounded-xl border border-hairline bg-card p-6 shadow-xl"
-    >
-      <h2 id="employer-settings-title" className="font-display text-lg text-ink">Settings</h2>
-      <p id="employer-settings-description" className="mt-1 mb-5 text-sm text-secondary">
-        Manage organisation details and the information kept for each member.
-      </p>
-
-      <div className="divide-y divide-hairline border-y border-hairline">
-        {canManageOrganisation && (
-          <button
-            type="button"
-            onClick={() => onChoose('organisation')}
-            className="flex w-full items-center justify-between gap-4 py-4 text-left text-ink hover:text-moss"
-          >
-            <span className="min-w-0">
-              <span className="block text-sm font-medium">Organisation settings</span>
-              <span className="mt-0.5 block text-xs text-secondary">Branding, learner LMS, public profile and connections</span>
-            </span>
-            <ChevronIcon />
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => onChoose('member-fields')}
-          className="flex w-full items-center justify-between gap-4 py-4 text-left text-ink hover:text-moss"
-        >
-          <span className="min-w-0">
-            <span className="block text-sm font-medium">Member fields</span>
-            <span className="mt-0.5 block text-xs text-secondary">Choose the details shown on member records</span>
-          </span>
-          <ChevronIcon />
-        </button>
-      </div>
-
-      <div className="mt-5 flex justify-end">
-        <button type="button" onClick={onClose} className="rounded-md border border-hairline px-4 py-2 text-sm font-medium text-ink hover:bg-paper">
-          Close
-        </button>
-      </div>
-    </AccessibleDialog>
-  )
-}
 
 function EmployerMemberFieldsSettings({ employer, userId }) {
   const [fields, setFields] = useState([])
@@ -169,49 +111,23 @@ function EmployerMemberFieldsSettings({ employer, userId }) {
   )
 }
 
-export default function EmployerSettingsDialog({ employer, userId, providerOrganisation, canManageOrganisation, onClose, onOrganisationUpdated }) {
-  const [view, setView] = useState('menu')
-
-  if (view === 'organisation' && providerOrganisation && canManageOrganisation) {
-    return (
-      <OrganisationSettingsModal
-        organisation={providerOrganisation}
-        learnerPortal={{ name: employer.name }}
-        onClose={() => {
-          onOrganisationUpdated?.()
-          setView('menu')
-        }}
-      />
-    )
-  }
-
-  if (view === 'member-fields') {
-    return (
-      <AccessibleDialog
-        labelledBy="member-fields-settings-title"
-        describedBy="member-fields-settings-description"
-        onClose={onClose}
-        panelClassName="w-full max-w-2xl rounded-xl border border-hairline bg-card p-6 shadow-xl max-h-[90vh] overflow-y-auto overscroll-contain"
-      >
-        <button type="button" onClick={() => setView('menu')} className="mb-3 text-sm font-medium text-moss hover:underline">
-          ← Back to settings
-        </button>
-        <h2 id="member-fields-settings-title" className="font-display text-lg text-ink">Member fields</h2>
-        <EmployerMemberFieldsSettings employer={employer} userId={userId} />
-        <div className="mt-6 flex justify-end border-t border-hairline pt-4">
-          <button type="button" onClick={onClose} className="rounded-md border border-hairline px-4 py-2 text-sm font-medium text-ink hover:bg-paper">
-            Close
-          </button>
-        </div>
-      </AccessibleDialog>
-    )
-  }
-
+// Member fields settings, opened from the workspace's Settings menu
+// (EmployerSettingsMenu) -- the details kept on each member record.
+export default function EmployerMemberFieldsDialog({ employer, userId, onClose }) {
   return (
-    <SettingsMenu
-      canManageOrganisation={Boolean(providerOrganisation && canManageOrganisation)}
-      onChoose={setView}
+    <AccessibleDialog
+      labelledBy="member-fields-settings-title"
+      describedBy="member-fields-settings-description"
       onClose={onClose}
-    />
+      panelClassName="w-full max-w-2xl rounded-xl border border-hairline bg-card p-6 shadow-xl max-h-[90vh] overflow-y-auto overscroll-contain"
+    >
+      <h2 id="member-fields-settings-title" className="font-display text-lg text-ink">Member fields</h2>
+      <EmployerMemberFieldsSettings employer={employer} userId={userId} />
+      <div className="mt-6 flex justify-end border-t border-hairline pt-4">
+        <button type="button" onClick={onClose} className="rounded-md border border-hairline px-4 py-2 text-sm font-medium text-ink hover:bg-paper">
+          Close
+        </button>
+      </div>
+    </AccessibleDialog>
   )
 }

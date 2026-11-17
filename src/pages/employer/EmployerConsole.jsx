@@ -7,7 +7,8 @@ import ResourceLibrarySection from '../../components/ResourceLibrarySection'
 import ProviderSkillsSection from '../../components/ProviderSkillsSection'
 import ProviderLtiToolsSection from '../../components/ProviderLtiToolsSection'
 import { ProviderTrainingSection, ProviderCataloguesSection } from '../provider/ProviderConsole'
-import EmployerSettingsDialog from './EmployerSettingsDialog'
+import EmployerMemberFieldsDialog from './EmployerMemberFieldsDialog'
+import EmployerSettingsMenu from './EmployerSettingsMenu'
 import { listOrganisations } from '../../lib/admin/organisations'
 import { handleTabListKeyDown } from '../../lib/tabsKeyboard'
 import MutationFeedback from '../../components/MutationFeedback'
@@ -78,7 +79,7 @@ export default function EmployerConsole() {
   const [organisations, setOrganisations] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [showSettings, setShowSettings] = useState(false)
+  const [settingsView, setSettingsView] = useState(null)
   // employer/section selection lives in the URL (?employer=&section=), the
   // same convention as ProviderConsole.jsx -- re-derived from searchParams
   // on every render so refresh, Back/Forward, and a shared link all restore
@@ -93,7 +94,7 @@ export default function EmployerConsole() {
   // after folding the standalone Assign training/Suggest skills tabs into
   // bulk actions on the Users tab's learner roster (EmployerLearnersPanel)
   // -- old links to either now land on Users, where that functionality
-  // actually lives now. Member fields has moved into the settings cog, so
+  // actually lives now. Member fields has moved into the Settings menu, so
   // an old tab URL safely returns to Overview instead of leaving an invalid
   // tab selected.
   const activeSection = ['staff', 'learners', 'assign', 'suggest-skills'].includes(requestedSection)
@@ -140,6 +141,10 @@ export default function EmployerConsole() {
       .map((item) => item.capability)
   )
   const hasWorkforceCapability = activeCapabilities.has('employs_people')
+  // For an organisation that employs people, the Distribution section is just
+  // its linked providers, which lives under the Settings menu instead of the
+  // tab bar -- still a normal ?section=providers page, just not a tab.
+  const linkedProvidersInSettings = hasWorkforceCapability
   // The attached provider org, required to actually be active -- mirrors
   // ProviderConsole.jsx's own myOrgs filter ("Deactivating an organisation
   // revokes its staff's actual access (RLS, 0069) -- filter to active orgs
@@ -163,6 +168,54 @@ export default function EmployerConsole() {
   const myProviderRole = attachedProviderOrg
     ? (organisationMemberships ?? []).find((m) => m.organisation_id === attachedProviderOrg.id)?.role
     : undefined
+  // Settings menu items. Organisation-level settings follow the same rules
+  // the former cog used: for an organisation that employs people they need
+  // the admin role on its (active) provider organisation; otherwise any
+  // admin of this workspace could already open them. Member fields only
+  // apply to organisations that employ people.
+  const settingsOrganisation = hasWorkforceCapability
+    ? (myProviderRole === 'admin' ? attachedProviderOrg : null)
+    : selectedEmployer
+  const settingsItems = [
+    ...(settingsOrganisation
+      ? [
+          {
+            key: 'organisation',
+            label: 'Organisation details',
+            description: 'Logo, brand colours, website, public profile and links',
+            onSelect: () => setSettingsView('organisation'),
+          },
+          {
+            key: 'lms-connections',
+            label: 'LMS connections',
+            description: 'Let other LMSs launch your courses and receive grades',
+            to: `/organisation/organisations/${settingsOrganisation.id}/lms-connections`,
+          },
+          {
+            key: 'lti-tools',
+            label: 'LTI tools',
+            description: 'External tools you can add to courses as resources',
+            to: `/organisation/organisations/${settingsOrganisation.id}/lti-tools`,
+          },
+        ]
+      : []),
+    ...(linkedProvidersInSettings
+      ? [{
+          key: 'linked-providers',
+          label: 'Linked providers',
+          description: 'Training providers whose catalogues and courses you can use',
+          to: `?${buildParams({ section: 'providers', ...EMPLOYER_FILTER_RESET }).toString()}`,
+        }]
+      : []),
+    ...(hasWorkforceCapability
+      ? [{
+          key: 'member-fields',
+          label: 'Member fields',
+          description: 'Details kept on each member record',
+          onSelect: () => setSettingsView('member-fields'),
+        }]
+      : []),
+  ]
   const visibleSections = SECTIONS.filter((s) => {
     if (s.workforceOnly && !hasWorkforceCapability) return false
     if (s.adminOnly) return myProviderRole === 'admin'
@@ -172,6 +225,8 @@ export default function EmployerConsole() {
   // Guards against a stale provider-only tab surviving a switch to an
   // employer where this admin no longer has the corresponding role.
   const currentSection = visibleSections.some((section) => section.key === activeSection) ? activeSection : 'overview'
+  const tabSections = visibleSections.filter((s) => !(linkedProvidersInSettings && s.key === 'providers'))
+  const currentSectionIsTab = tabSections.some((s) => s.key === currentSection)
   const providerSections = useMemo(() => visibleSections.filter((s) => s.providerTab), [visibleSections])
   const activeSectionIsProvider = providerSections.some((s) => s.key === currentSection)
   // Roving-tabindex keys for the top-level tablist's arrow-key navigation
@@ -181,16 +236,18 @@ export default function EmployerConsole() {
   // control rather than four tabs.
   const rovingSectionKeys = useMemo(() => {
     const keys = []
-    visibleSections.forEach((section, index) => {
+    tabSections.forEach((section, index) => {
       if (section.providerTab) {
-        if (!visibleSections[index - 1]?.providerTab) keys.push('provider-group')
+        if (!tabSections[index - 1]?.providerTab) keys.push('provider-group')
       } else {
         keys.push(section.key)
       }
     })
     return keys
-  }, [visibleSections])
-  const rovingActiveKey = activeSectionIsProvider ? 'provider-group' : currentSection
+  }, [tabSections])
+  // On a section opened from Settings (no tab of its own), Overview keeps the
+  // tablist's single Tab stop so keyboard users can still reach the tabs.
+  const rovingActiveKey = activeSectionIsProvider ? 'provider-group' : currentSectionIsTab ? currentSection : 'overview'
   // Arrow-key navigation onto the dropdown trigger activates whichever
   // provider sub-section is already open, or the first one otherwise --
   // it doesn't itself open the menu (that still needs a click/Enter).
@@ -263,7 +320,7 @@ export default function EmployerConsole() {
               <div>
                 <div className="flex items-center justify-between flex-wrap gap-x-1 gap-y-2 mb-6 border-b border-hairline">
                   <div role="tablist" aria-label="Console section" className="flex items-center flex-wrap gap-x-1 gap-y-2">
-                    {visibleSections.map((section, index) => {
+                    {tabSections.map((section, index) => {
                       if (section.providerTab) {
                         // Renders once for the whole consecutive run of
                         // providerTab sections (Training/Skills/Catalogues/
@@ -272,7 +329,7 @@ export default function EmployerConsole() {
                         // identically either way (same ?section= navigation,
                         // same employer-console frame), this only changes how
                         // they're grouped in the tab bar.
-                        if (visibleSections[index - 1]?.providerTab) return null
+                        if (tabSections[index - 1]?.providerTab) return null
                         return (
                           <ProviderSectionMenu
                             key="provider-group"
@@ -301,7 +358,7 @@ export default function EmployerConsole() {
                           role="tab"
                           aria-selected={currentSection === section.key}
                           aria-controls={`employer-section-panel-${section.key}`}
-                          tabIndex={currentSection === section.key ? 0 : -1}
+                          tabIndex={rovingActiveKey === section.key ? 0 : -1}
                           onKeyDown={(event) =>
                             handleTabListKeyDown(event, {
                               keys: rovingSectionKeys,
@@ -328,26 +385,19 @@ export default function EmployerConsole() {
                       )
                     })}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowSettings(true)}
-                    title="Settings"
-                    aria-label="Settings"
-                    className="shrink-0 mb-2 w-11 h-11 rounded-md border border-hairline text-secondary hover:text-ink hover:bg-paper flex items-center justify-center"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                      <circle cx="12" cy="12" r="3" />
-                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09A1.65 1.65 0 0 0 19.4 15z" />
-                    </svg>
-                  </button>
+                  <EmployerSettingsMenu items={settingsItems} active={!currentSectionIsTab} />
                 </div>
 
                 <div
                   id={`employer-section-panel-${currentSection}`}
-                  role="tabpanel"
-                  aria-labelledby={
-                    activeSectionIsProvider ? 'employer-section-tab-provider-group' : `employer-section-tab-${currentSection}`
-                  }
+                  {...(currentSectionIsTab
+                    ? {
+                        role: 'tabpanel',
+                        'aria-labelledby': activeSectionIsProvider
+                          ? 'employer-section-tab-provider-group'
+                          : `employer-section-tab-${currentSection}`,
+                      }
+                    : { role: 'region', 'aria-label': 'Linked providers' })}
                   tabIndex={0}
                 >
                   {currentSection === 'overview' && (
@@ -465,24 +515,23 @@ export default function EmployerConsole() {
         )}
       </main>
 
-      {showSettings && selectedEmployer && (hasWorkforceCapability ? (
-        <EmployerSettingsDialog
-          employer={selectedEmployer}
-          userId={user.id}
-          providerOrganisation={attachedProviderOrg}
-          canManageOrganisation={myProviderRole === 'admin'}
-          onOrganisationUpdated={reloadOrganisations}
-          onClose={() => setShowSettings(false)}
-        />
-      ) : (
+      {settingsView === 'organisation' && settingsOrganisation && (
         <OrganisationSettingsModal
-          organisation={selectedEmployer}
+          organisation={settingsOrganisation}
+          learnerPortal={hasWorkforceCapability ? { name: selectedEmployer.name } : undefined}
           onClose={() => {
-            setShowSettings(false)
+            setSettingsView(null)
             reloadOrganisations()
           }}
         />
-      ))}
+      )}
+      {settingsView === 'member-fields' && selectedEmployer && hasWorkforceCapability && (
+        <EmployerMemberFieldsDialog
+          employer={selectedEmployer}
+          userId={user.id}
+          onClose={() => setSettingsView(null)}
+        />
+      )}
     </div>
   )
 }
