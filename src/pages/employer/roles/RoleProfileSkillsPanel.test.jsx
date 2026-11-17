@@ -60,7 +60,51 @@ describe('RoleProfileSkillsPanel', () => {
     )
     const facilitationRow = screen.getByText('Facilitation').closest('li')
     fireEvent.click(within(facilitationRow).getByRole('button', { name: 'Remove' }))
+    expect(onRemoveSkill).not.toHaveBeenCalled()
+    fireEvent.click(within(facilitationRow).getByRole('button', { name: 'Confirm removing Facilitation' }))
     expect(onRemoveSkill).toHaveBeenCalledWith('skill-1')
+  })
+
+  it('cancelling a removal keeps the skill', () => {
+    const onRemoveSkill = vi.fn()
+    render(
+      <RoleProfileSkillsPanel
+        requiredSkills={FIXTURE_REQUIRED_SKILLS}
+        availableSkills={FIXTURE_SKILL_CATALOGUE}
+        onRemoveSkill={onRemoveSkill}
+      />
+    )
+    const facilitationRow = screen.getByText('Facilitation').closest('li')
+    fireEvent.click(within(facilitationRow).getByRole('button', { name: 'Remove' }))
+    fireEvent.click(within(facilitationRow).getByRole('button', { name: 'Cancel' }))
+    expect(onRemoveSkill).not.toHaveBeenCalled()
+    expect(within(facilitationRow).getByRole('button', { name: 'Remove' })).toBeInTheDocument()
+  })
+
+  it('filters the add picker by the search box', () => {
+    render(<RoleProfileSkillsPanel requiredSkills={[]} availableSkills={FIXTURE_SKILL_CATALOGUE} />)
+    fireEvent.change(screen.getByLabelText('Search skills'), { target: { value: 'data' } })
+    const optionNames = [...screen.getByLabelText('Add a skill').querySelectorAll('option')]
+      .map((o) => o.textContent)
+      .filter((name) => name !== 'Choose a skill…')
+    expect(optionNames).toEqual(['Data storytelling'])
+  })
+
+  it("groups the organisation's own skills apart from the skill library", () => {
+    const skills = [
+      { id: 'org-1', name: 'Our process', fromOrganisation: true },
+      { id: 'lib-1', name: 'Public speaking' },
+    ]
+    render(<RoleProfileSkillsPanel requiredSkills={[]} availableSkills={skills} />)
+    const groups = [...screen.getByLabelText('Add a skill').querySelectorAll('optgroup')]
+    expect(groups.map((g) => g.label)).toEqual(["Your organisation's skills", 'Skill library'])
+    expect(within(groups[0]).getByText('Our process')).toBeInTheDocument()
+    expect(within(groups[1]).getByText('Public speaking')).toBeInTheDocument()
+  })
+
+  it('explains when there are no skills to add', () => {
+    render(<RoleProfileSkillsPanel requiredSkills={[]} availableSkills={[]} />)
+    expect(screen.getByText('No skills are available to add yet.')).toBeInTheDocument()
   })
 
   it('renders an inline error', () => {

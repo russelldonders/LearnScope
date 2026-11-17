@@ -16,6 +16,7 @@ import {
 import { listEmployerSkillConfirmations, confirmEmployerSkillLevel } from '../../lib/employerSkillTargets'
 import { listEmployerCatalogueCourses, listEmployerCatalogueSkills, listEmployerMembers } from '../../lib/admin/employers'
 import { getOrganisation } from '../../lib/admin/organisations'
+import { listLibrarySkills } from '../../lib/skillLibrary'
 import RoleProfileDetailsForm from './roles/RoleProfileDetailsForm'
 import RoleProfileSkillsPanel from './roles/RoleProfileSkillsPanel'
 import RoleProfileTrainingPanel from './roles/RoleProfileTrainingPanel'
@@ -72,10 +73,19 @@ export default function EmployerRoleProfileDetail() {
       // has actually confirmed sharing with this employer
       // (list_employer_shared_courses, 20260912152917), not just anything
       // published in the attached org.
-      const [skillsData, coursesData] = await Promise.all([
+      // The global skill library is offered too, so an employer with no
+      // offered-skills roster of its own can still define what a role needs;
+      // the organisation's own skills are listed first and win on overlap.
+      const [organisationSkills, librarySkills, coursesData] = await Promise.all([
         listEmployerCatalogueSkills(employerData.id),
+        listLibrarySkills(),
         listEmployerCatalogueCourses(employerData.id),
       ])
+      const organisationSkillIds = new Set(organisationSkills.map((s) => s.id))
+      const skillsData = [
+        ...organisationSkills.map((s) => ({ ...s, fromOrganisation: true })),
+        ...librarySkills.filter((s) => !organisationSkillIds.has(s.id)),
+      ]
       const memberByUserId = new Map(membersData.map((m) => [m.user_id, m]))
       const nextProfile = toRoleProfileViewModel(rawProfile, assignments, memberByUserId)
       setProfile(nextProfile)
