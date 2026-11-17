@@ -274,7 +274,7 @@ export default function EmployerConsole() {
     }
   })
   const tabListMask = tabOverflow.start || tabOverflow.end
-    ? `linear-gradient(to right, ${tabOverflow.start ? 'transparent, black 1.5rem' : 'black'}, ${tabOverflow.end ? 'black calc(100% - 1.5rem), transparent' : 'black'})`
+    ? `linear-gradient(to right, ${tabOverflow.start ? 'transparent, black 2rem' : 'black'}, ${tabOverflow.end ? 'black calc(100% - 2rem), transparent' : 'black'})`
     : undefined
   // Arrow-key navigation onto the dropdown trigger activates whichever
   // provider sub-section is already open, or the first one otherwise --
@@ -425,6 +425,12 @@ export default function EmployerConsole() {
                       )
                     })}
                   </div>
+                  {/* When the tabs overflow (on a phone), a divider separates
+                      the faded, scrolling tabs from the pinned Settings menu so
+                      the cut-off tab doesn't read as overlapping it. */}
+                  {(tabOverflow.start || tabOverflow.end) && (
+                    <span aria-hidden="true" className="self-center mb-1 h-5 w-px shrink-0 bg-hairline" />
+                  )}
                   <EmployerSettingsMenu items={settingsItems} active={!currentSectionIsTab} />
                 </div>
 
