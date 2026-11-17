@@ -191,6 +191,7 @@ export function normalisePageDocument(document) {
   if (normalised.blocks.some((block) => block.type === 'test_question')) {
     normalised.test = {
       passMark: Math.max(0, Math.min(100, Number.isFinite(Number(document?.test?.passMark)) ? Number(document.test.passMark) : 70)),
+      displayMode: document?.test?.displayMode === 'one_at_a_time' ? 'one_at_a_time' : 'all',
     }
   }
   return normalised

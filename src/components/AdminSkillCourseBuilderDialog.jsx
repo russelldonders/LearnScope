@@ -25,6 +25,7 @@ const DEFAULT_SETTINGS = {
   assessmentQuestionCount: 10,
   assessmentPassMark: 70,
   assessmentPointsPerQuestion: 1,
+  assessmentDisplayMode: 'all',
   assessmentQuestionTypes: ['single', 'multiple', 'true_false', 'short_text', 'number', 'ordering', 'matching'],
 }
 
@@ -297,7 +298,7 @@ export default function AdminSkillCourseBuilderDialog({ skills, onClose, onFinis
               </div>
               {settings.assessmentEnabled && (
                 <div className="mt-4 space-y-4 border-t border-hairline pt-4">
-                  <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <label className="text-xs text-secondary">Questions
                       <input type="number" min="1" max="20" value={settings.assessmentQuestionCount} onChange={(event) => setSettings((current) => ({ ...current, assessmentQuestionCount: event.target.value }))} onBlur={() => setSettings((current) => ({ ...current, assessmentQuestionCount: String(wholeNumberInRange(current.assessmentQuestionCount, 'assessmentQuestionCount')) }))} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-gold" />
                     </label>
@@ -306,6 +307,12 @@ export default function AdminSkillCourseBuilderDialog({ skills, onClose, onFinis
                     </label>
                     <label className="text-xs text-secondary">Points per question
                       <input type="number" min="1" max="100" value={settings.assessmentPointsPerQuestion} onChange={(event) => setSettings((current) => ({ ...current, assessmentPointsPerQuestion: event.target.value }))} onBlur={() => setSettings((current) => ({ ...current, assessmentPointsPerQuestion: String(wholeNumberInRange(current.assessmentPointsPerQuestion, 'assessmentPointsPerQuestion')) }))} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-gold" />
+                    </label>
+                    <label className="text-xs text-secondary">Show questions
+                      <select value={settings.assessmentDisplayMode} onChange={(event) => setSettings((current) => ({ ...current, assessmentDisplayMode: event.target.value }))} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-gold">
+                        <option value="all">All together</option>
+                        <option value="one_at_a_time">One at a time</option>
+                      </select>
                     </label>
                   </div>
                   <div>

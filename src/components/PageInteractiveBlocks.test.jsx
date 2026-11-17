@@ -150,17 +150,40 @@ describe('normalisePageDocument for interactive blocks', () => {
   })
 })
 
-it('marks scored questions and reports an aggregate page test percentage', () => {
+it('submits and marks all scored questions together', async () => {
   const onScore = vi.fn()
   render(<PageContent onScore={onScore} document={{ version: 1, test: { passMark: 60 }, blocks: [
     { id: 'q1', type: 'test_question', title: 'Pick B', layout: 'single', points: 2, items: [item('a', 'A'), item('b', 'B', '', { correct: true })] },
     { id: 'q2', type: 'test_question', title: 'Type blue', layout: 'short_text', points: 3, items: [item('blue', 'Blue', '', { correct: true })] },
   ] }} />)
+  expect(screen.queryByRole('button', { name: 'Mark question' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Submit test' })).toBeDisabled()
   fireEvent.click(screen.getByRole('radio', { name: 'B' }))
-  fireEvent.click(screen.getAllByRole('button', { name: 'Mark question' })[0])
   fireEvent.change(screen.getByRole('textbox', { name: 'Your answer' }), { target: { value: 'blue' } })
-  fireEvent.click(screen.getAllByRole('button', { name: 'Mark question' })[0])
-  expect(screen.getByText('100%')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Submit test' }))
+  expect(await screen.findByText('100%')).toBeInTheDocument()
   expect(screen.getByText('Passed')).toBeInTheDocument()
   expect(onScore).toHaveBeenCalledWith({ score: 100, passed: true })
+})
+
+it('can present a scored test one question at a time with one final submission', async () => {
+  const onScore = vi.fn()
+  render(<PageContent onScore={onScore} document={{ version: 1, test: { passMark: 60, displayMode: 'one_at_a_time' }, blocks: [
+    { id: 'q1', type: 'test_question', title: 'Pick B', layout: 'single', points: 2, items: [item('a', 'A'), item('b', 'B', '', { correct: true })] },
+    { id: 'q2', type: 'test_question', title: 'Type blue', layout: 'short_text', points: 3, items: [item('blue', 'Blue', '', { correct: true })] },
+  ] }} />)
+
+  expect(screen.getByText('Question 1 of 2')).toBeInTheDocument()
+  expect(screen.getByText('Pick B')).toBeInTheDocument()
+  expect(screen.queryByText('Type blue')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('radio', { name: 'B' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Next question' }))
+  expect(screen.getByText('Question 2 of 2')).toBeInTheDocument()
+  fireEvent.change(screen.getByRole('textbox', { name: 'Your answer' }), { target: { value: 'blue' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Submit test' }))
+
+  expect(await screen.findByText('100%')).toBeInTheDocument()
+  expect(onScore).toHaveBeenCalledTimes(1)
+  fireEvent.click(screen.getByRole('button', { name: 'Previous question' }))
+  expect(screen.getByText('Pick B')).toBeInTheDocument()
 })

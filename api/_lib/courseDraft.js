@@ -211,6 +211,7 @@ export function buildCourseDraftRequest(body) {
     questionCount: positiveInteger(body?.assessmentQuestionCount, 10, 20),
     passMark: Math.max(0, Math.min(100, Number.isFinite(Number(body?.assessmentPassMark)) ? Math.round(Number(body.assessmentPassMark)) : 70)),
     pointsPerQuestion: positiveInteger(body?.assessmentPointsPerQuestion, 1, 100),
+    displayMode: body?.assessmentDisplayMode === 'one_at_a_time' ? 'one_at_a_time' : 'all',
     questionTypes: assessmentQuestionTypes,
   } : null
   const elements = assessmentEnabled ? [...contentElements, 'test_question'] : contentElements
@@ -390,7 +391,10 @@ export function checkGeneratedCourseDraft(raw, values = {}) {
       pages.push({ title: pageTitle, pageContent: {
         version: 1,
         blocks,
-        ...(blocks.some((block) => block.type === 'test_question') ? { test: { passMark: values.assessment?.passMark ?? 70 } } : {}),
+        ...(blocks.some((block) => block.type === 'test_question') ? { test: {
+          passMark: values.assessment?.passMark ?? 70,
+          displayMode: values.assessment?.displayMode ?? 'all',
+        } } : {}),
       } })
     }
     sections.push({ title, instructions: clean(section?.instructions, 2000) || null, pages })

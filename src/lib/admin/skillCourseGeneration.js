@@ -34,6 +34,7 @@ export function buildSkillCourseBrief(skill, level, settings) {
     assessmentQuestionCount: String(settings.assessmentQuestionCount),
     assessmentPassMark: String(settings.assessmentPassMark),
     assessmentPointsPerQuestion: String(settings.assessmentPointsPerQuestion),
+    assessmentDisplayMode: settings.assessmentDisplayMode,
     assessmentQuestionTypes: settings.assessmentQuestionTypes,
     sourceMaterial: [
       `Skill: ${skill.name}`,

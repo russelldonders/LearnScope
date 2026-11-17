@@ -134,6 +134,7 @@ describe('AdminSkillCourseBuilderDialog', () => {
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Questions' }), { target: { value: '6' } })
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Pass mark' }), { target: { value: '80' } })
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Points per question' }), { target: { value: '2' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Show questions' }), { target: { value: 'one_at_a_time' } })
     fireEvent.click(screen.getByRole('checkbox', { name: 'Matching' }))
     fireEvent.click(screen.getByRole('button', { name: 'Build 5 courses' }))
     await waitFor(() => expect(generateSkillCourseDraft).toHaveBeenCalled())
@@ -142,6 +143,7 @@ describe('AdminSkillCourseBuilderDialog', () => {
       assessmentQuestionCount: '6',
       assessmentPassMark: '80',
       assessmentPointsPerQuestion: '2',
+      assessmentDisplayMode: 'one_at_a_time',
       assessmentQuestionTypes: expect.not.arrayContaining(['matching']),
     }))
   })

@@ -618,7 +618,15 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
           <span className="hidden text-xs text-secondary sm:inline" aria-hidden="true">
             {wordCount} word{wordCount === 1 ? '' : 's'} · ~{readingMinutes} min read
           </span>
-          {pageHasScoredTest(pageDocument) && <label className="flex items-center gap-1 text-xs text-secondary">Pass mark <input type="number" min="0" max="100" value={pageDocument.test?.passMark ?? 70} onChange={(event) => setPageDocument((current) => ({ ...current, test: { passMark: Number(event.target.value) } }))} className="w-16 rounded-md border border-hairline bg-paper px-2 py-1 text-ink" />%</label>}
+          {pageHasScoredTest(pageDocument) && <div className="flex flex-wrap items-center gap-2" aria-label="Test settings">
+            <label className="flex items-center gap-1 text-xs text-secondary">Pass mark <input type="number" min="0" max="100" value={pageDocument.test?.passMark ?? 70} onChange={(event) => setPageDocument((current) => ({ ...current, test: { ...current.test, passMark: Number(event.target.value) } }))} className="w-16 rounded-md border border-hairline bg-paper px-2 py-1 text-ink" />%</label>
+            <label className="flex items-center gap-1 text-xs text-secondary">Show questions
+              <select value={pageDocument.test?.displayMode ?? 'all'} onChange={(event) => setPageDocument((current) => ({ ...current, test: { ...current.test, displayMode: event.target.value } }))} className="rounded-md border border-hairline bg-paper px-2 py-1 text-ink">
+                <option value="all">All together</option>
+                <option value="one_at_a_time">One at a time</option>
+              </select>
+            </label>
+          </div>}
           <span className="text-xs text-secondary" aria-live="polite">{saving ? 'Saving…' : 'Editing live'}</span>
           <button type="button" onClick={save} disabled={saving || !isDirty} title="Save (Ctrl+S)"
             className="rounded-md bg-moss px-4 py-2 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-60">

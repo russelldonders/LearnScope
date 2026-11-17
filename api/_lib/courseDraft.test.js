@@ -45,6 +45,7 @@ describe('buildCourseDraftRequest', () => {
       assessmentQuestionCount: 10,
       assessmentPassMark: 70,
       assessmentPointsPerQuestion: 1,
+      assessmentDisplayMode: 'one_at_a_time',
       assessmentQuestionTypes: ['single', 'multiple'],
       elements: ['knowledge_check'],
     })
@@ -53,6 +54,7 @@ describe('buildCourseDraftRequest', () => {
     expect(result.prompt).toContain('exactly 3 sections total: 2 learning sections followed by 1 final test section')
     expect(result.prompt).toContain('exactly 10 test_question blocks')
     expect(result.prompt).not.toContain('Each page must stand on its own')
+    expect(result.values.assessment.displayMode).toBe('one_at_a_time')
   })
 
   it('reserves extra output space for every scored question', () => {
@@ -135,7 +137,7 @@ describe('checkGeneratedCourseDraft', () => {
   it('creates the configured final test and stores its pass mark and points', () => {
     const base = { secondaryContent: 'Review the relevant lesson.', level: 2, variant: 'info', align: 'left', unit: '', tolerance: 0 }
     const answer = (label, correct) => ({ label, detail: '', value: 0, correct })
-    const assessment = { questionCount: 2, passMark: 80, pointsPerQuestion: 3, questionTypes: ['single'] }
+    const assessment = { questionCount: 2, passMark: 80, pointsPerQuestion: 3, displayMode: 'one_at_a_time', questionTypes: ['single'] }
     const result = checkGeneratedCourseDraft(course([
       section('Learning', 1),
       { title: 'Final test', instructions: '', pages: [{ title: 'Final test', blocks: [
@@ -145,7 +147,7 @@ describe('checkGeneratedCourseDraft', () => {
     ]), { sectionCount: 2, pagesPerSection: 1, elements: ['test_question'], assessment })
     expect(result.problem).toBeUndefined()
     const pageContent = result.draft.sections[1].pages[0].pageContent
-    expect(pageContent.test).toEqual({ passMark: 80 })
+    expect(pageContent.test).toEqual({ passMark: 80, displayMode: 'one_at_a_time' })
     expect(pageContent.blocks.filter((block) => block.type === 'test_question')).toHaveLength(2)
     expect(pageContent.blocks.filter((block) => block.type === 'test_question').every((block) => block.points === 3)).toBe(true)
   })

@@ -43,6 +43,7 @@ describe('buildSkillCourseBrief', () => {
       assessmentQuestionCount: 8,
       assessmentPassMark: 75,
       assessmentPointsPerQuestion: 2,
+      assessmentDisplayMode: 'one_at_a_time',
       assessmentQuestionTypes: ['single', 'ordering'],
     })
 
@@ -51,7 +52,7 @@ describe('buildSkillCourseBrief', () => {
     expect(brief.outcomes).toContain('core models and questioning choices')
     expect(brief.sourceMaterial).toContain('Target knowledge level: 3 — Familiar')
     expect(brief.sourceMaterial).toContain('Do not imply that completing it proves practical competence')
-    expect(brief).toMatchObject({ assessmentEnabled: true, assessmentQuestionCount: '8', assessmentPassMark: '75', assessmentPointsPerQuestion: '2', assessmentQuestionTypes: ['single', 'ordering'] })
+    expect(brief).toMatchObject({ assessmentEnabled: true, assessmentQuestionCount: '8', assessmentPassMark: '75', assessmentPointsPerQuestion: '2', assessmentDisplayMode: 'one_at_a_time', assessmentQuestionTypes: ['single', 'ordering'] })
   })
 })
 

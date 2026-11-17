@@ -81,11 +81,12 @@ describe('page builder content', () => {
   })
 
   it('normalises scored questions and marks the supported answer shapes', () => {
-    const question = normalisePageDocument({ test: { passMark: 75 }, blocks: [{
+    const question = normalisePageDocument({ test: { passMark: 75, displayMode: 'one_at_a_time' }, blocks: [{
       id: 'q', type: 'test_question', title: 'Select both', layout: 'multiple', points: 4,
       items: [{ id: 'a', label: 'A', correct: true }, { id: 'b', label: 'B', correct: false }, { id: 'c', label: 'C', correct: true }],
     }] })
     expect(question.test.passMark).toBe(75)
+    expect(question.test.displayMode).toBe('one_at_a_time')
     expect(scoreTestQuestion(question.blocks[0], ['c', 'a'])).toEqual({ earned: 4, possible: 4, correct: true })
     expect(scoreTestQuestion(question.blocks[0], ['a'])).toEqual({ earned: 0, possible: 4, correct: false })
     expect(scoreTestQuestion({ id: 'n', type: 'test_question', title: 'Number', layout: 'number', points: 2, tolerance: 0.5, items: [{ id: 'value', label: '', value: 10 }] }, '10.4').correct).toBe(true)

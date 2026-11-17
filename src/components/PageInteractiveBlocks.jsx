@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useState } from 'react'
 import { useOptionalLanguage } from '../context/LanguageContext'
-import { scoreTestQuestion, startingOrder } from '../lib/pageBuilder'
+import { startingOrder } from '../lib/pageBuilder'
 
 // The interactive and visual blocks a learner sees on a course page (see
 // INTERACTIVE_BLOCKS in lib/pageBuilder.js). Everything is plain text drawn
@@ -90,61 +90,40 @@ export function KnowledgeCheck({ block }) {
   )
 }
 
-export function ScoredQuestion({ block, onResult }) {
+export function ScoredQuestion({ block, answer, onAnswer, submitted = false, result = null, number = null }) {
   const choice = ['single', 'multiple', 'true_false'].includes(block.layout)
-  const initialOrder = useMemo(() => block.layout === 'ordering' ? startingOrder(block.items, block.id) : [], [block])
-  const [answer, setAnswer] = useState(block.layout === 'multiple' ? [] : block.layout === 'matching' ? {} : block.layout === 'ordering' ? initialOrder : '')
-  const [result, setResult] = useState(null)
-
-  function submit() {
-    const next = scoreTestQuestion(block, answer)
-    setResult(next)
-    onResult?.(next)
-  }
-  function reset() {
-    setResult(null)
-    setAnswer(block.layout === 'multiple' ? [] : block.layout === 'matching' ? {} : block.layout === 'ordering' ? initialOrder : '')
-    onResult?.(null)
-  }
   function choose(id) {
-    if (block.layout === 'multiple') setAnswer((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id])
-    else setAnswer(id)
+    if (block.layout === 'multiple') onAnswer(answer.includes(id) ? answer.filter((value) => value !== id) : [...answer, id])
+    else onAnswer(id)
   }
   function move(index, delta) {
-    setAnswer((current) => {
-      const next = [...current]
-      const target = index + delta
-      if (target < 0 || target >= next.length) return current
-      ;[next[index], next[target]] = [next[target], next[index]]
-      return next
-    })
+    const next = [...answer]
+    const target = index + delta
+    if (target < 0 || target >= next.length) return
+    ;[next[index], next[target]] = [next[target], next[index]]
+    onAnswer(next)
   }
-  const answered = block.layout === 'matching'
-    ? block.items.every((item) => answer[item.id])
-    : Array.isArray(answer) ? answer.length > 0 : String(answer).trim() !== ''
   const matches = block.items.map((item) => item.detail).filter(Boolean)
 
   return (
     <BlockFrame className="page-test-question">
-      <fieldset disabled={result !== null}>
-        <legend className="page-interactive__title">{block.title}</legend>
+      <fieldset disabled={submitted}>
+        <legend className="page-interactive__title">{number ? `${number}. ${block.title}` : block.title}</legend>
         <p className="page-interactive__hint">{block.points} {block.points === 1 ? 'point' : 'points'}</p>
         {choice && <div className="page-check__options">{block.items.map((item) => {
           const selected = block.layout === 'multiple' ? answer.includes(item.id) : answer === item.id
           return <label key={item.id} className={`page-check__option ${selected ? 'is-chosen' : ''}`}><input type={block.layout === 'multiple' ? 'checkbox' : 'radio'} name={`scored-${block.id}`} checked={selected} onChange={() => choose(item.id)} /><span>{item.label}</span></label>
         })}</div>}
-        {block.layout === 'short_text' && <input className="page-test-question__input" value={answer} onChange={(event) => setAnswer(event.target.value)} aria-label="Your answer" />}
-        {block.layout === 'number' && <input type="number" step="any" className="page-test-question__input" value={answer} onChange={(event) => setAnswer(event.target.value)} aria-label="Your answer" />}
+        {block.layout === 'short_text' && <input className="page-test-question__input" value={answer} onChange={(event) => onAnswer(event.target.value)} aria-label="Your answer" />}
+        {block.layout === 'number' && <input type="number" step="any" className="page-test-question__input" value={answer} onChange={(event) => onAnswer(event.target.value)} aria-label="Your answer" />}
         {block.layout === 'ordering' && <ol className="page-ordering">{answer.map((id, index) => {
           const item = block.items.find((candidate) => candidate.id === id)
           return <li key={id} className="page-ordering__item"><span className="page-ordering__number">{index + 1}</span><span className="page-ordering__label">{item?.label}</span><span className="page-ordering__moves"><button type="button" onClick={() => move(index, -1)} disabled={index === 0} aria-label={`Move ${item?.label} up`}>↑</button><button type="button" onClick={() => move(index, 1)} disabled={index === answer.length - 1} aria-label={`Move ${item?.label} down`}>↓</button></span></li>
         })}</ol>}
-        {block.layout === 'matching' && <div className="page-matching">{block.items.map((item) => <label key={item.id}><span>{item.label}</span><select value={answer[item.id] ?? ''} onChange={(event) => setAnswer((current) => ({ ...current, [item.id]: event.target.value }))}><option value="">Choose a match</option>{matches.map((match) => <option key={match} value={match}>{match}</option>)}</select></label>)}</div>}
+        {block.layout === 'matching' && <div className="page-matching">{block.items.map((item) => <label key={item.id}><span>{item.label}</span><select value={answer[item.id] ?? ''} onChange={(event) => onAnswer({ ...answer, [item.id]: event.target.value })}><option value="">Choose a match</option>{matches.map((match) => <option key={match} value={match}>{match}</option>)}</select></label>)}</div>}
       </fieldset>
-      <div className="page-interactive__actions">
-        {result === null ? <button type="button" className="page-interactive__button" disabled={!answered} onClick={submit}>Mark question</button> : <><p role="status" className={`page-interactive__result ${result.correct ? 'is-correct' : 'is-wrong'}`}>{result.earned} of {result.possible} points</p><button type="button" className="page-interactive__button page-interactive__button--quiet" onClick={reset}>Try again</button></>}
-      </div>
-      {result !== null && block.caption && <p className="page-interactive__caption">{block.caption}</p>}
+      {submitted && result && <div className="page-interactive__actions"><p role="status" className={`page-interactive__result ${result.correct ? 'is-correct' : 'is-wrong'}`}>{result.earned} of {result.possible} points</p></div>}
+      {submitted && block.caption && <p className="page-interactive__caption">{block.caption}</p>}
     </BlockFrame>
   )
 }

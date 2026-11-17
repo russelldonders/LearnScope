@@ -108,3 +108,17 @@ it('adds an interactive knowledge check, edits it, and saves it as part of the p
   expect(check.items[0].correct).toBe(true)
 })
 
+it('lets an author choose how scored questions are presented', async () => {
+  const resource = {
+    id: 'test-page', title: 'Final test', page_content: { version: 1, test: { passMark: 70 }, blocks: [{
+      id: 'q1', type: 'test_question', title: 'Choose one', layout: 'single', points: 1, tolerance: 0,
+      items: [{ id: 'a', label: 'A', detail: '', value: 0, correct: true }, { id: 'b', label: 'B', detail: '', value: 0, correct: false }],
+    }] },
+  }
+  render(<PageBuilderModal organisationId="org-1" userId="me" resource={resource} onClose={vi.fn()} onSaved={vi.fn()} />)
+
+  expect(screen.getByRole('combobox', { name: 'Show questions' })).toHaveValue('all')
+  fireEvent.change(screen.getByRole('combobox', { name: 'Show questions' }), { target: { value: 'one_at_a_time' } })
+  expect(screen.getByRole('combobox', { name: 'Show questions' })).toHaveValue('one_at_a_time')
+})
+

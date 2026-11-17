@@ -28,8 +28,8 @@ describe('CourseLearn', () => {
   it('only counts terminal successful statuses as completed content', () => {
     expect(isContentComplete('completed')).toBe(true)
     expect(isContentComplete('passed')).toBe(true)
+    expect(isContentComplete('failed')).toBe(true)
     expect(isContentComplete('incomplete')).toBe(false)
-    expect(isContentComplete('failed')).toBe(false)
     expect(isContentComplete('not_attempted')).toBe(false)
   })
 

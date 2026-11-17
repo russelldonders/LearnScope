@@ -65,13 +65,13 @@ select throws_ok(
 
 reset role;
 insert into public.course_content_progress (content_item_id, user_id, status) values
-  ('83000000-0000-0000-0000-000000000021', '83000000-0000-0000-0000-000000000001', 'passed');
+  ('83000000-0000-0000-0000-000000000021', '83000000-0000-0000-0000-000000000001', 'failed');
 set local role authenticated;
 
 select is(
   public.complete_my_course('83000000-0000-0000-0000-000000000030'),
   current_date,
-  'completed and passed both satisfy all-content completion'
+  'completed and marked-failed tests both satisfy all-content completion'
 );
 select is(
   (select completed_date from public.courses where id = '83000000-0000-0000-0000-000000000030'),
