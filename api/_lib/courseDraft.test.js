@@ -100,6 +100,24 @@ describe('checkGeneratedCourseDraft', () => {
     expect(result.draft.sections.map((s) => s.title)).toEqual(['A', 'B'])
     expect(result.draft.sections.map((s) => s.pages.length)).toEqual([4, 4])
   })
+
+  it('creates the configured final test and stores its pass mark and points', () => {
+    const base = { secondaryContent: 'Review the relevant lesson.', level: 2, variant: 'info', align: 'left', unit: '', tolerance: 0 }
+    const answer = (label, correct) => ({ label, detail: '', value: 0, correct })
+    const assessment = { questionCount: 2, passMark: 80, pointsPerQuestion: 3, questionTypes: ['single'] }
+    const result = checkGeneratedCourseDraft(course([
+      section('Learning', 1),
+      { title: 'Final test', instructions: '', pages: [{ title: 'Final test', blocks: [
+        { ...base, type: 'test_question', content: 'Question one?', layout: 'single', points: 1, items: [answer('Yes', true), answer('No', false)] },
+        { ...base, type: 'test_question', content: 'Question two?', layout: 'single', points: 1, items: [answer('Right', true), answer('Wrong', false)] },
+      ] }] },
+    ]), { sectionCount: 2, pagesPerSection: 1, elements: ['test_question'], assessment })
+    expect(result.problem).toBeUndefined()
+    const pageContent = result.draft.sections[1].pages[0].pageContent
+    expect(pageContent.test).toEqual({ passMark: 80 })
+    expect(pageContent.blocks.filter((block) => block.type === 'test_question')).toHaveLength(2)
+    expect(pageContent.blocks.filter((block) => block.type === 'test_question').every((block) => block.points === 3)).toBe(true)
+  })
 })
 
 describe('interactive and visual blocks from the AI', () => {

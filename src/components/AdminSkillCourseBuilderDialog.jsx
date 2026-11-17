@@ -19,9 +19,19 @@ const DEFAULT_SETTINGS = {
   pagesPerSection: 2,
   tone: 'Practical and encouraging',
   // Every interactive and visual element, used in balance, unless chosen otherwise.
-  elements: Object.keys(INTERACTIVE_BLOCKS),
+  elements: Object.keys(INTERACTIVE_BLOCKS).filter((element) => element !== 'test_question'),
   elementAmount: 'balanced',
+  assessmentEnabled: true,
+  assessmentQuestionCount: 10,
+  assessmentPassMark: 70,
+  assessmentPointsPerQuestion: 1,
+  assessmentQuestionTypes: ['single', 'multiple', 'true_false', 'short_text', 'number', 'ordering', 'matching'],
 }
+
+const ASSESSMENT_QUESTION_TYPES = [
+  ['single', 'Single choice'], ['multiple', 'Multiple choice'], ['true_false', 'True or false'],
+  ['short_text', 'Short answer'], ['number', 'Numeric'], ['ordering', 'Ordering'], ['matching', 'Matching'],
+]
 
 // The number fields hold what was typed (a string) while editing: turning it
 // into a number on every keystroke made a cleared field 0, so typing "15"
@@ -33,6 +43,9 @@ const NUMBER_FIELDS = {
   durationValue: { min: 1, max: 10000 },
   sectionCount: { min: 1, max: 8 },
   pagesPerSection: { min: 1, max: 6 },
+  assessmentQuestionCount: { min: 1, max: 20 },
+  assessmentPassMark: { min: 0, max: 100 },
+  assessmentPointsPerQuestion: { min: 1, max: 100 },
 }
 
 function wholeNumberInRange(value, field) {
@@ -266,12 +279,45 @@ export default function AdminSkillCourseBuilderDialog({ skills, onClose, onFinis
             <CourseElementsPicker
               elements={settings.elements}
               amount={settings.elementAmount}
+              excludedElements={['test_question']}
               onChange={(change) => setSettings((current) => ({
                 ...current,
                 ...(change.elements ? { elements: change.elements } : {}),
                 ...(change.amount ? { elementAmount: change.amount } : {}),
               }))}
             />
+
+            <fieldset className="rounded-lg border border-hairline bg-paper p-4">
+              <div className="flex items-start gap-3">
+                <input id="include-final-test" type="checkbox" checked={settings.assessmentEnabled} onChange={(event) => setSettings((current) => ({ ...current, assessmentEnabled: event.target.checked }))} className="mt-1 h-4 w-4 accent-moss" />
+                <div className="min-w-0 flex-1">
+                  <label htmlFor="include-final-test" className="font-medium text-ink">Include a final scored test</label>
+                  <p className="mt-1 text-sm text-secondary">The final section will contain an auto-marked test and counts toward the section total below.</p>
+                </div>
+              </div>
+              {settings.assessmentEnabled && (
+                <div className="mt-4 space-y-4 border-t border-hairline pt-4">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <label className="text-xs text-secondary">Questions
+                      <input type="number" min="1" max="20" value={settings.assessmentQuestionCount} onChange={(event) => setSettings((current) => ({ ...current, assessmentQuestionCount: event.target.value }))} onBlur={() => setSettings((current) => ({ ...current, assessmentQuestionCount: String(wholeNumberInRange(current.assessmentQuestionCount, 'assessmentQuestionCount')) }))} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-gold" />
+                    </label>
+                    <label className="text-xs text-secondary">Pass mark
+                      <span className="relative mt-1 block"><input aria-label="Pass mark" type="number" min="0" max="100" value={settings.assessmentPassMark} onChange={(event) => setSettings((current) => ({ ...current, assessmentPassMark: event.target.value }))} onBlur={() => setSettings((current) => ({ ...current, assessmentPassMark: String(wholeNumberInRange(current.assessmentPassMark, 'assessmentPassMark')) }))} className="w-full rounded-md border border-hairline bg-card px-3 py-2 pr-8 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-gold" /><span className="absolute right-3 top-2 text-sm text-secondary">%</span></span>
+                    </label>
+                    <label className="text-xs text-secondary">Points per question
+                      <input type="number" min="1" max="100" value={settings.assessmentPointsPerQuestion} onChange={(event) => setSettings((current) => ({ ...current, assessmentPointsPerQuestion: event.target.value }))} onBlur={() => setSettings((current) => ({ ...current, assessmentPointsPerQuestion: String(wholeNumberInRange(current.assessmentPointsPerQuestion, 'assessmentPointsPerQuestion')) }))} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-gold" />
+                    </label>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-secondary">Question types the AI may use</p>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                      {ASSESSMENT_QUESTION_TYPES.map(([value, label]) => <label key={value} className="flex items-center gap-2 rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink"><input type="checkbox" checked={settings.assessmentQuestionTypes.includes(value)} onChange={() => setSettings((current) => ({ ...current, assessmentQuestionTypes: current.assessmentQuestionTypes.includes(value) ? current.assessmentQuestionTypes.filter((type) => type !== value) : [...current.assessmentQuestionTypes, value] }))} className="h-4 w-4 accent-moss" />{label}</label>)}
+                    </div>
+                    {settings.assessmentQuestionTypes.length === 0 && <p role="alert" className="mt-2 text-xs text-red-700">Choose at least one question type.</p>}
+                  </div>
+                </div>
+              )}
+            </fieldset>
 
             <label className="flex items-start gap-3 border-y border-hairline py-4">
               <input
@@ -302,7 +348,7 @@ export default function AdminSkillCourseBuilderDialog({ skills, onClose, onFinis
                 <label className="text-xs text-secondary">Sections
                   <input type="number" min="1" max="8" inputMode="numeric" value={settings.sectionCount} onChange={(event) => setSettings((current) => ({ ...current, sectionCount: event.target.value }))} onBlur={() => setSettings((current) => ({ ...current, sectionCount: String(wholeNumberInRange(current.sectionCount, 'sectionCount')) }))} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-gold" />
                 </label>
-                <label className="text-xs text-secondary">Pages each
+                <label className="text-xs text-secondary">Learning pages each
                   <input type="number" min="1" max="6" inputMode="numeric" value={settings.pagesPerSection} onChange={(event) => setSettings((current) => ({ ...current, pagesPerSection: event.target.value }))} onBlur={() => setSettings((current) => ({ ...current, pagesPerSection: String(wholeNumberInRange(current.pagesPerSection, 'pagesPerSection')) }))} className="mt-1 w-full rounded-md border border-hairline bg-card px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-gold" />
                 </label>
                 <label className="col-span-2 text-xs text-secondary sm:col-span-1">Style
@@ -319,7 +365,7 @@ export default function AdminSkillCourseBuilderDialog({ skills, onClose, onFinis
               </p>
               <div className="flex flex-col-reverse gap-2 sm:flex-row">
                 <button type="button" onClick={handleClose} className="rounded-md border border-hairline px-4 py-2 text-sm font-medium text-ink hover:bg-paper">Cancel</button>
-                <button type="button" onClick={() => handleBuild()} disabled={courseCount === 0} className="rounded-md bg-moss px-4 py-2 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-50">
+                <button type="button" onClick={() => handleBuild()} disabled={courseCount === 0 || (settings.assessmentEnabled && settings.assessmentQuestionTypes.length === 0)} className="rounded-md bg-moss px-4 py-2 text-sm font-medium text-paper hover:opacity-90 disabled:opacity-50">
                   Build {courseCount} {courseCount === 1 ? 'course' : 'courses'}
                 </button>
               </div>

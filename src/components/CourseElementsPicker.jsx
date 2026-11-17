@@ -26,15 +26,16 @@ const AMOUNTS = [
   { value: 'rich', label: 'Rich', hint: 'Every page, up to three each' },
 ]
 
-export default function CourseElementsPicker({ elements, amount, onChange }) {
+export default function CourseElementsPicker({ elements, amount, onChange, excludedElements = [] }) {
   const id = useId()
-  const allChosen = elements.length === COURSE_ELEMENTS.length
+  const availableElements = COURSE_ELEMENTS.filter((element) => !excludedElements.includes(element))
+  const allChosen = availableElements.every((element) => elements.includes(element))
 
   function toggle(element) {
     onChange({
       elements: elements.includes(element)
         ? elements.filter((value) => value !== element)
-        : COURSE_ELEMENTS.filter((value) => value === element || elements.includes(value)),
+        : availableElements.filter((value) => value === element || elements.includes(value)),
     })
   }
 
@@ -42,7 +43,7 @@ export default function CourseElementsPicker({ elements, amount, onChange }) {
     <fieldset className="space-y-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <legend className="font-medium text-ink">Interactive and visual elements</legend>
-        <button type="button" onClick={() => onChange({ elements: allChosen ? [] : COURSE_ELEMENTS })} className="text-xs font-medium text-moss hover:underline">
+        <button type="button" onClick={() => onChange({ elements: allChosen ? [] : availableElements })} className="text-xs font-medium text-moss hover:underline">
           {allChosen ? 'Clear all' : 'Select all'}
         </button>
       </div>
@@ -51,7 +52,7 @@ export default function CourseElementsPicker({ elements, amount, onChange }) {
         {elements.includes('knowledge_check') ? ' Every section gets at least one knowledge check.' : ''}
       </p>
       <div className="grid gap-2 sm:grid-cols-2">
-        {COURSE_ELEMENTS.map((element) => (
+        {availableElements.map((element) => (
           <label key={element} className={`flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 ${elements.includes(element) ? 'border-moss bg-moss/10' : 'border-hairline bg-paper'}`}>
             <input type="checkbox" checked={elements.includes(element)} onChange={() => toggle(element)} className="mt-0.5 h-4 w-4 accent-moss" />
             <span>

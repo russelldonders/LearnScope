@@ -37,6 +37,13 @@ describe('buildSkillCourseBrief', () => {
       sectionCount: 3,
       pagesPerSection: 2,
       tone: 'Practical and encouraging',
+      elements: ['knowledge_check'],
+      elementAmount: 'balanced',
+      assessmentEnabled: true,
+      assessmentQuestionCount: 8,
+      assessmentPassMark: 75,
+      assessmentPointsPerQuestion: 2,
+      assessmentQuestionTypes: ['single', 'ordering'],
     })
 
     expect(brief.topic).toBe('Coaching — Familiar')
@@ -44,6 +51,7 @@ describe('buildSkillCourseBrief', () => {
     expect(brief.outcomes).toContain('core models and questioning choices')
     expect(brief.sourceMaterial).toContain('Target knowledge level: 3 — Familiar')
     expect(brief.sourceMaterial).toContain('Do not imply that completing it proves practical competence')
+    expect(brief).toMatchObject({ assessmentEnabled: true, assessmentQuestionCount: '8', assessmentPassMark: '75', assessmentPointsPerQuestion: '2', assessmentQuestionTypes: ['single', 'ordering'] })
   })
 })
 

@@ -53,7 +53,7 @@ describe('AdminSkillCourseBuilderDialog', () => {
     )
     const duration = screen.getByRole('spinbutton', { name: 'Duration' })
     const sections = screen.getByRole('spinbutton', { name: 'Sections' })
-    const pages = screen.getByRole('spinbutton', { name: 'Pages each' })
+    const pages = screen.getByRole('spinbutton', { name: 'Learning pages each' })
 
     // Clearing a field leaves it empty rather than putting a 0 in it.
     fireEvent.change(duration, { target: { value: '' } })
@@ -126,6 +126,24 @@ describe('AdminSkillCourseBuilderDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Build 5 courses' }))
     await waitFor(() => expect(generateSkillCourseDraft).toHaveBeenCalled())
     expect(generateSkillCourseDraft.mock.calls[0][0]).toEqual(expect.objectContaining({ elements: ['flip_cards', 'animation'], elementAmount: 'light' }))
+  })
+
+  it('defines a separate final test with scoring and question settings', async () => {
+    render(<MemoryRouter><AdminSkillCourseBuilderDialog skills={[skill]} onClose={vi.fn()} onFinished={vi.fn()} /></MemoryRouter>)
+    expect(screen.queryByRole('checkbox', { name: /Scored question/ })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Questions' }), { target: { value: '6' } })
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Pass mark' }), { target: { value: '80' } })
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Points per question' }), { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Matching' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Build 5 courses' }))
+    await waitFor(() => expect(generateSkillCourseDraft).toHaveBeenCalled())
+    expect(generateSkillCourseDraft.mock.calls[0][0]).toEqual(expect.objectContaining({
+      assessmentEnabled: true,
+      assessmentQuestionCount: '6',
+      assessmentPassMark: '80',
+      assessmentPointsPerQuestion: '2',
+      assessmentQuestionTypes: expect.not.arrayContaining(['matching']),
+    }))
   })
 
   it('builds all five knowledge-level courses with automatic Global publication', async () => {
