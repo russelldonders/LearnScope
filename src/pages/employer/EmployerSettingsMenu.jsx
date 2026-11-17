@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import useAnchoredMenuPosition from '../../lib/useAnchoredMenuPosition'
 
@@ -21,14 +22,14 @@ export default function EmployerSettingsMenu({ items, active = false }) {
     buttonRef,
     menuRef,
     align: 'right',
-    onClose: () => setOpen(false),
   })
 
   useEffect(() => {
     if (!open) return undefined
-    itemRefs.current[0]?.focus()
+    itemRefs.current[0]?.focus({ preventScroll: true })
+    // The menu is portalled to <body>, so it's outside containerRef in the DOM.
     function handleOutside(event) {
-      if (!containerRef.current?.contains(event.target)) setOpen(false)
+      if (!containerRef.current?.contains(event.target) && !menuRef.current?.contains(event.target)) setOpen(false)
     }
     document.addEventListener('mousedown', handleOutside)
     return () => document.removeEventListener('mousedown', handleOutside)
@@ -42,7 +43,7 @@ export default function EmployerSettingsMenu({ items, active = false }) {
   function handleMenuKeyDown(event) {
     const elements = itemRefs.current.filter(Boolean)
     const index = elements.indexOf(document.activeElement)
-    const focusAt = (i) => elements[(i + elements.length) % elements.length]?.focus()
+    const focusAt = (i) => elements[(i + elements.length) % elements.length]?.focus({ preventScroll: true })
     if (event.key === 'ArrowDown') {
       event.preventDefault()
       focusAt(index + 1)
@@ -59,7 +60,9 @@ export default function EmployerSettingsMenu({ items, active = false }) {
       event.preventDefault()
       close()
     } else if (event.key === 'Tab') {
-      close({ restoreFocus: false })
+      // Back to the button first, so Tab carries on from there in page order
+      // (the portalled menu itself sits at the end of the page).
+      close()
     }
   }
 
@@ -90,7 +93,7 @@ export default function EmployerSettingsMenu({ items, active = false }) {
           <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
         </svg>
       </button>
-      {open && (
+      {open && createPortal(
         <div
           ref={menuRef}
           role="menu"
@@ -133,7 +136,8 @@ export default function EmployerSettingsMenu({ items, active = false }) {
               </button>
             )
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

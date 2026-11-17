@@ -1,5 +1,6 @@
 import ProviderSharingPanel from '../../components/ProviderSharingPanel'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import AppHeader from '../../components/AppHeader'
@@ -590,25 +591,44 @@ function ProviderSectionMenu({ items, currentSection, isActive, buttonRef, hrefF
     buttonRef: localButtonRef,
     menuRef,
     align: 'left',
-    onClose: () => setOpen(false),
   })
   const containerRef = useRef(null)
+  const itemRefs = useRef([])
 
+  // The menu is portalled to <body> (see useAnchoredMenuPosition), so focus
+  // moves into it on open, and clicks inside it aren't "outside" clicks.
   useEffect(() => {
-    if (!open) return
+    if (!open) return undefined
+    itemRefs.current[0]?.focus({ preventScroll: true })
     function handleOutside(e) {
-      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false)
-    }
-    function handleEscape(e) {
-      if (e.key === 'Escape') setOpen(false)
+      if (!containerRef.current?.contains(e.target) && !menuRef.current?.contains(e.target)) setOpen(false)
     }
     document.addEventListener('mousedown', handleOutside)
-    document.addEventListener('keydown', handleEscape)
-    return () => {
-      document.removeEventListener('mousedown', handleOutside)
-      document.removeEventListener('keydown', handleEscape)
-    }
+    return () => document.removeEventListener('mousedown', handleOutside)
   }, [open])
+
+  function closeMenu() {
+    setOpen(false)
+    localButtonRef.current?.focus({ preventScroll: true })
+  }
+
+  function handleMenuKeyDown(event) {
+    const elements = itemRefs.current.filter(Boolean)
+    const index = elements.indexOf(document.activeElement)
+    const focusAt = (i) => elements[(i + elements.length) % elements.length]?.focus({ preventScroll: true })
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      focusAt(index + 1)
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      focusAt(index - 1)
+    } else if (event.key === 'Escape') {
+      event.preventDefault()
+      closeMenu()
+    } else if (event.key === 'Tab') {
+      closeMenu()
+    }
+  }
 
   const activeItem = items.find((item) => item.key === currentSection)
 
@@ -638,11 +658,19 @@ function ProviderSectionMenu({ items, currentSection, isActive, buttonRef, hrefF
           <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
         </svg>
       </button>
-      {open && (
-        <div ref={menuRef} role="menu" aria-label="Learning content" style={menuStyle} className="z-40 min-w-[10rem] bg-card border border-hairline rounded-md shadow-lg py-1">
-          {items.map((item) => (
+      {open && createPortal(
+        <div
+          ref={menuRef}
+          role="menu"
+          aria-label="Learning content"
+          onKeyDown={handleMenuKeyDown}
+          style={menuStyle}
+          className="z-40 min-w-[10rem] bg-card border border-hairline rounded-md shadow-lg py-1"
+        >
+          {items.map((item, index) => (
             <Link
               key={item.key}
+              ref={(el) => { itemRefs.current[index] = el }}
               role="menuitem"
               to={hrefFor(item.key)}
               onClick={() => setOpen(false)}
@@ -653,7 +681,8 @@ function ProviderSectionMenu({ items, currentSection, isActive, buttonRef, hrefF
               {item.label}
             </Link>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
