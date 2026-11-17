@@ -1,7 +1,7 @@
 import { waitUntil } from '@vercel/functions'
 import { verifySupabaseUser } from './auth.js'
 import { consumeQuota, sendQuotaExceeded } from './quota.js'
-import { assessmentQuestionListSchema, buildCourseDraftRequest, checkGeneratedCourseDraft, learningSectionListSchema } from './courseDraft.js'
+import { assessmentQuestionListSchema, buildCourseDraftRequest, checkGeneratedCourseDraft, isUsableAssessmentQuestion, learningSectionListSchema } from './courseDraft.js'
 import { supabaseAdmin } from './supabaseAdmin.js'
 import { createTrackedMessage } from './trackedAnthropic.js'
 
@@ -135,17 +135,56 @@ function finalTestPage(raw) {
   return pages[0] ?? null
 }
 
-function mergeAssessmentQuestions(raw, additions, wanted) {
+function mergeAssessmentQuestions(raw, additions, assessment) {
   const merged = structuredClone(raw)
   const page = finalTestPage(merged)
   if (!page || !Array.isArray(page.blocks)) return merged
   const otherBlocks = page.blocks.filter((block) => block?.type !== 'test_question')
-  const existingQuestions = page.blocks.filter((block) => block?.type === 'test_question')
-  // Put the purpose-built replacements first. If the original response had
-  // the right raw count but some malformed questions, they replace those
-  // unusable entries instead of pushing the page beyond its block limit.
-  page.blocks = [...otherBlocks, ...additions, ...existingQuestions].slice(0, otherBlocks.length + wanted)
+  const usable = (questions) => questions.filter((block) => isUsableAssessmentQuestion(block, assessment.questionTypes))
+  const existingQuestions = usable(page.blocks.filter((block) => block?.type === 'test_question'))
+  const newQuestions = usable(additions)
+  page.blocks = [...otherBlocks, ...existingQuestions, ...newQuestions]
+    .slice(0, otherBlocks.length + assessment.questionCount)
   return merged
+}
+
+export function normalizeAssessmentStructure(raw, values) {
+  const normalized = structuredClone(raw)
+  if (!values?.assessment || !Array.isArray(normalized?.sections) || normalized.sections.length === 0) return normalized
+
+  const countQuestions = (section) => (Array.isArray(section?.pages) ? section.pages : [])
+    .flatMap((page) => Array.isArray(page?.blocks) ? page.blocks : [])
+    .filter((block) => block?.type === 'test_question').length
+  let finalIndex = normalized.sections.findIndex((section) => section?.title?.trim().toLocaleLowerCase() === 'final test')
+  if (finalIndex < 0) {
+    finalIndex = normalized.sections.reduce((best, section, index, sections) => (
+      countQuestions(section) > countQuestions(sections[best]) ? index : best
+    ), normalized.sections.length - 1)
+  }
+
+  const [finalSection] = normalized.sections.splice(finalIndex, 1)
+  const allQuestions = [...normalized.sections, finalSection]
+    .flatMap((section) => Array.isArray(section?.pages) ? section.pages : [])
+    .flatMap((page) => Array.isArray(page?.blocks) ? page.blocks : [])
+    .filter((block) => block?.type === 'test_question')
+  for (const section of normalized.sections) {
+    for (const page of Array.isArray(section?.pages) ? section.pages : []) {
+      if (Array.isArray(page?.blocks)) page.blocks = page.blocks.filter((block) => block?.type !== 'test_question')
+    }
+  }
+
+  finalSection.title = 'Final test'
+  finalSection.instructions = typeof finalSection.instructions === 'string' ? finalSection.instructions : ''
+  const page = Array.isArray(finalSection.pages) && finalSection.pages[0]
+    ? finalSection.pages[0]
+    : { title: 'Final test', blocks: [] }
+  page.title = 'Final test'
+  page.blocks = allQuestions
+  finalSection.pages = [page]
+
+  const learningWanted = Math.max(0, values.sectionCount - 1)
+  normalized.sections = [...normalized.sections.slice(0, learningWanted), finalSection]
+  return mergeAssessmentQuestions(normalized, [], values.assessment)
 }
 
 function mergeLearningSections(raw, additions, wanted, hasAssessment) {
@@ -198,7 +237,7 @@ async function runGenerationJob({ jobId, request, userId, organisationId }) {
     if (!textBlock) throw unusableCourse('The AI’s reply had no course in it. Try again.')
 
     let raw = JSON.parse(textBlock.text)
-    if (request.values.assessment) raw = mergeAssessmentQuestions(raw, [], request.values.assessment.questionCount)
+    if (request.values.assessment) raw = normalizeAssessmentStructure(raw, request.values)
     let { draft, problem } = checkGeneratedCourseDraft(raw, request.values)
 
     for (let attempt = 1; !draft && attempt <= MAX_SECTION_REPAIR_ATTEMPTS; attempt += 1) {
@@ -252,7 +291,7 @@ async function runGenerationJob({ jobId, request, userId, organisationId }) {
       if (!repairText) continue
       const questions = JSON.parse(repairText.text)?.questions
       if (!Array.isArray(questions) || questions.length === 0) continue
-      raw = mergeAssessmentQuestions(raw, questions.slice(0, missing), assessment.questionCount)
+      raw = mergeAssessmentQuestions(raw, questions.slice(0, missing), assessment)
       ;({ draft, problem } = checkGeneratedCourseDraft(raw, request.values))
     }
     if (!draft) throw unusableCourse(`${problem} The course wasn’t saved after automatic correction attempts. Try again.`)

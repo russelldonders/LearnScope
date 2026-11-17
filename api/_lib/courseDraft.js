@@ -318,6 +318,12 @@ function normalizeInteractiveBlock(block) {
   }
 }
 
+export function isUsableAssessmentQuestion(block, questionTypes = ASSESSMENT_QUESTION_TYPES) {
+  if (block?.type !== 'test_question') return false
+  const normalized = normalizeInteractiveBlock(block)
+  return Boolean(normalized && questionTypes.includes(normalized.layout))
+}
+
 function normalizeBlock(block, elements = COURSE_ELEMENTS) {
   if (INTERACTIVE_RULES[block?.type]) return elements.includes(block.type) ? normalizeInteractiveBlock(block) : null
   const type = BLOCK_TYPES.includes(block?.type) ? block.type : 'text'

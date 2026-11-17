@@ -57,7 +57,7 @@ vi.mock('./supabaseAdmin.js', () => ({
 }))
 
 import { buildCourseDraftRequest } from './courseDraft.js'
-import skillCourseGenerationJobHandler, { failStalledJobs, generationErrorMessage, runGenerationJob } from './skillCourseGenerationJobHandler.js'
+import skillCourseGenerationJobHandler, { failStalledJobs, generationErrorMessage, normalizeAssessmentStructure, runGenerationJob } from './skillCourseGenerationJobHandler.js'
 
 function response() {
   return {
@@ -204,6 +204,44 @@ describe('assessment correction', () => {
     expect(mocks.createMessage.mock.calls[1][0].output_config.format.schema.properties).toHaveProperty('questions')
     expect(mocks.createMessage.mock.calls[1][0].output_config.format.schema.properties.questions.items.properties.layout.enum).toEqual(['single'])
     expect(mocks.createMessage.mock.calls[1][0].max_tokens).toBeLessThan(request.maxTokens)
+  })
+
+  it('removes an unusable original question before merging its replacement', async () => {
+    mocks.claimJob = true
+    const request = buildCourseDraftRequest({
+      topic: 'Coaching', audience: 'New coaches', outcomes: 'Understand coaching',
+      sectionCount: 2, pagesPerSection: 1, elements: [],
+      assessmentEnabled: true, assessmentQuestionCount: 10,
+      assessmentPointsPerQuestion: 1, assessmentQuestionTypes: ['single'],
+    })
+    const course = generatedCourse(10)
+    course.sections[1].pages[0].blocks[0].items[1].correct = true
+    mocks.createMessage
+      .mockResolvedValueOnce({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(course) }], usage: {} })
+      .mockResolvedValueOnce({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ questions: generatedCourse(1).sections[1].pages[0].blocks }) }], usage: {} })
+
+    await runGenerationJob({
+      jobId: '79000000-0000-4000-8000-000000000030', request,
+      userId: '79000000-0000-4000-8000-000000000001', organisationId: '79000000-0000-4000-8000-000000000010',
+    })
+
+    expect(mocks.createMessage).toHaveBeenCalledTimes(2)
+  })
+
+  it('deterministically names and positions the final test section', () => {
+    const course = generatedCourse(10)
+    course.sections[1].title = 'Assessment'
+    course.sections[1].pages[0].title = 'Assessment'
+    const values = {
+      sectionCount: 2, pagesPerSection: 1, elements: ['test_question'],
+      assessment: { questionCount: 10, passMark: 70, pointsPerQuestion: 1, questionTypes: ['single'] },
+    }
+
+    const normalized = normalizeAssessmentStructure(course, values)
+
+    expect(normalized.sections.at(-1).title).toBe('Final test')
+    expect(normalized.sections.at(-1).pages).toHaveLength(1)
+    expect(normalized.sections.at(-1).pages[0].blocks).toHaveLength(10)
   })
 
   it('generates only a missing learning section and keeps the final test', async () => {
