@@ -11,6 +11,7 @@ import EmployerSettingsDialog from './EmployerSettingsDialog'
 import { listOrganisations } from '../../lib/admin/organisations'
 import { handleTabListKeyDown } from '../../lib/tabsKeyboard'
 import MutationFeedback from '../../components/MutationFeedback'
+import OrganisationSwitcher from '../../components/OrganisationSwitcher'
 import EmployerRoleProfilesSection from './EmployerRoleProfilesSection'
 import EmployerOverviewPanel from './EmployerOverviewPanel'
 import EmployerManagementSection from './EmployerManagementSection'
@@ -102,7 +103,6 @@ export default function EmployerConsole() {
       : requestedSection === 'training'
         ? 'provider-training'
         : requestedSection
-  const employerTabRefs = useRef({})
   const sectionTabRefs = useRef({})
 
   // Builds the next ?employer=&section= query string, preserving whichever
@@ -246,52 +246,21 @@ export default function EmployerConsole() {
         ) : (
           <>
             {myEmployers.length > 1 && (
-              <div role="tablist" aria-label="Organisation" className="flex items-center flex-wrap gap-1 mb-4 border-b border-hairline">
-                {myEmployers.map((employer) => (
-                  <Link
-                    key={employer.id}
-                    ref={(el) => { employerTabRefs.current[employer.id] = el }}
-                    id={`employer-tab-${employer.id}`}
-                    to={`?${buildParams({ org: employer.id, employer: null, ...EMPLOYER_FILTER_RESET }).toString()}`}
-                    role="tab"
-                    aria-selected={selectedEmployerId === employer.id}
-                    aria-controls={`employer-panel-${employer.id}`}
-                    tabIndex={selectedEmployerId === employer.id ? 0 : -1}
-                    onKeyDown={(event) =>
-                      handleTabListKeyDown(event, {
-                        keys: myEmployers.map((e) => e.id),
-                        activeKey: selectedEmployerId,
-                        refs: employerTabRefs,
-                        // Clears the (read-only) training list's own filters on an
-                        // employer switch, same reasoning as ProviderConsole's org
-                        // switcher -- a stale q/status filter would otherwise carry
-                        // over and make the new employer's list look empty/wrong.
-                        onChange: (employerId) => setSearchParams(buildParams({ org: employerId, employer: null, ...EMPLOYER_FILTER_RESET })),
-                      })
-                    }
-                    className={`text-sm px-3 py-2 -mb-px border-b-2 whitespace-nowrap ${
-                      selectedEmployerId === employer.id
-                        ? 'border-moss text-ink font-medium'
-                        : 'border-transparent text-secondary hover:text-ink'
-                    }`}
-                  >
-                    {employer.name}
-                  </Link>
-                ))}
+              <div className="mb-6">
+                {/* Clears the (read-only) training list's own filters on an
+                    employer switch, same reasoning as ProviderConsole's org
+                    switcher -- a stale q/status filter would otherwise carry
+                    over and make the new employer's list look empty/wrong. */}
+                <OrganisationSwitcher
+                  organisations={myEmployers}
+                  selectedId={selectedEmployerId}
+                  onChange={(employerId) => setSearchParams(buildParams({ org: employerId, employer: null, ...EMPLOYER_FILTER_RESET }))}
+                />
               </div>
             )}
 
             {selectedEmployer && (
-              <div
-                {...(myEmployers.length > 1
-                  ? {
-                      role: 'tabpanel',
-                      id: `employer-panel-${selectedEmployer.id}`,
-                      'aria-labelledby': `employer-tab-${selectedEmployer.id}`,
-                      tabIndex: 0,
-                    }
-                  : {})}
-              >
+              <div>
                 <div className="flex items-center justify-between flex-wrap gap-x-1 gap-y-2 mb-6 border-b border-hairline">
                   <div role="tablist" aria-label="Console section" className="flex items-center flex-wrap gap-x-1 gap-y-2">
                     {visibleSections.map((section, index) => {
