@@ -35,7 +35,8 @@ export default function CourseOverlay({ course, onClose }) {
       )}
     >
       <Suspense fallback={<p className="p-4 text-sm text-secondary">{t('common.loading')}</p>}>
-        <CourseLearn courseId={course.id} inOverlay onProgressChange={setProgress} />
+        {/* Done on a finished course closes it, back to the page underneath. */}
+        <CourseLearn courseId={course.id} inOverlay onProgressChange={setProgress} onDone={onClose} />
       </Suspense>
     </FullScreenOverlay>
   )

@@ -129,4 +129,37 @@ describe('CourseLearn', () => {
     // Not a SCORM export: nothing is reported to a parent window.
     expect(postMessage).not.toHaveBeenCalled()
   })
+
+  it('closes the course with Done on its finished last item when it can, and only then', () => {
+    const player = (props) => (
+      <CourseItemPlayer
+        item={{ id: 'page-4', type: 'page', page_content: { version: '1', blocks: [] } }}
+        courseId="course-1"
+        hasPrevious
+        progress={100}
+        onPrevious={vi.fn()}
+        onProgress={vi.fn()}
+        pageNumber={4}
+        pageCount={4}
+        {...props}
+      />
+    )
+    const onDone = vi.fn()
+    const onMarkComplete = vi.fn()
+    const { rerender } = render(player({ hasNext: false, isComplete: true, onDone, onMarkComplete }))
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    expect(onDone).toHaveBeenCalledTimes(1)
+    expect(onMarkComplete).not.toHaveBeenCalled()
+
+    // Not finished yet: completing it comes first.
+    rerender(player({ hasNext: false, isComplete: false, onDone, onMarkComplete }))
+    fireEvent.click(screen.getByRole('button', { name: 'Complete page' }))
+    expect(onMarkComplete).toHaveBeenCalledTimes(1)
+    expect(onDone).toHaveBeenCalledTimes(1)
+
+    // On its own page there's nothing to close: Done records it as before.
+    rerender(player({ hasNext: false, isComplete: true, onDone: null, onMarkComplete }))
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    expect(onMarkComplete).toHaveBeenCalledTimes(2)
+  })
 })

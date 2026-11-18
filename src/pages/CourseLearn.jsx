@@ -61,6 +61,9 @@ function sortBySection(contentItems, sectionRows) {
 // the md+ side pane (which wraps this with a card, type label and title)
 // and the below-md inline accordion in the nav (already under the row
 // showing the title, so it skips repeating it).
+// onDone: what "Done" does -- shown on the last item once it's complete --
+// when the course is open over another page (close it); without it, Done
+// just records the item as complete, as before.
 export function CourseItemPlayer({
   item,
   userId,
@@ -74,9 +77,11 @@ export function CourseItemPlayer({
   onProgress,
   pageNumber,
   pageCount,
+  onDone = null,
 }) {
   const { t } = useLanguage()
   const isPageCourse = pageCount > 0
+  const showsDone = isComplete && !hasNext
   const isScoredPage = item.type === 'page' && pageHasScoredTest(item.page_content)
   return (
     <>
@@ -157,7 +162,7 @@ export function CourseItemPlayer({
         {item.type !== 'scorm' && (!isScoredPage || isComplete) && (
           <button
             type="button"
-            onClick={onMarkComplete}
+            onClick={showsDone && onDone ? onDone : onMarkComplete}
             className="rounded-md bg-moss text-paper py-2 px-4 text-sm font-medium hover:opacity-90"
           >
             {/* A page is done once read, so moving on is just "Next page"
@@ -188,8 +193,9 @@ export function CourseItemPlayer({
 // back link, title or course editing here (deleting would leave the page).
 // onProgressChange: told { done, total, percent } as the learner works
 // through the course (null when there's nothing to work through), for the
-// overlay to show in its own header instead of here.
-export default function CourseLearn({ courseId: courseIdProp = null, embeddedScorm = false, inOverlay = false, onProgressChange = null }) {
+// overlay to show in its own header instead of here. onDone: what the last
+// item's Done button does in an overlay (close it).
+export default function CourseLearn({ courseId: courseIdProp = null, embeddedScorm = false, inOverlay = false, onProgressChange = null, onDone = null }) {
   const { id: routeCourseId } = useParams()
   const id = courseIdProp ?? routeCourseId
   const { user } = useAuth()
@@ -518,6 +524,7 @@ export default function CourseLearn({ courseId: courseIdProp = null, embeddedSco
               isComplete={isContentComplete(status)}
               progress={progress}
               onMarkComplete={() => handleMarkComplete(item)}
+              onDone={onDone}
               onPrevious={() => selectItem(orderedItems[itemIndex - 1].id)}
               onProgress={refreshProgress}
               pageNumber={isPageCourse ? itemIndex + 1 : 0}
@@ -737,6 +744,7 @@ export default function CourseLearn({ courseId: courseIdProp = null, embeddedSco
                     isComplete={isContentComplete(progressByItemId[currentItem.id]?.status)}
                     progress={progress}
                     onMarkComplete={() => handleMarkComplete(currentItem)}
+                    onDone={onDone}
                     onPrevious={() => selectItem(orderedItems[currentIndex - 1].id)}
                     onProgress={refreshProgress}
                     pageNumber={isPageCourse ? currentIndex + 1 : 0}

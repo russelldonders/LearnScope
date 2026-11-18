@@ -107,4 +107,17 @@ describe('moving through a course', () => {
     expect(second).toHaveTextContent('Section 2')
     expect(second).toHaveTextContent('0/1')
   })
+
+  it('closes an overlay with Done once the last page is complete', async () => {
+    const onDone = vi.fn()
+    render(<MemoryRouter><CourseLearn courseId="c1" inOverlay onDone={onDone} /></MemoryRouter>)
+    await screen.findByRole('heading', { name: 'Welcome' })
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    await screen.findByRole('heading', { name: 'Preparing' })
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    await screen.findByRole('heading', { name: 'Closing' })
+    fireEvent.click(screen.getByRole('button', { name: 'Complete page' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Done' }))
+    expect(onDone).toHaveBeenCalledTimes(1)
+  })
 })
