@@ -39,6 +39,8 @@ const lib = vi.hoisted(() => ({
 }))
 
 vi.mock('../lib/learnerPlans', () => lib)
+const reflections = vi.hoisted(() => ({ saveReflection: vi.fn() }))
+vi.mock('../lib/quickActivityLog', async (importOriginal) => ({ ...(await importOriginal()), ...reflections }))
 vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'me', email: 'me@example.com' } }) }))
 vi.mock('../components/AppHeader', () => ({ default: () => <header>Header</header> }))
 vi.mock('../components/SetTargetModal', () => ({ default: ({ skill }) => <div role="dialog">Set target for {skill.name}</div> }))
@@ -690,5 +692,32 @@ describe('PlanDetail', () => {
     lib.getPlan.mockResolvedValue({ ...plan, target_on: null, duration_amount: 6, duration_unit: 'months', starts_on: '2026-11-01', my_joined_on: '2026-11-05' })
     renderPage()
     expect(await screen.findByText(/6 months from when you start · by/)).toBeInTheDocument()
+  })
+
+  it('adds a reflection to a done step\'s activity, right on the plan', async () => {
+    lib.getPlan.mockResolvedValue({
+      ...plan,
+      items: plan.items.map((item) => (item.id === 'i5' ? { ...item, completed_on: '2026-11-10', completion_statement_id: 'st1' } : item)),
+    })
+    const activity = { id: 'st1', statement: { object: { definition: { name: { 'en-US': 'Shadow a senior lead' } } } } }
+    lib.getItemActivity.mockResolvedValue(activity)
+    reflections.saveReflection.mockResolvedValue()
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a reflection' }))
+    const answer = await screen.findByRole('textbox')
+    // While reflecting, a click anywhere on the step doesn't untick it: only
+    // its own small dot does.
+    expect(screen.getByRole('button', { name: 'Mark “Shadow a senior lead” done' })).not.toHaveClass('inset-0')
+    fireEvent.change(answer, { target: { value: 'Asking more questions helped' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add to note' }))
+    await waitFor(() => expect(reflections.saveReflection).toHaveBeenCalledWith(activity, expect.any(String), 'Asking more questions helped'))
+    expect(lib.setItemDone).not.toHaveBeenCalled()
+  })
+
+  it('opens at a step from its activity, picking it out', async () => {
+    renderPage('/plans/p1?item=i5')
+    await screen.findByRole('button', { name: 'Mark “Shadow a senior lead” done' })
+    await waitFor(() => expect(document.getElementById('plan-item-i5')).toHaveAttribute('data-highlighted'))
+    expect(document.getElementById('plan-item-i1')).not.toHaveAttribute('data-highlighted')
   })
 })

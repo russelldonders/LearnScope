@@ -933,6 +933,7 @@ export default {
       closeReflection: '关闭反思',
       seeAll: '查看全部 {total} 项活动 →',
       via: '来自 {source}',
+      planChip: "计划：{title}",
       packageSource: "课件包",
       packageEarned: "已获得",
       packageWorkedThrough: "已学习",

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useLanguage } from '../context/LanguageContext'
@@ -108,6 +108,19 @@ export default function PlanDetail() {
     return new Map(plan.items.map((item) => [item.id, planItemStatus(item, context)]))
   }, [plan, context])
 
+  // Opened at one step (?item=, from that step's activity on a timeline):
+  // scrolled to and picked out for a moment, once the plan is there.
+  const focusItemId = searchParams.get('item')
+  const [highlightedItemId, setHighlightedItemId] = useState(null)
+  const focusReady = Boolean(plan && focusItemId && plan.items.some((item) => item.id === focusItemId))
+  useEffect(() => {
+    if (!focusReady) return undefined
+    document.getElementById(`plan-item-${focusItemId}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+    setHighlightedItemId(focusItemId)
+    const timer = setTimeout(() => setHighlightedItemId(null), 4000)
+    return () => clearTimeout(timer)
+  }, [focusReady, focusItemId])
+
   if (loading) {
     return <Shell><p className="text-secondary">{t('plans.loading')}</p></Shell>
   }
@@ -173,10 +186,12 @@ export default function PlanDetail() {
     return (
       <li
         key={item.id}
+        id={`plan-item-${item.id}`}
+        data-highlighted={highlightedItemId === item.id ? '' : undefined}
         data-drop-kind="item"
         data-drop-id={item.id}
         data-drop-list={listKey}
-        className={`relative rounded-md border bg-card p-3 transition-[border-color,background-color,opacity,box-shadow] ${isDropTarget ? 'border-moss bg-moss/5 ring-2 ring-moss/40' : 'border-hairline'} ${isDraggingItem ? 'opacity-60 shadow-lg' : ''} ${!editing && item.item_type === 'step' && !lockedIds.has(item.id) ? 'hover:border-moss/50' : ''}`}
+        className={`relative rounded-md border bg-card p-3 scroll-mt-24 transition-[border-color,background-color,opacity,box-shadow] ${isDropTarget ? 'border-moss bg-moss/5 ring-2 ring-moss/40' : highlightedItemId === item.id ? 'border-gold ring-2 ring-gold/40' : 'border-hairline'} ${isDraggingItem ? 'opacity-60 shadow-lg' : ''} ${!editing && item.item_type === 'step' && !lockedIds.has(item.id) ? 'hover:border-moss/50' : ''}`}
       >
         {editingItemId === item.id ? (
           <ItemEditForm
@@ -203,7 +218,7 @@ export default function PlanDetail() {
             dragHandlers={dragHandlers({ kind: 'item', id: item.id, listKey, table: 'learner_plan_items', list: items })}
             onMoveUp={() => move(items, index, -1, 'learner_plan_items')}
             onMoveDown={() => move(items, index, 1, 'learner_plan_items')}
-            onComplete={(values) => run(() => setItemDone(item, true, { userId: user.id, actor: { name: actorName, email: user.email }, ...values }))}
+            onComplete={(values) => run(() => setItemDone(item, true, { userId: user.id, actor: { name: actorName, email: user.email }, plan: { id: plan.id, title: plan.title }, ...values }))}
             onUntick={(removeActivity) => run(() => setItemDone(item, false, { userId: user.id, actor: { name: actorName, email: user.email }, removeActivity }))}
             onLoadActivity={() => getItemActivity(item)}
             onEdit={() => setEditingItemId(item.id)}

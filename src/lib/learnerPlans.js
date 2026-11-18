@@ -432,7 +432,9 @@ export function activityHasLearnerContent(row) {
 // Unticking clears the tick and, by default, removes that activity unless
 // it has anything of the learner's in it. removeActivity true or false
 // overrides that, for when the learner has been asked.
-export async function setItemDone(item, done, { userId, actor, completedOn = null, comment = '', evidence = null, removeActivity } = {}) {
+// plan ({ id, title }) is recorded on the activity, so it can lead back to
+// the step wherever it shows.
+export async function setItemDone(item, done, { userId, actor, plan = null, completedOn = null, comment = '', evidence = null, removeActivity } = {}) {
   if (done) {
     // Already ticked (a second click, or another tab): nothing to record.
     if (item.completion_statement_id || item.completed_on) return
@@ -446,6 +448,7 @@ export async function setItemDone(item, done, { userId, actor, completedOn = nul
       // Midday on the day, so it stays on that day wherever it's read.
       timestamp: day === localDateString() ? new Date().toISOString() : new Date(`${day}T12:00:00`).toISOString(),
       relatedSkills: skill ? [{ id: skill.id, name: skill.name }] : [],
+      relatedPlan: plan ? { id: plan.id, title: plan.title, itemId: item.id } : undefined,
     })
     const hasEvidence = Boolean(evidence?.evidenceUrl?.trim() || evidence?.files?.length)
     const row = await saveActivity({

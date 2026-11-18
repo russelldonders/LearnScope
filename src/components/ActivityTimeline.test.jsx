@@ -212,4 +212,15 @@ describe('course package sessions', () => {
     expect(screen.getByText('1 session')).toBeInTheDocument()
     expect(screen.queryByRole('list', { name: 'Earned' })).not.toBeInTheDocument()
   })
+
+  it('names the plan an activity came from and leads back to its step', () => {
+    const fromPlan = activity('Shadow a senior lead', 7, {
+      verb: 'http://adlnet.gov/expapi/verbs/completed',
+      context: { 'https://learnscope.app/xapi/extensions/plan': { id: 'plan-1', title: 'Become a team lead', itemId: 'item-5' } },
+    })
+    const onOpen = vi.fn()
+    render(<MemoryRouter><ActivityTimeline rows={[fromPlan]} now={NOW} onOpen={onOpen} /></MemoryRouter>)
+    expect(screen.getByRole('link', { name: 'Shadow a senior lead' })).toHaveAttribute('href', '/plans/plan-1?item=item-5')
+    expect(screen.getByRole('link', { name: /Plan: Become a team lead/ })).toHaveAttribute('href', '/plans/plan-1?item=item-5')
+  })
 })

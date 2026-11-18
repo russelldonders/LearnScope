@@ -933,6 +933,7 @@ export default {
       closeReflection: 'Cerrar reflexión',
       seeAll: 'Ver las {total} actividades →',
       via: 'vía {source}',
+      planChip: "Plan: {title}",
       packageSource: "Paquete de curso",
       packageEarned: "Conseguido",
       packageWorkedThrough: "Lo trabajaste",

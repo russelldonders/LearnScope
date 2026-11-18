@@ -26,6 +26,23 @@ export function packageSessionFromStatement(statement) {
   return statement?.context?.extensions?.[PACKAGE_SESSION_EXTENSION_IRI] ?? null
 }
 
+// The plan step an activity was recorded by ticking it off (setItemDone in
+// learnerPlans.js): { id, title, itemId } -- the plan, its title at the time,
+// and the step -- so wherever the activity shows, it can say which plan and
+// lead back to the step.
+export const PLAN_EXTENSION_IRI = 'https://learnscope.app/xapi/extensions/plan'
+
+export function relatedPlanFromStatement(statement) {
+  const plan = statement?.context?.extensions?.[PLAN_EXTENSION_IRI]
+  return plan?.id ? plan : null
+}
+
+// Where a plan step is: its plan's page, opened at the step.
+export function planStepPath(plan) {
+  const path = `/plans/${encodeURIComponent(plan.id)}`
+  return plan.itemId ? `${path}?item=${encodeURIComponent(plan.itemId)}` : path
+}
+
 // True for statements an automated diagnostic generated (e.g. the
 // Confirming Baseline knowledge-check quiz, see skillDiagnostics.js) rather
 // than something the learner deliberately logged as practical activity.
@@ -120,6 +137,7 @@ export function buildStatement({
   timestamp,
   relatedSkills,
   relatedExperience,
+  relatedPlan,
   provenance,
   durationHours,
   durationMinutes,
@@ -158,7 +176,7 @@ export function buildStatement({
     statement.result = { ...statement.result, extensions: { [MEASUREMENT_EXTENSION_IRI]: measurements } }
   }
 
-  if (skills.length > 0 || relatedExperience || provenance) {
+  if (skills.length > 0 || relatedExperience || relatedPlan || provenance) {
     statement.context = { extensions: {} }
     if (skills.length > 0) {
       statement.context.extensions[SKILL_EXTENSION_IRI] = skills.map((s) => ({ id: s.id, name: s.name }))
@@ -181,6 +199,9 @@ export function buildStatement({
     }
     if (provenance) {
       statement.context.extensions[PROVENANCE_EXTENSION_IRI] = { source: provenance.source, externalId: provenance.externalId }
+    }
+    if (relatedPlan) {
+      statement.context.extensions[PLAN_EXTENSION_IRI] = { id: relatedPlan.id, title: relatedPlan.title, itemId: relatedPlan.itemId }
     }
   }
 

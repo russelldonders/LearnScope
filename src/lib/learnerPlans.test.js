@@ -41,7 +41,7 @@ vi.mock('./supabaseClient', () => ({
 }))
 
 const { activityHasLearnerContent, isUneditedPlanActivity, setItemDone } = await import('./learnerPlans')
-const { PROVENANCE_EXTENSION_IRI, SKILL_EXTENSION_IRI } = await import('./xapiStatement')
+const { PLAN_EXTENSION_IRI, PROVENANCE_EXTENSION_IRI, SKILL_EXTENSION_IRI } = await import('./xapiStatement')
 
 const step = { id: 'item-1', item_type: 'step', step_title: 'Shadow a senior lead', step_skill: { id: 's1', name: 'Coaching' }, completion_statement_id: null, completed_on: null }
 const resource = { id: 'item-2', item_type: 'skill_resource', skill_resources: { title: 'Style guide', skills: { id: 's2', name: 'Writing' } } }
@@ -75,6 +75,12 @@ describe('setItemDone', () => {
     expect(values.user_id).toBe('me')
     expect(values.completion_statement_id).toBe('statement-1')
     expect(values.completed_on).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  it('names the plan and step on the activity, so it can lead back to them', async () => {
+    await setItemDone(step, true, { userId: 'me', actor, plan: { id: 'plan-1', title: 'Become a team lead' } })
+    const { statement } = mocks.saveActivity.mock.calls[0][0]
+    expect(statement.context.extensions[PLAN_EXTENSION_IRI]).toEqual({ id: 'plan-1', title: 'Become a team lead', itemId: 'item-1' })
   })
 
   it('records a ticked resource on the resource\'s skill', async () => {

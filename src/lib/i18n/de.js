@@ -933,6 +933,7 @@ export default {
       closeReflection: 'Reflexion schließen',
       seeAll: 'Alle {total} Aktivitäten ansehen →',
       via: 'über {source}',
+      planChip: "Plan: {title}",
       packageSource: "Kurspaket",
       packageEarned: "Erhalten",
       packageWorkedThrough: "Daran gearbeitet",

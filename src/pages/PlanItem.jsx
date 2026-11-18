@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import ActivityReflection from '../components/ActivityReflection'
+import { REFLECTION_PROMPTS } from '../lib/quickActivityLog'
 import { Link } from 'react-router-dom'
 import { useLanguage } from '../context/LanguageContext'
 import { activityHasLearnerContent } from '../lib/learnerPlans'
@@ -148,6 +150,21 @@ export function PlanItem({ item, status, context, busy, editing, locked = null, 
   // asks what to do with it rather than deciding for them.
   const [untickChoice, setUntickChoice] = useState(false)
   const [checking, setChecking] = useState(false)
+  // A reflection on a done step goes into its activity's note, as from the
+  // timeline: { row, promptKey } while open.
+  const [reflecting, setReflecting] = useState(null)
+  const [reflectError, setReflectError] = useState(null)
+
+  async function openReflection() {
+    setReflectError(null)
+    try {
+      const row = await onLoadActivity()
+      if (!row) return
+      setReflecting({ row, promptKey: REFLECTION_PROMPTS[Math.floor(Math.random() * REFLECTION_PROMPTS.length)] })
+    } catch (err) {
+      setReflectError(err.message)
+    }
+  }
 
   async function handleToggle(checked) {
     if (checked) {
@@ -177,7 +194,7 @@ export function PlanItem({ item, status, context, busy, editing, locked = null, 
   const typeLabel = t(`plans.itemTypes.${item.item_type}`)
   const shownTitle = state === 'removed' ? t('plans.removedRecord', { type: typeLabel }) : title
   const stepComplete = state === 'done' || completing
-  const stepTileClickable = !editing && !locked && item.item_type === 'step' && !completing && !untickChoice
+  const stepTileClickable = !editing && !locked && item.item_type === 'step' && !completing && !untickChoice && !reflecting
   const statusDotClass = editing
     ? 'border border-hairline'
     : stepComplete
@@ -283,10 +300,31 @@ export function PlanItem({ item, status, context, busy, editing, locked = null, 
         {item.target_on && <p className="mt-0.5 text-xs text-secondary">{t('plans.byDate', { date: formatFullDate(item.target_on) })}</p>}
         {item.note && <p className="mt-1 text-sm text-secondary whitespace-pre-wrap break-words">{item.note}</p>}
         {!editing && state === 'done' && item.completion_statement_id && (
-          <p className="mt-0.5 text-xs text-secondary">
-            {t('plans.loggedActivity')}{' '}
-            <Link to="/activity" className="pointer-events-auto relative z-20 text-moss font-medium hover:underline">{t('plans.viewActivityLog')}</Link>
+          <p className="mt-0.5 text-xs text-secondary flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span>
+              {t('plans.loggedActivity')}{' '}
+              <Link to="/activity" className="pointer-events-auto relative z-20 text-moss font-medium hover:underline">{t('plans.viewActivityLog')}</Link>
+            </span>
+            <button
+              type="button"
+              aria-expanded={Boolean(reflecting)}
+              onClick={() => (reflecting ? setReflecting(null) : openReflection())}
+              className="pointer-events-auto relative z-20 text-moss font-medium hover:underline"
+            >
+              {reflecting ? t('activity.timeline.closeReflection') : t('activity.timeline.reflect')}
+            </button>
           </p>
+        )}
+        {reflectError && <p role="alert" className="mt-1 text-xs text-red-700">{reflectError}</p>}
+        {reflecting && (
+          <div className="pointer-events-auto relative z-20">
+            <ActivityReflection
+              rows={[reflecting.row]}
+              promptKey={reflecting.promptKey}
+              idPrefix={`plan-reflection-${item.id}`}
+              onClose={() => setReflecting(null)}
+            />
+          </div>
         )}
         {completing && (
           <CompleteStepForm

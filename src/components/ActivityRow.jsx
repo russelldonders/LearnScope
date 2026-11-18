@@ -12,6 +12,8 @@ import {
   experienceTrail,
   formatDuration,
   formatMeasurements,
+  planStepPath,
+  relatedPlanFromStatement,
 } from '../lib/xapiStatement'
 import { XAPI_VERB_BY_IRI } from '../lib/xapiVerbs'
 import { activitySource, checkInLevel, isCheckIn, isJustAdded } from '../lib/activityTimeline'
@@ -95,6 +97,9 @@ export default function ActivityRow({ row, onClick, framed = true, dated = false
 
   const relatedSkills = relatedSkillsFromStatement(statement)
   const relatedExperience = relatedExperienceFromStatement(statement)
+  // Recorded by ticking off a plan step: it names the plan and leads back to
+  // the step there.
+  const relatedPlan = relatedPlanFromStatement(statement)
   const { source, note, distance } = activitySource(statement)
   const figures = [
     ...(formatMeasurements(statement) ? formatMeasurements(statement).split(' · ') : []),
@@ -124,7 +129,11 @@ export default function ActivityRow({ row, onClick, framed = true, dated = false
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          {!framed && onClick ? (
+          {!framed && relatedPlan ? (
+            <Link to={planStepPath(relatedPlan)} className="text-left text-sm font-medium text-ink hover:text-moss hover:underline break-words">
+              {title}
+            </Link>
+          ) : !framed && onClick ? (
             <button type="button" onClick={onClick} className="text-left text-sm font-medium text-ink hover:text-moss hover:underline break-words">
               {title}
             </button>
@@ -149,9 +158,21 @@ export default function ActivityRow({ row, onClick, framed = true, dated = false
         )}
       </div>
 
-      {(relatedSkills.length > 0 || relatedExperience || source) && (
+      {(relatedSkills.length > 0 || relatedExperience || relatedPlan || source) && (
         <div className="flex flex-wrap items-center gap-1.5 mt-2">
           {relatedSkills.map((skill) => <SkillChip key={skill.id} skill={skill} />)}
+          {relatedPlan && (
+            <Link
+              to={planStepPath(relatedPlan)}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 rounded-full border border-gold/50 bg-gold/10 px-2 py-0.5 text-xs text-ink hover:border-moss hover:text-moss"
+            >
+              <svg aria-hidden="true" viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="1.6" className="shrink-0 text-gold">
+                <path d="M3 2.5h10v11H3z" /><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" />
+              </svg>
+              {t('activity.timeline.planChip', { title: relatedPlan.title })}
+            </Link>
+          )}
           {relatedExperience && (
             <span className="rounded-full border border-hairline/70 px-2 py-0.5 text-xs text-secondary">{experienceTrail(relatedExperience)}</span>
           )}
