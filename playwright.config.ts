@@ -44,6 +44,11 @@ const projects = [
     testIgnore: [/authenticated\.spec\.ts/, /auth\.setup\.ts/],
     use: { ...devices['Desktop Chrome'] },
   },
+  {
+    name: 'mobile-webkit',
+    testIgnore: [/authenticated\.spec\.ts/, /auth\.setup\.ts/],
+    use: { ...devices['iPhone 13'] },
+  },
 ];
 
 if (hasAuthenticatedLearner) {

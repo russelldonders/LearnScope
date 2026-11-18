@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -79,10 +79,12 @@ describe('CourseLearn', () => {
     expect(await screen.findByRole('heading', { name: 'First aid' })).toBeInTheDocument()
     expect(screen.queryByText('Header')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Back to/ })).not.toBeInTheDocument()
-    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'learnscope.scorm.progress',
-      status: 'not attempted',
-      score: 0,
-    }), '*')
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'learnscope.scorm.progress',
+        status: 'not attempted',
+        score: 0,
+      }), '*')
+    })
   })
 })

@@ -11,6 +11,25 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.js'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/e2e/**', '**/.claude/worktrees/**'],
     pool: 'threads',
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json-summary', 'html'],
+      reportsDirectory: './coverage',
+      include: ['src/**/*.{js,jsx}', 'api/**/*.js'],
+      exclude: [
+        '**/*.{test,spec}.{js,jsx,ts,tsx}',
+        'src/main.jsx',
+        'src/test/**',
+        'src/lib/i18n/**',
+        'src/data/**',
+      ],
+      thresholds: {
+        statements: 40,
+        branches: 41,
+        functions: 40,
+        lines: 42,
+      },
+    },
     env: {
       VITE_SUPABASE_URL: viteEnv.VITE_SUPABASE_URL || 'http://127.0.0.1:54321',
       VITE_SUPABASE_ANON_KEY: viteEnv.VITE_SUPABASE_ANON_KEY || 'vitest-local-anon-key',

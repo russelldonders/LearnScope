@@ -38,6 +38,7 @@ env.test
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+/coverage/
 /playwright/.auth/
 
 # Supabase CLI local state

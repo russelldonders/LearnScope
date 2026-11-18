@@ -83,25 +83,25 @@ export default function Landing() {
         <section className="py-12 border-t border-hairline">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="bg-card border border-hairline rounded-lg p-6">
-              <h3 className="font-display text-lg text-ink mb-1">{t('landing.historyTitle')}</h3>
+              <h2 className="font-display text-lg text-ink mb-1">{t('landing.historyTitle')}</h2>
               <p className="text-sm text-secondary">
                 {t('landing.historyText')}
               </p>
             </div>
             <div className="bg-card border border-hairline rounded-lg p-6">
-              <h3 className="font-display text-lg text-ink mb-1">{t('landing.evidenceTitle')}</h3>
+              <h2 className="font-display text-lg text-ink mb-1">{t('landing.evidenceTitle')}</h2>
               <p className="text-sm text-secondary">
                 {t('landing.evidenceText')}
               </p>
             </div>
             <div className="bg-card border border-hairline rounded-lg p-6">
-              <h3 className="font-display text-lg text-ink mb-1">{t('landing.storyTitle')}</h3>
+              <h2 className="font-display text-lg text-ink mb-1">{t('landing.storyTitle')}</h2>
               <p className="text-sm text-secondary">
                 {t('landing.storyText')}
               </p>
             </div>
             <div className="bg-card border border-hairline rounded-lg p-6">
-              <h3 className="font-display text-lg text-ink mb-1">{t('landing.controlTitle')}</h3>
+              <h2 className="font-display text-lg text-ink mb-1">{t('landing.controlTitle')}</h2>
               <p className="text-sm text-secondary">
                 {t('landing.controlText')}
               </p>

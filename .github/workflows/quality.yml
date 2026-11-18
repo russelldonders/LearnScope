@@ -1,0 +1,62 @@
+name: Code and database quality
+
+on:
+  push:
+    branches: [staging, main, master]
+  pull_request:
+    branches: [staging, main, master]
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  application:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm run test:coverage -- --maxWorkers=4
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 30
+
+  database-pglite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci
+      - run: npm run test:db:pglite
+
+  database-pgtap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci
+      - name: Start local Supabase
+        run: npx supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor
+      - name: Run migration-level database tests
+        run: npm run test:db:pgtap
+      - name: Stop local Supabase
+        if: always()
+        run: npx supabase stop --no-backup

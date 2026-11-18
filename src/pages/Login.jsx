@@ -135,18 +135,20 @@ export default function Login() {
   const ctaTextClass = branding?.primaryColor ? 'text-white' : 'text-paper'
 
   return (
-    <div
+    <main
       className="org-brand-scope min-h-screen flex items-center justify-center bg-[var(--org-background,var(--color-paper))] px-4"
       style={orgBrandStyle(branding)}
     >
       <div className="w-full max-w-sm bg-[var(--org-background,var(--color-card))] border border-hairline rounded-lg p-8">
-        <Link
-          to={branding?.logoUrl ? `/organisations/${orgSlug}` : '/'}
-          className="flex items-center gap-2 font-display text-3xl text-ink mb-1"
-        >
-          <img src={branding?.logoUrl || '/favicon.svg'} alt="" className="w-8 h-8 object-contain rounded" />
-          {branding?.logoUrl ? branding.name : 'LearnScope'}
-        </Link>
+        <h1>
+          <Link
+            to={branding?.logoUrl ? `/organisations/${orgSlug}` : '/'}
+            className="flex items-center gap-2 font-display text-3xl text-ink mb-1"
+          >
+            <img src={branding?.logoUrl || '/favicon.svg'} alt="" className="w-8 h-8 object-contain rounded" />
+            {branding?.logoUrl ? branding.name : 'LearnScope'}
+          </Link>
+        </h1>
         <p className="text-secondary text-sm mb-6">{t('auth.login.tagline')}</p>
 
         {employerContext && (
@@ -229,6 +231,6 @@ export default function Login() {
           </p>
         )}
       </div>
-    </div>
+    </main>
   )
 }

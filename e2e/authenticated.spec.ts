@@ -2,9 +2,15 @@ import { expect, test } from '@playwright/test';
 
 const authenticatedRoutes = [
   { path: '/dashboard', name: 'dashboard' },
+  { path: '/activity', name: 'activity' },
+  { path: '/skills', name: 'skills' },
+  { path: '/experience', name: 'experience' },
   { path: '/profile', name: 'profile' },
+  { path: '/profile/privacy', name: 'privacy settings' },
   { path: '/connections', name: 'connections' },
   { path: '/learning', name: 'learning' },
+  { path: '/training', name: 'training catalogue' },
+  { path: '/plans', name: 'development plans' },
   { path: '/actions', name: 'actions' },
 ];
 

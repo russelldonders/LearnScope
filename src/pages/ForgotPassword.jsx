@@ -25,12 +25,14 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-paper px-4">
+    <main className="min-h-screen flex items-center justify-center bg-paper px-4">
       <div className="w-full max-w-sm bg-card border border-hairline rounded-lg p-8">
-        <Link to="/" className="flex items-center gap-2 font-display text-3xl text-ink mb-1">
-          <img src="/favicon.svg" alt="" className="w-8 h-8" />
-          LearnScope
-        </Link>
+        <h1>
+          <Link to="/" className="flex items-center gap-2 font-display text-3xl text-ink mb-1">
+            <img src="/favicon.svg" alt="" className="w-8 h-8" />
+            LearnScope
+          </Link>
+        </h1>
         <p className="text-secondary text-sm mb-6">{t('auth.forgotPassword.tagline')}</p>
 
         {sent ? (
@@ -71,6 +73,6 @@ export default function ForgotPassword() {
           </Link>
         </p>
       </div>
-    </div>
+    </main>
   )
 }
