@@ -11,7 +11,7 @@ import PageBuilderModal from '../../components/PageBuilderModal'
 import PageContent from '../../components/PageContent'
 import { DragHandle } from '../../components/DragHandle'
 import { sideOf, findDropTarget } from '../../lib/dragReorder'
-import { listCourseSections, createCourseSection, updateCourseSection, deleteCourseSection, reorderCourseSections, listCourseResources, listOrganisationResources, linkResourceToCourse, unlinkResourceFromCourse, reorderContentLinks, uploadVideoResource, uploadScreenRecordingResource, uploadFileResource, uploadScormResource, uploadXapiResource, uploadCmi5Resource, addWebResource, addExternalVideoResource, contentFileUrl, listLtiTools, createLtiResource } from '../../lib/courseContent'
+import { listCourseSections, createCourseSection, updateCourseSection, deleteCourseSection, reorderCourseSections, listCourseResources, listOrganisationResources, linkResourceToCourse, unlinkResourceFromCourse, reorderContentLinks, uploadVideoResource, uploadScreenRecordingResource, uploadFileResource, uploadScormResource, uploadXapiResource, uploadCmi5Resource, addWebResource, addExternalVideoResource, contentFileUrl, listLtiTools, createLtiResource, saveCoursePageEdit } from '../../lib/courseContent'
 import { useIsDesktop } from '../../lib/device'
 import { RESOURCE_TYPE_LABELS } from '../../lib/statusLabels'
 import Chevron from '../../components/Chevron'
@@ -562,6 +562,7 @@ export function CourseSections({ courseId, organisationId, userId, canEdit }) {
                                 <ItemPreviewBody
                                   item={item}
                                   userId={userId}
+                                  organisationId={organisationId}
                                   canEdit={canEdit}
                                   onChanged={() => {
                                     load()
@@ -726,6 +727,7 @@ export function CourseSections({ courseId, organisationId, userId, canEdit }) {
                             <ItemPreviewBody
                               item={item}
                               userId={userId}
+                              organisationId={organisationId}
                               canEdit={canEdit}
                               onChanged={() => {
                                 load()
@@ -748,6 +750,7 @@ export function CourseSections({ courseId, organisationId, userId, canEdit }) {
           <ItemPreviewPane
             item={previewingItem}
             userId={userId}
+            organisationId={organisationId}
             canEdit={canEdit}
             onChanged={() => {
               load()
@@ -1442,9 +1445,10 @@ function AddResourceModal({ section, courseId, organisationId, userId, available
 // inline accordion in the outline (which already shows the title as the
 // row it's expanding under, so it renders this directly without repeating
 // it).
-function ItemPreviewBody({ item, userId, canEdit, onChanged }) {
+function ItemPreviewBody({ item, userId, organisationId, canEdit, onChanged }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const [editingPage, setEditingPage] = useState(false)
 
   async function handleDetach() {
     setBusy(true)
@@ -1515,7 +1519,17 @@ function ItemPreviewBody({ item, userId, canEdit, onChanged }) {
       {item.type === 'page' && <PageContent document={item.page_content} compact />}
 
       {canEdit && (
-        <div className="flex items-center gap-2 mt-4 pt-4 border-t border-hairline">
+        <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-hairline">
+          {item.type === 'page' && (
+            <button
+              type="button"
+              onClick={() => setEditingPage(true)}
+              disabled={busy}
+              className="rounded-md border border-hairline text-ink py-2 px-4 text-sm font-medium hover:bg-paper disabled:opacity-60"
+            >
+              Edit page
+            </button>
+          )}
           <button
             type="button"
             onClick={handleDetach}
@@ -1526,13 +1540,28 @@ function ItemPreviewBody({ item, userId, canEdit, onChanged }) {
           </button>
         </div>
       )}
+
+      {/* Opens the page builder on this page -- including a generated
+          course's final test, with its answer key. Saving an already
+          published page creates a new version for this course only (see
+          saveCoursePageEdit). */}
+      {editingPage && (
+        <PageBuilderModal
+          organisationId={organisationId}
+          userId={userId}
+          resource={item}
+          saveResource={(title, pageDocument) => saveCoursePageEdit(item, title, pageDocument)}
+          onClose={() => setEditingPage(false)}
+          onSaved={() => onChanged()}
+        />
+      )}
     </>
   )
 }
 
 // md+ only -- see the outline's own inline accordion (rendered per-item,
 // gated by useIsDesktop) for the below-md equivalent.
-function ItemPreviewPane({ item, userId, canEdit, onChanged }) {
+function ItemPreviewPane({ item, userId, organisationId, canEdit, onChanged }) {
   if (!item) {
     return (
       <div className="bg-card border border-hairline rounded-lg p-6">
@@ -1547,7 +1576,7 @@ function ItemPreviewPane({ item, userId, canEdit, onChanged }) {
         {RESOURCE_TYPE_LABELS[item.type]}
       </span>
       <h3 className="font-display text-xl text-ink mb-4">{item.title}</h3>
-      <ItemPreviewBody item={item} userId={userId} canEdit={canEdit} onChanged={onChanged} />
+      <ItemPreviewBody item={item} userId={userId} organisationId={organisationId} canEdit={canEdit} onChanged={onChanged} />
     </div>
   )
 }

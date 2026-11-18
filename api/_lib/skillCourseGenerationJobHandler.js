@@ -178,7 +178,10 @@ export function normalizeAssessmentStructure(raw, values) {
   const page = Array.isArray(finalSection.pages) && finalSection.pages[0]
     ? finalSection.pages[0]
     : { title: 'Final test', blocks: [] }
-  page.title = 'Final test'
+  // Named after the course, so generated tests are told apart in the
+  // Resources library (the section itself stays "Final test").
+  const courseName = typeof normalized.name === 'string' ? normalized.name.trim() : ''
+  page.title = courseName ? `Final test – ${courseName}`.slice(0, 200) : 'Final test'
   page.blocks = allQuestions
   finalSection.pages = [page]
 

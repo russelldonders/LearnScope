@@ -87,6 +87,39 @@ export async function publishResourceVersion(resourceId) {
   if (error) throw error
 }
 
+// Saves an edit made to a page from inside a course (the course editor's
+// "Edit page"). A draft page is updated in place. A published page can't be
+// edited directly, so the edit becomes a new page version: it's created
+// from the current published version, given the edited content, linked
+// into this course in place of the old version (only this link -- other
+// courses, including this course's own live version, keep the version they
+// already use), then published. `item` is a listCourseResources() entry.
+export async function saveCoursePageEdit(item, title, pageContent) {
+  if (item.status === 'draft') return updatePageResource(item.id, title, pageContent)
+  if (!item.is_current_published) {
+    throw new Error('This course uses an older version of this page. Edit the latest version from the Resources library instead.')
+  }
+  let draftId
+  try {
+    draftId = await createResourceDraftVersion(item.id)
+  } catch (err) {
+    if (/already has a draft/i.test(err.message ?? '')) {
+      throw new Error('This page already has an unpublished draft in the Resources library. Publish or remove that draft first, then edit it here.')
+    }
+    throw err
+  }
+  const saved = await updatePageResource(draftId, title, pageContent)
+  const { data: relinked, error } = await supabase
+    .from('course_content_links')
+    .update({ resource_id: draftId })
+    .eq('id', item.linkId)
+    .select('id')
+  if (error) throw error
+  if (!relinked?.length) throw new Error("Couldn't attach the new page version to this course.")
+  await publishResourceVersion(draftId)
+  return { ...saved, status: 'published', is_current_published: true }
+}
+
 // Resources attached to one specific course, in that course's own order --
 // the same resource can appear (independently ordered) in more than one
 // course's list, since attachment is many-to-many. Each returned object is

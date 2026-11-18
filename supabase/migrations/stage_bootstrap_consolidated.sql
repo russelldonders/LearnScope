@@ -37794,3 +37794,119 @@ $$;
 
 revoke all on function public.get_learner_plan_prerequisites(uuid) from public, anon;
 grant execute on function public.get_learner_plan_prerequisites(uuid) to authenticated;
+
+-- =============================================================================
+-- 20261117182408_count_marked_tests_as_complete.sql
+-- =============================================================================
+
+-- A scored test is complete once it has been submitted and marked. Its
+-- success outcome remains available as passed/failed, while both terminal
+-- outcomes satisfy an all-content course's completion requirement.
+create or replace function public.complete_my_course(p_course_id uuid)
+returns date
+language plpgsql
+-- Completion policy must not be bypassable through a direct table update.
+-- This narrowly scoped definer function performs its own auth.uid(), course
+-- ownership and progress checks before changing only completed_date.
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := (select auth.uid());
+  v_catalogue_course_id uuid;
+  v_policy text;
+  v_completed_date date;
+begin
+  if v_user_id is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select personal.catalogue_course_id, catalogue.completion_policy, personal.completed_date
+    into v_catalogue_course_id, v_policy, v_completed_date
+  from public.courses personal
+  join public.course_catalogue catalogue on catalogue.id = personal.catalogue_course_id
+  where personal.id = p_course_id
+    and personal.user_id = v_user_id
+    and personal.status is null;
+
+  if not found then
+    raise exception 'Course not found or not enrolled';
+  end if;
+
+  if v_completed_date is not null then
+    return v_completed_date;
+  end if;
+
+  if v_policy = 'all_content' and not (
+    exists (
+      select 1 from public.course_content_links link
+      where link.course_id = v_catalogue_course_id
+    )
+    and not exists (
+      select 1
+      from public.course_content_links link
+      where link.course_id = v_catalogue_course_id
+        and not exists (
+          select 1
+          from public.course_content_progress progress
+          where progress.content_item_id = link.resource_id
+            and progress.user_id = v_user_id
+            and progress.status in ('completed', 'passed', 'failed')
+        )
+    )
+  ) then
+    raise exception 'Complete every course item before finishing this course';
+  end if;
+
+  update public.courses
+  set completed_date = current_date
+  where id = p_course_id and user_id = v_user_id
+  returning completed_date into v_completed_date;
+
+  return v_completed_date;
+end;
+$$;
+
+revoke all on function public.complete_my_course(uuid) from public, anon;
+grant execute on function public.complete_my_course(uuid) to authenticated;
+
+-- =============================================================================
+-- 20261117233000_0310_name_generated_final_test_pages.sql
+-- =============================================================================
+
+-- Run 0310. AI-generated courses end in a "Final test" section whose single
+-- page was also titled just "Final test", so an organisation's Resources
+-- library could hold several identical "Final test" pages with nothing to
+-- tell which course each belonged to. New generated courses now name the
+-- page after the course (src/lib/courseGeneration.js, and the skill-course
+-- job in api/_lib/skillCourseGenerationJobHandler.js); this renames the
+-- existing ones the same way.
+--
+-- Affected: content_resources rows of type 'page' titled exactly
+-- 'Final test' whose course links all point at courses with one and the
+-- same name (a page shared by differently named courses is left alone, as
+-- is any page not linked to a course). Only the title changes -- content,
+-- version, status and timestamps are untouched. Published pages can't be
+-- edited through the app (only drafts can), hence a migration.
+--
+-- Data loss risk: none. Rollback: every renamed page's previous title was
+-- exactly 'Final test', so
+--   update public.content_resources set title = 'Final test'
+--   where type = 'page' and title like 'Final test – %';
+-- restores it (it would also revert any page later created with that
+-- prefix, so run it promptly if needed).
+
+with page_course_names as (
+  select l.resource_id, min(c.name) as course_name
+  from public.course_content_links l
+  join public.course_catalogue c on c.id = l.course_id
+  group by l.resource_id
+  having count(distinct c.name) = 1
+)
+update public.content_resources r
+set title = left('Final test – ' || trim(p.course_name), 200)
+from page_course_names p
+where r.id = p.resource_id
+  and r.type = 'page'
+  and r.title = 'Final test'
+  and nullif(trim(p.course_name), '') is not null;

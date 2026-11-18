@@ -347,7 +347,11 @@ function InsertMenu({ onInsert, label = 'Add content' }) {
   )
 }
 
-export default function PageBuilderModal({ organisationId, userId, resource, initialTitle, onClose, onSaved }) {
+// `saveResource(title, pageDocument)` optionally replaces the default
+// persistence (update the given resource in place / create a new page) --
+// the course editor uses it to save an edit to a published page as a new
+// page version linked into that course instead (see CourseSections).
+export default function PageBuilderModal({ organisationId, userId, resource, initialTitle, onClose, onSaved, saveResource = null }) {
   const [title, setTitle] = useState(resource?.title || initialTitle?.trim() || 'Untitled page')
   const [pageDocument, setPageDocument] = useState(() => normalisePageDocument(resource?.page_content || EMPTY_PAGE_DOCUMENT))
   const [saving, setSaving] = useState(false)
@@ -531,9 +535,11 @@ export default function PageBuilderModal({ organisationId, userId, resource, ini
     setSaving(true); setError(null)
     try {
       const cleanDocument = normalisePageDocument(pageDocument)
-      const saved = resource
-        ? await updatePageResource(resource.id, title, cleanDocument)
-        : await createPageResource(organisationId, userId, title, cleanDocument)
+      const saved = saveResource
+        ? await saveResource(title, cleanDocument)
+        : resource
+          ? await updatePageResource(resource.id, title, cleanDocument)
+          : await createPageResource(organisationId, userId, title, cleanDocument)
       savedRef.current = true
       onSaved(saved); onClose()
     } catch (err) { setError(err.message) } finally { setSaving(false) }

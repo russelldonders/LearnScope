@@ -241,6 +241,7 @@ describe('assessment correction', () => {
 
     expect(normalized.sections.at(-1).title).toBe('Final test')
     expect(normalized.sections.at(-1).pages).toHaveLength(1)
+    expect(normalized.sections.at(-1).pages[0].title).toBe('Final test – Coaching')
     expect(normalized.sections.at(-1).pages[0].blocks).toHaveLength(10)
   })
 
